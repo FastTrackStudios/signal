@@ -1,0 +1,45 @@
+3e6147ae	12221	LPF UVI 2
+3f051eb8	8900	LPF Juicy 12db
+3f5c28f6	6513	Classic LPF 4-pole
+3f000000	5341	LPF Power 24db
+3ef5c28f	3996	LPF Juicy 24db
+3f51eb85	1806	Classic LPF 2-pole
+3e851eb8	1641	HPF UVI
+3f1eb852	1515	LPF Power 12db
+3f7d70b6	1326	Beefy LPF 4-pole
+3f4ccccd	1263	Classic LPF 1-pole
+3f147ae1	953	Bandpass Juicy 12db
+3f428f5c	770	State Variable 12dB
+3f7d70a9	753	Classic LPF 8-pole
+3f570a3d	726	Classic LPF 3-pole
+3f7d70b1	712	Jupiter LPF 4-pole
+3e75c28f	710	LPF UVI 3
+3e99999a	663	FATBOY
+3e3851ec	656	LPF Gentle 6db
+3f0a3d71	611	HPF Juicy 12db
+3e0f5c29	562	HPF Crisp
+3f19999a	562	Bandpass Juicy 24db
+3d75c28f	489	Bandpass
+3e8f5c29	435	LPF Warm 12db
+3f7d70cc	427	Beefy BPF 4-pole
+3d23d70a	411	LPF Colorful 24db
+3f23d70a	410	HPF Power 12db
+3f7d70b3	406	OB LPF 4-pole
+3f7d70a6	395	Classic LPF 6-pole
+3f7d70b5	379	Beefy LPF 2-pole
+3ea3d70a	376	LPF Smooth 24db
+3eeb851f	338	LPF Crisp 12db
+3f0f5c29	316	HPF Juicy 24db
+3eae147b	278	LPF Edge 24db
+3e4ccccd	275	LPF UVI 1
+3e999999	260	?
+3f7d70b0	255	Sauce LPF 4-pole
+3f7d70b8	253	Subtle LPF 1-pole
+3f6b851f	253	OB LPF 2-pole
+3f7d70dd	247	Jupiter HPF 4-pole
+3da3d70a	204	Notch
+3f333333	201	Bandpass Power 24db
+3f7d70bf	184	Jupiter HPF 2-pole
+3f666666	180	Jupiter HPF 1-pole
+3f6147ae	164	Jupiter LPF 2-pole
+3f7d70d4	163	State Variable OB

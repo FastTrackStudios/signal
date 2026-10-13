@@ -1,0 +1,79 @@
+[package]
+name = "signal-guitar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# PipeWire mode: route this rig's hardware MIDI through the pipewire-jack
+# backend (routable graph node, not an exclusive ALSA grab). midir's jack
+# swap is compile-time and whole-binary. Audio pipewire is picked up via
+# signal-sampler when the app enables it.
+# PipeWire (audio + MIDI) is DEFAULT on Linux — audio is target-gated in
+# daw-audio-io, MIDI via the linux target table below. Alias only.
+pipewire = []
+
+[dependencies]
+# A setlist dated today opens on its own (`SetlistDef::day`).
+chrono.workspace = true
+# WAV output for the switch probe (`SIGNAL_SWITCH_PROBE`, session.rs).
+hound = "3.5"
+uuid.workspace = true
+# getrusage — the process's own CPU time, for the bar's CPU meter.
+libc.workspace = true
+signal-rigs-proto.workspace = true
+# The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
+# RigAudioPrefs. The guitar feature is a thin live-handle layer on top.
+signal-sampler.workspace = true
+signal-phones.workspace = true
+# Cross-rig utilities: poison-tolerant locking, panic payload text.
+signal-rig-host.workspace = true
+signal-macromod.workspace = true
+
+# The wire contract this crate's headless backend implements (Rig +
+# AudioSettings services); front-ends consume the same crate's clients.
+signal-guitar-proto.workspace = true
+# A reverb locked to the tempo: its decay ↔ seconds law (`time_sync`).
+reverb-dsp.workspace = true
+# Layer/Services composition + dispatchers for mounting the services.
+architect = { workspace = true, features = ["vox", "rig"] }
+# BlockType — primary-param mapping per block type.
+signal-proto.workspace = true
+# The NAM library catalog: a preset stores its capture's content hash, and
+# resolves creator / licence / cover art through the catalog by it.
+signal-nam.workspace = true
+# EQ band-param naming (EQ_BANDS × EQ_FIELDS) — one source of truth with the DSP.
+fx-blocks.workspace = true
+# Styx-serializable rig definitions (the runtime library files).
+facet.workspace = true
+facet-styx.workspace = true
+# `signal rig web-bundle`: rig.json, and content-addressed asset keys.
+facet-json.workspace = true
+blake3.workspace = true
+# MIDI capture for the core's monitor (native only — the headless core).
+midicore = { workspace = true, features = ["vox", "midir"] }
+tracing.workspace = true
+# Runtime handle only: the audio-open thread carries the caller's tokio
+# handle across so the transport pump's `architect::platform::spawn`
+# (→ `tokio::spawn` on native) has a runtime (see Rig::start).
+tokio = { workspace = true, features = ["rt"] }
+
+[dev-dependencies]
+# The startup benchmarks (examples/startup_cost.rs, examples/nam_split.rs)
+# load captures directly, outside a rig.
+neural-amp-modeler = { workspace = true }
+tracing-subscriber.workspace = true
+# headless_rig example: serve the backend on an in-process vox link and drive
+# it like a remote GUI would.
+architect = { workspace = true, features = ["vox", "local"] }
+vox.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Hardware MIDI as a routable PipeWire graph node (midir on the
+# pipewire-jack backend) — the Linux default, matching the audio host.
+midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }

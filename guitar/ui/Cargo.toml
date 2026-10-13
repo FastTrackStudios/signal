@@ -1,0 +1,142 @@
+[package]
+name = "signal-guitar-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# Guitar-rig Dioxus components — the feature-scoped, wasm-clean UI half of
+# the detachable GUI. Everything here renders purely from the wire contract
+# (`signal-guitar-proto`) via the generated vox clients; no audio backend, no
+# signal domain, no platform I/O. Consumed by signal-ui (desktop) and
+# apps/web (browser) alike.
+
+[lints]
+workspace = true
+
+[dependencies]
+base64.workspace = true
+chrono.workspace = true
+# The app chrome's bar pieces: the rig header claims the app bar and becomes
+# the one bar (crumbs, drag space, window controls). Inert outside the app.
+fts-chrome.workspace = true
+dioxus.workspace = true
+# Shared audio-gui widgets (knob + arc geometry) — one copy for every rig UI.
+signal-widgets.workspace = true
+lumen-blocks.workspace = true
+signal-guitar-proto.workspace = true
+# The TONE3000 catalog browser — mounted as the Tones page. Wasm-clean,
+# like everything else here.
+signal-tone3000-ui.workspace = true
+signal-tone3000-proto.workspace = true
+signal-account-proto.workspace = true
+# The real FTS-EQ editor: the band model, the response maths and the
+# graph's own painters.
+#
+# `graph` is the vello surface as an embeddable widget — the plugin's own
+# painter, hit-testing and interaction rules, driven by `bands` and band
+# events rather than a parameter tree. Native only: a custom widget is a
+# painted scene, which needs a Blitz host. The wasm remote builds the same
+# crate without the feature and draws the portable SVG path instead.
+eq-ui = { workspace = true, features = ["graph"] }
+# The recorded scene the effects paint into — replayed by Blitz natively,
+# onto a canvas in the browser.
+anyrender.workspace = true
+kurbo.workspace = true
+# The EQ graph's painters, without the plugin stack: the browser paints the
+# real graph onto a canvas (fts_audio_ui::scene_canvas).
+fts-audio-ui.workspace = true
+
+# The visualisers, from the effects that own them: Signal draws processor's
+# picture of a chorus rather than keeping a second one. Their portable cores
+# here; the painted `viz` surface is native-only, below.
+modulation-ui = { workspace = true, features = ["viz"] }
+delay-ui = { workspace = true, features = ["viz"] }
+reverb-ui = { workspace = true, features = ["viz"] }
+# The engine's own decay → seconds law, so the Time readouts are what plays.
+reverb-dsp.workspace = true
+comp-ui = { workspace = true, features = ["viz"] }
+# BlockType — chain-strip coloring.
+signal-proto.workspace = true
+# The zoomable rig graph + the headless slot conversion (both wasm-clean).
+signal-grid.workspace = true
+signal-grid-ui.workspace = true
+uuid = { version = "1", features = ["v4"] }
+# frame's faces.json (which face draws which block).
+serde_json.workspace = true
+# use_stream (atom+vox) + the portable sleep (platform: tokio native / gloo wasm).
+architect = { workspace = true, features = ["atom", "vox", "platform"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Cover art (TONE3000 photographs) decoded for the routing grid's blocks.
+image.workspace = true
+# The custom-widget surface: a painted scene composited into Blitz's own
+# paint pass. Native only — a DOM renderer cannot be handed an `Any`
+# attribute at all (it panics); the browser replays the same scenes onto a
+# canvas instead (`scene_canvas`).
+# `custom-widget` is what compiles the painted-scene path in at all: without
+# it `process_custom_widget_node` is `#[cfg]`'d out and a widget silently
+# draws nothing. `dioxus-native` turns it on for the window; anything that
+# paints a document itself — the screenshot tool — has to ask too.
+blitz-dom = { workspace = true, features = ["custom-widget"] }
+blitz-traits.workspace = true
+dioxus-native-dom.workspace = true
+vello.workspace = true
+# Text for the GPU routing grid (tablet/routing_canvas).
+parley.workspace = true
+# The shader path: a WGSL fragment shader rendered into a texture vello
+# composites. See `shader.rs` for why this is optional at runtime rather
+# than at build time.
+wgpu.workspace = true
+bytemuck = { version = "1", features = ["derive"] }
+# Pages designed in frame, rendered by frame on this window's device and
+# hot-reloaded from their files (see frame_surface.rs). `wgpu_context` is
+# the type Blitz boxes its device in.
+frame-live = { workspace = true, features = ["anyrender-0-11"] }
+wgpu_context = "0.7"
+tracing.workspace = true
+
+# `rig_shot` — the UI rendered to a PNG with no window and no audio device.
+# The backend is a dev-dep because the UI crate does not depend on it (the
+# arrow runs the other way, and the remote talks over a wire, not a link);
+# for a picture the two have to meet, and an example is where they can.
+
+# Native only: the rig backend, a real window, a multi-thread runtime. The
+# wasm32 test build (param_writer's tests, run by wasm-bindgen-test) has
+# none of them.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+# Validate the WGSL without a GPU. The screenshot tool cannot run the shader
+# path — `VelloImageRenderer` has no device to give — so nothing else in the
+# tree would catch a shader that does not compile until someone ran the app.
+naga = { version = "29", features = ["wgsl-in"] }
+signal-guitar.workspace = true
+# The visualiser gallery (examples/viz_gallery.rs) opens a real window, so it
+# needs the same launcher the app uses.
+dioxus-native.workspace = true
+# `local` — the in-process server the shot establishes against.
+architect = { workspace = true, features = ["atom", "vox", "platform", "local"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tracing-subscriber.workspace = true
+futures.workspace = true
+dioxus-native-dom.workspace = true
+blitz-dom.workspace = true
+blitz-paint = { workspace = true, features = ["custom-widget"] }
+blitz-traits.workspace = true
+anyrender.workspace = true
+anyrender_vello.workspace = true
+image.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# The browser's painted surface: the effects' own scenes, replayed onto a
+# `<canvas>` by vello_hybrid's WebGL2 renderer (see `scene_canvas`).
+vello_hybrid = { workspace = true, features = ["webgl"] }
+anyrender_vello_hybrid = { workspace = true, features = ["webgl"] }
+rustc-hash = "2"
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = ["Window", "Document", "Element", "HtmlCanvasElement"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[[example]]
+name = "rig_shot"

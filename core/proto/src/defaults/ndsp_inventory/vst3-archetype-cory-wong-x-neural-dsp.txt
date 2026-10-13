@@ -1,0 +1,150 @@
+0	Input Gain	0.500000
+1	Output Gain	0.500000
+2	Gate Active	1.000000
+3	Gate Threshold	0.166667
+4	Transpose	0.500000
+5	Doubler Active	0.000000
+6	Doubler Spread	0.176471
+7	Active Wah Section	0.000000
+8	Wah Position	0.000000
+9	Wah Mode	0.000000
+10	Auto Wah Attack	0.595960
+11	Auto Wah Release	0.696970
+12	Auto Wah Sensitivity	0.310000
+13	Active Pre FX Section	1.000000
+14	The Postal Service Range	0.290909
+15	The Postal Service Sensitivity	0.425000
+16	The Postal Service Attack	0.183333
+17	The Postal Service Decay	0.233333
+18	The Postal Service Active	0.000000
+19	The 4th Position Comp Blend	0.360000
+20	The 4th Position Comp Tone	0.520833
+21	The 4th Position Comp Compression	0.470000
+22	The 4th Position Comp Volume	0.525000
+23	The 4th Position Comp Active	1.000000
+24	The Tuber Tone	0.500000
+25	The Tuber Drive	0.500000
+26	The Tuber Level	0.500000
+27	The Tuber Active	0.000000
+28	The Big Rig Overdrive Tone	0.500000
+29	The Big Rig Overdrive Drive	0.530000
+30	The Big Rig Overdrive Level	0.450000
+31	The Big Rig Overdrive Active	0.000000
+32	Active Amp Section	1.000000
+33	Amp/Cab Linked	0.000000
+34	Amp Type	1.000000
+35	D.I. Funk Console Comp	0.230000
+36	D.I. Funk Console Comp Attack	0.000000
+37	D.I. Funk Console Tube Sat	0.480000
+38	D.I. Funk Console High Pass	0.139130
+39	D.I. Funk Console Low Pass	0.566667
+40	D.I. Funk Console Lows	0.500000
+41	D.I. Funk Console Lows Freq	0.000000
+42	D.I. Funk Console Mids	0.500000
+43	D.I. Funk Console Mids Freq	1.000000
+44	D.I. Funk Console Highs	0.500000
+45	D.I. Funk Console Highs Freq	1.000000
+46	D.I. Funk Console Output	0.912734
+47	The Clean Machine Volume	0.320000
+48	The Clean Machine Bright	0.000000
+49	The Clean Machine Bass	0.500000
+50	The Clean Machine Middle	0.520000
+51	The Clean Machine Treble	0.430000
+52	The Clean Machine Presence	0.300000
+53	The Clean Machine Output	0.919245
+54	The Amp Snob Volume	0.170000
+55	The Amp Snob Bright	0.000000
+56	The Amp Snob Bass	0.500000
+57	The Amp Snob Middle	0.460000
+58	The Amp Snob Treble	0.500000
+59	The Amp Snob Master	1.000000
+60	The Amp Snob Presence	0.420000
+61	The Amp Snob Output	0.907000
+62	The Amp Snob Drive	0.000000
+63	Active Cab Section	1.000000
+64	Cab Type (Unlinked)	1.000000
+65	Cab L Active	1.000000
+66	D.I. Funk Console Cab Mic L Type	0.666667
+67	The Clean Machine Cab Mic L Type	0.666667
+68	The Amp Snob Cab Mic L Type	0.666667
+69	Cab L Position	0.550000
+70	Cab L Distance	0.000000
+71	Cab L Level	0.636880
+72	Cab L Pan	0.500000
+73	Cab L Phase	0.000000
+74	Room L Active	0.000000
+75	Room L Send	0.223317
+76	Cab R Active	0.000000
+77	D.I. Funk Console Cab Mic R Type	0.166667
+78	The Clean Machine Cab Mic R Type	0.166667
+79	The Amp Snob Cab Mic R Type	0.166667
+80	Cab R Position	0.550000
+81	Cab R Distance	0.000000
+82	Cab R Level	0.499999
+83	Cab R Pan	0.500000
+84	Cab R Phase	0.000000
+85	Room R Active	0.000000
+86	Room R Send	0.223317
+87	Active EQ Section	1.000000
+88	D.I. Funk Console EQ Active	1.000000
+89	D.I. Funk Console EQ 65 Hz	0.500000
+90	D.I. Funk Console EQ 125 Hz	0.500000
+91	D.I. Funk Console EQ 250 Hz	0.500000
+92	D.I. Funk Console EQ 500 Hz	0.500000
+93	D.I. Funk Console EQ 1 kHz	0.500000
+94	D.I. Funk Console EQ 2 kHz	0.500000
+95	D.I. Funk Console EQ 4 kHz	0.500000
+96	D.I. Funk Console EQ 8 kHz	0.500000
+97	D.I. Funk Console EQ 16 kHz	0.500000
+98	D.I. Funk Console EQ High Pass	0.000000
+99	D.I. Funk Console EQ Low Pass	1.000000
+100	The Clean Machine EQ Active	1.000000
+101	The Clean Machine EQ 65 Hz	0.400000
+102	The Clean Machine EQ 125 Hz	0.554167
+103	The Clean Machine EQ 250 Hz	0.566667
+104	The Clean Machine EQ 500 Hz	0.566667
+105	The Clean Machine EQ 1 kHz	0.545833
+106	The Clean Machine EQ 2 kHz	0.441667
+107	The Clean Machine EQ 4 kHz	0.500000
+108	The Clean Machine EQ 8 kHz	0.508333
+109	The Clean Machine EQ 16 kHz	0.500000
+110	The Clean Machine EQ High Pass	0.000000
+111	The Clean Machine EQ Low Pass	1.000000
+112	The Amp Snob EQ Active	1.000000
+113	The Amp Snob EQ 65 Hz	0.420833
+114	The Amp Snob EQ 125 Hz	0.500000
+115	The Amp Snob EQ 250 Hz	0.500000
+116	The Amp Snob EQ 500 Hz	0.475000
+117	The Amp Snob EQ 1 kHz	0.400000
+118	The Amp Snob EQ 2 kHz	0.416667
+119	The Amp Snob EQ 4 kHz	0.441667
+120	The Amp Snob EQ 8 kHz	0.500000
+121	The Amp Snob EQ 16 kHz	0.500000
+122	The Amp Snob EQ High Pass	0.000000
+123	The Amp Snob EQ Low Pass	1.000000
+124	Active Post FX Section	1.000000
+125	The 80s Chorus Mix	1.000000
+126	The 80s Chorus Rate	0.500000
+127	The 80s Chorus Width	0.500000
+128	The 80s Chorus Active	0.000000
+129	Delay-y-y Mix	0.392000
+130	Delay-y-y Sync	0.500000
+131	Delay-y-y Mode	1.000000
+132	Delay-y-y Feedback	0.394000
+133	Delay-y-y HPF	0.493333
+134	Delay-y-y Time L	0.300000
+135	Delay-y-y Time R	0.300000
+136	Delay-y-y Note L	0.650000
+137	Delay-y-y Note R	0.500000
+138	Delay-y-y LPF	0.305556
+139	Delay-y-y Tempo	0.400000
+140	Delay-y-y Active	0.000000
+141	The Wash Mix	0.245000
+142	The Wash Shimmer	0.000000
+143	The Wash Decay	0.696000
+144	The Wash Low Cut	0.413000
+145	The Wash High Cut	0.555000
+146	The Wash Active	0.000000
+147	Preset Previous	0.000000
+148	Preset Next	0.000000
+149	Bypass	0.000000

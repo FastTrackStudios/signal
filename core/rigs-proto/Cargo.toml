@@ -1,0 +1,19 @@
+[package]
+name = "signal-rigs-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Shared live-rig wire contract — the RigCore service every rig mounts (instance-scoped)"
+
+[lints]
+workspace = true
+
+[features]
+default = ["vox"]
+vox = ["dep:vox", "architect/vox"]
+
+[dependencies]
+architect = { workspace = true }
+vox = { workspace = true, optional = true }
+facet.workspace = true

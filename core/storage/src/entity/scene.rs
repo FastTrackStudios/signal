@@ -1,0 +1,41 @@
+use sea_orm::entity::prelude::*;
+use signal_proto::song::SceneId;
+
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+#[sea_orm(table_name = "scenes")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: String,
+    pub song_id: String,
+    pub position: i32,
+    pub name: String,
+    pub state_json: String,
+    pub metadata_json: String,
+}
+
+impl Model {
+    #[must_use]
+    pub fn variant_id_branded(&self) -> SceneId {
+        SceneId::from(self.id.clone())
+    }
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::song::Entity",
+        from = "Column::SongId",
+        to = "super::song::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    Song,
+}
+
+impl Related<super::song::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Song.def()
+    }
+}
+
+impl ActiveModelBehavior for ActiveModel {}

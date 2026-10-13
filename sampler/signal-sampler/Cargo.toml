@@ -1,0 +1,141 @@
+[package]
+name        = "signal-sampler"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Sample library playback engine for Signal — loads and plays orchestral, drum, and instrument libraries"
+
+[lints]
+workspace = true
+
+[features]
+# Native PipeWire backend (no JACK shim) — the live rig talks to PipeWire
+# directly via cpal's pipewire host. The rig picks the interface + input channel
+# by name and daw targets that device, so PipeWire maps its capture channels to
+# the rig in order and the chosen channel lands on the tapped input. Requires
+# libpipewire at build/link time (provided by the flake dev shell).
+# PipeWire is DEFAULT on Linux (target-gated in daw-audio-io); alias only.
+pipewire = []
+# Legacy JACK backend (pipewire-jack shim). Kept as a fallback for systems
+# without the native PipeWire host; run under `pw-jack`. Requires libjack.
+jack = ["cpal/jack", "daw-audio-io/jack", "signal-rig-host/jack"]
+
+
+[dependencies]
+# Shared daw-backed rig host — the one project/track/engine bootstrap every
+# live rig (GuitarRig / SamplerRig / KeysRig) runs on. Wasm builds get only
+# its topology half (`RigProject`); the engine half is target-gated inside
+# the crate.
+signal-rig-host.workspace = true
+
+# Spec loading
+facet       = { workspace = true }
+facet-styx  = { workspace = true }
+facet-toml  = { workspace = true }
+
+# City Grand physical-model voice: loads the swept modal parameter table (JSON).
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+
+# Tagging schema reuse (TagSet / TagCategory / StructuredTag)
+signal-proto.workspace = true
+# Node identity: UUIDv7, so a rig stays addressable when it is distributed.
+uuid.workspace = true
+
+# Shared articulation/legato/re-bow annotation model — the ONE source of
+# truth for document mode's stage-1 inference (also consumed by
+# keyflow-orchestra's mirror pass). no_std + alloc, dependency-free.
+keyflow-annotate.workspace = true
+
+# Plugin host (CLAP / VST3) — used to insert hosted plugins into mixer
+# strips and preset master chains. Base is the format-agnostic trait
+# surface (wasm-clean); `clap-host` rides the native target table below.
+# Flip on `vst3-host` in apps/native to enable .vst3 loading too.
+signal-plugin-host = { workspace = true }
+
+# Built-in FX — PluginInstance wrappers over the vendored FX DSP cores
+# (features/fx/). Backs `BlockImpl::Native` for EQ / Compressor / … blocks.
+fx-blocks = { workspace = true }
+
+# Vendored physically-modeled Wurlitzer 200A (GPL, personal use). Backs the
+# "City Wurli" native voice on the Tonewheel block. See features/rigs/wurli/.
+openwurli-dsp.workspace = true
+
+# Canonical MIDI vocabulary — the `midir` OS backend rides the native
+# target table below (the browser gets MIDI from WebMIDI via the worklet).
+midicore = { workspace = true, features = ["vox"] }
+# daw facade — the live guitar rig builds a tiny daw project (one input-armed
+# track) and drives daw's `AudioEngine` instead of its own cpal streams. The
+# `PluginInstance` trait (which NAM / cab-IR / hosted blocks implement) is also
+# re-exported through `signal-plugin-host`. Base is `standalone-decode`
+# (standalone backend + render path + wasm live-MIDI queue, no cpal);
+# `standalone-audio`/`clap-host` ride the native target table.
+daw         = { workspace = true, features = ["standalone-decode"] }
+# Decode persisted plugin state chunks (`state_b64`) when a rig "plugin" block
+# restores a hosted CLAP/VST3 plugin's saved parameters.
+base64      = "0.22"
+hound       = "3.5"
+realfft.workspace = true
+# Content-hash NAM models to key the loudness-calibration cache (matches
+# signal-nam's SHA-256 file identity).
+sha2        = "0.10"
+# The audio-file engine layer — RAM budget, sample cache + .signalpack
+# access (FLAC/Vorbis decode, flacenc/vorbis_rs encode), FLAC seek index,
+# chunked streaming, on-disk stream cache, and SamplerError. Re-exported as
+# `engine::{budget, cache, flac_index, stream, stream_cache}`. Base is the
+# wasm-clean `engine-core` (open packs from bytes, decode flac/ogg/pcm);
+# the native half (`engine` = mmap, rayon preload, encoders, stream cache)
+# rides the native target table below.
+fts-sample = { workspace = true, features = ["load", "engine-core"] }
+# Neural Amp Modeler — backs NAM blocks on every target: the C++ core
+# natively (vendored in the bindings' build.rs), the pure-Rust engine (A1 +
+# A2) on wasm32.
+neural-amp-modeler = { workspace = true }
+
+# Error handling
+eyre        = { workspace = true }
+tracing     = { workspace = true }
+
+# ── Native-only half ─────────────────────────────────────────────────────────
+# Everything the wasm32 build (headless engine + keys lane machinery inside
+# the browser worklet) must not pull: audio devices, hardware MIDI, the NAM
+# C++ core, dynamic plugin loading, filesystem scans, the pack CLI.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Audio I/O
+cpal        = { workspace = true }
+# Reusable audio I/O from daw — device enumeration + AudioIoPrefs used to drive
+# daw's audio engine (which the live guitar rig now runs ON, see `rig.rs`).
+daw-audio-io = { workspace = true, features = ["monitor"] }
+# midir OS backend — the strings rig opens a keyboard (one/all/virtual) via
+# `midicore::midir` and forwards decoded `midicore::MidiEvent`s into the
+# bank track through daw's live-MIDI ring.
+midicore = { workspace = true, features = ["midir", "pipewire", "native"] }
+# `standalone-audio` pulls in the project audio engine; `clap-host` matches
+# signal-plugin-host so the shared CLAP backend links once.
+daw = { workspace = true, features = ["standalone-audio", "clap-host"] }
+signal-plugin-host = { workspace = true, features = ["clap-host"] }
+# The native pack/cache/stream engine half (mmap, rayon preload, encoders).
+fts-sample = { workspace = true, features = ["engine"] }
+# `fts signal pack` CLI (src/pack_cli.rs) — mounted by fts-cli.
+clap        = { workspace = true }
+rayon       = "1"
+walkdir     = "2"
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
+# pack_plan planner tests build a scratch zoned pack on disk.
+tempfile = { workspace = true }
+# The relocated "held looping voice over a streamed sample" test (engine::voice)
+# mmaps its FLAC fixture to feed `StreamedSample::open`.
+memmap2 = { workspace = true }
+# TUI for the live guitar-rig example (input/output meters + patch switching).
+ratatui = "0.30"
+# dup2 — redirect stray stderr to a log while the rig TUI owns the terminal.
+libc = "0.2"
+# MusicXML → score-time notes/CCs for the document-mode example ONLY
+# (examples/render_document_going_home.rs). Dependency-light (musicxml /
+# thiserror / zip). Deliberately a dev-dependency: the library's document
+# annotation stays keyflow-free for phase 1. TODO(document-mode): unify the
+# inference (ported from keyflow's mirror.rs) into one shared crate.
+keyflow-orchestra.workspace = true

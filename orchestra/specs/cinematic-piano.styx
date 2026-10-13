@@ -1,0 +1,166 @@
+// Cinematic Studio Piano — Library Specification
+//
+// Ported from the legacy sample-collector spec (cinematic-piano.toml) and
+// reconciled against the extracted zonemap ground truth
+// (_patches/Piano/library.styx). Fundamentally different from the orchestral
+// CS libraries: no legato engine, no trills, no CC1 dynamic crossfade on the
+// main samples. Standard piano model: velocity selects the dynamic layer,
+// CC64 drives the sustain-pedal behaviour.
+//
+// Zone census (library.styx):
+//   Sustain  512 zones — dyn pp/mp/mf/f/ff/fff, rr 1, mics Close+Blumlein
+//   Suspedal 342 zones — dyn p/mf/f/ff,          rr 1, mics Close+Blumlein
+//   Keyup    258 zones — no dynamic token,       rr 3, mics Close+Blumlein
+//   1shotFX  160 zones — no dynamic token,       rr 1, mics Close+Blumlein+Ambient+XY
+
+name    "Cinematic Studio Piano"
+version 1.0
+vendor  "Cinematic Studio"
+
+// ── Sections ──────────────────────────────────────────────────────────────────
+// One section; label = the _patches directory name exactly ("Piano").
+//
+// The legacy toml (and the manual) claim chromatic sampling ("recorded every
+// note in 6 dynamics"), but the extracted zonemap is a WHOLE-TONE grid on
+// C/D/E/F#/G#/A# — 43 notes per dynamic per mic; the sampler pitch-shifts
+// ±1 semitone to fill the gaps (zone_pitch_tolerance below). ASSUMPTION:
+// the zonemap is ground truth; the "every note" manual claim refers to the
+// playable 88-key result, not the recorded grid.
+//
+// Note names follow the zonemap's own convention (sample files f_C0.wav …:
+// C0 = root_key 12, C7 = root_key 96). That sits an octave below concert
+// pitch for an 88-key A0–C8 instrument — vendor/Kontakt octave-down naming.
+// The engine resolves zones by root_key, so playback is self-consistent as
+// long as this spec uses the same names the zones do.
+
+sections (
+    {
+        id          Piano
+        label       Piano
+        note_grid   (C D E F# G# A#)
+        lowest_note  C0
+        highest_note C7
+    }
+)
+
+// ── Microphone Positions ───────────────────────────────────────────────────────
+// Four separate mic channels; NO pre-blended mix mic ships with this library
+// (unlike CSS's "Mix" bus). Close is marked `default true` as the most
+// immediate single-mic choice when only one mic loads on open.
+//
+// Coverage caveat (from the zone census): the main piano layers
+// (Sustain / Suspedal / Keyup) ship Close + Blumlein ONLY; Ambient and XY
+// exist exclusively for the 1shotFX patch. Requesting Ambient/XY for the
+// main piano resolves no zones.
+
+mics (
+    {id Close,    label Close,    kind separate, default true}
+    {id Blumlein, label Blumlein, kind separate}
+    {id Ambient,  label Ambient,  kind separate}
+    {id XY,       label XY,       kind separate}
+)
+
+// ── Performance ───────────────────────────────────────────────────────────────
+// Only deviations from the engine defaults; everything else keeps the
+// PerformanceSpec defaults.
+
+performance {
+    // Piano samples are unlooped natural decays, not looped plateaus — the
+    // CSS-calibrated +6 dB looped-plateau makeup does not apply here.
+    sustain_makeup_db    0.0
+    // Whole-tone grid → shift ±1 (tolerance 2 matches the engine default,
+    // stated here for clarity).
+    zone_pitch_tolerance 2
+}
+
+// ── Dynamic Control Model ─────────────────────────────────────────────────────
+// Standard piano model — velocity-driven only; no CC1 crossfade on the main
+// samples. CC64 (sustain pedal) semantics (from the legacy spec / manual):
+//
+//   CC64 down → held notes sustain; Suspedal sympathetic-resonance layer
+//               fires per held note at that note's velocity layer.
+//   Note-off, pedal down → note keeps ringing; Keyup does NOT fire.
+//   Note-off, pedal up   → release phase; Keyup mechanical noise fires.
+//   CC64 up   → pedal-sustained notes enter release phase.
+//
+// (The toml also documented Pednoisedn / Pedalnoiseup pedal-noise one-shots
+// and two loopedFX drones — none of those exist in the extracted zonemap,
+// so they are omitted here. See the census at the top of this file.)
+
+dynamics {
+    // Velocity everywhere — one-shot FX included.
+    short_note_controller velocity
+    // Use the per-articulation vel_thresholds below instead of an even
+    // velocity split.
+    enable_velocity_layers true
+}
+
+// ── Articulations ─────────────────────────────────────────────────────────────
+
+articulations (
+
+    {
+        id            Sustain
+        label         Sustain
+        kind          @Sustain
+        dynamics      (pp mp mf f ff fff)
+        rr            1
+        dyn_ctrl      velocity
+        release_artic Keyup
+        notes         full
+        // Equal-band 6-layer split ported from the legacy toml — an
+        // APPROXIMATION; the real KSP split points are undocumented and
+        // likely cluster toward the soft end. Bands: [1,22) [22,43) [43,64)
+        // [64,85) [85,106) [106,127].
+        vel_thresholds (22 43 64 85 106)
+    }
+    {
+        id       Suspedal
+        label    "Sustain Pedal Resonance"
+        kind     @Sustain
+        dynamics (p mf f ff)
+        rr       1
+        dyn_ctrl velocity
+        notes    full
+        // Pedal-down sustain layer: the engine should select/layer this
+        // articulation while CC64 is held (>= 64) — it fires per held note,
+        // at the velocity of that note, when the pedal goes down
+        // (sympathetic string resonance). NOT reachable by plain note-on
+        // with the pedal up.
+        //
+        // No release_artic on purpose: Keyup belongs to the key itself and
+        // already fires from the main Sustain note's note-off — linking it
+        // here too would double-fire the mechanical noise. (Per the pedal
+        // model, Keyup does not fire while the pedal is down at all.)
+        // Equal-band 4-layer split from the legacy toml — same approximation
+        // caveat as Sustain.
+        vel_thresholds (32 64 96)
+    }
+    {
+        id       Keyup
+        label    "Key Up Noise"
+        kind     @Release
+        // Zones carry no dynamic token (mechanical noise, velocity-
+        // independent) → dynamics list stays empty.
+        rr       3
+        dyn_ctrl fixed
+        notes    full
+        // Fires on note-off when the sustain pedal is UP (legacy spec:
+        // trigger = note_off_pedal_up). GUI-switchable in the original
+        // instrument.
+    }
+    {
+        id       "1shotFX"
+        label    "One-Shot FX"
+        kind     @OneShot
+        // Single recorded layer per key (zones carry no dynamic token);
+        // dyn_ctrl velocity = velocity scales volume only, it cannot switch
+        // layers.
+        rr       1
+        dyn_ctrl velocity
+        notes    short   // chromatic C1–G4 (zonemap naming, root keys 24–63)
+        // Col legno scrapes, plucked harmonics, prepared-piano sounds —
+        // each key is a DISTINCT effect, not a pitched instrument; the
+        // chromatic map is a menu, so no pitch-shift fill is wanted here.
+    }
+)

@@ -1,0 +1,161 @@
+0	Input Gain	0.500000
+1	Output Gain	0.500000
+2	Gate Active	1.000000
+3	Gate Threshold	0.166667
+4	Transpose	0.500000
+5	Doubler Active	0.000000
+6	Doubler Spread	0.176471
+7	Active Pre FX Section	1.000000
+8	Compressor Active	0.000000
+9	Compressor Compression	0.500000
+10	Compressor Level	0.500000
+11	Compressor Attack	0.000000
+12	Overdrive-1 Active	0.000000
+13	Overdrive-1 Drive	0.000000
+14	Overdrive-1 Tone	0.500000
+15	Overdrive-1 Level	0.611153
+16	Overdrive-1 Bright	1.000000
+17	Delay-1 Active	0.000000
+18	Delay-1 Mix	0.500000
+19	Delay-1 Feedback	0.159747
+20	Delay-1 Time	0.031579
+21	Delay-1 SyncNote	0.500000
+22	Delay-1 Sync	1.000000
+23	Delay-1 Tone	0.500000
+24	Overdrive-2 Active	0.000000
+25	Overdrive-2 Gain	0.174049
+26	Overdrive-2 Bass	0.500000
+27	Overdrive-2 Treble	0.500000
+28	Overdrive-2 Level	0.500000
+29	Active Amp Section	1.000000
+30	Amp/Cab Linked	0.000000
+31	Amp Type	0.666667
+32	Clean Amp Bright	1.000000
+33	Clean Amp Gain	0.500000
+34	Clean Amp Bass	0.389137
+35	Clean Amp Middle	0.500000
+36	Clean Amp Treble	0.617200
+37	Clean Amp Master	0.338565
+38	Clean Amp Output	0.650318
+39	Crunch Amp Bright	1.000000
+40	Crunch Amp Gain	0.691041
+41	Crunch Amp Bass	0.673262
+42	Crunch Amp Mid	0.821179
+43	Crunch Amp Treble	0.500000
+44	Crunch Amp Presence	0.804721
+45	Crunch Amp Depth	0.401647
+46	Crunch Amp Master	0.500000
+47	Crunch Amp Output	0.692676
+48	Rhythm Amp Gain	0.500000
+49	Rhythm Amp Bass	0.611719
+50	Rhythm Amp Mid	0.401857
+51	Rhythm Amp Treble	0.496191
+52	Rhythm Amp Resonance	0.682725
+53	Rhythm Amp Presence	0.725014
+54	Rhythm Amp Master	0.404523
+55	Rhythm Amp Output	0.750901
+56	Lead Amp Gain	0.666513
+57	Lead Amp Bass	0.500000
+58	Lead Amp Middle	0.500000
+59	Lead Amp Treble	0.500000
+60	Lead Amp Master	0.500000
+61	Lead Amp Output	0.736479
+62	Active Cab Section	1.000000
+63	Cab Type (Unlinked)	0.666667
+64	Cab L Active	1.000000
+65	Clean Amp Cab Mic L Type	0.500000
+66	Crunch Amp Cab Mic L Type	0.000000
+67	Rhythm Amp Cab Mic L Type	0.500000
+68	Lead Amp Cab Mic L Type	0.500000
+69	Cab L Position	0.350000
+70	Cab L Distance	0.000000
+71	Cab L Level	0.499999
+72	Cab L Pan	0.499414
+73	Cab L Phase	0.000000
+74	Room L Active	0.000000
+75	Room L Send	0.223317
+76	Cab R Active	0.000000
+77	Clean Amp Cab Mic R Type	0.750000
+78	Crunch Amp Cab Mic R Type	0.250000
+79	Rhythm Amp Cab Mic R Type	0.750000
+80	Lead Amp Cab Mic R Type	0.750000
+81	Cab R Position	0.350000
+82	Cab R Distance	0.000000
+83	Cab R Level	0.499999
+84	Cab R Pan	0.500586
+85	Cab R Phase	0.000000
+86	Room R Active	0.000000
+87	Room R Send	0.223610
+88	Active EQ Section	1.000000
+89	Clean Amp EQ Active	1.000000
+90	Clean Amp EQ Type	1.000000
+91	Clean Amp EQ Band 1	0.500000
+92	Clean Amp EQ Band 2	0.500000
+93	Clean Amp EQ Band 3	0.500000
+94	Clean Amp EQ Band 4	0.500000
+95	Clean Amp EQ Band 5	0.500000
+96	Clean Amp EQ Band 6	0.500000
+97	Clean Amp EQ Band 7	0.500000
+98	Clean Amp EQ Band 8	0.500000
+99	Clean Amp EQ Band 9	0.500000
+100	Clean Amp EQ High Pass	0.000000
+101	Clean Amp EQ Low Pass	1.000000
+102	Crunch Amp EQ Active	1.000000
+103	Crunch Amp EQ Type	1.000000
+104	Crunch Amp EQ Band 1	0.500000
+105	Crunch Amp EQ Band 2	0.500000
+106	Crunch Amp EQ Band 3	0.500000
+107	Crunch Amp EQ Band 4	0.500000
+108	Crunch Amp EQ Band 5	0.500000
+109	Crunch Amp EQ Band 6	0.500000
+110	Crunch Amp EQ Band 7	0.500000
+111	Crunch Amp EQ Band 8	0.500000
+112	Crunch Amp EQ Band 9	0.500000
+113	Crunch Amp EQ High Pass	0.000000
+114	Crunch Amp EQ Low Pass	1.000000
+115	Rhythm Amp EQ Active	1.000000
+116	Rhythm Amp EQ Type	1.000000
+117	Rhythm Amp EQ Band 1	0.500000
+118	Rhythm Amp EQ Band 2	0.500000
+119	Rhythm Amp EQ Band 3	0.500000
+120	Rhythm Amp EQ Band 4	0.500000
+121	Rhythm Amp EQ Band 5	0.500000
+122	Rhythm Amp EQ Band 6	0.500000
+123	Rhythm Amp EQ Band 7	0.500000
+124	Rhythm Amp EQ Band 8	0.500000
+125	Rhythm Amp EQ Band 9	0.500000
+126	Rhythm Amp EQ High Pass	0.000000
+127	Rhythm Amp EQ Low Pass	1.000000
+128	Lead Amp EQ Active	1.000000
+129	Lead Amp EQ Type	1.000000
+130	Lead Amp EQ Band 1	0.500000
+131	Lead Amp EQ Band 2	0.500000
+132	Lead Amp EQ Band 3	0.500000
+133	Lead Amp EQ Band 4	0.500000
+134	Lead Amp EQ Band 5	0.500000
+135	Lead Amp EQ Band 6	0.500293
+136	Lead Amp EQ Band 7	0.500000
+137	Lead Amp EQ Band 8	0.500000
+138	Lead Amp EQ Band 9	0.500000
+139	Lead Amp EQ High Pass	0.000000
+140	Lead Amp EQ Low Pass	1.000000
+141	Active Post FX Section	1.000000
+142	Delay-2 Active	0.000000
+143	Delay-2 Mix	0.211824
+144	Delay-2 Feedback	0.500000
+145	Delay-2 Low Cut	0.267057
+146	Delay-2 High Cut	0.576467
+147	Delay-2 Time	0.160792
+148	Delay-2 Tempo	0.400000
+149	Delay-2 Note	0.650000
+150	Delay-2 Mod	0.500000
+151	Delay-2 Sync	0.500000
+152	Delay-2 Ping Pong	0.000000
+153	Reverb Active	0.000000
+154	Reverb Mix	0.288978
+155	Reverb Decay	0.430000
+156	Reverb Low Cut	0.423153
+157	Reverb High Cut	0.564217
+158	Preset Previous	0.000000
+159	Preset Next	0.000000
+160	Bypass	0.000000

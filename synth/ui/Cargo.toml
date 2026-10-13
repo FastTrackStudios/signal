@@ -1,0 +1,23 @@
+[package]
+name = "signal-synth-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+dioxus.workspace = true
+# Shared audio-gui widgets (arc geometry).
+signal-widgets.workspace = true
+fts-chrome.workspace = true
+signal-synth-proto.workspace = true
+# The wasm-clean tagging engine (StructuredTag / TagSet / TagCategory) — the
+# BROWSE view re-parses each item's tags to filter faceted, client-side.
+signal-proto.workspace = true
+midicore-ui.workspace = true
+midicore-proto.workspace = true
+signal-ui = { workspace = true, features = ["web"] }
+architect = { workspace = true, features = ["atom", "vox", "platform"] }

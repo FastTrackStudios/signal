@@ -1,0 +1,699 @@
+//! The **`ModMatrix` engine** and its compiler: control-rate sources, resolved
+//! routes, send buses, tempo and the MIDI-domain arpeggiator — everything the
+//! render tree root ticks once per block.
+
+use signal_plugin_host::PluginEvents;
+use signal_proto::block::BlockType;
+
+use crate::native::{ControlEnv, ControlLfo, LfoWave, ModSource};
+use crate::rig::RigBlock;
+use signal_proto::node_resolve::{Resolved, ResolvedContent};
+
+use crate::rig_node::{ModRoute, RouteSource};
+
+/// Build the preset's arpeggiator from an active Arp modulator on the root
+/// container (`on` ≠ 0). Steps come from `step{i}_on/vel/gate` params.
+pub(super) fn build_arp(node: &Resolved) -> Option<crate::native::ArpEngine> {
+    use crate::native::{ArpEngine, ArpStep};
+    let arp = node
+        .modulators
+        .iter()
+        .map(crate::from_node::to_block)
+        .find(|m| {
+            m.block_type == BlockType::Arpeggiator && m.param_f32("on").unwrap_or(0.0) > 0.0
+        })?;
+    let step_beats = arp.param_f32("step_beats").unwrap_or(0.25);
+    let count = arp.param_f32("steps").unwrap_or(0.0).max(0.0) as usize;
+    let mut steps = Vec::with_capacity(count);
+    for i in 0..count.min(64) {
+        steps.push(ArpStep {
+            on: arp.param_f32(&format!("step{i}_on")).unwrap_or(1.0) > 0.0,
+            velocity: (arp.param_f32(&format!("step{i}_vel")).unwrap_or(100.0) as u8).clamp(1, 127),
+            gate: arp
+                .param_f32(&format!("step{i}_gate"))
+                .unwrap_or(0.8)
+                .clamp(0.05, 1.0),
+        });
+    }
+    Some(ArpEngine::new(steps, step_beats))
+}
+
+/// One resolved `ModMatrix` row.
+pub(super) struct CompiledRoute {
+    pub(super) source: usize,
+    pub(super) leaf: usize,
+    pub(super) param: u32,
+    /// Base (unmodulated) normalized value the depth adds onto.
+    pub(super) base: f64,
+    pub(super) depth: f32,
+    /// The depth the tree was authored with — what a source's depth knob
+    /// scales ([`ModEngine::set_source_depth`]).
+    pub(super) authored: f32,
+}
+
+/// A modulated modulator depth: `target`'s output is multiplied by
+/// `clamp(base + Σ depth·source, 0, 1)` (e.g. the mod wheel opening an
+/// LFO's swing — Omnisphere's "LFO1 swing" target).
+#[derive(Clone, Debug)]
+pub(super) struct SourceScale {
+    pub(super) target: usize,
+    pub(super) base: f32,
+    pub(super) terms: Vec<(usize, f32)>,
+}
+
+/// The compiled control-rate modulation engine + send-bus state for one tree.
+#[derive(Default)]
+pub struct ModEngine {
+    pub(super) sources: Vec<ModSource>,
+    /// Per-source `(container path, name)` — lower-cased, for live
+    /// addressing ("which module's Amp Env").
+    pub(super) source_paths: Vec<(Vec<String>, String)>,
+    pub(super) routes: Vec<CompiledRoute>,
+    /// Modulated modulator depths, applied to the source values each block.
+    pub(super) scales: Vec<SourceScale>,
+    /// Per-leaf lower-cased `(container path, display name, params)` — the
+    /// live-edit address book (leaf ids index all three).
+    pub(super) leaf_paths: Vec<Vec<String>>,
+    pub(super) leaf_names: Vec<String>,
+    pub(super) leaf_params: Vec<Vec<signal_plugin_host::PluginParamInfo>>,
+    /// Persistent live parameter overlay per leaf (`(param id, normalized)`)
+    /// — control-thread edits land here and both seed the per-block writes
+    /// and re-base any routes onto the same parameter.
+    pub(super) overlay: Vec<Vec<(u32, f64)>>,
+    /// Per-leaf pending parameter writes, rebuilt each block.
+    pub(super) writes: Vec<Vec<(u32, f64)>>,
+    /// Send buses (indexed by compile-time bus id), zeroed each block.
+    pub(super) bus_l: Vec<Vec<f32>>,
+    pub(super) bus_r: Vec<Vec<f32>>,
+    /// Tempo for synced LFOs and envelopes: the band's
+    /// (`signal_rig_host::tempo`) when one is set, else what the host set via
+    /// `RenderNode::set_tempo`.
+    pub(super) tempo_bpm: f32,
+    /// Leaf parameters that follow the tempo (see [`TempoFollower`]).
+    pub(super) tempo_followers: Vec<TempoFollower>,
+    /// The tempo they were last written at (0: never).
+    pub(super) followed_bpm: f32,
+    /// Sample rate captured at prepare (drives the arp clock).
+    pub(super) sample_rate: f32,
+    /// MIDI-domain arpeggiator, when the preset carries an active Arp.
+    pub(super) arp: Option<crate::native::ArpEngine>,
+}
+
+/// A leaf parameter set from the tempo: a block authored with
+/// `sync_ms_<param> = <beats>` gets `<param>` = that many beats in ms, and
+/// `sync_hz_<param> = <beats>` gets one cycle per that many beats in Hz —
+/// rewritten whenever the tempo moves.
+#[derive(Debug, Clone)]
+pub(crate) struct TempoFollower {
+    pub(crate) leaf: usize,
+    pub(crate) param_id: u32,
+    pub(crate) beats: f32,
+    pub(crate) hz: bool,
+}
+
+impl TempoFollower {
+    #[must_use]
+    pub(crate) fn value(&self, bpm: f32) -> f64 {
+        let beat_s = 60.0 / bpm.max(1.0);
+        if self.hz {
+            f64::from(1.0 / (self.beats.max(1e-3) * beat_s))
+        } else {
+            f64::from(self.beats * beat_s * 1000.0)
+        }
+    }
+}
+
+impl ModEngine {
+    pub(super) fn prepare(&mut self, sample_rate: f64, leaf_count: usize) {
+        self.sample_rate = sample_rate as f32;
+        for s in &mut self.sources {
+            s.set_sample_rate(sample_rate as f32);
+        }
+        self.writes = vec![Vec::new(); leaf_count];
+        if self.overlay.len() != leaf_count {
+            self.overlay = vec![Vec::new(); leaf_count];
+        }
+    }
+
+    /// Tick all sources through one block and rebuild the per-leaf writes.
+    pub(super) fn tick(&mut self, events: &PluginEvents<'_>, frames: usize) {
+        // Evaluate each source once, then apply every route additively.
+        let tempo = self.tempo_bpm;
+        let mut values: Vec<f32> = self
+            .sources
+            .iter_mut()
+            .map(|s| s.tick_at(events, frames, tempo))
+            .collect();
+        for sc in &self.scales {
+            let amount = sc.terms.iter().fold(sc.base, |a, &(src, d)| {
+                a + d * values.get(src).copied().unwrap_or(0.0)
+            });
+            if let Some(v) = values.get_mut(sc.target) {
+                *v *= amount.clamp(0.0, 1.0);
+            }
+        }
+        accumulate_writes(&self.routes, &values, &self.overlay, &mut self.writes);
+    }
+
+    #[must_use]
+    pub fn route_count(&self) -> usize {
+        self.routes.len()
+    }
+
+    // ── Live editing (control thread, under the host's plugin-map lock) ──
+
+    /// Leaf id whose path contains the `module` segment and whose display
+    /// name is `leaf` (both matched lower-cased).
+    pub(super) fn find_leaf(&self, module: &str, leaf: &str) -> Option<usize> {
+        let module = module.to_lowercase();
+        let leaf = leaf.to_lowercase();
+        (0..self.leaf_names.len())
+            .find(|&i| self.leaf_names[i] == leaf && self.leaf_paths[i].contains(&module))
+    }
+
+    /// Set a leaf parameter live (normalized 0..1). The value persists in
+    /// the overlay: it seeds the leaf's writes every block and becomes the
+    /// base any modulation routes on that parameter add onto.
+    pub fn set_leaf_param(&mut self, module: &str, leaf: &str, param: &str, value: f64) -> bool {
+        let Some(idx) = self.find_leaf(module, leaf) else {
+            return false;
+        };
+        let pkey = param.to_lowercase();
+        let Some(p) = self.leaf_params[idx]
+            .iter()
+            .find(|p| p.name.to_lowercase() == pkey)
+        else {
+            return false;
+        };
+        let value = value.clamp(0.0, 1.0);
+        if self.overlay.len() <= idx {
+            self.overlay.resize(self.leaf_names.len(), Vec::new());
+        }
+        match self.overlay[idx].iter_mut().find(|(id, _)| *id == p.id) {
+            Some(entry) => entry.1 = value,
+            None => self.overlay[idx].push((p.id, value)),
+        }
+        true
+    }
+
+    /// Live-update a modulator envelope's ADSR, addressed by module + name
+    /// ("amp env" / "filter env").
+    pub fn set_env(&mut self, module: &str, name: &str, params: crate::native::AdsrParams) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let sr = self.sample_rate;
+        for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
+            if *source_name == name && path.contains(&module) {
+                return self.sources[i].set_env_params(sr, params);
+            }
+        }
+        false
+    }
+
+    /// Live-update a route's depth (e.g. the Filter Env → cutoff amount),
+    /// addressed by module + source name + target leaf/param.
+    /// Live-update an LFO source (addressed by module + name, "LFO 1"):
+    /// its rate, and its wave when given.
+    pub fn set_lfo(
+        &mut self,
+        module: &str,
+        name: &str,
+        rate_hz: f32,
+        wave: Option<crate::native::LfoWave>,
+        fade_s: Option<f32>,
+    ) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let mut hit = false;
+        for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
+            if *source_name == name && path.contains(&module) {
+                hit |= self.sources[i].set_lfo(rate_hz, wave, fade_s);
+            }
+        }
+        hit
+    }
+
+    /// The routes from source `name` (in `module`) as `(leaf name, param
+    /// name)`, lower-cased — what a rebuild check compares against.
+    pub fn routes_from(&self, module: &str, name: &str) -> Vec<(String, String)> {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        self.routes
+            .iter()
+            .filter(|r| {
+                let (path, source_name) = &self.source_paths[r.source];
+                *source_name == name && path.contains(&module)
+            })
+            .filter_map(|r| {
+                let leaf = self.leaf_names.get(r.leaf)?.to_lowercase();
+                let param = self
+                    .leaf_params
+                    .get(r.leaf)?
+                    .iter()
+                    .find(|p| p.id == r.param)?;
+                Some((leaf, param.name.to_lowercase()))
+            })
+            .collect()
+    }
+
+    /// Live-update an envelope source's delay and hold (seconds).
+    pub fn set_env_timing(&mut self, module: &str, name: &str, delay_s: f32, hold_s: f32) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let mut hit = false;
+        for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
+            if *source_name == name && path.contains(&module) {
+                hit |= self.sources[i].set_env_timing(delay_s, hold_s);
+            }
+        }
+        hit
+    }
+
+    /// Scale every route from source `name` (in `module`) so the deepest
+    /// one reaches `depth` — the source's depth knob over the routes the
+    /// patch authored, keeping their proportions and signs. `false` when the
+    /// source has no routes (nothing to scale).
+    pub fn set_source_depth(&mut self, module: &str, name: &str, depth: f32) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let ours: Vec<usize> = self
+            .routes
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| {
+                let (path, source_name) = &self.source_paths[r.source];
+                *source_name == name && path.contains(&module)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        let deepest = ours
+            .iter()
+            .map(|&i| self.routes[i].authored.abs())
+            .fold(0.0f32, f32::max);
+        if deepest <= 0.0 {
+            return false;
+        }
+        let scale = depth / deepest;
+        for i in ours {
+            self.routes[i].depth = self.routes[i].authored * scale;
+        }
+        true
+    }
+
+    pub fn set_route_depth(
+        &mut self,
+        module: &str,
+        source: &str,
+        leaf: &str,
+        param: &str,
+        depth: f32,
+    ) -> bool {
+        let Some(leaf_idx) = self.find_leaf(module, leaf) else {
+            return false;
+        };
+        let pkey = param.to_lowercase();
+        let Some(p) = self.leaf_params[leaf_idx]
+            .iter()
+            .find(|p| p.name.to_lowercase() == pkey)
+        else {
+            return false;
+        };
+        let source = source.to_lowercase();
+        let module = module.to_lowercase();
+        let mut hit = false;
+        for r in &mut self.routes {
+            if r.leaf == leaf_idx && r.param == p.id {
+                let (path, name) = &self.source_paths[r.source];
+                if *name == source && path.contains(&module) {
+                    r.depth = depth;
+                    hit = true;
+                }
+            }
+        }
+        hit
+    }
+}
+
+/// Rebuild the per-leaf parameter writes for one block: each target parameter
+/// is its **base** plus the **sum** of every route's signed offset
+/// (`depth × source`), clamped once to the normalized range.
+///
+/// Additive by design — two modulators onto one cutoff sum, they don't clobber
+/// (spec `signal.parameter.modulatable` / `signal.modulator.route`: a
+/// parameter's value is `base + Σ(route offsets)`). Before this, the last route
+/// to a target won and the others were silently dropped.
+fn accumulate_writes(
+    routes: &[CompiledRoute],
+    values: &[f32],
+    overlay: &[Vec<(u32, f64)>],
+    writes: &mut [Vec<(u32, f64)>],
+) {
+    for w in writes.iter_mut() {
+        w.clear();
+    }
+    // Seed every live-overlay entry first: an overlaid parameter reaches its
+    // leaf even with no routes, and a route onto it adds its offset ON TOP
+    // of the live value (the overlay IS the new base).
+    for (leaf, entries) in overlay.iter().enumerate() {
+        if let Some(w) = writes.get_mut(leaf) {
+            w.extend_from_slice(entries);
+        }
+    }
+    for r in routes {
+        let Some(&source) = values.get(r.source) else {
+            continue;
+        };
+        let offset = r.depth as f64 * source as f64;
+        let Some(w) = writes.get_mut(r.leaf) else {
+            continue;
+        };
+        // First route to a (leaf, param) seeds `base + offset`; the rest add
+        // their offset onto the running sum. `base` is a property of the
+        // parameter, so it's identical across a param's routes.
+        match w.iter_mut().find(|(p, _)| *p == r.param) {
+            Some(entry) => entry.1 += offset,
+            None => w.push((r.param, r.base + offset)),
+        }
+    }
+    for w in writes.iter_mut() {
+        for (_, v) in w.iter_mut() {
+            *v = v.clamp(0.0, 1.0);
+        }
+    }
+}
+
+/// Compile-time state: modulator scope stack + leaf registry + route table
+/// + send-bus registry.
+pub(super) struct ModCompiler {
+    pub(super) sources: Vec<ModSource>,
+    /// Per-source `(container path, name)` — mirrors `sources`.
+    pub(super) source_paths: Vec<(Vec<String>, String)>,
+    /// (lower-cased modulator name, source index) — scoped stack.
+    pub(super) scope: Vec<(String, usize)>,
+    /// Dedup for MIDI sources.
+    midi: Vec<(crate::native::MidiMod, usize)>,
+    pub(super) routes: Vec<CompiledRoute>,
+    pub(super) scales: Vec<SourceScale>,
+    /// Per-leaf (lower-cased display name, params) for target resolution.
+    /// Per-leaf `(id, lower-cased display name, params)`. The id is what a
+    /// resolved route matches on; the name is the fallback for a route that
+    /// still points by name.
+    pub(super) leaves: Vec<(String, String, Vec<signal_plugin_host::PluginParamInfo>)>,
+    /// Leaf parameters declared tempo-synced (`sync_ms_<param>` /
+    /// `sync_hz_<param>` block params).
+    pub(super) tempo_followers: Vec<TempoFollower>,
+    /// Per-leaf lower-cased container path — mirrors `leaves`.
+    pub(super) leaf_paths: Vec<Vec<String>>,
+    /// Container-name stack during compile (lower-cased), for path capture.
+    pub(super) path: Vec<String>,
+    /// Send-bus names (lower-cased), collected in a pre-pass; index = bus id.
+    pub(super) buses: Vec<String>,
+    sample_rate: u32,
+}
+
+impl ModCompiler {
+    pub(super) fn new(sample_rate: u32) -> Self {
+        Self {
+            sources: Vec::new(),
+            source_paths: Vec::new(),
+            scope: Vec::new(),
+            midi: Vec::new(),
+            routes: Vec::new(),
+            scales: Vec::new(),
+            leaves: Vec::new(),
+            tempo_followers: Vec::new(),
+            leaf_paths: Vec::new(),
+            path: Vec::new(),
+            buses: Vec::new(),
+            sample_rate,
+        }
+    }
+
+    /// Pre-pass: register every send target in the tree as a bus.
+    ///
+    /// A target is keyed by whatever it points with — an id once resolved,
+    /// a name until then — and a container claims the return if *either* of
+    /// its own keys matches. See [`bus_id`](Self::bus_id).
+    pub(super) fn collect_buses(&mut self, node: &Resolved) {
+        for s in &node.sends {
+            let key = s.target.key();
+            if !self.buses.contains(&key) {
+                self.buses.push(key);
+            }
+        }
+        if let ResolvedContent::Children(children) = &node.content {
+            for child in children {
+                self.collect_buses(child);
+            }
+        }
+    }
+
+    /// The bus a container is the return for, if any.
+    ///
+    /// Checked by id first: a send authored as a name becomes an id once the
+    /// tree is resolved, and a send that was never resolved still has to
+    /// find its return, so both keys are tried.
+    pub(super) fn bus_for(&self, node: &Resolved) -> Option<usize> {
+        self.bus_by_key(&node.id.as_str().to_lowercase())
+            .or_else(|| self.bus_by_key(&node.name.to_lowercase()))
+    }
+
+    pub(super) fn bus_by_key(&self, key: &str) -> Option<usize> {
+        self.buses.iter().position(|b| b == key)
+    }
+
+    /// Instantiate a modulator block as a control source, honoring its
+    /// build-time params (LFO `rate` Hz; envelope `attack`/`decay`/
+    /// `sustain`/`release` seconds).
+    pub(super) fn instantiate(&mut self, block: &RigBlock) -> Option<usize> {
+        let sr = self.sample_rate as f32;
+        let src = match block.block_type {
+            BlockType::Lfo => {
+                let rate = block.param_f32("rate").unwrap_or(2.0).clamp(0.01, 40.0);
+                let wave = match block.param_f32("wave").unwrap_or(0.0).round() as u32 {
+                    1 => LfoWave::Triangle,
+                    2 => LfoWave::Saw,
+                    3 => LfoWave::Square,
+                    4 => LfoWave::SampleHold,
+                    5 => LfoWave::SawDown,
+                    _ => LfoWave::Sine,
+                };
+                let mut lfo = ControlLfo::new(wave, rate);
+                if let Some(beats) = block.param_f32("sync_beats") {
+                    lfo = lfo.with_sync_beats(beats);
+                }
+                if block.param_f32("retrigger").unwrap_or(0.0) > 0.0 {
+                    lfo = lfo.with_retrigger(true);
+                }
+                lfo.fade_s = block.param_f32("fade").unwrap_or(0.0).max(0.0);
+                lfo.amp = block.param_f32("amp").unwrap_or(1.0).clamp(0.0, 1.0);
+                lfo.unipolar = block.param_f32("unipolar").unwrap_or(0.0) > 0.0;
+                ModSource::lfo(lfo, sr)
+            }
+            // A breakpoint envelope: `points` = "time:level:curve:step;…"
+            // (see `SegPoint`), free-running, `loop` / `sync` (beats).
+            BlockType::MultisegEnvelope if block.param_str("points").is_some() => {
+                let points =
+                    crate::native::parse_points(&block.param_str("points").unwrap_or_default());
+                let env = crate::native::ControlMultiseg::new(
+                    points,
+                    block.param_f32("loop").unwrap_or(0.0) > 0.0,
+                    block.param_f32("sync").unwrap_or(0.0) > 0.0,
+                )
+                .with_velocity_sensitivity(block.param_f32("vel_sens").unwrap_or(0.0));
+                // An amp/filter envelope holds at its sustain point.
+                let env = match block.param_f32("sustain") {
+                    Some(i) if i >= 0.0 => env.with_sustain(i as usize),
+                    _ => env,
+                }
+                .with_amp(block.param_f32("amp").unwrap_or(1.0));
+                ModSource::multiseg(env, sr)
+            }
+            BlockType::Envelope | BlockType::MultisegEnvelope => {
+                let mut p = crate::native::AdsrParams::default();
+                if let Some(v) = block.param_f32("attack") {
+                    p.attack_s = v.max(0.0);
+                }
+                if let Some(v) = block.param_f32("decay") {
+                    p.decay_s = v.max(0.0);
+                }
+                if let Some(v) = block.param_f32("sustain") {
+                    p.sustain = v.clamp(0.0, 1.0);
+                }
+                if let Some(v) = block.param_f32("release") {
+                    p.release_s = v.max(0.0);
+                }
+                let (delay, hold) = (
+                    block.param_f32("delay").unwrap_or(0.0),
+                    block.param_f32("hold").unwrap_or(0.0),
+                );
+                let env = ControlEnv::new(sr, p)
+                    .with_amp(block.param_f32("amp").unwrap_or(1.0))
+                    .with_delay_hold(delay, hold)
+                    .with_velocity_sensitivity(block.param_f32("vel_sens").unwrap_or(0.0));
+                ModSource::env(env, sr)
+            }
+            _ => return None,
+        };
+        self.sources.push(src);
+        self.source_paths
+            .push((self.path.clone(), block.display_name().to_lowercase()));
+        Some(self.sources.len() - 1)
+    }
+
+    /// The control source a route draws from.
+    ///
+    /// A modulator is looked up in scope by whatever the route points with;
+    /// a performance gesture is resolved against this crate's MIDI
+    /// vocabulary, which is the only place that vocabulary lives.
+    fn resolve_source(&mut self, source: &RouteSource) -> Option<usize> {
+        let key = source.key();
+        // Innermost modulator scope wins.
+        if let Some((_, idx)) = self.scope.iter().rev().find(|(n, _)| *n == key) {
+            return Some(*idx);
+        }
+        let RouteSource::Performance { name } = source else {
+            return None;
+        };
+        // MIDI performance source (deduped).
+        let m = ModSource::midi_by_name(name)?;
+        if let Some((_, idx)) = self.midi.iter().find(|(mm, _)| *mm == m) {
+            return Some(*idx);
+        }
+        self.sources.push(ModSource::midi(m));
+        self.source_paths.push((Vec::new(), key));
+        let idx = self.sources.len() - 1;
+        self.midi.push((m, idx));
+        Some(idx)
+    }
+
+    /// Resolve this container's routes against its subtree's leaves
+    /// (`subtree` = leaf indices compiled beneath it).
+    pub(super) fn resolve_routes(&mut self, routes: &[ModRoute], subtree: &[usize]) {
+        for route in routes {
+            if route.parameter.is_empty() {
+                tracing::warn!(target = %route.target.key(), "mod route names no parameter");
+                continue;
+            }
+            let Some(source) = self.resolve_source(&route.source) else {
+                tracing::warn!(source = %route.source.key(), "mod route source not found");
+                continue;
+            };
+            // An id matches one leaf and cannot be shadowed by a rename; a
+            // name matches every leaf that still carries it, which is what
+            // the name-addressed model always did.
+            let bkey = route.target.key();
+            let pkey = route.parameter.to_lowercase();
+            // A route onto a modulator's own depth ("amp"): scale that
+            // source rather than a leaf parameter.
+            if pkey == "amp" {
+                if let Some(&(_, target)) = self.scope.iter().rev().find(|(n, _)| *n == bkey) {
+                    match self.scales.iter_mut().find(|s| s.target == target) {
+                        Some(sc) => sc.terms.push((source, route.depth)),
+                        None => {
+                            if let Some(base) = self.sources[target].take_amp() {
+                                self.scales.push(SourceScale {
+                                    target,
+                                    base,
+                                    terms: vec![(source, route.depth)],
+                                });
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+            let mut hit = false;
+            for &leaf in subtree {
+                let (id, name, params) = &self.leaves[leaf];
+                if id.to_lowercase() != bkey && *name != bkey {
+                    continue;
+                }
+                if let Some(p) = params.iter().find(|p| p.name.to_lowercase() == pkey) {
+                    self.routes.push(CompiledRoute {
+                        source,
+                        leaf,
+                        param: p.id,
+                        base: p.default,
+                        depth: route.depth,
+                        authored: route.depth,
+                    });
+                    hit = true;
+                }
+            }
+            if !hit {
+                tracing::warn!(
+                    target = %bkey,
+                    param = %route.parameter,
+                    "mod route target not resolved (placeholder block or unknown param)"
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn route(source: usize, leaf: usize, param: u32, base: f64, depth: f32) -> CompiledRoute {
+        CompiledRoute {
+            source,
+            leaf,
+            param,
+            base,
+            depth,
+            authored: depth,
+        }
+    }
+
+    #[test]
+    fn multiple_routes_to_one_param_sum_additively() {
+        // Two sources at full scale, two routes onto leaf 0 / param 7.
+        let routes = vec![
+            route(0, 0, 7, 0.2, 0.3), // base 0.2, +0.3
+            route(1, 0, 7, 0.2, 0.1), // +0.1
+        ];
+        let values = [1.0f32, 1.0];
+        let mut writes = vec![Vec::new()];
+        let overlay: Vec<Vec<(u32, f64)>> = vec![Vec::new(); writes.len()];
+        accumulate_writes(&routes, &values, &overlay, &mut writes);
+        assert_eq!(writes[0].len(), 1, "one accumulated write per param");
+        let (param, v) = writes[0][0];
+        assert_eq!(param, 7);
+        assert!((v - 0.6).abs() < 1e-6, "0.2 + 0.3 + 0.1 = 0.6, got {v}");
+    }
+
+    #[test]
+    fn accumulated_value_clamps_to_unit_range() {
+        let routes = vec![
+            route(0, 0, 1, 0.8, 0.5),
+            route(0, 0, 1, 0.8, 0.5), // → 1.8, clamps to 1.0
+        ];
+        let values = [1.0f32];
+        let mut writes = vec![Vec::new()];
+        let overlay: Vec<Vec<(u32, f64)>> = vec![Vec::new(); writes.len()];
+        accumulate_writes(&routes, &values, &overlay, &mut writes);
+        assert_eq!(writes[0][0].1, 1.0);
+    }
+
+    #[test]
+    fn negative_depth_subtracts_from_base() {
+        let routes = vec![route(0, 0, 3, 0.5, -0.5)];
+        let values = [1.0f32];
+        let mut writes = vec![Vec::new()];
+        let overlay: Vec<Vec<(u32, f64)>> = vec![Vec::new(); writes.len()];
+        accumulate_writes(&routes, &values, &overlay, &mut writes);
+        assert!((writes[0][0].1 - 0.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn distinct_params_stay_separate() {
+        let routes = vec![route(0, 0, 1, 0.1, 0.2), route(0, 0, 2, 0.3, 0.2)];
+        let values = [1.0f32];
+        let mut writes = vec![Vec::new()];
+        let overlay: Vec<Vec<(u32, f64)>> = vec![Vec::new(); writes.len()];
+        accumulate_writes(&routes, &values, &overlay, &mut writes);
+        assert_eq!(writes[0].len(), 2);
+    }
+}
