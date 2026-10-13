@@ -751,7 +751,7 @@ impl TaskSet {
             }
             #[cfg(feature = "native")]
             None => {
-                let library = session_library::Library::from_env();
+                let library = session::library::Library::from_env();
                 Self {
                     url: library.org_url(),
                     token: library.token,

@@ -1,0 +1,160 @@
+[package]
+name = "session"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Session: setlists, songs, the live session's sync, the song library and the guide"
+
+[lints]
+workspace = true
+
+[features]
+default = ["vox"]
+collab = ["engine", "net"]
+desktop = ["dioxus", "dock-dioxus/web"]
+engine = ["dep:daw-control", "dep:daw-standalone"]
+library = ["dep:collection-proto", "dep:files-client", "dep:files-proto", "dep:futures-util", "dep:links-proto", "dep:resources-proto", "dep:task-dial", "dep:vox-core"]
+net = ["dep:crdt", "dep:futures"]
+reaper = ["daw/reaper", "dep:daw-actions", "dep:daw-reaper", "dep:daw-synchronization", "dep:reaper-high", "dep:reaper-low", "dep:reaper-medium"]
+tts = ["dep:chatterbox-rs", "dep:ort", "ort/load-dynamic"]
+ui = ["dep:architect-ui", "dep:dock-dioxus", "dep:dock-proto", "dep:lucide-dioxus", "web"]
+vox = []
+web = ["dioxus", "dock-dioxus/web"]
+
+[dependencies]
+architect = { workspace = true, features = ["local", "platform", "vox"] }
+architect-ui = { workspace = true, optional = true }
+chatterbox-rs = { git = "https://github.com/bearcove/cbx", optional = true }
+chrono = { version = "0.4" }
+collection-proto = { workspace = true, features = ["vox"], optional = true }
+color-palette = { workspace = true }
+crdt = { workspace = true, optional = true, features = ["vox"] }
+daw = { workspace = true }
+daw-control = { workspace = true, optional = true }
+daw-proto = { workspace = true }
+daw-standalone = { workspace = true, optional = true }
+daw-transport-sync = { workspace = true }
+dawfile-reaper = { workspace = true }
+dioxus = { workspace = true, optional = true }
+dock-dioxus = { workspace = true, default-features = false, optional = true }
+dock-proto = { workspace = true, optional = true }
+eyre = { workspace = true }
+facet = { workspace = true }
+files-client = { workspace = true, optional = true }
+files-proto = { workspace = true, optional = true }
+fts-sample = { workspace = true, features = ["load"] }
+futures = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+hound = { version = "3.5" }
+keyflow = { workspace = true, features = ["text"] }
+keyflow-daw-analysis = { workspace = true }
+links-proto = { workspace = true, optional = true }
+loro = { workspace = true }
+lucide-dioxus = { workspace = true, optional = true }
+monarchy = { workspace = true }
+music-catalog = { workspace = true }
+num-traits = { workspace = true }
+ort = { version = "=2.0.0-rc.10", optional = true, default-features = false }
+resources-proto = { workspace = true, optional = true }
+rustc-hash = { version = "2" }
+serde = { workspace = true }
+sha2 = { workspace = true }
+smallvec = { version = "1.13" }
+task-dial = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { version = "1.48", features = ["macros", "rt", "sync", "time"] }
+tracing = { workspace = true }
+utils = { workspace = true }
+uuid = { version = "1", features = ["js", "serde", "v4", "v7"] }
+vox = { workspace = true }
+vox-core = { workspace = true, optional = true }
+vox-types = { workspace = true }
+
+[dev-dependencies]
+architect = { workspace = true, features = ["local", "platform", "vox"] }
+crdt = { workspace = true, features = ["vox"] }
+daw = { workspace = true, features = ["file", "standalone", "test-harness"] }
+daw-control = { workspace = true }
+daw-proto = { workspace = true }
+daw-standalone = { workspace = true, features = ["audio", "bootstrap", "decode", "rpp-project", "session-file"] }
+daw-synchronization = { workspace = true }
+dioxus-test = { workspace = true }
+eyre = { workspace = true }
+facet-postcard = { workspace = true }
+formats = { workspace = true, features = ["store"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+vox = { workspace = true }
+vox-stream = { workspace = true }
+vox-websocket = { workspace = true }
+zstd = { version = "0.13" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+daw = { workspace = true, features = ["file"] }
+daw-actions = { workspace = true, optional = true }
+daw-reaper = { workspace = true, optional = true }
+daw-synchronization = { workspace = true, optional = true }
+dynamic-template = { workspace = true, features = ["reaper"] }
+reaper-high = { workspace = true, optional = true }
+reaper-low = { workspace = true, optional = true }
+reaper-medium = { workspace = true, optional = true }
+vox = { workspace = true, features = ["transport-local"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+futures = { workspace = true }
+web-sys = { version = "0.3", features = ["Window", "Performance"] }
+
+[[bin]]
+name = "session"
+path = "src/main.rs"
+
+[[example]]
+name = "tts_smoke"
+required-features = ["tts"]
+
+[[test]]
+name = "navigation"
+path = "tests/navigation.rs"
+required-features = ["ui"]
+
+[[test]]
+name = "take_review"
+path = "tests/take_review.rs"
+required-features = ["ui"]
+
+[[test]]
+name = "transport_stats"
+path = "tests/transport_stats.rs"
+required-features = ["ui"]
+
+[[test]]
+name = "doc_undo"
+path = "tests/doc_undo.rs"
+required-features = ["engine"]
+
+[[test]]
+name = "engine_roundtrip"
+path = "tests/engine_roundtrip.rs"
+required-features = ["engine"]
+
+[[test]]
+name = "net"
+path = "tests/net.rs"
+required-features = ["net"]
+
+[[test]]
+name = "whole"
+path = "tests/whole.rs"
+required-features = ["engine"]
+
+[[example]]
+name = "doc_edit"
+path = "examples/doc_edit.rs"
+required-features = ["engine"]
+
+[[example]]
+name = "doc_scale"
+path = "examples/doc_scale.rs"
+required-features = ["engine"]

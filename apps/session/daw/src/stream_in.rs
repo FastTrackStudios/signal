@@ -484,7 +484,7 @@ async fn stream_from_elsewhere(remote: &str) -> Option<crate::song_stream::Strea
         return None;
     }
     let name = song_name(remote).await?;
-    let slug = session_library::slugify(&name);
+    let slug = session::library::slugify(&name);
     let link = std::env::var(SHARE_LINKS_ENV)
         .ok()
         .and_then(|links| share_link_for(&links, &slug));

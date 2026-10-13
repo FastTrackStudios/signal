@@ -4,7 +4,7 @@
 //! Live Mode ([`crate::session_engine`]) embeds a `daw-standalone` backend
 //! and plays the setlist's audio itself. Recording Mode is the same
 //! `SetlistService` wire surface — same `SetlistServiceClient` type, same
-//! `session_ui::Session::init` call, same performance view — just dialed
+//! `session::ui::Session::init` call, same performance view — just dialed
 //! at a REAPER extension's `SetlistServiceImpl<daw_reaper::Reaper>`
 //! instead of an in-process one. `fts-extensions` already mounts that
 //! service (`session::daw_services::layer_services_with_daw`) — along
@@ -132,7 +132,7 @@ pub enum ConnectError {
 
 /// Connect to the most recently started live REAPER and hand back a
 /// `SetlistService` client pair — the same client type
-/// [`session_ui::Session::init`] takes in Live Mode, just backed by real
+/// [`session::ui::Session::init`] takes in Live Mode, just backed by real
 /// REAPER instead of the standalone player.
 pub async fn connect() -> Result<ReaperEngine, ConnectError> {
     connect_to(&discover_socket().ok_or(ConnectError::NoSocket)?).await
@@ -336,7 +336,7 @@ fn supervise(
 
 /// Drop the current connection and tell the UI.
 ///
-/// `session_ui::Session` is cleared too: it holds its own copy of the client,
+/// `session::ui::Session` is cleared too: it holds its own copy of the client,
 /// and a workspace that kept rendering from it would be driving a dead link.
 /// The vox connection itself closes when the last `Arc<ReaperEngine>` goes —
 /// `ReaperEngine` owns the `ConnectionHandle`.
@@ -344,7 +344,7 @@ fn disconnect() {
     if let Ok(mut slot) = ENGINE.write() {
         *slot = None;
     }
-    session_ui::Session::clear();
+    session::ui::Session::clear();
     // Recording Mode owns `daw::get()` while it is connected (Live Mode
     // installs its own and never reaches this path), so a dead REAPER should
     // not stay reachable through it — the armed-track poll waits for a live
@@ -434,7 +434,7 @@ async fn ensure_connected_to(socket: Option<PathBuf>) -> eyre::Result<()> {
         install_daw_singleton(daw_connection.daw);
     }
 
-    session_ui::Session::init(engine.client.clone())
+    session::ui::Session::init(engine.client.clone())
         .map_err(|e| eyre::eyre!("Session::init: {e:?}"))?;
 
     // `--engine` mode's LAN control surface (engine_server.rs) serves

@@ -52,10 +52,9 @@ rayon = { workspace = true, optional = true }
 # The project file: one Turso file per song, its Loro doc and blobs.
 formats = { workspace = true, optional = true, features = ["store"] }
 # The mix phases the mixer's left rail lists.
-session = { workspace = true }
+session = { workspace = true, features = ["library", "ui", "web"] }
 # The performance panels (the progress bar), drawn under Blitz — see
 # `src/progress.rs`.
-session-ui = { workspace = true, features = ["web"] }
 # The small-screen layout's tab icons (`compact`) — the icon set session-ui's
 # transport draws with.
 lucide-dioxus = { workspace = true }
@@ -63,7 +62,6 @@ lucide-dioxus = { workspace = true }
 keyflow = { workspace = true }
 # The guide engine the Click / Count / Guide MIDI tracks play through —
 # see `src/guide_instrument.rs`.
-session-guide = { workspace = true }
 # The visual presets. Which tracks a preset shows, and how large, is a
 # rule resolved against the session's own taxonomy — not a list of GUIDs
 # this window keeps. See `src/plan.rs`.
@@ -227,7 +225,6 @@ facet-json = { workspace = true }
 # The web demo's stems: Ogg proxies decoded a window at a time (`web_audio`).
 fts-sample = { workspace = true, optional = true, features = ["engine-core"] }
 # Streaming a song in from the Task library (song_stream::TaskSource).
-session-library = { workspace = true, optional = true }
 # A set Task keeps: joined through Task, its clock followed.
 live-proto = { workspace = true, optional = true }
 # A page follows its set's resets (live-proto's epochs stream).
@@ -254,12 +251,12 @@ default = ["native"]
 signal = ["native", "dep:signal-fx"]
 # The desktop app: dioxus-native (Blitz) hosts for the panels, the
 # in-process engine with its audio device, threads, the plugin-UI graph.
-native = ["dep:dioxus-native", "dep:realfft", "dep:architect-mcp", "dep:anyrender_vello", "dep:wgpu", "dep:wgpu-context-07", "dep:pollster", "dep:dirs", "dep:winit", "dep:tokio", "dep:tracing-subscriber", "eq/native", "daw/standalone-rpp", "daw/standalone-bootstrap", "daw-standalone/reapeaks", "daw-standalone/stream-ogg", "daw/standalone-session-file", "daw/cli", "dynamic-template/reaper", "dep:patch-list", "dep:editor-view", "editor-view/native", "dep:editor-state", "dep:keyflow-editor-lang", "dep:futures-channel", "dep:rayon", "dep:hits", "dep:formats", "formats?/store", "dep:futures-util", "session/collab", "dep:architect", "architect/iroh", "dep:crdt", "dep:vox-core", "dep:uuid", "dep:editor-crdt", "dep:futures-timer", "dep:daw-transport-sync", "dep:fts-sample", "fts-sample/engine-native", "fts-sample/write", "dep:dawfile-reaper", "dep:builtin", "builtin?/engine", "dawfile-reaper/peaks-wav", "dawfile-reaper/peaks-ogg", "dep:session-library", "dep:auth-client", "dep:live-proto", "dep:task-dial", "dep:reqwest"]
+native = ["dep:dioxus-native", "dep:realfft", "dep:architect-mcp", "dep:anyrender_vello", "dep:wgpu", "dep:wgpu-context-07", "dep:pollster", "dep:dirs", "dep:winit", "dep:tokio", "dep:tracing-subscriber", "eq/native", "daw/standalone-rpp", "daw/standalone-bootstrap", "daw-standalone/reapeaks", "daw-standalone/stream-ogg", "daw/standalone-session-file", "daw/cli", "dynamic-template/reaper", "dep:patch-list", "dep:editor-view", "editor-view/native", "dep:editor-state", "dep:keyflow-editor-lang", "dep:futures-channel", "dep:rayon", "dep:hits", "dep:formats", "formats?/store", "dep:futures-util", "session/collab", "dep:architect", "architect/iroh", "dep:crdt", "dep:vox-core", "dep:uuid", "dep:editor-crdt", "dep:futures-timer", "dep:daw-transport-sync", "dep:fts-sample", "fts-sample/engine-native", "fts-sample/write", "dep:dawfile-reaper", "dep:builtin", "builtin?/engine", "dawfile-reaper/peaks-wav", "dawfile-reaper/peaks-ogg", "session/library", "dep:auth-client", "dep:live-proto", "dep:task-dial", "dep:reqwest"]
 # The browser: the same widgets, hosted in <canvas> elements under
 # dioxus-web and drawn with vello_hybrid's WebGL renderer (keyflow-ui's
 # `wasm-graphics` pattern). See `web_host`.
 web = ["dioxus/web", "dep:web-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:anyrender_vello_hybrid", "dep:vello_hybrid", "dep:vello_common", "dep:rustc-hash", "dep:gloo-timers", "daw-standalone/stream-ogg", "dep:fts-sample", "dep:futures-util", "dep:reqwest", "daw/standalone-session-file", "session/collab", "dep:architect", "dep:crdt", "dep:uuid", "dep:daw-transport-sync", "dep:live-proto", "dep:task-dial", "dep:vox", "daw-standalone/reapeaks", "dep:futures-channel"]
-# The `#[reaper_test]` suites, which need a REAPER to talk to. Behind a
+# The `#[]` suites, which need a REAPER to talk to. Behind a
 # feature so an ordinary `cargo nextest run --workspace` does not try to
 # reach one that is not running — `just reaper-test` turns it on, via
 # session-reaper-xtask, which starts the REAPER first.

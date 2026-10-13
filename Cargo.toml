@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/session",
     "features/rigs/synth",
     "features/rigs/sampler",
     "features/rigs/guitar",
@@ -71,13 +72,7 @@ members = [
     "apps/session/player",
     "apps/session/vault-sync",
     "apps/session/web",
-    "features/session/proto",
-    "features/session/session",
-    "features/session/sync",
-    "features/session/library",
-    "features/session/ui",
     "features/dynamic-template/dynamic-template-extension",
-    "features/guide",
     "features/patch-list",
     "features/adapters/reaper/session-extension",
     "features/adapters/reaper/session-extension/xtask",
@@ -269,6 +264,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+session = { path = "features/session" }
 synth = { path = "features/rigs/synth" }
 sampler = { path = "features/rigs/sampler" }
 guitar = { path = "features/rigs/guitar" }
@@ -410,14 +406,9 @@ daw-standalone = { path = "crates/daw/standalone" }
 # `session` is the facade — the only public API surface for the session
 # domain. session-proto is INTERNAL (session-ui and session-guide are the
 # documented exceptions: Dioxus components / the guide engine).
-session = { path = "features/session/session" }
-session-proto = { path = "features/session/proto" }
-session-sync = { path = "features/session/sync" }
-session-ui = { path = "features/session/ui", default-features = false }
 # Portable guide engine (click / count-in / section guide). Optional `tts`
 # feature adds local Chatterbox TTS (its ort/chatterbox pins live in the
 # crate's own manifest, not here).
-session-guide = { path = "features/guide" }
 # Durable Song + Arrangement vault-folder schema (stored counterpart to
 # session_proto::Song). Keyflow-agnostic: charts are stored as references
 # (relative paths / attachment ids), never embedded keyflow::Chart types.
@@ -966,7 +957,6 @@ task-dial = { git = "https://github.com/FastTrackStudios/task", branch = "main" 
 # Live sessions Task keeps: joining a set, the clock, the epochs.
 live-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 links-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-session-library = { path = "features/session/library" }
 
 # Task's externals not already pinned above (root pins win everywhere
 # a key already existed — dioxus, serde, tokio, facet/vox rc.5 fleet,

@@ -4,7 +4,7 @@
 //! Renders the current song's chart with the same CPU engraver pipeline the
 //! website uses (`keyflow::engraver` layout → SVG string, wasm-safe — no
 //! canvas/wgpu), and drives a highlight overlay from the transport's musical
-//! position (`session_ui::ACTIVE_PLAYBACK_MUSICAL`, fed by the
+//! position (`session::ui::ACTIVE_PLAYBACK_MUSICAL`, fed by the
 //! `SetlistService` streams the `SessionRemoteBridge` pumps):
 //!
 //! - **chart source**: `SONG_CHARTS[project_guid].chart_text` — hydrated by
@@ -48,7 +48,7 @@ use keyflow::engraver::layout::chart::{
     Breakpoint, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult,
 };
 use keyflow::engraver::style::MStyle;
-use session_ui::{ACTIVE_INDICES, SETLIST_STRUCTURE, SONG_CHARTS};
+use session::ui::{ACTIVE_INDICES, SETLIST_STRUCTURE, SONG_CHARTS};
 
 /// Layout width in points. Fixed (tablet/desktop breakpoint); the SVG scales
 /// to the pane's CSS width, so this only picks type sizes / measures-per-line.

@@ -203,8 +203,8 @@ fn Player(reference: Signal<Option<Reference>>) -> Element {
 /// second and there would be no way to scrub it to the moment you were
 /// about to mark.
 fn session_now() -> Option<(f64, bool)> {
-    let song = session_ui::ACTIVE_INDICES().song_index?;
-    let transport = session_ui::SONG_TRANSPORT().get(&song).cloned()?;
+    let song = session::ui::ACTIVE_INDICES().song_index?;
+    let transport = session::ui::SONG_TRANSPORT().get(&song).cloned()?;
     let at = transport.position.time.map_or(0.0, |t| t.as_seconds());
     Some((at, transport.is_playing))
 }

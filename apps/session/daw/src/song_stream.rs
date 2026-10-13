@@ -14,7 +14,7 @@
 //!
 //! - [`PeerSource`] — the engine's song folder (`daw::rpc::SongFiles`).
 //! - [`TaskSource`] — the song's session File Root in the library
-//!   (`session_library::TaskSong`); its library chart replaces the folder's.
+//!   (`session::library::TaskSong`); its library chart replaces the folder's.
 //! - [`ShareSource`] — a Task share link to the song's session (the public
 //!   demo: no account): its JSON listing, its documents whole, its proxies
 //!   as the link's audio rendition with HTTP ranges.
@@ -171,8 +171,8 @@ impl SongSource for PeerSource {
 /// A song in the Task library: its session File Root, and its chart.
 #[cfg(feature = "native")]
 pub struct TaskSource {
-    library: session_library::Library,
-    song: session_library::TaskSong,
+    library: session::library::Library,
+    song: session::library::TaskSong,
 }
 
 #[cfg(feature = "native")]
@@ -184,7 +184,7 @@ impl TaskSource {
     ///
     /// The library cannot be reached, or has no session for the song.
     pub async fn new(slug: &str) -> eyre::Result<Self> {
-        Self::of(session_library::Library::from_env(), slug).await
+        Self::of(session::library::Library::from_env(), slug).await
     }
 
     /// The song `slug` in `library` — one a window signed in to.
@@ -192,7 +192,7 @@ impl TaskSource {
     /// # Errors
     ///
     /// As [`Self::new`].
-    pub async fn of(library: session_library::Library, slug: &str) -> eyre::Result<Self> {
+    pub async fn of(library: session::library::Library, slug: &str) -> eyre::Result<Self> {
         let song = library.song(slug).await?;
         Ok(Self { library, song })
     }
@@ -1147,7 +1147,7 @@ fn write_chart(keep: &Keep, project: &Path, label: &str, chart: &str) -> eyre::R
         #[cfg(feature = "native")]
         Keep::Disk(_) => {
             if let Some(folder) = project.parent() {
-                session_library::write_chart(folder, label, chart)?;
+                session::library::write_chart(folder, label, chart)?;
             }
             Ok(())
         }

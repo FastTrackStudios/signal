@@ -12,8 +12,8 @@ use dioxus::prelude::*;
 
 use crate::engine::{Move, Reading, Transport, transport};
 use crate::studio::StudioSession;
-use session_ui::components::progress::{ProgressSection, SongProgressBar};
-use session_ui::components::transport_controls::TransportControlBar;
+use session::ui::components::progress::{ProgressSection, SongProgressBar};
+use session::ui::components::transport_controls::TransportControlBar;
 
 /// The song as the performance panels (and the navigator) see it.
 #[derive(Clone, PartialEq)]

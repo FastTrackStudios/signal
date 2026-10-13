@@ -8697,7 +8697,7 @@ name = "guide-plugin"
 version = "0.1.0"
 dependencies = [
  "nice-plug",
- "session-guide",
+ "session",
 ]
 
 [[package]]
@@ -17754,40 +17754,68 @@ name = "session"
 version = "0.1.0"
 dependencies = [
  "architect",
+ "architect-ui",
+ "chatterbox-rs",
  "chrono",
+ "collection-proto",
  "color-palette 0.1.0 (git+https://github.com/FastTrackStudios/music-convention?tag=v0.1.3)",
+ "crdt",
  "daw",
  "daw-actions",
+ "daw-control",
  "daw-proto",
  "daw-reaper",
  "daw-standalone",
  "daw-synchronization",
+ "daw-transport-sync",
  "dawfile-reaper",
+ "dioxus",
+ "dioxus-test",
+ "dock-dioxus",
+ "dock-proto",
  "dynamic-template",
  "eyre",
+ "facet",
+ "facet-postcard",
+ "files-client",
+ "files-proto",
+ "formats",
+ "fts-sample",
  "futures",
+ "futures-util",
+ "hound",
  "keyflow",
  "keyflow-daw-analysis",
+ "links-proto",
+ "loro",
+ "lucide-dioxus",
  "monarchy",
  "music-catalog 0.1.0 (git+https://github.com/FastTrackStudios/music-convention?tag=v0.1.3)",
+ "num-traits",
+ "ort",
  "reaper-high",
  "reaper-low",
  "reaper-medium",
+ "resources-proto",
  "rustc-hash 2.1.3",
  "serde",
  "serde_json",
- "session-guide",
- "session-proto",
- "session-sync",
+ "sha2 0.10.9",
  "smallvec 1.16.0",
+ "task-dial",
+ "thiserror 2.0.20",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "utils",
  "uuid",
  "vox",
+ "vox-core",
  "vox-stream",
+ "vox-types",
  "vox-websocket",
+ "web-sys",
+ "zstd",
 ]
 
 [[package]]
@@ -17804,8 +17832,6 @@ dependencies = [
  "serde",
  "serde_json",
  "session",
- "session-library",
- "session-proto",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -17889,9 +17915,6 @@ dependencies = [
  "saturate",
  "serde_json",
  "session",
- "session-guide",
- "session-library",
- "session-ui",
  "signal-fx",
  "skrifa 0.42.1",
  "task-dial",
@@ -17967,9 +17990,6 @@ dependencies = [
  "rfd",
  "session",
  "session-daw",
- "session-guide",
- "session-proto",
- "session-ui",
  "session-vault-sync",
  "thiserror 2.0.20",
  "tokio",
@@ -18014,38 +18034,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "session-guide"
-version = "0.1.0"
-dependencies = [
- "chatterbox-rs",
- "fts-sample",
- "hound",
- "ort",
- "session-proto",
- "sha2 0.10.9",
- "thiserror 2.0.20",
- "tracing",
-]
-
-[[package]]
-name = "session-library"
-version = "0.1.0"
-dependencies = [
- "architect",
- "collection-proto",
- "eyre",
- "files-client",
- "files-proto",
- "futures-util",
- "links-proto",
- "resources-proto",
- "session-sync",
- "task-dial",
- "tokio",
- "vox-core",
-]
-
-[[package]]
 name = "session-player"
 version = "0.1.0"
 dependencies = [
@@ -18057,80 +18045,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "session-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "daw-proto",
- "eyre",
- "facet",
- "facet-postcard",
- "keyflow",
- "serde",
- "thiserror 2.0.20",
- "tokio",
- "utils",
- "uuid",
- "vox",
- "vox-types",
-]
-
-[[package]]
 name = "session-reaper-xtask"
 version = "0.1.0"
 dependencies = [
  "daw",
-]
-
-[[package]]
-name = "session-sync"
-version = "0.1.0"
-dependencies = [
- "architect",
- "crdt",
- "daw",
- "daw-control",
- "daw-proto",
- "daw-standalone",
- "daw-transport-sync",
- "eyre",
- "facet",
- "formats",
- "futures",
- "loro",
- "num-traits",
- "sha2 0.10.9",
- "tokio",
- "tracing",
- "uuid",
- "vox",
- "zstd",
-]
-
-[[package]]
-name = "session-ui"
-version = "0.1.0"
-dependencies = [
- "architect",
- "architect-ui",
- "daw",
- "daw-proto",
- "daw-standalone",
- "dioxus",
- "dioxus-test",
- "dock-dioxus",
- "dock-proto",
- "dynamic-template",
- "eyre",
- "keyflow",
- "lucide-dioxus",
- "session",
- "session-proto",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "vox",
- "web-sys",
 ]
 
 [[package]]
@@ -18161,7 +18079,6 @@ dependencies = [
  "eyre",
  "getrandom 0.3.4",
  "session",
- "session-ui",
  "ssg",
  "ssg-build",
  "ssg-ui",
@@ -18422,7 +18339,7 @@ dependencies = [
  "objc2-ui-kit 0.3.2",
  "reqwest 0.12.28",
  "sampler",
- "session-ui",
+ "session",
  "sha2 0.10.9",
  "signal-account",
  "signal-account-proto",
@@ -18658,7 +18575,7 @@ dependencies = [
  "hound",
  "keyflow-orchestra",
  "sampler",
- "session-guide",
+ "session",
 ]
 
 [[package]]

@@ -208,7 +208,7 @@ enum LibraryCommand {
 }
 
 async fn library(command: LibraryCommand) -> eyre::Result<()> {
-    let lib = session_library::Library::from_env();
+    let lib = session::library::Library::from_env();
     let setlists = lib.setlists().await?;
     match command {
         LibraryCommand::List => {

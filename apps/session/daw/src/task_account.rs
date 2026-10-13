@@ -49,8 +49,8 @@ impl Account {
 
     /// The org `org`'s library, as this person.
     #[must_use]
-    pub fn library(&self, org: &str) -> session_library::Library {
-        session_library::Library {
+    pub fn library(&self, org: &str) -> session::library::Library {
+        session::library::Library {
             server: self
                 .server
                 .replacen("https://", "wss://", 1)

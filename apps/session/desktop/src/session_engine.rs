@@ -242,7 +242,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
 
     // Session singleton for session-ui components (transport buttons,
     // sidebar seeks) — same client type the REAPER desktop installs.
-    session_ui::Session::init(engine.client.clone())
+    session::ui::Session::init(engine.client.clone())
         .map_err(|e| eyre::eyre!("Session::init: {e:?}"))?;
 
     ENGINE

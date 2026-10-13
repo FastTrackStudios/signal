@@ -246,11 +246,11 @@ fn reach_song_end(daw: &daw::standalone::Standalone, project: &daw::service::Pro
 }
 
 /// The session's guide action as REAPER knows it
-/// (`session_proto::guide::GuideActions::generate_guide_tracks`).
+/// (`session::proto::guide::GuideActions::generate_guide_tracks`).
 const GENERATE_GUIDE: &str = "FTS_SESSION_GUIDE_GENERATE_GUIDE_TRACKS";
 
 /// The REAPER command id of a marker or section button — the session's own
-/// action (`session_proto::keyflow_actions::KeyflowActions`), which runs
+/// action (`session::proto::keyflow_actions::KeyflowActions`), which runs
 /// the same `dispatch` the local press does. `None` for a time signature
 /// (there is no action for one; the remote press writes it itself) and
 /// for the sections with no action.

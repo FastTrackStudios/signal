@@ -50,24 +50,19 @@ session = ["session-domain", "tts"]
 # The guide still runs; spoken section cues fall back to the synthesized
 # guide samples, exactly as they do when FTS_TTS is unset on desktop.
 session-domain = [
-    "dep:session-proto",
-    # Wasm-only collection browser dep (no-op on native — see note above).
+    "dep:session",
     "dep:collection-proto",
-    "dep:session-ui",
+    "session?/ui",
     "dep:daw-ui",
     "dep:dawfile-reaper",
     "dep:keyflow",
     "dep:keyflow-sync",
-    "dep:session",
-    "dep:session-guide",
     "dep:daw",
     "dep:daw-control",
     "dep:daw-standalone",
     "dep:session-vault-sync",
     "dep:architect",
     "architect/local",
-    # The remote path to the session engine (src/remote.rs, shared with the
-    # signal rig views): vox over a WebSocket or iroh p2p.
     "architect/iroh",
     "dep:vox",
     "dep:vox-core",
@@ -77,16 +72,6 @@ session-domain = [
     "dep:libc",
     "dep:tokio",
     "dep:eyre",
-    # --engine mode's /vox server: the axum WebSocket<->vox adapter
-    # (architect::axum_ws). `dep:axum` on a target-table-only dependency is
-    # a no-op on platforms where that table doesn't declare it (wasm never
-    # builds a server) — same trick collection-proto already uses. The
-    # matching `architect/server-axum` feature reference is NOT similarly
-    # free — Cargo features aren't per-target — so a wasm build of this
-    # feature set would also try to pull in axum's server bits and likely
-    # fail; nothing currently builds `session-domain` for wasm without
-    # trimming it back out first (see `web-stage`'s own `--features
-    # signal,session`, which doesn't go through this feature).
     "architect/server-axum",
     "dep:axum",
     "dep:daw-proto"
@@ -100,7 +85,7 @@ charts = ["dep:keyflow"]
 # FTS_TTS=1 and a voice wav exists at ~/.config/fts/tts-voice.wav (the flake
 # provides onnxruntime + ORT_DYLIB_PATH). Cached cues keep loading regardless;
 # without it, cues fall back to the synthesized guide samples.
-tts = ["session-guide/tts"]
+tts = ["session/tts"]
 
 # Network probe for the engine's SetlistService (the browser remote's wire
 # path, natively): `cargo run -p session-desktop --example setlist_probe`.
@@ -116,7 +101,7 @@ fts-chrome.workspace = true
 # clients (session-proto) compile everywhere, including the wasm remote.
 # The in-process player crates (session facade, daw-standalone, the guide)
 # are native-only and live in the cfg(not wasm) table below.
-session-proto = { workspace = true, optional = true }
+session = { workspace = true, optional = true }
 keyflow = { workspace = true, optional = true }
 # Ordered-collection wire contract (song Library / Setlist / …). Only the
 # wasm build uses it (the /{org}/{collection} browser dials the task-server's
@@ -169,7 +154,7 @@ lucide-dioxus = { workspace = true, optional = true }
 # dependency weight, and at runtime nothing exports unless
 # OTEL_EXPORTER_OTLP_ENDPOINT is set (http/protobuf, port 4318).
 architect-telemetry = { workspace = true, features = ["otel"] }
-session-ui = { workspace = true, features = ["desktop"], optional = true }
+session = { workspace = true, features = ["desktop", "ui"], optional = true }
 # The real DAW panels (MixerPanel / ArrangementView) — self-contained,
 # wired to the in-process daw facade. `web` = the dioxus (WebView) renderer
 # the desktop app uses.
@@ -198,12 +183,10 @@ libc = { workspace = true, optional = true }
 # plus the guide engine — all native-only (audio, threads, filesystem).
 # The wasm build gets only session-proto + session-ui and drives a
 # network engine instead (session_remote_view.rs).
-session = { workspace = true, optional = true }
 # Guide engine: click / count-in / section cues rendered into the audio
 # output through daw-standalone's aux post-render hook. On iOS the
 # session-demo feature drives it with default features (no tts/ONNX) into a
 # small cpal stream instead.
-session-guide = { workspace = true, optional = true }
 # Lyric-sync sidecar (TimingMap) reader for the Lyric Sync workspace. Lean
 # default features only — no onnx/whisper; alignment is produced offline by
 # the `kf` CLI, the app just loads + edits the resulting sidecar.
@@ -257,7 +240,7 @@ block2 = "0.6"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }
-session-ui = { workspace = true, features = ["web"], optional = true }
+session = { workspace = true, features = ["ui", "web"], optional = true }
 # The collection browser's wire client (CollectionServiceClient + Collection /
 # CollectionItem / NodeRef). Wasm-only: this surface exists only in the web
 # build. Enabled via the `session` feature's `dep:collection-proto`.

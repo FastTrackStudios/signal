@@ -11,7 +11,7 @@
 //! of the song playing goes there.
 
 use dioxus::prelude::*;
-use session_ui::components::sidebar_items::{SectionItem, SongItemData};
+use session::ui::components::sidebar_items::{SectionItem, SongItemData};
 
 use crate::engine::{Move, transport};
 use crate::setlist::{Setlist, Song};

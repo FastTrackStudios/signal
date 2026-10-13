@@ -27,10 +27,10 @@ use crate::setlist::{Arrival, Opening, Setlist};
 use crate::song_stream::{FetchGuard, Keep, ShareSource, SongSource, StreamedSong, TaskSource};
 
 /// A setlist in an org's library, as [`setlists`] lists them.
-pub use session_library::Setlist as LibrarySetlist;
+pub use session::library::Setlist as LibrarySetlist;
 /// A song in an org's library, and what a list is for — for the window's
 /// list editor.
-pub use session_library::{Library, ListKind, Song as LibrarySong};
+pub use session::library::{Library, ListKind, Song as LibrarySong};
 
 /// A set Task keeps, to stream in.
 pub enum Remote {
@@ -40,8 +40,8 @@ pub enum Remote {
     /// A setlist in the org's library, joined as the member signed in to
     /// it, called `name`.
     Library {
-        library: session_library::Library,
-        setlist: session_library::Setlist,
+        library: session::library::Library,
+        setlist: session::library::Setlist,
         name: String,
     },
 }
@@ -51,20 +51,20 @@ pub enum Remote {
 /// # Errors
 ///
 /// The library could not be reached, or refused.
-pub fn setlists(library: &session_library::Library) -> eyre::Result<Vec<session_library::Setlist>> {
+pub fn setlists(library: &session::library::Library) -> eyre::Result<Vec<session::library::Setlist>> {
     crate::open::engine_runtime()?.block_on(library.setlists())
 }
 
 /// `work` against the library, to its end: what a window calls on a
-/// thread of its own to change its lists (see `session_library::Library`'s
+/// thread of its own to change its lists (see `session::library::Library`'s
 /// `create_list`, `set_songs` and the rest).
 ///
 /// # Errors
 ///
 /// The engine's runtime did not start, or `work` failed.
 pub fn with_library<T, F>(
-    library: &session_library::Library,
-    work: impl FnOnce(session_library::Library) -> F,
+    library: &session::library::Library,
+    work: impl FnOnce(session::library::Library) -> F,
 ) -> eyre::Result<T>
 where
     F: std::future::Future<Output = eyre::Result<T>>,
@@ -198,7 +198,7 @@ enum Source {
     /// A live set's song: its files link.
     Share(String),
     /// A library setlist's song: its slug in the library.
-    Library(session_library::Library, String),
+    Library(session::library::Library, String),
 }
 
 impl Source {
@@ -478,9 +478,9 @@ pub fn download_file(into: &std::path::Path, title: &str) -> PathBuf {
 ///
 /// None of the songs could be downloaded, or the setlist not written.
 pub fn download(
-    library: &session_library::Library,
+    library: &session::library::Library,
     title: &str,
-    songs: &[session_library::Song],
+    songs: &[session::library::Song],
     into: &std::path::Path,
     offline: crate::song_stream::Offline,
     progress: &(dyn Fn(Downloading) + Sync),

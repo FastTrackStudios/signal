@@ -953,7 +953,7 @@ async fn fetch_bytes(url: &str) -> Result<Arc<[u8]>, String> {
 /// from the library's share link. A file that does not arrive is left out
 /// (the instrument synthesizes its slot).
 async fn guide_library(base: &str) -> HashMap<String, Vec<u8>> {
-    let wanted = session_guide::samples::library::files(
+    let wanted = session::guide::engine::samples::library::files(
         crate::guide_instrument::CLICK,
         crate::guide_instrument::VOICE,
         "ogg",

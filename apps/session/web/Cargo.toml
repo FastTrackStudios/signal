@@ -9,11 +9,10 @@ description = "session.fasttrackstudio.app — the Session landing page and live
 # The facade — never session-proto directly (crate-facade rule, see
 # crates/session/CLAUDE.md). Gives the /demo route the Praise chart
 # importer, the demo-fixture generator, and the setlist service types.
-session = { workspace = true }
+session = { workspace = true, features = ["ui", "web"] }
 # Dioxus performance-view chrome (PerformanceLayout/PerformanceSidebar/
 # TransportPanel) and the global signals it reads — the real desktop
 # player UI, `#[cfg(target_arch = "wasm32")]`-split throughout.
-session-ui = { workspace = true, features = ["web"] }
 architect-ui = { workspace = true }
 
 # In-process backend bootstrap for /demo — same shape as

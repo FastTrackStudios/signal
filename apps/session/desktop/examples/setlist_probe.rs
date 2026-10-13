@@ -21,8 +21,8 @@
 //! scratch engine on another port (`SIGNAL_ENGINE_ADDR=127.0.0.1:14041
 //! session-desktop --engine`).
 
-use session_proto::services::setlist_service::SetlistServiceStreamClient;
-use session_proto::{ActiveIndices, SetlistEvent, SetlistServiceClient};
+use session::proto::services::setlist_service::SetlistServiceStreamClient;
+use session::proto::{ActiveIndices, SetlistEvent, SetlistServiceClient};
 
 async fn establish<C: vox_core::FromVoxLane>(url: &str) -> C {
     let link = vox_websocket::WsLink::connect(url)

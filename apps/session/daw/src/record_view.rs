@@ -15,7 +15,7 @@
 //! - **At the bottom**, the transport, with Record where Loop is.
 
 use dioxus::prelude::*;
-use session_ui::components::{MeasureIndicator, SectionProgressBar};
+use session::ui::components::{MeasureIndicator, SectionProgressBar};
 
 use crate::compact::{Form, use_form};
 use crate::engine::{Move, transport};

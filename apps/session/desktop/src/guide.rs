@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use session_guide::{
+use session::guide::engine::{
     BlockClock, ClickSound, CueBank, CueSchedule, GuideConfig, GuideEngine, GuideSongTiming,
     SampleBank, TtsRenderer, sections_from_song, tts_cue_key,
 };
@@ -56,7 +56,7 @@ static GUIDE: OnceLock<Arc<GuideShared>> = OnceLock::new();
 
 /// Latest active song, kept so a rebuild can run whenever either side
 /// (audio install / bridge event) arrives first.
-static CURRENT_SONG: Mutex<Option<session_proto::Song>> = Mutex::new(None);
+static CURRENT_SONG: Mutex<Option<session::proto::Song>> = Mutex::new(None);
 
 /// Frames of stereo scratch the hook pre-allocates (matches the aux
 /// staging cap in daw-standalone).
@@ -283,7 +283,7 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
 /// Called by the session event bridge whenever the active song changes
 /// (or its data is re-hydrated). Cheap: stores the song and kicks the
 /// rebuild worker.
-pub fn set_current_song(song: session_proto::Song) {
+pub fn set_current_song(song: session::proto::Song) {
     match CURRENT_SONG.lock() {
         Ok(mut slot) => *slot = Some(song),
         Err(_) => return,
@@ -418,8 +418,8 @@ fn load_tts() -> Option<Box<dyn TtsRenderer>> {
     }
     // voice_wav is only used if no cached profile matches; the bundled default
     // profile takes precedence inside ChatterboxTts.
-    let config = session_guide::ChatterboxTtsConfig::with_voice(tts_voice_path(), "fts");
-    match session_guide::ChatterboxTts::load(config) {
+    let config = session::guide::engine::ChatterboxTtsConfig::with_voice(tts_voice_path(), "fts");
+    match session::guide::engine::ChatterboxTts::load(config) {
         Ok(tts) => {
             debug_assert_eq!(tts.voice_id(), tts_voice_id());
             Some(Box::new(tts))

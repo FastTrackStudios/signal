@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use session::services::setlist_service::{SetlistServiceStreamClient, SetlistServiceStreamSource};
 use session::{SessionServiceError, SetlistServiceClient};
-use session_proto::{
+use session::proto::{
     ActiveIndices, AudioLatencyInfo, MeasureInfo, MusicalPosition, Section, Setlist, SetlistEvent,
     Song, SongChartHydration,
 };
@@ -423,7 +423,7 @@ impl session::SetlistService for ReaperLanProxy {
     async fn song_review(
         &self,
         song_index: usize,
-    ) -> Result<Vec<session_proto::review::Pass>, SessionServiceError> {
+    ) -> Result<Vec<session::proto::review::Pass>, SessionServiceError> {
         self.client
             .song_review(song_index)
             .await
@@ -434,7 +434,7 @@ impl session::SetlistService for ReaperLanProxy {
         &self,
         song_index: usize,
         pass: u32,
-        mark: session_proto::review::Mark,
+        mark: session::proto::review::Mark,
     ) -> Result<(), SessionServiceError> {
         self.client
             .mark_take(song_index, pass, mark)

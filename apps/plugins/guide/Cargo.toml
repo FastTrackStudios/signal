@@ -22,4 +22,4 @@ nice-plug.workspace = true
 # The portable guide engine (click / count-in / section guide, ported from
 # legacy fts-guide). The plugin drives it with a per-block `BlockClock`
 # built from the host transport.
-session-guide.workspace = true
+session = { workspace = true }
