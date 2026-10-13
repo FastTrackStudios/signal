@@ -4390,6 +4390,7 @@ name = "daw-sync"
 version = "0.1.0"
 dependencies = [
  "daw",
+ "daw-sync",
  "eyre",
  "facet",
  "facet-postcard",

@@ -23,6 +23,9 @@ tokio-util = { version = "0.7" }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# Its own tests, with the features they need: a plain `cargo test` of the
+# workspace builds them all.
+daw-sync = { path = ".", features = ["link", "network"] }
 daw = { workspace = true }
 eyre = { workspace = true }
 studio = { workspace = true, features = ["reaper", "test-harness"] }
