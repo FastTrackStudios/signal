@@ -14,7 +14,7 @@ view-gestures = { workspace = true }
 razor = { workspace = true }
 # The shared scroll/wheel and key bindings, resolved from the same keymap
 # the arrange view and REAPER use.
-input.workspace = true
+input = { workspace = true }
 # The grid that follows the zoom.
 adaptive-grid = { workspace = true }
 # The canonical FTS palette — every colour in `theme` comes from here.

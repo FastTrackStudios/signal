@@ -1,4 +1,4 @@
-//! Dioxus hook for driving `input::InputProcessor`.
+//! Dioxus hook for driving `crate::InputProcessor`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -7,11 +7,11 @@ use dioxus::prelude::{
     GlobalSignal, KeyboardEvent, MouseEvent, ReadableExt, Signal, WheelEvent, WritableExt, spawn,
     use_hook, use_signal,
 };
-use input::{
+use crate::{
     ActionContext, InputCommand, InputEvent, InputProcessor, KeymapConfig, ModeId, MouseAction,
 };
 
-use crate::convert::{convert_keyboard_event, convert_mouse_event, convert_wheel_event};
+use crate::dioxus::convert::{convert_keyboard_event, convert_mouse_event, convert_wheel_event};
 
 /// Platform sleep for the chord-sequence timeout: tokio on native, the
 /// browser timer on wasm (tokio's `full` features pull mio's net stack, which

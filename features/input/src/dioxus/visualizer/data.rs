@@ -1,11 +1,11 @@
 //! Flat binding extraction from trie / table structures for UI display.
 
-use input::context::WhenExpr;
-use input::event::{MouseAction, MouseButton};
-use input::key::{KeyChord, KeyCode, Modifiers};
-use input::mouse::MouseBindingTable;
-use input::scroll::{ScrollAxis, ScrollBindingTable};
-use input::trie::{KeyTrie, LeafAction};
+use crate::context::WhenExpr;
+use crate::event::{MouseAction, MouseButton};
+use crate::key::{KeyChord, KeyCode, Modifiers};
+use crate::mouse::MouseBindingTable;
+use crate::scroll::{ScrollAxis, ScrollBindingTable};
+use crate::trie::{KeyTrie, LeafAction};
 
 // ---------------------------------------------------------------------------
 // Action sections (color-coded categories)

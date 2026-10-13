@@ -30,7 +30,7 @@ expression-editor-tools.workspace = true
 # same keymap the arrange view and REAPER use rather than hardcoding a
 # modifier match, which is how three schemes for one gesture happened.
 # Wasm-clean (serde + tracing only), so this does not cost the web build.
-input.workspace = true
+input = { workspace = true }
 expression-editor-core = { workspace = true }
 # The portable painter and interaction — see that crate for why it is
 # separate. Re-exported below under the module names they had here.

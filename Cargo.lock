@@ -4520,9 +4520,6 @@ dependencies = [
  "eyre",
  "futures-timer",
  "input",
- "input-config-proto",
- "input-dioxus",
- "input-keybinds",
  "tokio",
  "tracing",
  "wasm-bindgen",
@@ -9953,39 +9950,17 @@ dependencies = [
 name = "input"
 version = "0.1.0"
 dependencies = [
+ "architect-ui",
+ "dioxus",
  "facet",
+ "facet-styx",
+ "gloo-timers",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
- "tracing",
-]
-
-[[package]]
-name = "input-config-proto"
-version = "0.1.0"
-dependencies = [
- "facet",
- "vox",
-]
-
-[[package]]
-name = "input-dioxus"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "dioxus",
- "gloo-timers",
- "input",
  "tokio",
-]
-
-[[package]]
-name = "input-keybinds"
-version = "0.1.0"
-dependencies = [
- "facet-styx",
- "input",
- "input-config-proto",
+ "tracing",
+ "vox",
 ]
 
 [[package]]
@@ -16290,9 +16265,6 @@ dependencies = [
  "figue",
  "helgoboss-midi",
  "input",
- "input-config-proto",
- "input-dioxus",
- "input-keybinds",
  "once_cell",
  "reaper-config",
  "reaper-dioxus",
@@ -17889,8 +17861,6 @@ dependencies = [
  "hits",
  "image",
  "input",
- "input-config-proto",
- "input-keybinds",
  "js-sys",
  "keyflow",
  "level",

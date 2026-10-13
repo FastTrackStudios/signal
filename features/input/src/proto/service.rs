@@ -17,7 +17,7 @@
 use facet::Facet;
 use vox::service;
 
-use crate::types::{OverlayConfig, ProfileConfig, SectionConfig, WorkflowConfig};
+use crate::proto::types::{OverlayConfig, ProfileConfig, SectionConfig, WorkflowConfig};
 
 /// Summary of a profile (directory of section files).
 #[derive(Facet, Debug, Clone, PartialEq)]

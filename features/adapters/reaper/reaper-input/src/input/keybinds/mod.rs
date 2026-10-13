@@ -52,7 +52,7 @@ use facet::Facet;
 // The portable context enums live in input-config-proto (the wire
 // contract for keybind config editing) so wasm clients never link this
 // crate; re-exported here at their historical paths.
-pub use input_config_proto::KeybindContext;
+pub use input::proto::KeybindContext;
 
 /// A single keybinding definition
 #[derive(Debug, Clone, Facet)]
@@ -111,7 +111,7 @@ impl Keybind {
     }
 }
 
-pub use input_config_proto::MouseModifierContext;
+pub use input::proto::MouseModifierContext;
 
 /// A mouse modifier binding (for click+drag behaviors)
 #[derive(Debug, Clone, Facet)]

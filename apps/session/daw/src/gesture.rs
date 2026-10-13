@@ -174,7 +174,7 @@ pub fn drag_fraction(delta_y: f64, travel: f64) -> f64 {
 mod tests {
     use super::*;
     use crate::hit::{Hit, Target};
-    use input_config_proto::MouseModifierContext as Context;
+    use input::proto::MouseModifierContext as Context;
 
     fn hit(row: usize) -> Hit {
         Hit {

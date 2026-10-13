@@ -8,12 +8,12 @@
 //! is geometry, a mouse map is preference.
 //!
 //! The table here is the FTS default. A mouse profile
-//! (`input_config_proto::MouseProfileConfig`) is the same shape — a
+//! (`input::proto::MouseProfileConfig`) is the same shape — a
 //! context, a modifier set, a behaviour — and is where a user's
 //! overrides will load into once the profile system reaches this
 //! window; the contexts are already its contexts.
 
-use input_config_proto::MouseModifierContext as Context;
+use input::proto::MouseModifierContext as Context;
 
 /// The keys held during a gesture.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

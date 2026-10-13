@@ -2,8 +2,8 @@
 //!
 //! Turns the styx/facet keybind config data model from `input-config-proto`
 //! (`KeybindDef` / `WhichKeyTreeDef` / `WheelBindDef` / `SectionConfig` /
-//! `ProfileConfig`) into an [`input::KeymapConfig`] that an
-//! `input::InputProcessor` can dispatch. The key-notation translation
+//! `ProfileConfig`) into an [`crate::KeymapConfig`] that an
+//! `crate::InputProcessor` can dispatch. The key-notation translation
 //! (`<C-s>` → `Ctrl+s`, `gg` → `g g`, which-key trees → flat space-separated
 //! sequences) was extracted from reaper-input's bridge so that any consumer —
 //! not just the DAW — can drive the same input engine from the same config

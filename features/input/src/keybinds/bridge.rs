@@ -10,12 +10,12 @@
 //! This is the app-agnostic core: it carries no REAPER coupling (no action
 //! "routing marks", no VK-code conversion — those stay in reaper-input). A
 //! plain Dioxus app can call [`section_to_keymap_config`] on a parsed styx
-//! section and hand the result straight to an `input::InputProcessor`.
+//! section and hand the result straight to an `crate::InputProcessor`.
 
 use std::collections::HashMap;
 
-use input::config::{ContextLayerConfig, KeymapConfig};
-use input_config_proto::{
+use crate::config::{ContextLayerConfig, KeymapConfig};
+use crate::proto::{
     KeybindContext, KeybindDef, SectionConfig, WheelBindDef, WhichKeyEntryDef, WhichKeyTreeDef,
 };
 
@@ -113,10 +113,10 @@ fn which_key_trees_to_keymap_entries(trees: &[WhichKeyTreeDef]) -> HashMap<Strin
 /// translation, the same case-insensitive variants), keeping the names:
 /// `z` → "Zoom", `z t` → "Toggle tracks/time zoom".
 #[must_use]
-pub fn which_key_labels(trees: &[WhichKeyTreeDef]) -> HashMap<Vec<input::KeyChord>, String> {
+pub fn which_key_labels(trees: &[WhichKeyTreeDef]) -> HashMap<Vec<crate::KeyChord>, String> {
     let mut labels = HashMap::new();
     let mut put = |seq: &str, label: &str| {
-        if let Ok(chords) = input::parse_key_sequence(seq) {
+        if let Ok(chords) = crate::parse_key_sequence(seq) {
             labels.insert(chords, label.to_owned());
         }
     };

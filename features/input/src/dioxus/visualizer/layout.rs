@@ -3,7 +3,7 @@
 //! Modeled after the MPL ReaImGui script's block/row/position system.
 //! Three blocks: main keyboard, navigation cluster, numpad.
 
-use input::key::KeyCode;
+use crate::key::KeyCode;
 
 /// A single key on the visual keyboard.
 #[derive(Debug, Clone, PartialEq)]

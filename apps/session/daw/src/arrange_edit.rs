@@ -307,7 +307,7 @@ impl Editor {
     /// hit's own, unless a razor area already drawn is under it, which
     /// answers for itself (the same rule [`Self::press`] follows).
     #[must_use]
-    pub fn context_at(&self, hit: Hit) -> input_config_proto::MouseModifierContext {
+    pub fn context_at(&self, hit: Hit) -> input::proto::MouseModifierContext {
         let Some((at, row)) = Self::where_in_lanes(hit.target) else {
             return hit.context;
         };
@@ -5105,7 +5105,7 @@ mod tests {
                 seconds: 20.0,
                 on: crate::ruler::On::Bars,
             },
-            context: input_config_proto::MouseModifierContext::Ruler,
+            context: input::proto::MouseModifierContext::Ruler,
         };
         let mut effects = Vec::new();
         s.editor
@@ -5176,7 +5176,7 @@ mod ruler_tests {
         to: Option<f64>,
     ) -> Vec<Edit> {
         use crate::hit::{Hit, Target};
-        use input_config_proto::MouseModifierContext as Context;
+        use input::proto::MouseModifierContext as Context;
         let mut effects = Vec::new();
         editor.ruler_span = Some(was);
         let hit = Hit {

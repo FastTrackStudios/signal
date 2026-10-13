@@ -488,7 +488,7 @@ fn anchor_modifiers(translated_prefix: &str) -> Vec<&'static str> {
 /// Key-notation translation is app-agnostic and now lives in the shared
 /// `input-keybinds` crate; re-exported here so callers keep using
 /// `bridge::translate_sequence`.
-pub use input_keybinds::translate_sequence;
+pub use input::keybinds::translate_sequence;
 
 // ---------------------------------------------------------------------------
 // Context → WhenExpr string

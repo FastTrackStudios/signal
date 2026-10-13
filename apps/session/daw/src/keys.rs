@@ -261,22 +261,22 @@ impl Keys {
     pub fn load() -> Self {
         let (profile, source) = profile_dir()
             .and_then(|dir| {
-                input_keybinds::load_profile_dir(&dir).map(|p| (p, dir.display().to_string()))
+                input::keybinds::load_profile_dir(&dir).map(|p| (p, dir.display().to_string()))
             })
             .or_else(|| {
-                input_keybinds::embedded::fasttrackstudio()
+                input::keybinds::embedded::fasttrackstudio()
                     .map(|p| (p, "fasttrackstudio (embedded)".to_owned()))
             })
             .or_else(|| {
                 KeymapConfig::from_json_str(BUILTIN).ok().map(|keymap| {
-                    let profile = input_keybinds::Profile {
+                    let profile = input::keybinds::Profile {
                         keymap,
                         labels: HashMap::new(),
                     };
                     (profile, "built-in".to_owned())
                 })
             })
-            .unwrap_or_else(|| (input_keybinds::Profile::default(), "none".to_owned()));
+            .unwrap_or_else(|| (input::keybinds::Profile::default(), "none".to_owned()));
         let processor =
             InputProcessor::from_config(profile.keymap).unwrap_or_else(|_| InputProcessor::new());
         Self {
@@ -722,7 +722,7 @@ mod tests {
     /// The profile the app ships toggles the Editor on `e`.
     #[test]
     fn the_shipped_profile_toggles_the_editor_on_e() {
-        let profile = input_keybinds::embedded::fasttrackstudio().expect("the embedded profile");
+        let profile = input::keybinds::embedded::fasttrackstudio().expect("the embedded profile");
         let mut keys = Keys {
             processor: InputProcessor::from_config(profile.keymap).expect("a processor"),
             context: ActionContext::new(),
@@ -741,7 +741,7 @@ mod tests {
     /// Quantize panel on Shift+Q.
     #[test]
     fn the_shipped_profile_quantizes_on_q() {
-        let profile = input_keybinds::embedded::fasttrackstudio().expect("the embedded profile");
+        let profile = input::keybinds::embedded::fasttrackstudio().expect("the embedded profile");
         let mut keys = Keys {
             processor: InputProcessor::from_config(profile.keymap).expect("a processor"),
             context: ActionContext::new(),
@@ -771,7 +771,7 @@ mod tests {
     /// Alt+G.
     #[test]
     fn the_shipped_profile_gain_stages_on_g() {
-        let profile = input_keybinds::embedded::fasttrackstudio().expect("the embedded profile");
+        let profile = input::keybinds::embedded::fasttrackstudio().expect("the embedded profile");
         let mut keys = Keys {
             processor: InputProcessor::from_config(profile.keymap).expect("a processor"),
             context: ActionContext::new(),
@@ -796,7 +796,7 @@ mod tests {
     /// Ctrl+N comps from take N.
     #[test]
     fn the_shipped_profile_comps_on_ctrl_digits() {
-        let profile = input_keybinds::embedded::fasttrackstudio().expect("the embedded profile");
+        let profile = input::keybinds::embedded::fasttrackstudio().expect("the embedded profile");
         let mut keys = Keys {
             processor: InputProcessor::from_config(profile.keymap).expect("a processor"),
             context: ActionContext::new(),

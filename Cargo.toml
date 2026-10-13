@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/input",
     "features/ui/themer",
     "features/launcher",
     "features/preset-browser",
@@ -91,10 +92,6 @@ members = [
     "crates/daw/daw",
     "crates/daw/module",
     "crates/daw/proto",
-    "features/input/input",
-    "features/input/input-config-proto",
-    "features/input/input-dioxus",
-    "features/input/input-keybinds",
     "crates/keyflow/keyflow-proto",
     "crates/keyflow/keyflow-syntax",
     "features/midi/midicore",
@@ -305,6 +302,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+input = { path = "features/input" }
 themer = { path = "features/ui/themer", default-features = false }
 launcher = { path = "features/launcher" }
 preset-browser = { path = "features/preset-browser" }
@@ -372,14 +370,10 @@ midicore-proto = { path = "features/midi/midicore-proto" }
 midicore-midir = { path = "features/midi/midicore-midir" }
 midicore-ui = { path = "features/midi/midicore-ui" }
 # NI Komplete Kontrol keyboard driver (Light Guide / per-key RGB LEDs).
-input-config-proto = { path = "features/input/input-config-proto" }
 arborium ={ version = "2.16.0", default-features = false }
 arborium-theme = "2.16.0"
 arborium-tree-sitter = "2.16.0"
 ropey = "1.6"
-input = { path = "features/input/input" }
-input-dioxus = { path = "features/input/input-dioxus" }
-input-keybinds = { path = "features/input/input-keybinds" }
 # ── frame themes ──────────────────────────────────────────────────────
 # The mixer (then the TCP, then the arrangement) drawn from frame
 # documents — runtime-swappable, hot-reloaded themes. See

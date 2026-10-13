@@ -8,7 +8,7 @@
 //! (a git dependency has no stable path on disk), so it asks this crate
 //! for the bytes instead.
 
-use crate::loader::{Profile, load_profile_from};
+use crate::keybinds::loader::{Profile, load_profile_from};
 
 /// Every file of `reaper-input/config/config/fasttrackstudio`, by name.
 pub const FASTTRACKSTUDIO: &[(&str, &str)] = &[
@@ -159,7 +159,7 @@ pub fn fasttrackstudio() -> Option<Profile> {
 
 #[cfg(test)]
 mod tests {
-    use input::parse_key_sequence;
+    use crate::parse_key_sequence;
 
     /// The embedded profile loads, carries the zoom tree, and names it.
     #[test]

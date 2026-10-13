@@ -77,9 +77,7 @@ hits = { workspace = true, optional = true }
 patch-list = { workspace = true, optional = true }
 # The mouse-modifier contexts a hit reports, so bindings stay
 # configurable rather than being hard-coded per widget.
-input-config-proto = { workspace = true }
 input = { workspace = true }
-input-keybinds = { workspace = true }
 daw-theme = { workspace = true }
 
 # The expression editor: its engine, its painter and gestures (no

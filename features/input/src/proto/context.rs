@@ -1,5 +1,5 @@
 //! Portable binding-context enums, extracted from reaper-input's
-//! `input::keybinds` so wasm clients can use the config types without
+//! `crate::keybinds` so wasm clients can use the config types without
 //! linking the REAPER runtime. reaper-input re-exports these at their
 //! original paths.
 

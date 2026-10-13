@@ -7,8 +7,8 @@ use std::collections::HashSet;
 
 use dioxus::prelude::*;
 
-use input::key::{KeyCode, Modifiers};
-use input::mode::ModeId;
+use crate::key::{KeyCode, Modifiers};
+use crate::mode::ModeId;
 
 use super::data::{
     ActionSection, ContextBindingGroup, KeyBindingInfo, MouseBindingInfo, ScrollBindingInfo,
@@ -17,7 +17,7 @@ use super::data::{
 };
 use super::layout::{KeyBlock, KeyDef, KeyRow, qwerty_layout};
 
-use crate::hook::InputHandle;
+use crate::dioxus::hook::InputHandle;
 
 /// Base key unit in pixels. All key sizes are multiples of this.
 const KEY_UNIT: f32 = 52.0;

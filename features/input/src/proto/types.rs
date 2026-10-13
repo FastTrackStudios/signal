@@ -2,7 +2,7 @@
 
 use facet::Facet;
 
-use crate::context::{KeybindContext, MouseModifierContext};
+use crate::proto::context::{KeybindContext, MouseModifierContext};
 
 // ── Profile ──────────────────────────────────────────────────────────────────
 

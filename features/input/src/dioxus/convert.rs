@@ -4,7 +4,7 @@ use dioxus::prelude::{
     InteractionLocation, Key, KeyboardEvent, Modifiers as DioxusModifiers, ModifiersInteraction,
     MouseEvent, PointerInteraction, WheelEvent,
 };
-use input::{InputEvent, KeyCode, KeyEvent, Modifiers, MouseAction, MouseButton, ScrollEvent};
+use crate::{InputEvent, KeyCode, KeyEvent, Modifiers, MouseAction, MouseButton, ScrollEvent};
 
 /// Convert a Dioxus key value to an input key code.
 pub fn convert_key(key: &Key) -> Option<KeyCode> {
@@ -68,7 +68,7 @@ pub fn convert_mouse_event(e: &MouseEvent, action: MouseAction) -> InputEvent {
                 _ => MouseButton::Left,
             });
 
-    InputEvent::Mouse(input::MouseEvent {
+    InputEvent::Mouse(crate::MouseEvent {
         button,
         action,
         x: coords.x,

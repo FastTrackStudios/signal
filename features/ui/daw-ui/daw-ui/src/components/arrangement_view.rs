@@ -27,7 +27,7 @@ use crate::prelude::*;
 use daw_proto::{Item, Track};
 use daw_theme_art::geometry::tcp::ROW_W;
 use input::InputCommand;
-use input_dioxus::use_input_processor;
+use input::dioxus::use_input_processor;
 
 /// What an item shows of its content — REAPER's waveform or note preview.
 ///
@@ -210,7 +210,7 @@ fn profiles_root() -> std::path::PathBuf {
 /// bindings) config if the profile is missing/unparseable rather than
 /// erroring, matching `KeybindProfile::list`'s own quiet-skip behavior.
 fn load_keymap(slug: &str) -> input::KeymapConfig {
-    input_keybinds::load_profile_keymap(&profiles_root().join(slug)).unwrap_or_default()
+    input::keybinds::load_profile_keymap(&profiles_root().join(slug)).unwrap_or_default()
 }
 
 /// The ruler's band, above the lanes.
@@ -1280,7 +1280,7 @@ pub fn ArrangementView(
 
     // The real input engine, loaded from the active profile's ACTUAL
     // keybind data (`transport.styx`/`navigation.styx`/...) — the same
-    // files `reaper-input` loads, via `input_keybinds::load_profile_keymap`.
+    // files `reaper-input` loads, via `input::keybinds::load_profile_keymap`.
     // `use_hook` (not `use_signal`): loaded once at mount, then only
     // refreshed explicitly on a profile switch (below) — reading the
     // profile's ~20 styx files on every render would be needless I/O at

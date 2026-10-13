@@ -5,4 +5,4 @@
 //! site, the hub — can use them without linking this crate. Re-exported
 //! here at their historical paths.
 
-pub use input_config_proto::types::*;
+pub use input::proto::types::*;

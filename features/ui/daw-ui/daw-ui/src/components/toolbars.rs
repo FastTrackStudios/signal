@@ -313,7 +313,7 @@ pub fn ModeIndicator(mode: ModeOption) -> Element {
 #[derive(Clone, PartialEq)]
 pub struct KeybindProfile {
     /// The subdirectory name — what actually gets passed back to
-    /// `input_keybinds::load_profile_keymap`.
+    /// `input::keybinds::load_profile_keymap`.
     pub slug: String,
     pub name: String,
     pub description: String,
@@ -323,9 +323,9 @@ pub struct KeybindProfile {
 impl KeybindProfile {
     /// List every profile under `root` (one subdirectory per profile,
     /// each with its own `profile.styx`) — see
-    /// `input_keybinds::list_profiles`, which this wraps.
+    /// `input::keybinds::list_profiles`, which this wraps.
     pub fn list(root: &std::path::Path) -> Vec<Self> {
-        input_keybinds::list_profiles(root)
+        input::keybinds::list_profiles(root)
             .into_iter()
             .map(|(slug, cfg)| Self {
                 slug,
