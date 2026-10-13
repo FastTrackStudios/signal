@@ -103,8 +103,8 @@ members = [
     "features/adapters/reaper/reaper-kbd",
     "features/adapters/reaper/reaper-launcher",
     "crates/daw/standalone",
-    "features/sync/daw-audio-sync",
-    "features/sync/daw-transport-sync",
+    "features/adapters/reaper/daw-audio-sync",
+    "crates/daw/transport-sync",
     "features/sync/daw-link",
     "features/sync/daw-network",
     "features/sync/daw-synchronization",
@@ -316,8 +316,8 @@ audio-controls = { path = "features/ui/audio-controls" }
 daw-synchronization = { path = "features/sync/daw-synchronization" }
 daw-link = { path = "features/sync/daw-link" }
 daw-network = { path = "features/sync/daw-network" }
-daw-audio-sync = { path = "features/sync/daw-audio-sync" }
-daw-transport-sync = { path = "features/sync/daw-transport-sync" }
+daw-audio-sync = { path = "features/adapters/reaper/daw-audio-sync" }
+daw-transport-sync = { path = "crates/daw/transport-sync" }
 dawfile-reaper = { path = "features/formats/dawfile-reaper" }
 # default = all-formats; the daw facade opts into formats individually,
 # so the root entry keeps defaults OFF and consumers that want every
