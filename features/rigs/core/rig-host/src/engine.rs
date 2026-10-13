@@ -314,6 +314,36 @@ impl Rig {
         Ok(guid)
     }
 
+    /// Remove one of the rig's tracks, with any tracks below it; the
+    /// folder depths of the rest are put right.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `guid` is not one of the rig's tracks, or a
+    /// track cannot be removed.
+    pub fn remove_track(&self, guid: &str) -> eyre::Result<()> {
+        let mut tracks = self.tracks.lock_ok();
+        if !tracks.iter().any(|(g, _)| g == guid) {
+            return Err(eyre::eyre!("rig: {guid} is not one of this rig's tracks"));
+        }
+        let gone: Vec<String> = tracks
+            .iter()
+            .filter(|(g, _)| g == guid || is_below(&tracks, g, guid, &self.folder))
+            .map(|(g, _)| g.clone())
+            .collect();
+        let ctx = self.engine.context();
+        for g in gone.iter().rev() {
+            self.engine
+                .daw
+                .remove(ctx.clone(), TrackRef::Guid(g.clone()))
+                .map_err(|e| eyre::eyre!("rig: remove track failed: {e}"))?;
+        }
+        tracks.retain(|(g, _)| !gone.contains(g));
+        self.set_depths(&tracks)?;
+        drop(tracks);
+        Ok(())
+    }
+
     /// REAPER's folder depths over the rig: a track's depth change is the
     /// next track's nesting level minus its own (a folder opens with +1, the
     /// last track of a folder closes as many levels as end there), and the

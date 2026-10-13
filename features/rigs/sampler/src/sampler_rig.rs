@@ -53,13 +53,13 @@ use std::sync::{Arc, Mutex};
 use midi::MidiMonitor;
 
 use audio::io::AudioIoPrefs;
-use daw::service::{FxChainContext, FxChains, ProjectContext, TrackRef, Tracks};
+use daw::service::{FxChainContext, FxChains};
 use daw::standalone::Standalone;
-use daw::standalone::metering::{Meters, linear_to_db};
+use daw::standalone::metering::linear_to_db;
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
-use signal_rig_host::{RigHost, RigProject};
+use signal_rig_host::engine::{Engine, Rig};
 
 use crate::bank::{PreloadProfile, SamplerBank};
 use crate::engine::SampleEngine;
@@ -289,16 +289,14 @@ fn ev_cc(ch: u8, controller: u8, value: u8) -> midi::MidiEvent {
 // ── Per-instrument-track routing tables (alternate per-track API) ────────────
 
 /// One instrument's place in the daw project (per-track API): which track
-/// carries it, which FX slot guid backs its [`SamplerInstrument`], and which
-/// [`Meters`] cell holds its post-fader peak.
+/// carries it and which FX slot guid backs its [`SamplerInstrument`]; its
+/// post-fader peak is read by track guid ([`SamplerRig::track_peak`]).
 #[derive(Clone, Debug)]
 pub struct InstrumentTrack {
     /// daw track guid — the target of `push_note_on` / `push_cc`.
     pub track_guid: String,
     /// FX-slot guid the instrument box was inserted under.
     pub fx_guid: String,
-    /// Meter cell index (project track order) for this track's output peak.
-    pub meter_index: usize,
     /// Optional grouping piece id (e.g. `"kick"`) when this instrument is one
     /// mic of a multi-mic piece. `None` = standalone instrument.
     pub piece: Option<String>,
@@ -310,7 +308,6 @@ pub struct BusTrack {
     /// The bus mic id this track collects (e.g. `"Overhead"`).
     pub id: String,
     pub track_guid: String,
-    pub meter_index: usize,
 }
 
 // ── MIDI monitor ─────────────────────────────────────────────────────────────
@@ -326,12 +323,11 @@ pub struct BusTrack {
 struct Inner {
     /// `None` in offline mode (no device opened).
     daw: Option<Standalone>,
-    /// The shared daw host (project + output engine + transport); drop =
-    /// stop audio. `None` offline.
-    _host: Option<RigHost>,
-    meters: Mutex<Arc<Meters>>,
-    #[allow(dead_code)]
-    project_guid: String,
+    /// The engine the rig plays on — its own (dropping the last clone closes
+    /// the device) or one shared with other rigs. `None` offline.
+    engine: Option<Arc<Engine>>,
+    /// The rig's folder of tracks in the engine's project. `None` offline.
+    rig: Option<Rig>,
 
     /// The signal-domain engine/preset/drum-mixer/preload/stats machinery,
     /// shared with the bank track's `BankInstrument` (live) or driven
@@ -447,19 +443,47 @@ impl SamplerRig {
         prefs: &AudioIoPrefs,
         cache_budget_bytes: Option<usize>,
     ) -> eyre::Result<Self> {
-        // Seed the project and reserve one bank track + fx slot for the
-        // BankInstrument.
-        let project = RigProject::new(SAMPLER_PROJECT_NAME);
-        let bank_track = project.add_track(BANK_TRACK_NAME)?;
-        let bank_fx_guid = project.add_fx_slot(&bank_track, "sampler-bank")?;
+        let engine = Engine::new(SAMPLER_PROJECT_NAME);
+        let rig = engine.add_rig(SAMPLER_PROJECT_NAME)?;
+        let bank_track = rig.add_track(BANK_TRACK_NAME)?;
+        let bank_fx_guid = rig.add_fx_slot(&bank_track, "sampler-bank")?;
+        // Output-only (a sampler generates, never records).
+        let mut io = prefs.clone();
+        io.want_input = false;
+        engine.start_audio(&io)?;
+        Self::with_bank(engine, rig, bank_track, bank_fx_guid, cache_budget_bytes)
+    }
 
-        // Output-only engine (a sampler generates, never records) + one meter
-        // cell for the bank track.
-        let host = project.start_output(prefs)?;
-        let sample_rate = host.sample_rate();
-        let meters = host.install_meters(1);
-        let daw = host.daw().clone();
-        let project_guid = host.project_guid().to_string();
+    /// [`open`](Self::open) as one more rig on a running `engine`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the engine has no device, or track setup fails.
+    pub fn open_in(engine: &Arc<Engine>, cache_budget_bytes: Option<usize>) -> eyre::Result<Self> {
+        let rig = engine.add_rig(SAMPLER_PROJECT_NAME)?;
+        let bank_track = rig.add_track(BANK_TRACK_NAME)?;
+        let bank_fx_guid = rig.add_fx_slot(&bank_track, "sampler-bank")?;
+        Self::with_bank(
+            engine.clone(),
+            rig,
+            bank_track,
+            bank_fx_guid,
+            cache_budget_bytes,
+        )
+    }
+
+    /// The rig on its engine, with the bank instrument in the bank track.
+    fn with_bank(
+        engine: Arc<Engine>,
+        rig: Rig,
+        bank_track: String,
+        bank_fx_guid: String,
+        cache_budget_bytes: Option<usize>,
+    ) -> eyre::Result<Self> {
+        let sample_rate = engine
+            .sample_rate()
+            .ok_or_else(|| eyre::eyre!("sampler rig: the engine has no device"))?;
+        let daw = engine.daw().clone();
 
         // Build + install the bank instrument.
         let bank = Arc::new(Mutex::new(SamplerBank::with_cache_budget(
@@ -471,20 +495,17 @@ impl SamplerRig {
         let _ = inst.prepare(sample_rate as f64, PREPARE_BLOCK);
         daw.insert_plugin_instance(bank_fx_guid, Box::new(inst));
 
-        host.play();
-
         tracing::info!(
             sample_rate,
-            project = %project_guid,
+            project = %engine.project_guid(),
             "signal-sampler: sampler rig started on daw engine (bank-backed)"
         );
 
         Ok(Self {
             inner: Arc::new(Inner {
                 daw: Some(daw),
-                _host: Some(host),
-                meters: Mutex::new(meters),
-                project_guid,
+                engine: Some(engine),
+                rig: Some(rig),
                 bank,
                 bank_track: Some(bank_track),
                 stats,
@@ -514,9 +535,8 @@ impl SamplerRig {
         Self {
             inner: Arc::new(Inner {
                 daw: None,
-                _host: None,
-                meters: Mutex::new(Meters::new(0)),
-                project_guid: String::new(),
+                engine: None,
+                rig: None,
                 bank: Arc::new(Mutex::new(SamplerBank::with_cache_budget(
                     sample_rate,
                     cache_budget_bytes,
@@ -1586,17 +1606,12 @@ impl SamplerRig {
         tables.instruments.len() + tables.buses.len()
     }
 
-    /// Re-install the meter bank sized for the current per-track count
-    /// (instruments + buses), plus the bank track at cell 0.
-    fn resize_meters(&self, tables: &TrackTables) {
-        let n = 1 + Self::track_count(tables);
-        let meters = Meters::new(n);
-        if let Some(daw) = self.inner.daw.as_ref() {
-            daw.set_meters(meters.clone());
-        }
-        if let Ok(mut m) = self.inner.meters.lock() {
-            *m = meters;
-        }
+    /// The rig's tracks (a live rig only).
+    fn rig(&self) -> eyre::Result<&Rig> {
+        self.inner
+            .rig
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("sampler rig: tracks need a live rig"))
     }
 
     fn add_instrument_track(
@@ -1616,10 +1631,7 @@ impl SamplerRig {
             .tracks
             .lock()
             .map_err(|_| eyre::eyre!("track table poisoned"))?;
-        // Per-track tracks sit after the bank track (cell 0).
-        let meter_index = 1 + Self::track_count(&tables);
-        let track_guid = <Standalone as Tracks>::add(daw, ProjectContext::Current, name, None)
-            .map_err(|e| eyre::eyre!("sampler rig: add track {name:?} failed: {e}"))?;
+        let track_guid = self.rig()?.add_track(name)?;
 
         let fx_ctx = FxChainContext::track(track_guid.clone());
         let idx = <Standalone as FxChains>::add(daw, fx_ctx.clone(), &format!("inst-{id}"))
@@ -1640,18 +1652,11 @@ impl SamplerRig {
         let track = InstrumentTrack {
             track_guid,
             fx_guid,
-            meter_index,
             piece,
         };
         tables.instruments.insert(id.clone(), track.clone());
         tables.order.push(id);
         drop(tables);
-        let tables = self
-            .inner
-            .tracks
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        self.resize_meters(&tables);
         Ok(track)
     }
 
@@ -1678,33 +1683,19 @@ impl SamplerRig {
     }
 
     fn add_bus_track(&self, bus_id: &str) -> eyre::Result<BusTrack> {
-        let daw = self
-            .inner
-            .daw
-            .as_ref()
-            .ok_or_else(|| eyre::eyre!("bus tracks require a live rig"))?;
         let mut tables = self
             .inner
             .tracks
             .lock()
             .map_err(|_| eyre::eyre!("track table poisoned"))?;
-        let meter_index = 1 + Self::track_count(&tables);
         let name = format!("{bus_id} (bus)");
-        let track_guid = <Standalone as Tracks>::add(daw, ProjectContext::Current, &name, None)
-            .map_err(|e| eyre::eyre!("sampler rig: add bus track {bus_id:?} failed: {e}"))?;
+        let track_guid = self.rig()?.add_track(&name)?;
         let bus = BusTrack {
             id: bus_id.to_string(),
             track_guid,
-            meter_index,
         };
         tables.buses.insert(bus_id.to_string(), bus.clone());
         drop(tables);
-        let tables = self
-            .inner
-            .tracks
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        self.resize_meters(&tables);
         Ok(bus)
     }
 
@@ -1717,7 +1708,7 @@ impl SamplerRig {
             .ok_or_else(|| eyre::eyre!("routing requires a live rig"))?;
         // Bus-mic routing: post-FX tap into the shared bus, and the send
         // REPLACES the master send (the bus is the track's only output).
-        daw.current()
+        daw.project(self.project_guid())
             .track(source_track)
             .send_to(bus_track)
             .post_fx()
@@ -1951,7 +1942,7 @@ impl SamplerRig {
                 }
                 if let Some(daw) = self.inner.daw.as_ref() {
                     use daw::service::handle::DawHandle as _;
-                    let t = daw.current().track(&track.track_guid);
+                    let t = daw.project(self.project_guid()).track(&track.track_guid);
                     if gain_db != 0.0 {
                         let _ = t.set_volume(10f64.powf(gain_db as f64 / 20.0));
                     }
@@ -1967,7 +1958,6 @@ impl SamplerRig {
                     instrument_id,
                     track_guid: track.track_guid,
                     fx_guid: track.fx_guid,
-                    meter_index: track.meter_index,
                     bus,
                     engine: shared,
                 });
@@ -1988,12 +1978,12 @@ impl SamplerRig {
                 .tracks
                 .lock()
                 .map_err(|_| eyre::eyre!("track table poisoned"))?;
-            let mut buses: Vec<(String, String, usize)> = tables
+            let mut buses: Vec<(String, String)> = tables
                 .buses
                 .values()
-                .map(|b| (b.id.clone(), b.track_guid.clone(), b.meter_index))
+                .map(|b| (b.id.clone(), b.track_guid.clone()))
                 .collect();
-            buses.sort_by_key(|(_, _, m)| *m);
+            buses.sort();
             buses
         };
 
@@ -2035,7 +2025,7 @@ impl SamplerRig {
         let Some(state) = self.inner.kit.lock().ok().and_then(|mut k| k.take()) else {
             return Ok(());
         };
-        let Some(daw) = self.inner.daw.as_ref() else {
+        let Some(rig) = self.inner.rig.as_ref() else {
             return Ok(());
         };
         let mut tables = self
@@ -2045,28 +2035,16 @@ impl SamplerRig {
             .map_err(|_| eyre::eyre!("track table poisoned"))?;
         for piece in &state.pieces {
             for mic in &piece.mics {
-                let _ = <Standalone as Tracks>::remove(
-                    daw,
-                    ProjectContext::Current,
-                    TrackRef::guid(&mic.track_guid),
-                );
+                let _ = rig.remove_track(&mic.track_guid);
                 tables.instruments.remove(&mic.instrument_id);
                 tables.order.retain(|id| id != &mic.instrument_id);
             }
         }
-        for (bus_id, guid, _) in &state.buses {
-            let _ =
-                <Standalone as Tracks>::remove(daw, ProjectContext::Current, TrackRef::guid(guid));
+        for (bus_id, guid) in &state.buses {
+            let _ = rig.remove_track(guid);
             tables.buses.remove(bus_id);
         }
-        // Meter indices are compacted on the next load (resize_meters).
         drop(tables);
-        let tables = self
-            .inner
-            .tracks
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        self.resize_meters(&tables);
         Ok(())
     }
 
@@ -2087,9 +2065,7 @@ impl SamplerRig {
             .tracks
             .lock()
             .map_err(|_| eyre::eyre!("track table poisoned"))?;
-        let meter_index = 1 + Self::track_count(&tables);
-        let track_guid = <Standalone as Tracks>::add(daw, ProjectContext::Current, name, None)
-            .map_err(|e| eyre::eyre!("sampler rig: add kit track {name:?} failed: {e}"))?;
+        let track_guid = self.rig()?.add_track(name)?;
         let fx_ctx = FxChainContext::track(track_guid.clone());
         let idx = <Standalone as FxChains>::add(daw, fx_ctx.clone(), &format!("kit-{id}"))
             .map_err(|e| eyre::eyre!("sampler rig: reserve kit fx slot failed: {e}"))?;
@@ -2104,18 +2080,11 @@ impl SamplerRig {
         let track = InstrumentTrack {
             track_guid,
             fx_guid,
-            meter_index,
             piece: Some(piece.to_string()),
         };
         tables.instruments.insert(id.to_string(), track.clone());
         tables.order.push(id.to_string());
         drop(tables);
-        let tables = self
-            .inner
-            .tracks
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        self.resize_meters(&tables);
         Ok(track)
     }
 
@@ -2163,14 +2132,25 @@ impl SamplerRig {
         self.inner.kit.lock().ok().and_then(|k| k.as_ref().map(f))
     }
 
-    /// The current per-track meter bank (cell indices = the meter indices in
-    /// the kit/instrument track tables).
+    /// A track's post-fader peak (linear, the louder channel), by guid —
+    /// its position in the engine's project moves as other rigs add tracks.
     #[must_use]
-    pub fn meters_bank(&self) -> Arc<Meters> {
+    pub fn track_peak(&self, track_guid: &str) -> f32 {
         self.inner
-            .meters
-            .lock()
-            .map_or_else(|_| Meters::new(0), |m| m.clone())
+            .rig
+            .as_ref()
+            .and_then(|rig| rig.peak(track_guid))
+            .map_or(0.0, |(l, r)| l.max(r))
+    }
+
+    /// The project the rig's tracks are in (empty offline).
+    #[must_use]
+    pub fn project_guid(&self) -> String {
+        self.inner
+            .engine
+            .as_ref()
+            .map(|e| e.project_guid().to_string())
+            .unwrap_or_default()
     }
 
     /// A kit piece's preload progress `(loaded, total)`, summed over its mic
@@ -2279,50 +2259,41 @@ impl SamplerRig {
             .unwrap_or_default()
     }
 
-    fn meters(&self) -> Arc<Meters> {
-        self.inner
-            .meters
-            .lock()
-            .map_or_else(|_| Meters::new(0), |m| m.clone())
-    }
-
     /// Per-track output peak (linear) for a per-track instrument `id`.
     #[must_use]
     pub fn instrument_peak(&self, id: &str) -> f32 {
-        let meters = self.meters();
-        self.inner
+        let guid = self
+            .inner
             .tracks
             .lock()
             .ok()
-            .and_then(|t| t.instruments.get(id).map(|i| i.meter_index))
-            .and_then(|i| meters.cell(i))
-            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
+            .and_then(|t| t.instruments.get(id).map(|i| i.track_guid.clone()));
+        guid.map_or(0.0, |g| self.track_peak(&g))
     }
 
     /// Per-track output peak (linear) for a per-track bus `id`.
     #[must_use]
     pub fn bus_peak(&self, id: &str) -> f32 {
-        let meters = self.meters();
-        self.inner
+        let guid = self
+            .inner
             .tracks
             .lock()
             .ok()
-            .and_then(|t| t.buses.get(id).map(|b| b.meter_index))
-            .and_then(|i| meters.cell(i))
-            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
+            .and_then(|t| t.buses.get(id).map(|b| b.track_guid.clone()));
+        guid.map_or(0.0, |g| self.track_peak(&g))
     }
 
-    /// Master / overall output peak (linear) — the loudest track cell.
+    /// Master / overall output peak (linear) — the loudest of the rig's
+    /// tracks.
     #[must_use]
     pub fn output_peak(&self) -> f32 {
-        let meters = self.meters();
-        let mut pk = 0.0f32;
-        for i in 0..meters.len() {
-            if let Some(c) = meters.cell(i) {
-                pk = pk.max(c.peak(0)).max(c.peak(1));
-            }
-        }
-        pk
+        let Some(rig) = self.inner.rig.as_ref() else {
+            return 0.0;
+        };
+        rig.tracks()
+            .iter()
+            .map(|g| self.track_peak(g))
+            .fold(0.0f32, f32::max)
     }
 
     #[must_use]
@@ -2691,11 +2662,13 @@ zones (
 
         let bus_guid = rig.buses()["Overhead"].track_guid.clone();
         let daw = rig.inner.daw.as_ref().unwrap();
+        let project = daw::service::ProjectContext::Project(rig.project_guid());
+        use daw::service::TrackRef;
         for (id, t) in &rig.inner.tracks.lock().unwrap().instruments {
             if id.ends_with(":Overhead") {
                 let sends = <Standalone as Routing>::sends(
                     daw,
-                    ProjectContext::Current,
+                    project.clone(),
                     TrackRef::guid(&t.track_guid),
                 );
                 assert!(
@@ -2707,7 +2680,7 @@ zones (
                 assert!(
                     !<Standalone as Routing>::parent_send_enabled(
                         daw,
-                        ProjectContext::Current,
+                        project.clone(),
                         TrackRef::guid(&t.track_guid)
                     ),
                     "overhead mic {id} parent send must be disabled"

@@ -862,13 +862,18 @@ impl RigBackend for EkitBackend {
     }
     fn on_running_tick(&self) {
         // Meter pump: pull the per-pad peaks off the rig and publish.
-        let meters = {
+        // Every pad is an instrument in the rig's one bank track, so there is
+        // one meter — the bank's — and no per-pad peak: pad 0 shows the
+        // bank's output and the rest read silence, as when this read meter
+        // cells by pad index (only cell 0 existed). Per-pad metering needs
+        // the pads on tracks of their own.
+        let bank = {
             let rig = self
                 .inner
                 .rig
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            rig.as_ref().map(sampler::SamplerRig::meters_bank)
+            rig.as_ref().map_or(0.0, sampler::SamplerRig::output_peak)
         }; // rig lock dropped before touching state
         let pads = {
             let mut s = self
@@ -877,10 +882,7 @@ impl RigBackend for EkitBackend {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             for (i, p) in s.pads.iter_mut().enumerate() {
-                p.peak = meters
-                    .as_ref()
-                    .and_then(|m| m.cell(i))
-                    .map_or(0.0, |c| c.peak(0).max(c.peak(1)));
+                p.peak = if i == 0 { bank } else { 0.0 };
             }
             s.pads.clone()
         };
