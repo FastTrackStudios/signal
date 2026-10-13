@@ -1,5 +1,5 @@
 //! Pattern runtime state — phase accumulation over a built
-//! `fts_modulation::Pattern`.
+//! `dsp_core::modulation::Pattern`.
 //!
 //! The evaluator is rebuilt only when the config's point list actually
 //! changes (cheap hash compare), so `tick` stays allocation-free at
@@ -12,7 +12,7 @@ use crate::sources::pattern::PatternConfig;
 #[derive(Debug, Clone)]
 pub struct PatternState {
     phase: f64,
-    pattern: fts_modulation::Pattern,
+    pattern: dsp_core::modulation::Pattern,
     /// Fingerprint of the points the evaluator was built from.
     built_from: u64,
 }
