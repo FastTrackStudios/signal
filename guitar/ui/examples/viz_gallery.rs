@@ -27,8 +27,8 @@ use signal_guitar::design;
 
 use comp::ui::viz::CompViz;
 use delay::ui::viz::{DelayViz, Family as DelayFamily};
-use eq_ui::eq_graph::{AnalyzerSnapshot, EqGraph};
-use eq_ui::eq_graph_model::EqBand;
+use eq::ui::eq_graph::{AnalyzerSnapshot, EqGraph};
+use eq::ui::eq_graph_model::EqBand;
 use modulation::ui::viz::{Engine, ModViz};
 use reverb::ui::viz::{Family as VerbFamily, ReverbViz};
 

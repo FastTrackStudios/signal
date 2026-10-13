@@ -38,7 +38,7 @@ signal-account-proto.workspace = true
 # events rather than a parameter tree. Native only: a custom widget is a
 # painted scene, which needs a Blitz host. The wasm remote builds the same
 # crate without the feature and draws the portable SVG path instead.
-eq-ui = { workspace = true, features = ["graph"] }
+eq = { workspace = true, features = ["graph", "ui"] }
 # The recorded scene the effects paint into — replayed by Blitz natively,
 # onto a canvas in the browser.
 anyrender.workspace = true
