@@ -33,6 +33,19 @@ authors = ["FastTrackStudio"]
 name = "signal-desktop"
 path = "src/main.rs"
 
+# The command lines (`--features cli`): `signal`, the rig and its tone
+# library without a GUI, and `fts-convert`, which swaps third-party plugin
+# instances in a REAPER project for FTS equivalents.
+[[bin]]
+name = "signal"
+path = "src/bin/signal/main.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "fts-convert"
+path = "src/bin/fts-convert/main.rs"
+required-features = ["cli"]
+
 [lints]
 workspace = true
 
@@ -42,6 +55,13 @@ workspace = true
 # `cargo run -p signal-desktop --no-default-features --features "session,charts"`
 # skips the heavy `signal` rig (nam C++, lucide icons, webkit engine deps).
 default = ["signal"]
+# The command-line tools (src/bin/): native only.
+cli = [
+    "dep:builtin", "dep:clap", "dep:guitar", "dep:serde_json", "dep:signal-account",
+    "dep:signal-analyzer", "dep:signal-import", "dep:signal-nam", "dep:signal-plugin-host",
+    "dep:signal-tone3000", "dep:signal-tone3000-proto", "dep:tokio",
+    "tokio?/macros", "tokio?/rt-multi-thread", "tokio?/time",
+]
 # Render the desktop window with WebKit/WRY instead of Blitz.
 #
 # The old path, kept as an escape hatch while the Blitz migration settles —
@@ -185,6 +205,12 @@ eyre = { workspace = true, optional = true }
 dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The command-line tools' own (feature `cli`).
+clap = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
+signal-import = { workspace = true, optional = true }
+signal-plugin-host = { workspace = true, features = ["clap-host"], optional = true }
+signal-analyzer = { workspace = true, optional = true }
 # The rig's store and config dir: rig_engine.rs (native, and its TONE3000
 # session on every desktop, not only macOS).
 signal-rig-host = { workspace = true }

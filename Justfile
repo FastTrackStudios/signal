@@ -210,7 +210,7 @@ guitar-worklet-wasm out='apps/signal/desktop/web-dist/worklet/guitar':
 # `node profile.mjs <profile> <patch>` in the dir prints each block's cost.
 guitar-web-harness dir='target/guitar-web' port='8765':
     just guitar-worklet-wasm {{dir}}
-    cargo run -q -p signal-cli -- rig web-bundle {{dir}}/rig
+    cargo run -q -p signal-desktop --features cli --bin signal -- rig web-bundle {{dir}}/rig
     cp features/audio/worklet/harness/index.html features/audio/worklet/harness/serve.py features/audio/worklet/harness/profile.mjs {{dir}}/
     cp "${XDG_CONFIG_HOME:-$HOME/.config}/signal/calibration/di-reference.wav" {{dir}}/ || echo "no di-reference.wav — the demo input needs one"
     python3 {{dir}}/serve.py {{port}}

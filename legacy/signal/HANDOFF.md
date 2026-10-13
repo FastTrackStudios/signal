@@ -19,7 +19,7 @@ computer becomes the rig, all audio in the tab) is planned — see
   `signal-desktop` with a *different* feature set or profile makes cargo
   recompile every shared crate (that was the 15-minute rebuilds). The CLI
   builds alongside with no penalty:
-  `cargo build --profile release-fast -p signal-desktop -p signal-cli --features signal-desktop/signal-keys-rig`.
+  `cargo build --profile release-fast -p signal-desktop -p signal-desktop --features cli --bin signal --features signal-desktop/signal-keys-rig`.
 - **release-fast** (root `Cargo.toml`): release opt, incremental, 256 CGUs.
   An edit in `signal-sampler` rebuilds the app in ~15 s. Local only.
   **dev** now has the render stack (Blitz/Stylo/Taffy/Parley/Vello/wgpu) at

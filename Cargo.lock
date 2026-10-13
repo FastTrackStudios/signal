@@ -7458,16 +7458,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fts-convert"
-version = "0.1.0"
-dependencies = [
- "builtin",
- "signal-analyzer",
- "signal-import",
- "signal-plugin-host",
-]
-
-[[package]]
 name = "fts-devtools"
 version = "0.1.0"
 
@@ -17657,23 +17647,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "guitar",
- "serde_json",
- "signal-account",
- "signal-nam",
- "signal-rig-host",
- "signal-tone3000",
- "signal-tone3000-proto",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "signal-controller"
 version = "0.1.0"
 dependencies = [
@@ -17707,6 +17680,7 @@ dependencies = [
  "blitz-shell",
  "block2 0.6.2",
  "builtin",
+ "clap",
  "daw-proto",
  "dioxus",
  "dioxus-native",
@@ -17733,11 +17707,15 @@ dependencies = [
  "objc2-ui-kit 0.3.2",
  "reqwest 0.12.28",
  "sampler",
+ "serde_json",
  "session",
  "sha2 0.10.9",
  "signal-account",
  "signal-account-proto",
+ "signal-analyzer",
+ "signal-import",
  "signal-nam",
+ "signal-plugin-host",
  "signal-rig-host",
  "signal-rigs-proto",
  "signal-space",

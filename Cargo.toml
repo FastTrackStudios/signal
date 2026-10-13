@@ -150,8 +150,6 @@ members = [
     "vendor/winit-uikit",
     "vendor/wgpu-hal",
     "apps/signal/web",
-    "apps/signal/cli",
-    "apps/signal/convert",
     "apps/plugins/guide",
     "apps/plugins/nam",
     "apps/plugins/signal",
@@ -965,7 +963,6 @@ signal-controller = { path = "features/rigs/core/controller" }
 signal-live = { path = "features/rigs/core/live" }
 signal-storage = { path = "features/rigs/core/storage" }
 signal-import = { path = "features/rigs/core/import" }
-fts-convert = { path = "apps/signal/convert" }
 signal-web = { path = "apps/signal/web" }
 signal-daw-bridge = { path = "features/rigs/core/daw-bridge" }
 signal-rig-host = { path = "features/rigs/core/rig-host" }

@@ -499,7 +499,7 @@ which is the macro/modulation data model and is embedded in
 nix develop
 cargo check --workspace
 cargo build -p signal-desktop          # the app; --engine is headless
-cargo build -p signal-cli              # the `signal` command
+cargo build -p signal-desktop --features cli --bin signal              # the `signal` command
 ```
 
 ## Licence

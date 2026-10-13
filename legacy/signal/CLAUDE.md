@@ -157,7 +157,7 @@ Everything builds from the repo root (one workspace):
 ```bash
 cargo check --workspace                          # the whole tree
 cargo build -p signal-desktop                   # THE app (GUI; `--engine` = headless signal engine)
-cargo build -p signal-cli                        # the `signal` CLI (signal tone3000 status|login|search|show|fetch)
+cargo build -p signal-desktop --features cli --bin signal                        # the `signal` CLI (signal tone3000 status|login|search|show|fetch)
 cargo check -p signal-desktop --target wasm32-unknown-unknown --no-default-features --features signal  # browser remote (web build)
 ```
 
