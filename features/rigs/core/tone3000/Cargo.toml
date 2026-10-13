@@ -10,8 +10,7 @@ description = "TONE3000, the online tone library: its wire types and the account
 workspace = true
 
 [features]
-default = ["account_proto-vox", "vox"]
-account_proto-vox = ["architect/vox", "dep:vox"]
+default = ["vox"]
 client = ["architect/platform", "dep:auth-client", "dep:futures-util", "dep:rand", "dep:reqwest", "dep:serde", "dep:serde_json", "dep:sha2", "dep:signal-nam", "dep:thiserror", "dep:tokio", "dep:tone3000", "dep:tracing", "dep:url", "reqwest/stream", "tokio/sync", "vox"]
 ui = ["architect/atom", "architect/platform", "architect/vox", "dep:base64", "dep:dioxus", "vox"]
 vox = ["architect/vox", "dep:vox"]
