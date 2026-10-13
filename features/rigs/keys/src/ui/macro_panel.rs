@@ -23,11 +23,11 @@
 //! on one line and the band costs the same room whatever is selected.
 
 use dioxus::prelude::*;
-use signal_keys_proto::KeysMacro;
+use crate::proto::KeysMacro;
 
-use crate::graphs::{ModuleCurve, StackedEnvelopes, StackedFilters, StackedUnison, StackedVibrato};
-use crate::knob::Knob;
-use crate::module_edit::{KnobRow, Panel};
+use crate::ui::graphs::{ModuleCurve, StackedEnvelopes, StackedFilters, StackedUnison, StackedVibrato};
+use crate::ui::knob::Knob;
+use crate::ui::module_edit::{KnobRow, Panel};
 
 /// One card in the band.
 enum Cell {

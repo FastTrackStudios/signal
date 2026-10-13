@@ -6,7 +6,7 @@
 //! so it's the honest picture of what the rig is doing.
 
 use dioxus::prelude::*;
-use signal_keys_proto::KeysNode;
+use crate::proto::KeysNode;
 
 #[component]
 pub fn RoutingView(tree: KeysNode) -> Element {

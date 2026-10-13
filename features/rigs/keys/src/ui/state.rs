@@ -3,8 +3,8 @@
 
 use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
-use signal_keys_proto::keys::{KeysEvent, KeysRigClient, KeysRigStreamClient};
-use signal_keys_proto::{KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus};
+use crate::proto::keys::{KeysEvent, KeysRigClient, KeysRigStreamClient};
+use crate::proto::{KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus};
 
 /// The whole rig, as the remote sees it. `PartialEq` compares the signal
 /// handles (cheap + stable), so it can ride as a component prop.

@@ -46,7 +46,7 @@ signal-guitar-ui = { workspace = true }
 # `BlockType` is signal-proto's; features/rigs/guitar/proto imports it
 # privately, so the block types have to come from the owning crate.
 signal-proto = { workspace = true }
-signal-keys-ui = { workspace = true }
+keys = { workspace = true, features = ["ui"] }
 # `architect::platform::sleep` — the wasm-cfg-split timer seam CLAUDE.md
 # mandates (tokio on native, browser timers on wasm). The rig UI crates
 # drive their own animations through it; the demo feed does the same.

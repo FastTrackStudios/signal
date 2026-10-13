@@ -18,7 +18,7 @@
 use std::path::{Path, PathBuf};
 
 use facet::Facet;
-use signal_keys_proto::KeysPreset;
+use crate::proto::KeysPreset;
 
 use crate::profile::{EngineDef, LayerDef};
 

@@ -19,8 +19,8 @@ use std::collections::HashMap;
 
 use dioxus::prelude::*;
 use futures_util::StreamExt as _;
-use signal_keys_proto::keys::KeysRigClient;
-use signal_keys_proto::{KeysPreset, KeysStatus};
+use keys::proto::keys::KeysRigClient;
+use keys::proto::{KeysPreset, KeysStatus};
 use signal_packs_proto::PackInfo;
 
 use crate::pack_client::{self, DownloadEvent};

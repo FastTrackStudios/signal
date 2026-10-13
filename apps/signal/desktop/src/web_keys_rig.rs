@@ -11,7 +11,7 @@
 //! Manager** popover shows per-pack streaming state.
 //!
 //! Since W9 the page body is the REAL remote UI —
-//! `signal_keys_ui::KeysRigRemote`, the same component the desktop and
+//! `keys::ui::KeysRigRemote`, the same component the desktop and
 //! phone mount — backed by real `KeysRigClient`/`KeysRigStreamClient`
 //! vox clients served in-process by `web_keys_backend.rs` (architect's
 //! `LocalServer` over its wasm memory link). The W3–W8 top-bar chrome
@@ -26,9 +26,9 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use js_sys::{Array, Object, Reflect};
-use signal_keys_proto::KeysLaneProgram;
-use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
-use signal_keys_ui::KeysRigRemote;
+use keys::proto::KeysLaneProgram;
+use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
+use keys::ui::KeysRigRemote;
 use signal_packs_proto::PackInfo;
 use signal_packs_proto::packs::PackLibraryClient;
 use wasm_bindgen::prelude::*;
@@ -678,7 +678,7 @@ struct LaneRow {
 
 /// Compute each lane's worklet track index: rig(0), then per engine its
 /// folder track followed by its lanes.
-fn lane_tracks(lanes: &[signal_keys_proto::KeysLaneRef]) -> Vec<u32> {
+fn lane_tracks(lanes: &[keys::proto::KeysLaneRef]) -> Vec<u32> {
     let mut out = Vec::with_capacity(lanes.len());
     let mut track = 0u32; // rig folder
     let mut engine: Option<&str> = None;

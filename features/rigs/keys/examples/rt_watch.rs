@@ -20,7 +20,7 @@
 //!   crackle. Neither deadline counter moves while it happens.
 use std::time::Duration;
 
-use signal_keys_proto::keys::KeysRigClient;
+use keys::proto::keys::KeysRigClient;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {

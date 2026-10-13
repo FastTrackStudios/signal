@@ -32,7 +32,7 @@ fn main() {
     let lane = args.first().cloned().unwrap_or_else(|| "Bass".into());
     let note: u8 = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(48);
     let hold: f32 = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(8.0);
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     let program = backend.debug_profile_program().expect("profile program");
     let tree = program.find(&lane).unwrap_or_else(|| panic!("no lane {lane}")).clone();
     if std::env::var_os("LANE_DUMP").is_some() {

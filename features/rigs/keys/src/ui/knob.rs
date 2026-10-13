@@ -58,7 +58,7 @@ pub fn Knob(
 ) -> Element {
     let mut drag = use_signal(|| None::<(f64, f32)>);
     // A drag is a stream of values; only the newest is worth sending.
-    let send = crate::throttle::use_throttle(on_change);
+    let send = crate::ui::throttle::use_throttle(on_change);
     // What the dial shows while a drag is live. The prop is the engine's
     // answer and arrives a round trip late — if the dial waited for it, a
     // throttled drag would look stuck and then jump.

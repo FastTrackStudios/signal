@@ -32,11 +32,11 @@
 use std::time::Duration;
 
 use dioxus::prelude::*;
-use signal_keys_ui::proto::{
+use keys::ui::proto::{
     KeysEngineModel, KeysEnv, KeysLayerModel, KeysMacro, KeysMeter, KeysMixer, KeysModule,
     KeysNode, KeysPerform, KeysStatus,
 };
-use signal_keys_ui::{ControlView, KeysViewState};
+use keys::ui::{ControlView, KeysViewState};
 
 /// (engine, gain dB, [(lane, patch, gain dB)]) — the Worship profile's
 /// mixer shape.

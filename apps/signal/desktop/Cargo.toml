@@ -94,15 +94,15 @@ signal-guitar = [
 # Documents/FastTrackStudio/Packs/Keys.
 signal-keys-rig = [
     "signal-guitar",
-    "dep:signal-keys",
-    "dep:signal-keys-proto",
+    "dep:keys",
+    "dep:keys",
 ]
 signal = [
     "signal-guitar",
     "dep:drums",
     "dep:drums",
-    "dep:signal-keys-proto",
-    "dep:signal-keys-ui",
+    "dep:keys",
+    "dep:keys",
     "dep:midicore-proto",
     "dep:signal-synth-proto",
     "dep:signal-synth-ui",
@@ -114,7 +114,7 @@ signal = [
     # deps only exist in the not(wasm32) target table, so enabling them
     # here is a no-op on the web build.
     "dep:drums",
-    "dep:signal-keys",
+    "dep:keys",
     "dep:signal-synth-rig",
     "dep:signal-sampler",
     # Pack distribution: the engine serves its .signalpack library
@@ -221,8 +221,7 @@ signal-tone3000-ui = { workspace = true, optional = true }
 fts-chrome.workspace = true
 signal-guitar-ui = { workspace = true, optional = true }
 drums = { workspace = true, optional = true, features = ["ui"] }
-signal-keys-proto = { workspace = true, optional = true }
-signal-keys-ui = { workspace = true, optional = true }
+keys = { workspace = true, optional = true, features = ["ui"] }
 # MidiEvent — the in-tab keys backend (web_keys_backend.rs) decodes the raw
 # 3-byte messages it forwards into the monitor's wire events.
 midicore-proto = { workspace = true, optional = true }
@@ -324,7 +323,7 @@ fx-blocks = { workspace = true, optional = true }
 #    apps/signal-engine, native only ─────────────────────────────────────
 signal-guitar = { workspace = true, optional = true }
 drums = { workspace = true, optional = true }
-signal-keys = { workspace = true, optional = true }
+keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }
 signal-pack-library = { workspace = true, optional = true }

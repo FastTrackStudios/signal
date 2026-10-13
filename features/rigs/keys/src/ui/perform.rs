@@ -12,8 +12,8 @@
 //! strip is the bottom of the window.
 
 use dioxus::prelude::*;
-use signal_keys_proto::keys::KeysRigClient;
-use signal_keys_proto::{KeysPerform, SwitchLearn};
+use crate::proto::keys::KeysRigClient;
+use crate::proto::{KeysPerform, SwitchLearn};
 use signal_widgets::PopupHost;
 use signal_widgets::switches::{
     MenuRow, MidiLearnRows, SwitchMenuFrame, SwitchTile, SwitchesMode, SwitchesToggle,

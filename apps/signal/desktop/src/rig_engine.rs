@@ -20,7 +20,7 @@ use signal_guitar::GuitarRigBackend;
 use signal_guitar::proto::audio::AudioSettingsClient;
 use signal_guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 #[cfg(feature = "signal-keys-rig")]
-use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
+use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
 #[cfg(feature = "tone3000")]
 use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 
@@ -90,7 +90,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         // backend + merge_router, exactly the engine_main.rs wiring. It
         // stays dormant (no audio) until the keys view starts it.
         #[cfg(feature = "signal-keys-rig")]
-        let keys_backend = signal_keys::KeysRigBackend::new();
+        let keys_backend = keys::KeysRigBackend::new();
         #[cfg(feature = "signal-keys-rig")]
         let router = router.merge_router(keys_backend.router());
 

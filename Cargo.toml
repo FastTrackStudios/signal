@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/rigs/keys",
     "features/rigs/ekit",
     "features/rigs/drums",
     "features/input",
@@ -221,9 +222,6 @@ members = [
     "features/rigs/guitar/proto",
     "features/rigs/guitar/ui",
     "features/rigs/guitar/phones",
-    "features/rigs/keys",
-    "features/rigs/keys/proto",
-    "features/rigs/keys/ui",
     "features/audio/worklet/keys",
     "features/audio/worklet/guitar",
     "features/rigs/orchestra",
@@ -298,6 +296,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+keys = { path = "features/rigs/keys" }
 ekit = { path = "features/rigs/ekit" }
 drums = { path = "features/rigs/drums" }
 input = { path = "features/input" }
@@ -1106,9 +1105,6 @@ signal-pack-library = { path = "features/rigs/sampler/pack-library" }
 signal-guitar-proto = { path = "features/rigs/guitar/proto" }
 signal-guitar-ui = { path = "features/rigs/guitar/ui" }
 signal-phones = { path = "features/rigs/guitar/phones" }
-signal-keys = { path = "features/rigs/keys" }
-signal-keys-proto = { path = "features/rigs/keys/proto" }
-signal-keys-ui = { path = "features/rigs/keys/ui" }
 signal-keys-worklet = { path = "features/audio/worklet/keys" }
 signal-guitar-worklet = { path = "features/audio/worklet/guitar" }
 openwurli-dsp = { path = "features/rigs/wurli/openwurli-dsp" }

@@ -6,7 +6,7 @@
 //!     --no-default-features --features signal -- ws://127.0.0.1:4040/vox
 //! ```
 
-use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
+use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {

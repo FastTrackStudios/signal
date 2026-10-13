@@ -1,4 +1,4 @@
-//! W9 — the in-tab keys backend behind `signal_keys_ui::KeysRigRemote`.
+//! W9 — the in-tab keys backend behind `keys::ui::KeysRigRemote`.
 //!
 //! The browser keys page mounts the SAME remote UI the desktop and phone
 //! use (`KeysRigRemote`, which takes `KeysRigClient` + `KeysRigStreamClient`
@@ -52,10 +52,10 @@ use std::sync::Arc;
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use midicore_proto::MidiEvent;
-use signal_keys_proto::keys::{
+use keys::proto::keys::{
     KeysEvent, KeysRig as KeysRigSvc, KeysRigClient, KeysRigStreamClient, KeysRigStreamSource,
 };
-use signal_keys_proto::{
+use keys::proto::{
     KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
     KeysMeter, KeysMixer, KeysModule, KeysNode, KeysPerform, KeysPreset, KeysRealtime, KeysStatus,
 };
@@ -147,8 +147,8 @@ pub(crate) struct WebKeysBackend {
 impl Services for WebKeysBackend {
     fn layers() -> impl Layer<Self> {
         layers![
-            signal_keys_proto::keys::Service,
-            signal_keys_proto::keys::StreamService
+            keys::proto::keys::Service,
+            keys::proto::keys::StreamService
         ]
     }
 }

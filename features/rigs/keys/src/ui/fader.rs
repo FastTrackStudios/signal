@@ -54,7 +54,7 @@ pub fn EdgeFader(
     on_change: EventHandler<f32>,
 ) -> Element {
     let mut drag = use_signal(|| None::<(f64, f32)>);
-    let send = crate::throttle::use_throttle(on_change);
+    let send = crate::ui::throttle::use_throttle(on_change);
 
     let pos = db_to_pos(db);
     let pct = pos * 100.0;
@@ -136,7 +136,7 @@ pub fn Fader(
 ) -> Element {
     // (start_y, start_pos) while a drag is live.
     let mut drag = use_signal(|| None::<(f64, f32)>);
-    let send = crate::throttle::use_throttle(on_change);
+    let send = crate::ui::throttle::use_throttle(on_change);
 
     let pos = db_to_pos(db);
     let h = height_px as f32;

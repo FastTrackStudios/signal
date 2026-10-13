@@ -8,6 +8,11 @@
 //! (engine/layer mixer shape + footswitch stacks), Keyscape preset scanning /
 //! normalization, and the [`KeysRigBackend`] wire service.
 
+
+pub mod proto;
+#[cfg(feature = "ui")]
+pub mod ui;
+
 mod backend;
 pub mod normalize;
 /// Profiles: the engine/layer mixer shape + the footswitch stacks (scenes)
@@ -19,5 +24,4 @@ pub mod user_presets;
 pub mod variations;
 pub use backend::KeysRigBackend;
 pub use profile::{EngineDef, KeysProfile, KeysStackDef, LayerDef, SceneSlot, worship_profile};
-pub use signal_keys_proto as proto;
 pub use signal_sampler::keys_rig::{KeysInstrument, KeysRig};

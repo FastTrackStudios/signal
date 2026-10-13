@@ -5,7 +5,7 @@
 //! JACK clients to the same hardware ports (REAPER is on them too). If a
 //! single explicit subscription receives what omni does not, the fan-out is
 //! the problem, not the keyboard.
-use signal_keys_proto::keys::KeysRigClient;
+use keys::proto::keys::KeysRigClient;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {

@@ -17,7 +17,7 @@ use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
-use signal_keys::KeysRig;
+use keys::KeysRig;
 use signal_sampler::rig_node::{Container, RigNode, Role};
 use signal_synth::omni_import::{
     OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,
@@ -371,7 +371,7 @@ impl SynthRigSvc for SynthRigBackend {
                 .rig
                 .lock()
                 .ok()
-                .and_then(|r| r.as_ref().map(signal_keys::KeysRig::output_peak))
+                .and_then(|r| r.as_ref().map(keys::KeysRig::output_peak))
                 .unwrap_or(0.0)
         } else {
             0.0

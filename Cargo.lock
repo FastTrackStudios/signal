@@ -10696,6 +10696,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "keys"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "architect-telemetry",
+ "daw",
+ "daw-audio-io",
+ "dioxus",
+ "eyre",
+ "facet",
+ "facet-json",
+ "facet-styx",
+ "fts-chrome",
+ "fts-sample",
+ "libc",
+ "midicore",
+ "midicore-proto",
+ "midicore-ui",
+ "ratatui",
+ "signal-browser",
+ "signal-plugin-host",
+ "signal-proto",
+ "signal-rig-host",
+ "signal-rigs-proto",
+ "signal-sampler",
+ "signal-synth",
+ "signal-ui",
+ "signal-widgets",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "vox",
+ "vox-core",
+ "vox-websocket",
+]
+
+[[package]]
 name = "khronos-egl"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18443,6 +18480,7 @@ dependencies = [
  "getrandom 0.3.4",
  "include_dir",
  "js-sys",
+ "keys",
  "launcher",
  "libc",
  "midicore-proto",
@@ -18458,9 +18496,6 @@ dependencies = [
  "signal-guitar",
  "signal-guitar-proto",
  "signal-guitar-ui",
- "signal-keys",
- "signal-keys-proto",
- "signal-keys-ui",
  "signal-nam",
  "signal-pack-library",
  "signal-packs-proto",
@@ -18703,62 +18738,6 @@ dependencies = [
  "thiserror 2.0.20",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "signal-keys"
-version = "0.1.0"
-dependencies = [
- "architect",
- "architect-telemetry",
- "daw",
- "daw-audio-io",
- "eyre",
- "facet",
- "facet-json",
- "facet-styx",
- "fts-sample",
- "libc",
- "midicore",
- "ratatui",
- "signal-keys-proto",
- "signal-plugin-host",
- "signal-proto",
- "signal-rig-host",
- "signal-rigs-proto",
- "signal-sampler",
- "signal-synth",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "vox-core",
- "vox-websocket",
-]
-
-[[package]]
-name = "signal-keys-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "midicore-proto",
- "signal-rigs-proto",
- "vox",
-]
-
-[[package]]
-name = "signal-keys-ui"
-version = "0.1.0"
-dependencies = [
- "architect",
- "dioxus",
- "fts-chrome",
- "midicore-proto",
- "midicore-ui",
- "signal-browser",
- "signal-keys-proto",
- "signal-ui",
- "signal-widgets",
 ]
 
 [[package]]
@@ -19121,9 +19100,9 @@ dependencies = [
  "architect",
  "daw",
  "daw-audio-io",
+ "keys",
  "midicore",
  "signal-browser",
- "signal-keys",
  "signal-plugin-host",
  "signal-rig-host",
  "signal-rigs-proto",
@@ -19230,8 +19209,8 @@ dependencies = [
  "console_error_panic_hook",
  "dioxus",
  "dioxus-router",
+ "keys",
  "signal-guitar-ui",
- "signal-keys-ui",
  "signal-proto",
  "ssg",
  "ssg-build",
