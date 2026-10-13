@@ -14,7 +14,7 @@
 //!
 //!   cargo xtask reaper-test
 
-use daw::test::{DawInstanceConfig, run_multi_reaper_test};
+use studio::test::{DawInstanceConfig, run_multi_reaper_test};
 use eyre::Result;
 
 // ---------------------------------------------------------------------------

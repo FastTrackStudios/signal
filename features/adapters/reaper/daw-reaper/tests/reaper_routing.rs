@@ -7,10 +7,10 @@
 //!
 //! Run with: `cargo xtask reaper-test -- reaper_routing`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 #[reaper_test(isolated)]
-async fn add_send_then_list(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn add_send_then_list(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
     let src = tracks.add("Send Source", None).await?;
@@ -33,7 +33,7 @@ async fn add_send_then_list(ctx: &daw::test::ReaperTestContext) -> eyre::Result<
 
 #[reaper_test(isolated)]
 async fn delete_middle_send_preserves_others(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
@@ -61,7 +61,7 @@ async fn delete_middle_send_preserves_others(
 }
 
 #[reaper_test(isolated)]
-async fn send_resolvable_by_destination(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn send_resolvable_by_destination(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
     let src = tracks.add("Send Source", None).await?;
@@ -89,7 +89,7 @@ async fn send_resolvable_by_destination(ctx: &daw::test::ReaperTestContext) -> e
 
 #[reaper_test(isolated)]
 async fn send_appears_as_receive_on_destination(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();

@@ -10,7 +10,7 @@
 //! just reaper daw-test --gui key_track_round_trips   # watch it
 //! ```
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::primitives::{Duration, PositionInSeconds};
 use session::key::{KEY_TRACK, format_key, parse_key};
 
@@ -32,7 +32,7 @@ fn key_of(root: &str, major: bool) -> eyre::Result<Key> {
 /// a side-car: if REAPER mangles the text, the design fails.
 #[reaper_test(isolated)]
 async fn key_track_round_trips_through_reaper(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add(KEY_TRACK, None).await?;
@@ -61,7 +61,7 @@ async fn key_track_round_trips_through_reaper(
 /// Several changes, each on its own item, stay distinct and keep their
 /// positions — the property "the key at bar N" depends on.
 #[reaper_test(isolated)]
-async fn key_changes_keep_their_positions(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn key_changes_keep_their_positions(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add(KEY_TRACK, None).await?;
 
@@ -125,7 +125,7 @@ async fn key_changes_keep_their_positions(ctx: &daw::test::ReaperTestContext) ->
 /// C# major are different keys.
 #[reaper_test(isolated)]
 async fn accidentals_survive_the_round_trip(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add(KEY_TRACK, None).await?;
@@ -169,7 +169,7 @@ async fn accidentals_survive_the_round_trip(
 /// nothing but a live project would reveal.
 #[reaper_test(isolated)]
 async fn key_positions_convert_to_the_right_measures(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     project.transport().set_tempo(120.0).await?;

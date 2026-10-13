@@ -31,7 +31,8 @@ rustdoc-args = ["--html-in-header", "arborium-header.html"]
 path = "src/lib.rs"
 
 [dependencies]
-daw = { workspace = true, features = ["reaper"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["reaper"] }
 daw-reaper.workspace = true
 facet.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "macros", "rt"] }
@@ -41,7 +42,8 @@ tracing.workspace = true
 [dev-dependencies]
 # Integration-test harness via the daw facade's `test-harness` feature
 # (replaces the former `reaper-test` crate).
-daw = { workspace = true, features = ["reaper", "test-harness"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["reaper", "test-harness"] }
 eyre.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync"] }
 

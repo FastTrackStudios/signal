@@ -1,7 +1,7 @@
 //! One-off manual check: connect to `session-desktop --engine`'s `/vox`
 //! over a real WebSocket and drive the setlist through it — the full
 //! chain (LAN client -> axum -> `reaper_lan_proxy` -> real REAPER
-//! extension -> back) that `daw::test` alone can't exercise, since the
+//! extension -> back) that `studio::test` alone can't exercise, since the
 //! desktop binary is a separate process it doesn't spawn.
 //!
 //! Run with `session-desktop --engine` (Recording Mode, connected to a

@@ -6,7 +6,7 @@
 //! in-memory backend used by `standalone_setlist_harness.rs`. `TrackManager<D>`
 //! is generic over any `Tracks + Items + Projects` backend, so the exact
 //! same `#[action]`-decorated trait methods production wires to
-//! `daw::reaper::Reaper` (via `register_actions` -> `ScopedActionBackend`
+//! `studio::reaper::Reaper` (via `register_actions` -> `ScopedActionBackend`
 //! -> `ActionBackend`) run here as plain method calls on the same wrapper
 //! type — no action-id string/enum indirection, and no calling actions
 //! directly on the raw DAW backend (`add_channel` is session's business

@@ -75,7 +75,8 @@ base64 = "0.22.1"
 # `test-harness` feature (replaces the former `reaper-test` crate).
 # `standalone-audio` for the take-peaks parity test: the same fixture
 # through the standalone backend, compared against REAPER's answer.
-daw = { workspace = true, features = ["test-harness", "standalone-audio"] }
+daw = { workspace = true, features = ["standalone-audio"] }
+studio = { workspace = true, features = ["test-harness"] }
 eyre.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 vox.workspace = true

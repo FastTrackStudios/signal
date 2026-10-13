@@ -76,6 +76,7 @@ members = [
     "crates/daw/actions",
     "crates/daw/control",
     "crates/daw/daw",
+    "crates/studio",
     "crates/daw/module",
     "crates/daw/proto",
     "crates/keyflow/keyflow-proto",
@@ -301,6 +302,7 @@ ropey = "1.6"
 # daw-proto, daw-control, daw-standalone, dawfile-* are INTERNAL to the
 # domain; consumers outside it go through the `daw` facade.
 daw = { path = "crates/daw/daw" }
+studio = { path = "crates/studio" }
 daw-proto = { path = "crates/daw/proto" }
 daw-actions = { path = "crates/daw/actions" }
 daw-control = { path = "crates/daw/control" }

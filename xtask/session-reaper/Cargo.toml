@@ -10,4 +10,5 @@ publish = false
 # `#[reaper_test]` macro and this runner; `reaper` is NOT enabled,
 # because nothing here loads inside REAPER — this process starts one and
 # talks to it over a socket.
-daw = { workspace = true, features = ["test-harness"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["test-harness"] }

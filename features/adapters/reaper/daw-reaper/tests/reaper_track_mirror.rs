@@ -13,7 +13,7 @@
 //!
 //! Run with: `cargo run -p daw-reaper-xtask -- reaper_track_mirror`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::track::{GroupFamily, GroupRole, TrackEvent};
 
 /// How long to wait for the 30 Hz poller to notice.
@@ -85,7 +85,7 @@ async fn settle(
 /// that the whole group of them was missing at once.
 #[reaper_test(isolated)]
 async fn the_fields_the_poller_used_to_drop_reach_a_subscriber(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     use daw_proto::primitives::AutomationMode;
     use daw_proto::track::InputMonitoringMode;
@@ -173,7 +173,7 @@ async fn the_fields_the_poller_used_to_drop_reach_a_subscriber(
 /// used to watch a VCA appear in REAPER and not in itself.
 #[reaper_test(isolated)]
 async fn a_group_written_through_the_facade_is_announced(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
@@ -224,7 +224,7 @@ async fn a_group_written_through_the_facade_is_announced(
 /// the route is the thing that was missing.
 #[reaper_test(isolated)]
 async fn a_late_subscriber_is_told_what_the_groups_already_are(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
@@ -263,7 +263,7 @@ async fn a_late_subscriber_is_told_what_the_groups_already_are(
 /// works at all. Nothing in this repo had ever subscribed to a stream
 /// inside a real REAPER, so that question had no answer until now.
 #[reaper_test(isolated)]
-async fn a_rename_reaches_a_subscriber(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn a_rename_reaches_a_subscriber(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
     let probe = tracks.add("Probe", None).await?;
@@ -289,7 +289,7 @@ async fn a_rename_reaches_a_subscriber(ctx: &daw::test::ReaperTestContext) -> ey
 /// enough to be wrong quietly.
 #[reaper_test(isolated)]
 async fn height_depth_and_lanes_reach_a_subscriber(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
@@ -368,7 +368,7 @@ async fn height_depth_and_lanes_reach_a_subscriber(
 /// numbers. Before this the indicator was drawn from a hard-coded
 /// false, so a session full of sends showed none.
 #[reaper_test(isolated)]
-async fn a_send_changes_the_route_counts(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn a_send_changes_the_route_counts(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
     let source = tracks.add("Route Source", None).await?;

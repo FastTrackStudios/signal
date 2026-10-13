@@ -1204,7 +1204,7 @@ fn mode_glyph(mode: session::modes::Mode) -> &'static str {
 /// `ModeOption` shape.
 ///
 /// State is a plain local signal, NOT `session::modes::set_mode` — that
-/// function unconditionally calls into `daw::reaper::Reaper`
+/// function unconditionally calls into `studio::reaper::Reaper`
 /// (`HighReaper::get()`), which panics without a real REAPER process.
 /// This is display/selection only for now; nothing yet changes behavior
 /// when the mode changes (no REAPER window layout to apply here).

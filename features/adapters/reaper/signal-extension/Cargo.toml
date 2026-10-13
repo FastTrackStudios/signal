@@ -14,7 +14,8 @@ path = "src/lib.rs"
 workspace = true
 
 [dependencies]
-daw = { workspace = true, features = ["reaper"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["reaper"] }
 daw-extension-runtime.workspace = true
 signal-macromod.workspace = true
 signal.workspace = true
@@ -32,6 +33,7 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 signal = { workspace = true, features = ["daw"] }
-daw = { workspace = true, features = ["file", "test-harness"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["file", "test-harness"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 eyre.workspace = true

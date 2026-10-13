@@ -1,7 +1,7 @@
 //! What gets versioned, and what must never be.
 
-use daw::reaper_config::{self, filter_reaper_ini, merge_reaper_ini};
 use std::path::Path;
+use studio::reaper_config::{self, filter_reaper_ini, merge_reaper_ini};
 
 #[test]
 fn the_files_that_define_how_reaper_feels_are_tracked() {

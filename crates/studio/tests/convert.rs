@@ -1,4 +1,4 @@
-//! Integration test for `daw::file::convert`. Run with `--features convert`.
+//! Integration test for `studio::file::convert`. Run with `--features convert`.
 #![cfg(feature = "convert")]
 
 #[test]
@@ -6,10 +6,10 @@ fn ptx_to_rpp() {
     // A real PT fixture from the dawfile-protools crate.
     let input = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../../features/formats/tests/fixtures/protools/HeyLady.ptx"
+        "/../../features/formats/tests/fixtures/protools/HeyLady.ptx"
     );
     let out = std::env::temp_dir().join("daw_convert_test_heylady.rpp");
-    daw::file::convert(input, &out).expect("convert ptx -> rpp");
+    studio::file::convert(input, &out).expect("convert ptx -> rpp");
 
     let rpp = std::fs::read_to_string(&out).unwrap();
     assert!(
@@ -25,8 +25,11 @@ fn ptx_to_rpp() {
 fn unsupported_output_errors() {
     let input = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../../features/formats/tests/fixtures/protools/HeyLady.ptx"
+        "/../../features/formats/tests/fixtures/protools/HeyLady.ptx"
     );
-    let err = daw::file::convert(input, "out.als").unwrap_err();
-    assert!(matches!(err, daw::file::ConvertError::UnsupportedOutput(_)));
+    let err = studio::file::convert(input, "out.als").unwrap_err();
+    assert!(matches!(
+        err,
+        studio::file::ConvertError::UnsupportedOutput(_)
+    ));
 }

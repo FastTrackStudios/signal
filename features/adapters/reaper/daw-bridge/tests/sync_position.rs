@@ -11,7 +11,7 @@
 use std::time::Duration;
 
 use daw::service::PlayState;
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 /// Maximum allowed position drift between any two instances (seconds).
 ///
@@ -31,9 +31,9 @@ const MAX_DRIFT_AFTER_CHANGE: f64 = 0.2; // 200ms
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(200);
 
 #[reaper_test(instances("master", "follower1", "follower2", "follower3"))]
-async fn position_sync(ctx: &daw::test::MultiDawTestContext) -> Result<()> {
+async fn position_sync(ctx: &studio::test::MultiDawTestContext) -> Result<()> {
     let master = ctx.by_label("master");
-    let followers: Vec<(&str, &daw::test::DawInstance)> = vec![
+    let followers: Vec<(&str, &studio::test::DawInstance)> = vec![
         ("follower1", ctx.by_label("follower1")),
         ("follower2", ctx.by_label("follower2")),
         ("follower3", ctx.by_label("follower3")),

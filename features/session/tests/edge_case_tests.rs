@@ -7,7 +7,7 @@
 //!   cargo xtask reaper-test -- `edge_case`
 
 use daw::rpc::Project;
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use session::{SongBuilder, stamp_demo_into_project};
 use std::time::Duration;
 
@@ -34,7 +34,7 @@ async fn clear_project(project: &Project) -> eyre::Result<()> {
 
 /// `SongBuilder` on an empty project (no markers, no regions).
 #[reaper_test]
-async fn songbuilder_empty_project(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn songbuilder_empty_project(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     clear_project(&ctx.project).await?;
     // Project is now empty
     let songs = SongBuilder::build(&ctx.project).await?;
@@ -59,7 +59,7 @@ async fn songbuilder_empty_project(ctx: &daw::test::ReaperTestContext) -> eyre::
 /// `SongBuilder` with only structural markers (no regions).
 /// Should build sections from marker boundaries.
 #[reaper_test]
-async fn songbuilder_markers_only(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn songbuilder_markers_only(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let markers_api = ctx.project.markers();
 
     // Add structural markers without any regions
@@ -104,7 +104,7 @@ async fn songbuilder_markers_only(ctx: &daw::test::ReaperTestContext) -> eyre::R
 /// Should still produce a song and detect at least some sections from regions.
 #[reaper_test]
 async fn songbuilder_regions_no_structural_markers(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let regions_api = ctx.project.regions();
 
@@ -150,7 +150,7 @@ async fn songbuilder_regions_no_structural_markers(
 
 /// `SongBuilder` with SONGSTART but no SONGEND.
 #[reaper_test]
-async fn songbuilder_missing_songend(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn songbuilder_missing_songend(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let markers_api = ctx.project.markers();
     let regions_api = ctx.project.regions();
 
@@ -178,7 +178,7 @@ async fn songbuilder_missing_songend(ctx: &daw::test::ReaperTestContext) -> eyre
 
 /// `SongBuilder` with only SONGSTART and SONGEND (no section regions/markers).
 #[reaper_test]
-async fn songbuilder_structural_only(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn songbuilder_structural_only(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let markers_api = ctx.project.markers();
 
     markers_api.add(0.0, "COUNT-IN").await?;
@@ -223,7 +223,7 @@ async fn songbuilder_structural_only(ctx: &daw::test::ReaperTestContext) -> eyre
 
 /// Seek to position 0 (project start).
 #[reaper_test]
-async fn seek_to_zero(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn seek_to_zero(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let transport = ctx.project.transport();
 
     transport.stop().await?;
@@ -244,7 +244,7 @@ async fn seek_to_zero(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
 
 /// Seek to a very large position (past any content).
 #[reaper_test]
-async fn seek_past_end(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn seek_past_end(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     stamp_demo_into_project(&ctx.project).await?;
     tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -270,7 +270,7 @@ async fn seek_past_end(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
 
 /// Seek to exact section boundary positions.
 #[reaper_test]
-async fn seek_exact_boundaries(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn seek_exact_boundaries(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     stamp_demo_into_project(&ctx.project).await?;
     tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -299,7 +299,7 @@ async fn seek_exact_boundaries(ctx: &daw::test::ReaperTestContext) -> eyre::Resu
 
 /// `goto_start` resets to position 0.
 #[reaper_test]
-async fn transport_goto_start(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn transport_goto_start(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let transport = ctx.project.transport();
 
     transport.stop().await?;
@@ -324,7 +324,7 @@ async fn transport_goto_start(ctx: &daw::test::ReaperTestContext) -> eyre::Resul
 
 /// Rapid play/stop/play — no stale state.
 #[reaper_test]
-async fn rapid_play_stop_play(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn rapid_play_stop_play(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     stamp_demo_into_project(&ctx.project).await?;
     tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -369,7 +369,7 @@ async fn rapid_play_stop_play(ctx: &daw::test::ReaperTestContext) -> eyre::Resul
 
 /// Rapid seek across sections.
 #[reaper_test]
-async fn rapid_seek(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn rapid_seek(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     stamp_demo_into_project(&ctx.project).await?;
     tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -399,7 +399,7 @@ async fn rapid_seek(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
 
 /// Play/pause/play maintains position continuity.
 #[reaper_test]
-async fn rapid_play_pause_play(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn rapid_play_pause_play(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     stamp_demo_into_project(&ctx.project).await?;
     tokio::time::sleep(Duration::from_millis(200)).await;
 

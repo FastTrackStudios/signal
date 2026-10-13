@@ -136,15 +136,15 @@ async fn register_daw_dispatcher() {
     info!("Registering DAW dispatcher...");
 
     // Set TaskSupport for daw-reaper to use
-    daw::reaper::set_task_support(Global::task_support());
+    studio::reaper::set_task_support(Global::task_support());
 
     // Surviving (non-service) broadcasters — others retired with the
     // architect::rpc port.
-    daw::reaper::init_item_broadcaster();
-    daw::reaper::init_tempo_map_broadcaster();
-    daw::reaper::init_fx_broadcaster();
-    daw::reaper::init_routing_broadcaster();
-    daw::reaper::init_take_broadcaster();
+    studio::reaper::init_item_broadcaster();
+    studio::reaper::init_tempo_map_broadcaster();
+    studio::reaper::init_fx_broadcaster();
+    studio::reaper::init_routing_broadcaster();
+    studio::reaper::init_take_broadcaster();
     info!("Surviving broadcasters initialized");
 
     let dock_host = daw_reaper_dioxus::ReaperDockHost::new();
@@ -154,9 +154,9 @@ async fn register_daw_dispatcher() {
     // pre-mounted). The MIDI analysis service (`keyflow-daw-analysis`)
     // is mounted out-of-tree by fts-extensions; see daw-reaper
     // a823b67 for why.
-    let daw_handler = daw::reaper::Reaper::layers()
+    let daw_handler = studio::reaper::Reaper::layers()
         .merge(daw_proto::dock_host::layer(dock_host))
-        .provide(daw::reaper::Reaper);
+        .provide(studio::reaper::Reaper);
 
     let acceptor = DawConnectionAcceptor::new(daw_handler);
 
@@ -376,7 +376,7 @@ extern "C" fn timer_callback() {
         // Deferred eager-load: run once after REAPER startup is complete
         if !FX_PLUGINS_LOADED.load(std::sync::atomic::Ordering::Relaxed) {
             FX_PLUGINS_LOADED.store(true, std::sync::atomic::Ordering::Relaxed);
-            daw::reaper::eager_load_fx_plugins();
+            studio::reaper::eager_load_fx_plugins();
         }
 
         // Measure REAPER's actual timer tick rate when FTS_TIMER_PROBE=1.
@@ -414,16 +414,16 @@ extern "C" fn timer_callback() {
             // Poll surviving broadcasters. FX / routing / track
             // streams will land as DawEventHub channels (Phase 2 of
             // docs/streaming-design.md) — transport is wired now.
-            daw::reaper::poll_and_broadcast_items();
-            daw::reaper::poll_and_broadcast_tempo_map();
-            daw::reaper::poll_and_broadcast_transport();
-            daw::reaper::poll_and_broadcast_markers();
-            daw::reaper::poll_and_broadcast_regions();
-            daw::reaper::poll_and_broadcast_tracks();
-            daw::reaper::poll_and_broadcast_fx();
-            daw::reaper::poll_and_broadcast_routing();
-            daw::reaper::poll_and_broadcast_takes();
-            daw::reaper::poll_and_broadcast_meters();
+            studio::reaper::poll_and_broadcast_items();
+            studio::reaper::poll_and_broadcast_tempo_map();
+            studio::reaper::poll_and_broadcast_transport();
+            studio::reaper::poll_and_broadcast_markers();
+            studio::reaper::poll_and_broadcast_regions();
+            studio::reaper::poll_and_broadcast_tracks();
+            studio::reaper::poll_and_broadcast_fx();
+            studio::reaper::poll_and_broadcast_routing();
+            studio::reaper::poll_and_broadcast_takes();
+            studio::reaper::poll_and_broadcast_meters();
             // Reads a slice of the tracks per tick rather than all of
             // them, so the cost is flat whatever the session's size. It
             // is the only thing that sees a group edited by hand in
@@ -431,10 +431,10 @@ extern "C" fn timer_callback() {
             // that has just attached learns the grouping at all — the
             // bulk track read leaves it empty because reading it is
             // about a hundred calls per track.
-            daw::reaper::poll_and_broadcast_grouping();
+            studio::reaper::poll_and_broadcast_grouping();
 
             // Process deferred toolbar operations
-            daw::reaper::process_toolbar_ops();
+            studio::reaper::process_toolbar_ops();
 
             // Refresh the multi-project audio-sync slot assignments.
             // Cheap (one enum_projects loop) and lets the audio
@@ -471,7 +471,7 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
     info!("daw-bridge starting...");
 
     // Store plugin context for PluginLoaderService before REAPER consumes it
-    daw::reaper::set_plugin_context(context);
+    studio::reaper::set_plugin_context(context);
 
     // Install SWELL function pointers for cross-platform window/menu APIs
     // (used by the FTS Extensions menu hook, the input TranslateAccel
@@ -571,9 +571,9 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
         info!("FTS_MISC_TIMER_HZ={hz} — REAPER misc timer rearmed at {rate_ms}ms");
     }
 
-    daw::reaper::register_extension_menu(&mut session);
+    studio::reaper::register_extension_menu(&mut session);
 
-    daw::reaper::register_project_importer(&mut session)?;
+    studio::reaper::register_project_importer(&mut session)?;
 
     // Audio-thread observer: writes per-buffer (host_micros, playhead,
     // sample_rate, len) into a lock-free seqlock cell that the main
@@ -692,8 +692,8 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
     // boxed surface and unregisters on REAPER shutdown.
     if std::env::var("FTS_CSURF_DISABLED").as_deref() != Ok("1") {
         use reaper_high::MiddlewareControlSurface;
-        let mode = daw::reaper::CsurfMode::from_env();
-        let csurf = MiddlewareControlSurface::new(daw::reaper::DawControlSurface::with_mode(mode));
+        let mode = studio::reaper::CsurfMode::from_env();
+        let csurf = MiddlewareControlSurface::new(studio::reaper::DawControlSurface::with_mode(mode));
         match session.plugin_register_add_csurf_inst(Box::new(csurf)) {
             Ok(_handle) => {
                 info!("daw control surface registered (mode={mode:?})");
@@ -716,7 +716,7 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
         // we registered above. Don't rely on the daw::get() facade singleton —
         // daw-bridge never calls init_from_parts, so it stays None.
         runtime.spawn(async move {
-            match daw::reaper::build_extension_daw().await {
+            match studio::reaper::build_extension_daw().await {
                 Ok(daw) => {
                     if let Err(e) = sync_runtime::start(daw).await {
                         warn!("sync runtime start failed: {e}");
@@ -773,7 +773,7 @@ fn register_fts_extension_action(name: &'static str, description: &'static str, 
 }
 
 fn register_window_geometry_actions() {
-    use daw::reaper::window_geometry as wg;
+    use studio::reaper::window_geometry as wg;
     use daw_proto::WindowTarget;
 
     const NUDGE_STEP: i32 = 10;

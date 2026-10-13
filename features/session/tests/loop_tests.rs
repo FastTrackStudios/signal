@@ -5,7 +5,7 @@
 //! Run with:
 //!   cargo xtask reaper-test -- loop_
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use session::stamp_demo_into_project;
 use std::time::Duration;
 
@@ -18,7 +18,7 @@ async fn setup_demo(project: &daw::rpc::Project) -> eyre::Result<()> {
 
 /// Verify loop is off by default.
 #[reaper_test]
-async fn loop_initially_off(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn loop_initially_off(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let transport = ctx.project.transport();
 
     let looping = transport.is_looping().await?;
@@ -32,7 +32,7 @@ async fn loop_initially_off(ctx: &daw::test::ReaperTestContext) -> eyre::Result<
 
 /// Toggle loop on and off.
 #[reaper_test]
-async fn loop_toggle(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn loop_toggle(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let transport = ctx.project.transport();
 
     // Ensure off first
@@ -65,7 +65,7 @@ async fn loop_toggle(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
 
 /// Set loop on/off explicitly.
 #[reaper_test]
-async fn loop_set_explicit(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn loop_set_explicit(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let transport = ctx.project.transport();
 
     transport.set_loop(true).await?;
@@ -92,7 +92,7 @@ async fn loop_set_explicit(ctx: &daw::test::ReaperTestContext) -> eyre::Result<(
 
 /// Verify loop state is reflected in `get_state()`.
 #[reaper_test]
-async fn loop_state_in_transport(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn loop_state_in_transport(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let transport = ctx.project.transport();
 
     transport.set_loop(false).await?;
@@ -117,7 +117,7 @@ async fn loop_state_in_transport(ctx: &daw::test::ReaperTestContext) -> eyre::Re
 /// Verify playback wraps at loop end back to loop start.
 /// Uses a time selection as the loop region.
 #[reaper_test]
-async fn loop_playback_wraps(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn loop_playback_wraps(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     setup_demo(&ctx.project).await?;
     let transport = ctx.project.transport();
 

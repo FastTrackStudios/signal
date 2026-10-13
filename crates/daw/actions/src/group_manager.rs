@@ -7,7 +7,7 @@
 //! *realize* that partition in a live project.
 //!
 //! Written against the `daw` domain API (`Tracks` group methods + `Projects`
-//! undo) on `daw::reaper::Reaper` — no raw FFI. The REAPER-specific bitmask
+//! undo) on `studio::reaper::Reaper` — no raw FFI. The REAPER-specific bitmask
 //! plumbing lives in the `daw-reaper` backend.
 
 use daw::service::{ProjectContext, Projects as _, TrackRef, Tracks as _};
@@ -19,7 +19,7 @@ use tracing::{info, warn};
 ///
 /// Returns the number of slots successfully named.
 pub fn apply_group_naming() -> u32 {
-    let daw = daw::reaper::Reaper;
+    let daw = studio::reaper::Reaper;
     let mut named = 0u32;
     for slot in 1..=TOTAL_GROUP_SLOTS {
         match daw.set_group_name(ProjectContext::Current, slot as u32, &slot_label(slot)) {
@@ -43,7 +43,7 @@ pub fn assign_selected_to_category(category: &str) -> usize {
         warn!(category, "[group] unknown category");
         return 0;
     };
-    let daw = daw::reaper::Reaper;
+    let daw = studio::reaper::Reaper;
 
     let selected: Vec<String> = daw
         .selected(ProjectContext::Current)

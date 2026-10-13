@@ -18,7 +18,7 @@
 
 use std::time::{Duration, Instant};
 
-use daw::test::{DawInstanceConfig, run_multi_reaper_test};
+use studio::test::{DawInstanceConfig, run_multi_reaper_test};
 use daw_proto::track::TrackEvent;
 use eyre::Result;
 

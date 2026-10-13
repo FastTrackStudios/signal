@@ -1,4 +1,4 @@
-//! `daw` — thin binary over `daw::cli` (build with `--features cli`).
+//! `daw` — thin binary over `studio::cli` (build with `--features cli`).
 //!
 //! The same command tree is mounted at `fts daw <...>` by the unified
 //! `fts` CLI; this standalone binary exists for muscle memory and for the
@@ -13,5 +13,5 @@ async fn main() -> eyre::Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    daw::cli::cli_main(std::env::args()).await
+    studio::cli::cli_main(std::env::args()).await
 }

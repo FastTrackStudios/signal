@@ -15,7 +15,7 @@
 use std::time::Duration;
 
 use daw::service::PlayState;
-use daw::test::{DawInstanceConfig, run_multi_reaper_test};
+use studio::test::{DawInstanceConfig, run_multi_reaper_test};
 use eyre::Result;
 
 /// Maximum allowed position drift during sustained playback (seconds).

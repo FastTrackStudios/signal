@@ -57,7 +57,7 @@ pub mod setlist;
 pub mod song;
 pub mod strip_width;
 
-// REAPER-hotkey action domains driving the `daw::reaper` backend directly.
+// REAPER-hotkey action domains driving the `studio::reaper` backend directly.
 // Not needed by the browser setlist engine — native-only. `track_manager`
 // also drives `dynamic-template` (the native template engine).
 #[cfg(all(not(target_arch = "wasm32"), feature = "reaper"))]
@@ -131,7 +131,7 @@ pub use setlist::service::demo::{stamp_demo_into_project, stamp_demo_setlist};
 /// only "Guitar Grow", and both get wrapped in a `SESSION`-scoped
 /// backend on the way in.
 ///
-/// `daw` is the backend the handlers drive (`daw::reaper::Reaper` in
+/// `daw` is the backend the handlers drive (`studio::reaper::Reaper` in
 /// production, `daw_standalone::sync::Standalone` in tests).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn register_all_actions<D, B>(backend: &B, daw: D)

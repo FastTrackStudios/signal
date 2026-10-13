@@ -19,7 +19,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::dock_host::{DockKind, UiEventDto};
 
 const TEST_PANEL_ID: &str = "FTS_TEST_PANEL";

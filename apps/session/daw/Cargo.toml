@@ -112,6 +112,7 @@ frame = { workspace = true, features = ["anyrender-0-11", "live", "theme"] }
 # extension's Unix socket, not linking its FFI, which is what lets this
 # window run on a machine that has no REAPER at all.
 daw = { workspace = true }
+studio = { workspace = true }
 
 # The GPU-accelerated arrangement. `anyrender` is the 2D abstraction
 # (`PaintScene`: fill/stroke/draw_glyphs/draw_image) and the portable
@@ -247,7 +248,7 @@ default = ["native"]
 signal = ["native", "dep:signal-fx"]
 # The desktop app: dioxus-native (Blitz) hosts for the panels, the
 # in-process engine with its audio device, threads, the plugin-UI graph.
-native = ["dep:dioxus-native", "dep:realfft", "dep:architect-mcp", "dep:anyrender_vello", "dep:wgpu", "dep:wgpu-context-07", "dep:pollster", "dep:dirs", "dep:winit", "dep:tokio", "dep:tracing-subscriber", "eq/native", "daw/standalone-rpp", "daw/standalone-bootstrap", "daw-standalone/reapeaks", "daw-standalone/stream-ogg", "daw/standalone-session-file", "daw/cli", "dynamic-template/reaper", "dep:patch-list", "dep:editor-view", "editor-view/native", "dep:editor-state", "dep:keyflow-editor-lang", "dep:futures-channel", "dep:rayon", "dep:hits", "dep:formats", "formats?/store", "dep:futures-util", "session/collab", "dep:architect", "architect/iroh", "dep:crdt", "dep:vox-core", "dep:uuid", "dep:editor-crdt", "dep:futures-timer", "dep:daw-transport-sync", "dep:fts-sample", "fts-sample/engine-native", "fts-sample/write", "dep:dawfile-reaper", "dep:builtin", "builtin?/engine", "dawfile-reaper/peaks-wav", "dawfile-reaper/peaks-ogg", "session/library", "dep:auth-client", "dep:live-proto", "dep:task-dial", "dep:reqwest"]
+native = ["dep:dioxus-native", "dep:realfft", "dep:architect-mcp", "dep:anyrender_vello", "dep:wgpu", "dep:wgpu-context-07", "dep:pollster", "dep:dirs", "dep:winit", "dep:tokio", "dep:tracing-subscriber", "eq/native", "daw/standalone-rpp", "daw/standalone-bootstrap", "daw-standalone/reapeaks", "daw-standalone/stream-ogg", "daw/standalone-session-file", "studio/cli", "dynamic-template/reaper", "dep:patch-list", "dep:editor-view", "editor-view/native", "dep:editor-state", "dep:keyflow-editor-lang", "dep:futures-channel", "dep:rayon", "dep:hits", "dep:formats", "formats?/store", "dep:futures-util", "session/collab", "dep:architect", "architect/iroh", "dep:crdt", "dep:vox-core", "dep:uuid", "dep:editor-crdt", "dep:futures-timer", "dep:daw-transport-sync", "dep:fts-sample", "fts-sample/engine-native", "fts-sample/write", "dep:dawfile-reaper", "dep:builtin", "builtin?/engine", "dawfile-reaper/peaks-wav", "dawfile-reaper/peaks-ogg", "session/library", "dep:auth-client", "dep:live-proto", "dep:task-dial", "dep:reqwest"]
 # The browser: the same widgets, hosted in <canvas> elements under
 # dioxus-web and drawn with vello_hybrid's WebGL renderer (keyflow-ui's
 # `wasm-graphics` pattern). See `web_host`.
@@ -256,7 +257,7 @@ web = ["dioxus/web", "dep:web-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-future
 # feature so an ordinary `cargo nextest run --workspace` does not try to
 # reach one that is not running — `just reaper-test` turns it on, via
 # session-reaper-xtask, which starts the REAPER first.
-reaper-tests = ["daw/test-harness"]
+reaper-tests = ["studio/test-harness"]
 # A sampling profiler on the headless benchmarks. Behind a feature so an
 # ordinary build never links a signal handler: `pprof` installs a SIGPROF
 # timer, which is exactly what you want while measuring and nothing you

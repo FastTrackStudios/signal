@@ -5,7 +5,7 @@
 //!
 //!   cargo xtask reaper-test -- reaper_dawfile_service
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 #[reaper_test(isolated)]
 async fn summarize_project_returns_track_count(ctx: &ReaperTestContext) -> eyre::Result<()> {

@@ -8,7 +8,7 @@
 //!
 //! Run with: `cargo xtask reaper-test -- reaper_takes`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::SourceType;
 use std::fs;
 use std::path::PathBuf;
@@ -48,7 +48,7 @@ fn write_silence_wav(name: &str) -> PathBuf {
 }
 
 #[reaper_test(isolated)]
-async fn take_delete_decreases_count(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn take_delete_decreases_count(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Take Delete Track", None).await?;
     let item = track
@@ -87,7 +87,7 @@ async fn take_delete_decreases_count(ctx: &daw::test::ReaperTestContext) -> eyre
 }
 
 #[reaper_test(isolated)]
-async fn take_preserve_pitch_round_trips(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn take_preserve_pitch_round_trips(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Preserve Pitch Track", None).await?;
     let item = track
@@ -118,7 +118,7 @@ async fn take_preserve_pitch_round_trips(ctx: &daw::test::ReaperTestContext) -> 
 
 #[reaper_test(isolated)]
 async fn take_set_source_file_flips_to_audio(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let wav = write_silence_wav("source_swap");
     let path_str = wav.to_string_lossy().into_owned();
@@ -147,7 +147,7 @@ async fn take_set_source_file_flips_to_audio(
 
 #[reaper_test(isolated)]
 async fn take_marker_add_list_update_delete(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Take Marker Track", None).await?;
@@ -231,7 +231,7 @@ async fn take_marker_add_list_update_delete(
 
 #[reaper_test(isolated)]
 async fn take_marker_at_project_position_inside_and_outside(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     use daw_proto::{Position, PositionInSeconds};
 
@@ -296,7 +296,7 @@ async fn take_marker_at_project_position_inside_and_outside(
 
 #[reaper_test(isolated)]
 async fn take_rating_up_rank_progression_and_clear(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Take Rating Track", None).await?;
@@ -375,7 +375,7 @@ fn take_rating_marker_name_round_trip() {
 
 #[reaper_test(isolated)]
 async fn take_source_type_detected_for_default(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Source Type Track", None).await?;

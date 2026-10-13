@@ -1,0 +1,114 @@
+[package]
+name = "studio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "FastTrack Studio: the DAW and everything built on it — the REAPER adapter, project files, UI, control surfaces, the daw CLI and the integration-test harness"
+
+[dependencies]
+# The DAW, re-exported whole (`pub use daw::*`).
+daw = { workspace = true }
+daw-proto = { workspace = true }
+daw-control = { workspace = true }
+vox.workspace = true
+facet.workspace = true
+architect.workspace = true
+
+# The REAPER adapter. It carries per-format importer features (default =
+# all-formats); taken with default-features = false so `convert-<format>`
+# can opt into formats one at a time.
+daw-reaper = { workspace = true, optional = true, default-features = false }
+# REAPER + Dioxus UI host (`reaper-ui`).
+daw-reaper-dioxus = { workspace = true, optional = true }
+# The RPP project file (`file`).
+dawfile-reaper = { workspace = true, optional = true }
+# The reusable, vector-themeable UI component library (`ui`).
+daw-ui = { workspace = true, optional = true }
+# Control Surface Integration — Mackie Control / X-Touch (`csi`).
+control-surfaces = { workspace = true, optional = true }
+# Source-format parsers, each under `studio::<format>`. None pulls in REAPER;
+# the RPP conversion is `convert`.
+formats = { workspace = true, optional = true, features = ["aaf", "ableton", "dawproject", "logic", "protools"] }
+
+# The CLI's and the test harness's own.
+vox-stream = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+facet-json = { workspace = true, optional = true }
+libc = { version = "0.2", optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+eyre = { workspace = true, optional = true }
+daw-test-macro = { workspace = true, optional = true }
+reaper-launcher = { workspace = true, optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio.workspace = true
+
+[features]
+reaper = ["dep:daw-reaper"]
+# Reusable UI components (`studio::ui` — widgets / theming / panels). `web`
+# brings in dioxus (the components render under any dioxus renderer).
+ui = ["dep:daw-ui", "daw-ui/web"]
+# REAPER theme import: `studio::ui::theming::theme_from_reaper`.
+ui-reaper-theme = ["ui", "daw-ui/reaper-theme"]
+file = ["dep:dawfile-reaper"]
+# Cross-format project conversion (`studio::file::convert`, format → RPP),
+# with the importers from `daw-reaper`: every one, or a single format.
+convert = ["file", "reaper", "daw-reaper/all-formats"]
+convert-protools = ["file", "reaper", "daw-reaper/protools"]
+convert-ableton = ["file", "reaper", "daw-reaper/ableton"]
+convert-aaf = ["file", "reaper", "daw-reaper/aaf"]
+convert-dawproject = ["file", "reaper", "daw-reaper/dawproject"]
+reaper-ui = ["dep:daw-reaper-dioxus"]
+# The `daw` command line (`studio::cli`) and its thin binary.
+cli = [
+    "file",
+    "dep:clap",
+    "dep:eyre",
+    "dep:serde_json",
+    "dep:facet-json",
+    "dep:libc",
+    "dep:vox-stream",
+    "dep:tracing-subscriber",
+]
+# Control surfaces (`studio::csi`) — Mackie Control / Behringer X-Touch.
+csi = ["dep:control-surfaces"]
+protools = ["dep:formats", "formats?/protools"]
+ableton = ["dep:formats", "formats?/ableton"]
+logic = ["dep:formats", "formats?/logic"]
+aaf = ["dep:formats", "formats?/aaf"]
+dawproject = ["dep:formats", "formats?/dawproject"]
+formats = ["protools", "ableton", "logic", "aaf", "dawproject"]
+# Integration-test harness: drives daw-reaper over the daw RPC surface,
+# generalized over `DawBackend` (impl `ReaperBackend`).
+test-harness = [
+    "reaper",
+    "dep:reaper-launcher",
+    "dep:vox-stream",
+    "dep:eyre",
+    "dep:daw-test-macro",
+    # geteuid() for the socket owner check in find_fts_daw_socket
+    # (skip cross-user stale /tmp sockets).
+    "dep:libc",
+]
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "daw"
+path = "src/bin/daw.rs"
+required-features = ["cli"]
+
+[dev-dependencies]
+formats = { workspace = true, features = ["ableton"] }
+dawfile-reaper = { workspace = true }
+# CLI integration tests: the in-process standalone backend over a real vox
+# memory link + local wire probes.
+daw = { workspace = true, features = ["standalone-bootstrap"] }
+daw-standalone = { workspace = true, features = ["bootstrap", "audio"] }
+architect = { workspace = true, features = ["vox", "local"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+eyre = { workspace = true }
+serde_json = { workspace = true }

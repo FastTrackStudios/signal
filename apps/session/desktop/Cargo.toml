@@ -44,12 +44,12 @@ default = ["session", "charts", "native"]
 # setlist), `session-player` (the live multitrack setlist player) and
 # `session-vault-sync` (Task vault notes from the Song Library).
 cli = [
-    "daw?/reaper",
+    "studio?/reaper",
     "dawfile-reaper?/peaks-ogg",
     "dawfile-reaper?/peaks-wav",
     "dep:chrono",
     "dep:clap",
-    "dep:daw",
+    "dep:daw", "dep:studio",
     "dep:daw-proto",
     "dep:daw-standalone",
     "dep:dawfile-reaper",
@@ -104,7 +104,7 @@ session-domain = [
     "dep:dawfile-reaper",
     "dep:keyflow",
     "dep:keyflow-sync",
-    "dep:daw",
+    "dep:daw", "dep:studio",
     "dep:daw-control",
     "dep:daw-standalone",
     "session?/vault-sync",
@@ -253,7 +253,8 @@ keyflow-sync = { workspace = true, optional = true }
 # (daw::cli::{launch_and_connect, discover_socket, spawn_reaper}) — the
 # same code the `daw` CLI itself uses against a live REAPER, reused here
 # instead of reimplementing "find or launch REAPER" from scratch.
-daw = { workspace = true, optional = true, features = ["cli"] }
+daw = { workspace = true, optional = true }
+studio = { workspace = true, optional = true, features = ["cli"] }
 # Backend-agnostic transport/track RPC client (play/pause, record toggle,
 # position) — used by the Arrangement workspace's mode-specific toolbar
 # actions (e.g. Record mode's record-toggle button) without depending on

@@ -11,7 +11,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::rpc::Daw;
+use daw::rpc::Daw;
 use eyre::Result;
 use serde_json::{Value, json};
 

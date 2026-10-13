@@ -17,7 +17,8 @@ path = "src/lib.rs"
 [dependencies]
 # DAW facade (REAPER impl). The UI host is provided by the pinned direct
 # daw-reaper-dioxus dependency below so local dioxus work cannot break bridge.
-daw = { workspace = true, features = ["reaper"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["reaper"] }
 # Direct dep so we can construct ReaperDockHost in plugin_main.
 daw-reaper-dioxus = { workspace = true }
 daw-proto = { workspace = true }
@@ -68,7 +69,8 @@ sync = ["dep:daw-synchronization", "dep:daw-network"]
 eyre = "0.6"
 # Integration-test harness via the daw facade's `test-harness` feature
 # (replaces the former `reaper-test` crate).
-daw = { workspace = true, features = ["reaper", "test-harness"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["reaper", "test-harness"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]

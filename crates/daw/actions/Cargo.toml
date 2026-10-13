@@ -8,7 +8,8 @@ license.workspace = true
 # The `daw` facade (not daw-proto directly): these modules drive a live
 # backend — `daw::reaper::Reaper` — on top of the service traits, which is
 # exactly why they can't live in daw-proto (daw-reaper depends on it).
-daw = { workspace = true, features = ["reaper"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["reaper"] }
 daw-reaper = { workspace = true }
 architect = { workspace = true, features = ["vox"] }
 # Canonical 128-slot group partition (music_catalog::groups).

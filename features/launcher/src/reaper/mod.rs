@@ -5,7 +5,7 @@
 //!
 //! # Integration modes
 //!
-//! - **Embedded (CLAP plugin)**: `daw::init(host_context)` bootstraps in-process
+//! - **Embedded (CLAP plugin)**: `studio::init(host_context)` bootstraps in-process
 //! - **Standalone**: Uses `daw` standalone feature with mock/demo data
 //!
 //! The providers don't care which mode — they use `daw::get()` or `daw::block_on()`.

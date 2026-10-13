@@ -5,7 +5,7 @@
 //!
 //! Run with: `cargo run -p daw-reaper-xtask -- song_files`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 /// A song folder on disk: its project, a proxy, and the proxy's index.
 fn song_folder(label: &str) -> std::path::PathBuf {
@@ -29,7 +29,7 @@ fn song_folder(label: &str) -> std::path::PathBuf {
 
 #[reaper_test(isolated)]
 async fn song_files_lists_and_reads_the_folder_reaper_opened(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let dir = song_folder("list");
     let project = ctx

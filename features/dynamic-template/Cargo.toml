@@ -11,13 +11,14 @@ workspace = true
 
 [features]
 default = ["reaper"]
-reaper = ["daw/reaper", "dep:daw-reaper"]
+reaper = ["studio/reaper", "dep:daw-reaper"]
 
 [dependencies]
 anyhow = { workspace = true }
 architect = { workspace = true }
 color-palette = { workspace = true }
 daw = { workspace = true }
+studio = { workspace = true }
 daw-proto = { workspace = true }
 daw-reaper = { workspace = true, default-features = true, optional = true }
 dawfile-reaper = { workspace = true }

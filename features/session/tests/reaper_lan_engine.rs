@@ -1,6 +1,6 @@
 //! Proves `session-desktop --engine`'s LAN control surface actually works
 //! against a real, running REAPER — not just Live Mode's in-process
-//! player, and not just the unix socket `daw::test` normally connects
+//! player, and not just the unix socket `studio::test` normally connects
 //! over.
 //!
 //! `session-extension` (this test's REAPER host) additionally binds a
@@ -14,13 +14,13 @@
 //! Run via `session-extension-xtask` (needs `nix develop .#reaper-test`):
 //!   cargo run -p session-extension-xtask -- lan_engine
 
-use daw::test::daw_test;
+use studio::test::daw_test;
 
 /// Read the LAN test server's bound port from ExtState (published by
 /// `session-extension`'s `spawn_lan_test_server`) and open the
 /// `SetlistService` lanes over a real WebSocket to it.
 async fn connect_over_lan(
-    ctx: &daw::test::DawTestContext,
+    ctx: &studio::test::DawTestContext,
 ) -> eyre::Result<(
     session::SetlistServiceClient,
     session::services::setlist_service::SetlistServiceStreamClient,
@@ -85,7 +85,7 @@ async fn wait_for_active_section(
 
 #[daw_test(isolated)]
 async fn lan_engine_drives_real_reaper_over_websocket(
-    ctx: &daw::test::DawTestContext,
+    ctx: &studio::test::DawTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let sections_lane = session::ruler_lanes::CoreLane::Sections.lane_index();

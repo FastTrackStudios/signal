@@ -8,7 +8,7 @@
 //!
 //! Run with: `cargo xtask reaper-test -- reaper_automation`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::primitives::PositionInSeconds;
 use daw_proto::{EnvelopeShape, EnvelopeType};
 
@@ -17,7 +17,7 @@ const VALUE_TOLERANCE: f64 = 1e-6;
 
 #[reaper_test(isolated)]
 async fn list_envelopes_returns_volume_for_new_track(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Envelope Test", None).await?;
@@ -40,7 +40,7 @@ async fn list_envelopes_returns_volume_for_new_track(
 }
 
 #[reaper_test(isolated)]
-async fn add_then_read_point_round_trip(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn add_then_read_point_round_trip(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Envelope Round Trip", None).await?;
     let env = track.envelopes().volume();
@@ -71,7 +71,7 @@ async fn add_then_read_point_round_trip(ctx: &daw::test::ReaperTestContext) -> e
 }
 
 #[reaper_test(isolated)]
-async fn update_point_changes_value(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn update_point_changes_value(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Envelope Update", None).await?;
     let env = track.envelopes().volume();
@@ -103,7 +103,7 @@ async fn update_point_changes_value(ctx: &daw::test::ReaperTestContext) -> eyre:
 }
 
 #[reaper_test(isolated)]
-async fn delete_point_removes_it(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn delete_point_removes_it(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Envelope Delete", None).await?;
     let env = track.envelopes().volume();

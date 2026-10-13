@@ -13,7 +13,7 @@
 //! theory says "these MIDI numbers", and REAPER has to end up holding
 //! exactly those, in one item, at the cursor.
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::midi::MidiNoteCreate;
 use daw_proto::primitives::{Duration, PositionInSeconds};
 use keyflow::chord::palette::{grid, variations};
@@ -38,7 +38,7 @@ fn f64_from_usize(x: usize) -> f64 {
 /// holds afterwards. This is the whole contract of the insert path.
 #[reaper_test(isolated)]
 async fn chord_notes_survive_the_round_trip(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Chord Insert", None).await?;
@@ -96,7 +96,7 @@ async fn chord_notes_survive_the_round_trip(
 /// A chord is one item holding N simultaneous notes, not N items or a
 /// melody. If the voices ever drift apart in time, this catches it.
 #[reaper_test(isolated)]
-async fn chord_voices_are_simultaneous(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn chord_voices_are_simultaneous(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Simultaneity", None).await?;
 
@@ -157,7 +157,7 @@ async fn chord_voices_are_simultaneous(ctx: &daw::test::ReaperTestContext) -> ey
 /// Successive chords laid at increasing positions must stay in order and
 /// not collide — the property "insert advances the cursor" depends on.
 #[reaper_test(isolated)]
-async fn progression_lays_out_in_order(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn progression_lays_out_in_order(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Progression", None).await?;
 
@@ -233,7 +233,7 @@ const KEYFLOW_TRACKS: [&str; 4] = ["KEY", "CHORD", "MELODY", "SCALE"];
 /// way no unit test would notice.
 #[reaper_test(isolated)]
 async fn keyflow_folder_spawns_with_its_four_tracks(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
@@ -303,7 +303,7 @@ async fn keyflow_folder_spawns_with_its_four_tracks(
 /// one.
 #[reaper_test(isolated)]
 async fn fresh_project_has_no_key_signature(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     // A fresh tab starts empty; the marker here is that nothing in the

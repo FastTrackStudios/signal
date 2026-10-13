@@ -159,7 +159,7 @@ fn ensure_reactive_updates() -> eyre::Result<()> {
         return Ok(());
     }
 
-    let mut rx = daw::reaper::event_hub().subscribe_tracks();
+    let mut rx = studio::reaper::event_hub().subscribe_tracks();
 
     let recv_loop = async move {
         loop {
@@ -301,9 +301,9 @@ fn apply_to_project(
     let state = state()?.clone();
     let project_key = project_key(project);
     load_applied_colors_for_project(project, &project_key)?;
-    let all = daw::reaper::Reaper.all(project.clone());
+    let all = studio::reaper::Reaper.all(project.clone());
     let selected: HashSet<String> = if selected_only {
-        daw::reaper::Reaper
+        studio::reaper::Reaper
             .selected(project.clone())
             .into_iter()
             .map(|track| track.guid)
@@ -339,7 +339,7 @@ fn apply_to_project(
 
         if let Some(desired) = desired {
             if current != desired && (force || current == previous) {
-                daw::reaper::Reaper.set_color(
+                studio::reaper::Reaper.set_color(
                     project.clone(),
                     TrackRef::Guid(track.guid.clone()),
                     desired,
@@ -349,7 +349,7 @@ fn apply_to_project(
             applied_colors.insert(key, desired);
         } else if previous != 0 {
             if current == previous {
-                daw::reaper::Reaper.set_color(
+                studio::reaper::Reaper.set_color(
                     project.clone(),
                     TrackRef::Guid(track.guid.clone()),
                     0,
@@ -377,7 +377,7 @@ fn clear_current_project(selected_only: bool) -> eyre::Result<()> {
     let project = ProjectContext::Current;
     let project_key = project_key(&project);
     let selected: HashSet<String> = if selected_only {
-        daw::reaper::Reaper
+        studio::reaper::Reaper
             .selected(project.clone())
             .into_iter()
             .map(|track| track.guid)
@@ -386,13 +386,13 @@ fn clear_current_project(selected_only: bool) -> eyre::Result<()> {
         HashSet::new()
     };
 
-    for track in daw::reaper::Reaper.all(project.clone()) {
+    for track in studio::reaper::Reaper.all(project.clone()) {
         if selected_only && !selected.contains(&track.guid) {
             continue;
         }
         remove_applied_color(&project_key, &track.guid);
         if track.color.is_some() {
-            daw::reaper::Reaper.set_color(project.clone(), TrackRef::Guid(track.guid), 0)?;
+            studio::reaper::Reaper.set_color(project.clone(), TrackRef::Guid(track.guid), 0)?;
         }
     }
     save_current_applied_colors_for_project(&project, &project_key)?;
@@ -413,7 +413,7 @@ fn set_enabled(enabled: bool) {
 
 fn project_key(project: &ProjectContext) -> String {
     match project {
-        ProjectContext::Current => daw::reaper::Reaper
+        ProjectContext::Current => studio::reaper::Reaper
             .current()
             .map_or_else(|| "current".to_string(), |project| project.guid),
         ProjectContext::Project(guid) => guid.clone(),
@@ -450,14 +450,14 @@ fn load_applied_colors_for_project(
     }
 
     let Some(serialized) = ExtState::get_project(
-        &daw::reaper::Reaper,
+        &studio::reaper::Reaper,
         project.clone(),
         PROJECT_STATE_SECTION,
         PROJECT_STATE_APPLIED_COLORS_KEY,
     )
     .or_else(|| {
         ExtState::get_project(
-            &daw::reaper::Reaper,
+            &studio::reaper::Reaper,
             project.clone(),
             LEGACY_PROJECT_STATE_SECTION,
             LEGACY_PROJECT_STATE_APPLIED_COLORS_KEY,
@@ -521,14 +521,14 @@ fn save_applied_colors_for_project(
 
     if serialized.is_empty() {
         ExtState::delete_project(
-            &daw::reaper::Reaper,
+            &studio::reaper::Reaper,
             project.clone(),
             PROJECT_STATE_SECTION,
             PROJECT_STATE_APPLIED_COLORS_KEY,
         )?;
     } else {
         ExtState::set_project(
-            &daw::reaper::Reaper,
+            &studio::reaper::Reaper,
             project.clone(),
             PROJECT_STATE_SECTION,
             PROJECT_STATE_APPLIED_COLORS_KEY,
@@ -540,7 +540,7 @@ fn save_applied_colors_for_project(
 
 fn load_enabled() -> bool {
     let Some(value) = ExtState::get(
-        &daw::reaper::Reaper,
+        &studio::reaper::Reaper,
         EXT_STATE_SECTION,
         EXT_STATE_ENABLED_KEY,
     ) else {
@@ -554,7 +554,7 @@ fn load_enabled() -> bool {
 
 fn save_enabled(enabled: bool) -> eyre::Result<()> {
     ExtState::set(
-        &daw::reaper::Reaper,
+        &studio::reaper::Reaper,
         EXT_STATE_SECTION,
         EXT_STATE_ENABLED_KEY,
         if enabled { "true" } else { "false" },

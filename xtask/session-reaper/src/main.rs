@@ -21,7 +21,7 @@
 //!   cargo run -p session-reaper-xtask `<filter>`     # matching test NAMES
 //!   cargo run -p session-reaper-xtask -- --gui     # watch it drive REAPER
 
-use daw::test::runner::{TestPackage, TestRunner};
+use studio::test::runner::{TestPackage, TestRunner};
 use std::path::{Path, PathBuf};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn prepare_rig(repo_root: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let rig = repo_root.join("target").join("fts-reaper-test");
     std::fs::create_dir_all(rig.join("UserPlugins"))?;
-    let source = daw::test::runner::fts_reaper_resources();
+    let source = studio::test::runner::fts_reaper_resources();
     for name in [
         "ColorThemes",
         "Cursors",

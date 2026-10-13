@@ -21,7 +21,7 @@
 //!   cargo run -p session-extension-xtask -- --gui         # visible REAPER window
 //!   FTS_KEEP_OPEN=1 cargo run -p session-extension-xtask  # keep REAPER open after
 
-use daw::test::runner::{ExtensionPackage, TestPackage, TestRunner};
+use studio::test::runner::{ExtensionPackage, TestPackage, TestRunner};
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -168,7 +168,7 @@ fn prepare_isolated_rig(repo_root: &Path) -> Result<PathBuf, Box<dyn std::error:
     // (falls back to REAPER's install defaults otherwise). This is also
     // where REAPER license state lives (not a per-resources-dir concern),
     // so a rig built this way is licensed exactly like the dev rig is.
-    let source = daw::test::runner::fts_reaper_resources();
+    let source = studio::test::runner::fts_reaper_resources();
     for name in [
         "ColorThemes",
         "Cursors",

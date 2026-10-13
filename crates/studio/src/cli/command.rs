@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-/// CLI flag form of [`crate::service::ScreensetKind`].
+/// CLI flag form of [`daw::service::ScreensetKind`].
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum ScreensetKindArg {
     Window,
@@ -16,12 +16,12 @@ enum ScreensetKindArg {
     SelectionSet,
 }
 
-impl From<ScreensetKindArg> for crate::service::ScreensetKind {
+impl From<ScreensetKindArg> for daw::service::ScreensetKind {
     fn from(arg: ScreensetKindArg) -> Self {
         match arg {
-            ScreensetKindArg::Window => crate::service::ScreensetKind::Window,
-            ScreensetKindArg::TrackSet => crate::service::ScreensetKind::TrackSet,
-            ScreensetKindArg::SelectionSet => crate::service::ScreensetKind::SelectionSet,
+            ScreensetKindArg::Window => daw::service::ScreensetKind::Window,
+            ScreensetKindArg::TrackSet => daw::service::ScreensetKind::TrackSet,
+            ScreensetKindArg::SelectionSet => daw::service::ScreensetKind::SelectionSet,
         }
     }
 }
@@ -962,7 +962,7 @@ where
     run_rpc_command(&daw, cli.command, cli.json).await
 }
 
-async fn run_rpc_command(daw: &crate::rpc::Daw, command: Command, json: bool) -> Result<()> {
+async fn run_rpc_command(daw: &daw::rpc::Daw, command: Command, json: bool) -> Result<()> {
     match command {
         Command::Info => crate::cli::cmd_info(daw, json).await?,
         // Purely local file work — no DAW connection needed, so this
@@ -1473,7 +1473,7 @@ fn reaper_config_dir() -> std::path::PathBuf {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../../legacy/daw/nix/reaper-config")
+                .join("../../legacy/daw/nix/reaper-config")
         })
 }
 

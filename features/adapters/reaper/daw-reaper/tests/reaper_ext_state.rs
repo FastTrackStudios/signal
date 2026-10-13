@@ -8,12 +8,12 @@
 //!
 //! Run with: `cargo xtask reaper-test -- reaper_ext_state`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 const TEST_SECTION: &str = "fts.test.ext_state";
 
 #[reaper_test(isolated)]
-async fn set_then_get_returns_value(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn set_then_get_returns_value(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
 
     ext.set(TEST_SECTION, "color", "blue", false).await?;
@@ -28,7 +28,7 @@ async fn set_then_get_returns_value(ctx: &daw::test::ReaperTestContext) -> eyre:
 }
 
 #[reaper_test(isolated)]
-async fn has_reflects_presence(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn has_reflects_presence(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
 
     let before = ext.has(TEST_SECTION, "tempo").await?;
@@ -42,7 +42,7 @@ async fn has_reflects_presence(ctx: &daw::test::ReaperTestContext) -> eyre::Resu
 }
 
 #[reaper_test(isolated)]
-async fn delete_removes_value(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn delete_removes_value(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
 
     ext.set(TEST_SECTION, "transient", "1", false).await?;
@@ -59,7 +59,7 @@ async fn delete_removes_value(ctx: &daw::test::ReaperTestContext) -> eyre::Resul
 }
 
 #[reaper_test(isolated)]
-async fn overwrite_replaces_value(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn overwrite_replaces_value(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
 
     ext.set(TEST_SECTION, "mode", "manual", false).await?;
@@ -94,7 +94,7 @@ const PROJ_SECTION: &str = "fts.test.proj_ext_state";
 
 #[reaper_test(isolated)]
 async fn project_ext_state_reads_are_live_not_last_saved(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
     let project = daw_proto::ProjectContext::project(ctx.project().guid());
@@ -117,7 +117,7 @@ async fn project_ext_state_reads_are_live_not_last_saved(
 
 #[reaper_test(isolated)]
 async fn a_project_value_can_be_overwritten_within_a_session(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
     let project = daw_proto::ProjectContext::project(ctx.project().guid());
@@ -138,7 +138,7 @@ async fn a_project_value_can_be_overwritten_within_a_session(
 
 #[reaper_test(isolated)]
 async fn a_large_project_value_survives_the_read(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     // The editor-state blob is not small. Before `bb824d89f` the read
     // buffer was a fixed 4096 bytes and truncated silently, which under

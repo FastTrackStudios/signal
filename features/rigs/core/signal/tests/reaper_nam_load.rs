@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use signal_nam::{
     NamCatalog, merge_into_catalog, nam_root_from_env, resolve_path, scan_directory,
     vst_chunk::{decode_chunk, encode_chunk, rewrite_paths},
@@ -20,7 +20,7 @@ async fn settle() {
 }
 
 /// Ensure REAPER's audio engine is running.
-async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
+async fn ensure_audio(ctx: &studio::test::ReaperTestContext) {
     if !ctx.daw.audio_engine().is_running().await.unwrap_or(false) {
         let _ = ctx.daw.audio_engine().init().await;
         tokio::time::sleep(Duration::from_millis(500)).await;

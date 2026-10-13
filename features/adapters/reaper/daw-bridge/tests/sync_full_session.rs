@@ -19,7 +19,7 @@
 use std::time::Duration;
 
 use daw::service::PlayState;
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 /// How long to wait for a single sync event to propagate.
 const SYNC_WAIT: Duration = Duration::from_millis(2000);
@@ -31,7 +31,7 @@ const PROP_WAIT: Duration = Duration::from_millis(1500);
 const F64_TOL: f64 = 0.01;
 
 #[reaper_test(instances("master", "follower"))]
-async fn full_session_sync(ctx: &daw::test::MultiDawTestContext) -> Result<()> {
+async fn full_session_sync(ctx: &studio::test::MultiDawTestContext) -> Result<()> {
     let master = ctx.by_label("master");
     let follower = ctx.by_label("follower");
 

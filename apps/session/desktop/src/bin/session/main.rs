@@ -414,11 +414,11 @@ async fn open(paths: &[PathBuf]) -> eyre::Result<()> {
     let daw = match discover_sockets().into_iter().next() {
         Some((pid, socket)) => {
             println!("attaching to REAPER (pid {pid})");
-            daw::cli::connect(Some(socket)).await?.daw
+            studio::cli::connect(Some(socket)).await?.daw
         }
         None => {
             println!("no REAPER running — launching the '{REAPER_PROFILE}' profile");
-            let (connection, pid, socket) = daw::cli::launch_and_connect(REAPER_PROFILE).await?;
+            let (connection, pid, socket) = studio::cli::launch_and_connect(REAPER_PROFILE).await?;
             println!("  launched pid {pid} ({})", socket.display());
             connection.daw
         }

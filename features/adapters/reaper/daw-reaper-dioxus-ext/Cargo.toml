@@ -17,7 +17,8 @@ name = "reaper_daw_dioxus"
 path = "src/lib.rs"
 
 [dependencies]
-daw = { workspace = true, features = ["reaper", "reaper-ui"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["reaper", "reaper-ui"] }
 daw-extension-runtime.workspace = true
 daw-module = { workspace = true }
 daw-reaper-dioxus = { workspace = true }

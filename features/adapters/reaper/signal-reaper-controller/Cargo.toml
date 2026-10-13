@@ -22,7 +22,8 @@ plugin-core = { workspace = true }
 atomic_float.workspace = true
 
 # DAW API — all REAPER access goes through this
-daw = { workspace = true, features = ["reaper"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["reaper"] }
 
 # SHM bridge for communication with signal-extension
 signal-proto.workspace = true

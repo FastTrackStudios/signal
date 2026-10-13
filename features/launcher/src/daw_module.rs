@@ -5,7 +5,7 @@ use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_
 use daw::module::{
     ActionDef, DawModule, DockPosition, ModuleContext, PanelComponent, PanelDef, PanelRenderer,
 };
-use daw::reaper_ui::prelude::*;
+use studio::reaper_ui::prelude::*;
 
 use crate::LauncherEngine;
 
@@ -25,11 +25,11 @@ impl DawModule for LauncherModule {
     fn actions(&self) -> Vec<ActionDef> {
         vec![
             ActionDef::new("FTS_LAUNCHER_TOGGLE", "FTS: Toggle Launcher", || {
-                daw::reaper_ui::dock::toggle_panel(LAUNCHER_PANEL_ID);
+                studio::reaper_ui::dock::toggle_panel(LAUNCHER_PANEL_ID);
             })
             .in_menu(),
             ActionDef::new("FTS_LAUNCHER_FOCUS", "FTS: Focus Launcher Search", || {
-                daw::reaper_ui::dock::show_panel(LAUNCHER_PANEL_ID);
+                studio::reaper_ui::dock::show_panel(LAUNCHER_PANEL_ID);
             }),
         ]
     }
@@ -65,7 +65,7 @@ pub fn LauncherPanel() -> Element {
     });
     let theme_state = use_signal(|| ThemeState::new(default_theme_preset(), ThemeMode::Dark));
     let on_close = move |_: ()| {
-        daw::reaper_ui::dock::hide_panel(LAUNCHER_PANEL_ID);
+        studio::reaper_ui::dock::hide_panel(LAUNCHER_PANEL_ID);
     };
 
     rsx! {

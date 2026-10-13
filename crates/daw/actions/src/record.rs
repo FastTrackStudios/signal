@@ -51,7 +51,7 @@ pub enum RecordAction {
 }
 
 pub fn dispatch(action: RecordAction) {
-    let daw = daw::reaper::Reaper;
+    let daw = studio::reaper::Reaper;
     match action {
         RecordAction::RestartRecording => restart_recording(),
         RecordAction::ToggleMonitorOnOff => {
@@ -82,7 +82,7 @@ pub fn dispatch(action: RecordAction) {
 fn set_arm_selected(armed: bool) {
     use daw::service::{Projects as _, Tracks as _};
 
-    let daw = daw::reaper::Reaper;
+    let daw = studio::reaper::Reaper;
     let selected = daw.selected(ProjectContext::Current);
     if selected.is_empty() {
         info!("[record] arm: no tracks selected");
@@ -119,7 +119,7 @@ fn set_arm_selected(armed: bool) {
 fn toggle_monitor_between(a: InputMonitoringMode, b: InputMonitoringMode) {
     use daw::service::{Projects as _, Tracks as _};
 
-    let daw = daw::reaper::Reaper;
+    let daw = studio::reaper::Reaper;
     let selected = daw.selected(ProjectContext::Current);
     if selected.is_empty() {
         return;
@@ -163,7 +163,7 @@ fn monitor_label(m: InputMonitoringMode) -> &'static str {
 fn restart_recording() {
     use daw::service::{ActionRegistration as _, Projects as _};
 
-    let daw = daw::reaper::Reaper;
+    let daw = studio::reaper::Reaper;
     daw.begin_undo_block(ProjectContext::Current, "Restart recording");
     daw.run_action(cmd::STOP_DELETE);
     daw.run_action(cmd::RECORD);

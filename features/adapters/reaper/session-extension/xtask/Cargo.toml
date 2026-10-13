@@ -13,7 +13,8 @@ path = "src/main.rs"
 # `test-harness` gates `daw::test::runner` (TestRunner/TestPackage/
 # ExtensionPackage) — the same shared orchestration `daw-reaper-xtask`
 # (in the `daw` repo) uses for its own `daw-bridge` rig.
-daw = { workspace = true, features = ["test-harness"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["test-harness"] }
 
 [lints]
 workspace = true

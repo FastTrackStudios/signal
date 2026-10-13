@@ -6,7 +6,7 @@
 //! Run with:
 //!   cargo xtask reaper-test -- transport
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use session::stamp_demo_into_project;
 use std::time::Duration;
 
@@ -19,7 +19,7 @@ async fn setup_demo(project: &daw::rpc::Project) -> eyre::Result<()> {
 
 /// Verify transport starts in stopped state with position at 0.
 #[reaper_test]
-async fn transport_initial_state(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn transport_initial_state(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let transport = ctx.project.transport();
 
     let is_playing = transport.is_playing().await?;
@@ -34,7 +34,7 @@ async fn transport_initial_state(ctx: &daw::test::ReaperTestContext) -> eyre::Re
 
 /// Verify play starts transport and stop returns to stopped state.
 #[reaper_test]
-async fn transport_play_stop(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn transport_play_stop(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     setup_demo(&ctx.project).await?;
     let transport = ctx.project.transport();
 
@@ -65,7 +65,7 @@ async fn transport_play_stop(ctx: &daw::test::ReaperTestContext) -> eyre::Result
 
 /// Verify pause freezes the playhead and resume continues from the same position.
 #[reaper_test]
-async fn transport_pause_resume(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn transport_pause_resume(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     setup_demo(&ctx.project).await?;
     let transport = ctx.project.transport();
 
@@ -120,7 +120,7 @@ async fn transport_pause_resume(ctx: &daw::test::ReaperTestContext) -> eyre::Res
 
 /// Verify `set_position` moves the playhead to the requested location.
 #[reaper_test]
-async fn transport_seek(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn transport_seek(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     setup_demo(&ctx.project).await?;
     let transport = ctx.project.transport();
 
@@ -146,7 +146,7 @@ async fn transport_seek(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> 
 
 /// Verify playhead advances through demo song sections during playback.
 #[reaper_test]
-async fn transport_playback_advances(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn transport_playback_advances(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     setup_demo(&ctx.project).await?;
     let transport = ctx.project.transport();
 
@@ -195,7 +195,7 @@ async fn transport_playback_advances(ctx: &daw::test::ReaperTestContext) -> eyre
 
 /// Verify `get_state` returns comprehensive transport information.
 #[reaper_test]
-async fn transport_state_query(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn transport_state_query(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     setup_demo(&ctx.project).await?;
     let transport = ctx.project.transport();
 

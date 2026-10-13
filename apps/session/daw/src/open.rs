@@ -715,7 +715,7 @@ pub struct Attached {
 ///
 /// The old connection is dropped when a new one replaces it, which is
 /// what actually closes the dead socket.
-static CONNECTION: std::sync::RwLock<Option<daw::cli::DawConnection>> =
+static CONNECTION: std::sync::RwLock<Option<studio::cli::DawConnection>> =
     std::sync::RwLock::new(None);
 
 /// The socket the last attach used, so a re-attach can repeat it.
@@ -754,7 +754,7 @@ pub fn attach_to_reaper(socket: Option<std::path::PathBuf>) -> eyre::Result<Atta
     let socket_for_retry = socket.clone();
     let socket_for_mode = socket.clone();
     let connection = rt
-        .block_on(daw::cli::connect(socket))
+        .block_on(studio::cli::connect(socket))
         .map_err(|e| eyre::eyre!("could not attach to REAPER: {e}"))?;
 
     let block_on_rt = Arc::new(

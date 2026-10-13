@@ -23,7 +23,7 @@ pub use crate::proto::track_manager::{TrackManagerActions, register_track_manage
 /// always acts on `ProjectContext::Current` (matches how a REAPER named
 /// command works — there's no "target a background project" for a
 /// user-triggered action).
-/// Production wraps `daw::reaper::Reaper`; tests wrap
+/// Production wraps `studio::reaper::Reaper`; tests wrap
 /// `daw_standalone::sync::Standalone` to drive the tree logic headless,
 /// with no live REAPER process — same trait impl either way.
 pub struct TrackManager<D> {

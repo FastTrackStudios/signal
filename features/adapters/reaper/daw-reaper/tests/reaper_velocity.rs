@@ -11,7 +11,7 @@
 //! ```
 
 use daw::rpc::TakeHandle;
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::midi::MidiNoteCreate;
 use daw_proto::primitives::{Duration, PositionInSeconds};
 use expression_editor::ops::velocity::{
@@ -22,7 +22,7 @@ const PPQ: f64 = 960.0;
 
 /// Lay `velocities` out as a run of eighth notes on a fresh track.
 async fn take_with(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
     name: &str,
     velocities: &[u8],
 ) -> eyre::Result<TakeHandle> {
@@ -75,7 +75,7 @@ async fn read(take: &TakeHandle) -> eyre::Result<Vec<Note>> {
 /// a visibly wrong shape rather than a coincidence.
 #[reaper_test(isolated)]
 async fn velocity_curve_lands_exactly_as_resolved(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let take = take_with(ctx, "Velocity Curve", &[64; 16]).await?;
 
@@ -105,7 +105,7 @@ async fn velocity_curve_lands_exactly_as_resolved(
 /// starting velocity and a pattern that depends on position.
 #[reaper_test(isolated)]
 async fn velocity_edits_address_the_right_notes(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let seed: Vec<u8> = (0..8).map(|i| 30 + i * 6).collect();
     let take = take_with(ctx, "Velocity Indexing", &seed).await?;
@@ -132,7 +132,7 @@ async fn velocity_edits_address_the_right_notes(
 /// keeps a slider drag from being hundreds of redundant writes, and it's
 /// only observable against a real backend.
 #[reaper_test(isolated)]
-async fn velocity_neutral_writes_nothing(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn velocity_neutral_writes_nothing(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let seed: Vec<u8> = (0..12).map(|i| 40 + i * 3).collect();
     let take = take_with(ctx, "Velocity Neutral", &seed).await?;
 
@@ -151,7 +151,7 @@ async fn velocity_neutral_writes_nothing(ctx: &daw::test::ReaperTestContext) -> 
 /// baseline outlives the write.
 #[reaper_test(isolated)]
 async fn velocity_revert_restores_the_original(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let seed: Vec<u8> = (0..10).map(|i| 50 + i * 7).collect();
     let take = take_with(ctx, "Velocity Revert", &seed).await?;

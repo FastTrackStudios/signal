@@ -4,7 +4,7 @@
 //!
 //!   cargo xtask reaper-test -- reaper_window_geometry
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::WindowTarget;
 
 #[reaper_test(isolated)]

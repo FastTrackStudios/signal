@@ -200,7 +200,7 @@ fn daw_test_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
             .map(|l| {
                 let socket = format!("/tmp/fts-daw-test-{l}.sock");
                 quote! {
-                    daw::test::DawInstanceConfig::new(#l)
+                    studio::test::DawInstanceConfig::new(#l)
                         .with_env("DISPLAY", "")
                         .with_env("FTS_SYNC_NO_LINK", "1")
                         .with_env("FTS_SYNC_ENABLED", "1")
@@ -215,7 +215,7 @@ fn daw_test_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
             #[test]
             #[ignore = "reaper-test: run with `cargo xtask reaper-test`"]
             #fn_vis fn #fn_name() -> eyre::Result<()> {
-                daw::test::run_multi_daw_test(
+                studio::test::run_multi_daw_test(
                     #fn_name_str,
                     vec![#(#label_tokens),*],
                     |#ctx_ident| Box::pin(async move #fn_block),
@@ -231,7 +231,7 @@ fn daw_test_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
             #[test]
             #[ignore = "reaper-test: run with `cargo xtask reaper-test`"]
             #fn_vis fn #fn_name() -> eyre::Result<()> {
-                daw::test::run_daw_test(
+                studio::test::run_daw_test(
                     #fn_name_str,
                     #isolated,
                     |#ctx_ident| Box::pin(async move #fn_block),

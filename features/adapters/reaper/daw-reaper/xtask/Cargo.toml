@@ -12,7 +12,8 @@ path = "src/main.rs"
 [dependencies]
 # Test-runner orchestration lives at `daw::test::runner` behind the
 # `test-harness` feature.
-daw = { workspace = true, features = ["test-harness"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["test-harness"] }
 
 [lints]
 workspace = true

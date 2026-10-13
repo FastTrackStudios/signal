@@ -1,6 +1,6 @@
 //! Proves `session-desktop`'s Recording Mode connection actually works.
 //!
-//! Written against `daw::test` — the backend-generic integration-test
+//! Written against `studio::test` — the backend-generic integration-test
 //! framework (`#[daw_test]`/`DawTestContext`; `#[reaper_test]`/
 //! `ReaperTestContext` are its older, REAPER-specific aliases) — run here
 //! against the REAPER backend specifically, via `session-extension` (a
@@ -17,7 +17,7 @@
 //! pointed at it:
 //!   cargo run -p session-extension-xtask
 
-use daw::test::daw_test;
+use studio::test::daw_test;
 use session::SetlistServiceClient;
 use session::ruler_lanes::CoreLane;
 use session::services::setlist_service::SetlistServiceStreamClient;

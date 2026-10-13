@@ -10,7 +10,7 @@
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 const REACOMP: &str = "VST: ReaComp (Cockos)";
 
@@ -35,7 +35,7 @@ async fn add_signal_controller(track: &daw::rpc::TrackHandle) -> eyre::Result<da
 }
 
 /// Wait for signal-extension to be ready (it writes "ready" to `ExtState` on startup).
-async fn wait_for_signal_extension(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn wait_for_signal_extension(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
     let start = std::time::Instant::now();
     loop {
@@ -52,7 +52,7 @@ async fn wait_for_signal_extension(ctx: &daw::test::ReaperTestContext) -> eyre::
 }
 
 /// Run a signal action by command name, retrying until the action is registered.
-async fn run_signal_action(ctx: &daw::test::ReaperTestContext, action: &str) -> eyre::Result<()> {
+async fn run_signal_action(ctx: &studio::test::ReaperTestContext, action: &str) -> eyre::Result<()> {
     wait_for_signal_extension(ctx).await?;
 
     let project = ctx.project();
@@ -104,7 +104,7 @@ async fn poll_param(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn load_signal_controller_on_track(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn load_signal_controller_on_track(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Controller Load Test", None).await?;
 
@@ -130,7 +130,7 @@ async fn load_signal_controller_on_track(ctx: &daw::test::ReaperTestContext) -> 
 
 #[reaper_test(isolated)]
 async fn last_touched_fx_detects_reacomp_parameter(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Last Touched Test", None).await?;
@@ -163,7 +163,7 @@ async fn last_touched_fx_detects_reacomp_parameter(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn reacomp_param_set_and_readback(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn reacomp_param_set_and_readback(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Param Readback", None).await?;
     let fx = track.fx_chain().add(REACOMP).await?;
@@ -199,7 +199,7 @@ async fn reacomp_param_set_and_readback(ctx: &daw::test::ReaperTestContext) -> e
 
 #[reaper_test(isolated)]
 async fn macro_drives_reacomp_via_fx_params(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
@@ -312,7 +312,7 @@ async fn macro_drives_reacomp_via_fx_params(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn four_point_stage_macro(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn four_point_stage_macro(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== 4-POINT STAGE MACRO ===");
@@ -433,7 +433,7 @@ async fn four_point_stage_macro(ctx: &daw::test::ReaperTestContext) -> eyre::Res
 
 #[reaper_test(isolated)]
 async fn z_demo_setlist_action_creates_tracks(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     ctx.log("=== DEMO SETLIST VIA ACTION ===");
 
@@ -628,7 +628,7 @@ async fn z_demo_setlist_action_creates_tracks(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn macro_set_min_max_via_actions(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn macro_set_min_max_via_actions(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== MACRO SET MIN/MAX VIA ACTIONS ===");

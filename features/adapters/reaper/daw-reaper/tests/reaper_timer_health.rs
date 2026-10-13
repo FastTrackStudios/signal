@@ -6,7 +6,7 @@
 //!
 //!   cargo xtask reaper-test -- timer_responsive_for_60s
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 /// Ping REAPER's transport every second for 55 seconds.
 /// If the timer callback stops firing, the RPC calls will hang and

@@ -13,8 +13,8 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::{env, fs};
 
-use crate::rpc::Daw;
-use crate::service::FxType;
+use daw::rpc::Daw;
+use daw::service::FxType;
 use eyre::{Result, bail};
 use serde_json::json;
 use vox::{Caller, ConnectionHandle};
@@ -735,7 +735,7 @@ pub async fn resolve_track(daw: &Daw, track_arg: &str) -> Result<(String, String
 }
 
 /// Resolve a track argument and return the TrackHandle directly.
-pub async fn resolve_track_handle(daw: &Daw, track_arg: &str) -> Result<crate::rpc::TrackHandle> {
+pub async fn resolve_track_handle(daw: &Daw, track_arg: &str) -> Result<daw::rpc::TrackHandle> {
     let (guid, _) = resolve_track(daw, track_arg).await?;
     let project = daw.current_project().await?;
     project
@@ -747,10 +747,10 @@ pub async fn resolve_track_handle(daw: &Daw, track_arg: &str) -> Result<crate::r
 
 /// Resolve an FX argument (index or name) on a track's FX chain.
 pub async fn resolve_fx_handle(
-    fx_chain: &crate::rpc::FxChain,
+    fx_chain: &daw::rpc::FxChain,
     fx_arg: &str,
     track_name: &str,
-) -> Result<crate::rpc::FxHandle> {
+) -> Result<daw::rpc::FxHandle> {
     let fx_handle = if let Ok(idx) = fx_arg.parse::<u32>() {
         fx_chain.by_index(idx).await?
     } else {
@@ -763,7 +763,7 @@ pub async fn resolve_fx_handle(
 // Formatting Helpers
 // ============================================================================
 
-pub fn format_position(pos: &crate::service::primitives::Position) -> String {
+pub fn format_position(pos: &daw::service::primitives::Position) -> String {
     if let Some(ref musical) = pos.musical {
         format!(
             "{}.{}.{:03}",
@@ -1463,7 +1463,7 @@ pub async fn cmd_remove_track(daw: &Daw, track_arg: &str) -> Result<()> {
     let project = daw.current_project().await?;
     project
         .tracks()
-        .remove(crate::service::TrackRef::Guid(guid.clone()))
+        .remove(daw::service::TrackRef::Guid(guid.clone()))
         .await?;
     println!("Removed track \"{}\" ({})", name, guid);
     Ok(())
@@ -1625,7 +1625,7 @@ async fn resolve_take(
     track_arg: &str,
     item_idx: u32,
     take_idx: u32,
-) -> Result<crate::rpc::TakeHandle> {
+) -> Result<daw::rpc::TakeHandle> {
     let track = resolve_track_handle(daw, track_arg).await?;
     let item = track
         .items()

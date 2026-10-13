@@ -2,7 +2,7 @@
 
 use crate::proto::{SessionServiceError, Song, SongService};
 use crate::song::builder::SongBuilder;
-use daw::reaper::Reaper;
+use studio::reaper::Reaper;
 use daw::service::{ProjectContext, Projects};
 use tracing::{debug, info, warn};
 

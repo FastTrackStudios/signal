@@ -18,7 +18,7 @@ desktop = ["dioxus", "dock-dioxus/web"]
 engine = ["dep:daw-control", "dep:daw-standalone"]
 library = ["dep:collection-proto", "dep:files-client", "dep:files-proto", "dep:futures-util", "dep:links-proto", "dep:resources-proto", "dep:task-dial", "dep:vox-core"]
 net = ["dep:crdt", "dep:futures"]
-reaper = ["daw/reaper", "dep:daw-actions", "dep:daw-reaper", "dep:daw-synchronization", "dep:reaper-high", "dep:reaper-low", "dep:reaper-medium"]
+reaper = ["studio/reaper", "dep:daw-actions", "dep:daw-reaper", "dep:daw-synchronization", "dep:reaper-high", "dep:reaper-low", "dep:reaper-medium"]
 tts = ["dep:chatterbox-rs", "dep:ort", "ort/load-dynamic"]
 ui = ["dep:architect-ui", "dep:dock-dioxus", "dep:dock-proto", "dep:lucide-dioxus", "web"]
 vox = []
@@ -80,7 +80,8 @@ vox-types = { workspace = true }
 session = { path = ".", features = ["engine", "net", "tts", "ui"] }
 architect = { workspace = true, features = ["local", "platform", "vox"] }
 crdt = { workspace = true, features = ["vox"] }
-daw = { workspace = true, features = ["file", "standalone", "test-harness"] }
+daw = { workspace = true, features = ["standalone"] }
+studio = { workspace = true, features = ["file", "test-harness"] }
 daw-control = { workspace = true }
 daw-proto = { workspace = true }
 daw-standalone = { workspace = true, features = ["audio", "bootstrap", "decode", "rpp-project", "session-file"] }
@@ -99,7 +100,8 @@ vox-websocket = { workspace = true }
 zstd = { version = "0.13" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-daw = { workspace = true, features = ["file"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["file"] }
 daw-actions = { workspace = true, optional = true }
 daw-reaper = { workspace = true, optional = true }
 daw-synchronization = { workspace = true, optional = true }

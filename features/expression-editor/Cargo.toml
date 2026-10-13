@@ -11,19 +11,19 @@ workspace = true
 
 [features]
 audio = ["dep:align-dsp", "dep:realfft", "dep:tune", "ops", "pitch"]
-audio-daw = ["dep:daw", "dep:fts-sample"]
+audio-daw = ["dep:daw", "dep:studio", "dep:fts-sample"]
 corpus = ["audio", "dep:clap", "dep:fts-sample", "dep:hound", "dep:midly"]
-daw = ["dep:daw", "dep:facet-styx", "dep:level", "ops"]
+daw = ["dep:daw", "dep:studio", "dep:facet-styx", "dep:level", "ops"]
 demo = ["dep:daw-proto", "dep:formats", "guitarpro"]
 guitarpro = ["dep:guitarpro"]
-host = ["audio", "audio-daw", "dep:daw", "dep:tracing", "ops"]
+host = ["audio", "audio-daw", "dep:daw", "dep:studio", "dep:tracing", "ops"]
 host-standalone = ["daw/standalone-save"]
 ops = ["dep:rand", "dep:tracing"]
 paint = ["dep:anyrender", "dep:daw-ui", "dep:input", "dep:kurbo", "dep:parley", "dep:peniko", "dep:tracing"]
 pitch = ["dep:tune"]
-reaper = ["audio", "audio-daw", "daw", "dep:daw", "dep:dioxus", "dep:tracing", "host", "render", "ui", "ui-host"]
+reaper = ["audio", "audio-daw", "daw", "dep:daw", "dep:studio", "dep:dioxus", "dep:tracing", "host", "render", "ui", "ui-host"]
 render = ["tune/world"]
-standalone = ["audio", "audio-daw", "daw", "dep:daw", "dep:daw-control", "dep:daw-ui", "dep:dioxus", "dep:dioxus-mcp-probe", "dep:dioxus-native", "dep:eyre", "dep:futures-timer", "dep:regex", "dep:serde_json", "dep:tempfile", "dep:tokio", "dep:tracing", "dep:tracing-subscriber", "guitarpro", "host", "host-standalone", "render", "ui", "ui-host"]
+standalone = ["audio", "audio-daw", "daw", "dep:daw", "dep:studio", "dep:daw-control", "dep:daw-ui", "dep:dioxus", "dep:dioxus-mcp-probe", "dep:dioxus-native", "dep:eyre", "dep:futures-timer", "dep:regex", "dep:serde_json", "dep:tempfile", "dep:tokio", "dep:tracing", "dep:tracing-subscriber", "guitarpro", "host", "host-standalone", "render", "ui", "ui-host"]
 ui = ["dep:anyrender", "dep:daw-ui", "dep:dioxus", "dep:input", "dep:kurbo", "dep:level", "dep:parley", "dep:peniko", "dep:tracing", "host", "ops", "paint"]
 ui-host = ["host"]
 ui-webview = ["dep:anyrender_vello_cpu", "dep:base64", "dep:futures-timer", "dep:png", "dep:serde_json", "dioxus/desktop"]
@@ -38,7 +38,8 @@ architect = { workspace = true }
 architect-action-derive = { workspace = true }
 base64 = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
-daw = { workspace = true, optional = true, features = ["reaper", "reaper-ui", "standalone", "standalone-bootstrap", "standalone-rpp", "standalone-save"] }
+daw = { workspace = true, optional = true, features = ["standalone", "standalone-bootstrap", "standalone-rpp", "standalone-save"] }
+studio = { workspace = true, optional = true, features = ["reaper", "reaper-ui"] }
 daw-control = { workspace = true, optional = true }
 daw-proto = { workspace = true, optional = true }
 daw-ui = { workspace = true, optional = true, features = ["web"] }
@@ -80,7 +81,8 @@ expression-editor = { path = ".", features = ["audio", "audio-daw", "corpus", "d
 anyrender_vello_cpu = { workspace = true }
 base64 = { workspace = true }
 blitz-traits = { workspace = true }
-daw = { workspace = true, features = ["reaper", "reaper-ui", "standalone", "standalone-audio", "test-harness"] }
+daw = { workspace = true, features = ["standalone", "standalone-audio"] }
+studio = { workspace = true, features = ["reaper", "reaper-ui", "test-harness"] }
 daw-test-macro = { workspace = true }
 dawfile-reaper = { workspace = true }
 dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false }

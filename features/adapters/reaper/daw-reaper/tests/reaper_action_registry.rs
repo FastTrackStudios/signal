@@ -7,7 +7,7 @@
 //!
 //!   cargo xtask reaper-test -- reaper_action_registry
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::{ActionListFilter, ActionListRequest, ActionOrigin, ActionSection};
 
 #[reaper_test(isolated)]

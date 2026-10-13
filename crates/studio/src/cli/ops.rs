@@ -1,6 +1,6 @@
 //! Structured operations shared by DAW CLI commands.
 
-use crate::rpc::Daw;
+use daw::rpc::Daw;
 use eyre::Result;
 use serde_json::{Value, json};
 
@@ -37,7 +37,7 @@ fn service_descriptor_json(service: &'static vox::ServiceDescriptor) -> Value {
 }
 
 fn daw_service_descriptors() -> Vec<&'static vox::ServiceDescriptor> {
-    use crate::service;
+    use daw::service;
     vec![
         service::action_registry::descriptor(),
         service::audio_accessor::descriptor(),
@@ -79,7 +79,7 @@ pub fn service_catalog() -> Value {
     )
 }
 
-fn fx_param_json(p: &crate::service::FxParameter) -> Value {
+fn fx_param_json(p: &daw::service::FxParameter) -> Value {
     let mut obj = json!({
         "index": p.index,
         "name": p.name,
@@ -453,7 +453,7 @@ pub async fn transport_control(daw: &Daw, action: &str) -> Result<Value> {
     transport_state_for_project(&project).await
 }
 
-async fn transport_state_for_project(project: &crate::rpc::Project) -> Result<Value> {
+async fn transport_state_for_project(project: &daw::rpc::Project) -> Result<Value> {
     let state = project.transport().get_state().await?;
     Ok(json!({
         "play_state": format!("{:?}", state.play_state),
@@ -776,7 +776,7 @@ pub async fn remove_track(daw: &Daw, track_arg: &str) -> Result<Value> {
     let project = daw.current_project().await?;
     project
         .tracks()
-        .remove(crate::service::TrackRef::Guid(guid.clone()))
+        .remove(daw::service::TrackRef::Guid(guid.clone()))
         .await?;
     Ok(json!({
         "removed": true,
@@ -946,19 +946,19 @@ pub async fn action_list(
     limit: Option<u32>,
 ) -> Result<Value> {
     let filter = match filter.trim().to_ascii_lowercase().as_str() {
-        "all" => crate::service::ActionListFilter::All,
-        "reaper" | "native" | "built-in" | "builtin" => crate::service::ActionListFilter::Reaper,
+        "all" => daw::service::ActionListFilter::All,
+        "reaper" | "native" | "built-in" | "builtin" => daw::service::ActionListFilter::Reaper,
         "non-reaper" | "nonreaper" | "extension" | "extensions" | "custom" => {
-            crate::service::ActionListFilter::NonReaper
+            daw::service::ActionListFilter::NonReaper
         }
-        "sws" | "sws/s&m" | "s&m" => crate::service::ActionListFilter::Sws,
-        "fts" | "fasttrackstudio" => crate::service::ActionListFilter::Fts,
-        "registered" | "local" => crate::service::ActionListFilter::Registered,
+        "sws" | "sws/s&m" | "s&m" => daw::service::ActionListFilter::Sws,
+        "fts" | "fasttrackstudio" => daw::service::ActionListFilter::Fts,
+        "registered" | "local" => daw::service::ActionListFilter::Registered,
         _ => eyre::bail!("action filter must be all, reaper, non-reaper, sws, fts, or registered"),
     };
     let section = parse_action_section(section)?;
 
-    let request = crate::service::ActionListRequest {
+    let request = daw::service::ActionListRequest {
         filter,
         section,
         query: query.map(str::to_string),
@@ -990,25 +990,25 @@ pub async fn action_list(
     }))
 }
 
-fn parse_action_section(section: &str) -> Result<crate::service::ActionSection> {
+fn parse_action_section(section: &str) -> Result<daw::service::ActionSection> {
     match section.trim().to_ascii_lowercase().as_str() {
-        "main" | "0" => Ok(crate::service::ActionSection::Main),
-        "main-alt" | "main_alt" | "100" => Ok(crate::service::ActionSection::MainAlt),
+        "main" | "0" => Ok(daw::service::ActionSection::Main),
+        "main-alt" | "main_alt" | "100" => Ok(daw::service::ActionSection::MainAlt),
         "midi-editor" | "midi_editor" | "midi" | "32060" => {
-            Ok(crate::service::ActionSection::MidiEditor)
+            Ok(daw::service::ActionSection::MidiEditor)
         }
         "midi-event-list-editor" | "midi_event_list_editor" | "midi-event-list" | "32061" => {
-            Ok(crate::service::ActionSection::MidiEventListEditor)
+            Ok(daw::service::ActionSection::MidiEventListEditor)
         }
         "midi-inline-editor" | "midi_inline_editor" | "midi-inline" | "32062" => {
-            Ok(crate::service::ActionSection::MidiInlineEditor)
+            Ok(daw::service::ActionSection::MidiInlineEditor)
         }
         "media-explorer" | "media_explorer" | "explorer" | "32063" => {
-            Ok(crate::service::ActionSection::MediaExplorer)
+            Ok(daw::service::ActionSection::MediaExplorer)
         }
         raw => raw
             .parse::<u32>()
-            .map(crate::service::ActionSection::Custom)
+            .map(daw::service::ActionSection::Custom)
             .map_err(|_| {
                 eyre::eyre!(
                     "action section must be main, main-alt, midi-editor, midi-event-list-editor, midi-inline-editor, media-explorer, or a numeric section ID"
@@ -1074,11 +1074,11 @@ pub async fn toolbar_status(daw: &Daw) -> Result<Value> {
     }))
 }
 
-pub fn parse_toolbar_target(target: &str) -> Result<crate::service::ToolbarTarget> {
+pub fn parse_toolbar_target(target: &str) -> Result<daw::service::ToolbarTarget> {
     let normalized = target.trim().to_ascii_lowercase();
     match normalized.as_str() {
         "main" | "main-toolbar" | "main_toolbar" | "main toolbar" | "0" => {
-            Ok(crate::service::ToolbarTarget::Main)
+            Ok(daw::service::ToolbarTarget::Main)
         }
         value => {
             if let Some(raw) = value
@@ -1097,7 +1097,7 @@ pub fn parse_toolbar_target(target: &str) -> Result<crate::service::ToolbarTarge
                 if !(1..=8).contains(&number) {
                     eyre::bail!("MIDI toolbar number must be between 1 and 8");
                 }
-                return Ok(crate::service::ToolbarTarget::Midi(number));
+                return Ok(daw::service::ToolbarTarget::Midi(number));
             }
 
             let number = value
@@ -1117,12 +1117,12 @@ pub fn parse_toolbar_target(target: &str) -> Result<crate::service::ToolbarTarge
             if !(1..=32).contains(&number) {
                 eyre::bail!("floating toolbar number must be between 1 and 32");
             }
-            Ok(crate::service::ToolbarTarget::Floating(number))
+            Ok(daw::service::ToolbarTarget::Floating(number))
         }
     }
 }
 
-fn toolbar_snapshots_json(snapshots: &[crate::service::ToolbarSnapshot]) -> Value {
+fn toolbar_snapshots_json(snapshots: &[daw::service::ToolbarSnapshot]) -> Value {
     let json = facet_json::to_string(snapshots).unwrap_or_else(|_| "[]".to_string());
     serde_json::from_str(&json).unwrap_or(Value::Array(Vec::new()))
 }
@@ -1144,16 +1144,16 @@ pub async fn toolbar_config(daw: &Daw, path: &str, target: Option<&str>) -> Resu
     let mut snapshots = dawfile_reaper::toolbar_config::parse_toolbar_config_file(path)?;
     if let Some(target) = target {
         let target_name = match parse_toolbar_target(target)? {
-            crate::service::ToolbarTarget::Main => "Main toolbar".to_string(),
-            crate::service::ToolbarTarget::Floating(n) => format!("Floating toolbar {n}"),
-            crate::service::ToolbarTarget::Midi(n) => format!("Floating MIDI toolbar {n}"),
+            daw::service::ToolbarTarget::Main => "Main toolbar".to_string(),
+            daw::service::ToolbarTarget::Floating(n) => format!("Floating toolbar {n}"),
+            daw::service::ToolbarTarget::Midi(n) => format!("Floating MIDI toolbar {n}"),
         };
         snapshots.retain(|snapshot| snapshot.toolbar_name == target_name);
     }
     Ok(toolbar_snapshots_json(&snapshots))
 }
 
-fn toolbar_operation_json(result: crate::service::ToolbarResult) -> Result<Value> {
+fn toolbar_operation_json(result: daw::service::ToolbarResult) -> Result<Value> {
     if result.ok {
         Ok(json!({
             "ok": true,
@@ -1169,9 +1169,9 @@ fn toolbar_operation_json(result: crate::service::ToolbarResult) -> Result<Value
 
 fn make_toolbar_icon(
     icon: Option<&str>,
-    kind: crate::service::ToolbarIconKind,
-) -> Option<crate::service::ToolbarIcon> {
-    icon.map(|value| crate::service::ToolbarIcon {
+    kind: daw::service::ToolbarIconKind,
+) -> Option<daw::service::ToolbarIcon> {
+    icon.map(|value| daw::service::ToolbarIcon {
         kind,
         value: value.to_string(),
     })
@@ -1183,17 +1183,17 @@ fn toolbar_button(
     target: &str,
     position: Option<u32>,
     icon: Option<&str>,
-    icon_kind: crate::service::ToolbarIconKind,
+    icon_kind: daw::service::ToolbarIconKind,
     flags: u32,
-) -> Result<crate::service::ToolbarButton> {
-    Ok(crate::service::ToolbarButton {
+) -> Result<daw::service::ToolbarButton> {
+    Ok(daw::service::ToolbarButton {
         command_name: command_name.to_string(),
         label: label.to_string(),
         icon: make_toolbar_icon(icon, icon_kind),
         target: parse_toolbar_target(target)?,
         placement: position
-            .map(crate::service::ToolbarPlacement::Position)
-            .unwrap_or(crate::service::ToolbarPlacement::Append),
+            .map(daw::service::ToolbarPlacement::Position)
+            .unwrap_or(daw::service::ToolbarPlacement::Append),
         flags,
     })
 }
@@ -1207,7 +1207,7 @@ pub async fn toolbar_add(
     workflow_id: &str,
     position: Option<u32>,
     icon: Option<&str>,
-    icon_kind: crate::service::ToolbarIconKind,
+    icon_kind: daw::service::ToolbarIconKind,
     flags: u32,
 ) -> Result<Value> {
     let button = toolbar_button(
@@ -1231,7 +1231,7 @@ pub async fn toolbar_update(
     workflow_id: &str,
     position: Option<u32>,
     icon: Option<&str>,
-    icon_kind: crate::service::ToolbarIconKind,
+    icon_kind: daw::service::ToolbarIconKind,
     flags: u32,
 ) -> Result<Value> {
     let button = toolbar_button(
@@ -1272,7 +1272,7 @@ pub async fn toolbar_icon(
     command_name: &str,
     target: &str,
     icon: Option<&str>,
-    icon_kind: crate::service::ToolbarIconKind,
+    icon_kind: daw::service::ToolbarIconKind,
     clear: bool,
 ) -> Result<Value> {
     if clear && icon.is_some() {
@@ -1294,14 +1294,14 @@ pub async fn toolbar_icon(
     )
 }
 
-fn screenset_options(persist: bool) -> crate::service::ScreensetOptions {
-    crate::service::ScreensetOptions {
-        scope: crate::service::ScreensetScope::Global,
+fn screenset_options(persist: bool) -> daw::service::ScreensetOptions {
+    daw::service::ScreensetOptions {
+        scope: daw::service::ScreensetScope::Global,
         persist,
     }
 }
 
-fn screenset_result_json(result: crate::service::ScreensetResult) -> Result<Value> {
+fn screenset_result_json(result: daw::service::ScreensetResult) -> Result<Value> {
     if result.ok {
         Ok(json!({
             "ok": true,
@@ -1328,7 +1328,7 @@ pub async fn screenset_capture(
     id: &str,
     name: Option<&str>,
     description: Option<&str>,
-    kind: crate::service::ScreensetKind,
+    kind: daw::service::ScreensetKind,
     tags: Vec<String>,
     actions_on_apply: Vec<String>,
     persist: bool,
@@ -1400,7 +1400,7 @@ pub async fn combine_rpl(
         .combine_setlist(
             input,
             output.unwrap_or(""),
-            crate::service::CombineSetlistOptions { gap_measures },
+            daw::service::CombineSetlistOptions { gap_measures },
         )
         .await?;
     if !result.error.is_empty() {
@@ -1448,7 +1448,7 @@ const OP_SERVICES: &[(&str, &str)] = &[
     ("takes", "Take"),
 ];
 
-fn parse_response_json(response: &crate::service::batch::BatchResponse) -> Result<Value> {
+fn parse_response_json(response: &daw::service::batch::BatchResponse) -> Result<Value> {
     let json = facet_json::to_string(response)
         .map_err(|e| eyre::eyre!("serialize batch response: {e}"))?;
     Ok(serde_json::from_str(&json)?)
@@ -1458,7 +1458,7 @@ fn parse_response_json(response: &crate::service::batch::BatchResponse) -> Resul
 /// program is a facet-JSON `BatchRequest`; see `daw service-catalog`
 /// for methods and `daw op` for the per-op shape.
 pub async fn run_batch(daw: &Daw, program_json: &str) -> Result<Value> {
-    let request: crate::service::batch::BatchRequest = facet_json::from_str(program_json)
+    let request: daw::service::batch::BatchRequest = facet_json::from_str(program_json)
         .map_err(|e| eyre::eyre!("invalid batch program JSON: {e}"))?;
     let response = daw.execute_batch(request).await?;
     parse_response_json(&response)
@@ -1467,15 +1467,15 @@ pub async fn run_batch(daw: &Daw, program_json: &str) -> Result<Value> {
 /// Execute one reified op (externally-tagged JSON, e.g.
 /// `{"Marker":{"Add":{"project":{"Literal":"Current"},"position":1.5,"name":"x"}}}`).
 pub async fn run_op(daw: &Daw, op_json: &str) -> Result<Value> {
-    let op: crate::service::batch::BatchOp = facet_json::from_str(op_json).map_err(|e| {
+    let op: daw::service::batch::BatchOp = facet_json::from_str(op_json).map_err(|e| {
         eyre::eyre!(
             "invalid op JSON: {e}\n(expected {{\"<Service>\":{{\"<Method>\":{{..args..}}}}}}; \
              see `daw service-catalog` for methods)"
         )
     })?;
-    let request = crate::service::batch::BatchRequest {
-        instructions: vec![crate::service::batch::BatchInstruction { step: 0, op }],
-        options: crate::service::batch::BatchOptions::default(),
+    let request = daw::service::batch::BatchRequest {
+        instructions: vec![daw::service::batch::BatchInstruction { step: 0, op }],
+        options: daw::service::batch::BatchOptions::default(),
     };
     let response = daw.execute_batch(request).await?;
     let value = parse_response_json(&response)?;

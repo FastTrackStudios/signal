@@ -13,7 +13,7 @@
 //!
 //! Run with: `just reaper integration-test reaper_ruler`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::marker::MarkerEvent;
 use daw_proto::region::RegionEvent;
 
@@ -71,7 +71,7 @@ async fn wait_for_region(
 /// A marker's life, as a subscriber sees it.
 #[reaper_test(isolated)]
 async fn a_markers_whole_life_reaches_a_subscriber(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let markers = project.markers();
@@ -120,7 +120,7 @@ async fn a_markers_whole_life_reaches_a_subscriber(
 /// A region's life, including the lane that makes it a song section.
 #[reaper_test(isolated)]
 async fn a_regions_whole_life_reaches_a_subscriber(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let regions = project.regions();

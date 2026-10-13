@@ -9,7 +9,7 @@
 //! setlists or songs.
 //!
 //! Why a separate crate and not `daw-proto`: these drive a live backend
-//! (`daw::reaper::Reaper`) rather than merely defining the contract, and
+//! (`studio::reaper::Reaper`) rather than merely defining the contract, and
 //! `daw-reaper` already depends on `daw-proto` — putting them there would
 //! be a dependency cycle. `daw-proto` stays the backend-agnostic
 //! *definition* layer (service traits, `TracksExt`, `TrackTree`); this
@@ -31,7 +31,7 @@ pub mod take_ranking;
 /// One call instead of five: a module added here reaches every host that
 /// already calls this, rather than silently not registering until each
 /// call site remembers to add a line. `daw` is the backend the handlers
-/// drive (`daw::reaper::Reaper` in production).
+/// drive (`studio::reaper::Reaper` in production).
 pub fn register_all_actions<D, B>(backend: &B, daw: D)
 where
     D: daw::service::Projects + daw::service::ActionRegistration + Send + Sync + 'static,

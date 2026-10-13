@@ -15,7 +15,7 @@
 //! Invoked via `just daw-reaper-test` (sets FTS_REAPER_EXECUTABLE to the
 //! wrapper script that resolves the local REAPER install).
 
-use daw::test::runner::{self, TestPackage, TestRunner};
+use studio::test::runner::{self, TestPackage, TestRunner};
 use std::env;
 use std::path::{Path, PathBuf};
 

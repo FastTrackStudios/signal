@@ -39,7 +39,7 @@ pub use crate::proto::guitar_grow::{GuitarGrowActions, register_guitar_grow_acti
 /// Session's guitar-part grower for one DAW backend.
 ///
 /// Wraps whichever `D` for the duration it is used, always acting on
-/// `ProjectContext::Current`. Production wraps `daw::reaper::Reaper`;
+/// `ProjectContext::Current`. Production wraps `studio::reaper::Reaper`;
 /// tests wrap `daw_standalone::sync::Standalone` — the same trait impl
 /// either way, which is what lets the scenario tests drive the real
 /// gesture without a REAPER process or a window.

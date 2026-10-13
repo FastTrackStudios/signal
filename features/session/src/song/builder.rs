@@ -17,7 +17,7 @@
 // the `*_native` builders below (the async builders drive the backend-agnostic
 // `daw::rpc::Project` handle). Native-only.
 #[cfg(all(not(target_arch = "wasm32"), feature = "reaper"))]
-use daw::reaper::Reaper;
+use studio::reaper::Reaper;
 use daw::rpc::Project;
 use daw::service::{Marker, ProjectContext, Region};
 use daw::service::{Markers, Projects, Regions, TempoMap};

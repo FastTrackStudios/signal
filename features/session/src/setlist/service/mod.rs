@@ -8,7 +8,7 @@
 //! - `polling` — Active indices calculation, transport streaming, subscriptions
 
 mod build;
-// Combined-setlist RPP export drives `daw::file` (REAPER project combining) —
+// Combined-setlist RPP export drives `studio::file` (REAPER project combining) —
 // native-only. wasm gets a stub (see the bottom of this file).
 #[cfg(not(target_arch = "wasm32"))]
 mod combined;

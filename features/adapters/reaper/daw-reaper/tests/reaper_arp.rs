@@ -11,7 +11,7 @@
 //! ```
 
 use daw::rpc::TakeHandle;
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::midi::MidiNoteCreate;
 use daw_proto::primitives::{Duration, PositionInSeconds};
 use expression_editor::ops::arp::{
@@ -20,7 +20,7 @@ use expression_editor::ops::arp::{
 
 /// Write a chord as simultaneous whole notes on a fresh track.
 async fn chord_take(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
     name: &str,
     pitches: &[u8],
     bars: f64,
@@ -96,7 +96,7 @@ async fn commit(take: &TakeHandle, session: &ArpSession) -> eyre::Result<usize> 
 /// The whole contract: a chord in, the engine's exact arp out.
 #[reaper_test(isolated)]
 async fn arp_pitches_and_positions_survive_the_round_trip(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let take = chord_take(ctx, "Arp Round Trip", &[60, 64, 67], 1.0).await?;
 
@@ -141,7 +141,7 @@ async fn arp_pitches_and_positions_survive_the_round_trip(
 /// feature to get subtly wrong.
 #[reaper_test(isolated)]
 async fn arp_replaces_the_source_chord_exactly(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let take = chord_take(ctx, "Arp Replace", &[48, 52, 55, 59], 1.0).await?;
     assert_eq!(take.midi().notes().await?.len(), 4);
@@ -170,7 +170,7 @@ async fn arp_replaces_the_source_chord_exactly(
 /// the tidy ones a unit test hands it.
 #[reaper_test(isolated)]
 async fn arp_keeps_a_progression_in_separate_chords(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Arp Progression", None).await?;
@@ -220,7 +220,7 @@ async fn arp_keeps_a_progression_in_separate_chords(
 /// stacked under every gated note.
 #[reaper_test(isolated)]
 async fn arp_gate_shortens_without_duplicating(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let take = chord_take(ctx, "Arp Gate", &[60, 64, 67], 1.0).await?;
 

@@ -9,7 +9,7 @@
 //! Run with:
 //!   cargo xtask reaper-test -- navigation
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use session::{SongBuilder, stamp_demo_into_project};
 use std::time::Duration;
 
@@ -32,7 +32,7 @@ async fn setup_song(project: &daw::rpc::Project) -> eyre::Result<session::Song> 
 /// Navigate to each section by index (simulates `go_to_section`).
 /// Verifies the playhead lands at the correct section start.
 #[reaper_test]
-async fn navigate_to_each_section(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn navigate_to_each_section(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let song = setup_song(&ctx.project).await?;
     let transport = ctx.project.transport();
     transport.stop().await?;
@@ -65,7 +65,7 @@ async fn navigate_to_each_section(ctx: &daw::test::ReaperTestContext) -> eyre::R
 /// Simulate `next_section`: start at first section, step forward through all sections.
 /// Verifies each step lands at the next section's start position.
 #[reaper_test]
-async fn next_section_navigation(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn next_section_navigation(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let song = setup_song(&ctx.project).await?;
     let transport = ctx.project.transport();
     transport.stop().await?;
@@ -110,7 +110,7 @@ async fn next_section_navigation(ctx: &daw::test::ReaperTestContext) -> eyre::Re
 /// Simulate `previous_section`: start at last section, step backward.
 /// Verifies each step lands at the previous section's start position.
 #[reaper_test]
-async fn previous_section_navigation(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn previous_section_navigation(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let song = setup_song(&ctx.project).await?;
     let transport = ctx.project.transport();
     transport.stop().await?;
@@ -153,7 +153,7 @@ async fn previous_section_navigation(ctx: &daw::test::ReaperTestContext) -> eyre
 /// Simulate `previous_section` "smart rewind": if we're mid-section (>5% progress),
 /// previous should go to the START of the current section, not the previous one.
 #[reaper_test]
-async fn previous_section_smart_rewind(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn previous_section_smart_rewind(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let song = setup_song(&ctx.project).await?;
     let transport = ctx.project.transport();
     transport.stop().await?;
@@ -239,7 +239,7 @@ async fn previous_section_smart_rewind(ctx: &daw::test::ReaperTestContext) -> ey
 /// Verify that playing through a section boundary naturally advances to the next section.
 /// Starts playback near the end of one section and confirms position enters the next.
 #[reaper_test]
-async fn playback_crosses_section_boundary(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn playback_crosses_section_boundary(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let song = setup_song(&ctx.project).await?;
     let transport = ctx.project.transport();
 
@@ -297,7 +297,7 @@ async fn playback_crosses_section_boundary(ctx: &daw::test::ReaperTestContext) -
 /// Verify section index calculation: given a position, determine which section we're in.
 /// This is what the polling loop does to compute `ActiveIndices.section_index`.
 #[reaper_test]
-async fn section_index_from_position(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn section_index_from_position(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let song = setup_song(&ctx.project).await?;
     let transport = ctx.project.transport();
     transport.stop().await?;
@@ -341,7 +341,7 @@ async fn section_index_from_position(ctx: &daw::test::ReaperTestContext) -> eyre
 /// Song-level navigation: seek to song start (count-in position).
 /// In a single-song setlist, this verifies the `song_seek_position` logic.
 #[reaper_test]
-async fn navigate_to_song_start(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn navigate_to_song_start(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let song = setup_song(&ctx.project).await?;
     let transport = ctx.project.transport();
 
@@ -395,7 +395,7 @@ async fn navigate_to_song_start(ctx: &daw::test::ReaperTestContext) -> eyre::Res
 
 /// Navigate to song end: verify seeking near SONGEND works correctly.
 #[reaper_test]
-async fn navigate_to_song_end(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn navigate_to_song_end(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let song = setup_song(&ctx.project).await?;
     let transport = ctx.project.transport();
     transport.stop().await?;

@@ -9,7 +9,7 @@
 //!
 //! Run with: `just reaper daw-test lanes`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::track::{Comp, CompArea, LaneComping, LaneDisplay};
 use daw_proto::{Duration, PositionInSeconds};
 
@@ -26,7 +26,7 @@ fn area(comp_lane: u32, source_lane: u32, start: f64, end: f64) -> CompArea {
 
 #[reaper_test(isolated)]
 async fn a_lane_layout_and_a_named_comp_read_back_identical(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Lead Vox", None).await?;
@@ -89,7 +89,7 @@ async fn a_lane_layout_and_a_named_comp_read_back_identical(
 
 #[reaper_test(isolated)]
 async fn renaming_and_switching_the_active_comp(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Lead Vox", None).await?;

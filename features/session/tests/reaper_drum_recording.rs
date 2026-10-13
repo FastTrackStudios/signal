@@ -17,7 +17,7 @@
 //! Run via `session-extension-xtask` (needs `nix develop .#reaper-test`):
 //!   cargo run -p session-extension-xtask -- drum_recording
 
-use daw::test::daw_test;
+use studio::test::daw_test;
 
 const DRUM_TRACKS: &[&str] = &[
     "Kick In",

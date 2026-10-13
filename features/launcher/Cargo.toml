@@ -13,7 +13,7 @@ workspace = true
 default = ["native"]
 desktop = []
 installer = ["dep:ab_glyph", "dep:dpp", "dep:eyre", "dep:futures", "dep:icns", "dep:image", "dep:reqwest", "dep:tempfile", "dep:tiny-skia", "dep:tokio", "dep:utils"]
-native = ["daw/reaper-ui"]
+native = ["studio/reaper-ui"]
 standalone = ["dep:tracing-subscriber", "dep:winit", "native"]
 
 [dependencies]
@@ -23,6 +23,7 @@ architect-launcher-providers = { workspace = true }
 architect-launcher-ui = { workspace = true }
 architect-ui = { workspace = true }
 daw = { workspace = true }
+studio = { workspace = true }
 dioxus-native = { workspace = true }
 dpp = { version = "0.4", features = ["extract"], optional = true }
 eyre = { workspace = true, optional = true }

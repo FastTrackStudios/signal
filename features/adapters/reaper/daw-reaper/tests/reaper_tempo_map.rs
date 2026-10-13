@@ -8,13 +8,13 @@
 //!
 //! Run with: `cargo xtask reaper-test -- reaper_tempo_map`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 const BPM_TOLERANCE: f64 = 0.01;
 const TIME_TOLERANCE: f64 = 0.001;
 
 #[reaper_test(isolated)]
-async fn add_then_query_tempo_point(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn add_then_query_tempo_point(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tempo_map = project.tempo_map();
 
@@ -40,7 +40,7 @@ async fn add_then_query_tempo_point(ctx: &daw::test::ReaperTestContext) -> eyre:
 }
 
 #[reaper_test(isolated)]
-async fn time_to_musical_round_trip(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn time_to_musical_round_trip(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tempo_map = project.tempo_map();
 
@@ -64,7 +64,7 @@ async fn time_to_musical_round_trip(ctx: &daw::test::ReaperTestContext) -> eyre:
 }
 
 #[reaper_test(isolated)]
-async fn remove_point_drops_from_list(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn remove_point_drops_from_list(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tempo_map = project.tempo_map();
 
@@ -84,7 +84,7 @@ async fn remove_point_drops_from_list(ctx: &daw::test::ReaperTestContext) -> eyr
 }
 
 #[reaper_test(isolated)]
-async fn time_signature_at_returns_default(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn time_signature_at_returns_default(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tempo_map = project.tempo_map();
 

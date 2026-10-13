@@ -15,7 +15,7 @@
 //!
 //! Run the REAPER half with: `cargo run -p daw-reaper-xtask -- peaks_parity`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::midi::Midi;
 use daw_proto::{
     Duration, Peaks, ProjectContext, ProjectInfo, TakePeakData, TakeRef, Takes, TrackRef, Tracks,
@@ -330,7 +330,7 @@ fn standalone_offset_rate_take_matches_exact_scan() {
 /// The fixture through REAPER: a real item + take over `wav` with the
 /// fixture's placement, read back over the daw RPC.
 async fn reaper_peaks(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
     fx: &Fixture,
     wav: &std::path::Path,
 ) -> eyre::Result<TakePeakData> {
@@ -358,7 +358,7 @@ async fn reaper_peaks(
     Ok(take.peaks(fx.block).await?)
 }
 
-async fn parity(ctx: &daw::test::ReaperTestContext, fx: Fixture) -> eyre::Result<()> {
+async fn parity(ctx: &studio::test::ReaperTestContext, fx: Fixture) -> eyre::Result<()> {
     let wav = fx.write_wav("parity");
     let reaper = reaper_peaks(ctx, &fx, &wav).await;
     let standalone = standalone_peaks(&fx, &wav);
@@ -382,12 +382,12 @@ async fn parity(ctx: &daw::test::ReaperTestContext, fx: Fixture) -> eyre::Result
 
 // r[verify drums.open.peaks]
 #[reaper_test(isolated)]
-async fn peaks_parity_plain(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn peaks_parity_plain(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     parity(ctx, Fixture::PLAIN).await
 }
 
 #[reaper_test(isolated)]
-async fn peaks_parity_offset_and_rate(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn peaks_parity_offset_and_rate(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     parity(ctx, Fixture::OFFSET_RATE).await
 }
 
@@ -447,7 +447,7 @@ fn fixture_content_discriminates_offset_and_rate() {
 /// checked by value (see [`Fixture::OFF_RATE_SOURCE`]).
 #[reaper_test(isolated)]
 async fn peaks_report_the_sources_own_rate_and_channels(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let fx = Fixture::OFF_RATE_SOURCE;
     let wav = fx.write_wav("off-rate");

@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 /// Verify that session-extension connected and wrote its health beacon.
 ///
@@ -16,7 +16,7 @@ use daw::test::reaper_test;
 /// `FTS_SESSION_EXT/pid = "<pid>"` after successful initialization.
 /// We poll for up to 10 seconds to give it time to start.
 #[reaper_test]
-async fn session_extension_health(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn session_extension_health(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
 
     // Poll — the extension may still be connecting

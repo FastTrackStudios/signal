@@ -10,7 +10,7 @@
 //!
 //!   cargo xtask reaper-test
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 // ---------------------------------------------------------------------------
 // Basic: verify the test gets a project with a unique GUID

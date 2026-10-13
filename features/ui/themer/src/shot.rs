@@ -301,7 +301,7 @@ pub fn project_rpp(tracks: &[TrackSpec]) -> String {
 
 /// Set up a profile, launch REAPER on a private display, and capture it.
 pub fn capture(opts: &ShotOptions) -> Result<PathBuf> {
-    use daw::test::VirtualDisplay;
+    use studio::test::VirtualDisplay;
 
     let theme = crate::ThemeDir::open(&opts.theme)?;
     let dir = opts.profile.dir().to_path_buf();
@@ -674,7 +674,7 @@ fn which(bin: &str) -> Option<PathBuf> {
 
 // ── the display ──────────────────────────────────────────────────────────
 //
-// `daw::test::VirtualDisplay` is the shared harness (see the reaper-testing
+// `studio::test::VirtualDisplay` is the shared harness (see the reaper-testing
 // skill): a private Xvfb, a window manager on it, dialog sweeping, xdotool
 // input and a screenshot recorder. This module had its own copy briefly;
 // having two implementations of "run REAPER on a private display" is how

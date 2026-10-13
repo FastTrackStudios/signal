@@ -56,7 +56,7 @@ impl TestExtension {
         // surfaces — so this test extension stands in for `fts-extensions`
         // without pulling in any of its other (tempo/mirror/expression-editor/
         // ...) modules. Published on the same `/tmp/fts-daw-{pid}.sock`
-        // `daw::test` already waits on, so a `#[reaper_test]`'s `ctx.daw`
+        // `studio::test` already waits on, so a `#[reaper_test]`'s `ctx.daw`
         // reaches these services, and a raw `SetlistServiceClient`/
         // `SetlistServiceStreamClient` (opened the same way
         // `session-desktop`'s Recording Mode does) reaches them too.
@@ -79,7 +79,7 @@ impl TestExtension {
                 // LAN test server: the exact `architect::axum_ws::serve_router`
                 // path `session-desktop --engine` uses, serving this SAME
                 // router — proves the real WebSocket path works against real
-                // REAPER, not just the unix socket `daw::test` normally uses.
+                // REAPER, not just the unix socket `studio::test` normally uses.
                 // Port 0 (OS-assigned) so parallel test runs never collide;
                 // the actual port is published via ExtState for the test to
                 // discover, the same way the health beacon below announces

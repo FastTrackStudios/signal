@@ -15,9 +15,9 @@
 use std::path::PathBuf;
 
 use crate::proto::SetlistOffsetMap;
-use daw::file::diff::{self, ApplyOptions, DiffOptions};
-use daw::file::io::read_project;
-use daw::file::types::ReaperProject;
+use studio::file::diff::{self, ApplyOptions, DiffOptions};
+use studio::file::io::read_project;
+use studio::file::types::ReaperProject;
 use tracing::{debug, info, warn};
 
 use super::file_watcher::{SongFileChanged, SongFileWatcher};
@@ -178,7 +178,7 @@ impl LiveSyncState {
             SongId,
             offset_map::{SetlistOffsetMap, SongOffset},
         };
-        use daw::file::setlist_rpp::{
+        use studio::file::setlist_rpp::{
             build_song_infos_from_projects, concatenate_projects, measures_to_seconds,
         };
 
@@ -240,7 +240,7 @@ impl LiveSyncState {
 
     /// Write the current setlist project to disk, plus shell copies for each role.
     fn write_setlist(&self) {
-        use daw::file::setlist_rpp::{generate_shell_copy, project_to_rpp_text};
+        use studio::file::setlist_rpp::{generate_shell_copy, project_to_rpp_text};
 
         // Write master setlist
         let rpp_text = project_to_rpp_text(&self.setlist_project);

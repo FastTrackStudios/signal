@@ -10,10 +10,10 @@
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use signal::track_template;
 
-async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
+async fn ensure_audio(ctx: &studio::test::ReaperTestContext) {
     if !ctx.daw.audio_engine().is_running().await.unwrap_or(false) {
         let _ = ctx.daw.audio_engine().init().await;
         tokio::time::sleep(Duration::from_millis(1000)).await;

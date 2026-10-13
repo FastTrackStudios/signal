@@ -7,7 +7,7 @@
 //! Run with:
 //!   cargo xtask reaper-test -- `registered_actions`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 /// Representative actions from each action group that should be registered
 /// when the reaper-extension loads. This is a smoke test — we check a
@@ -45,7 +45,7 @@ const EXPECTED_ACTIONS: &[(&str, &str)] = &[
 
 /// Verify that all expected FTS actions are registered with REAPER.
 #[reaper_test]
-async fn registered_actions_check(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn registered_actions_check(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let actions = ctx.daw.action_registry();
 
     let mut missing = Vec::new();

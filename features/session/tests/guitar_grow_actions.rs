@@ -8,7 +8,7 @@
 //! These are scenario tests in the sense #48's testing decisions mean it:
 //! the real gesture goes through the facade (`session::guitar_grow::
 //! GuitarGrow` over `daw_standalone::sync::Standalone`, the same trait
-//! impl production wires to `daw::reaper::Reaper`) and the project is
+//! impl production wires to `studio::reaper::Reaper`) and the project is
 //! read back through the same facade. Nothing here drives the session
 //! window, and nothing asserts on how the grower got there — only on the
 //! tree, the names the classifier reads back out of it, the items, the

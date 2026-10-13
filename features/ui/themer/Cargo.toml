@@ -15,12 +15,13 @@ apply = ["fs"]
 cli = ["apply", "dep:clap", "fs", "generate", "shot"]
 fs = ["dep:image"]
 generate = ["apply", "daw-ui/render", "dep:dioxus"]
-shot = ["daw/test-harness", "dep:daw", "fs"]
+shot = ["studio/test-harness", "dep:daw", "dep:studio", "fs"]
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 daw = { workspace = true, optional = true }
+studio = { workspace = true, optional = true }
 daw-ui = { workspace = true }
 dioxus = { workspace = true, optional = true, features = ["lib"] }
 image = { workspace = true, optional = true }

@@ -23,7 +23,7 @@
 use signal::daw_compat::TrackHandleCompat;
 use std::time::{Duration, Instant};
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 /// `ReaComp` plugin name in REAPER's FX browser.
 const REACOMP: &str = "VST: ReaComp (Cockos)";
@@ -104,7 +104,7 @@ async fn poll_param_value(
 
 #[reaper_test(isolated)]
 async fn compression_macro_drives_threshold_and_ratio(
-    ctx: &daw::test::ReaperTestContext,
+    ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
 

@@ -21,7 +21,7 @@
 //! Run with:
 //!   cargo xtask reaper-test -- csurf_inproc_latency
 
-use daw::test::{DawInstanceConfig, run_multi_reaper_test};
+use studio::test::{DawInstanceConfig, run_multi_reaper_test};
 use eyre::Result;
 
 /// In-process hub publish→receive ceiling. broadcast::send +

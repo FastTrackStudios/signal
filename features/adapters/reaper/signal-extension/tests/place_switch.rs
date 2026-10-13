@@ -14,7 +14,7 @@ use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::service::MidiNoteCreate;
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 /// Small sleep to let REAPER process changes.
 async fn settle() {

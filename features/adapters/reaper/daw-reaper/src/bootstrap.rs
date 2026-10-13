@@ -8,7 +8,7 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use daw::reaper::bootstrap::*;
+//! use studio::reaper::bootstrap::*;
 //!
 //! #[no_mangle]
 //! pub unsafe extern "C" fn ReaperPluginEntry(
@@ -142,7 +142,7 @@ use daw_control::Daw;
 
 /// Create a `Daw` instance from a raw CLAP host pointer.
 ///
-/// Called by `daw::init()` — not meant to be used directly by plugins.
+/// Called by `studio::init()` — not meant to be used directly by plugins.
 /// Returns `(Daw, runtime)` or `None` if not running in REAPER.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn create_plugin_daw(
@@ -199,7 +199,7 @@ pub fn create_plugin_daw(
     Some(result)
 }
 
-/// Register an additional timer callback (called by `daw::init`).
+/// Register an additional timer callback (called by `studio::init`).
 pub fn register_internal_timer(callback: fn()) {
     if let Ok(mut cbs) = USER_TIMER_CALLBACKS.lock() {
         cbs.push(callback);
@@ -219,7 +219,7 @@ static USER_TIMER_CALLBACKS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new
 ///
 /// ```rust,ignore
 /// HighReaper::load(context).setup()?;
-/// daw::reaper::set_task_support(&task_support);
+/// studio::reaper::set_task_support(&task_support);
 /// ```
 ///
 /// It wires all REAPER service implementations into a [`LocalCaller`]
@@ -233,7 +233,7 @@ static USER_TIMER_CALLBACKS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new
 ///
 /// ```rust,ignore
 /// // Inside plugin_main / extension entry:
-/// let daw = tokio_runtime.block_on(daw::reaper::build_extension_daw())?;
+/// let daw = tokio_runtime.block_on(studio::reaper::build_extension_daw())?;
 /// ```
 pub async fn build_extension_daw() -> eyre::Result<Daw> {
     build_extension_daw_with(crate::plugin_services::create_daw_handler()).await
@@ -254,7 +254,7 @@ pub async fn build_extension_daw() -> eyre::Result<Daw> {
 ///     .with(midi_chart_service_descriptor(),
 ///           MidiChartServiceDispatcher::new(KeyflowMidiAnalysis::new(daw)));
 /// let daw = tokio_runtime.block_on(
-///     daw::reaper::build_extension_daw_with(handler)
+///     studio::reaper::build_extension_daw_with(handler)
 /// )?;
 /// ```
 pub async fn build_extension_daw_with(handler: architect::LayerRouter) -> eyre::Result<Daw> {

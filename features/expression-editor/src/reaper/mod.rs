@@ -41,7 +41,7 @@ pub enum Loaded {
     Audio(Box<AudioSession>),
     Drums {
         editor: Box<crate::Editor>,
-        host: crate::host::SharedDrumHost<daw::reaper::Reaper>,
+        host: crate::host::SharedDrumHost<studio::reaper::Reaper>,
     },
 }
 
@@ -108,7 +108,7 @@ fn loaded_guid() -> &'static Mutex<Option<String>> {
 /// The first selected item's guid, if any.
 fn selected_item_guid() -> Option<String> {
     use daw::service::Items;
-    daw::reaper::Reaper
+    studio::reaper::Reaper
         .get_selected_items(ProjectContext::Current)
         .into_iter()
         .next()
@@ -128,7 +128,7 @@ fn selected_item_guid() -> Option<String> {
 pub fn load_selected() -> bool {
     use daw::service::Items;
 
-    let reaper = daw::reaper::Reaper;
+    let reaper = studio::reaper::Reaper;
     let viewport = Viewport::new(1100.0, 520.0);
 
     // The item's own identity, resolved up front so both session kinds
@@ -184,7 +184,7 @@ pub fn load_selected() -> bool {
 /// Open the current project's drum kit using the shared host services.
 /// Call on REAPER's owner thread; audio analysis never captures the facade.
 pub fn load_drums() -> bool {
-    let reaper = daw::reaper::Reaper;
+    let reaper = studio::reaper::Reaper;
     let Some(project) = daw::service::Projects::current(&reaper) else {
         return false;
     };
@@ -226,7 +226,7 @@ pub fn load_drums() -> bool {
 /// and the resynthesis is lossy. A take that was only retimed is never
 /// resynthesised at all.
 pub fn write_back() -> bool {
-    let reaper = daw::reaper::Reaper;
+    let reaper = studio::reaper::Reaper;
     let mut guard = session().lock().unwrap();
     let Some(loaded) = guard.as_mut() else {
         tracing::warn!("nothing loaded");
@@ -308,7 +308,7 @@ fn follow_cell_size() {
     use crate::ui::canvas::{GUTTER_W, RULER_H};
 
     let Some((w, h)) =
-        daw::reaper_ui::dock::panel_element_size(PANEL_ID, "data-testid", "canvas-cell")
+        studio::reaper_ui::dock::panel_element_size(PANEL_ID, "data-testid", "canvas-cell")
     else {
         return;
     };
@@ -338,7 +338,7 @@ fn follow_cell_size() {
     })
     .unwrap_or(false);
     if resized {
-        daw::reaper_ui::dock::remount_panel(PANEL_ID);
+        studio::reaper_ui::dock::remount_panel(PANEL_ID);
     }
 }
 
@@ -365,7 +365,7 @@ const WRITE_AFTER_STABLE_TICKS: u32 = 8;
 ///   replaces the take's events; audio timing goes out as stretch
 ///   markers, and a settled pitch edit renders once, not per frame.
 pub fn poll() {
-    if !daw::reaper_ui::dock::is_panel_visible(PANEL_ID) {
+    if !studio::reaper_ui::dock::is_panel_visible(PANEL_ID) {
         return;
     }
 
@@ -388,7 +388,7 @@ pub fn poll() {
                 write_back();
             }
             if load_selected() {
-                daw::reaper_ui::dock::remount_panel(PANEL_ID);
+                studio::reaper_ui::dock::remount_panel(PANEL_ID);
                 let mut st = poll_state().lock().unwrap();
                 st.last_seen = None;
                 st.stable_ticks = 0;
@@ -427,7 +427,7 @@ pub fn poll() {
 
 /// Discard local edits and re-read the take.
 pub fn reload() -> bool {
-    let reaper = daw::reaper::Reaper;
+    let reaper = studio::reaper::Reaper;
     let mut guard = session().lock().unwrap();
     match guard.as_mut() {
         Some(Loaded::Drums { editor, host }) => {
@@ -490,8 +490,8 @@ impl DawModule for ExpressionEditorModule {
                         return;
                     }
                     if load_drums() {
-                        daw::reaper_ui::dock::show_panel(PANEL_ID);
-                        daw::reaper_ui::dock::remount_panel(PANEL_ID);
+                        studio::reaper_ui::dock::show_panel(PANEL_ID);
+                        studio::reaper_ui::dock::remount_panel(PANEL_ID);
                     }
                 },
             )
@@ -500,7 +500,7 @@ impl DawModule for ExpressionEditorModule {
                 "FTS_EXPRESSION_EDITOR_TOGGLE",
                 "FTS: Toggle Expression Editor",
                 || {
-                    daw::reaper_ui::dock::toggle_panel(PANEL_ID);
+                    studio::reaper_ui::dock::toggle_panel(PANEL_ID);
                 },
             )
             .in_menu(),
@@ -512,8 +512,8 @@ impl DawModule for ExpressionEditorModule {
                     // open the live-sync poll already follows the item
                     // selection, so the only job `e` has left on an
                     // open panel is to close it.
-                    if daw::reaper_ui::dock::is_panel_visible(PANEL_ID) {
-                        daw::reaper_ui::dock::hide_panel(PANEL_ID);
+                    if studio::reaper_ui::dock::is_panel_visible(PANEL_ID) {
+                        studio::reaper_ui::dock::hide_panel(PANEL_ID);
                         return;
                     }
                     // Load before showing so the panel mounts on the
@@ -521,7 +521,7 @@ impl DawModule for ExpressionEditorModule {
                     // the empty state explains what to do next — more
                     // help than a key that silently does nothing.
                     load_selected();
-                    daw::reaper_ui::dock::show_panel(PANEL_ID);
+                    studio::reaper_ui::dock::show_panel(PANEL_ID);
                 },
             )
             .in_menu(),
@@ -537,7 +537,7 @@ impl DawModule for ExpressionEditorModule {
                 "FTS: Reload Expression Editor from take",
                 || {
                     if reload() {
-                        daw::reaper_ui::dock::remount_panel(PANEL_ID);
+                        studio::reaper_ui::dock::remount_panel(PANEL_ID);
                     }
                 },
             ),
@@ -760,7 +760,7 @@ pub fn write_test_dynamics() -> bool {
     use crate::audio::dynamics::GainPoint;
     use crate::audio::{DynamicsLane, Lanes};
 
-    let reaper = daw::reaper::Reaper;
+    let reaper = studio::reaper::Reaper;
     let mut guard = session().lock().unwrap();
     let Some(Loaded::Audio(s)) = guard.as_mut() else {
         tracing::warn!("no audio take loaded");
@@ -813,6 +813,6 @@ pub fn module() -> Box<dyn DawModule> {
 // These instantiate the complete loader and shared UI adapter, including their
 // method bodies, so a standalone-only dependency cannot hide behind a type alias.
 const _: fn() = || {
-    let _ = crate::host::drum_workspace::<daw::reaper::Reaper>;
-    let _ = crate::ui::host::use_drum_callbacks::<daw::reaper::Reaper>;
+    let _ = crate::host::drum_workspace::<studio::reaper::Reaper>;
+    let _ = crate::ui::host::use_drum_callbacks::<studio::reaper::Reaper>;
 };

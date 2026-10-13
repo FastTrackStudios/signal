@@ -102,7 +102,7 @@ impl FromStr for OnOff {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ToolbarIconKindValue(pub crate::service::ToolbarIconKind);
+pub struct ToolbarIconKindValue(pub daw::service::ToolbarIconKind);
 
 impl FromStr for ToolbarIconKindValue {
     type Err = String;
@@ -110,9 +110,9 @@ impl FromStr for ToolbarIconKindValue {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "file" | "file-name" | "filename" | "reaper" | "reaper-file" => {
-                Ok(Self(crate::service::ToolbarIconKind::FileName))
+                Ok(Self(daw::service::ToolbarIconKind::FileName))
             }
-            "path" | "file-path" | "filepath" => Ok(Self(crate::service::ToolbarIconKind::Path)),
+            "path" | "file-path" | "filepath" => Ok(Self(daw::service::ToolbarIconKind::Path)),
             _ => Err("toolbar icon kind must be file-name or path".to_string()),
         }
     }
@@ -173,11 +173,11 @@ mod tests {
     fn parses_toolbar_icon_kinds() {
         assert_eq!(
             "file-name".parse::<ToolbarIconKindValue>().unwrap().0,
-            crate::service::ToolbarIconKind::FileName
+            daw::service::ToolbarIconKind::FileName
         );
         assert_eq!(
             "path".parse::<ToolbarIconKindValue>().unwrap().0,
-            crate::service::ToolbarIconKind::Path
+            daw::service::ToolbarIconKind::Path
         );
         assert!("url".parse::<ToolbarIconKindValue>().is_err());
     }

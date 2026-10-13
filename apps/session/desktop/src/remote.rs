@@ -214,7 +214,7 @@ pub(crate) async fn establish_verbose<C: vox_core::FromVoxLane>(
 // the setlist, over its `/vox` WebSocket and over iroh. This is the client
 // half: one vox connection, one lane, one `Caller` that every daw service
 // client shares (the engine's router dispatches by method id, exactly like
-// the REAPER extension's socket that `daw::cli::connect` dials).
+// the REAPER extension's socket that `studio::cli::connect` dials).
 //
 // The result is what `daw::init_from_parts` takes, so a UI attaches to a
 // Session engine the way `open::attach_to_reaper` attaches to REAPER.

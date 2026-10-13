@@ -12,13 +12,13 @@
 
 use std::time::Duration;
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_synchronization::{SyncConfig, SyncDomain, SyncSession, SynchronizationEngine};
 
 const PEER_ID: &str = "test-peer";
 
 #[reaper_test(isolated)]
-async fn marker_add_emits_sync_event(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn marker_add_emits_sync_event(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project_guid = ctx.project().guid().to_string();
 
     let session = SyncSession {
@@ -75,7 +75,7 @@ async fn marker_add_emits_sync_event(ctx: &daw::test::ReaperTestContext) -> eyre
 }
 
 #[reaper_test(isolated)]
-async fn track_add_emits_sync_event(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn track_add_emits_sync_event(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project_guid = ctx.project().guid().to_string();
 
     let session = SyncSession {

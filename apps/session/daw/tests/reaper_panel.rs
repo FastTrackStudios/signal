@@ -27,7 +27,7 @@
 
 #![cfg(feature = "reaper-tests")]
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::track::TrackEvent;
 use session_daw::engine::{Applied, Applier, Edit, Watch, apply_event};
 
@@ -138,7 +138,7 @@ fn settle(watch: &Watch, tracks: &mut Vec<daw_proto::Track>, guid: &str) -> eyre
 /// one applier, and the scenarios run in the order a session does them.
 #[reaper_test(isolated)]
 async fn the_window_is_a_control_surface_over_reaper(
-    _ctx: &daw::test::ReaperTestContext,
+    _ctx: &studio::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     attach()?;
     let project = window_project().await?;

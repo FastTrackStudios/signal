@@ -15,7 +15,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 #[architect::actions(namespace = "FTS_TEST_ACTION_BACKEND")]
 trait TestActions {

@@ -23,7 +23,7 @@
 //! Run via `session-extension-xtask` (needs `nix develop .#reaper-test`):
 //!   cargo run -p session-extension-xtask -- --virtual rockstars
 
-use daw::test::daw_test;
+use studio::test::daw_test;
 
 const ALBUM_ROOT: &str = "/run/media/AudioHaven/Project/Crescendum-Rockstars";
 
@@ -103,7 +103,7 @@ async fn wait_for_active_section(
 }
 
 #[daw_test]
-async fn rockstars_album_opens_all_ten_songs(ctx: &daw::test::DawTestContext) -> eyre::Result<()> {
+async fn rockstars_album_opens_all_ten_songs(ctx: &studio::test::DawTestContext) -> eyre::Result<()> {
     for (folder, file) in SONGS {
         let path = format!("{ALBUM_ROOT}/{folder}/{file}");
         if !std::path::Path::new(&path).exists() {

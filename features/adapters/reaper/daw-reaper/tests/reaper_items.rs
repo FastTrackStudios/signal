@@ -5,10 +5,10 @@
 //!
 //! Run with: `cargo test -p daw-reaper --test reaper_items -- --ignored --nocapture`
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 #[reaper_test(isolated)]
-async fn item_create_basic(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn item_create_basic(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
 
@@ -171,7 +171,7 @@ async fn item_create_basic(ctx: &daw::test::ReaperTestContext) -> eyre::Result<(
 }
 
 #[reaper_test(isolated)]
-async fn item_count_on_empty_track(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn item_count_on_empty_track(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Empty Track", None).await?;
 

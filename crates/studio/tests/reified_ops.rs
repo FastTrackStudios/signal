@@ -4,14 +4,14 @@
 
 #![cfg(feature = "cli")]
 
-use daw::cli::ops::{run_batch, run_call, run_op};
 use daw_standalone::bootstrap::build_in_process_daw;
 use daw_standalone::sync::Standalone;
+use studio::cli::ops::{run_batch, run_call, run_op};
 
 #[tokio::test]
 async fn op_and_call_round_trip_against_standalone() -> eyre::Result<()> {
     let standalone = Standalone::new();
-    let project = daw::service::project::Projects::create(&standalone)
+    let project = studio::service::project::Projects::create(&standalone)
         .expect("create project")
         .guid;
     let in_proc = build_in_process_daw(standalone).await?;

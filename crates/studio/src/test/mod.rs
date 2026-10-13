@@ -22,7 +22,7 @@ pub use display::{Recording, VirtualDisplay};
 
 pub mod runner;
 
-use crate::rpc::{Daw, Project, TrackHandle};
+use daw::rpc::{Daw, Project, TrackHandle};
 use eyre::Result;
 use std::{
     fs::{self, File},
@@ -40,7 +40,7 @@ use std::{
 };
 use tokio::runtime::Runtime;
 
-// Re-export the proc-macros so users can `use daw::test::{daw_test, reaper_test};`
+// Re-export the proc-macros so users can `use studio::test::{daw_test, reaper_test};`
 pub use daw_test_macro::{daw_test, reaper_test};
 
 // ─────────────────────────────────────────────────────────────
@@ -838,8 +838,8 @@ impl DawTestContext {
         &self,
         id: &str,
         title: &str,
-        kind: crate::service::dock_host::DockKind,
-    ) -> eyre::Result<crate::service::dock_host::DockHandle> {
+        kind: daw::service::dock_host::DockKind,
+    ) -> eyre::Result<daw::service::dock_host::DockHandle> {
         Ok(self.daw.dock_host().register_dock(id, title, kind).await?)
     }
 
@@ -850,7 +850,7 @@ impl DawTestContext {
         let handle = self
             .daw
             .dock_host()
-            .register_dock(id, id, crate::service::dock_host::DockKind::Tabbed)
+            .register_dock(id, id, daw::service::dock_host::DockKind::Tabbed)
             .await?;
         let visible = self.daw.dock_host().is_visible(handle).await?;
         if !visible {
@@ -868,7 +868,7 @@ impl DawTestContext {
         let handle = self
             .daw
             .dock_host()
-            .register_dock(id, id, crate::service::dock_host::DockKind::Tabbed)
+            .register_dock(id, id, daw::service::dock_host::DockKind::Tabbed)
             .await?;
         Ok(self.daw.dock_host().is_visible(handle).await?)
     }
@@ -878,7 +878,7 @@ impl DawTestContext {
         let handle = self
             .daw
             .dock_host()
-            .register_dock(id, id, crate::service::dock_host::DockKind::Tabbed)
+            .register_dock(id, id, daw::service::dock_host::DockKind::Tabbed)
             .await?;
         let visible = self.daw.dock_host().is_visible(handle).await?;
         if visible {

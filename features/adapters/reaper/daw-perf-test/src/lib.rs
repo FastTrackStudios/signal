@@ -159,7 +159,7 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
 
     // Set TaskSupport for daw-reaper main_thread dispatch
     Global::init();
-    daw::reaper::set_task_support(Global::task_support());
+    studio::reaper::set_task_support(Global::task_support());
 
     let session = ReaperSession::load(context);
     let app = App::new(session)?;

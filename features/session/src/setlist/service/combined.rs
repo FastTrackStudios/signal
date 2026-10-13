@@ -112,7 +112,7 @@ where
     fn combine_and_write_rpp(
         rpp_paths: &[PathBuf],
         gap_measures: u32,
-    ) -> Result<(PathBuf, Vec<daw::file::setlist_rpp::SongInfo>), SessionServiceError> {
+    ) -> Result<(PathBuf, Vec<studio::file::setlist_rpp::SongInfo>), SessionServiceError> {
         // Combine RPP files using the daw crate pipeline.
         // This handles everything at the RPP level:
         // - Resolves song bounds (PREROLL → POSTROLL priority chain)
@@ -121,12 +121,12 @@ where
         // - Concatenates tempo envelopes with square-shape boundaries
         // - Offsets markers/regions with lane classification
         // - Resolves relative media paths to absolute
-        let options = daw::file::setlist_rpp::CombineOptions {
+        let options = studio::file::setlist_rpp::CombineOptions {
             gap_measures,
             trim_to_bounds: true,
         };
         let (combined_rpp, song_infos) =
-            daw::file::setlist_rpp::combine_rpp_files(rpp_paths, &options).map_err(|e| {
+            studio::file::setlist_rpp::combine_rpp_files(rpp_paths, &options).map_err(|e| {
                 SessionServiceError::Internal(format!("Failed to combine RPP files: {e}"))
             })?;
 
@@ -324,7 +324,7 @@ where
     async fn setup_position_sync_bridge(
         &self,
         guid: &str,
-        song_infos: &[daw::file::setlist_rpp::SongInfo],
+        song_infos: &[studio::file::setlist_rpp::SongInfo],
     ) {
         use crate::proto::SongId;
         use crate::proto::offset_map::{SetlistOffsetMap, SongOffset};
@@ -357,7 +357,7 @@ where
     }
 
     fn build_offset_map(
-        song_infos: &[daw::file::setlist_rpp::SongInfo],
+        song_infos: &[studio::file::setlist_rpp::SongInfo],
     ) -> crate::proto::offset_map::SetlistOffsetMap {
         use crate::proto::SongId;
         use crate::proto::offset_map::{SetlistOffsetMap, SongOffset};

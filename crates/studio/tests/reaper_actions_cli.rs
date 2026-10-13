@@ -6,9 +6,9 @@
 
 #![cfg(all(feature = "cli", feature = "test-harness"))]
 
-use daw::test::reaper_test;
 use serde_json::Value;
 use std::process::Command;
+use studio::test::reaper_test;
 
 fn daw_command() -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_daw"));

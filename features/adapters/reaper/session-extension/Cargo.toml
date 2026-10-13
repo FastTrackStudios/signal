@@ -12,7 +12,8 @@ path = "src/lib.rs"
 test = false
 
 [dependencies]
-daw = { workspace = true, features = ["reaper"] }
+daw = { workspace = true }
+studio = { workspace = true, features = ["reaper"] }
 daw-reaper.workspace = true
 daw-extension-runtime.workspace = true
 session = { workspace = true, features = ["reaper"] }

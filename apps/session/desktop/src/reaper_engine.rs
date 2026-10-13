@@ -15,11 +15,11 @@
 //!
 //! Two client connections share that one socket, opened separately
 //! because they need different client types:
-//! - [`daw::cli`] (already-written REAPER launcher + socket discovery +
+//! - [`studio::cli`] (already-written REAPER launcher + socket discovery +
 //!   the generic `Projects`/`Tracks`/etc. surface) handles "find or
 //!   launch REAPER" and "open each song's project".
 //! - This module's own [`connect`] opens the `SetlistService` lanes
-//!   directly — `daw::cli`'s `Daw` type doesn't expose those (they're
+//!   directly — `studio::cli`'s `Daw` type doesn't expose those (they're
 //!   session's own services, not core `daw` ones).
 //!
 //! No audio thread here: REAPER is the one making sound.
@@ -34,7 +34,7 @@ const SOCKET_DIR: &str = "/tmp";
 const SOCKET_PREFIX: &str = "fts-daw-";
 const SOCKET_SUFFIX: &str = ".sock";
 
-/// The dev-rig REAPER profile (`~/fts-dev`, per `daw::cli::daw_profiles()`)
+/// The dev-rig REAPER profile (`~/fts-dev`, per `studio::cli::daw_profiles()`)
 /// — the one this whole workflow (organizing songs, testing Recording
 /// Mode) has been running against. A profile picker is future work; this
 /// is the one that matters today.
@@ -430,7 +430,7 @@ async fn ensure_connected_to(socket: Option<PathBuf>) -> eyre::Result<()> {
     // path) — `load_playlist` isn't guaranteed to run again this session,
     // so this is the only chance to install `daw::get()`'s singleton
     // before the Mixer tab (`daw_ui::MixerPanel`) tries to self-connect.
-    if let Ok(daw_connection) = daw::cli::connect(Some(engine.socket.clone())).await {
+    if let Ok(daw_connection) = studio::cli::connect(Some(engine.socket.clone())).await {
         install_daw_singleton(daw_connection.daw);
     }
 
@@ -528,12 +528,12 @@ pub async fn load_playlist(songs: &[LibrarySong]) -> eyre::Result<()> {
 /// for it to come up if nothing's listening yet.
 async fn ensure_reaper_running() -> eyre::Result<daw::rpc::Daw> {
     if let Some(socket) = discover_socket() {
-        let daw = daw::cli::connect(Some(socket)).await?.daw;
+        let daw = studio::cli::connect(Some(socket)).await?.daw;
         install_daw_singleton(daw.clone());
         return Ok(daw);
     }
     tracing::info!("no live REAPER found; launching the '{REAPER_PROFILE}' profile");
-    let (connection, pid, socket) = daw::cli::launch_and_connect(REAPER_PROFILE).await?;
+    let (connection, pid, socket) = studio::cli::launch_and_connect(REAPER_PROFILE).await?;
     tracing::info!(pid, socket = %socket.display(), "REAPER launched");
     install_daw_singleton(connection.daw.clone());
     Ok(connection.daw)

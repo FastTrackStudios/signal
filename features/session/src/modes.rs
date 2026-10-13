@@ -243,7 +243,7 @@ fn fire_mode_change_listeners(mode: Mode) {
 /// `reaper-screensets.ini` and applied via REAPER's native `Screenset:
 /// Load #N` action — see `daw_reaper::window_manager`.
 ///
-/// Calls the synchronous trait impl on `daw::reaper::Reaper` directly
+/// Calls the synchronous trait impl on `studio::reaper::Reaper` directly
 /// rather than going through the async RPC client — the apply runs on
 /// REAPER's main thread (the only place `main_on_command_ex` is safe
 /// to call), and `daw::block_on` would deadlock us against ourselves
@@ -281,7 +281,7 @@ pub fn set_mode(mode: Mode) {
 fn apply_window_layout(mode: Mode) {
     use daw::service::{WindowLayoutOptions, WindowManager as _};
 
-    let result = daw::reaper::Reaper.apply_layout(
+    let result = studio::reaper::Reaper.apply_layout(
         mode.display_name().to_string(),
         WindowLayoutOptions { run_actions: true },
     );
@@ -334,7 +334,7 @@ pub fn mode_broadcast() -> &'static tokio::sync::broadcast::Sender<String> {
 
 /// Capture REAPER's current window state into the mode's native screenset slot.
 ///
-/// Calls the sync trait method on `daw::reaper::Reaper`
+/// Calls the sync trait method on `studio::reaper::Reaper`
 /// (same pattern as `set_mode`) so it runs on REAPER's main thread.
 /// REAPER-only — see the `reaper` Cargo feature.
 #[cfg(feature = "reaper")]
@@ -347,7 +347,7 @@ pub fn save_layout(mode: Mode) {
         toolbars: Vec::new(),
         actions_on_apply: Vec::new(),
     };
-    let result = daw::reaper::Reaper.save_layout(layout);
+    let result = studio::reaper::Reaper.save_layout(layout);
     if result.ok {
         tracing::info!(mode = %mode, "[session] Layout saved to native screenset");
     } else {
@@ -380,7 +380,7 @@ fn persist_current_mode(mode: Mode) {
 
     // Global ext-state (`reaper-extstate.ini`, persist=true) — not
     // project-scoped, so the mode restores regardless of which project loads.
-    let _ = daw::reaper::Reaper.set(EXTSTATE_SECTION, EXTSTATE_KEY_MODE, mode.slug(), true);
+    let _ = studio::reaper::Reaper.set(EXTSTATE_SECTION, EXTSTATE_KEY_MODE, mode.slug(), true);
     tracing::debug!(mode = %mode, "[session] Persisted mode to extstate");
 }
 
@@ -395,7 +395,7 @@ const fn persist_current_mode(_mode: Mode) {}
 pub fn persisted_mode() -> Option<Mode> {
     use daw::service::ExtState as _;
 
-    let raw = daw::reaper::Reaper.get(EXTSTATE_SECTION, EXTSTATE_KEY_MODE)?;
+    let raw = studio::reaper::Reaper.get(EXTSTATE_SECTION, EXTSTATE_KEY_MODE)?;
     if raw.is_empty() {
         return None;
     }

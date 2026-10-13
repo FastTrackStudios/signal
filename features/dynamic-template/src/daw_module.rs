@@ -877,7 +877,7 @@ fn is_drum_create_action(command_suffix: &str) -> bool {
 }
 
 fn current_project_tracks() -> Vec<daw::service::Track> {
-    let Some(daw) = daw::main_thread_daw() else {
+    let Some(daw) = studio::main_thread_daw() else {
         return Vec::new();
     };
     daw.track_list()

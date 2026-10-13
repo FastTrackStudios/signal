@@ -1,6 +1,6 @@
 //! FTS Signal Controller — CLAP plugin for per-track signal chain control.
 //!
-//! Uses `daw::init()` / `daw::get()` for DAW access — fully DAW-agnostic.
+//! Uses `studio::init()` / `daw::get()` for DAW access — fully DAW-agnostic.
 //! No direct reaper-rs dependency.
 //!
 //! # Timer callbacks

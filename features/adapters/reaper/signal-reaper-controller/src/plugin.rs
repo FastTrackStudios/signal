@@ -297,7 +297,7 @@ impl Plugin for FtsSignalController {
         static TIMERS_REGISTERED: std::sync::atomic::AtomicBool =
             std::sync::atomic::AtomicBool::new(false);
 
-        if daw::init(context.raw_host_context())
+        if studio::init(context.raw_host_context())
             && !TIMERS_REGISTERED.swap(true, std::sync::atomic::Ordering::Relaxed)
         {
             daw::register_timer(signal_timer);

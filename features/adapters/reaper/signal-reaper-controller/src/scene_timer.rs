@@ -68,7 +68,7 @@ pub fn poll() {
         scan_controllers(&mut state);
     }
 
-    let Some(daw) = daw::main_thread_daw() else {
+    let Some(daw) = studio::main_thread_daw() else {
         return;
     };
 
@@ -152,7 +152,7 @@ pub fn invalidate() {
 fn scan_controllers(state: &mut SceneState) {
     state.controllers.clear();
 
-    let Some(daw) = daw::main_thread_daw() else {
+    let Some(daw) = studio::main_thread_daw() else {
         return;
     };
     let all_tracks = daw.track_list();
@@ -257,7 +257,7 @@ fn scan_controllers(state: &mut SceneState) {
     );
 }
 
-fn read_item_timeline(daw: &daw::reaper::DawMainThread, track_guid: &str) -> Vec<TimelineEntry> {
+fn read_item_timeline(daw: &studio::reaper::DawMainThread, track_guid: &str) -> Vec<TimelineEntry> {
     let items = daw.items(track_guid);
     let mut timeline: Vec<TimelineEntry> = items
         .into_iter()

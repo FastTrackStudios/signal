@@ -1,6 +1,6 @@
 //! Timer-based macro mapping using the sync DAW API.
 //!
-//! Runs at ~30Hz via `daw::register_timer`. Uses `daw::main_thread_daw()`
+//! Runs at ~30Hz via `daw::register_timer`. Uses `studio::main_thread_daw()`
 //! for zero-overhead direct REAPER calls — no async, no RPC, no channels.
 
 use std::sync::Mutex;
@@ -160,7 +160,7 @@ pub fn invalidate() {
 fn scan_tracks(state: &mut MacroState) {
     state.tracks.clear();
 
-    let Some(daw) = daw::main_thread_daw() else {
+    let Some(daw) = studio::main_thread_daw() else {
         return;
     };
     let tracks = daw.track_list();
@@ -210,7 +210,7 @@ fn scan_tracks(state: &mut MacroState) {
 }
 
 fn refresh_configs(state: &mut MacroState) {
-    let Some(daw) = daw::main_thread_daw() else {
+    let Some(daw) = studio::main_thread_daw() else {
         return;
     };
 
@@ -266,7 +266,7 @@ fn refresh_configs(state: &mut MacroState) {
 }
 
 fn apply_macros(state: &mut MacroState) {
-    let Some(daw) = daw::main_thread_daw() else {
+    let Some(daw) = studio::main_thread_daw() else {
         return;
     };
 
@@ -360,7 +360,7 @@ fn apply_macros(state: &mut MacroState) {
 static LAST_CONSOLE_MSG: Mutex<String> = Mutex::new(String::new());
 
 fn flush_console_log() {
-    let Some(daw) = daw::main_thread_daw() else {
+    let Some(daw) = studio::main_thread_daw() else {
         return;
     };
 

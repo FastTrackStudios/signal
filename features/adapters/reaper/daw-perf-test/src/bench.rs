@@ -108,7 +108,7 @@ impl vox::FromVoxLane for PerfLaneClient {
 
 async fn native_create_tracks(n: u32) -> Duration {
     let start = Instant::now();
-    daw::reaper::main_thread::query(move || {
+    studio::reaper::main_thread::query(move || {
         let reaper = reaper_high::Reaper::get();
         let project = reaper.current_project();
         for i in 0..n {
@@ -123,7 +123,7 @@ async fn native_create_tracks(n: u32) -> Duration {
 }
 
 async fn native_remove_all_tracks() {
-    daw::reaper::main_thread::query(move || {
+    studio::reaper::main_thread::query(move || {
         let reaper = reaper_high::Reaper::get();
         let project = reaper.current_project();
         while project.track_count() > 0 {
@@ -139,7 +139,7 @@ async fn native_remove_all_tracks() {
 
 async fn native_mutate_tracks(n: u32) -> Duration {
     let start = Instant::now();
-    daw::reaper::main_thread::query(move || {
+    studio::reaper::main_thread::query(move || {
         let reaper = reaper_high::Reaper::get();
         let project = reaper.current_project();
         let count = project.track_count().min(n);
@@ -166,7 +166,7 @@ async fn native_mutate_tracks(n: u32) -> Duration {
 
 async fn native_create_and_mutate_tracks(n: u32) -> Duration {
     let start = Instant::now();
-    daw::reaper::main_thread::query(move || {
+    studio::reaper::main_thread::query(move || {
         let reaper = reaper_high::Reaper::get();
         let project = reaper.current_project();
         for i in 0..n {
@@ -192,7 +192,7 @@ async fn native_create_and_mutate_tracks(n: u32) -> Duration {
 
 async fn native_add_markers(n: u32) -> Duration {
     let start = Instant::now();
-    daw::reaper::main_thread::query(move || {
+    studio::reaper::main_thread::query(move || {
         let reaper = reaper_high::Reaper::get();
         let medium = reaper.medium_reaper();
         for i in 0..n {
@@ -213,8 +213,8 @@ async fn native_add_markers(n: u32) -> Duration {
 }
 
 async fn native_remove_all_markers() {
-    daw::reaper::main_thread::query(move || {
-        use daw::reaper::safe_wrappers::markers as markers_sw;
+    studio::reaper::main_thread::query(move || {
+        use studio::reaper::safe_wrappers::markers as markers_sw;
         let reaper = reaper_high::Reaper::get();
         let low = reaper.medium_reaper().low();
         let rctx = reaper_medium::ProjectContext::CurrentProject;

@@ -8,7 +8,7 @@
 //!
 //!   cargo xtask reaper-test -- reaper_screenset
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 use daw_proto::{ScreensetKind, ScreensetOptions, ScreensetScope};
 
 #[reaper_test(isolated)]
