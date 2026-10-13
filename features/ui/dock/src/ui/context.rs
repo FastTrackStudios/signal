@@ -3,9 +3,9 @@
 //! Provides the panel renderer callback to the component tree.
 //! The consuming app registers a callback that maps PanelId -> Element.
 
-use crate::prelude::*;
-use crate::signals::DOCK_PANEL_RENDERER;
-use dock_proto::PanelId;
+use crate::ui::prelude::*;
+use crate::ui::signals::DOCK_PANEL_RENDERER;
+use crate::PanelId;
 use std::rc::Rc;
 
 /// Wrapper around the panel renderer function with `PartialEq` via `Rc::ptr_eq`.

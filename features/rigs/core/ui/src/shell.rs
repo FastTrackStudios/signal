@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use dock_dioxus::{DockProvider, DockRoot, PanelRenderer, PanelRendererRegistry};
+use dock::ui::{DockProvider, DockRoot, PanelRenderer, PanelRendererRegistry};
 use signal::Signal;
 
 use crate::register_panels;

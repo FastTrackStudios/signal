@@ -9,10 +9,10 @@
 //! cursor never escapes. On mouseup, JS dispatches a custom event carrying
 //! the final ratio back to Dioxus.
 
-use crate::hooks::use_dock_actions;
-use crate::prelude::*;
-use crate::signals::DOCK_RESIZING;
-use dock_proto::{NodeId, SplitDirection};
+use crate::ui::hooks::use_dock_actions;
+use crate::ui::prelude::*;
+use crate::ui::signals::DOCK_RESIZING;
+use crate::{NodeId, SplitDirection};
 
 /// Minimum percentage for any pane (prevents invisible tiles).
 const MIN_RATIO: f64 = 10.0;

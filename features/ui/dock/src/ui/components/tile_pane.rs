@@ -1,12 +1,12 @@
 //! Tile pane — content wrapper with optional tab bar, panel header,
 //! and drag-and-drop drop zone overlays.
 
-use crate::components::tab_bar::DockTabBar;
-use crate::context::use_dock_context;
-use crate::hooks::use_dock_actions;
-use crate::prelude::*;
-use crate::signals::*;
-use dock_proto::{DropZone, NodeId, TabGroup};
+use crate::ui::components::tab_bar::DockTabBar;
+use crate::ui::context::use_dock_context;
+use crate::ui::hooks::use_dock_actions;
+use crate::ui::prelude::*;
+use crate::ui::signals::*;
+use crate::{DropZone, NodeId, TabGroup};
 
 /// Tile pane component with drop zone support.
 #[component]

@@ -1,9 +1,9 @@
 //! Tab bar — horizontal tab strip for multi-panel tiles with drag support.
 
-use crate::hooks::use_dock_actions;
-use crate::prelude::*;
-use crate::signals::{ContextMenuState, DOCK_CONTEXT_MENU};
-use dock_proto::{NodeId, TabGroup};
+use crate::ui::hooks::use_dock_actions;
+use crate::ui::prelude::*;
+use crate::ui::signals::{ContextMenuState, DOCK_CONTEXT_MENU};
+use crate::{NodeId, TabGroup};
 
 /// Horizontal tab bar shown when a tile has multiple panels.
 /// Tabs are draggable for rearrangement.
@@ -34,7 +34,7 @@ pub fn DockTabBar(node_id: NodeId, tabs: TabGroup) -> Element {
                                 let drag_source_id = drag_source_id.clone();
                                 move |_: DragEvent| {
                                     actions.start_drag.call((panel, node_id));
-                                    crate::drag_ghost::start_drag_ghost(&drag_source_id, panel.display_name());
+                                    crate::ui::drag_ghost::start_drag_ghost(&drag_source_id, panel.display_name());
                                 }
                             },
                             ondragend: {

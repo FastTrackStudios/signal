@@ -3,8 +3,8 @@
 //! Registers session-ui panels with the dock renderer registry,
 //! decoupling panel definitions from the central app binary.
 
-use dock_dioxus::PanelRendererRegistry;
-use dock_proto::PanelId;
+use dock::ui::PanelRendererRegistry;
+use dock::PanelId;
 
 use crate::ui::layouts::PerformanceLayout;
 use crate::ui::layouts::PerformanceSidebar;

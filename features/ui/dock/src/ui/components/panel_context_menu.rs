@@ -1,9 +1,9 @@
 //! Panel context menu overlay.
 
-use crate::hooks::use_dock_actions;
-use crate::prelude::*;
-use crate::signals::{DOCK_CONTEXT_MENU, DOCK_MAXIMIZED_PANEL, DOCK_WORKSPACE};
-use dock_proto::{DropZone, PanelId, SplitDirection};
+use crate::ui::hooks::use_dock_actions;
+use crate::ui::prelude::*;
+use crate::ui::signals::{DOCK_CONTEXT_MENU, DOCK_MAXIMIZED_PANEL, DOCK_WORKSPACE};
+use crate::{DropZone, PanelId, SplitDirection};
 
 #[component]
 pub fn PanelContextMenuOverlay() -> Element {
@@ -20,7 +20,7 @@ pub fn PanelContextMenuOverlay() -> Element {
             window.layout.get_node(state.node_id).is_some()
                 && matches!(
                     window.layout.zone_mode(state.node_id),
-                    dock_proto::DockZoneMode::AutoHide
+                    crate::DockZoneMode::AutoHide
                 )
         })
     };

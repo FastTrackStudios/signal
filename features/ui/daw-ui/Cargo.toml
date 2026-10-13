@@ -17,7 +17,7 @@ reaper-test-panels = ["dep:architect-ui", "dep:daw-module", "dep:daw-reaper-diox
 reaper-theme = ["dep:image", "dep:thiserror"]
 render = ["dep:dioxus-ssr", "dep:image", "dep:resvg"]
 studio = ["web"]
-web = ["dep:input", "dep:tracing", "dock-dioxus/web"]
+web = ["dep:input", "dep:tracing", "dock/ui", "dock/web"]
 
 [dependencies]
 architect = { workspace = true }
@@ -29,8 +29,7 @@ daw-reaper-dioxus = { workspace = true, optional = true }
 dioxus = { workspace = true, features = ["lib"] }
 dioxus-native = { workspace = true, optional = true }
 dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false, optional = true }
-dock-dioxus = { workspace = true, default-features = false }
-dock-proto = { workspace = true }
+dock = { workspace = true, features = ["ui"] }
 eyre = { workspace = true }
 facet = { workspace = true }
 facet-styx = { workspace = true }

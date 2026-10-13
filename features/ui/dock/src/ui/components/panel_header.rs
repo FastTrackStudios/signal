@@ -4,10 +4,10 @@
 //! includes buttons for splitting, maximizing, and closing tiles.
 //! The split buttons show a panel picker dropdown.
 
-use crate::hooks::use_dock_actions;
-use crate::prelude::*;
-use crate::signals::{ContextMenuState, DOCK_CONTEXT_MENU};
-use dock_proto::{NodeId, PanelId, SplitDirection};
+use crate::ui::hooks::use_dock_actions;
+use crate::ui::prelude::*;
+use crate::ui::signals::{ContextMenuState, DOCK_CONTEXT_MENU};
+use crate::{NodeId, PanelId, SplitDirection};
 
 /// Panel header component with drag handle and controls.
 #[component]
@@ -29,7 +29,7 @@ pub fn PanelHeader(node_id: NodeId, panel_id: PanelId) -> Element {
                 let drag_source_id = drag_source_id.clone();
                 move |_: DragEvent| {
                     actions.start_drag.call((panel_id, node_id));
-                    crate::drag_ghost::start_drag_ghost(&drag_source_id, panel_id.display_name());
+                    crate::ui::drag_ghost::start_drag_ghost(&drag_source_id, panel_id.display_name());
                 }
             },
             ondragend: {

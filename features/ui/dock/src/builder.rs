@@ -3,8 +3,8 @@
 //! # Example
 //!
 //! ```rust
-//! use dock_proto::builder::DockLayoutBuilder;
-//! use dock_proto::panel::PanelId;
+//! use crate::builder::DockLayoutBuilder;
+//! use crate::panel::PanelId;
 //!
 //! let layout = DockLayoutBuilder::horizontal()
 //!     .left(DockLayoutBuilder::tile(PanelId::Navigator))

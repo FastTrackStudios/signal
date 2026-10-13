@@ -1,8 +1,8 @@
 //! Preset bar — screenset selector with save/load and persistence.
 
-use crate::hooks::use_dock_actions;
-use crate::prelude::*;
-use crate::signals::*;
+use crate::ui::hooks::use_dock_actions;
+use crate::ui::prelude::*;
+use crate::ui::signals::*;
 
 /// Screenset selector bar showing available presets with save/load controls.
 #[component]

@@ -3,10 +3,10 @@
 //! Provides `DockActions` — callbacks that UI components use to mutate
 //! workspace/layout state, switch presets, and manage persistence.
 
-use crate::context::DockProvider;
-use crate::prelude::*;
-use crate::signals::*;
-use dock_proto::*;
+use crate::ui::context::DockProvider;
+use crate::ui::prelude::*;
+use crate::ui::signals::*;
+use crate::*;
 use tokio::time::{sleep, Duration};
 
 #[cfg(feature = "native")]
@@ -104,7 +104,7 @@ fn FloatingWindowRoot(window_id: WindowId) -> Element {
     rsx! {
         DockProvider { render_panel: renderer,
             div { class: "h-full w-full",
-                crate::components::DockRoot { window_id: Some(window_id) }
+                crate::ui::components::DockRoot { window_id: Some(window_id) }
             }
         }
     }
@@ -282,7 +282,7 @@ pub fn use_dock_actions() -> DockActions {
 
             if let Some(target_layout) = target_layout {
                 let duration_ms = *DOCK_TRANSITION_DURATION_MS.read();
-                let transition = crate::transition::compute_transition(
+                let transition = crate::ui::transition::compute_transition(
                     &current_layout,
                     &target_layout,
                     duration_ms,
@@ -367,7 +367,7 @@ pub fn use_dock_actions() -> DockActions {
 
                 sync_main_layout_signal(&workspace);
                 *DOCK_DRAG_DROPPED.write() = true;
-                crate::drag_ghost::animate_drop_to(&format!("dock-tile-{target_node}"));
+                crate::ui::drag_ghost::animate_drop_to(&format!("dock-tile-{target_node}"));
             }
             DOCK_DRAG_STATE.write().end();
         }),
@@ -375,14 +375,14 @@ pub fn use_dock_actions() -> DockActions {
             if *DOCK_DRAG_DROPPED.read() {
                 *DOCK_DRAG_DROPPED.write() = false;
             } else {
-                crate::drag_ghost::animate_cancel_back();
+                crate::ui::drag_ghost::animate_cancel_back();
             }
             DOCK_DRAG_STATE.write().end();
         }),
         persist_presets: Callback::new(move |_: ()| {
             let presets = DOCK_PRESETS.read();
-            if let Some(path) = dock_proto::persistence::default_presets_path() {
-                if let Err(e) = dock_proto::save_presets_to_file(&presets, &path) {
+            if let Some(path) = crate::persistence::default_presets_path() {
+                if let Err(e) = crate::save_presets_to_file(&presets, &path) {
                     tracing::warn!("Failed to save dock presets: {e}");
                 }
             }
@@ -528,7 +528,7 @@ pub fn load_rig_preset(index: usize) {
 pub fn init_dock_presets() {
     // Temporary behavior: always use built-in presets at startup.
     // Ignore on-disk presets until layout behavior is finalized.
-    let presets = dock_proto::default_presets();
+    let presets = crate::default_presets();
 
     let mut registry = PanelRegistry::new();
     PanelId::register_all(&mut registry);

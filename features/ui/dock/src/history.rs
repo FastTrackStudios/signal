@@ -14,9 +14,9 @@ use crate::LayoutDiff;
 /// # Example
 ///
 /// ```
-/// use dock_proto::history::LayoutHistory;
-/// use dock_proto::layout::DockLayout;
-/// use dock_proto::panel::PanelId;
+/// use crate::history::LayoutHistory;
+/// use crate::layout::DockLayout;
+/// use crate::panel::PanelId;
 ///
 /// let mut layout = DockLayout::single(PanelId::Performance);
 /// let mut history = LayoutHistory::new();

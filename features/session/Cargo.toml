@@ -14,15 +14,15 @@ workspace = true
 vault-sync = ["dep:serde_json"]
 default = ["vox"]
 collab = ["engine", "net"]
-desktop = ["dioxus", "dock-dioxus/web"]
+desktop = ["dioxus", "dock/ui", "dock/web"]
 engine = ["dep:daw-control", "dep:daw-standalone"]
 library = ["dep:collection-proto", "dep:files-client", "dep:files-proto", "dep:futures-util", "dep:links-proto", "dep:resources-proto", "dep:task-dial", "dep:vox-core"]
 net = ["dep:crdt", "dep:futures"]
 reaper = ["studio/reaper", "dep:daw-actions", "dep:daw-reaper", "dep:daw-sync", "dep:reaper-high", "dep:reaper-low", "dep:reaper-medium"]
 tts = ["dep:chatterbox-rs", "dep:ort", "ort/load-dynamic"]
-ui = ["dep:architect-ui", "dep:dock-dioxus", "dep:dock-proto", "dep:lucide-dioxus", "web"]
+ui = ["dep:architect-ui", "dep:dock", "dock?/ui", "dep:lucide-dioxus", "web"]
 vox = []
-web = ["dioxus", "dock-dioxus/web"]
+web = ["dioxus", "dock/ui", "dock/web"]
 
 [dependencies]
 serde_json = { workspace = true, optional = true }
@@ -40,8 +40,7 @@ daw-standalone = { workspace = true, optional = true }
 daw-transport-sync = { workspace = true }
 dawfile-reaper = { workspace = true }
 dioxus = { workspace = true, optional = true }
-dock-dioxus = { workspace = true, default-features = false, optional = true }
-dock-proto = { workspace = true, optional = true }
+dock = { workspace = true, optional = true, features = ["ui"] }
 eyre = { workspace = true }
 facet = { workspace = true }
 files-client = { workspace = true, optional = true }

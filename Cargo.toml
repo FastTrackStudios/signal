@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/ui/dock",
     "features/sync",
     "crates/frame",
     "features/audio/worklet",
@@ -109,8 +110,6 @@ members = [
     "features/ui/adaptive-grid",
     "crates/daw/macros",
     "xtask/devtools",
-    "features/ui/dock/dock-dioxus",
-    "features/ui/dock/dock-proto",
     "features/ui/fts-chrome",
     "crates/daw/utils",
     "vendor/dioxus-test",
@@ -202,6 +201,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+dock = { path = "features/ui/dock" }
 daw-sync = { path = "features/sync" }
 frame = { path = "crates/frame" }
 web-audio-worklet = { path = "features/audio/worklet" }
@@ -254,8 +254,6 @@ fts-chrome = { path = "features/ui/fts-chrome" }
 # lockfile, which cargo refuses outright.
 fts-audio-ui = { path = "features/ui/fts-audio-ui" }
 fts-plug-ui = { path = "features/ui/fts-plug-ui" }
-dock-dioxus = { path = "features/ui/dock/dock-dioxus", default-features = false }
-dock-proto = { path = "features/ui/dock/dock-proto" }
 # nice-plug lives in its own fork repo (upstream RustAudio/nice-plug's
 # baseview-03 branch + the FTS delta: nice-plug-dioxus, embedded editors,
 # rich track-info, param rescan). The ONE sanctioned exception to

@@ -10,6 +10,9 @@
 //! - Defaults: built-in screenset presets
 //! - Persistence: JSON save/load for presets and layouts
 
+#[cfg(feature = "ui")]
+pub mod ui;
+
 pub mod builder;
 pub mod context;
 pub mod defaults;

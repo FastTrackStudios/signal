@@ -9,11 +9,11 @@
 
 use std::rc::Rc;
 
-use dock_dioxus::{DOCK_WORKSPACE, DockProvider, DockRoot, PanelRenderer, PanelRendererRegistry};
-use dock_proto::PanelRegistry;
-use dock_proto::builder::DockLayoutBuilder as B;
-use dock_proto::panel::PanelId;
-use dock_proto::workspace::{DockWorkspace, WindowBounds};
+use dock::ui::{DOCK_WORKSPACE, DockProvider, DockRoot, PanelRenderer, PanelRendererRegistry};
+use dock::PanelRegistry;
+use dock::builder::DockLayoutBuilder as B;
+use dock::panel::PanelId;
+use dock::workspace::{DockWorkspace, WindowBounds};
 
 use crate::ui::layouts::top_bar::{ConnectionState, VERSION};
 use crate::ui::prelude::*;

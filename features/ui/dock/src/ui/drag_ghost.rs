@@ -1,6 +1,6 @@
 //! JS-backed drag ghost overlay for smooth cursor-following and drop/cancel animations.
 
-use crate::prelude::*;
+use crate::ui::prelude::*;
 
 pub fn start_drag_ghost(source_id: &str, label: &str) {
     let source_id = escape_js(source_id);

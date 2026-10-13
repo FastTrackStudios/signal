@@ -4,8 +4,8 @@
 //! Dioxus `Element` types. Domain crates register their panels at startup
 //! via `register()`, and the dock system calls `render()` to display them.
 
-use crate::prelude::*;
-use dock_proto::PanelId;
+use crate::ui::prelude::*;
+use crate::PanelId;
 use std::collections::HashMap;
 use std::rc::Rc;
 

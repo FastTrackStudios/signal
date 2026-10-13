@@ -3,10 +3,10 @@
 //! Global Dioxus signals for dock state. Components subscribe to these
 //! for reactive layout updates.
 
-use crate::context::PanelRenderer;
-use crate::prelude::*;
-use crate::transition::LayoutTransition;
-use dock_proto::{
+use crate::ui::context::PanelRenderer;
+use crate::ui::prelude::*;
+use crate::ui::transition::LayoutTransition;
+use crate::{
     DockLayout, DockWorkspace, DropZone, NodeId, PanelId, PanelRegistry, PresetCollection,
     WindowBounds, WindowId,
 };

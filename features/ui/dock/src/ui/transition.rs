@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use dock_proto::{DockLayout, DockNode, LayoutOp, PanelId, SplitDirection};
+use crate::{DockLayout, DockNode, LayoutOp, PanelId, SplitDirection};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TransitionRect {

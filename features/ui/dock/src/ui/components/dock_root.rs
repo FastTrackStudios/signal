@@ -3,14 +3,14 @@
 //! Reads the global `DOCK_WORKSPACE` signal and renders one window's
 //! split/tile tree. Handles maximized panels and global drag state.
 
-use crate::components::split_pane::SplitPane;
-use crate::components::tile_pane::TilePane;
-use crate::components::PanelContextMenuOverlay;
-use crate::context::use_dock_context;
-use crate::prelude::*;
-use crate::signals::*;
-use crate::transition::TransitionKind;
-use dock_proto::{DockLayout, FlatNode, NodeId, WindowId};
+use crate::ui::components::split_pane::SplitPane;
+use crate::ui::components::tile_pane::TilePane;
+use crate::ui::components::PanelContextMenuOverlay;
+use crate::ui::context::use_dock_context;
+use crate::ui::prelude::*;
+use crate::ui::signals::*;
+use crate::ui::transition::TransitionKind;
+use crate::{DockLayout, FlatNode, NodeId, WindowId};
 
 /// Root dock layout component.
 #[component]
@@ -85,7 +85,7 @@ pub fn DockRoot(window_id: Option<WindowId>) -> Element {
             onkeydown: move |e: KeyboardEvent| {
                 if matches!(e.key(), Key::Escape) && DOCK_DRAG_STATE.read().is_dragging() {
                     *DOCK_DRAG_DROPPED.write() = false;
-                    crate::drag_ghost::animate_cancel_back();
+                    crate::ui::drag_ghost::animate_cancel_back();
                     DOCK_DRAG_STATE.write().end();
                     e.prevent_default();
                 }
