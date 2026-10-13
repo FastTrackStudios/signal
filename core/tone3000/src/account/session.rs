@@ -413,7 +413,7 @@ impl Account {
         oidc::user_from(&text).ok()
     }
 
-    /// The HTTP client and issuer, for [`crate::linked`].
+    /// The HTTP client and issuer, for [`crate::account::linked`].
     pub(crate) const fn http(&self) -> &reqwest::Client {
         &self.http
     }

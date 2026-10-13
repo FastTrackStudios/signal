@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use crate::store::{DownloadOutcome, TokenStore, Tokens};
+use crate::client::store::{DownloadOutcome, TokenStore, Tokens};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {

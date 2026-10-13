@@ -1,4 +1,4 @@
-//! The `AccountAuth` RPC surface — [`crate::Account`] handed to a GUI.
+//! The `AccountAuth` RPC surface — [`crate::account::Account`] handed to a GUI.
 //!
 //! A thin wrapper rather than putting `#[derive(HasDispatcher)]` on
 //! [`Account`] itself: `Account` is shared as `Arc<Account>` everywhere else
@@ -11,10 +11,10 @@
 use std::sync::Arc;
 
 use architect::{HasDispatcher, Layer, Services, layers};
-use signal_account_proto::account::{AccountAuth, Service};
-use signal_account_proto::{AccountStatus, AuthRequest};
+use crate::account_proto::account::{AccountAuth, Service};
+use crate::account_proto::{AccountStatus, AuthRequest};
 
-use crate::Account;
+use crate::account::Account;
 
 /// Mount this on any vox transport (`.router()`) to expose [`Account`] to a
 /// GUI. Cheap to clone — one `Arc` underneath, the same one the engine's

@@ -12,7 +12,7 @@ workspace = true
 [features]
 default = ["vox"]
 pipewire = []
-ui = ["dep:anyrender", "dep:base64", "dep:comp", "dep:delay", "dep:dioxus", "dep:eq", "dep:fts-audio-ui", "dep:kurbo", "dep:lumen-blocks", "dep:modulation", "dep:serde_json", "dep:signal-account-proto", "dep:signal-grid", "dep:signal-grid-ui", "dep:signal-tone3000-proto", "dep:signal-tone3000-ui", "dep:signal-widgets", "architect/atom", "architect/platform", "reverb/ui", "reverb/viz", "uuid/v4"]
+ui = ["dep:anyrender", "dep:base64", "dep:comp", "dep:delay", "dep:dioxus", "dep:eq", "dep:fts-audio-ui", "dep:kurbo", "dep:lumen-blocks", "dep:modulation", "dep:serde_json", "dep:signal-tone3000", "dep:signal-grid", "dep:signal-grid-ui", "signal-tone3000?/ui", "dep:signal-widgets", "architect/atom", "architect/platform", "reverb/ui", "reverb/viz", "uuid/v4"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
@@ -39,7 +39,7 @@ midi = { workspace = true, features = ["midir", "vox"] }
 modulation = { workspace = true, features = ["ui", "viz"], optional = true }
 reverb = { workspace = true }
 serde_json = { workspace = true, optional = true }
-signal-account-proto = { workspace = true, optional = true }
+signal-tone3000 = { workspace = true, optional = true, features = ["ui"] }
 signal-grid = { workspace = true, optional = true }
 signal-grid-ui = { workspace = true, optional = true }
 signal-macromod = { workspace = true }
@@ -48,8 +48,6 @@ signal-proto = { workspace = true }
 signal-rig-host = { workspace = true }
 signal-rigs-proto = { workspace = true }
 sampler = { workspace = true }
-signal-tone3000-proto = { workspace = true, optional = true }
-signal-tone3000-ui = { workspace = true, optional = true }
 signal-widgets = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }

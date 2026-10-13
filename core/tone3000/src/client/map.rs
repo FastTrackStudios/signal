@@ -6,7 +6,7 @@
 //! fetched tone are different payloads upstream (licence, links and sizes are
 //! detail-only), so a row is mapped from what a row actually has.
 
-use signal_tone3000_proto::{PickedTone, ToneModel, TonePage, ToneSummary};
+use crate::{PickedTone, ToneModel, TonePage, ToneSummary};
 use tone3000::{Model, Page, Tone};
 
 /// One tone as a list row.

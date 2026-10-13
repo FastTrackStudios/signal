@@ -36,8 +36,8 @@ pub use detail::ToneDetail;
 pub use state::{Tone3000State, UrlOpener, use_tone3000_state};
 
 use dioxus::prelude::*;
-use signal_tone3000_proto::tone3000::Tone3000Client;
-use signal_tone3000_proto::{PickedTone, TonePage, ToneQuery, ToneShelf, ToneSummary};
+use crate::tone3000::Tone3000Client;
+use crate::{PickedTone, TonePage, ToneQuery, ToneShelf, ToneSummary};
 
 /// What the grid is currently showing.
 #[derive(Clone, PartialEq)]
@@ -111,7 +111,7 @@ pub fn grouping_key(tone: &PickedTone) -> String {
 #[cfg(test)]
 mod grouping_tests {
     use super::grouping_key;
-    use signal_tone3000_proto::PickedTone;
+    use crate::PickedTone;
 
     fn tone(name: &str, makes: &[&str]) -> PickedTone {
         PickedTone {

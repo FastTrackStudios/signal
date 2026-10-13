@@ -910,8 +910,8 @@ pub fn GuitarRigRemote() -> Element {
                                         let rig = rig.clone();
                                         rsx! {
                                             div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
-                                                signal_tone3000_ui::ToneBrowser {
-                                                    on_loaded: move |i: signal_tone3000_ui::ToneImport| {
+                                                signal_tone3000::ui::ToneBrowser {
+                                                    on_loaded: move |i: signal_tone3000::ui::ToneImport| {
                                                         let rig = rig.clone();
                                                         spawn(async move {
                                                             if let Some(r) = rig {
