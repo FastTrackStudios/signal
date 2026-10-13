@@ -118,3 +118,46 @@ fn two_rigs_play_in_one_engine() {
         "a track added later is metered too"
     );
 }
+
+#[test]
+fn a_rig_nests_folders_and_keeps_them_closed() {
+    let runtime = tokio::runtime::Runtime::new().expect("a runtime");
+    let _inside = runtime.enter();
+    let engine = Engine::new("Signal");
+    let keys = engine.add_rig("Keys").expect("keys rig");
+    let e1 = keys.add_track("Engine 1").expect("engine 1");
+    keys.add_track_in(&e1, "Layer 1").expect("layer 1");
+    keys.add_track_in(&e1, "Layer 2").expect("layer 2");
+    let e2 = keys.add_track("Engine 2").expect("engine 2");
+    keys.add_track_in(&e2, "Layer 3").expect("layer 3");
+    let drums = engine.add_rig("Drums").expect("drums rig");
+    drums.add_track("Kick").expect("kick");
+    // Into the first engine folder, after both later folders exist.
+    keys.add_track_in(&e1, "Layer 4").expect("layer 4");
+
+    let tracks = engine
+        .daw()
+        .all(ProjectContext::Project(engine.project_guid().to_string()));
+    let order: Vec<(&str, i32)> = tracks
+        .iter()
+        .map(|t| (t.name.as_str(), t.folder_depth))
+        .collect();
+    assert_eq!(
+        order,
+        [
+            ("Keys", 1),
+            ("Engine 1", 1),
+            ("Layer 1", 0),
+            ("Layer 2", 0),
+            ("Layer 4", -1),
+            ("Engine 2", 1),
+            ("Layer 3", -2),
+            ("Drums", 1),
+            ("Kick", -1),
+        ]
+    );
+    assert!(
+        keys.add_track_in(drums.folder_guid(), "Stray").is_err(),
+        "another rig's folder"
+    );
+}
