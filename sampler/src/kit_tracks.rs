@@ -173,7 +173,6 @@ pub struct KitMic {
     pub instrument_id: String,
     pub track_guid: String,
     pub fx_guid: String,
-    pub meter_index: usize,
     /// The shared bus this mic sends into, or `None` for a close mic.
     pub bus: Option<String>,
     pub engine: SharedEngine,
@@ -232,8 +231,8 @@ pub struct KitState {
     pub name: String,
     pub routing: KitRouting,
     pub pieces: Vec<KitPiece>,
-    /// Shared bus tracks: `(bus id, track guid, meter index)`.
-    pub buses: Vec<(String, String, usize)>,
+    /// Shared bus tracks: `(bus id, track guid)`.
+    pub buses: Vec<(String, String)>,
 }
 
 impl KitState {

@@ -161,3 +161,24 @@ fn a_rig_nests_folders_and_keeps_them_closed() {
         "another rig's folder"
     );
 }
+
+#[test]
+fn removing_a_track_takes_what_is_below_it_and_keeps_the_folders_closed() {
+    let runtime = tokio::runtime::Runtime::new().expect("a runtime");
+    let _inside = runtime.enter();
+    let engine = Engine::new("Signal");
+    let drums = engine.add_rig("Drums").expect("drums rig");
+    let kick = drums.add_track("Kick").expect("kick");
+    drums.add_track_in(&kick, "Kick In").expect("kick in");
+    drums.add_track("Snare").expect("snare");
+    drums.remove_track(&kick).expect("remove the kick");
+    let tracks = engine
+        .daw()
+        .all(ProjectContext::Project(engine.project_guid().to_string()));
+    let order: Vec<(&str, i32)> = tracks
+        .iter()
+        .map(|t| (t.name.as_str(), t.folder_depth))
+        .collect();
+    assert_eq!(order, [("Drums", 1), ("Snare", -1)]);
+    assert_eq!(drums.tracks().len(), 1);
+}

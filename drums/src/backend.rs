@@ -69,7 +69,6 @@ struct ChanRef {
     piece: usize,
     mic: String,
     track: String,
-    meter: usize,
     state: StripState,
 }
 
@@ -80,7 +79,6 @@ struct SendRef {
     #[expect(dead_code)]
     mic: String,
     track: String,
-    meter: usize,
     bus: usize,
     level_db: f32,
     muted: bool,
@@ -92,7 +90,6 @@ struct SendRef {
 struct BusRef {
     label: String,
     track: String,
-    meter: usize,
     state: StripState,
 }
 
@@ -121,7 +118,7 @@ impl KitMix {
             .buses
             .iter()
             .enumerate()
-            .map(|(i, (id, _, _))| (id.as_str(), i))
+            .map(|(i, (id, _))| (id.as_str(), i))
             .collect();
         for (pi, piece) in kit.pieces.iter().enumerate() {
             mix.pieces.push(PieceStrip {
@@ -138,14 +135,12 @@ impl KitMix {
                         piece: pi,
                         mic: mic.mic.clone(),
                         track: mic.track_guid.clone(),
-                        meter: mic.meter_index,
                         state: StripState::default(),
                     }),
                     Some(bus) => mix.sends.push(SendRef {
                         piece: pi,
                         mic: mic.mic.clone(),
                         track: mic.track_guid.clone(),
-                        meter: mic.meter_index,
                         bus: bus_index.get(bus.as_str()).copied().unwrap_or(0),
                         level_db: 0.0,
                         muted: false,
@@ -154,11 +149,10 @@ impl KitMix {
                 }
             }
         }
-        for (label, track, meter) in &kit.buses {
+        for (label, track) in &kit.buses {
             mix.buses.push(BusRef {
                 label: label.clone(),
                 track: track.clone(),
-                meter: *meter,
                 state: StripState::default(),
             });
         }
@@ -914,13 +908,11 @@ impl DrumRig for DrumRigBackend {
             if let Some(rig) = rig.as_ref() {
                 // Master ≈ the loudest strip (close mics + buses); the daw
                 // master has no meter cell of its own yet.
-                let meters = rig.meters_bank();
-                let peak = |idx: usize| meters.cell(idx).map_or(0.0, |c| c.peak(0).max(c.peak(1)));
                 for ch in &s.mix.channels {
-                    master_peak = master_peak.max(peak(ch.meter));
+                    master_peak = master_peak.max(rig.track_peak(&ch.track));
                 }
                 for bus in &s.mix.buses {
-                    master_peak = master_peak.max(peak(bus.meter));
+                    master_peak = master_peak.max(rig.track_peak(&bus.track));
                 }
                 voices = rig.kit_voices() as u32;
                 for piece in &s.mix.pieces {
@@ -1159,9 +1151,10 @@ impl DrumRig for DrumRigBackend {
             let Some(rig) = rig.as_ref() else {
                 return Vec::new();
             };
-            rig.meters_bank()
+            // A cheap handle; the rig lock is dropped before the state lock.
+            rig.clone()
         };
-        let peak = |idx: usize| meters.cell(idx).map_or(0.0, |c| c.peak(0).max(c.peak(1)));
+        let peak = |track: &str| meters.track_peak(track);
         let s = self
             .inner
             .state
@@ -1193,12 +1186,12 @@ impl DrumRig for DrumRigBackend {
                 .channels
                 .iter()
                 .filter(|c| c.piece == pi)
-                .map(|c| c.meter)
+                .map(|c| c.track.as_str())
                 .chain(
                     mix.sends
                         .iter()
                         .filter(|sd| sd.piece == pi)
-                        .map(|sd| sd.meter),
+                        .map(|sd| sd.track.as_str()),
                 )
                 .map(peak)
                 .fold(0.0f32, f32::max);
@@ -1231,7 +1224,7 @@ impl DrumRig for DrumRigBackend {
                     gain_db: ch.state.gain_db,
                     muted: ch.state.muted,
                     soloed: ch.state.soloed,
-                    peak: peak(ch.meter),
+                    peak: peak(&ch.track),
                     sends: Vec::new(),
                 });
             }
@@ -1245,7 +1238,7 @@ impl DrumRig for DrumRigBackend {
                 gain_db: bus.state.gain_db,
                 muted: bus.state.muted,
                 soloed: bus.state.soloed,
-                peak: peak(bus.meter),
+                peak: peak(&bus.track),
                 sends: Vec::new(),
             });
         }
@@ -1262,9 +1255,9 @@ impl DrumRig for DrumRigBackend {
             let Some(rig) = rig.as_ref() else {
                 return Default::default();
             };
-            (rig.meters_bank(), rig.kit_voices() as u32)
+            (rig.clone(), rig.kit_voices() as u32)
         };
-        let peak = |idx: usize| meters.cell(idx).map_or(0.0, |c| c.peak(0).max(c.peak(1)));
+        let peak = |track: &str| meters.track_peak(track);
         let s = self
             .inner
             .state
@@ -1280,24 +1273,24 @@ impl DrumRig for DrumRigBackend {
                 .channels
                 .iter()
                 .filter(|c| c.piece == pi)
-                .map(|c| c.meter)
+                .map(|c| c.track.as_str())
                 .chain(
                     mix.sends
                         .iter()
                         .filter(|sd| sd.piece == pi)
-                        .map(|sd| sd.meter),
+                        .map(|sd| sd.track.as_str()),
                 )
                 .map(peak)
                 .fold(0.0f32, f32::max);
             strips.push(piece_peak);
             for ch in mix.channels.iter().filter(|c| c.piece == pi) {
-                let p = peak(ch.meter);
+                let p = peak(&ch.track);
                 master = master.max(p);
                 strips.push(p);
             }
         }
         for bus in &mix.buses {
-            let p = peak(bus.meter);
+            let p = peak(&bus.track);
             master = master.max(p);
             strips.push(p);
         }
