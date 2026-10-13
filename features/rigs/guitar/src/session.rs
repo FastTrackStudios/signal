@@ -1082,7 +1082,7 @@ impl GuitarRigBackend {
                         }
                     }
                     match msg.to_event() {
-                        Some(midicore::MidiEvent::ControlChange {
+                        Some(midi::MidiEvent::ControlChange {
                             controller, value, ..
                         }) => {
                             let (cc, val) = (u8::from(controller), u8::from(value));
@@ -1094,8 +1094,8 @@ impl GuitarRigBackend {
                         // and some pedals send exactly that as their *press*
                         // (see `FootswitchEngine::note_switch_is_down`).
                         Some(
-                            midicore::MidiEvent::NoteOn { .. }
-                            | midicore::MidiEvent::NoteOff { .. },
+                            midi::MidiEvent::NoteOn { .. }
+                            | midi::MidiEvent::NoteOff { .. },
                         ) => {
                             let [status, key, velocity] = msg.bytes();
                             let down = match (status & 0xF0, velocity) {

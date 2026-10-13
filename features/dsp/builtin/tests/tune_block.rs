@@ -32,9 +32,9 @@ fn run(t: &mut NativeTune, input: &[f32], block: usize, midi_at: Option<(usize, 
             Some((at, key)) if at >= s && at < s + chunk.len() => vec![PluginMidiEvent {
                 offset: (at - s) as u32,
                 message: daw_proto::MidiEvent::NoteOn {
-                    channel: midicore_proto::Channel::new(0),
-                    key: midicore_proto::KeyNumber::new(key),
-                    velocity: midicore_proto::Velocity::new(100),
+                    channel: midi::proto::Channel::new(0),
+                    key: midi::proto::KeyNumber::new(key),
+                    velocity: midi::proto::Velocity::new(100),
                 },
             }],
             _ => vec![],

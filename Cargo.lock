@@ -2227,7 +2227,7 @@ dependencies = [
  "limiter-plugin",
  "meter-plugin",
  "mic-plugin",
- "midicore-proto",
+ "midi",
  "modulation",
  "modulation-plugin",
  "nice-plug",
@@ -3219,7 +3219,7 @@ dependencies = [
  "facet",
  "facet-styx",
  "hidapi",
- "midicore",
+ "midi",
  "midir",
  "rusb",
  "tokio",
@@ -4265,7 +4265,7 @@ dependencies = [
  "facet",
  "facet-json",
  "futures",
- "midicore",
+ "midi",
  "vox",
  "vox-phon",
  "vox-types",
@@ -5960,9 +5960,7 @@ dependencies = [
  "daw",
  "dioxus",
  "facet",
- "midicore",
- "midicore-proto",
- "midicore-ui",
+ "midi",
  "sampler",
  "signal-plugin-host",
  "signal-rig-host",
@@ -6189,7 +6187,7 @@ dependencies = [
  "daw",
  "dioxus",
  "facet",
- "midicore",
+ "midi",
  "sampler",
  "signal-rigs-proto",
  "signal-space",
@@ -8617,7 +8615,7 @@ dependencies = [
  "libc",
  "lumen-blocks",
  "memmap2",
- "midicore",
+ "midi",
  "modulation",
  "naga",
  "neural-amp-modeler",
@@ -10500,9 +10498,7 @@ dependencies = [
  "fts-chrome",
  "fts-sample",
  "libc",
- "midicore",
- "midicore-proto",
- "midicore-ui",
+ "midi",
  "ratatui",
  "sampler",
  "signal-browser",
@@ -11801,87 +11797,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "midi-consts"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f2dd5c7f8aaf48a76e389068ab25ed80bdbc226b887f9013844c415698c9952"
-
-[[package]]
-name = "midicore"
-version = "0.1.0"
-dependencies = [
- "eyre",
- "midicore-macos",
- "midicore-midir",
- "midicore-pipewire",
- "midicore-proto",
- "midicore-wasm",
- "tracing",
-]
-
-[[package]]
-name = "midicore-macos"
-version = "0.1.0"
-dependencies = [
- "core-foundation 0.10.1",
- "coremidi",
- "midicore-proto",
- "tracing",
-]
-
-[[package]]
-name = "midicore-midir"
-version = "0.1.0"
-dependencies = [
- "crossbeam-channel",
- "eyre",
- "midicore-proto",
- "midir",
- "tracing",
-]
-
-[[package]]
-name = "midicore-pipewire"
-version = "0.1.0"
-dependencies = [
- "eyre",
- "libspa",
- "libspa-sys",
- "midicore-proto",
- "pipewire",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "midicore-proto"
+name = "midi"
 version = "0.1.0"
 dependencies = [
  "architect",
+ "core-foundation 0.10.1",
+ "coremidi",
+ "crossbeam-channel",
+ "dioxus",
+ "eyre",
  "facet",
+ "js-sys",
+ "libspa",
+ "libspa-sys",
+ "midir",
+ "pipewire",
+ "tracing",
+ "tracing-subscriber",
  "vox",
  "vox-types",
-]
-
-[[package]]
-name = "midicore-ui"
-version = "0.1.0"
-dependencies = [
- "dioxus",
- "midicore-proto",
-]
-
-[[package]]
-name = "midicore-wasm"
-version = "0.1.0"
-dependencies = [
- "js-sys",
- "midicore-proto",
- "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
 ]
+
+[[package]]
+name = "midi-consts"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f2dd5c7f8aaf48a76e389068ab25ed80bdbc226b887f9013844c415698c9952"
 
 [[package]]
 name = "midir"
@@ -16977,7 +16921,7 @@ dependencies = [
  "keyflow-orchestra",
  "libc",
  "memmap2",
- "midicore",
+ "midi",
  "neural-amp-modeler",
  "openwurli-dsp",
  "ratatui",
@@ -18216,7 +18160,7 @@ dependencies = [
  "keys",
  "launcher",
  "libc",
- "midicore-proto",
+ "midi",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
@@ -18530,8 +18474,7 @@ dependencies = [
  "eyre",
  "facet",
  "facet-styx",
- "midicore",
- "midicore-proto",
+ "midi",
  "tracing",
 ]
 
@@ -18624,7 +18567,7 @@ dependencies = [
  "audio",
  "daw",
  "keys",
- "midicore",
+ "midi",
  "sampler",
  "signal-browser",
  "signal-plugin-host",
@@ -18692,7 +18635,7 @@ dependencies = [
  "getrandom 0.3.4",
  "guitar",
  "lumen-blocks",
- "midicore",
+ "midi",
  "modulation",
  "nice-plug-dioxus",
  "signal",
@@ -20375,8 +20318,7 @@ dependencies = [
  "facet-styx",
  "flate2",
  "fts-chrome",
- "midicore-proto",
- "midicore-ui",
+ "midi",
  "sampler",
  "signal-plugin-host",
  "signal-proto",

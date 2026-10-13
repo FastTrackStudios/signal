@@ -58,7 +58,7 @@ use keys::proto::{
     KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
     KeysMeter, KeysMixer, KeysModule, KeysNode, KeysPerform, KeysPreset, KeysRealtime, KeysStatus,
 };
-use midicore_proto::MidiEvent;
+use midi::proto::MidiEvent;
 
 use crate::web_keys_rig::Worklet;
 

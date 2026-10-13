@@ -50,7 +50,7 @@ fn main() {
 
     // Inject chords into the ALSA loopback (captured by the omni attach) and
     // watch for them coming back through the monitor + the master meter.
-    let mut out = match midicore::midir::MidiOutput::open(midicore::PortSelector::NameContains(
+    let mut out = match midi::midir::MidiOutput::open(midi::PortSelector::NameContains(
         "Midi Through".into(),
     )) {
         Ok(o) => {

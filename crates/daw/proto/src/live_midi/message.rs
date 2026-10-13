@@ -1,6 +1,6 @@
 //! MIDI message types for real-time I/O.
 //!
-//! The canonical event type is [`midicore::MidiEvent`] — a structured enum over
+//! The canonical event type is [`midi::MidiEvent`] — a structured enum over
 //! constrained newtypes ([`Channel`], [`KeyNumber`], [`Velocity`], …) that makes
 //! illegal MIDI values unrepresentable. It is re-exported here (and, via the
 //! `live_midi` glob, at the `daw_proto` crate root) so existing call sites keep
@@ -11,7 +11,7 @@
 use facet::Facet;
 
 // The canonical MIDI event + the newtypes callers need to build/read it.
-pub use midicore::{
+pub use midi::{
     Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEvent, PitchBend, Pressure,
     ProgramNumber, RawShortMessage, ShortMessage, Velocity,
 };

@@ -17,7 +17,7 @@
 
 use dioxus::prelude::*;
 
-use midicore::midir::MidiStream;
+use midi::midir::MidiStream;
 
 use crate::components::piano::{Piano, WaterfallNote, WaterfallState};
 
@@ -183,7 +183,7 @@ pub fn SamplerView() -> Element {
                 if let Some(ref midi) = midi {
                     for raw in midi.drain() {
                         match raw.to_event() {
-                            Some(midicore::MidiEvent::NoteOn { key, .. }) => {
+                            Some(midi::MidiEvent::NoteOn { key, .. }) => {
                                 let note = key.get();
                                 let mut an = active_notes.write();
                                 if !an.contains(&note) {
@@ -192,7 +192,7 @@ pub fn SamplerView() -> Element {
                                 drop(an);
                                 waterfall.write().spawn(note, Some("#e8813a".to_string()));
                             }
-                            Some(midicore::MidiEvent::NoteOff { key, .. }) => {
+                            Some(midi::MidiEvent::NoteOff { key, .. }) => {
                                 let note = key.get();
                                 active_notes.write().retain(|&n| n != note);
                                 waterfall.write().release(note);

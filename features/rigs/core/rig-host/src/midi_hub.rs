@@ -18,7 +18,7 @@
 //!
 //! # Shape
 //!
-//! The hub sits on [`midicore::MidiInput`], the platform's native input: on
+//! The hub sits on [`midi::MidiInput`], the platform's native input: on
 //! Linux that is the PipeWire backend — **one graph node** (`Signal`) with
 //! **one MIDI port** that every selected device is linked into; on macOS, one
 //! CoreMIDI client whose input port every selected source is connected to. That replaced a midir/JACK arrangement whose cost was
@@ -50,9 +50,9 @@
 
 use std::sync::{Arc, Mutex, RwLock};
 
-use midicore::InputConfig;
-use midicore::MidiInput;
-use midicore_proto::{PortSelector, TimedEvent};
+use midi::InputConfig;
+use midi::MidiInput;
+use midi::proto::{PortSelector, TimedEvent};
 
 /// A registered listener.
 struct Sub {
@@ -115,15 +115,15 @@ impl Drop for Subscription {
 /// only updates a process's view of its devices through the run loop of the
 /// thread that first connected to it; when a worker thread with no run loop
 /// got there first, a pedal switched on after launch never appeared (see
-/// `midicore_macos::init`).
+/// `midi::coremidi::init`).
 pub fn init_platform() {
-    midicore::native::init();
+    midi::native::init();
 }
 
 /// Send `bytes` to the MIDI device(s) whose name contains `device` (a
 /// controller's LED feedback). Returns how many it reached.
 pub fn send_to(device: &str, bytes: &[u8]) -> usize {
-    midicore::native::send_to(device, bytes)
+    midi::native::send_to(device, bytes)
 }
 
 static HUB: std::sync::OnceLock<MidiHub> = std::sync::OnceLock::new();
@@ -177,7 +177,7 @@ impl MidiHub {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .as_ref()
-            .map(midicore::MidiInput::ports)
+            .map(midi::MidiInput::ports)
             .unwrap_or_default()
     }
 
@@ -211,11 +211,11 @@ impl MidiHub {
                 return; // Nothing to listen for yet.
             }
             let started = std::time::Instant::now();
-            let config = InputConfig::new(midicore::DEFAULT_INPUT_NAME).selecting(selectors);
+            let config = InputConfig::new(midi::DEFAULT_INPUT_NAME).selecting(selectors);
             match MidiInput::open_with(config, self.make_sink()) {
                 Ok(new) => {
                     tracing::info!(
-                        midi.node = midicore::DEFAULT_INPUT_NAME,
+                        midi.node = midi::DEFAULT_INPUT_NAME,
                         midi.backend = MidiInput::BACKEND,
                         midi.elapsed_ms = started.elapsed().as_millis(),
                         "midi hub: opened"
@@ -250,7 +250,7 @@ impl MidiHub {
             // controller sends hundreds of events a second.
             if tracing::enabled!(tracing::Level::DEBUG) {
                 match &ev.event {
-                    midicore_proto::MidiEvent::NoteOn {
+                    midi::proto::MidiEvent::NoteOn {
                         channel,
                         key,
                         velocity,
@@ -262,7 +262,7 @@ impl MidiHub {
                         midi.delivered_to = subs.len(),
                         "midi in"
                     ),
-                    midicore_proto::MidiEvent::NoteOff { channel, key, .. } => tracing::debug!(
+                    midi::proto::MidiEvent::NoteOff { channel, key, .. } => tracing::debug!(
                         midi.kind = "note_off",
                         midi.channel = ?channel,
                         midi.note = key.get(),
@@ -280,7 +280,7 @@ impl MidiHub {
 
             // A note nobody wanted is worth one warning regardless of level:
             // it is always a misconfiguration, never normal.
-            if subs.is_empty() && matches!(ev.event, midicore_proto::MidiEvent::NoteOn { .. }) {
+            if subs.is_empty() && matches!(ev.event, midi::proto::MidiEvent::NoteOn { .. }) {
                 tracing::warn!(
                     "note-on reached the hub with NO subscribers — the node is \
                      linked but no rig is listening"
@@ -299,13 +299,13 @@ impl MidiHub {
 /// draining exactly as it did.
 pub struct MidiDrain {
     _sub: Subscription,
-    rx: crossbeam_channel::Receiver<midicore_proto::RawShortMessage>,
+    rx: crossbeam_channel::Receiver<midi::proto::RawShortMessage>,
 }
 
 impl MidiDrain {
     /// Non-blocking drain of all pending events — the same contract as
     /// `MidiStream::drain`.
-    pub fn drain(&self) -> impl Iterator<Item = midicore_proto::RawShortMessage> + '_ {
+    pub fn drain(&self) -> impl Iterator<Item = midi::proto::RawShortMessage> + '_ {
         self.rx.try_iter()
     }
 }
@@ -315,9 +315,9 @@ impl MidiHub {
     /// callback. Bounded: a stalled consumer drops events instead of growing
     /// without limit on the MIDI thread.
     pub fn subscribe_drain(&'static self, rig: &'static str, filter: Option<String>) -> MidiDrain {
-        let (tx, rx) = crossbeam_channel::bounded::<midicore_proto::RawShortMessage>(256);
+        let (tx, rx) = crossbeam_channel::bounded::<midi::proto::RawShortMessage>(256);
         let sub = self.subscribe(rig, filter, move |t| {
-            if let Some(raw) = midicore_proto::RawShortMessage::from_event(&t.event) {
+            if let Some(raw) = midi::proto::RawShortMessage::from_event(&t.event) {
                 let _ = tx.try_send(raw);
             }
         });
@@ -328,7 +328,7 @@ impl MidiHub {
 #[cfg(test)]
 mod tests {
     use super::Sub;
-    use midicore_proto::PortSelector;
+    use midi::proto::PortSelector;
     use std::sync::Arc;
 
     fn sub(filter: Option<&str>) -> Sub {

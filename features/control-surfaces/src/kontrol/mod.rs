@@ -118,6 +118,6 @@ pub const fn note_to_key(note: u8) -> u8 {
 }
 
 /// Map a `midicore` key number to the device Light Guide key index.
-pub fn key_from_midicore(key: midicore::KeyNumber) -> u8 {
+pub fn key_from_midicore(key: midi::KeyNumber) -> u8 {
     note_to_key(key.get())
 }

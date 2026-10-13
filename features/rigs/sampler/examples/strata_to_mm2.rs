@@ -9,7 +9,7 @@
 
 use std::time::{Duration, Instant};
 
-use midicore::{
+use midi::{
     Channel, ControllerNumber, ControllerValue, DrumMap, DrumMapConverter, KeyNumber, MidiEvent,
     Velocity,
 };

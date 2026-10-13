@@ -50,7 +50,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use midicore::MidiMonitor;
+use midi::MidiMonitor;
 
 use audio::io::AudioIoPrefs;
 use daw::service::{FxChainContext, FxChains, ProjectContext, TrackRef, Tracks};
@@ -226,8 +226,8 @@ impl PluginInstance for BankInstrument {
 /// Forward one daw MIDI message into the bank. Channel is honoured via the
 /// bank's `midi_message` routing (so `set_midi_channel` works); plain
 /// note/cc with no channel routing fall through to the bank's default id.
-fn apply_midi(bank: &mut SamplerBank, message: &midicore::MidiEvent) {
-    use midicore::MidiEvent;
+fn apply_midi(bank: &mut SamplerBank, message: &midi::MidiEvent) {
+    use midi::MidiEvent;
     match message {
         MidiEvent::NoteOn {
             channel,
@@ -257,8 +257,8 @@ fn apply_midi(bank: &mut SamplerBank, message: &midicore::MidiEvent) {
 }
 
 /// Build a `MidiEvent::NoteOn` from raw channel/note/velocity bytes.
-fn ev_note_on(ch: u8, note: u8, vel: u8) -> midicore::MidiEvent {
-    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+fn ev_note_on(ch: u8, note: u8, vel: u8) -> midi::MidiEvent {
+    use midi::{Channel, KeyNumber, MidiEvent, Velocity};
     MidiEvent::NoteOn {
         channel: Channel::new(ch),
         key: KeyNumber::new(note),
@@ -267,8 +267,8 @@ fn ev_note_on(ch: u8, note: u8, vel: u8) -> midicore::MidiEvent {
 }
 
 /// Build a `MidiEvent::NoteOff` from raw channel/note/velocity bytes.
-fn ev_note_off(ch: u8, note: u8, vel: u8) -> midicore::MidiEvent {
-    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+fn ev_note_off(ch: u8, note: u8, vel: u8) -> midi::MidiEvent {
+    use midi::{Channel, KeyNumber, MidiEvent, Velocity};
     MidiEvent::NoteOff {
         channel: Channel::new(ch),
         key: KeyNumber::new(note),
@@ -277,8 +277,8 @@ fn ev_note_off(ch: u8, note: u8, vel: u8) -> midicore::MidiEvent {
 }
 
 /// Build a `MidiEvent::ControlChange` from raw channel/controller/value bytes.
-fn ev_cc(ch: u8, controller: u8, value: u8) -> midicore::MidiEvent {
-    use midicore::{Channel, ControllerNumber, ControllerValue, MidiEvent};
+fn ev_cc(ch: u8, controller: u8, value: u8) -> midi::MidiEvent {
+    use midi::{Channel, ControllerNumber, ControllerValue, MidiEvent};
     MidiEvent::ControlChange {
         channel: Channel::new(ch),
         controller: ControllerNumber::new(controller),
@@ -1051,7 +1051,7 @@ impl SamplerRig {
     // its default instrument (per-instrument addressing uses the per-track API).
 
     /// The single MIDI entry point shared by live + offline.
-    fn dispatch(&self, msg: midicore::MidiEvent) {
+    fn dispatch(&self, msg: midi::MidiEvent) {
         if let Some((daw, track)) = self.bank_io() {
             daw.push_live_midi(&track, msg);
         } else {
@@ -1122,7 +1122,7 @@ impl SamplerRig {
     /// Dispatch a raw MIDI message (status + 2 data bytes) — same path as
     /// hardware MIDI. Channel is preserved (full fidelity).
     pub fn midi_message(&self, channel: u8, status: u8, data1: u8, data2: u8) {
-        use midicore::{Channel, MidiEvent, PitchBend, ProgramNumber};
+        use midi::{Channel, MidiEvent, PitchBend, ProgramNumber};
         let msg = match status & 0xF0 {
             0x90 if data2 > 0 => ev_note_on(channel, data1, data2),
             0x90 | 0x80 => ev_note_off(channel, data1, data2),
@@ -1133,7 +1133,7 @@ impl SamplerRig {
             },
             0xE0 => MidiEvent::PitchBend {
                 channel: Channel::new(channel),
-                bend: PitchBend::from_halves(midicore::U7::new(data1), midicore::U7::new(data2)),
+                bend: PitchBend::from_halves(midi::U7::new(data1), midi::U7::new(data2)),
             },
             _ => return,
         };
@@ -1151,17 +1151,17 @@ impl SamplerRig {
     // ── Hardware MIDI input (daw-owned primitive) ─────────────────────────────
 
     /// List available hardware MIDI input port names — for a device picker.
-    /// All device enumeration lives in `midicore::midir`; signal only forwards.
+    /// All device enumeration lives in `midi::midir`; signal only forwards.
     #[must_use]
     pub fn midi_input_ports() -> Vec<String> {
-        midicore::input_ports()
+        midi::input_ports()
     }
 
     /// Open a hardware MIDI keyboard and forward its events into this rig's bank
     /// track (live mode only). `selection` chooses one named device, **all**
     /// devices merged, or a REAPER-style **virtual** port.
     ///
-    /// The returned [`midicore::MidiInput`] owns the open connection(s) —
+    /// The returned [`midi::MidiInput`] owns the open connection(s) —
     /// hold it for as long as you want MIDI, drop it to stop. All MIDI primitive
     /// logic (enumeration, selection, byte parsing) lives in `midicore`; signal
     /// just wires the source to daw's live-MIDI ring with full fidelity
@@ -1170,26 +1170,23 @@ impl SamplerRig {
     /// # Errors
     ///
     /// Returns an error if the rig is not live (no bank track), or if the MIDI port cannot be opened.
-    pub fn attach_midi(
-        &self,
-        selection: midicore::PortSelector,
-    ) -> eyre::Result<midicore::MidiInput> {
+    pub fn attach_midi(&self, selection: midi::PortSelector) -> eyre::Result<midi::MidiInput> {
         let (daw, track) = match (self.inner.daw.as_ref(), self.inner.bank_track.as_ref()) {
             (Some(d), Some(t)) => (d.clone(), t.clone()),
             _ => eyre::bail!("attach_midi requires a live rig with a bank track (not offline)"),
         };
         // Tap for the UI monitor, then forward full-fidelity to the engine —
         // the monitor-tap → live-MIDI-sink wiring is midicore's.
-        let sink = midicore::attach::tap_sink(self.inner.midi_monitor.clone(), move |ev| {
+        let sink = midi::attach::tap_sink(self.inner.midi_monitor.clone(), move |ev| {
             daw.push_live_midi(&track, ev);
         });
-        midicore::MidiInput::open(selection, sink)
+        midi::MidiInput::open(selection, sink)
     }
 
     /// Like [`attach_midi`](Self::attach_midi), but runs every incoming event
     /// through `transform` first, forwarding each produced event to the engine.
     /// This is where a drum-map converter (e.g. Strata Prime → MM2) inserts:
-    /// pass a closure that owns a `midicore::DrumMapConverter` and returns
+    /// pass a closure that owns a `midi::DrumMapConverter` and returns
     /// `conv.convert(ev)`. The monitor taps the *original* (pre-transform)
     /// event so a UI shows what the hardware actually sent.
     ///
@@ -1202,11 +1199,11 @@ impl SamplerRig {
     /// Returns an error if the rig is not live (no bank track), or if the MIDI port cannot be opened.
     pub fn attach_midi_transformed<F>(
         &self,
-        selection: midicore::PortSelector,
+        selection: midi::PortSelector,
         transform: F,
-    ) -> eyre::Result<midicore::MidiInput>
+    ) -> eyre::Result<midi::MidiInput>
     where
-        F: FnMut(midicore::MidiEvent) -> Vec<midicore::MidiEvent> + Send + 'static,
+        F: FnMut(midi::MidiEvent) -> Vec<midi::MidiEvent> + Send + 'static,
     {
         let (daw, track) = match (self.inner.daw.as_ref(), self.inner.bank_track.as_ref()) {
             (Some(d), Some(t)) => (d.clone(), t.clone()),
@@ -1214,14 +1211,14 @@ impl SamplerRig {
                 "attach_midi_transformed requires a live rig with a bank track (not offline)"
             ),
         };
-        let sink = midicore::attach::tap_sink_transformed(
+        let sink = midi::attach::tap_sink_transformed(
             self.inner.midi_monitor.clone(),
             transform,
             move |ev| {
                 daw.push_live_midi(&track, ev);
             },
         );
-        midicore::MidiInput::open(selection, sink)
+        midi::MidiInput::open(selection, sink)
     }
 
     /// The live MIDI monitor — a rolling log + total count of messages reaching
@@ -2137,7 +2134,7 @@ impl SamplerRig {
 
     /// Dispatch one MIDI event through the loaded kit's routing table
     /// (direct engine calls — mic RR selection stays correlated).
-    pub fn kit_dispatch(&self, ev: &midicore::MidiEvent) {
+    pub fn kit_dispatch(&self, ev: &midi::MidiEvent) {
         if let Ok(kit) = self.inner.kit.lock() {
             if let Some(kit) = kit.as_ref() {
                 kit.dispatch(ev);
@@ -2219,19 +2216,19 @@ impl SamplerRig {
     /// Returns an error if the MIDI port cannot be opened.
     pub fn attach_midi_kit<F>(
         &self,
-        selection: midicore::PortSelector,
+        selection: midi::PortSelector,
         transform: F,
-    ) -> eyre::Result<midicore::MidiInput>
+    ) -> eyre::Result<midi::MidiInput>
     where
-        F: FnMut(midicore::MidiEvent) -> Vec<midicore::MidiEvent> + Send + 'static,
+        F: FnMut(midi::MidiEvent) -> Vec<midi::MidiEvent> + Send + 'static,
     {
         let rig = self.clone();
-        let sink = midicore::attach::tap_sink_transformed(
+        let sink = midi::attach::tap_sink_transformed(
             self.inner.midi_monitor.clone(),
             transform,
             move |ev| rig.kit_dispatch(&ev),
         );
-        midicore::MidiInput::open(selection, sink)
+        midi::MidiInput::open(selection, sink)
     }
 
     fn tracks_for(&self, id: &str) -> Vec<String> {

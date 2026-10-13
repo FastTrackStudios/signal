@@ -12,7 +12,7 @@ workspace = true
 [features]
 default = ["vox"]
 pipewire = []
-ui = ["dep:dioxus", "dep:midicore-ui", "dep:signal-ui"]
+ui = ["dep:dioxus", "midi/ui", "dep:signal-ui"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
@@ -22,9 +22,7 @@ daw = { workspace = true }
 dioxus = { workspace = true, optional = true }
 facet = { workspace = true }
 builtin = { workspace = true }
-midicore = { workspace = true, features = ["vox", "midir", "native"] }
-midicore-proto = { workspace = true }
-midicore-ui = { workspace = true, optional = true }
+midi = { workspace = true, features = ["midir", "native", "ui", "vox"] }
 signal-plugin-host = { workspace = true }
 signal-rig-host = { workspace = true }
 signal-rigs-proto = { workspace = true }
@@ -38,4 +36,4 @@ vox = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
+midi = { workspace = true, features = ["midir", "pipewire", "vox"] }

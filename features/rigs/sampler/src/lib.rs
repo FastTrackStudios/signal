@@ -175,6 +175,7 @@ pub mod tail_stage;
 pub mod time_stage;
 pub mod to_node;
 
+pub use ::midi::MidiMonitor;
 pub use audio_soundsource::AudioSoundsource;
 pub use bank::{PreloadProfile, SamplerBank};
 pub use block::{BlockParams, BlockSpec, SamplerBlock};
@@ -190,7 +191,6 @@ pub use engine::{ArticClass, EmittedMarker, LegatoFireEvent, LineId, PlayMode, S
 pub use engine_spec::{BlockRef, EngineLayerSpec, EngineSpec, FxChainSlot, PortSpec, VoiceConfig};
 pub use instrument::SamplerInstrument;
 pub use keys_rig::{KeysInstrument, KeysRig};
-pub use midicore::MidiMonitor;
 pub use mixer::{
     Bus, BusStrip, ChannelStrip, DirectChannel, DrumMixer, EngineStrip, FxBackend, FxSlotStrip,
     FxTarget, MixerLayout, MixerMeters, Send as MixerSend, SendStrip,
@@ -230,11 +230,11 @@ pub use soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 // Hardware MIDI input primitives live in `midicore` (the `midir` OS backend);
 // re-export the selector + handle + event types so rig consumers (e.g. the
 // strings TUI) don't need a direct midicore dependency.
-pub use midicore;
-pub use midicore::MidiEvent;
+pub use ::midi as midicore;
+pub use ::midi::MidiEvent;
 #[cfg(not(target_arch = "wasm32"))]
-pub use midicore::MidiInput as MidiInputHandle;
-pub use midicore::PortSelector as MidiSelection;
+pub use ::midi::MidiInput as MidiInputHandle;
+pub use ::midi::PortSelector as MidiSelection;
 pub use spec::LibrarySpec;
 pub use stats::AudioStatsSnapshot;
 

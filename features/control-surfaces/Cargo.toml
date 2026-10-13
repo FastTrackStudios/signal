@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 default = ["midi-hardware"]
-kontrol = ["dep:hidapi", "dep:midicore", "dep:rusb"]
+kontrol = ["dep:hidapi", "dep:midi", "dep:rusb"]
 midi-hardware = ["dep:midir"]
 
 [dependencies]
@@ -21,7 +21,7 @@ eyre = { workspace = true }
 facet = { workspace = true }
 facet-styx = { workspace = true }
 hidapi = { workspace = true, optional = true }
-midicore = { workspace = true, features = ["midir"], optional = true }
+midi = { workspace = true, features = ["midir"], optional = true }
 midir = { workspace = true, optional = true }
 rusb = { workspace = true, optional = true }
 tokio = { workspace = true }

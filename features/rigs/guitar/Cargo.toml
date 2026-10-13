@@ -36,7 +36,7 @@ kurbo = { workspace = true, optional = true }
 libc = { workspace = true }
 lumen-blocks = { workspace = true, optional = true }
 memmap2 = { workspace = true }
-midicore = { workspace = true, features = ["vox", "midir"] }
+midi = { workspace = true, features = ["midir", "vox"] }
 modulation = { workspace = true, features = ["ui", "viz"], optional = true }
 reverb = { workspace = true, features = ["ui", "viz"] }
 serde_json = { workspace = true, optional = true }
@@ -108,7 +108,7 @@ web-sys = { workspace = true, features = ["Window", "Document", "Element", "Html
 wasm-bindgen-test = { version = "0.3" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
+midi = { workspace = true, features = ["midir", "pipewire", "vox"] }
 
 [[bin]]
 name = "signal-phones"

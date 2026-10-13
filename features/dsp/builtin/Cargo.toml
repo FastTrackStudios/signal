@@ -52,7 +52,7 @@ unison-plugin = { workspace = true, optional = true }
 builtin = { path = ".", features = ["engine"] }
 daw = { workspace = true, features = ["standalone"] }
 daw-standalone = { workspace = true, features = ["rpp-project", "decode"] }
-midicore-proto = { workspace = true }
+midi = { workspace = true }
 
 [[test]]
 name = "engine"

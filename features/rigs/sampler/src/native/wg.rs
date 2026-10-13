@@ -574,8 +574,8 @@ impl NativeWaveguide {
         }
     }
 
-    fn apply_midi(&mut self, message: &midicore::MidiEvent) {
-        use midicore::MidiEvent;
+    fn apply_midi(&mut self, message: &midi::MidiEvent) {
+        use midi::MidiEvent;
         match message {
             MidiEvent::NoteOn { key, velocity, .. } => self.note_on(key.get(), velocity.get()),
             MidiEvent::NoteOff { key, .. } => self.note_off(key.get()),
@@ -687,7 +687,7 @@ mod tests {
     use signal_plugin_host::PluginMidiEvent;
 
     fn note_on(note: u8, vel: u8) -> PluginMidiEvent {
-        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+        use midi::{Channel, KeyNumber, MidiEvent, Velocity};
         PluginMidiEvent {
             offset: 0,
             message: MidiEvent::NoteOn {
@@ -751,13 +751,13 @@ mod tests {
         };
         m.process_block(&inl, &inr, &mut outl, &mut outr, &ev)
             .unwrap();
-        use midicore::{Channel, KeyNumber, MidiEvent};
+        use midi::{Channel, KeyNumber, MidiEvent};
         let off = [PluginMidiEvent {
             offset: 0,
             message: MidiEvent::NoteOff {
                 channel: Channel::new(0),
                 key: KeyNumber::new(60),
-                velocity: midicore::Velocity::new(0),
+                velocity: midi::Velocity::new(0),
             },
         }];
         let ev_off = PluginEvents {

@@ -43,8 +43,8 @@ fn tree_uses_sample(tree: &Container, spec_path: &str) -> bool {
 }
 
 /// Build a channel-0 `MidiEvent::NoteOn` from raw note/velocity.
-fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {
-    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+fn ev_note_on(note: u8, vel: u8) -> midi::MidiEvent {
+    use midi::{Channel, KeyNumber, MidiEvent, Velocity};
     MidiEvent::NoteOn {
         channel: Channel::new(0),
         key: KeyNumber::new(note),
@@ -53,8 +53,8 @@ fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {
 }
 
 /// Build a channel-0 `MidiEvent::NoteOff` from a raw note.
-fn ev_note_off(note: u8) -> midicore::MidiEvent {
-    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+fn ev_note_off(note: u8) -> midi::MidiEvent {
+    use midi::{Channel, KeyNumber, MidiEvent, Velocity};
     MidiEvent::NoteOff {
         channel: Channel::new(0),
         key: KeyNumber::new(note),
@@ -63,8 +63,8 @@ fn ev_note_off(note: u8) -> midicore::MidiEvent {
 }
 
 /// Build a channel-0 `MidiEvent::ControlChange` from raw controller/value.
-fn ev_cc(controller: u8, value: u8) -> midicore::MidiEvent {
-    use midicore::{Channel, ControllerNumber, ControllerValue, MidiEvent};
+fn ev_cc(controller: u8, value: u8) -> midi::MidiEvent {
+    use midi::{Channel, ControllerNumber, ControllerValue, MidiEvent};
     MidiEvent::ControlChange {
         channel: Channel::new(0),
         controller: ControllerNumber::new(controller),
@@ -1764,7 +1764,7 @@ impl KeysRig {
         }
     }
 
-    fn dispatch(&self, msg: midicore::MidiEvent) {
+    fn dispatch(&self, msg: midi::MidiEvent) {
         for track in self.midi_targets() {
             self.daw.push_live_midi(&track, msg.clone());
         }
@@ -2019,7 +2019,7 @@ impl KeysRig {
     /// voices bend per their `bend_range`, sampled voices per the engine's,
     /// percussion ignores it.
     pub fn pitch_bend(&self, raw: u16) {
-        use midicore::{Channel, MidiEvent, PitchBend};
+        use midi::{Channel, MidiEvent, PitchBend};
         self.dispatch(MidiEvent::PitchBend {
             channel: Channel::new(0),
             bend: PitchBend::new(raw.min(16_383)),
@@ -2038,7 +2038,7 @@ impl KeysRig {
     #[cfg(not(target_arch = "wasm32"))]
     #[must_use]
     pub fn midi_input_ports() -> Vec<String> {
-        midicore::input_ports()
+        midi::input_ports()
     }
 
     /// The rig's live-MIDI sink (monitor tap + per-target dispatch), detached
@@ -2047,10 +2047,10 @@ impl KeysRig {
     /// opening hardware ports takes seconds and can stall outright while the
     /// `PipeWire` graph reconfigures, and that stall must not pin a rig mutex.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn midi_sink(&self) -> impl Fn(midicore::TimedEvent) + Send + Clone + 'static + use<> {
+    pub fn midi_sink(&self) -> impl Fn(midi::TimedEvent) + Send + Clone + 'static + use<> {
         let daw = self.daw.clone();
         let targets = self.midi_targets();
-        midicore::attach::tap_sink(self.midi_monitor.clone(), move |ev| {
+        midi::attach::tap_sink(self.midi_monitor.clone(), move |ev| {
             for track in &targets {
                 daw.push_live_midi(track, ev.clone());
             }
@@ -2058,17 +2058,14 @@ impl KeysRig {
     }
 
     /// Open a hardware MIDI keyboard and forward its events into the rig
-    /// (monitor tap + live-MIDI sink wired by `midicore::attach`).
+    /// (monitor tap + live-MIDI sink wired by `midi::attach`).
     ///
     /// # Errors
     ///
     /// Returns an error if opening the MIDI port fails.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn attach_midi(
-        &self,
-        selection: midicore::PortSelector,
-    ) -> eyre::Result<midicore::MidiInput> {
-        midicore::MidiInput::open(selection, self.midi_sink())
+    pub fn attach_midi(&self, selection: midi::PortSelector) -> eyre::Result<midi::MidiInput> {
+        midi::MidiInput::open(selection, self.midi_sink())
     }
 
     pub fn midi_monitor(&self) -> MidiMonitor {

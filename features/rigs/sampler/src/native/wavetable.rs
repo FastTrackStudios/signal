@@ -709,8 +709,8 @@ impl NativeWavetable {
         }
     }
 
-    fn apply_midi(&mut self, message: &midicore::MidiEvent) {
-        use midicore::MidiEvent;
+    fn apply_midi(&mut self, message: &midi::MidiEvent) {
+        use midi::MidiEvent;
         match message {
             MidiEvent::NoteOn { key, velocity, .. } => self.note_on(key.get(), velocity.get()),
             MidiEvent::NoteOff { key, .. } => self.note_off(key.get()),
@@ -1080,8 +1080,8 @@ mod tests {
     }
     use signal_plugin_host::PluginMidiEvent;
 
-    fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {
-        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+    fn ev_note_on(note: u8, vel: u8) -> midi::MidiEvent {
+        use midi::{Channel, KeyNumber, MidiEvent, Velocity};
         MidiEvent::NoteOn {
             channel: Channel::new(0),
             key: KeyNumber::new(note),

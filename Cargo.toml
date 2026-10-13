@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/midi",
     "features/expression-editor",
     "features/session",
     "features/rigs/synth",
@@ -79,13 +80,6 @@ members = [
     "crates/daw/proto",
     "crates/keyflow/keyflow-proto",
     "crates/keyflow/keyflow-syntax",
-    "features/midi/midicore",
-    "features/midi/midicore-macos",
-    "features/midi/midicore-midir",
-    "features/midi/midicore-pipewire",
-    "features/midi/midicore-proto",
-    "features/midi/midicore-ui",
-    "features/midi/midicore-wasm",
     "features/dsp/align/align-dsp",
     "features/ui/audio-controls",
     "crates/daw/allocator",
@@ -254,6 +248,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+midi = { path = "features/midi" }
 plugin-core = { path = "features/ui/plugin-core" }
 expression-editor = { path = "features/expression-editor" }
 session = { path = "features/session" }
@@ -328,10 +323,6 @@ meter-ui = { path = "features/ui/meter-ui" }
 # (nor the `midir` feature — midicore-midir pins midir 0.10/alsa-sys 0.3,
 # colliding with daw's midir 0.11/alsa-sys 0.4 via `links = "alsa"`).
 # Consumers that want the vox surface set `features = ["vox"]` themselves.
-midicore = { path = "features/midi/midicore", default-features = false }
-midicore-proto = { path = "features/midi/midicore-proto" }
-midicore-midir = { path = "features/midi/midicore-midir" }
-midicore-ui = { path = "features/midi/midicore-ui" }
 # NI Komplete Kontrol keyboard driver (Light Guide / per-key RGB LEDs).
 arborium ={ version = "2.16.0", default-features = false }
 arborium-theme = "2.16.0"
@@ -986,9 +977,6 @@ vox-codegen = "0.10.0-rc.5"
 # architect-ui. Nothing resolves a crate named `fts-ui` any more.
 
 # ── from daw's workspace (joined into studio) ──
-midicore-macos = { path = "features/midi/midicore-macos" }
-midicore-pipewire = { path = "features/midi/midicore-pipewire" }
-midicore-wasm = { path = "features/midi/midicore-wasm" }
 
 # ── from processor's workspace (joined into studio) ──
 tone3000 = "0.1"

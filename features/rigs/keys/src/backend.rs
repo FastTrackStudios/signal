@@ -20,7 +20,7 @@ use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use audio::io::AudioIoPrefs;
-use midicore::MidiEvent;
+use midi::MidiEvent;
 
 use crate::profile::{KeysProfile, worship_profile};
 use sampler::Container;
@@ -3792,11 +3792,11 @@ impl KeysRigBackend {
         // The mod wheel also sweeps the pads' cutoff: note the value for the
         // worker and move on — the MIDI thread never waits on the rig state.
         let weak = Arc::downgrade(&self.inner);
-        let sink = move |ev: midicore::TimedEvent| {
+        let sink = move |ev: midi::TimedEvent| {
             // A learned pedal is a switch's, not a note to play: learn it,
             // or fire its switch off this thread, and drop it either way.
             if let (Some(raw), Some(inner)) = (
-                midicore::RawShortMessage::from_event(&ev.event),
+                midi::RawShortMessage::from_event(&ev.event),
                 weak.upgrade(),
             ) {
                 let [status, d1, d2] = raw.bytes();
@@ -3828,7 +3828,7 @@ impl KeysRigBackend {
                     }
                 }
             }
-            if let midicore::MidiEvent::ControlChange {
+            if let midi::MidiEvent::ControlChange {
                 controller, value, ..
             } = &ev.event
             {
@@ -5438,7 +5438,7 @@ fn lane_refs_for(
 }
 
 const fn note_ev(note: u8, velocity: u8) -> MidiEvent {
-    use midicore::{Channel, KeyNumber, Velocity};
+    use midi::{Channel, KeyNumber, Velocity};
     MidiEvent::NoteOn {
         channel: Channel::new(0),
         key: KeyNumber::new(note),

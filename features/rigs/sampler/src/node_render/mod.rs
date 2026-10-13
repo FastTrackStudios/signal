@@ -1481,14 +1481,14 @@ impl RenderNode {
                     && events
                         .midi
                         .iter()
-                        .any(|e| matches!(e.message, midicore::MidiEvent::NoteOn { .. }))
+                        .any(|e| matches!(e.message, midi::MidiEvent::NoteOn { .. }))
                 {
                     let mut kept = event_scratch();
                     kept.extend(
                         events
                             .midi
                             .iter()
-                            .filter(|e| !matches!(e.message, midicore::MidiEvent::NoteOn { .. }))
+                            .filter(|e| !matches!(e.message, midi::MidiEvent::NoteOn { .. }))
                             .cloned(),
                     );
                     Some(kept)
@@ -1614,7 +1614,7 @@ impl RenderNode {
 /// the rest by the crossfade gain (velocity × gain), and pass everything else
 /// (`NoteOff` / CC / …) through unchanged so releases always land.
 fn filter_events_by_zone(zone: Zone, events: &PluginEvents<'_>, out: &mut Vec<PluginMidiEvent>) {
-    use midicore::{MidiEvent, Velocity};
+    use midi::{MidiEvent, Velocity};
     out.clear();
     for ev in events.midi {
         match &ev.message {
@@ -1657,7 +1657,7 @@ mod tests {
     use signal_proto::block::BlockType;
 
     fn note_off(note: u8) -> PluginMidiEvent {
-        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+        use midi::{Channel, KeyNumber, MidiEvent, Velocity};
         PluginMidiEvent {
             offset: 0,
             message: MidiEvent::NoteOff {
@@ -1669,7 +1669,7 @@ mod tests {
     }
 
     fn note_on(note: u8, vel: u8) -> PluginMidiEvent {
-        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+        use midi::{Channel, KeyNumber, MidiEvent, Velocity};
         PluginMidiEvent {
             offset: 0,
             message: MidiEvent::NoteOn {
@@ -2338,10 +2338,10 @@ zones (
         // Wheel to max → cutoff floor → dark.
         let cc = [PluginMidiEvent {
             offset: 0,
-            message: midicore::MidiEvent::ControlChange {
-                channel: midicore::Channel::new(0),
-                controller: midicore::ControllerNumber::new(1),
-                value: midicore::ControllerValue::new(127),
+            message: midi::MidiEvent::ControlChange {
+                channel: midi::Channel::new(0),
+                controller: midi::ControllerNumber::new(1),
+                value: midi::ControllerValue::new(127),
             },
         }];
         let ev = PluginEvents {

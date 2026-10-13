@@ -324,7 +324,7 @@ pub mod synth {
         /// The loaded composition tree changed (its layer/block structure).
         Tree(SynthNode),
         /// Recent MIDI activity (oldest first), for the monitor.
-        Midi(Vec<midicore_proto::MidiEvent>),
+        Midi(Vec<midi::proto::MidiEvent>),
     }
 
     #[architect::rpc]
@@ -355,7 +355,7 @@ pub mod synth {
         /// Set the master output gain in milli-units (1000 = unity, 250 = −12 dB).
         fn set_volume(&self, gain_milli: u32);
         /// Recent MIDI events seen by the core (oldest first), for the monitor.
-        fn midi_recent(&self) -> Vec<midicore_proto::MidiEvent>;
+        fn midi_recent(&self) -> Vec<midi::proto::MidiEvent>;
 
         /// The soundsource names referenced by the loaded preset's layers that
         /// resolve against the local library — the Mapping editor's subjects.

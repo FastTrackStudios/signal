@@ -1,5 +1,5 @@
 //! Thin MIDI **output** helpers for the S88 MK3, over midicore's MIDI output
-//! primitive ([`midicore::midir::MidiOutput`]) — used only by the falsification
+//! primitive ([`midi::midir::MidiOutput`]) — used only by the falsification
 //! probe (proving note-ons on Main/DAW do NOT light the guide) and as the seam
 //! for future NIHIA DAW-port integration.
 //!
@@ -8,7 +8,7 @@
 //! now lives in `midicore`, so this crate no longer re-rolls it.
 
 use eyre::Result;
-use midicore::{PortSelector, midir::MidiOutput};
+use midi::{PortSelector, midir::MidiOutput};
 
 use crate::kontrol::LightColor;
 
@@ -47,7 +47,7 @@ impl Encoding {
     }
 }
 
-/// A single open MIDI output port (backed by [`midicore::midir::MidiOutput`]).
+/// A single open MIDI output port (backed by [`midi::midir::MidiOutput`]).
 pub struct MidiOut {
     out: MidiOutput,
     /// The port name actually opened (for logs / the probe).
@@ -71,5 +71,5 @@ impl MidiOut {
 
 /// List the names of all available MIDI **output** ports.
 pub fn output_ports() -> Vec<String> {
-    midicore::midir::output_ports()
+    midi::midir::output_ports()
 }

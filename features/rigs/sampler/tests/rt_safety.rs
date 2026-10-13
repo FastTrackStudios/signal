@@ -305,7 +305,7 @@ fn walking_the_render_tree_does_not_allocate() {
 }
 
 fn note_on(note: u8, vel: u8) -> signal_plugin_host::PluginMidiEvent {
-    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+    use midi::{Channel, KeyNumber, MidiEvent, Velocity};
     signal_plugin_host::PluginMidiEvent {
         offset: 0,
         message: MidiEvent::NoteOn {
