@@ -18,7 +18,7 @@ keyflow-orchestra.workspace = true
 # Click/count-in engine for the timing-verification harness: the click is
 # rendered from THE SAME tempo map as the document render, so grid alignment
 # is audible (examples) and testable (tests). Light dep (no tts feature).
-session-guide.workspace = true
+session = { workspace = true }
 
 [dev-dependencies]
 sampler = { workspace = true, features = ["pipewire"] }

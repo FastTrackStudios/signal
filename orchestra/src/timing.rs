@@ -66,7 +66,7 @@ pub fn bpm_at_sec(tempo: &[TempoPoint], sec: f64) -> f64 {
 // ── Click render (session-guide, same tempo map) ─────────────────────────────
 
 /// Synthesized click: a short sine burst with exponential decay.
-fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> session_guide::AudioSample {
+fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> session::guide::engine::AudioSample {
     let n = (dur_sec * f64::from(sr)).round() as usize;
     let samples: Vec<f32> = (0..n)
         .map(|i| {
@@ -77,7 +77,7 @@ fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> session_guide::Au
             (2.0 * std::f64::consts::PI * freq * t).cos() as f32 * amp * env
         })
         .collect();
-    session_guide::AudioSample::mono(samples, sr)
+    session::guide::engine::AudioSample::mono(samples, sr)
 }
 
 /// Optional count-in: `beats` count cues starting at `start_qn` (one per
@@ -102,10 +102,10 @@ pub fn render_click(
     sr: u32,
     count_in: Option<CountIn>,
 ) -> Vec<f32> {
-    let mut engine = session_guide::GuideEngine::new(session_guide::GuideConfig {
+    let mut engine = session::guide::engine::GuideEngine::new(session::guide::engine::GuideConfig {
         // Every beat with the downbeat accented, no subdivisions.
         // (subdivisions default to off.)
-        click: session_guide::ClickSubdivisions {
+        click: session::guide::engine::ClickSubdivisions {
             beat: true,
             measure_accent: true,
             ..Default::default()
@@ -117,12 +117,12 @@ pub fn render_click(
     engine.bank_mut().beat = Some(click_sample(1000.0, 0.045, 0.7, sr));
     engine.bank_mut().measure_accent = Some(click_sample(1600.0, 0.055, 0.85, sr));
     if let Some(ci) = count_in {
-        let mut schedule = session_guide::CueSchedule::default();
+        let mut schedule = session::guide::engine::CueSchedule::default();
         for i in 0..ci.beats.min(8) {
             engine.bank_mut().counts[i as usize] = Some(click_sample(760.0, 0.09, 0.8, sr));
-            schedule.cues.push(session_guide::ScheduledCue {
+            schedule.cues.push(session::guide::engine::ScheduledCue {
                 time_seconds: qn_to_sec(tempo, ci.start_qn + f64::from(i)),
-                event: session_guide::CueEvent::Count { index: i as usize },
+                event: session::guide::engine::CueEvent::Count { index: i as usize },
             });
         }
         engine.set_schedule(schedule);
@@ -143,7 +143,7 @@ pub fn render_click(
             b[..n].fill(0.0);
         }
         let pos_seconds = start as f64 / f64::from(sr);
-        let clock = session_guide::BlockClock {
+        let clock = session::guide::engine::BlockClock {
             playing: true,
             pos_seconds,
             pos_beats: sec_to_qn(tempo, pos_seconds),
@@ -152,7 +152,7 @@ pub fn render_click(
             time_sig_den: 4,
             sample_rate: f64::from(sr),
         };
-        let mut buses = session_guide::GuideBuses {
+        let mut buses = session::guide::engine::GuideBuses {
             click_l: &mut cl[..n],
             click_r: &mut cr[..n],
             count_l: &mut nl[..n],
