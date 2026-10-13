@@ -187,7 +187,8 @@ impl Engine {
     }
 }
 
-/// A rig in an [`Engine`]: a folder track and the tracks under it.
+/// A rig in an [`Engine`]: a folder track and the tracks under it, folders
+/// within folders as deep as the rig needs.
 ///
 /// Its tracks are inserted inside its folder, wherever other rigs have put
 /// theirs since — so a track's position (and its meter cell) can move;
@@ -196,7 +197,9 @@ impl Engine {
 pub struct Rig {
     engine: Arc<Engine>,
     folder: String,
-    tracks: Mutex<Vec<String>>,
+    /// The rig's tracks below its folder, in project order, each with its
+    /// parent (the rig's folder or another of its tracks).
+    tracks: Mutex<Vec<(String, String)>>,
 }
 
 impl Rig {
@@ -225,10 +228,14 @@ impl Rig {
         &self.folder
     }
 
-    /// The rig's tracks, in order.
+    /// The rig's tracks below its folder, in project order.
     #[must_use]
     pub fn tracks(&self) -> Vec<String> {
-        self.tracks.lock_ok().clone()
+        self.tracks
+            .lock_ok()
+            .iter()
+            .map(|(g, _)| g.clone())
+            .collect()
     }
 
     /// Add a track at the end of the rig's folder; returns its guid.
@@ -237,34 +244,75 @@ impl Rig {
     ///
     /// Returns an error if the track cannot be added or placed.
     pub fn add_track(&self, name: &str) -> eyre::Result<String> {
+        let folder = self.folder.clone();
+        self.add_track_in(&folder, name)
+    }
+
+    /// Add a track at the end of `parent` — the rig's folder or one of its
+    /// tracks, which becomes a folder; returns its guid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `parent` is not the rig's, or the track cannot be
+    /// added or placed.
+    pub fn add_track_in(&self, parent: &str, name: &str) -> eyre::Result<String> {
         let mut tracks = self.tracks.lock_ok();
-        let after = tracks.last().unwrap_or(&self.folder);
+        if parent != self.folder && !tracks.iter().any(|(g, _)| g == parent) {
+            return Err(eyre::eyre!("rig: {parent} is not one of this rig's tracks"));
+        }
+        // After the parent's last descendant (or the parent itself).
+        let mut pos = tracks
+            .iter()
+            .position(|(g, _)| g == parent)
+            .map_or(0, |p| p + 1);
+        while pos < tracks.len() && is_below(&tracks, &tracks[pos].0, parent, &self.folder) {
+            pos += 1;
+        }
+        let after = if pos == 0 {
+            self.folder.clone()
+        } else {
+            tracks[pos - 1].0.clone()
+        };
         let at = self
             .engine
-            .index_of(after)
+            .index_of(&after)
             .ok_or_else(|| eyre::eyre!("rig: track {after} is gone"))?
             .saturating_add(1);
-        let daw = &self.engine.daw;
-        let ctx = self.engine.context();
-        let guid = daw
-            .add(ctx.clone(), name, Some(at))
+        let guid = self
+            .engine
+            .daw
+            .add(self.engine.context(), name, Some(at))
             .map_err(|e| eyre::eyre!("rig: add track '{name}' failed: {e}"))?;
-        // Folder depths, REAPER's way: the folder opens (+1), the last child
-        // closes it (-1); the child that was last no longer closes anything.
-        let depth = |guid: &str, d: i32| {
-            daw.set_folder_depth(ctx.clone(), TrackRef::Guid(guid.to_string()), d)
-                .map_err(|e| eyre::eyre!("rig: folder depth failed: {e}"))
-        };
-        match tracks.last() {
-            Some(previous) => depth(previous, 0)?,
-            None => depth(&self.folder, 1)?,
-        }
-        depth(&guid, -1)?;
+        tracks.insert(pos, (guid.clone(), parent.to_string()));
+        self.set_depths(&tracks)?;
         // Held until here on purpose: two adds to one rig must not interleave
         // their folder depths.
-        tracks.push(guid.clone());
         drop(tracks);
         Ok(guid)
+    }
+
+    /// REAPER's folder depths over the rig: a track's depth change is the
+    /// next track's nesting level minus its own (a folder opens with +1, the
+    /// last track of a folder closes as many levels as end there), and the
+    /// rig's last track closes back to the rig folder's level.
+    fn set_depths(&self, tracks: &[(String, String)]) -> eyre::Result<()> {
+        let mut levels: Vec<(String, i32)> = vec![(self.folder.clone(), 0)];
+        for (guid, parent) in tracks {
+            let parent_level = levels
+                .iter()
+                .find(|(g, _)| g == parent)
+                .map_or(0, |(_, l)| *l);
+            levels.push((guid.clone(), parent_level + 1));
+        }
+        let ctx = self.engine.context();
+        for (k, (guid, level)) in levels.iter().enumerate() {
+            let next = levels.get(k + 1).map_or(0, |(_, l)| *l);
+            self.engine
+                .daw
+                .set_folder_depth(ctx.clone(), TrackRef::Guid(guid.clone()), next - level)
+                .map_err(|e| eyre::eyre!("rig: folder depth failed: {e}"))?;
+        }
+        Ok(())
     }
 
     /// Reserve one FX slot on `track`; returns the slot's guid — constant for
@@ -317,13 +365,30 @@ impl Rig {
     /// Returns an error if a track cannot be removed.
     pub fn remove(self) -> eyre::Result<()> {
         let ctx = self.engine.context();
-        let tracks = self.tracks.lock_ok().clone();
-        for guid in tracks.iter().chain(std::iter::once(&self.folder)) {
+        let tracks = self.tracks();
+        for guid in tracks.iter().rev().chain(std::iter::once(&self.folder)) {
             self.engine
                 .daw
                 .remove(ctx.clone(), TrackRef::Guid(guid.clone()))
                 .map_err(|e| eyre::eyre!("rig: remove track failed: {e}"))?;
         }
         Ok(())
+    }
+}
+
+/// Whether `guid` sits (at any depth) below `ancestor` in the rig's tree.
+fn is_below(tracks: &[(String, String)], guid: &str, ancestor: &str, root: &str) -> bool {
+    let mut at = guid;
+    loop {
+        let Some((_, parent)) = tracks.iter().find(|(g, _)| g == at) else {
+            return false;
+        };
+        if parent == ancestor {
+            return true;
+        }
+        if parent == root {
+            return false;
+        }
+        at = parent;
     }
 }
