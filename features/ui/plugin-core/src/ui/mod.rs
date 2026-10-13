@@ -13,14 +13,14 @@
 pub mod components;
 
 /// Theme re-exported from `audiocore-gui`.
-pub use audiocore_gui::theme;
+pub use crate::canvas::theme;
 
 /// UI prelude — import this for all FTS plugin UI building blocks.
 ///
-/// Includes everything from `audiocore_gui::prelude` (Knob, ParamSlider,
+/// Includes everything from `crate::canvas::prelude` (Knob, ParamSlider,
 /// LevelMeter, TransferCurve, etc.) plus legacy components (Toggle,
 /// Section, etc.) that haven't been moved yet.
 pub mod prelude {
     pub use super::components::*;
-    pub use audiocore_gui::prelude::*;
+    pub use crate::canvas::prelude::*;
 }

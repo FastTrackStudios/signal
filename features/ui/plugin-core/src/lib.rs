@@ -11,6 +11,14 @@
 //! use crate::ui::prelude::*;  // FTS UI components (Toggle, Section, etc.)
 //! ```
 
+#[cfg(feature = "gui")]
+pub mod canvas;
+#[cfg(feature = "editor")]
+pub mod editor;
+#[cfg(feature = "meters")]
+pub mod meters;
+
+
 // Re-export core dependencies
 pub use nice_plug;
 #[allow(
@@ -36,9 +44,6 @@ pub use nice_plug_dioxus::prelude::*;
 pub mod ui;
 
 /// Re-export audiocore-gui crate for shared audio UI components.
-#[cfg(feature = "gui")]
-pub use audiocore_gui;
-
 /// Prelude for convenient imports.
 pub mod prelude {
     #[allow(

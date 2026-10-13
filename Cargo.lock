@@ -1478,15 +1478,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "audiocore-gui"
-version = "0.1.0"
-dependencies = [
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
-]
-
-[[package]]
 name = "auth-client"
 version = "0.1.0"
 source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
@@ -3006,7 +2997,6 @@ dependencies = [
  "dsp-core",
  "eq",
  "fts-audio-ui",
- "fts-plug-ui",
  "naga",
  "nice-plug",
  "nice-plug-dioxus",
@@ -4558,12 +4548,12 @@ dependencies = [
  "dioxus-test",
  "dsp-core",
  "fts-audio-ui",
- "fts-plug-ui",
  "naga",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
  "pitch",
+ "plugin-core",
  "png 0.18.1",
  "tokio",
  "vello 0.9.0",
@@ -6261,7 +6251,6 @@ dependencies = [
  "dsp-core",
  "eq",
  "fts-audio-ui",
- "fts-plug-ui",
  "futures-timer",
  "kurbo 0.13.1",
  "naga",
@@ -7461,19 +7450,6 @@ dependencies = [
  "vox-core",
  "vox-websocket",
  "web-sys",
-]
-
-[[package]]
-name = "fts-plug-ui"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "atomic_float",
- "dioxus",
- "fts-audio-ui",
- "nice-plug",
- "nice-plug-dioxus",
- "plugin-core",
 ]
 
 [[package]]
@@ -11466,20 +11442,10 @@ version = "0.1.0"
 dependencies = [
  "dioxus",
  "dsp-core",
- "meter-ui",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
-]
-
-[[package]]
-name = "meter-ui"
-version = "0.1.0"
-dependencies = [
- "dsp-core",
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
+ "plugin-core",
 ]
 
 [[package]]
@@ -11490,11 +11456,11 @@ dependencies = [
  "dioxus-test",
  "dsp-core",
  "fts-audio-ui",
- "fts-plug-ui",
  "hound",
  "mic",
  "nice-plug",
  "nice-plug-dioxus",
+ "plugin-core",
  "realfft",
  "tokio",
 ]
@@ -11682,12 +11648,12 @@ dependencies = [
  "dioxus-test",
  "dsp-core",
  "fts-audio-ui",
- "fts-plug-ui",
  "modulation",
  "naga",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
+ "plugin-core",
  "png 0.18.1",
  "tokio",
  "vello 0.9.0",
@@ -14402,9 +14368,14 @@ dependencies = [
 name = "plugin-core"
 version = "0.1.0"
 dependencies = [
- "audiocore-gui",
+ "architect-ui",
+ "atomic_float",
+ "dioxus",
+ "dsp-core",
+ "fts-audio-ui",
  "nice-plug",
  "nice-plug-dioxus",
+ "parking_lot",
 ]
 
 [[package]]
@@ -15980,12 +15951,12 @@ dependencies = [
  "dsp-core",
  "eq",
  "fts-audio-ui",
- "fts-plug-ui",
  "naga",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
  "pitch",
+ "plugin-core",
  "png 0.18.1",
  "preset-browser",
  "realfft",
@@ -16482,7 +16453,6 @@ dependencies = [
  "dsp-core",
  "eq",
  "fts-audio-ui",
- "fts-plug-ui",
  "fx-stack",
  "kurbo 0.13.1",
  "libm",
@@ -16491,6 +16461,7 @@ dependencies = [
  "nice-plug-dioxus",
  "parking_lot",
  "peniko 0.6.1",
+ "plugin-core",
  "png 0.17.16",
  "saturate",
  "tokio",
@@ -18074,7 +18045,6 @@ dependencies = [
  "architect",
  "architect-ui",
  "audio-controls",
- "audiocore-gui",
  "dioxus",
  "dock",
  "dsp-core",
@@ -18084,6 +18054,7 @@ dependencies = [
  "midi",
  "modulation",
  "nice-plug-dioxus",
+ "plugin-core",
  "signal",
  "signal-browser",
  "signal-controller",
@@ -18121,10 +18092,10 @@ name = "signal-widgets"
 version = "0.1.0"
 dependencies = [
  "architect",
- "audiocore-gui",
  "dioxus",
  "dioxus-test",
  "nice-plug-dioxus",
+ "plugin-core",
  "signal-proto",
  "tokio",
 ]
@@ -20950,7 +20921,6 @@ dependencies = [
  "dsp-core",
  "eq",
  "fts-audio-ui",
- "fts-plug-ui",
  "nice-plug",
  "nice-plug-dioxus",
  "plugin-core",

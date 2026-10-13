@@ -10,7 +10,7 @@ workspace = true
 
 [features]
 default = []
-native = ["dep:architect-ui", "dep:atomic_float", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot"]
+native = ["dep:architect-ui", "dep:atomic_float", "dep:plugin-core", "plugin-core?/editor", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot"]
 profiles = []
 ui = ["dep:dioxus", "dep:fts-audio-ui", "dep:web-time", "profiles"]
 viz = ["dep:anyrender", "dep:blitz-dom", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
@@ -24,7 +24,7 @@ blitz-dom = { workspace = true, features = ["custom-widget"], optional = true }
 dioxus = { workspace = true, optional = true }
 dioxus-native-dom = { workspace = true, optional = true }
 fts-audio-ui = { workspace = true, optional = true }
-fts-plug-ui = { workspace = true, optional = true }
+plugin-core = { workspace = true, optional = true, features = ["editor"] }
 nice-plug = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }

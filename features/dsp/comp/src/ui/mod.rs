@@ -54,7 +54,7 @@ pub mod sc_eq_view;
 #[cfg(feature = "native")]
 pub mod stack_strip;
 #[cfg(feature = "native")]
-pub use fts_plug_ui::param_adapter;
+pub use plugin_core::editor::param_adapter;
 #[cfg(feature = "native")]
 pub mod param_map;
 #[cfg(feature = "native")]

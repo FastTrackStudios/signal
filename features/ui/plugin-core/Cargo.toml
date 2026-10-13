@@ -12,9 +12,16 @@ workspace = true
 
 [features]
 default = ["gui"]
-gui = ["dep:audiocore-gui", "dep:nice-plug-dioxus"]
+editor = ["dep:architect-ui", "dep:atomic_float", "dep:dioxus", "dep:fts-audio-ui", "dep:nice-plug-dioxus"]
+gui = ["dep:nice-plug-dioxus", "dep:parking_lot"]
+meters = ["dep:dsp-core", "dep:nice-plug-dioxus", "dep:parking_lot"]
 
 [dependencies]
-audiocore-gui = { workspace = true, optional = true }
+architect-ui = { workspace = true, optional = true }
+atomic_float = { workspace = true, optional = true }
+dioxus = { workspace = true, optional = true }
+dsp-core = { workspace = true, features = ["meter"], optional = true }
+fts-audio-ui = { workspace = true, optional = true }
 nice-plug = { workspace = true }
 nice-plug-dioxus = { workspace = true, optional = true }
+parking_lot = { version = "0.12", optional = true }

@@ -4,7 +4,7 @@
 //! render against the param tree without a circular dep — same split as
 //! `comp-ui::params` and `eq-ui::params`.
 
-use fts_plug_ui::prelude::{PeakMeter, WaveRing};
+use plugin_core::editor::prelude::{PeakMeter, WaveRing};
 use plugin_core::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
@@ -26,7 +26,7 @@ pub struct LimiterUiState {
 impl LimiterUiState {
     /// How many pushes fill a history ring — handy for tests that want to
     /// flush the whole window to a known value.
-    pub const WAVE_LEN_HINT: usize = fts_plug_ui::feed::WAVE_HISTORY_LEN;
+    pub const WAVE_LEN_HINT: usize = plugin_core::editor::feed::WAVE_HISTORY_LEN;
 
     pub fn new(params: Arc<LimiterParams>) -> Self {
         Self {

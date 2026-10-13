@@ -4,7 +4,7 @@
 //! (Gain / Release / Ceiling) beside the I/O + GR meters. Everything but the
 //! trace comes from [`fts_plug_ui`]'s shared chrome.
 
-use fts_plug_ui::prelude::*;
+use plugin_core::editor::prelude::*;
 use nice_plug::editor::ResizeHint;
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug_dioxus::SharedState;
@@ -81,7 +81,7 @@ fn AppShell() -> Element {
 
     // Owned here, not by the chrome: this is the scope that loads the meter
     // atomics below, and `schedule_update` only dirties the scope it is called
-    // in. See `fts_plug_ui::chrome::use_redraw_tick`.
+    // in. See `plugin_core::editor::chrome::use_redraw_tick`.
     let frame = use_redraw_tick();
 
     let gr_db = ui.gain_reduction_db.load(Ordering::Relaxed);

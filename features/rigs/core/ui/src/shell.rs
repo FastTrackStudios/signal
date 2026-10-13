@@ -14,7 +14,7 @@ use signal::Signal;
 
 use crate::register_panels;
 use crate::views::{FxView, SamplerView};
-use audiocore_gui::theme::use_init_theme;
+use plugin_core::canvas::theme::use_init_theme;
 
 /// Signal view mode — determines which top-level browser/editor is shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

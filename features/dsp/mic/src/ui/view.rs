@@ -6,7 +6,7 @@
 //! pattern steps).
 
 use dioxus::prelude::*;
-use fts_plug_ui::prelude::*;
+use plugin_core::editor::prelude::*;
 use nice_plug::editor::ResizeHint;
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::prelude::*;

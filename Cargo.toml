@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/ui/plugin-core",
     "features/ui/dock",
     "features/sync",
     "crates/frame",
@@ -23,7 +24,6 @@ members = [
     "features/ui/daw-ui",
     "features/dynamic-template",
     "features/audio",
-    "features/ui/plugin-core",
     "features/dsp/builtin",
     "features/dsp/core",
     "features/rigs/keys",
@@ -71,10 +71,8 @@ members = [
     "features/adapters/reaper/session-extension/xtask",
     "features/song",
     # ── daw ──
-    "features/ui/audiocore-gui",
     "features/audio/sample",
     "features/ui/themes",
-    "features/ui/meter-ui",
     "crates/daw/actions",
     "crates/daw/control",
     "crates/daw/daw",
@@ -137,7 +135,6 @@ members = [
     "features/dsp/stack",
     "features/ui/fts-audio-ui",
     "features/ui/kit-sheet",
-    "features/ui/fts-plug-ui",
     # ── signal ──
     "apps/signal/desktop",
     "apps/signal/mobile",
@@ -201,13 +198,13 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+plugin-core = { path = "features/ui/plugin-core" }
 dock = { path = "features/ui/dock" }
 daw-sync = { path = "features/sync" }
 frame = { path = "crates/frame" }
 web-audio-worklet = { path = "features/audio/worklet" }
 patchbay = { path = "features/patchbay" }
 midi = { path = "features/midi" }
-plugin-core = { path = "features/ui/plugin-core" }
 expression-editor = { path = "features/expression-editor" }
 session = { path = "features/session" }
 synth = { path = "features/rigs/synth" }
@@ -253,7 +250,6 @@ fts-chrome = { path = "features/ui/fts-chrome" }
 # and taking that one puts two different `fts-audio-ui v0.1.0` in one
 # lockfile, which cargo refuses outright.
 fts-audio-ui = { path = "features/ui/fts-audio-ui" }
-fts-plug-ui = { path = "features/ui/fts-plug-ui" }
 # nice-plug lives in its own fork repo (upstream RustAudio/nice-plug's
 # baseview-03 branch + the FTS delta: nice-plug-dioxus, embedded editors,
 # rich track-info, param rescan). The ONE sanctioned exception to
@@ -267,13 +263,11 @@ utils = { path = "crates/daw/utils" }
 # either depending on the other.
 adaptive-grid = { path = "features/ui/adaptive-grid" }
 neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-modeler-rs", tag = "v0.1.1" }
-audiocore-gui = { path = "features/ui/audiocore-gui" }
 # Defaults OFF at the root so lean consumers (probe-only scanners, the
 # iOS-clean session-guide) don't drag the pack engine in; each consumer
 # names the features it needs ("load" / "write" / "engine").
 fts-sample = { path = "features/audio/sample", default-features = false }
 fts-themes = { path = "features/ui/themes" }
-meter-ui = { path = "features/ui/meter-ui" }
 # Canonical MIDI facade. Defaults OFF at the root: daw-proto re-exports
 # `midicore::MidiEvent` and must not drag midicore's `vox` service traits
 # (nor the `midir` feature — midicore-midir pins midir 0.10/alsa-sys 0.3,

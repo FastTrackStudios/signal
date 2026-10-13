@@ -17,7 +17,7 @@ nice-plug = { workspace = true, features = ["vst3"] }
 nice-plug-dioxus.workspace = true
 dioxus = { workspace = true }
 dsp-core = { workspace = true, features = ["meter"] }
-meter-ui = { workspace = true }
+plugin-core = { workspace = true, features = ["meters"] }
 parking_lot = { workspace = true }
 
 [features]

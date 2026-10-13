@@ -24,7 +24,7 @@ use preset_browser::PresetBrowser;
 
 use crate::ui::param_map::{CORE_PARAM_NAMES, core_param_ptr};
 use crate::ui::params::CompStageParams;
-use fts_plug_ui::param_adapter::param_handle;
+use plugin_core::editor::param_adapter::param_handle;
 
 /// Where the compressor's presets live.
 #[must_use]

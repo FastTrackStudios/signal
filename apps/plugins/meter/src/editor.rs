@@ -9,10 +9,10 @@ use dioxus::prelude::*;
 use nice_plug_dioxus::prelude::*;
 use std::sync::Arc;
 
-use meter_ui::goniometer_painter::{GoniometerConfig, GoniometerPainter};
-use meter_ui::lufs_painter::{LufsConfig, LufsPainter};
-use meter_ui::phase_painter::{PhaseConfig, PhasePainter};
-use meter_ui::spectrum_painter::{SpectrumConfig, SpectrumPainter};
+use plugin_core::meters::goniometer_painter::{GoniometerConfig, GoniometerPainter};
+use plugin_core::meters::lufs_painter::{LufsConfig, LufsPainter};
+use plugin_core::meters::phase_painter::{PhaseConfig, PhasePainter};
+use plugin_core::meters::spectrum_painter::{SpectrumConfig, SpectrumPainter};
 
 use crate::{EDITOR_H, EDITOR_W, MeterShared};
 
