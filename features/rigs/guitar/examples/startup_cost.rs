@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use signal_sampler::rig::{RigBlock, prepare_chain};
+use sampler::rig::{RigBlock, prepare_chain};
 
 const SAMPLE_RATE: u32 = 48_000;
 

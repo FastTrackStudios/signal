@@ -1,7 +1,7 @@
 //! Pack downloads — the client half of `signal-packs-proto`.
 //!
 //! Lists and fetches `.signalpack`s from a pack host (the studio engine,
-//! a hosted mirror — anything serving [`signal_packs_proto::packs`])
+//! a hosted mirror — anything serving [`sampler::packs::packs`])
 //! over the shared engine plumbing (`remote.rs`: WebSocket or iroh p2p).
 //! Downloads land in the keys packs dir with `.part` resume + sha256
 //! verify, then the keys rig rescans and the pack is playable.
@@ -13,8 +13,8 @@
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use signal_packs_proto::packs::PackLibraryClient;
-use signal_packs_proto::{PackChunk, PackInfo};
+use sampler::packs::packs::PackLibraryClient;
+use sampler::packs::{PackChunk, PackInfo};
 
 use crate::remote::EngineTarget;
 

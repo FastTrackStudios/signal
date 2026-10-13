@@ -33,8 +33,8 @@ use std::path::{Path, PathBuf};
 use daw_standalone::plugin::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
-use signal_sampler::SampleEngine;
-use signal_sampler::kit_tracks::KitRouting;
+use sampler::SampleEngine;
+use sampler::kit_tracks::KitRouting;
 
 /// What the voices play, as saved.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -73,7 +73,7 @@ pub fn output_of(id: &str) -> usize {
 /// Whether the mic `id` is one `wanted` names.
 #[must_use]
 pub fn wants(wanted: &[String], id: &str) -> bool {
-    let bus = signal_sampler::mixer::mic_is_bus(id);
+    let bus = sampler::mixer::mic_is_bus(id);
     let lower = id.to_ascii_lowercase();
     wanted
         .iter()
@@ -92,7 +92,7 @@ pub fn wants(wanted: &[String], id: &str) -> bool {
 /// for a preset that will not read, or a note it maps to nothing.
 #[must_use]
 pub fn piece_for_note(preset: &Path, note: u8) -> Option<String> {
-    let spec = signal_sampler::preset_spec::PresetSpec::from_file(preset).ok()?;
+    let spec = sampler::preset_spec::PresetSpec::from_file(preset).ok()?;
     spec.note_routing
         .iter()
         .find(|r| r.note == note)
@@ -160,7 +160,7 @@ impl KitMic {
         let Some(preset_path) = self.state.preset.clone() else {
             return;
         };
-        let preset = match signal_sampler::preset_spec::PresetSpec::from_file(&preset_path) {
+        let preset = match sampler::preset_spec::PresetSpec::from_file(&preset_path) {
             Ok(p) => p,
             Err(why) => {
                 tracing::warn!(kit.preset = %preset_path.display(), why = %why, "kit mic: the preset would not load");
@@ -202,18 +202,18 @@ impl KitMic {
     /// mic's samples only.
     fn piece(
         &self,
-        er: &signal_sampler::preset_spec::PresetEngineRef,
+        er: &sampler::preset_spec::PresetEngineRef,
         dir: &Path,
         rate: u32,
     ) -> Result<Piece, String> {
         let engine_path = resolve(&er.engine, dir);
-        let spec = signal_sampler::engine_spec::EngineSpec::from_file(&engine_path)
+        let spec = sampler::engine_spec::EngineSpec::from_file(&engine_path)
             .map_err(|e| e.to_string())?;
         let pack = resolve(
             &spec.block.pack,
             engine_path.parent().unwrap_or_else(|| Path::new("")),
         );
-        let patch = signal_sampler::PlayerPatch::from_pack(&pack).map_err(|e| e.to_string())?;
+        let patch = sampler::PlayerPatch::from_pack(&pack).map_err(|e| e.to_string())?;
         let section = patch
             .spec
             .sections

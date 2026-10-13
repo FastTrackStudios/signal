@@ -48,7 +48,7 @@ signal-nam = { workspace = true }
 signal-proto = { workspace = true }
 signal-rig-host = { workspace = true }
 signal-rigs-proto = { workspace = true }
-signal-sampler = { workspace = true }
+sampler = { workspace = true }
 signal-tone3000-proto = { workspace = true, optional = true }
 signal-tone3000-ui = { workspace = true, optional = true }
 signal-widgets = { workspace = true, optional = true }

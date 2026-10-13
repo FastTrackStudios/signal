@@ -7,8 +7,8 @@
 //! ```
 
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
-use signal_sampler::node_render::RenderNode;
-use signal_sampler::rig_node::Container;
+use sampler::node_render::RenderNode;
+use sampler::rig_node::Container;
 
 fn main() {
     // Surface the sampler's preload / cache-miss / zone tracing. `RUST_LOG`

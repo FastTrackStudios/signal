@@ -173,7 +173,7 @@ impl WireParam {
 /// The wire carries a name, a value and a range but not a unit, and a knob
 /// that prints "5500" where it means "5.5 kHz" is a knob a player misreads.
 /// The same naming conventions the DSP's own ranges use — see
-/// `signal_sampler::native::ranges`.
+/// `sampler::native::ranges`.
 fn unit_for(param: &str) -> &'static str {
     let ends = |suffix: &str| param == suffix || param.ends_with(&format!("_{suffix}"));
     if ends("freq") || ends("cutoff") || ends("rate") || param.contains("side_") {

@@ -18,8 +18,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use js_sys::{Array, Reflect, Uint8Array};
-use signal_packs_proto::PackChunk;
-use signal_packs_proto::packs::PackLibraryClient;
+use sampler::packs::PackChunk;
+use sampler::packs::packs::PackLibraryClient;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
@@ -746,7 +746,7 @@ pub(crate) async fn fetch_pack_plan(
     name: &str,
     variant: &str,
     total: u64,
-) -> Result<Vec<signal_packs_proto::PackSegment>, String> {
+) -> Result<Vec<sampler::packs::PackSegment>, String> {
     let client: PackLibraryClient = crate::remote::establish_verbose(target)
         .await
         .map_err(|e| format!("pack host unreachable: {e}"))?;
@@ -781,7 +781,7 @@ pub(crate) async fn fetch_pack_plan(
     if json.trim().is_empty() {
         return Err("pack host returned no plan for this pack".into());
     }
-    let segments: Vec<signal_packs_proto::PackSegment> =
+    let segments: Vec<sampler::packs::PackSegment> =
         facet_json::from_str(&json).map_err(|e| format!("pack_plan json: {e}"))?;
     if segments.is_empty() {
         return Err("pack host returned no plan for this pack".into());
@@ -810,7 +810,7 @@ pub(crate) async fn read_range_to_vec(
     let call = client.read(
         format!(
             "range:{}:{name}",
-            signal_packs_proto::PackRange { start, len }
+            sampler::packs::PackRange { start, len }
         ),
         variant.to_string(),
         0,

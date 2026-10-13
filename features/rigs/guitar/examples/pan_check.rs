@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use guitar::library::RigLibrary;
-use signal_sampler::rig::GuitarRig;
-use signal_sampler::rig_profile::{ProfileRig, RigProfile};
+use sampler::rig::GuitarRig;
+use sampler::rig_profile::{ProfileRig, RigProfile};
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -54,7 +54,7 @@ fn main() {
     prig.load_profile(profile, None).expect("builds");
     prig.activate(0);
     guitar::measure::apply_chain_bypass(&prig);
-    let di = signal_sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(rate));
+    let di = sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(rate));
     prig.rig()
         .start_test_signal(Arc::new(di.samples.iter().map(|&s| s as f32).collect()));
     prig.rig().render_offline(rate as usize / 2);

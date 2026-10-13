@@ -81,7 +81,7 @@ fn main() {
         match build_soundsource_pack(dir, &out, &tags) {
             Ok(_stats) => {
                 built += 1;
-                if let Ok(h) = signal_sampler::read_pack_header(&out) {
+                if let Ok(h) = sampler::read_pack_header(&out) {
                     zones_looped += h
                         .spec
                         .zones
@@ -113,7 +113,7 @@ fn main() {
 /// A pack already carries loops ⇒ it was rebuilt with the STINFO fix; skip it.
 fn already_looped(out: &Path) -> bool {
     out.exists()
-        && signal_sampler::read_pack_header(out)
+        && sampler::read_pack_header(out)
             .ok()
             .is_some_and(|h| h.spec.zones.iter().any(|z| z.loop_end > z.loop_start))
 }

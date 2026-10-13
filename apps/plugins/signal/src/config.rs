@@ -34,7 +34,7 @@ pub const RIG_ENV: &str = "FTS_SIGNAL_RIG";
 
 /// Instrument id the plugin loads and drives inside the [`SamplerBank`].
 ///
-/// [`SamplerBank`]: signal_sampler::SamplerBank
+/// [`SamplerBank`]: sampler::SamplerBank
 pub const INSTRUMENT_ID: &str = "rig";
 
 #[derive(Debug, Clone, Facet)]

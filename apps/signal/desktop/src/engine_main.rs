@@ -193,7 +193,7 @@ async fn async_main() {
     // Sample-pack distribution: serves the built `.signalpack` trees
     // (proxy + full) so remotes — the phone keys rig above all — can list
     // and download packs over the same `/vox` (and iroh p2p) endpoint.
-    let packs = signal_pack_library::PackLibraryBackend::new();
+    let packs = sampler::library::PackLibraryBackend::new();
     let router = router.merge_router(packs.router());
 
     // ── TONE3000 (the public NAM/IR library) ──────────────────────────────
@@ -202,7 +202,7 @@ async fn async_main() {
     // remote is served over plain HTTP on the LAN where WebCrypto (and so
     // PKCE) is unavailable. Every GUI is a courier for a URL in one
     // direction and a callback in the other.
-    let config_dir_t3k = signal_sampler::rig_prefs::signal_config_dir();
+    let config_dir_t3k = sampler::rig_prefs::signal_config_dir();
     // The FastTrackStudio account. Linking TONE3000 to it once means every
     // machine signed in to that account can download captures without its
     // own authorization — the issuer holds the refresh token and rotates it
@@ -246,7 +246,7 @@ async fn async_main() {
 
     // Serve the router over axum (`/vox` + `/health`) and iroh p2p, with the
     // browser remote as the HTTP fallback — all of it in `architect::host`.
-    let config_dir = signal_sampler::rig_prefs::signal_config_dir();
+    let config_dir = sampler::rig_prefs::signal_config_dir();
     let mut engine_host = EngineHost::new(router, bind_addr());
     if let Some(routes) = watch_routes {
         engine_host = engine_host.extend(routes);

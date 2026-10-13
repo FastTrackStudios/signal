@@ -22,7 +22,7 @@ crate-type = ["cdylib", "rlib"]
 daw-standalone = { workspace = true, features = ["decode", "web"] }
 # Headless KeysRig (lane topology + KeysInstrument) + the in-memory pack
 # registry. On wasm32 the native halves of the crate vanish by target.
-signal-sampler = { workspace = true }
+sampler = { workspace = true }
 eyre = { workspace = true }
 tracing = { workspace = true }
 facet = { workspace = true }

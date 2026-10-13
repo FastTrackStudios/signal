@@ -5,9 +5,9 @@
 //! anywhere.
 
 use daw_standalone::audio_engine::render::ProjectRenderer;
-use signal_sampler::KeysRig;
-use signal_sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
-use signal_sampler::rig_node::Container;
+use sampler::KeysRig;
+use sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
+use sampler::rig_node::Container;
 
 const SR: u32 = 48_000;
 
@@ -87,7 +87,7 @@ fn open_headless_renders_from_external_pack_reader() {
         .get_or_insert_with(HashMap::new)
         .insert(ID, bytes);
     // First install wins process-wide; this test file installs exactly once.
-    signal_sampler::engine::cache::set_external_pack_reader(Box::new(|id, offset, dst| {
+    sampler::engine::cache::set_external_pack_reader(Box::new(|id, offset, dst| {
         let packs = PACKS.lock().unwrap();
         let Some(bytes) = packs.as_ref().and_then(|m| m.get(&id)) else {
             return false;
@@ -101,7 +101,7 @@ fn open_headless_renders_from_external_pack_reader() {
     }));
 
     const PACK_KEY: &str = "test-tone-external.signalpack";
-    signal_sampler::pack_registry::install_external(PACK_KEY, ID, len)
+    sampler::pack_registry::install_external(PACK_KEY, ID, len)
         .expect("install external pack");
 
     let program = LaneProgram {
@@ -151,7 +151,7 @@ fn open_headless_renders_live_midi_from_pack_bytes() {
     // The browser seam: the pack reaches the engine as installed bytes,
     // keyed by the spec-path string the lane tree references.
     const PACK_KEY: &str = "test-tone.signalpack";
-    signal_sampler::pack_registry::install(PACK_KEY, bytes).expect("install pack bytes");
+    sampler::pack_registry::install(PACK_KEY, bytes).expect("install pack bytes");
 
     let program = LaneProgram {
         name: "Headless Test".into(),

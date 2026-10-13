@@ -21,7 +21,7 @@ nice-plug.workspace = true
 
 # The sampler engine — the one rig backend the signal facade exposes headlessly
 # today (see crate docs for the facade gaps blocking full rig hosting).
-signal-sampler.workspace = true
+sampler = { workspace = true }
 
 # Rig config (.styx) parsing — same stack as signal-sampler-clap's PatchConfig
 facet.workspace = true

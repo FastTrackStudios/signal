@@ -434,7 +434,7 @@ pub struct KeysRealtime {
 #[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysPackRef {
     /// The spec-path KEY the lane trees reference (`RigBlock.sample`) — the
-    /// exact string to hand `signal_sampler::pack_registry::install`. On the
+    /// exact string to hand `sampler::pack_registry::install`. On the
     /// engine this is the pack's absolute path; the registry also matches by
     /// file name, so installing the fetched bytes under this key resolves.
     pub key: String,
@@ -467,7 +467,7 @@ pub struct KeysLaneRef {
 /// engines and lanes in `lanes` order.
 #[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct KeysLaneProgram {
-    /// `signal_sampler::keys_rig::WireProgram` as facet-json.
+    /// `sampler::keys_rig::WireProgram` as facet-json.
     pub program_json: String,
     /// Every distinct pack the program's lanes reference, in lane order.
     pub packs: Vec<KeysPackRef>,

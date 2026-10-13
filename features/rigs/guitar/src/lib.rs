@@ -9,7 +9,7 @@
 //!
 //! ```no_run
 //! use crate::AmpEngine;
-//! use signal_sampler::RigAudioPrefs;
+//! use sampler::RigAudioPrefs;
 //! let mut amp = AmpEngine::open(&RigAudioPrefs::default())?;
 //! amp.load_model("/path/to/amp.nam")?;
 //! // audio is now live: guitar in → NAM → out
@@ -53,12 +53,12 @@ pub use session::{GuitarRigBackend, RigHost};
 /// (route changes, access), beside the rig's at open.
 #[must_use]
 pub fn audio_session_report() -> Option<String> {
-    signal_sampler::rig::GuitarRig::session_report()
+    sampler::rig::GuitarRig::session_report()
 }
 
-use signal_sampler::GuitarRig;
-use signal_sampler::RigAudioPrefs;
-use signal_sampler::{ProfileRig, RigPatch, RigProfile};
+use sampler::GuitarRig;
+use sampler::RigAudioPrefs;
+use sampler::{ProfileRig, RigPatch, RigProfile};
 
 /// A running amp: live duplex audio + at most one loaded NAM model.
 pub struct AmpEngine {
@@ -114,7 +114,7 @@ impl AmpEngine {
     /// render in the signal grid. Empty block names are filled with the model
     /// name so the grid always has a label. Empty if no model is loaded.
     // r[impl guitar.amp.chain-blocks]
-    pub fn active_blocks(&self) -> Vec<signal_sampler::RigBlock> {
+    pub fn active_blocks(&self) -> Vec<sampler::RigBlock> {
         let patch = self
             .rig
             .active_patch()

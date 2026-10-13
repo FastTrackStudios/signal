@@ -21,8 +21,8 @@
 use js_sys::{Atomics, Float32Array, Float64Array, Int32Array, SharedArrayBuffer};
 use wasm_bindgen::prelude::*;
 
-use signal_sampler::RigBlock;
-use signal_sampler::rig::prepare_chain;
+use sampler::RigBlock;
+use sampler::rig::prepare_chain;
 
 use crate::plan::{Place, Plan, model_budget_us};
 use crate::remote::{Lag, Link, MAX_POSTED_PARAMS};
@@ -280,20 +280,20 @@ pub fn model_budget(sample_rate: f64, share: f64) -> u32 {
 /// instance — the worklet's and each worker's registries are their own.
 #[wasm_bindgen(js_name = installAsset)]
 pub fn install_asset(key: String, bytes: Vec<u8>) {
-    signal_sampler::assets::install(key, bytes);
+    sampler::assets::install(key, bytes);
 }
 
 /// NAM level calibration: the interface's full-scale input in dBu, or NaN
 /// for off. Applies to chains built afterwards.
 #[wasm_bindgen(js_name = setCalibration)]
 pub fn set_calibration(dbu: f32) {
-    signal_sampler::nam::set_interface_calibration_dbu(dbu.is_finite().then_some(dbu));
+    sampler::nam::set_interface_calibration_dbu(dbu.is_finite().then_some(dbu));
 }
 
 /// Size A2 models are built at from now on (1 = full).
 #[wasm_bindgen(js_name = setModelSize)]
 pub fn set_model_size(size: f64) {
-    signal_sampler::nam::set_model_size(size);
+    sampler::nam::set_model_size(size);
 }
 
 /// The guitar rig's render loop, in the AudioWorklet.

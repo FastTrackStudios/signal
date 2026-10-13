@@ -12,8 +12,8 @@
 
 use daw::service::{Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEvent, Velocity};
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
-use signal_sampler::node_render::RenderNode;
-use signal_sampler::rig_node::Container;
+use sampler::node_render::RenderNode;
+use sampler::rig_node::Container;
 use signal_synth::Source;
 use signal_synth::engine::{ModuleSettings, signal_layer_with};
 

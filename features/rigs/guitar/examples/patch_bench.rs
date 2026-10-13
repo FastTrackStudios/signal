@@ -26,8 +26,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use guitar::library::RigLibrary;
-use signal_sampler::rig::GuitarRig;
-use signal_sampler::rig_profile::{ProfileRig, RigProfile};
+use sampler::rig::GuitarRig;
+use sampler::rig_profile::{ProfileRig, RigProfile};
 
 struct Args {
     profile: Option<String>,
@@ -176,7 +176,7 @@ fn main() {
     }
 
     if a.blocks {
-        let di = signal_sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(a.rate));
+        let di = sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(a.rate));
         let input: Vec<f32> = di.samples.iter().map(|&s| s as f32).collect();
         let budget = a.block as f64 / f64::from(a.rate) * 1e6;
         for p in &chosen {
@@ -190,7 +190,7 @@ fn main() {
                 })
                 .cloned()
                 .collect();
-            let costs = signal_sampler::block_profile::profile_chain(
+            let costs = sampler::block_profile::profile_chain(
                 &playing,
                 a.rate,
                 a.block,
@@ -248,7 +248,7 @@ fn main() {
         a.block as f64 / f64::from(a.rate) * 1e6
     );
 
-    let di = signal_sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(a.rate));
+    let di = sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(a.rate));
     let samples: Arc<Vec<f32>> = Arc::new(di.samples.iter().map(|&s| s as f32).collect());
     let budget_us = a.block as f64 / f64::from(a.rate) * 1e6;
     let blocks = (a.secs * f64::from(a.rate) / a.block as f64) as usize;

@@ -22,7 +22,7 @@ use crate::proto::{
     TunerReading,
 };
 use signal_proto::block::BlockType;
-use signal_sampler::{
+use sampler::{
     CommitStatus, DeviceInfo, GuitarRig, ProfileRig, ReloadMode, RigBlock, RigManager,
 };
 
@@ -475,7 +475,7 @@ pub struct GuitarRigBackend {
     /// from the whole library for every `patches`, `compositions` and
     /// patch-name question, 20–30 ms each, several per change. Kept briefly,
     /// keyed by what it is built from.
-    design_cache: Arc<Mutex<Option<(u64, std::time::Instant, signal_sampler::rig_profile::RigProfile)>>>,
+    design_cache: Arc<Mutex<Option<(u64, std::time::Instant, sampler::rig_profile::RigProfile)>>>,
     /// The `#[subscribe]` fan-out hub: every mutation publishes full-state
     /// [`RigEvent`]s here; the meter pump publishes `Status` at meter rate.
     events: PubSub<RigEvent>,
@@ -505,7 +505,7 @@ pub struct GuitarRigBackend {
 #[derive(Default)]
 pub struct RigHost {
     sample_rate: std::sync::atomic::AtomicU32,
-    audio: std::sync::Mutex<Option<signal_sampler::HostedAudio>>,
+    audio: std::sync::Mutex<Option<sampler::HostedAudio>>,
 }
 
 impl RigHost {
@@ -1494,7 +1494,7 @@ impl GuitarRigBackend {
     /// Rebuild the live chains for `rebuilt` without a gap — every chain
     /// edit and profile switch comes through here.
     ///
-    /// Three phases (see `signal_sampler::rig_profile`): a ticket under the
+    /// Three phases (see `sampler::rig_profile`): a ticket under the
     /// rig lock (microseconds); the diff and the build of only the chains
     /// that changed with the lock **released**, so footswitches, the pump
     /// and every other RPC carry on — a footswitch pressed meanwhile switches
@@ -1509,7 +1509,7 @@ impl GuitarRigBackend {
     /// honoured on what plays. `false` when nothing committed.
     fn reload_gapless(
         &self,
-        rebuilt: signal_sampler::rig_profile::RigProfile,
+        rebuilt: sampler::rig_profile::RigProfile,
         mode: ReloadMode,
         activate: Option<&str>,
     ) -> bool {
@@ -1521,7 +1521,7 @@ impl GuitarRigBackend {
     /// built and reused. `None` when nothing committed (or no engine).
     fn reload_gapless_counted(
         &self,
-        rebuilt: signal_sampler::rig_profile::RigProfile,
+        rebuilt: sampler::rig_profile::RigProfile,
         mode: ReloadMode,
         activate: Option<&str>,
     ) -> Option<hot_reload::ReloadCounts> {
@@ -1586,16 +1586,16 @@ impl GuitarRigBackend {
     fn macro_overlay(
         &self,
         name: &str,
-        patch: &signal_sampler::RigPatch,
-    ) -> Vec<(String, signal_sampler::LiveWrite)> {
-        use signal_sampler::LiveWrite;
+        patch: &sampler::RigPatch,
+    ) -> Vec<(String, sampler::LiveWrite)> {
+        use sampler::LiveWrite;
         let reals: Vec<RigBlock> = patch
             .chain
             .iter()
             .filter(|b| b.has_backend())
             .cloned()
             .collect();
-        let ids = signal_sampler::rig_profile::chain_block_ids(patch);
+        let ids = sampler::rig_profile::chain_block_ids(patch);
         let mut blocks = chain_as_live(&reals);
         for (b, id) in blocks.iter_mut().zip(&ids) {
             b.id = id.clone();
@@ -1636,14 +1636,14 @@ impl GuitarRigBackend {
         out
     }
 
-    fn reload_rebuilt(&self, rebuilt: signal_sampler::rig_profile::RigProfile) {
+    fn reload_rebuilt(&self, rebuilt: sampler::rig_profile::RigProfile) {
         self.reload_rebuilt_activating(rebuilt, None);
     }
 
     /// [`reload_rebuilt`](Self::reload_rebuilt), saying what the reload did.
     fn reload_rebuilt_counted(
         &self,
-        rebuilt: signal_sampler::rig_profile::RigProfile,
+        rebuilt: sampler::rig_profile::RigProfile,
         mode: ReloadMode,
     ) -> Option<hot_reload::ReloadCounts> {
         let counts = self.reload_gapless_counted(rebuilt, mode, None);
@@ -1655,7 +1655,7 @@ impl GuitarRigBackend {
     /// patch name) instead of whatever was playing.
     fn reload_rebuilt_activating(
         &self,
-        rebuilt: signal_sampler::rig_profile::RigProfile,
+        rebuilt: sampler::rig_profile::RigProfile,
         activate: Option<&str>,
     ) {
         // No engine: the patch to activate is the one shown.
@@ -1993,8 +1993,8 @@ impl GuitarRigBackend {
         let Some(block) = built else { return };
         let (in_db, out_db) = Self::drive_trims_live(&block, None, drive);
         let path = std::path::Path::new(&block.nam);
-        let curve_sr = signal_sampler::nam_calibrate::DRIVE_CURVE_SAMPLE_RATE;
-        if signal_sampler::nam_calibrate::drive_curve_cached(path, curve_sr).is_none() {
+        let curve_sr = sampler::nam_calibrate::DRIVE_CURVE_SAMPLE_RATE;
+        if sampler::nam_calibrate::drive_curve_cached(path, curve_sr).is_none() {
             self.measure_drive_later(block.nam.clone(), curve_sr);
         }
         {
@@ -2021,13 +2021,13 @@ impl GuitarRigBackend {
         }
         let level = level_db.unwrap_or_else(|| {
             block.output_trim_db
-                - signal_sampler::nam_calibrate::drive_output_delta_cached(
+                - sampler::nam_calibrate::drive_output_delta_cached(
                     path,
-                    signal_sampler::nam_calibrate::DRIVE_CURVE_SAMPLE_RATE,
+                    sampler::nam_calibrate::DRIVE_CURVE_SAMPLE_RATE,
                     built_drive,
                 )
         });
-        signal_sampler::nam_calibrate::drive_trims(path, level, drive)
+        sampler::nam_calibrate::drive_trims(path, level, drive)
     }
 
     /// Measure `path`'s drive curve off the switch path, then re-apply the
@@ -2044,7 +2044,7 @@ impl GuitarRigBackend {
         tracing::info!(model = %path, "drive calibration: not measured yet — measuring in the background");
         let backend = self.clone();
         std::thread::spawn(move || {
-            let _ = signal_sampler::nam_calibrate::drive_curve(
+            let _ = sampler::nam_calibrate::drive_curve(
                 std::path::Path::new(&path),
                 sample_rate,
             );
@@ -2079,7 +2079,7 @@ impl GuitarRigBackend {
             .rig
             .lock_ok()
             .as_ref()
-            .map_or(48_000, signal_sampler::rig_profile::ProfileRig::sample_rate);
+            .map_or(48_000, sampler::rig_profile::ProfileRig::sample_rate);
         // Each patch's own target: the rig's, plus its snapshot's gain bias.
         let comp = self.home().load_compositions();
         let target_of = |name: &str| {
@@ -2087,7 +2087,7 @@ impl GuitarRigBackend {
             def.patches
                 .iter()
                 .find(|p| p.name.eq_ignore_ascii_case(name))
-                .map_or(signal_sampler::patch_level::TARGET_LUFS as f32, |p| {
+                .map_or(sampler::patch_level::TARGET_LUFS as f32, |p| {
                     crate::compose::loudness_target(&comp, &p.rig_preset, &p.snapshot)
                 })
         };
@@ -2146,7 +2146,7 @@ impl GuitarRigBackend {
                 .iter()
                 .zip(&measured)
                 .filter_map(|(p, l)| {
-                    l.filter(|l| *l > signal_sampler::loudness::SILENCE_LUFS as f32)
+                    l.filter(|l| *l > sampler::loudness::SILENCE_LUFS as f32)
                         .map(|l| (p.name.clone(), target_of(&p.name) - l))
                 })
                 .collect();
@@ -2284,7 +2284,7 @@ impl GuitarRigBackend {
             crate::levelling::par_map(&paths, threads, |path| {
                 let path = path.clone();
                 let t = std::time::Instant::now();
-                if signal_sampler::nam_calibrate::drive_curve(std::path::Path::new(&path), sr)
+                if sampler::nam_calibrate::drive_curve(std::path::Path::new(&path), sr)
                     .is_some()
                     && t.elapsed().as_millis() > 50
                 {
@@ -2517,7 +2517,7 @@ impl GuitarRigBackend {
     /// Route the phones as the audio prefs say: the engine blends the mix
     /// itself, or leaves it to the separate headphone mixer — which is then
     /// pointed at the device and channels, given the levels, and started.
-    fn apply_phones_prefs(&self, a: &signal_sampler::rig_prefs::RigAudioPrefs) {
+    fn apply_phones_prefs(&self, a: &sampler::rig_prefs::RigAudioPrefs) {
         use std::sync::atomic::Ordering::Relaxed;
         let (_, phones, mix) = a.resolved_routing();
         let routed = a.phones_routing;
@@ -2865,7 +2865,7 @@ impl GuitarRigBackend {
         let Some(t) = self.guitar_tone() else { return };
         let guard = self.rig.lock_ok();
         if let Some(prig) = guard.as_ref() {
-            prig.rig().set_input_tone(signal_sampler::input_stage::ToneValues {
+            prig.rig().set_input_tone(sampler::input_stage::ToneValues {
                 trim_db: t.trim_db,
                 low_cut_hz: t.low_cut_hz,
                 bass_db: t.bass_db,
@@ -3387,7 +3387,7 @@ impl GuitarRigBackend {
     /// patch, or to the next one if that patch is already live.
     /// The profile as the live rig would load it — pure data, no engine.
     /// Design mode's source for patches, stacks and chains.
-    fn design_profile(&self) -> signal_sampler::rig_profile::RigProfile {
+    fn design_profile(&self) -> sampler::rig_profile::RigProfile {
         /// Long enough for one change's questions to share a build; short
         /// enough that what the key cannot see (saved node presets on disk)
         /// shows within it.
@@ -3435,7 +3435,7 @@ impl GuitarRigBackend {
 
     /// The live profile, plus the audition patch when one is playing — kept
     /// last, so every real patch keeps its index.
-    fn profile_with_audition(&self) -> signal_sampler::rig_profile::RigProfile {
+    fn profile_with_audition(&self) -> sampler::rig_profile::RigProfile {
         let mut def = self.profile_def.lock_ok().clone();
         if let Some((preset, snapshot)) = self.audition.lock_ok().clone() {
             if let Some(patch) =
@@ -3633,7 +3633,7 @@ impl GuitarRigBackend {
     /// same fallback `design_blocks` builds the chain from.
     fn design_active_patch(
         &self,
-        profile: &signal_sampler::rig_profile::RigProfile,
+        profile: &sampler::rig_profile::RigProfile,
     ) -> Option<String> {
         let chosen = self.design_patch.lock_ok().clone();
         profile
@@ -3649,8 +3649,8 @@ impl GuitarRigBackend {
     /// for the live rig and design mode, so the two cannot drift apart.
     fn patch_infos(
         &self,
-        patches: &[signal_sampler::rig_profile::RigPatch],
-        stacks: &[signal_sampler::rig_profile::RigStack],
+        patches: &[sampler::rig_profile::RigPatch],
+        stacks: &[sampler::rig_profile::RigStack],
         active: Option<&str>,
         available: impl Fn(usize) -> bool,
     ) -> Vec<PatchInfo> {
@@ -4671,7 +4671,7 @@ impl GuitarRigBackend {
 
         let mut mgr = RigManager::load(self.home().audio_rig_name());
         let cal = mgr.audio.nam_calibration();
-        signal_sampler::nam::set_interface_calibration_dbu(cal);
+        sampler::nam::set_interface_calibration_dbu(cal);
         tracing::info!(nam.calibration_dbu = ?cal, "rig open: NAM level calibration");
         // Monitor + play through a single duplex interface. (Not on iOS: an
         // input there is one of the session's ports, and the output is the
@@ -5244,7 +5244,7 @@ impl GuitarRigBackend {
         {
             let mut blocks = self.blocks.lock_ok();
             for (block, id) in reals.iter().zip(&ids) {
-                if signal_sampler::block_params::native_writes(block).is_none() {
+                if sampler::block_params::native_writes(block).is_none() {
                     continue;
                 }
                 let Some(view) = blocks.iter_mut().find(|b| b.id == *id) else {
@@ -5253,7 +5253,7 @@ impl GuitarRigBackend {
                 // Due: the definition, then the live writes in order.
                 let mut due: Vec<(String, f32)> = Vec::new();
                 for p in &view.params {
-                    if signal_sampler::block_params::is_known(block.block_type, &p.name) {
+                    if sampler::block_params::is_known(block.block_type, &p.name) {
                         if let Some(v) = block.param_f32(&p.name) {
                             due.push((p.name.clone(), v));
                         }
@@ -5263,7 +5263,7 @@ impl GuitarRigBackend {
                     if bid != id {
                         continue;
                     }
-                    if let signal_sampler::LiveWrite::Param(name, v) = w {
+                    if let sampler::LiveWrite::Param(name, v) = w {
                         if let Some(d) = due.iter_mut().find(|(n, _)| n == name) {
                             d.1 = *v;
                         } else if view.params.iter().any(|p| p.name == *name) {
@@ -8803,7 +8803,7 @@ impl Rig for GuitarRigBackend {
                     .map(|p| p.rig().take_di_capture())
                     .unwrap_or_default()
             };
-            match signal_sampler::nam_calibrate::install_di_reference(&samples, sr as u32) {
+            match sampler::nam_calibrate::install_di_reference(&samples, sr as u32) {
                 Ok(()) => {
                     // Both measurements were taken against the old DI: the
                     // drive curves first (levelling hears the trims they
@@ -11620,7 +11620,7 @@ enum LevelHome {
 /// default, present whenever any device is).
 fn audio_device_present(audio_rig: &str) -> bool {
     let prefs = RigManager::load(audio_rig).audio;
-    let has = |want: &str, list: Vec<signal_sampler::DeviceInfo>| {
+    let has = |want: &str, list: Vec<sampler::DeviceInfo>| {
         if want.is_empty() {
             !list.is_empty()
         } else {

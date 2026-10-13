@@ -1,6 +1,6 @@
 //! The full **Omnisphere 3** per-Part signal chain, built as a composition
-//! tree ([`signal_sampler::rig_node`]) — the routing experiment companion to
-//! [`signal_sampler::nord`].
+//! tree ([`sampler::rig_node`]) — the routing experiment companion to
+//! [`sampler::nord`].
 //!
 //! If the engine can express both the Nord Stage 4 and the Omnisphere 3 routing,
 //! there aren't many synth architectures it can't.
@@ -30,13 +30,13 @@
 //!
 //! Everything is a placeholder until its DSP lands, except Sampler blocks —
 //! [`omnisphere_soundsource_preset`] realizes Layer A/B with real extracted
-//! Omnisphere soundsources ([`BlockImpl::Sample`](signal_sampler::rig::BlockImpl)).
+//! Omnisphere soundsources ([`BlockImpl::Sample`](sampler::rig::BlockImpl)).
 //! The Multi level (8 Parts, mixer, 4 shared Aux racks) is a Rig concern and
 //! comes later.
 
 use signal_proto::block::BlockType;
 
-use signal_sampler::rig_node::Container;
+use sampler::rig_node::Container;
 
 /// Send target for every layer's aux route (the Part's 4-slot Aux rack).
 use crate::engine::AUX_RACK;
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn placeholder_part_compiles_to_a_render_tree() {
         let p = omnisphere_preset();
-        let mut rn = signal_sampler::node_render::RenderNode::compile(&p, 48_000);
+        let mut rn = sampler::node_render::RenderNode::compile(&p, 48_000);
         rn.prepare(48_000.0, 256);
         // 4 modules × (2 filters + amp) = 12 live native leaves; the source
         // blocks are placeholders here and everything else passes through.
@@ -210,7 +210,7 @@ mod tests {
             eprintln!("skipping: Omnisphere extraction not present");
             return;
         };
-        let mut rn = signal_sampler::node_render::RenderNode::compile(&p, 48_000);
+        let mut rn = sampler::node_render::RenderNode::compile(&p, 48_000);
         rn.prepare(48_000.0, 512);
 
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);

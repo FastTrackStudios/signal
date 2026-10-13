@@ -251,7 +251,7 @@ mod tests {
                 &mut after, i, &set
             ));
         }
-        let layer = |t: &signal_sampler::rig_node::Container, name: &str| {
+        let layer = |t: &sampler::rig_node::Container, name: &str| {
             let f1 = t
                 .find("Layer A")
                 .unwrap()
@@ -270,7 +270,7 @@ mod tests {
                 assert!((b - a).abs() < 2e-3, "{p}: {b} -> {a}");
             }
         }
-        let fe = |t: &signal_sampler::rig_node::Container, name: &str| {
+        let fe = |t: &sampler::rig_node::Container, name: &str| {
             t.find("Layer A")
                 .unwrap()
                 .modulators
@@ -283,7 +283,7 @@ mod tests {
             let (b, a) = (fe(&before, p).unwrap_or(0.0), fe(&after, p).unwrap_or(0.0));
             assert!((b - a).abs() < 1e-3, "filter env {p}: {b} -> {a}");
         }
-        let depth = |t: &signal_sampler::rig_node::Container| {
+        let depth = |t: &sampler::rig_node::Container| {
             t.find("Layer A")
                 .unwrap()
                 .mod_routes
@@ -300,7 +300,7 @@ mod tests {
         }
         let mut again = after.clone();
         crate::engine::apply_lfos_to_omni(&mut again, &four, None);
-        let lfo = |t: &signal_sampler::rig_node::Container, p: &str| -> Vec<Option<f32>> {
+        let lfo = |t: &sampler::rig_node::Container, p: &str| -> Vec<Option<f32>> {
             t.modulators
                 .iter()
                 .filter(|m| m.display_name().starts_with("LFO"))
@@ -315,12 +315,12 @@ mod tests {
                 }
             }
         }
-        let all_depths = |t: &signal_sampler::rig_node::Container| {
+        let all_depths = |t: &sampler::rig_node::Container| {
             let mut v: Vec<f32> = Vec::new();
-            fn walk(c: &signal_sampler::rig_node::Container, v: &mut Vec<f32>) {
+            fn walk(c: &sampler::rig_node::Container, v: &mut Vec<f32>) {
                 v.extend(c.mod_routes.iter().map(|r| r.depth));
                 for ch in &c.children {
-                    if let signal_sampler::rig_node::RigNode::Container { container } = ch {
+                    if let sampler::rig_node::RigNode::Container { container } = ch {
                         walk(container, v);
                     }
                 }
@@ -379,10 +379,10 @@ mod tests {
                 *slot = l;
             }
             crate::engine::apply_lfos_to_omni(&mut after, &four, None);
-            fn depths(c: &signal_sampler::rig_node::Container, v: &mut Vec<(String, f32)>) {
+            fn depths(c: &sampler::rig_node::Container, v: &mut Vec<(String, f32)>) {
                 v.extend(c.mod_routes.iter().map(|r| (r.source.key(), r.depth)));
                 for ch in &c.children {
-                    if let signal_sampler::rig_node::RigNode::Container { container } = ch {
+                    if let sampler::rig_node::RigNode::Container { container } = ch {
                         depths(container, v);
                     }
                 }
@@ -394,7 +394,7 @@ mod tests {
             for ((src, db), (_, da)) in b.iter().zip(&a) {
                 assert!((db - da).abs() < 1e-4, "{path:?}: {src} depth {db} -> {da}");
             }
-            let rates = |t: &signal_sampler::rig_node::Container| -> Vec<Option<f32>> {
+            let rates = |t: &sampler::rig_node::Container| -> Vec<Option<f32>> {
                 t.modulators.iter().map(|m| m.param_f32("rate")).collect()
             };
             for (rb, ra) in rates(&before).iter().zip(rates(&after)) {
@@ -468,7 +468,7 @@ mod tests {
         assert!((f1.param_f32("cutoff").unwrap() - 0.780).abs() < 1e-3);
         assert_eq!(f1.param_f32("resonance"), Some(0.25));
         // Renders (placeholder-safe).
-        let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
+        let mut rn = sampler::node_render::RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 256);
         assert!(rn.live_leaves() >= 3, "native filters/amp are live");
     }
@@ -521,7 +521,7 @@ mod tests {
         let tree = load_patch_file(&patch_path, &index).expect("import");
         eprintln!("imported {:?} as {:?}", patch_path.file_name(), tree.name);
 
-        let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
+        let mut rn = sampler::node_render::RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
         let midi = [PluginMidiEvent {
@@ -582,7 +582,7 @@ mod tests {
         let wave = osc.param_str("wave0").expect("the patch's wave, resolved");
         assert!(wave.ends_with("Moog Modular Saw.wav"), "{wave}");
 
-        let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
+        let mut rn = sampler::node_render::RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
         let midi = [PluginMidiEvent {
@@ -625,7 +625,7 @@ mod tests {
             return;
         }
         let tree = load_patch_file(path, &SoundsourceIndex::default()).expect("import");
-        let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
+        let mut rn = sampler::node_render::RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
         let midi = [PluginMidiEvent {
@@ -666,7 +666,7 @@ mod tests {
         let index = SoundsourceIndex::scan_default();
         let tree = load_patch_file(path, &index).expect("multi import");
         eprintln!("imported multi as {:?}", tree.name);
-        let mut rn = signal_sampler::node_render::RenderNode::compile(&tree, 48_000);
+        let mut rn = sampler::node_render::RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
         let midi = [PluginMidiEvent {

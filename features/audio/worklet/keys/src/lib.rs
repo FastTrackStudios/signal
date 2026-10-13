@@ -5,7 +5,7 @@
 //! topology (rig folder → engine folders → layer tracks, one
 //! [`KeysInstrument`] per lane) is seeded into the SAME `Standalone` the
 //! worklet renders, packs arrive as transferred bytes
-//! ([`signal_sampler::pack_registry`]), and live MIDI rides the wasm
+//! ([`sampler::pack_registry`]), and live MIDI rides the wasm
 //! live-MIDI queue (`Standalone::push_live_midi` → per-block drain).
 //!
 //! This crate exists because the dependency arrow is one-way —
@@ -14,18 +14,18 @@
 //! The worklet-with-keys entry lives here, on top of both.
 //!
 //! [`WebRenderer`]: daw_standalone::audio_engine::web::WebRenderer
-//! [`KeysRig`]: signal_sampler::KeysRig
-//! [`KeysInstrument`]: signal_sampler::KeysInstrument
+//! [`KeysRig`]: sampler::KeysRig
+//! [`KeysInstrument`]: sampler::KeysInstrument
 
 // ── The LaneProgram wire shape ──────────────────────────────────────────────
 //
 // The Facet mirror (`WireProgram` and friends) lives in
-// `signal_sampler::keys_rig` — the one crate both this worklet and the
+// `sampler::keys_rig` — the one crate both this worklet and the
 // engine backend (signal-keys, which SERIALIZES the same JSON from
 // `KeysRig::lane_program_wire`) depend on. Re-exported so existing
 // consumers keep their import path.
 
-pub use signal_sampler::keys_rig::{WireEngine, WireLayer, WireProgram};
+pub use sampler::keys_rig::{WireEngine, WireLayer, WireProgram};
 
 /// Parse a lane program from its JSON wire form (the payload of the
 /// worklet's `open_lanes` message — the engine's `lane_program_wire` RPC
@@ -47,8 +47,8 @@ mod web {
     use wasm_bindgen::prelude::*;
 
     use daw_standalone::audio_engine::web::WebRenderer;
-    use signal_sampler::KeysRig;
-    use signal_sampler::keys_rig::LaneProgram;
+    use sampler::KeysRig;
+    use sampler::keys_rig::LaneProgram;
 
     use crate::wire_program_from_json;
 
@@ -66,7 +66,7 @@ mod web {
         use std::sync::Once;
         static ONCE: Once = Once::new();
         ONCE.call_once(|| {
-            signal_sampler::engine::cache::set_external_pack_reader(Box::new(|id, offset, dst| {
+            sampler::engine::cache::set_external_pack_reader(Box::new(|id, offset, dst| {
                 use wasm_bindgen::JsCast as _;
                 let Ok(hook) = js_sys::Reflect::get(&js_sys::global(), &"__ftsPackRead".into())
                 else {
@@ -168,7 +168,7 @@ mod web {
     pub fn streamer_wake_addr() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
         {
-            signal_sampler::engine::stream_wasm::wake_addr()
+            sampler::engine::stream_wasm::wake_addr()
         }
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         0
@@ -178,7 +178,7 @@ mod web {
     pub fn streamer_wake_value() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
         {
-            signal_sampler::engine::stream_wasm::wake_value()
+            sampler::engine::stream_wasm::wake_value()
         }
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         0
@@ -193,8 +193,8 @@ mod web {
             // Free what the audio thread retired. It cannot free itself —
             // the allocator lock is shared with these workers, and the
             // worklet thread is realtime priority (see `built_lanes`).
-            let reaped = signal_sampler::built_lanes::reap() as u32;
-            signal_sampler::engine::stream_wasm::drain() as u32 + reaped
+            let reaped = sampler::built_lanes::reap() as u32;
+            sampler::engine::stream_wasm::drain() as u32 + reaped
         }
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         0
@@ -206,7 +206,7 @@ mod web {
     pub fn streamer_depth() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
         {
-            signal_sampler::engine::stream_wasm::depth() as u32
+            sampler::engine::stream_wasm::depth() as u32
         }
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         0
@@ -218,7 +218,7 @@ mod web {
     pub fn streamer_opened() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
         {
-            signal_sampler::engine::stream_wasm::opened() as u32
+            sampler::engine::stream_wasm::opened() as u32
         }
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         0
@@ -232,7 +232,7 @@ mod web {
     pub fn streamer_open_failed() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
         {
-            signal_sampler::engine::stream_wasm::open_failed() as u32
+            sampler::engine::stream_wasm::open_failed() as u32
         }
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         0
@@ -242,7 +242,7 @@ mod web {
     pub fn streamer_open_depth() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
         {
-            signal_sampler::engine::stream_wasm::open_depth() as u32
+            sampler::engine::stream_wasm::open_depth() as u32
         }
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         0
@@ -252,7 +252,7 @@ mod web {
     pub fn streamer_dropped() -> u32 {
         #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
         {
-            signal_sampler::engine::stream_wasm::dropped() as u32
+            sampler::engine::stream_wasm::dropped() as u32
         }
         #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
         0
@@ -371,7 +371,7 @@ mod web {
         /// ([`attach_pack_external`](Self::attach_pack_external)).
         #[wasm_bindgen(js_name = attachPack)]
         pub fn attach_pack(&self, key: &str, bytes: &[u8]) -> Result<(), JsValue> {
-            signal_sampler::pack_registry::install(key, bytes.to_vec()).map_err(js_err)
+            sampler::pack_registry::install(key, bytes.to_vec()).map_err(js_err)
         }
 
         /// Install a pack whose BYTES STAY ON THE JS HEAP, outside wasm
@@ -384,7 +384,7 @@ mod web {
         #[wasm_bindgen(js_name = attachPackExternal)]
         pub fn attach_pack_external(&self, key: &str, id: u32, len: f64) -> Result<(), JsValue> {
             install_external_reader_once();
-            signal_sampler::pack_registry::install_external(key, id, len as u64).map_err(js_err)
+            sampler::pack_registry::install_external(key, id, len as u64).map_err(js_err)
         }
 
         /// Build the headless keys rig from a lane-program JSON (see
@@ -585,7 +585,7 @@ mod web {
         /// The keys of every installed in-memory pack.
         #[wasm_bindgen(js_name = installedPacks)]
         pub fn installed_packs(&self) -> Vec<JsValue> {
-            signal_sampler::pack_registry::keys()
+            sampler::pack_registry::keys()
                 .into_iter()
                 .map(|k| JsValue::from_str(&k))
                 .collect()
@@ -659,7 +659,7 @@ mod web {
         pub fn has_built_lanes(&self) -> bool {
             #[cfg(target_feature = "atomics")]
             {
-                signal_sampler::built_lanes::has_pending()
+                sampler::built_lanes::has_pending()
             }
             #[cfg(not(target_feature = "atomics"))]
             false
@@ -670,7 +670,7 @@ mod web {
         pub fn lanes_built(&self) -> u32 {
             #[cfg(target_feature = "atomics")]
             {
-                signal_sampler::built_lanes::built() as u32
+                sampler::built_lanes::built() as u32
             }
             #[cfg(not(target_feature = "atomics"))]
             0
@@ -680,7 +680,7 @@ mod web {
         pub fn lanes_installed(&self) -> u32 {
             #[cfg(target_feature = "atomics")]
             {
-                signal_sampler::built_lanes::installed() as u32
+                sampler::built_lanes::installed() as u32
             }
             #[cfg(not(target_feature = "atomics"))]
             0
@@ -705,7 +705,7 @@ mod web {
         /// pressed keys that made NO sound.
         #[wasm_bindgen(js_name = notesDropped)]
         pub fn notes_dropped(&self) -> u32 {
-            signal_sampler::engine::notes_dropped() as u32
+            sampler::engine::notes_dropped() as u32
         }
 
         /// Voices currently alive across every lane's sampler sources
@@ -781,7 +781,7 @@ mod web {
             } else {
                 pcm.len() / channels as usize
             };
-            let data = std::sync::Arc::new(signal_sampler::engine::cache::SampleData::from_f32(
+            let data = std::sync::Arc::new(sampler::engine::cache::SampleData::from_f32(
                 pcm.to_vec(),
                 channels,
                 sample_rate,
@@ -849,7 +849,7 @@ mod web {
             } else {
                 frames.len() / channels as usize
             };
-            let data = std::sync::Arc::new(signal_sampler::engine::cache::SampleData::from_f32(
+            let data = std::sync::Arc::new(sampler::engine::cache::SampleData::from_f32(
                 frames,
                 channels,
                 sample_rate,
@@ -878,7 +878,7 @@ mod web {
         /// it took (a later call is ignored; see `budget::set_limit_mb`).
         #[wasm_bindgen(js_name = setPcmBudgetMb)]
         pub fn set_pcm_budget_mb(&self, mb: f64) -> bool {
-            signal_sampler::engine::budget::set_limit_mb(mb.max(0.0) as u64)
+            sampler::engine::budget::set_limit_mb(mb.max(0.0) as u64)
         }
 
         /// Decoded PCM currently resident, in MB — the number that says
@@ -886,13 +886,13 @@ mod web {
         /// sound without a fetch.
         #[wasm_bindgen(js_name = pcmUsedMb)]
         pub fn pcm_used_mb(&self) -> f64 {
-            signal_sampler::engine::budget::used_bytes() as f64 / (1024.0 * 1024.0)
+            sampler::engine::budget::used_bytes() as f64 / (1024.0 * 1024.0)
         }
 
         /// The decoded-PCM ceiling in MB (-1 when unlimited).
         #[wasm_bindgen(js_name = pcmLimitMb)]
         pub fn pcm_limit_mb(&self) -> f64 {
-            let limit = signal_sampler::engine::budget::limit_bytes();
+            let limit = sampler::engine::budget::limit_bytes();
             if limit == u64::MAX {
                 -1.0
             } else {

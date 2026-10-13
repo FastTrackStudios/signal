@@ -24,7 +24,7 @@ signal-synth.workspace = true
 # plays its imported Container on the very same host the keys rig uses; only
 # the preset source + wire service differ.
 keys = { workspace = true }
-signal-sampler.workspace = true
+sampler = { workspace = true }
 # Filesystem-direct pack discovery + tagging for the BROWSE view (scan_packs).
 signal-browser = { workspace = true, features = ["native"] }
 audio = { workspace = true, features = ["io", "monitor"] }

@@ -57,7 +57,7 @@ fn start() -> Option<Engine> {
     ));
 
     runtime.block_on(async {
-        let config_dir = signal_sampler::rig_prefs::signal_config_dir();
+        let config_dir = sampler::rig_prefs::signal_config_dir();
         let backend = Tone3000Backend::new(Config::from_env(
             &config_dir,
             signal_nam::nam_root_from_env(&config_dir.join("nam")),

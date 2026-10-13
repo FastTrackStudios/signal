@@ -18,8 +18,8 @@
 //! source until the engine grows into the structure.
 
 use signal_proto::block::BlockType;
-use signal_sampler::rig::RigBlock;
-use signal_sampler::rig_node::Container;
+use sampler::rig::RigBlock;
+use sampler::rig_node::Container;
 
 /// Send target for a layer's aux route — a rig that offers an Aux rack names
 /// its container this, and the send resolves; rigs without one drop it.
@@ -543,7 +543,7 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
         // each note owns its amp/filter envelopes and lowpass, so the
         // module's settings ride on the oscillator block itself.
         Source::Synth => {
-            let cutoff_norm = signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz);
+            let cutoff_norm = sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz);
             let block = RigBlock::of_type(BlockType::Oscillator)
                 .named("Soundsource")
                 .with_param("amp_attack", format!("{:.3}", set.amp_env.0.max(0.0)))
@@ -585,7 +585,7 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
     let chain_cutoff = if open {
         1.0
     } else {
-        signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
+        sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
     };
     let chain_res = if open {
         0.0
@@ -703,7 +703,7 @@ pub fn apply_settings_to_omni_layer(
     layer_idx: usize,
     set: &ModuleSettings,
 ) -> bool {
-    use signal_sampler::rig_node::RigNode;
+    use sampler::rig_node::RigNode;
     fn find_mut<'a>(c: &'a mut Container, name: &str) -> Option<&'a mut Container> {
         if c.name == name {
             return Some(c);
@@ -725,7 +725,7 @@ pub fn apply_settings_to_omni_layer(
         match block.params.iter_mut().find(|p| p.name == name) {
             Some(p) => p.value = value,
             None => {
-                block.params.push(signal_sampler::rig_node::Param {
+                block.params.push(sampler::rig_node::Param {
                     name: name.to_string(),
                     value,
                 });
@@ -811,7 +811,7 @@ pub fn apply_settings_to_omni_layer(
     let amp = set.amp_block();
     let base_amp = base.map(ModuleSettings::amp_block);
     // Only the params that differ from the baseline's.
-    let changed = |p: &signal_sampler::rig_node::Param, from: &Option<RigBlock>| {
+    let changed = |p: &sampler::rig_node::Param, from: &Option<RigBlock>| {
         from.as_ref()
             .is_none_or(|b| b.params.iter().find(|q| q.name == p.name) != Some(p))
     };
@@ -881,7 +881,7 @@ pub fn apply_settings_to_omni_layer(
                     match (base, knob, get(b, "knob_setting")) {
                         // A measured knob: move it by the knob's ratio.
                         (Some(bs), Some(taper), Some(_)) if bs.cutoff_hz > 0.0 => {
-                            let hz = signal_sampler::native::NativeFilter::cutoff_from_norm(
+                            let hz = sampler::native::NativeFilter::cutoff_from_norm(
                                 get(b, "cutoff").unwrap_or(1.0),
                             ) * (set.cutoff_hz / bs.cutoff_hz);
                             if let Some(setting) = taper_setting(&taper, hz) {
@@ -892,7 +892,7 @@ pub fn apply_settings_to_omni_layer(
                                 "cutoff",
                                 format!(
                                     "{:.4}",
-                                    signal_sampler::native::NativeFilter::norm_from_cutoff(hz)
+                                    sampler::native::NativeFilter::norm_from_cutoff(hz)
                                 ),
                             );
                         }
@@ -901,7 +901,7 @@ pub fn apply_settings_to_omni_layer(
                             "cutoff",
                             format!(
                                 "{:.4}",
-                                signal_sampler::native::NativeFilter::norm_from_cutoff(
+                                sampler::native::NativeFilter::norm_from_cutoff(
                                     set.cutoff_hz
                                 )
                             ),
@@ -1168,7 +1168,7 @@ pub fn apply_lfos_to_omni(
     lfos: &[(f32, f32, f32); 4],
     base: Option<&[(f32, f32, f32); 4]>,
 ) {
-    use signal_sampler::rig_node::RigNode;
+    use sampler::rig_node::RigNode;
     fn walk(c: &mut Container, f: &mut impl FnMut(&mut Container)) {
         f(c);
         for child in &mut c.children {
@@ -1198,7 +1198,7 @@ pub fn apply_lfos_to_omni(
                     ] {
                         match m.params.iter_mut().find(|p| p.name == k) {
                             Some(p) => p.value = v,
-                            None => m.params.push(signal_sampler::rig_node::Param {
+                            None => m.params.push(sampler::rig_node::Param {
                                 name: k.to_string(),
                                 value: v,
                             }),
@@ -1229,7 +1229,7 @@ pub fn apply_lfo_fades_to_omni(tree: &mut Container, fades_ms: &[f32; 4], base: 
                 let v = format!("{:.4}", fade.max(0.0) / 1000.0);
                 match m.params.iter_mut().find(|p| p.name == "fade") {
                     Some(p) => p.value = v,
-                    None => m.params.push(signal_sampler::rig_node::Param {
+                    None => m.params.push(sampler::rig_node::Param {
                         name: "fade".to_string(),
                         value: v,
                     }),
@@ -1266,7 +1266,7 @@ pub fn import_omni_lfos(path: &std::path::Path) -> Result<Vec<(f32, f32, f32)>, 
 
 /// The deepest route (absolute) from each of "LFO 1".."LFO 4" in `tree`.
 fn lfo_depths(tree: &Container) -> [f32; 4] {
-    use signal_sampler::rig_node::RigNode;
+    use sampler::rig_node::RigNode;
     fn walk(c: &Container, out: &mut [f32; 4]) {
         for r in &c.mod_routes {
             let key = r.source.key();
@@ -1354,7 +1354,7 @@ mod tests {
 
     #[test]
     fn a_picked_destination_builds_its_lfo_and_route_off_builds_none() {
-        use signal_sampler::node_render::RenderNode;
+        use sampler::node_render::RenderNode;
         let compile = |set: &ModuleSettings| {
             let m = signal_module_with("Keys A", set);
             let mut rn = RenderNode::compile(&Container::preset("p").add(m), 48_000);
@@ -1383,7 +1383,7 @@ mod tests {
             "Keys A",
             "LFO 1",
             3.0,
-            Some(signal_sampler::native::LfoWave::Saw),
+            Some(sampler::native::LfoWave::Saw),
             Some(0.2)
         ));
         assert!(rn.set_route_depth("Keys A", "LFO 1", "Amp", "gain", 0.1));
@@ -1391,7 +1391,7 @@ mod tests {
 
     #[test]
     fn effects_are_in_the_chain_only_when_on_and_take_live_writes() {
-        use signal_sampler::node_render::RenderNode;
+        use sampler::node_render::RenderNode;
         // Defaults: no effect blocks at all (an idle module costs nothing).
         let quiet = signal_module_with("Keys A", &ModuleSettings::from_source(Source::Synth));
         let mut rn = RenderNode::compile(&Container::preset("p").add(quiet), 48_000);
@@ -1435,10 +1435,10 @@ mod tests {
     #[test]
     fn synth_module_plays_bends_and_vibratos() {
         use signal_plugin_host::{PluginEvents, PluginMidiEvent};
-        use signal_sampler::RenderNode;
+        use sampler::RenderNode;
 
         let note_on = |note: u8, vel: u8| {
-            use signal_sampler::midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+            use sampler::midicore::{Channel, KeyNumber, MidiEvent, Velocity};
             PluginMidiEvent {
                 offset: 0,
                 message: MidiEvent::NoteOn {
@@ -1449,7 +1449,7 @@ mod tests {
             }
         };
         let bend_full = || {
-            use signal_sampler::midicore::{Channel, MidiEvent, PitchBend};
+            use sampler::midicore::{Channel, MidiEvent, PitchBend};
             PluginMidiEvent {
                 offset: 0,
                 message: MidiEvent::PitchBend {
@@ -1503,7 +1503,7 @@ mod tests {
             "full bend ≈ +2 st through the tree: ratio={ratio}"
         );
     }
-    use signal_sampler::rig_node::Role;
+    use sampler::rig_node::Role;
 
     #[test]
     fn a_module_has_exactly_one_generator() {

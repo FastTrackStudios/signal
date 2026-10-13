@@ -5960,10 +5960,10 @@ dependencies = [
  "midicore",
  "midicore-proto",
  "midicore-ui",
+ "sampler",
  "signal-plugin-host",
  "signal-rig-host",
  "signal-rigs-proto",
- "signal-sampler",
  "signal-space",
  "signal-ui",
  "tracing",
@@ -6185,8 +6185,8 @@ dependencies = [
  "dioxus",
  "facet",
  "midicore",
+ "sampler",
  "signal-rigs-proto",
- "signal-sampler",
  "signal-space",
  "tracing",
  "tracing-subscriber",
@@ -8753,6 +8753,7 @@ dependencies = [
  "parley 0.10.0",
  "reverb",
  "rustc-hash 2.1.3",
+ "sampler",
  "serde_json",
  "signal-account-proto",
  "signal-grid",
@@ -8762,7 +8763,6 @@ dependencies = [
  "signal-proto",
  "signal-rig-host",
  "signal-rigs-proto",
- "signal-sampler",
  "signal-tone3000-proto",
  "signal-tone3000-ui",
  "signal-widgets",
@@ -10633,12 +10633,12 @@ dependencies = [
  "midicore-proto",
  "midicore-ui",
  "ratatui",
+ "sampler",
  "signal-browser",
  "signal-plugin-host",
  "signal-proto",
  "signal-rig-host",
  "signal-rigs-proto",
- "signal-sampler",
  "signal-synth",
  "signal-ui",
  "signal-widgets",
@@ -12435,8 +12435,8 @@ dependencies = [
  "audio",
  "neural-amp-modeler",
  "nice-plug",
+ "sampler",
  "signal-nam",
- "signal-sampler",
  "signal-tone3000",
  "signal-tone3000-proto",
  "signal-tone3000-ui",
@@ -17070,6 +17070,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "sampler"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "architect-telemetry",
+ "audio",
+ "base64 0.22.1",
+ "builtin",
+ "clap",
+ "cpal",
+ "daw",
+ "eyre",
+ "facet",
+ "facet-json",
+ "facet-styx",
+ "facet-toml",
+ "fts-sample",
+ "futures-util",
+ "hound",
+ "keyflow-annotate",
+ "keyflow-orchestra",
+ "libc",
+ "memmap2",
+ "midicore",
+ "neural-amp-modeler",
+ "openwurli-dsp",
+ "ratatui",
+ "rayon",
+ "realfft",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "signal-plugin-host",
+ "signal-proto",
+ "signal-rig-host",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "vox",
+ "vox-types",
+ "walkdir",
+]
+
+[[package]]
 name = "saturate"
 version = "0.1.0"
 dependencies = [
@@ -18289,10 +18336,10 @@ name = "signal-browser"
 version = "0.1.0"
 dependencies = [
  "rayon",
+ "sampler",
  "signal",
  "signal-grid",
  "signal-proto",
- "signal-sampler",
  "tokio",
  "uuid",
  "walkdir",
@@ -18374,16 +18421,14 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-ui-kit 0.3.2",
  "reqwest 0.12.28",
+ "sampler",
  "session-ui",
  "sha2 0.10.9",
  "signal-account",
  "signal-account-proto",
  "signal-nam",
- "signal-pack-library",
- "signal-packs-proto",
  "signal-rig-host",
  "signal-rigs-proto",
- "signal-sampler",
  "signal-space",
  "signal-space-proto",
  "signal-synth-proto",
@@ -18433,9 +18478,9 @@ dependencies = [
  "dirs",
  "guitar",
  "num-traits",
+ "sampler",
  "serde",
  "serde_json",
- "signal-sampler",
  "tracing",
 ]
 
@@ -18469,8 +18514,8 @@ dependencies = [
  "facet",
  "facet-json",
  "js-sys",
+ "sampler",
  "signal-plugin-host",
- "signal-sampler",
  "tracing",
  "wasm-bindgen",
 ]
@@ -18536,7 +18581,7 @@ dependencies = [
  "fts-sample",
  "hound",
  "js-sys",
- "signal-sampler",
+ "sampler",
  "tracing",
  "wasm-bindgen",
 ]
@@ -18613,38 +18658,8 @@ dependencies = [
  "eyre",
  "hound",
  "keyflow-orchestra",
+ "sampler",
  "session-guide",
- "signal-sampler",
-]
-
-[[package]]
-name = "signal-pack-library"
-version = "0.1.0"
-dependencies = [
- "architect",
- "architect-telemetry",
- "facet-json",
- "futures-util",
- "hound",
- "sha2 0.10.9",
- "signal-packs-proto",
- "signal-sampler",
- "tempfile",
- "tokio",
- "tracing",
- "vox",
- "walkdir",
-]
-
-[[package]]
-name = "signal-packs-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "thiserror 2.0.20",
- "vox",
- "vox-types",
 ]
 
 [[package]]
@@ -18655,7 +18670,7 @@ dependencies = [
  "facet",
  "facet-styx",
  "nice-plug",
- "signal-sampler",
+ "sampler",
  "tracing",
  "tracing-subscriber",
 ]
@@ -18730,45 +18745,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-sampler"
-version = "0.1.0"
-dependencies = [
- "audio",
- "base64 0.22.1",
- "builtin",
- "clap",
- "cpal",
- "daw",
- "eyre",
- "facet",
- "facet-styx",
- "facet-toml",
- "fts-sample",
- "hound",
- "keyflow-annotate",
- "keyflow-orchestra",
- "libc",
- "memmap2",
- "midicore",
- "neural-amp-modeler",
- "openwurli-dsp",
- "ratatui",
- "rayon",
- "realfft",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "signal-plugin-host",
- "signal-proto",
- "signal-rig-host",
- "tempfile",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "walkdir",
-]
-
-[[package]]
 name = "signal-sampler-clap"
 version = "0.1.0"
 dependencies = [
@@ -18779,9 +18755,9 @@ dependencies = [
  "facet-styx",
  "hound",
  "nice-plug",
+ "sampler",
  "serde",
  "serde_json",
- "signal-sampler",
  "tracing",
  "tracing-subscriber",
 ]
@@ -18847,9 +18823,9 @@ dependencies = [
  "daw",
  "facet-styx",
  "flate2",
+ "sampler",
  "signal-plugin-host",
  "signal-proto",
- "signal-sampler",
  "song",
  "tracing",
  "tracing-subscriber",
@@ -18875,11 +18851,11 @@ dependencies = [
  "daw",
  "keys",
  "midicore",
+ "sampler",
  "signal-browser",
  "signal-plugin-host",
  "signal-rig-host",
  "signal-rigs-proto",
- "signal-sampler",
  "signal-synth",
  "signal-synth-proto",
  "tracing",

@@ -13,7 +13,7 @@
 
 use guitar::library::RigLibrary;
 use guitar::measure::render_through;
-use signal_sampler::rig_profile::RigPatch;
+use sampler::rig_profile::RigPatch;
 
 const SR: u32 = 48_000;
 /// The test note: a guitar's G (196 Hz), or `TONE_AUDIT_F0` (82 for a
@@ -123,7 +123,7 @@ fn main() {
         let chords = guitar::di_player::recording(0, SR);
         let is_dly = |n: &str| n.to_lowercase().starts_with("dly");
         let is_verb = |n: &str| n.to_lowercase().starts_with("verb");
-        let lufs = |x: &[f64]| signal_sampler::loudness::integrated_lufs(x, f64::from(SR));
+        let lufs = |x: &[f64]| sampler::loudness::integrated_lufs(x, f64::from(SR));
         let mono = |(l, r): (Vec<f32>, Vec<f32>)| -> Vec<f64> { l.iter().zip(&r).map(|(a, b)| f64::from(a + b) * 0.5).collect() };
         let rows = guitar::levelling::par_map(&built.patches, 0, |p| {
             let lim = |n: &str| n.eq_ignore_ascii_case("limiter");
@@ -188,7 +188,7 @@ fn main() {
     caps.sort();
     caps.dedup();
     guitar::levelling::par_map(&caps, 0, |c| {
-        let _ = signal_sampler::nam_calibrate::drive_curve(std::path::Path::new(c), f64::from(SR));
+        let _ = sampler::nam_calibrate::drive_curve(std::path::Path::new(c), f64::from(SR));
     });
     let built = guitar::nodes::profile_from_library(def, &lib.drive_presets);
     let rows = guitar::levelling::par_map(&built.patches, 0, |p| {
@@ -199,7 +199,7 @@ fn main() {
                 write_wav(&dir.join(format!("{}.wav", p.name)), &l, &r);
             }
             let mono: Vec<f64> = l.iter().zip(&r).map(|(a, b)| f64::from(a + b) * 0.5).collect();
-            signal_sampler::loudness::integrated_lufs(&mono, f64::from(SR))
+            sampler::loudness::integrated_lufs(&mono, f64::from(SR))
         });
         (sides(&full, &soft), sides(&full, &hard), sides(&amps, &hard), lufs)
     });

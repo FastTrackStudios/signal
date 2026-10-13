@@ -35,7 +35,7 @@ use signal_proto::model::Block;
 use signal_proto::node::{Combine, Content, Node, NodeId, NodeLibrary, Role, Selection, Variant};
 use signal_proto::overrides::{NodeOverrideOp, NodePath, NodePathSegment, Override};
 
-use signal_sampler::gapless::{Bank, InstallError, Resident, VariantBank};
+use sampler::gapless::{Bank, InstallError, Resident, VariantBank};
 
 use crate::library::RigHome;
 use crate::profiles::{DrivePresetDef, OverrideDef, ProfileDef};
@@ -94,8 +94,8 @@ impl RigNodes {
         &self,
         def: &ProfileDef,
         drives: &[DrivePresetDef],
-    ) -> signal_sampler::rig_profile::RigProfile {
-        use signal_sampler::rig_profile::{RigPatch, RigProfile, RigStack};
+    ) -> sampler::rig_profile::RigProfile {
+        use sampler::rig_profile::{RigPatch, RigProfile, RigStack};
 
         let mut profile = RigProfile::new(&def.name);
         for patch in &def.patches {
@@ -126,7 +126,7 @@ impl RigNodes {
             };
 
             let mut built = RigPatch::new(&patch.name);
-            built.chain = signal_sampler::from_node::to_chain(&resolved);
+            built.chain = sampler::from_node::to_chain(&resolved);
             settle_amp_stage(&mut built.chain, def, patch);
             settle_drives(&mut built.chain, def, patch, drives);
             apply_block_levels(&mut built.chain, def, patch, drives);
@@ -246,7 +246,7 @@ impl RigNodes {
     /// patches — which is what `ProfileRig` already does by hand for gapless
     /// footswitching. The difference is that afterwards the switch is a
     /// [`Resident`] token rather than an integer, so it *cannot* be asked to
-    /// load. See [`signal_sampler::gapless`].
+    /// load. See [`sampler::gapless`].
     ///
     /// # Errors
     ///
@@ -361,7 +361,7 @@ fn at_path(mut node: Node, path: &str) -> Node {
 /// type's category is the implicit one the rig has always used ("Empty =
 /// grouped by the block type's category"). Either way every block has a
 /// purpose, and in the node model a purpose is a container.
-fn module_of(block: &signal_sampler::RigBlock) -> String {
+fn module_of(block: &sampler::RigBlock) -> String {
     if block.module.is_empty() {
         block.block_type.category().display_name().to_string()
     } else {
@@ -381,7 +381,7 @@ fn drive_leaf(name: &str, path: &str) -> Node {
     let mut node = nam_leaf(name, path, BlockType::Drive);
     node.bypassed = true;
     node.settings.push(signal_proto::node_routing::Setting {
-        name: format!("{}drive", signal_sampler::to_node::RAW_PARAM),
+        name: format!("{}drive", sampler::to_node::RAW_PARAM),
         value: "0.5".to_string(),
     });
     node
@@ -396,7 +396,7 @@ fn drive_leaf(name: &str, path: &str) -> Node {
 /// The definition is the authority for all three, so they are settled here,
 /// once, after resolving — keeping this path equal to `build_profile`.
 fn settle_amp_stage(
-    chain: &mut [signal_sampler::RigBlock],
+    chain: &mut [sampler::RigBlock],
     def: &ProfileDef,
     patch: &crate::profiles::PatchDef,
 ) {
@@ -438,7 +438,7 @@ fn settle_amp_stage(
         }) {
             match amp.params.iter_mut().find(|p| p.name == ov.param) {
                 Some(p) => p.value = ov.value.to_string(),
-                None => amp.params.push(signal_sampler::rig_node::Param {
+                None => amp.params.push(sampler::rig_node::Param {
                     name: ov.param.clone(),
                     value: ov.value.to_string(),
                 }),
@@ -466,7 +466,7 @@ fn settle_amp_stage(
 /// patch that runs different pedals gets them set here after resolving —
 /// the same seam as the amp stage.
 fn settle_drives(
-    chain: &mut [signal_sampler::RigBlock],
+    chain: &mut [sampler::RigBlock],
     def: &ProfileDef,
     patch: &crate::profiles::PatchDef,
     presets: &[DrivePresetDef],
@@ -504,7 +504,7 @@ fn settle_drives(
 /// set after the chain was already playing was a gain stage only the live
 /// rig had, and the first thing to drift.
 fn apply_block_levels(
-    chain: &mut [signal_sampler::RigBlock],
+    chain: &mut [sampler::RigBlock],
     def: &ProfileDef,
     patch: &crate::profiles::PatchDef,
     drives: &[DrivePresetDef],
@@ -530,7 +530,7 @@ fn apply_block_levels(
         let drive = block.param_f32("drive").unwrap_or(0.5);
         let path = std::path::Path::new(&block.nam);
         (block.input_trim_db, block.output_trim_db) =
-            signal_sampler::nam_calibrate::drive_trims(path, level, drive);
+            sampler::nam_calibrate::drive_trims(path, level, drive);
     }
 }
 
@@ -568,7 +568,7 @@ pub(crate) fn drive_option_level(drives: &[DrivePresetDef], nam: &str) -> f32 {
 pub fn profile_from_library(
     def: &ProfileDef,
     drives: &[DrivePresetDef],
-) -> signal_sampler::rig_profile::RigProfile {
+) -> sampler::rig_profile::RigProfile {
     profile_from_library_in(&RigHome::process_default(), def, drives)
 }
 
@@ -579,7 +579,7 @@ pub fn profile_from_library_in(
     home: &RigHome,
     def: &ProfileDef,
     drives: &[DrivePresetDef],
-) -> signal_sampler::rig_profile::RigProfile {
+) -> sampler::rig_profile::RigProfile {
     let flat = crate::compose::flatten(def, &home.load_compositions());
     to_nodes_with_store_in(home, &flat, drives).to_profile(&flat, drives)
 }
@@ -764,7 +764,7 @@ pub fn to_nodes_for(
         ..def.clone()
     };
     let base = crate::profiles::build_profile_for(&unbent, drives, instrument);
-    let base_chain: &[signal_sampler::RigBlock] = base
+    let base_chain: &[sampler::RigBlock] = base
         .patches
         .first()
         .map_or(&[], |patch| patch.chain.as_slice());
@@ -866,7 +866,7 @@ pub fn to_nodes_for(
             // called "Boost" — the board's and the post-amp one — and without
             // the discriminator they would seed to the same id and the second
             // would silently replace the first in the library.
-            let (leaf, _report) = signal_sampler::to_node::lift_one_block(block);
+            let (leaf, _report) = sampler::to_node::lift_one_block(block);
             let module = module_of(block);
             let key = (module.clone(), block.display_name());
             let seen = occurrences.entry(key).or_insert(0);
@@ -918,7 +918,7 @@ pub fn to_nodes_for(
         base_chain
             .iter()
             .find(|b| b.display_name().eq_ignore_ascii_case(block))
-            .and_then(|b| signal_sampler::native::range_of(b.block_type, param))
+            .and_then(|b| sampler::native::range_of(b.block_type, param))
     };
 
     // The pedal settings the board is wired to, on the chain's own default.
@@ -984,7 +984,7 @@ pub fn to_nodes_for(
             else {
                 continue;
             };
-            let Some(range) = signal_sampler::native::range_of(target.block_type, &ov.param) else {
+            let Some(range) = sampler::native::range_of(target.block_type, &ov.param) else {
                 continue;
             };
             // A capture's drive sits at 0.5 — the capture at unity — not at
@@ -994,7 +994,7 @@ pub fn to_nodes_for(
             let default = if ov.param == "drive" && !target.nam.is_empty() {
                 0.5
             } else {
-                signal_sampler::native::default_of(target.block_type, &ov.param)
+                sampler::native::default_of(target.block_type, &ov.param)
                     .unwrap_or(range.min)
             };
             let Some(node) = library
@@ -1205,7 +1205,7 @@ mod tests {
             resolve(&rig.library, &rig.chain, Some(ambient)).expect("resolves");
         assert!(report.missing.is_empty());
 
-        let chain = signal_sampler::from_node::to_chain(&resolved);
+        let chain = sampler::from_node::to_chain(&resolved);
         assert!(!chain.is_empty(), "the patch renders to a chain");
 
         let amp = chain
@@ -1234,7 +1234,7 @@ mod tests {
             next: u32,
         }
         impl Bank for Counting {
-            fn install(&mut self, _blocks: &[signal_sampler::RigBlock]) -> Result<u32, String> {
+            fn install(&mut self, _blocks: &[sampler::RigBlock]) -> Result<u32, String> {
                 self.installs += 1;
                 self.next += 1;
                 Ok(self.next)
@@ -1283,7 +1283,7 @@ mod tests {
             next: u32,
         }
         impl Bank for Counting {
-            fn install(&mut self, _b: &[signal_sampler::RigBlock]) -> Result<u32, String> {
+            fn install(&mut self, _b: &[sampler::RigBlock]) -> Result<u32, String> {
                 self.installs += 1;
                 self.next += 1;
                 Ok(self.next)
@@ -1379,7 +1379,7 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{} did not resolve: {e}", patch.name));
             assert!(report.is_clean(), "{}: {report:?}", patch.name);
 
-            let chain = signal_sampler::from_node::to_chain(&resolved);
+            let chain = sampler::from_node::to_chain(&resolved);
             assert_eq!(
                 chain.len(),
                 patch.chain.len(),
@@ -1454,7 +1454,7 @@ mod tests {
         let mut unranged = Vec::new();
         for patch in &built.patches {
             for block in &patch.chain {
-                let (_, report) = signal_sampler::to_node::lift_one_block(block);
+                let (_, report) = sampler::to_node::lift_one_block(block);
                 // A compressor's `meter` is which panel trace it draws on —
                 // wiring set at build time, deliberately not a knob.
                 unranged.extend(report.unranged.into_iter().filter(|(_, p)| p != "meter"));
@@ -1554,7 +1554,7 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{} did not resolve: {e}", patch.name));
             assert!(report.is_clean(), "{}: {report:?}", patch.name);
 
-            let chain = signal_sampler::from_node::to_chain(&resolved);
+            let chain = sampler::from_node::to_chain(&resolved);
             assert_eq!(
                 chain.len(),
                 patch.chain.len(),
@@ -1615,7 +1615,7 @@ mod tests {
         let mut unranged = Vec::new();
         for patch in &built.patches {
             for block in &patch.chain {
-                let (_, report) = signal_sampler::to_node::lift_one_block(block);
+                let (_, report) = sampler::to_node::lift_one_block(block);
                 // `meter` is a compressor's panel-trace wiring, not a knob.
                 unranged.extend(
                     report
@@ -1670,7 +1670,7 @@ mod tests {
         let from_nodes = to_nodes(&def, &drives).to_profile(&def, &drives);
         let from_builder = crate::profiles::build_profile(&def, &drives);
         for (n, b) in from_nodes.patches.iter().zip(&from_builder.patches) {
-            let pick = |chain: &[signal_sampler::RigBlock], name: &str| {
+            let pick = |chain: &[sampler::RigBlock], name: &str| {
                 chain
                     .iter()
                     .find(|x| x.name.eq_ignore_ascii_case(name))
@@ -1758,7 +1758,7 @@ mod tests {
         }
 
         // The stacks a footswitch rotates through come across untouched.
-        let names = |p: &signal_sampler::rig_profile::RigProfile| -> Vec<String> {
+        let names = |p: &sampler::rig_profile::RigProfile| -> Vec<String> {
             p.stacks.iter().map(|s| s.name.clone()).collect()
         };
         assert_eq!(names(&from_nodes), names(&from_builder));

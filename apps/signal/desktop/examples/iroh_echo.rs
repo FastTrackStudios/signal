@@ -18,9 +18,9 @@ use vox::{Link as _, LinkRx as _, LinkTx as _};
 #[derive(Clone, architect::HasDispatcher)]
 struct StubPacks;
 
-impl signal_packs_proto::packs::PackLibrary for StubPacks {
-    fn packs(&self) -> Vec<signal_packs_proto::PackInfo> {
-        vec![signal_packs_proto::PackInfo {
+impl sampler::packs::packs::PackLibrary for StubPacks {
+    fn packs(&self) -> Vec<sampler::packs::PackInfo> {
+        vec![sampler::packs::PackInfo {
             name: "stub".into(),
             category: "Test".into(),
             variant: "proxy".into(),
@@ -34,10 +34,10 @@ impl signal_packs_proto::packs::PackLibrary for StubPacks {
         _name: String,
         _variant: String,
         start: u64,
-        tx: vox::Tx<signal_packs_proto::PackChunk>,
-    ) -> Result<(), signal_packs_proto::PackError> {
+        tx: vox::Tx<sampler::packs::PackChunk>,
+    ) -> Result<(), sampler::packs::PackError> {
         let _ = tx
-            .send(signal_packs_proto::PackChunk {
+            .send(sampler::packs::PackChunk {
                 offset: start,
                 bytes: vec![1, 2, 3, 4],
             })
@@ -51,18 +51,18 @@ impl signal_packs_proto::packs::PackLibrary for StubPacks {
         _name: String,
         _variant: String,
         range: String,
-        tx: vox::Tx<signal_packs_proto::PackChunk>,
-    ) -> Result<(), signal_packs_proto::PackError> {
+        tx: vox::Tx<sampler::packs::PackChunk>,
+    ) -> Result<(), sampler::packs::PackError> {
         // "start+len", the PackRange string form.
         let (start, len) = range
             .split_once('+')
             .and_then(|(a, b)| Some((a.parse::<u64>().ok()?, b.parse::<usize>().ok()?)))
-            .ok_or(signal_packs_proto::PackError::NotFound)?;
+            .ok_or(sampler::packs::PackError::NotFound)?;
         let pack = [1u8, 2, 3, 4];
         let from = (start as usize).min(pack.len());
         let to = (from + len).min(pack.len());
         let _ = tx
-            .send(signal_packs_proto::PackChunk {
+            .send(sampler::packs::PackChunk {
                 offset: start,
                 bytes: pack[from..to].to_vec(),
             })
@@ -77,20 +77,20 @@ impl signal_packs_proto::packs::PackLibrary for StubPacks {
         _name: String,
         _variant: String,
         start: u64,
-        tx: vox::Tx<signal_packs_proto::PackChunk>,
-    ) -> Result<(), signal_packs_proto::PackError> {
-        let json = facet_json::to_string(&vec![signal_packs_proto::PackSegment {
+        tx: vox::Tx<sampler::packs::PackChunk>,
+    ) -> Result<(), sampler::packs::PackError> {
+        let json = facet_json::to_string(&vec![sampler::packs::PackSegment {
             start: 0,
             len: 4,
             rank: 0,
             label: "stub".into(),
         }]);
         let bytes = json
-            .map_err(|_| signal_packs_proto::PackError::NotFound)?
+            .map_err(|_| sampler::packs::PackError::NotFound)?
             .into_bytes();
         let from = (start as usize).min(bytes.len());
         let _ = tx
-            .send(signal_packs_proto::PackChunk {
+            .send(sampler::packs::PackChunk {
                 offset: start,
                 bytes: bytes[from..].to_vec(),
             })
@@ -101,7 +101,7 @@ impl signal_packs_proto::packs::PackLibrary for StubPacks {
 
 impl architect::Services for StubPacks {
     fn layers() -> impl architect::Layer<Self> {
-        architect::layers![signal_packs_proto::packs::Service]
+        architect::layers![sampler::packs::packs::Service]
     }
 }
 

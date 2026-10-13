@@ -25,8 +25,8 @@ use signal_orchestra::timing::{
     timing_corpus,
 };
 use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
-use signal_sampler::SamplerRig;
-use signal_sampler::document::{DocumentRenderOptions, qn_to_frame, qn_to_sec};
+use sampler::SamplerRig;
+use sampler::document::{DocumentRenderOptions, qn_to_frame, qn_to_sec};
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

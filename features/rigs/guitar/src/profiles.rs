@@ -4,8 +4,8 @@
 
 use facet::Facet;
 use signal_proto::block::BlockType;
-use signal_sampler::rig_profile::RigStack;
-use signal_sampler::{RigBlock, RigPatch, RigProfile};
+use sampler::rig_profile::RigStack;
+use sampler::{RigBlock, RigPatch, RigProfile};
 
 // ── Worship profile (hardcoded, one NAM per patch from ~/Downloads) ──────────
 
@@ -200,7 +200,7 @@ pub struct PatchDef {
     pub preset: String,
     /// A second amp (Amp R), in parallel with the first: Amp L → Cab L and
     /// Amp R → Cab R both hear the guitar and are blended at the end (see
-    /// `signal_sampler::amp_blend`). Independently bypassable. Empty
+    /// `sampler::amp_blend`). Independently bypassable. Empty
     /// = the slot is unloaded; the chain still has the block (so bypass
     /// grouping and the board layout stay constant) but it has no
     /// realization, so it is skipped at install and costs nothing.
@@ -1161,7 +1161,7 @@ pub fn assign_meters(patch: &mut RigPatch) {
             let ch = meter_channel(&block.name).to_string();
             match block.params.iter_mut().find(|p| p.name == "meter") {
                 Some(p) => p.value = ch,
-                None => block.params.push(signal_sampler::rig_node::Param {
+                None => block.params.push(sampler::rig_node::Param {
                     name: "meter".to_string(),
                     value: ch,
                 }),
@@ -1273,7 +1273,7 @@ pub fn set_patch_trim(patch: &mut RigPatch, db: f32) {
     };
     match block.params.iter_mut().find(|p| p.name == "gain_db") {
         Some(p) => p.value = db.to_string(),
-        None => block.params.push(signal_sampler::rig_node::Param {
+        None => block.params.push(sampler::rig_node::Param {
             name: "gain_db".to_string(),
             value: db.to_string(),
         }),
@@ -1296,7 +1296,7 @@ fn apply_overrides(patch: &mut RigPatch, overrides: &[OverrideDef]) {
             "set" if !ov.param.is_empty() => {
                 match block.params.iter_mut().find(|p| p.name == ov.param) {
                     Some(p) => p.value = ov.value.to_string(),
-                    None => block.params.push(signal_sampler::rig_node::Param {
+                    None => block.params.push(sampler::rig_node::Param {
                         name: ov.param.clone(),
                         value: ov.value.to_string(),
                     }),
@@ -1305,7 +1305,7 @@ fn apply_overrides(patch: &mut RigPatch, overrides: &[OverrideDef]) {
             "set_text" if !ov.param.is_empty() => {
                 match block.params.iter_mut().find(|p| p.name == ov.param) {
                     Some(p) => p.value = ov.text.clone(),
-                    None => block.params.push(signal_sampler::rig_node::Param {
+                    None => block.params.push(sampler::rig_node::Param {
                         name: ov.param.clone(),
                         value: ov.text.clone(),
                     }),

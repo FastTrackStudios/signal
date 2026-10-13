@@ -31,15 +31,15 @@
 //! Stacks: Spotlight · Verse · Energy · Hooks · Underscore
 //! ```
 //!
-//! The tree this builds is an ordinary [`Container`](signal_sampler::Container) program — the same one
+//! The tree this builds is an ordinary [`Container`](sampler::Container) program — the same one
 //! the sampler renders, so layers inherit zones (key/velocity splits), sends,
 //! modulators and the block/module system for free. Layer faders are live
-//! [`GainCells`](signal_sampler::node_render::GainCells), addressed by the
+//! [`GainCells`](sampler::node_render::GainCells), addressed by the
 //! layer's container name.
 
 use facet::Facet;
 use signal_proto::block::BlockType;
-use signal_sampler::rig_node::Container;
+use sampler::rig_node::Container;
 
 /// One layer's slot in a scene: what it plays and how loud.
 #[derive(Debug, Clone, PartialEq, Facet)]
@@ -504,10 +504,10 @@ impl KeysProfile {
     pub fn build_library(
         &self,
         resolve: impl Fn(&str) -> Option<String>,
-    ) -> signal_sampler::to_node::Lift {
+    ) -> sampler::to_node::Lift {
         let mut tree = self.build_tree(resolve);
         tree.canonicalize();
-        let mut lifted = signal_sampler::to_node::lift(&tree);
+        let mut lifted = sampler::to_node::lift(&tree);
 
         // Name which kind of playable thing each Engine is. The lift cannot:
         // a container tree only ever knew that a node *was* an Engine.
@@ -599,10 +599,10 @@ impl KeysProfile {
             stamp_source_params(&mut lane, &layer.source_params);
         }
         if !layer.is_full_range() {
-            lane = lane.zone(signal_sampler::rig_node::Zone {
+            lane = lane.zone(sampler::rig_node::Zone {
                 key_lo: layer.key_lo,
                 key_hi: layer.key_hi,
-                ..signal_sampler::rig_node::Zone::full()
+                ..sampler::rig_node::Zone::full()
             });
         }
         lane
@@ -656,10 +656,10 @@ impl KeysProfile {
                 );
                 let mut lane = Container::layer(&layer.name).add(tree);
                 if !layer.is_full_range() {
-                    lane = lane.zone(signal_sampler::rig_node::Zone {
+                    lane = lane.zone(sampler::rig_node::Zone {
                         key_lo: layer.key_lo,
                         key_hi: layer.key_hi,
-                        ..signal_sampler::rig_node::Zone::full()
+                        ..sampler::rig_node::Zone::full()
                     });
                 }
                 Some(lane)
@@ -687,8 +687,8 @@ impl KeysProfile {
         &self,
         resolve: impl Fn(&str) -> Option<String>,
         module_set: impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
-    ) -> signal_sampler::keys_rig::LaneProgram {
-        use signal_sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
+    ) -> sampler::keys_rig::LaneProgram {
+        use sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
         LaneProgram {
             name: self.name.clone(),
             engines: self
@@ -1059,15 +1059,15 @@ pub fn worship_profile() -> KeysProfile {
 
 /// Put `params` on every Sampler block under `node` (a lane's sample
 /// sources), replacing a param of the same name.
-fn stamp_source_params(node: &mut signal_sampler::rig_node::Container, params: &[SourceParam]) {
-    use signal_sampler::rig_node::RigNode;
+fn stamp_source_params(node: &mut sampler::rig_node::Container, params: &[SourceParam]) {
+    use sampler::rig_node::RigNode;
     for child in &mut node.children {
         match child {
             // A sample source is the block that names a sample spec.
             RigNode::Block { block } if !block.sample.is_empty() => {
                 for p in params {
                     block.params.retain(|q| q.name != p.name);
-                    block.params.push(signal_sampler::rig_node::Param {
+                    block.params.push(sampler::rig_node::Param {
                         name: p.name.clone(),
                         value: p.value.clone(),
                     });
@@ -1235,7 +1235,7 @@ mod tests {
         let tree = p.build_tree(|name| Some(format!("/patches/{name}.prt_omn")));
         // The layer, not its like-named engine.
         let lane = tree
-            .of_role(signal_sampler::rig_node::Role::Layer)
+            .of_role(sampler::rig_node::Role::Layer)
             .into_iter()
             .find(|c| c.name == "Bass")
             .expect("Bass lane in the tree");
@@ -1262,8 +1262,8 @@ mod tests {
     fn tree_has_a_fader_per_lane() {
         let p = worship_profile();
         let tree = p.build_tree(|_| None);
-        let (_, cells) = signal_sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
-        use signal_sampler::rig_node::Role;
+        let (_, cells) = sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
+        use sampler::rig_node::Role;
         use std::sync::Arc;
         for name in p.layer_names() {
             assert!(
@@ -1360,12 +1360,12 @@ mod order_tests {
         tree.canonicalize();
         let before = tree.dump();
 
-        let lifted = signal_sampler::to_node::lift(&tree);
+        let lifted = sampler::to_node::lift(&tree);
         let (resolved, report) =
             resolve(&lifted.library, &lifted.root, None).expect("the profile resolves");
         assert!(report.is_clean(), "{report:?}");
 
-        let after = signal_sampler::from_node::to_container(&resolved).dump();
+        let after = sampler::from_node::to_container(&resolved).dump();
         assert_eq!(before, after, "the keys rig changed crossing the domain");
     }
 
@@ -1378,7 +1378,7 @@ mod order_tests {
         let mut tree = profile.build_tree(|_| None);
         tree.canonicalize();
 
-        let lifted = signal_sampler::to_node::lift(&tree);
+        let lifted = sampler::to_node::lift(&tree);
         assert!(
             lifted.report.is_clean(),
             "parameters the domain could not range: {:?}",
@@ -1396,7 +1396,7 @@ mod order_tests {
     #[test]
     fn the_rig_compiles_from_the_library() {
         use signal_proto::node_resolve::resolve;
-        use signal_sampler::rig_node::Role;
+        use sampler::rig_node::Role;
 
         let profile = worship_profile();
         let lifted = profile.build_library(|_| None);
@@ -1404,8 +1404,8 @@ mod order_tests {
             resolve(&lifted.library, &lifted.root, None).expect("the program resolves");
         assert!(report.is_clean(), "{report:?}");
 
-        let tree = signal_sampler::from_node::to_container(&resolved);
-        let (_, cells) = signal_sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
+        let tree = sampler::from_node::to_container(&resolved);
+        let (_, cells) = sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
 
         for name in profile.layer_names() {
             assert!(
@@ -1439,11 +1439,11 @@ mod order_tests {
 
         let lifted = profile.build_library(|_| None);
         let (resolved, _) = resolve(&lifted.library, &lifted.root, None).expect("resolves");
-        let tree = signal_sampler::from_node::to_container(&resolved);
+        let tree = sampler::from_node::to_container(&resolved);
 
         // Look lanes up as LAYERS: a lane may share its engine's name ("Bass"
         // in "Bass"), and a plain `find` returns the engine.
-        let layers = tree.of_role(signal_sampler::rig_node::Role::Layer);
+        let layers = tree.of_role(sampler::rig_node::Role::Layer);
         for lane in split_lanes {
             let found = layers.iter().find(|c| c.name == lane.name).expect(&lane.name);
             assert_eq!(found.zone.key_lo, lane.key_lo, "{} key_lo", lane.name);

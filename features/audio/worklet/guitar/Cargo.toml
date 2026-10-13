@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # prepare_chain / RigBlock / the assets registry / the dual-amp stage.
-signal-sampler = { workspace = true }
+sampler = { workspace = true }
 signal-plugin-host = { workspace = true }
 facet = { workspace = true }
 facet-json = { workspace = true }

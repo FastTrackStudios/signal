@@ -24,10 +24,10 @@ use std::sync::Arc;
 use guitar::compose::snapshot_patch;
 use guitar::library::RigLibrary;
 use guitar::measure::apply_chain_bypass;
-use signal_sampler::nam_calibrate::DiReference;
-use signal_sampler::rig::GuitarRig;
-use signal_sampler::rig_node::Param;
-use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
+use sampler::nam_calibrate::DiReference;
+use sampler::rig::GuitarRig;
+use sampler::rig_node::Param;
+use sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 
 const SR: u32 = 48_000;
 
@@ -178,7 +178,7 @@ fn post_sources(name: &str) -> &'static [(&'static str, &'static str)] {
     }
 }
 
-fn set(b: &mut signal_sampler::RigBlock, name: &str, v: f64) {
+fn set(b: &mut sampler::RigBlock, name: &str, v: f64) {
     let v = format!("{v}");
     match b.params.iter_mut().find(|p| p.name == name) {
         Some(p) => p.value = v,
@@ -240,7 +240,7 @@ fn render(patch: &RigPatch, di: &[f32]) -> Option<f64> {
         .zip(&r)
         .map(|(a, b)| f64::from(a + b) * 0.5)
         .collect();
-    Some(signal_sampler::loudness::integrated_lufs(
+    Some(sampler::loudness::integrated_lufs(
         &mono,
         f64::from(SR),
     ))

@@ -2,16 +2,16 @@
 //!
 //! Natively the chain runs inside `GuitarRig`'s daw project; the browser has
 //! no daw project, only an AudioWorklet asking for 128 frames at a time. So
-//! this plays a [`PreparedChain`](signal_sampler::rig::PreparedChain)'s
+//! this plays a [`PreparedChain`](sampler::rig::PreparedChain)'s
 //! blocks in order on two ping-pong buffers, with bypass, parameter changes
 //! and meters — and with the NAM models placed by [`crate::plan`].
 
 use std::sync::Arc;
 
 use signal_plugin_host::{PluginEvents, PluginInstance};
-use signal_sampler::RigBlock;
-use signal_sampler::amp_blend::{self, Role};
-use signal_sampler::rig::prepare_chain_with;
+use sampler::RigBlock;
+use sampler::amp_blend::{self, Role};
+use sampler::rig::prepare_chain_with;
 
 use crate::plan::{self, Model, Place, Plan};
 use crate::remote::{Lag, Link, Prefetch, RemoteBlock, RemoteStats, Standby};
@@ -146,7 +146,7 @@ pub fn build(
         _ => None,
     };
 
-    let max = signal_sampler::mixer::FX_PREPARE_BLOCK as usize;
+    let max = sampler::mixer::FX_PREPARE_BLOCK as usize;
     Ok(ChainRunner {
         // One box per block, in order — so a block's saved bypass carries over.
         slots: prepared

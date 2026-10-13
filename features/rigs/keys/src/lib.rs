@@ -3,7 +3,7 @@
 //!
 //! The engine itself ([`KeysRig`] / [`KeysInstrument`] — a composition-tree
 //! preset hosted as one MIDI-driven instrument on daw's audio engine) lives in
-//! `signal_sampler::keys_rig` with its `GuitarRig` / `SamplerRig` peers and is
+//! `sampler::keys_rig` with its `GuitarRig` / `SamplerRig` peers and is
 //! re-exported here. This crate adds the keys *product*: the worship profile
 //! (engine/layer mixer shape + footswitch stacks), Keyscape preset scanning /
 //! normalization, and the [`KeysRigBackend`] wire service.
@@ -24,4 +24,4 @@ pub mod user_presets;
 pub mod variations;
 pub use backend::KeysRigBackend;
 pub use profile::{EngineDef, KeysProfile, KeysStackDef, LayerDef, SceneSlot, worship_profile};
-pub use signal_sampler::keys_rig::{KeysInstrument, KeysRig};
+pub use sampler::keys_rig::{KeysInstrument, KeysRig};

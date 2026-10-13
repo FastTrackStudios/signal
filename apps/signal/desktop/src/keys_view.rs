@@ -21,7 +21,7 @@ use dioxus::prelude::*;
 use futures_util::StreamExt as _;
 use keys::proto::keys::KeysRigClient;
 use keys::proto::{KeysPreset, KeysStatus};
-use signal_packs_proto::PackInfo;
+use sampler::packs::PackInfo;
 
 use crate::pack_client::{self, DownloadEvent};
 use crate::remote::EngineTarget;

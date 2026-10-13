@@ -162,7 +162,7 @@ fn main() {
         let r = KeysRigSvc::status(&backend).rt;
         (r.blocks, f64::from(r.mean_render_ms) * r.blocks as f64)
     };
-    signal_sampler::engine::reset_output_glitches();
+    sampler::engine::reset_output_glitches();
     let faults0 = major_faults();
     let minor0 = minor_faults();
     // Measure the PLAY window, not the open: installing a preset and filling
@@ -261,7 +261,7 @@ fn main() {
     // Voices alive at the end of each chord — the number that says whether a
     // render spike is "too much audio to mix" or something else entirely.
     let mut per_chord_voices: Vec<u32> = Vec::new();
-    let mut drops_prev = signal_sampler::engine::notes_dropped();
+    let mut drops_prev = sampler::engine::notes_dropped();
     let started = Instant::now();
     for (i, chord) in CHORDS.iter().cycle().take(12).enumerate() {
         KeysRigSvc::reset_rt_peak(&backend);
@@ -273,7 +273,7 @@ fn main() {
         let st = KeysRigSvc::status(&backend);
         per_chord.push(st.rt.peak_render_ms);
         per_chord_voices.push(st.voices);
-        let drops_now = signal_sampler::engine::notes_dropped();
+        let drops_now = sampler::engine::notes_dropped();
         per_chord_drops.push(drops_now.saturating_sub(drops_prev));
         drops_prev = drops_now;
         peak = peak.max(st.master_peak);
@@ -352,7 +352,7 @@ fn main() {
             st::MISS_PENDING.load(Relaxed),
         );
     }
-    let g = signal_sampler::engine::output_glitches();
+    let g = sampler::engine::output_glitches();
     let played_frames = (played * 48_000.0) as usize;
     println!(
         "output artefacts: holes={} ({} frames, {:.3}% of output, longest {} frames) \

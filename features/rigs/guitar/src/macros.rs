@@ -3493,7 +3493,7 @@ pub fn seed_responses(p: &crate::compose::BlockPresetDef) -> Vec<MacroResponseDe
 /// Put `patch`'s stored knob positions on its built chain, as the live rig
 /// does — what levelling measures, so a preset's knob positions are part of
 /// the loudness it is levelled to.
-pub fn apply_positions(def: &PatchDef, comp: &Compositions, patch: &mut signal_sampler::RigPatch) {
+pub fn apply_positions(def: &PatchDef, comp: &Compositions, patch: &mut sampler::RigPatch) {
     apply_ctx(context_for(comp, def), def, patch);
 }
 
@@ -3507,7 +3507,7 @@ pub const LEVEL_EXEMPT: &[&str] = &["output"];
 pub fn apply_positions_for_level(
     def: &PatchDef,
     comp: &Compositions,
-    patch: &mut signal_sampler::RigPatch,
+    patch: &mut sampler::RigPatch,
 ) {
     let mut ctx = context_for(comp, def);
     ctx.saved
@@ -3517,7 +3517,7 @@ pub fn apply_positions_for_level(
     apply_ctx(ctx, def, patch);
 }
 
-fn apply_ctx(ctx: Context, def: &PatchDef, patch: &mut signal_sampler::RigPatch) {
+fn apply_ctx(ctx: Context, def: &PatchDef, patch: &mut sampler::RigPatch) {
     if ctx.saved.is_empty() && ctx.defaults.is_empty() {
         return;
     }
@@ -3536,7 +3536,7 @@ fn apply_ctx(ctx: Context, def: &PatchDef, patch: &mut signal_sampler::RigPatch)
         };
         match b.params.iter_mut().find(|p| p.name == param) {
             Some(p) => p.value = format!("{v}"),
-            None => b.params.push(signal_sampler::rig_node::Param {
+            None => b.params.push(sampler::rig_node::Param {
                 name: param,
                 value: format!("{v}"),
             }),
@@ -4341,7 +4341,7 @@ mod tests {
     /// built chain carries the positions.
     #[test]
     fn levelling_measures_the_stored_positions() {
-        use signal_sampler::{RigBlock, RigPatch};
+        use sampler::{RigBlock, RigPatch};
         let dly = RigBlock::of_type(BlockType::Delay)
             .named("DLY 1")
             .with_param("feedback", "0.3")

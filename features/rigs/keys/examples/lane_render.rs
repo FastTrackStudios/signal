@@ -9,7 +9,7 @@
 //! ```
 
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
-use signal_sampler::node_render::RenderNode;
+use sampler::node_render::RenderNode;
 
 fn ev(on: bool, key: u8, vel: u8) -> PluginMidiEvent {
     use daw::service::{Channel, KeyNumber, MidiEvent, Velocity};
@@ -51,7 +51,7 @@ fn main() {
         Err(_) => rn.set_tempo(120.0),
     }
     let t0 = std::time::Instant::now();
-    while signal_sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 120 {
+    while sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 120 {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     let (mut l, mut r) = (vec![0.0f32; block], vec![0.0f32; block]);

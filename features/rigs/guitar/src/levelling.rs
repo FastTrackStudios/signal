@@ -11,10 +11,10 @@ use crate::library::RigLibrary;
 /// chain built from now on — the live rig and offline levelling alike, so
 /// what is measured is what is heard.
 pub fn apply_nam_calibration() -> Option<f32> {
-    let cal = signal_sampler::RigManager::load(crate::session::audio_rig_name())
+    let cal = sampler::RigManager::load(crate::session::audio_rig_name())
         .audio
         .nam_calibration();
-    signal_sampler::nam::set_interface_calibration_dbu(cal);
+    sampler::nam::set_interface_calibration_dbu(cal);
     cal
 }
 use crate::nodes::profile_from_library;
@@ -183,14 +183,14 @@ pub struct ModuleLevel {
 #[must_use]
 pub fn level_modules(sample_rate: u32, dry_run: bool) -> Vec<ModuleLevel> {
     use signal_proto::BlockType;
-    use signal_sampler::rig::RigBlock;
+    use sampler::rig::RigBlock;
     apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let mut comp = RigLibrary::load_compositions();
     let mut drives = lib.drive_presets.clone();
-    let target = signal_sampler::patch_level::TARGET_LUFS as f32;
-    let di = signal_sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(sample_rate));
-    let di_lufs = signal_sampler::loudness::integrated_lufs(&di.samples, di.sample_rate) as f32;
+    let target = sampler::patch_level::TARGET_LUFS as f32;
+    let di = sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(sample_rate));
+    let di_lufs = sampler::loudness::integrated_lufs(&di.samples, di.sample_rate) as f32;
 
     enum Job {
         Amp {
@@ -261,14 +261,14 @@ pub fn level_modules(sample_rate: u32, dry_run: bool) -> Vec<ModuleLevel> {
                 ]
             }
         };
-        let mut patch = signal_sampler::rig_profile::RigPatch::new("module");
+        let mut patch = sampler::rig_profile::RigPatch::new("module");
         patch.chain = chain;
         crate::measure::patch_lufs(&patch, sample_rate)
     });
 
     let mut out = Vec::with_capacity(jobs.len());
     for (job, lufs) in jobs.iter().zip(measured) {
-        let lufs = lufs.filter(|l| *l > signal_sampler::loudness::SILENCE_LUFS as f32);
+        let lufs = lufs.filter(|l| *l > sampler::loudness::SILENCE_LUFS as f32);
         match job {
             Job::Amp { m, s, second, .. } => {
                 let module = &mut comp.modules[*m];

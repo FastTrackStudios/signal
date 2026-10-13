@@ -13,8 +13,8 @@
 
 use std::io::Write as _;
 
-use signal_packs_proto::PackChunk;
-use signal_packs_proto::packs::PackLibraryClient;
+use sampler::packs::PackChunk;
+use sampler::packs::packs::PackLibraryClient;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -138,7 +138,7 @@ async fn main() -> eyre::Result<()> {
         let call = client.read_range(
             pname.to_string(),
             "proxy".to_string(),
-            signal_packs_proto::PackRange { start: 0, len: 64 }.to_string(),
+            sampler::packs::PackRange { start: 0, len: 64 }.to_string(),
             tx,
         );
         let drain = async {

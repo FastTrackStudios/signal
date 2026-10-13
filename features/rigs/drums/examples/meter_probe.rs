@@ -2,7 +2,7 @@
 //! drum-mixer meters — proves the per-channel/bus/master peak plumbing.
 //!   cargo run -p signal-drums --example `meter_probe`
 
-use signal_sampler::{PresetSpec, SamplerRig};
+use sampler::{PresetSpec, SamplerRig};
 
 const KIT: &str = "kit";
 const PRESET: &str = "/run/media/AudioHaven/Signal/Libraries/Drum Kits/\

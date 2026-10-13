@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/rigs/sampler",
     "features/rigs/guitar",
     "features/formats",
     "features/ui/daw-ui",
@@ -207,9 +208,6 @@ members = [
     "features/rigs/synth-rig",
     "features/rigs/synth/ui",
     "features/rigs/wurli/openwurli-dsp",
-    "features/rigs/sampler/pack-library",
-    "features/rigs/sampler/packs-proto",
-    "features/rigs/sampler/signal-sampler",
     "apps/plugins/sampler",
     # ── patchbay ──
     "features/patchbay/patchbay",
@@ -273,6 +271,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+sampler = { path = "features/rigs/sampler" }
 guitar = { path = "features/rigs/guitar" }
 formats = { path = "features/formats" }
 daw-ui = { path = "features/ui/daw-ui" }
@@ -520,7 +519,6 @@ signal-fx = { path = "features/rigs/fx" }
 # signal's in-process rig engine (NAM, convolver, the sampler), from the
 # sibling checkout as daw is: both resolve daw to ../daw, so its
 # processors are the session engine's `PluginInstance`s.
-signal-sampler = { path = "features/rigs/sampler/signal-sampler" }
 # signal's rig library — its profiles, scenes and how a profile becomes the
 # chains a scene plays (the bass rig's profile mode, signal-fx).
 expression-editor-audio = { path = "features/expression-editor/expression-editor-audio" }
@@ -1058,8 +1056,6 @@ signal-widgets = { path = "features/rigs/core/widgets" }
 signal-extension = { path = "features/adapters/reaper/signal-extension" }
 signal-macromod = { path = "features/rigs/macromod/macromod" }
 signal-plugin-host = { path = "features/rigs/plugin-host", default-features = false }
-signal-packs-proto = { path = "features/rigs/sampler/packs-proto" }
-signal-pack-library = { path = "features/rigs/sampler/pack-library" }
 signal-keys-worklet = { path = "features/audio/worklet/keys" }
 signal-guitar-worklet = { path = "features/audio/worklet/guitar" }
 openwurli-dsp = { path = "features/rigs/wurli/openwurli-dsp" }

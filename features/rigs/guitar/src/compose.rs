@@ -1254,7 +1254,7 @@ mod tests {
     #[test]
     fn loudness_target_adds_the_snapshot_gain_bias() {
         let c = comp();
-        let base = signal_sampler::patch_level::TARGET_LUFS as f32;
+        let base = sampler::patch_level::TARGET_LUFS as f32;
         assert!((loudness_target(&c, "Fender", "Edge") - (base + 2.0)).abs() < 1e-6);
         assert!((loudness_target(&c, "Fender", "Clean") - base).abs() < 1e-6);
         assert!((loudness_target(&c, "", "") - base).abs() < 1e-6);
@@ -1389,7 +1389,7 @@ mod tests {
         let drives = drive_presets();
         let live = crate::nodes::to_nodes(&flat, &drives).to_profile(&flat, &drives);
         let built = crate::profiles::build_profile(&flat, &drives);
-        let key = |c: &[signal_sampler::RigBlock], name: &str| {
+        let key = |c: &[sampler::RigBlock], name: &str| {
             c.iter()
                 .find(|b| b.name == name)
                 .map(|b| (b.nam.clone(), b.ir.clone(), b.bypassed, b.param_f32("mix")))
@@ -1755,7 +1755,7 @@ pub fn level_presets(
     // After the first step the trimmed signal sits under the limiter and the
     // next one is exact; cached, so a re-run costs nothing.
     let measure = |&job: &(usize, usize)| -> Option<(f32, f32)> {
-        let target = signal_sampler::patch_level::TARGET_LUFS as f32
+        let target = sampler::patch_level::TARGET_LUFS as f32
             + comp.presets[job.0].snapshots[job.1].gain_bias_db;
         let raw = measure_at(job, 0.0)?;
         let mut level = (target - raw).clamp(-40.0, 40.0);
@@ -2088,7 +2088,7 @@ pub fn loudness_target(comp: &Compositions, preset: &str, snapshot: &str) -> f32
                 .find(|s| s.name.eq_ignore_ascii_case(snapshot))
         })
         .map_or(0.0, |s| s.gain_bias_db);
-    signal_sampler::patch_level::TARGET_LUFS as f32 + bias
+    sampler::patch_level::TARGET_LUFS as f32 + bias
 }
 
 /// A patch that plays one preset snapshot and nothing else of its own: no

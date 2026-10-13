@@ -22,7 +22,7 @@ dioxus = { workspace = true, optional = true }
 facet = { workspace = true }
 midicore = { workspace = true, features = ["vox", "midir"] }
 signal-rigs-proto = { workspace = true }
-signal-sampler = { workspace = true }
+sampler = { workspace = true }
 signal-space = { workspace = true }
 tracing = { workspace = true }
 vox = { workspace = true, optional = true }

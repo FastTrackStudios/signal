@@ -2,7 +2,7 @@
 //! engine.
 //!
 //! Drums need no drum-specific DSP: a kit is plain multi-sampled zones (with
-//! round-robins + velocity layers) played by [`signal_sampler::SamplerRig`],
+//! round-robins + velocity layers) played by [`sampler::SamplerRig`],
 //! the same engine the strings and keys features use. This crate owns the
 //! drum-kit *definitions* (how to load and route a kit), the behaviour *spec*
 //! (`spec/`), and the kit-loading *tests* as they land.
@@ -14,8 +14,8 @@ pub mod ui;
 
 use std::path::Path;
 
-use signal_sampler::midicore::{self, DrumMap, DrumMapConverter};
-use signal_sampler::{InstrumentId, PreloadProfile, PresetSpec, SamplerRig};
+use sampler::midicore::{self, DrumMap, DrumMapConverter};
+use sampler::{InstrumentId, PreloadProfile, PresetSpec, SamplerRig};
 
 mod backend;
 pub mod cradle;
@@ -34,7 +34,7 @@ pub const GM_DRUM_CHANNEL: u8 = 9;
 /// (e.g. an Alesis Strata Prime e-kit, [`DrumMap::StrataPrime`]) drives the
 /// loaded sample library's note layout (e.g. [`DrumMap::Mm2`]).
 ///
-/// Returns the live [`MidiInput`](signal_sampler::MidiInputHandle) — hold it
+/// Returns the live [`MidiInput`](sampler::MidiInputHandle) — hold it
 /// alive for as long as the kit should play. Requires a live (non-offline) rig.
 ///
 /// # Errors
@@ -45,7 +45,7 @@ pub fn attach_converted_kit(
     selection: midicore::PortSelector,
     from: DrumMap,
     to: DrumMap,
-) -> Result<signal_sampler::MidiInputHandle, String> {
+) -> Result<sampler::MidiInputHandle, String> {
     let mut conv = DrumMapConverter::new(from, to);
     rig.attach_midi_transformed(selection, move |ev| conv.convert(ev))
         .map_err(|e| e.to_string())

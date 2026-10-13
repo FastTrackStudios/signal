@@ -3,8 +3,8 @@
 //! The chain signal's bass rig builds from a preset
 //! (`signal-bass`'s `build_profile`): a drive capture (optional), the amp
 //! capture, a cab IR (optional), with a trim either side. Each capture is
-//! a NAM model ([`signal_sampler::nam::NamProcessor`]), the cab a
-//! convolution ([`signal_sampler::convolver::Convolver`]) — signal's own
+//! a NAM model ([`sampler::nam::NamProcessor`]), the cab a
+//! convolution ([`sampler::convolver::Convolver`]) — signal's own
 //! processors, the same the rig runs. A preamp captured direct (a DI
 //! preamp pedal) wants no cab.
 //!
@@ -18,8 +18,8 @@ use std::path::PathBuf;
 use daw_standalone::plugin::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
-use signal_sampler::convolver::Convolver;
-use signal_sampler::nam::NamProcessor;
+use sampler::convolver::Convolver;
+use sampler::nam::NamProcessor;
 
 /// What the rig plays, as saved.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]

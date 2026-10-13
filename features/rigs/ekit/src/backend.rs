@@ -10,7 +10,7 @@ use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use crate::proto::ekit::EkitRig;
 use crate::proto::{EkitEvent, EkitStatus, Pad};
-use signal_sampler::{PreloadProfile, SamplerRig};
+use sampler::{PreloadProfile, SamplerRig};
 use signal_space::{Space, knn};
 
 pub const DEFAULT_ROWS: u32 = 4;
@@ -868,7 +868,7 @@ impl RigBackend for EkitBackend {
                 .rig
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            rig.as_ref().map(signal_sampler::SamplerRig::meters_bank)
+            rig.as_ref().map(sampler::SamplerRig::meters_bank)
         }; // rig lock dropped before touching state
         let pads = {
             let mut s = self

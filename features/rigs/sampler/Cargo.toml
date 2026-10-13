@@ -1,0 +1,76 @@
+[package]
+name = "sampler"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "The sampler: streaming, round robins, articulations, and its sample packs"
+
+[lints]
+workspace = true
+
+[features]
+default = ["vox"]
+jack = ["audio/io", "audio/jack", "cpal/jack", "signal-rig-host/jack"]
+library = ["dep:architect-telemetry", "dep:facet-json", "dep:tokio", "dep:vox", "dep:walkdir"]
+pipewire = []
+vox = ["architect/vox", "dep:vox", "dep:vox-types"]
+
+[dependencies]
+architect = { workspace = true, features = ["vox"] }
+architect-telemetry = { workspace = true, optional = true }
+base64 = { version = "0.22" }
+builtin = { workspace = true }
+daw = { workspace = true, features = ["standalone-decode"] }
+eyre = { workspace = true }
+facet = { workspace = true }
+facet-json = { workspace = true, optional = true }
+facet-styx = { workspace = true }
+facet-toml = { workspace = true }
+fts-sample = { workspace = true, features = ["load", "engine-core"] }
+hound = { version = "3.5" }
+keyflow-annotate = { workspace = true }
+midicore = { workspace = true, features = ["vox"] }
+neural-amp-modeler = { workspace = true }
+openwurli-dsp = { workspace = true }
+realfft = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { version = "0.10" }
+signal-plugin-host = { workspace = true }
+signal-proto = { workspace = true }
+signal-rig-host = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util"], optional = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+vox = { workspace = true, optional = true }
+vox-types = { workspace = true, optional = true }
+walkdir = { workspace = true, optional = true }
+
+[dev-dependencies]
+futures-util = { workspace = true }
+hound = { version = "3.5" }
+keyflow-orchestra = { workspace = true }
+libc = { version = "0.2" }
+memmap2 = { workspace = true }
+ratatui = { version = "0.30" }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tracing-subscriber = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+audio = { workspace = true, features = ["io", "monitor"] }
+clap = { workspace = true }
+cpal = { workspace = true }
+daw = { workspace = true, features = ["standalone-audio", "clap-host"] }
+fts-sample = { workspace = true, features = ["engine"] }
+midicore = { workspace = true, features = ["midir", "pipewire", "native"] }
+rayon = { version = "1" }
+signal-plugin-host = { workspace = true, features = ["clap-host"] }
+walkdir = { version = "2" }
+
+[[test]]
+name = "plan_roundtrip"
+path = "tests/plan_roundtrip.rs"
+required-features = ["library"]

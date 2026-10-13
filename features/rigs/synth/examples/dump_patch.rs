@@ -6,7 +6,7 @@
 //! cargo run -p signal-synth --release --example dump_patch -- "<patch.prt_omn>"
 //! ```
 
-use signal_sampler::rig_node::{Container, RigNode};
+use sampler::rig_node::{Container, RigNode};
 use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
 
 fn walk<'a>(c: &'a Container, out: &mut Vec<&'a Container>) {

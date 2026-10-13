@@ -7,7 +7,7 @@
 //! ## What v0 actually is
 //!
 //! An INSTRUMENT+FX hybrid shell (MIDI in, stereo audio in AND out) over
-//! [`signal_sampler::SamplerBank`] — the one rig backend the signal stack
+//! [`sampler::SamplerBank`] — the one rig backend the signal stack
 //! exposes headlessly today. It loads a `.signalpack` rig at `initialize()`
 //! (see [`config`] for resolution: `$FTS_SIGNAL_RIG`, else
 //! `~/.config/signal/plugin/rig.styx`), plays it from live MIDI, and sums the

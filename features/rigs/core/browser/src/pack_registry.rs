@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 use signal_proto::tagging::{StructuredTag, TagSet};
-use signal_sampler::{LibrarySpec, read_pack_header};
+use sampler::{LibrarySpec, read_pack_header};
 
 use crate::types::{ColumnItem, DetailData};
 
@@ -211,7 +211,7 @@ pub fn scan_packs_report(root: &Path) -> ScanReport {
         entries.push((path, kind));
     }
 
-    let built: Vec<Result<PackEntry, (PathBuf, signal_sampler::SamplerError)>> = entries
+    let built: Vec<Result<PackEntry, (PathBuf, sampler::SamplerError)>> = entries
         .par_iter()
         .map(|(path, kind)| {
             build_entry_dispatch(path, root, *kind).map_err(|err| (path.clone(), err))
@@ -254,7 +254,7 @@ fn build_entry_dispatch(
     path: &Path,
     root: &Path,
     kind: EntryKind,
-) -> Result<PackEntry, signal_sampler::SamplerError> {
+) -> Result<PackEntry, sampler::SamplerError> {
     match kind {
         EntryKind::Pack => build_pack_entry(path, root),
         EntryKind::Engine => build_engine_entry(path, root),
@@ -276,8 +276,8 @@ fn folder_segments(path: &Path, root: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn build_engine_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_sampler::SamplerError> {
-    let spec = signal_sampler::EngineSpec::from_file(path)?;
+fn build_engine_entry(path: &Path, root: &Path) -> Result<PackEntry, sampler::SamplerError> {
+    let spec = sampler::EngineSpec::from_file(path)?;
     let size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     let mut tags = TagSet::new();
     if !spec.engine_type.is_empty() {
@@ -308,8 +308,8 @@ fn build_engine_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_samp
     })
 }
 
-fn build_preset_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_sampler::SamplerError> {
-    let spec = signal_sampler::PresetSpec::from_file(path)?;
+fn build_preset_entry(path: &Path, root: &Path) -> Result<PackEntry, sampler::SamplerError> {
+    let spec = sampler::PresetSpec::from_file(path)?;
     let size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     Ok(PackEntry {
         kind: EntryKind::Preset,
@@ -333,8 +333,8 @@ fn build_preset_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_samp
     })
 }
 
-fn build_module_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_sampler::SamplerError> {
-    let spec = signal_sampler::ModuleSpec::from_file(path)?;
+fn build_module_entry(path: &Path, root: &Path) -> Result<PackEntry, sampler::SamplerError> {
+    let spec = sampler::ModuleSpec::from_file(path)?;
     let size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     Ok(PackEntry {
         kind: EntryKind::Module,
@@ -358,8 +358,8 @@ fn build_module_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_samp
     })
 }
 
-fn build_block_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_sampler::SamplerError> {
-    let spec = signal_sampler::BlockSpec::from_file(path)?;
+fn build_block_entry(path: &Path, root: &Path) -> Result<PackEntry, sampler::SamplerError> {
+    let spec = sampler::BlockSpec::from_file(path)?;
     let size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     Ok(PackEntry {
         kind: EntryKind::Block,
@@ -383,7 +383,7 @@ fn build_block_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_sampl
     })
 }
 
-fn build_pack_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_sampler::SamplerError> {
+fn build_pack_entry(path: &Path, root: &Path) -> Result<PackEntry, sampler::SamplerError> {
     let header = read_pack_header(path)?;
     let spec: LibrarySpec = header.spec;
     let name = if spec.name.is_empty() {

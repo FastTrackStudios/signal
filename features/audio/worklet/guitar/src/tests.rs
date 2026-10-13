@@ -5,8 +5,8 @@
 
 use std::time::Duration;
 
-use signal_sampler::RigBlock;
-use signal_sampler::rig::prepare_chain;
+use sampler::RigBlock;
+use sampler::rig::prepare_chain;
 
 use crate::remote::thread::ThreadLink;
 use crate::remote::{Lag, Link};

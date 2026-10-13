@@ -15,9 +15,9 @@ use std::sync::Arc;
 use guitar::compose::snapshot_patch;
 use guitar::library::RigLibrary;
 use guitar::measure::apply_chain_bypass;
-use signal_sampler::nam_calibrate::DiReference;
-use signal_sampler::rig::GuitarRig;
-use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
+use sampler::nam_calibrate::DiReference;
+use sampler::rig::GuitarRig;
+use sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 
 const SR: u32 = 48_000;
 
@@ -82,7 +82,7 @@ fn render(patch: &RigPatch, di: &[f32]) -> Option<Vec<f32>> {
 
 fn lufs(x: &[f32]) -> f64 {
     let v: Vec<f64> = x.iter().map(|&s| f64::from(s)).collect();
-    signal_sampler::loudness::integrated_lufs(&v, f64::from(SR))
+    sampler::loudness::integrated_lufs(&v, f64::from(SR))
 }
 
 fn corr(a: &[f32], b: &[f32]) -> f64 {
