@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Query: for each kind, show one piece's nearest neighbours.
-    let (space, _) = signal_space::Space::load(&dir)?;
+    let (space, _) = signal_space::engine::Space::load(&dir)?;
     let mut seen: Vec<&str> = Vec::new();
     for item in &space.items {
         if seen.contains(&item.class.as_str()) {

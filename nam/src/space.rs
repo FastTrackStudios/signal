@@ -15,13 +15,13 @@
 //!   straight line, a high-gain amp's flattens early.
 //! - **gain / output level** — where the model sits, for level matching.
 //!
-//! The measurements become an ordinary [`signal_space::Space`], so KNN
+//! The measurements become an ordinary [`signal_space::engine::Space`], so KNN
 //! similarity, the 2D map and the map UI all work unchanged.
 
 use std::path::{Path, PathBuf};
 
 use neural_amp_modeler::NamModel;
-use signal_space::{SPACE_VERSION, Space, SpaceItem, knn};
+use signal_space::engine::{SPACE_VERSION, Space, SpaceItem, knn};
 
 /// The space built under `<nam-root>/Space/nam.space`.
 pub const NAM_SPACE: &str = "nam";
@@ -222,7 +222,7 @@ pub fn build(root: &Path) -> Result<(PathBuf, usize, usize), String> {
     if items.is_empty() {
         return Err("no model probed successfully".into());
     }
-    let coords = signal_space::project::project_2d(&features, items.len(), DIM);
+    let coords = signal_space::engine::project::project_2d(&features, items.len(), DIM);
     for (item, (x, y)) in items.iter_mut().zip(coords) {
         item.x = x;
         item.y = y;

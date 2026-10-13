@@ -23,7 +23,7 @@ facet = { workspace = true }
 midi = { workspace = true, features = ["midir", "vox"] }
 signal-rigs-proto = { workspace = true }
 sampler = { workspace = true }
-signal-space = { workspace = true }
+signal-space = { workspace = true, features = ["engine"] }
 tracing = { workspace = true }
 vox = { workspace = true, optional = true }
 

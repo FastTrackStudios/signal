@@ -18,7 +18,7 @@ fts-sample.workspace = true
 sha2 = "0.10"
 walkdir = "2"
 # The similarity space + the model inference the prober drives (#77 M5).
-signal-space.workspace = true
+signal-space = { workspace = true, features = ["engine"] }
 neural-amp-modeler.workspace = true
 tracing.workspace = true
 base64 = "0.22"

@@ -10,13 +10,13 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use signal_space_proto::space::SampleSpace;
-use signal_space_proto::{MapItem, SimilarHit, SpaceEvent, SpaceFilter, SpaceInfo};
+use crate::space::SampleSpace;
+use crate::{MapItem, SimilarHit, SpaceEvent, SpaceFilter, SpaceInfo};
 
-use crate::{Space, build, knn};
+use crate::engine::{Space, build, knn};
 
 /// Re-exported for consumers that read the same roots (the ekit rig).
-pub use crate::ROOTS_ENV;
+pub use crate::engine::ROOTS_ENV;
 
 struct Loaded {
     dir: PathBuf,
@@ -46,7 +46,7 @@ impl Default for SpaceBackend {
 
 impl SpaceBackend {
     pub fn new() -> Self {
-        tracing::info!(roots = ?crate::space_roots(), "sample space: roots");
+        tracing::info!(roots = ?crate::engine::space_roots(), "sample space: roots");
         Self {
             inner: Arc::new(Inner {
                 cache: Mutex::new(HashMap::new()),
@@ -63,7 +63,7 @@ impl SpaceBackend {
 
     /// All `.space` dirs under the roots.
     fn discover() -> Vec<PathBuf> {
-        crate::discover_spaces()
+        crate::engine::discover_spaces()
     }
 
     fn load(&self, name: &str) -> Option<Arc<Loaded>> {
@@ -120,7 +120,7 @@ impl SpaceBackend {
     }
 }
 
-fn matches(item: &crate::SpaceItem, f: &SpaceFilter) -> bool {
+fn matches(item: &crate::engine::SpaceItem, f: &SpaceFilter) -> bool {
     (f.classes.is_empty() || f.classes.iter().any(|c| c == &item.class))
         && (f.text.is_empty() || item.path.to_lowercase().contains(&f.text.to_lowercase()))
         && (!f.favorites_only || item.favorite)
@@ -282,7 +282,7 @@ impl SampleSpace for SpaceBackend {
     }
 }
 
-impl signal_space_proto::space::SampleSpaceStreamSource for SpaceBackend {
+impl crate::space::SampleSpaceStreamSource for SpaceBackend {
     fn events_hub(&self) -> &PubSub<SpaceEvent> {
         &self.inner.events
     }
@@ -291,8 +291,8 @@ impl signal_space_proto::space::SampleSpaceStreamSource for SpaceBackend {
 impl Services for SpaceBackend {
     fn layers() -> impl Layer<Self> {
         layers![
-            signal_space_proto::space::Service,
-            signal_space_proto::space::StreamService
+            crate::space::Service,
+            crate::space::StreamService
         ]
     }
 }

@@ -11,7 +11,7 @@
 //! An optional ONNX classifier (YAMNet-style) can replace this later; the
 //! class vocabulary is the contract, not the rules.
 
-use crate::analyze::Analysis;
+use crate::engine::analyze::Analysis;
 
 pub const CLASSES: &[&str] = &[
     "kick",

@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use sampler::SamplerRig;
-use signal_space::{SPACE_VERSION, Space, SpaceItem, analyze, knn};
+use signal_space::engine::{SPACE_VERSION, Space, SpaceItem, analyze, knn};
 
 /// The space built under `<library>/Space/pieces.space`.
 pub const PIECE_SPACE: &str = "pieces";
@@ -132,7 +132,7 @@ pub fn build(library_root: &Path) -> Result<(PathBuf, usize, usize), String> {
     if items.is_empty() {
         return Err("no engine rendered audibly".into());
     }
-    let coords = signal_space::project::project_2d(&features, items.len(), analyze::DIM);
+    let coords = signal_space::engine::project::project_2d(&features, items.len(), analyze::DIM);
     for (item, (x, y)) in items.iter_mut().zip(coords) {
         item.x = x;
         item.y = y;

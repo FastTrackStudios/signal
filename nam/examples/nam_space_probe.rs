@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         dir.display()
     );
 
-    let (space, _) = signal_space::Space::load(&dir)?;
+    let (space, _) = signal_space::engine::Space::load(&dir)?;
     for item in &space.items {
         println!(
             "  [{:<12}] {:>6.0} Hz  out {:>6.1} dB  knee {:.2}  {}",
