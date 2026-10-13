@@ -11,7 +11,7 @@ description = "Adapter between the expression editor's document and tune-dsp's a
 # `ExpressionDoc`, which is the whole reason one editor serves both.
 [features]
 default = []
-render = ["tune-dsp/world"]
+render = ["tune/world"]
 # The DAW-facing session. Off by default so a wasm or offline consumer
 # gets the analysis without the facade.
 daw = ["dep:daw", "dep:fts-sample"]
@@ -21,7 +21,7 @@ expression-editor-core = { workspace = true }
 # The tool seam. `pitch` on, because this is the crate that produces
 # pitch-detected notes, so this is where their `Timed` impl is wanted.
 expression-editor-tools = { workspace = true, features = ["pitch"] }
-tune-dsp = { workspace = true }
+tune = { workspace = true }
 align-dsp = { workspace = true }
 realfft = { workspace = true }
 daw = { workspace = true, optional = true }

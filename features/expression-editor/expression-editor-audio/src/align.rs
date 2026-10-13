@@ -31,7 +31,7 @@
 //! worse-sounding than pinning the syllables and letting the sustains
 //! stretch between them.
 
-use tune_dsp::model::WarpMarker;
+use tune::model::WarpMarker;
 
 use crate::Analysis;
 

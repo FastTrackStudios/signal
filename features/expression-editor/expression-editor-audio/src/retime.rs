@@ -18,7 +18,7 @@
 
 use daw::service::StretchMarker;
 use expression_editor_core::{ExpressionDoc, NoteId};
-use tune_dsp::model::PitchDoc;
+use tune::model::PitchDoc;
 
 /// Where the take sits, which decides how document time converts.
 ///

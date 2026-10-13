@@ -1,6 +1,6 @@
 //! YIN + note + correction sanity checks on synthesized pitched tones.
 
-use tune_dsp::{
+use tune::{
     analyze, correct_notes, hz_to_midi, AnalyzeConfig, CorrectConfig, Scale, YinConfig, YinDetector,
 };
 
@@ -109,9 +109,9 @@ fn naive_yin_f0(frame: &[f64], sr: f64, window: usize, threshold: f64) -> Option
 #[test]
 fn fft_difference_matches_naive_reference() {
     let sr = 48000.0;
-    let cfg = tune_dsp::detect::YinConfig::default();
+    let cfg = tune::detect::YinConfig::default();
     let window = cfg.window;
-    let mut det = tune_dsp::detect::YinDetector::new(sr, cfg);
+    let mut det = tune::detect::YinDetector::new(sr, cfg);
     let mut seed = 17u64;
     for &freq in &[82.4, 110.0, 220.0, 452.0, 880.0] {
         // Sine + light noise + a 2nd harmonic (realistic-ish).
@@ -141,9 +141,9 @@ fn fft_yin_is_fast() {
     // its complexity class (~1000 frames well under a second even in
     // debug builds; the naive path took ~1M mults per frame).
     let sr = 48000.0;
-    let cfg = tune_dsp::detect::YinConfig::default();
+    let cfg = tune::detect::YinConfig::default();
     let window = cfg.window;
-    let mut det = tune_dsp::detect::YinDetector::new(sr, cfg);
+    let mut det = tune::detect::YinDetector::new(sr, cfg);
     let frame: Vec<f64> = (0..window)
         .map(|i| (core::f64::consts::TAU * 220.0 * i as f64 / sr).sin())
         .collect();
@@ -178,7 +178,7 @@ fn analysis_repairs_octave_glitches_and_gates_noise() {
             }
         })
         .collect();
-    let analysis = tune_dsp::analyze(&samples, sr, tune_dsp::AnalyzeConfig::default());
+    let analysis = tune::analyze(&samples, sr, tune::AnalyzeConfig::default());
 
     // Voiced region: every frame within a semitone of 220 (no octave
     // outliers survive the repair pass).
@@ -193,7 +193,7 @@ fn analysis_repairs_octave_glitches_and_gates_noise() {
         .skip(4)
     {
         if let Some(hz) = f.f0_hz {
-            let dev = (tune_dsp::detect::hz_to_midi(hz) - 57.0).abs();
+            let dev = (tune::detect::hz_to_midi(hz) - 57.0).abs();
             worst = worst.max(dev);
         } else {
             panic!("frame {i} in the tone should be voiced");

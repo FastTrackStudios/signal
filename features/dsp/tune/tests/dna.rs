@@ -1,7 +1,7 @@
 //! DNA kernel: prove two simultaneous notes can be pulled apart into isolated,
 //! independently-editable streams — the thing transcription alone can't do.
 
-use tune_dsp::{DnaConfig, DnaEngine};
+use tune::{DnaConfig, DnaEngine};
 
 const SR: f64 = 48_000.0;
 

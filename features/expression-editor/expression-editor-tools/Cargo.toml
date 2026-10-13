@@ -17,7 +17,7 @@ default = []
 # `expression-editor-audio` — the trait is ours, the type is not — and
 # a MIDI-only or wasm consumer should not pay for a DSP crate to get
 # `Timed`.
-pitch = ["dep:tune-dsp"]
+pitch = ["dep:tune"]
 
 [dependencies]
 # Absorbed with `velocity::Randomize` from midi-tools (#153); the only
@@ -28,7 +28,7 @@ tracing = { workspace = true }
 # The document — its `Note` is the MIDI/MPE side of the seam. Portable,
 # no DSP, no UI, which is the property that lets this crate stay thin.
 expression-editor-core = { workspace = true }
-tune-dsp = { workspace = true, optional = true }
+tune = { workspace = true, optional = true }
 
 [dev-dependencies]
 expression-editor-tools = { workspace = true, features = ["pitch"] }

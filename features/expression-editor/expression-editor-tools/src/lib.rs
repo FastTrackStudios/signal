@@ -8,7 +8,7 @@
 //! | Domain | Event | Has an end? |
 //! |---|---|---|
 //! | MIDI / MPE / Guitar | [`expression_editor_core::doc::Note`] | yes |
-//! | Vocals (analysed) | `tune_dsp::model::NoteBlob` | yes |
+//! | Vocals (analysed) | `tune::model::NoteBlob` | yes |
 //! | Drums / unpitched audio | `expression_editor_audio::detect::Transient` | no |
 //!
 //! [`Sustained`] is the difference in that last column, and it is the

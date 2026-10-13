@@ -2,8 +2,8 @@
 
 use expression_editor_audio::{FORMANT_RANGE, GAIN_RANGE_DB, Span, apply_to, spans, to_doc};
 use expression_editor_core::doc::{Dimension, NoteId};
-use tune_dsp::TrackedNote;
-use tune_dsp::model::{NoteBlob, PitchDoc};
+use tune::TrackedNote;
+use tune::model::{NoteBlob, PitchDoc};
 
 const FRAME_RATE: f64 = 100.0;
 
@@ -12,7 +12,7 @@ const SAMPLE_RATE: f64 = 44100.0;
 
 /// A blob sung around `center`, with a scoop in and a growing vibrato.
 ///
-/// Built through the real [`tune_dsp::model::decompose`] rather than by
+/// Built through the real [`tune::model::decompose`] rather than by
 /// hand, because the model has an invariant that matters here:
 /// `center` is the *median* of the contour and `drift` is the residual
 /// about it. A handcrafted blob whose drift has a non-zero median
@@ -29,10 +29,10 @@ fn blob(start: usize, end: usize, center: f64) -> NoteBlob {
             let f = i as f64 / (n.max(2) - 1) as f64;
             let scoop = -1.5 * (1.0 - (f / 0.15).min(1.0)).powi(3);
             let vib = 0.2 * (f * 18.0).sin() * f;
-            tune_dsp::midi_to_hz(center + scoop + vib)
+            tune::midi_to_hz(center + scoop + vib)
         })
         .collect();
-    let mut midi: Vec<f64> = f0.iter().map(|&hz| tune_dsp::hz_to_midi(hz)).collect();
+    let mut midi: Vec<f64> = f0.iter().map(|&hz| tune::hz_to_midi(hz)).collect();
     midi.sort_by(f64::total_cmp);
     let note = TrackedNote {
         start_frame: start,
@@ -40,7 +40,7 @@ fn blob(start: usize, end: usize, center: f64) -> NoteBlob {
         f0,
         median_midi: midi[midi.len() / 2],
     };
-    let mut b = tune_dsp::model::decompose(&note, HOP, SAMPLE_RATE);
+    let mut b = tune::model::decompose(&note, HOP, SAMPLE_RATE);
     b.rms = 0.5;
     b
 }

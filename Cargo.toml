@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/tune",
     "features/dsp/gate",
     # ── session ──
     "vendor/dioxus-native-dom",
@@ -107,7 +108,6 @@ members = [
     "features/formats/dawfile-store",
     "features/dsp/level/level-dsp",
     "features/dsp/pitch/pitch-dsp",
-    "features/dsp/tune/tune-dsp",
     "features/launcher/fts-launcher",
     "features/adapters/reaper/daw-bridge",
     "features/adapters/reaper/daw-extension-runtime",
@@ -210,7 +210,6 @@ members = [
     "features/dsp/trigger/trigger",
     "features/dsp/trigger/trigger-dsp",
     "features/dsp/trigger/trigger-ui",
-    "features/dsp/tune/tune",
     "features/preset-browser/preset-browser",
     "features/preset-browser/preset-browser-ui",
     "features/ui/fts-audio-ui",
@@ -343,6 +342,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+tune = { path = "features/dsp/tune" }
 # Razor edit areas: a rectangle of time by row, and the set algebra over
 # it. Dependency-free and shared by the expression editor and the
 # arrangement, so the two cannot disagree about what an area is.
@@ -547,7 +547,6 @@ engraver-score = { git = "https://github.com/FastTrackStudios/keyflow", tag = "v
 # nice-plug/Blitz editor is behind its `native` feature.
 pitch-dsp = { path = "features/dsp/pitch/pitch-dsp" }
 world-sys = { path = "vendor/world" }
-tune-dsp = { path = "features/dsp/tune/tune-dsp" }
 align-dsp = { path = "features/dsp/align/align-dsp" }
 # ── The built-in FX, from the processor repo ──────────────────────────
 # The mixer's Tone rack draws a real EQ, compressor and saturator, and
@@ -1133,7 +1132,6 @@ limiter-ui = { path = "features/dsp/comp/limiter-ui" }
 reverb = { path = "features/dsp/reverb/reverb" }
 delay = { path = "features/dsp/delay/delay" }
 pitch = { path = "features/dsp/pitch/pitch" }
-tune = { path = "features/dsp/tune/tune" }
 level = { path = "features/dsp/level/level" }
 modulation = { path = "features/dsp/modulation/modulation" }
 eq-dsp = { path = "features/dsp/eq/eq-dsp" }

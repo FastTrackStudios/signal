@@ -6758,7 +6758,7 @@ dependencies = [
  "expression-editor-tools",
  "fts-sample",
  "realfft",
- "tune-dsp",
+ "tune",
 ]
 
 [[package]]
@@ -6909,7 +6909,7 @@ dependencies = [
  "expression-editor-tools",
  "rand 0.8.8",
  "tracing",
- "tune-dsp",
+ "tune",
 ]
 
 [[package]]
@@ -22523,13 +22523,6 @@ dependencies = [
 
 [[package]]
 name = "tune"
-version = "0.1.0"
-dependencies = [
- "tune-dsp",
-]
-
-[[package]]
-name = "tune-dsp"
 version = "0.1.0"
 dependencies = [
  "pitch-dsp",

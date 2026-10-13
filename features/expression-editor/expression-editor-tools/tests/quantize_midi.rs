@@ -226,7 +226,7 @@ fn a_detected_note_moves_in_whole_frames_and_keeps_its_frame_count() {
     // The blob's drift and modulation are one value per frame of the
     // note, so quantizing may move it but may never change how long it
     // is.
-    use tune_dsp::model::NoteBlob;
+    use tune::model::NoteBlob;
 
     let mut blob = NoteBlob {
         start_frame: 26,

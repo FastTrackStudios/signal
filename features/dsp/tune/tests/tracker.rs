@@ -3,8 +3,8 @@
 //! separator must place each note's audio only in its own time region — the
 //! thing whole-buffer separation cannot do.
 
-use tune_dsp::detect::{hz_to_midi, midi_to_hz};
-use tune_dsp::{spans_from_frames, track_notes, DnaConfig, DnaEngine, TrackConfig};
+use tune::detect::{hz_to_midi, midi_to_hz};
+use tune::{spans_from_frames, track_notes, DnaConfig, DnaEngine, TrackConfig};
 
 const SR: f64 = 48_000.0;
 
