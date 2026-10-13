@@ -17837,6 +17837,7 @@ dependencies = [
  "facet",
  "facet-styx",
  "midi",
+ "tokio",
  "tracing",
 ]
 

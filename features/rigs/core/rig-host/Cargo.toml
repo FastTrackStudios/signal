@@ -39,3 +39,6 @@ midi = { workspace = true, features = ["midir", "native", "pipewire"] }
 crossbeam-channel.workspace = true
 daw = { workspace = true, features = ["standalone-audio"] }
 audio = { workspace = true, features = ["io"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread"] }
