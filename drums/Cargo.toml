@@ -32,7 +32,7 @@ architect = { workspace = true, features = ["vox", "rig"] }
 # Hardware MIDI ports + the drum-map converter for the live input path.
 midicore = { workspace = true, features = ["vox", "midir", "native"] }
 # NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs.
-kontrol.workspace = true
+control-surfaces = { workspace = true, features = ["kontrol"] }
 # Built-in FX (NativeEq/NativeComp/NativeReverb) + the plugin-host wrapper, so
 # an imported MM2 (Cradle) mix can be reproduced with our own DSP per piece.
 fx-blocks.workspace = true
