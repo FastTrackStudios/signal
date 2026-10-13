@@ -121,8 +121,8 @@ fn decay_t60_secs(decay: f32) -> f64 {
 /// Hall-law estimate otherwise. The estimate alone read 4.5 s for a Hall
 /// the engine rings for 12.
 pub(crate) fn verb_seconds(algorithm: f32, variant: f32, decay: f32) -> (f64, bool) {
-    let alg = reverb_dsp::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
-    match reverb_dsp::algorithm::decay_seconds(
+    let alg = reverb::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
+    match reverb::algorithm::decay_seconds(
         alg,
         variant.round().max(0.0) as usize,
         f64::from(decay),
@@ -2751,7 +2751,7 @@ fn reverb_lane(
     let color = crate::fx_viz::rgb(color);
     // The algorithm index is `VERB_ALGOS`'s, which is the DSP's own order;
     // the effect owns the table that turns it into a machine.
-    let family = reverb_ui::viz::family_of_algorithm(algorithm);
+    let family = reverb::ui::viz::family_of_algorithm(algorithm);
     rsx! { crate::fx_viz::ReverbViz { decay, density, predelay, mix, damp, family, on, beat_ms, color } }
 }
 
