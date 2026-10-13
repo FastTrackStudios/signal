@@ -10,6 +10,10 @@
 //! iteration (`cargo run -p chord-tool --example panel`) and a Blitz-
 //! rendered REAPER panel via `fts-extensions`.
 
+
+#[cfg(feature = "daw")]
+pub mod daw;
+
 pub mod panel;
 pub mod sink;
 

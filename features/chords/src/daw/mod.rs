@@ -1,9 +1,9 @@
 //! Writes chord-tool's chords into a DAW project.
 //!
-//! The other half of [`chord_tool::ChordSink`]: the panel decides *what*,
+//! The other half of [`crate::ChordSink`]: the panel decides *what*,
 //! this decides *where*. Split so the panel can run in a desktop window
 //! with no DAW behind it — the standalone example provides
-//! `chord_tool::LogSink` instead of this.
+//! `crate::LogSink` instead of this.
 //!
 //! Placement follows `ChordGun`: a chord lands at the edit cursor on the
 //! selected track, and the cursor advances past it so repeated inserts
@@ -25,7 +25,7 @@ const PPQ: f64 = 960.0;
 /// audible without dominating whatever it lands next to.
 const VELOCITY: u8 = 96;
 
-/// A [`chord_tool::ChordSink`] backed by a live DAW.
+/// A [`crate::ChordSink`] backed by a live DAW.
 pub struct DawChordSink<D> {
     daw: D,
     /// Preview state, so a second preview can silence the first. Behind a
@@ -122,7 +122,7 @@ impl<D: ChordDaw> DawChordSink<D> {
     }
 }
 
-impl<D: ChordDaw> chord_tool::ChordSink for DawChordSink<D> {
+impl<D: ChordDaw> crate::ChordSink for DawChordSink<D> {
     fn preview(&self, notes: &[u8]) {
         // Auditioning without writing needs a note-send path the daw
         // facade doesn't expose yet (REAPER's StuffMIDIMessage, or a

@@ -2581,22 +2581,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "chord-tool"
+name = "chords"
 version = "0.1.0"
 dependencies = [
  "architect-ui",
- "dioxus",
- "keyflow",
- "tracing",
-]
-
-[[package]]
-name = "chord-tool-daw"
-version = "0.1.0"
-dependencies = [
- "chord-tool",
  "daw",
  "daw-proto",
+ "dioxus",
  "eyre",
  "keyflow",
  "tracing",

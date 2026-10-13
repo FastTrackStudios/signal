@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/chords",
     "features/dsp/hits",
     "features/dsp/eq",
     "features/dsp/modulation",
@@ -64,8 +65,6 @@ members = [
     "features/session/sync",
     "features/session/library",
     "features/session/ui",
-    "features/chords/chord-tool",
-    "features/chords/chord-tool-daw",
     "features/dynamic-template/dynamic-template",
     "features/dynamic-template/dynamic-template-extension",
     "features/dynamic-template/dynamic-template-proto",
@@ -310,6 +309,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+chords = { path = "features/chords" }
 hits = { path = "features/dsp/hits" }
 eq = { path = "features/dsp/eq" }
 modulation = { path = "features/dsp/modulation" }
@@ -707,8 +707,6 @@ totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
 dynamic-template = { path = "features/dynamic-template/dynamic-template", default-features = false }
 patch-list = { path = "features/patch-list" }
 dynamic-template-proto = { path = "features/dynamic-template/dynamic-template-proto" }
-chord-tool = { path = "features/chords/chord-tool" }
-chord-tool-daw = { path = "features/chords/chord-tool-daw" }
 
 # ── music-convention (its own repo since 2026-08-15) ──────────────────
 # The canonical music-production taxonomy (instrument groups + the REAPER

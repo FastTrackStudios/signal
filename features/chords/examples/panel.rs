@@ -25,5 +25,5 @@ fn main() {
 
     dioxus::LaunchBuilder::new()
         .with_cfg(Config::new().with_window(window).with_menu(None))
-        .launch(chord_tool::ChordToolPanel);
+        .launch(chords::ChordToolPanel);
 }

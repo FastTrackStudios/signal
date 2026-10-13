@@ -1,0 +1,31 @@
+[package]
+name = "chords"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Chord entry and analysis, and writing chords into a project"
+
+[lints]
+workspace = true
+
+[features]
+daw = ["dep:daw", "dep:daw-proto"]
+
+[dependencies]
+architect-ui = { workspace = true }
+daw = { workspace = true, optional = true }
+daw-proto = { workspace = true, optional = true }
+dioxus = { workspace = true }
+keyflow = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+daw = { workspace = true, features = ["test-harness", "reaper"] }
+dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
+eyre = { workspace = true }
+keyflow = { workspace = true }
+
+[[test]]
+name = "reaper_chord_insert"
+path = "tests/reaper_chord_insert.rs"
+required-features = ["daw"]
