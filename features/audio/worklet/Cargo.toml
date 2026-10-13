@@ -1,0 +1,41 @@
+[package]
+name = "web-audio-worklet"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The browser rigs' AudioWorklet entry: one wasm crate, each rig's runner behind its feature (guitar: the chain runner and NAM worker pool; keys: the KeysRig over daw-standalone's WebRenderer)"
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+guitar = ["dep:facet", "dep:facet-json", "dep:sampler", "dep:signal-plugin-host", "dep:tracing"]
+keys = ["dep:daw-standalone", "dep:eyre", "dep:facet", "dep:facet-json", "dep:sampler", "dep:tracing"]
+
+[dependencies]
+daw-standalone = { workspace = true, features = ["decode", "web"], optional = true }
+eyre = { workspace = true, optional = true }
+facet = { workspace = true, optional = true }
+facet-json = { workspace = true, optional = true }
+sampler = { workspace = true, optional = true }
+signal-plugin-host = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+daw-standalone = { workspace = true, features = ["decode", "audio"] }
+fts-sample = { workspace = true, features = ["load", "engine"] }
+hound = { version = "3.5" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+
+[[test]]
+name = "open_headless"
+path = "tests/open_headless.rs"
+required-features = ["keys"]

@@ -18145,19 +18145,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-guitar-worklet"
-version = "0.1.0"
-dependencies = [
- "facet",
- "facet-json",
- "js-sys",
- "sampler",
- "signal-plugin-host",
- "tracing",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "signal-hook"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18205,22 +18192,6 @@ dependencies = [
  "thiserror 2.0.20",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "signal-keys-worklet"
-version = "0.1.0"
-dependencies = [
- "daw-standalone",
- "eyre",
- "facet",
- "facet-json",
- "fts-sample",
- "hound",
- "js-sys",
- "sampler",
- "tracing",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -22998,6 +22969,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02a7fcadcbd0f12cd098f64637c46d9b4195f36490cb5ad2ffa2f4e867d15abb"
 dependencies = [
  "copypatch",
+]
+
+[[package]]
+name = "web-audio-worklet"
+version = "0.1.0"
+dependencies = [
+ "daw-standalone",
+ "eyre",
+ "facet",
+ "facet-json",
+ "fts-sample",
+ "hound",
+ "js-sys",
+ "sampler",
+ "signal-plugin-host",
+ "tracing",
+ "wasm-bindgen",
 ]
 
 [[package]]

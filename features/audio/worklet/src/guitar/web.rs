@@ -24,9 +24,9 @@ use wasm_bindgen::prelude::*;
 use sampler::RigBlock;
 use sampler::rig::prepare_chain;
 
-use crate::plan::{Place, Plan, model_budget_us};
-use crate::remote::{Lag, Link, MAX_POSTED_PARAMS};
-use crate::runner::{BuildOptions, ChainRunner, build, plan_chain};
+use crate::guitar::plan::{Place, Plan, model_budget_us};
+use crate::guitar::remote::{Lag, Link, MAX_POSTED_PARAMS};
+use crate::guitar::runner::{BuildOptions, ChainRunner, build, plan_chain};
 
 const SEQ_IN: u32 = 0;
 const SEQ_OUT: u32 = 1;

@@ -4,7 +4,7 @@
 //! no daw project, only an AudioWorklet asking for 128 frames at a time. So
 //! this plays a [`PreparedChain`](sampler::rig::PreparedChain)'s
 //! blocks in order on two ping-pong buffers, with bypass, parameter changes
-//! and meters — and with the NAM models placed by [`crate::plan`].
+//! and meters — and with the NAM models placed by [`crate::guitar::plan`].
 
 use std::sync::Arc;
 
@@ -13,8 +13,8 @@ use sampler::amp_blend::{self, Role};
 use sampler::rig::prepare_chain_with;
 use signal_plugin_host::{PluginEvents, PluginInstance};
 
-use crate::plan::{self, Model, Place, Plan};
-use crate::remote::{Lag, Link, Prefetch, RemoteBlock, RemoteStats, Standby};
+use crate::guitar::plan::{self, Model, Place, Plan};
+use crate::guitar::remote::{Lag, Link, Prefetch, RemoteBlock, RemoteStats, Standby};
 
 /// Parameter changes one slot can queue between quanta.
 const MAX_PENDING: usize = 16;
@@ -68,7 +68,7 @@ fn roles(blocks: &[RigBlock]) -> Vec<Option<Role>> {
     amp_blend::roles(&names, r_loaded)
 }
 
-/// Where `blocks`' models run (see [`crate::plan`]). `cost_us` is each
+/// Where `blocks`' models run (see [`crate::guitar::plan`]). `cost_us` is each
 /// model's per-quantum cost, measured or estimated.
 #[must_use]
 pub fn plan_chain(

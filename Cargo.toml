@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/audio/worklet",
     "features/patchbay",
     "features/midi",
     "features/expression-editor",
@@ -181,8 +182,6 @@ members = [
     "features/rigs/plugin-host",
     "features/adapters/reaper/signal-extension",
     "features/adapters/reaper/signal-reaper-controller",
-    "features/audio/worklet/keys",
-    "features/audio/worklet/guitar",
     "features/rigs/orchestra",
     "features/rigs/synth-rig",
     "features/rigs/wurli/openwurli-dsp",
@@ -240,6 +239,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+web-audio-worklet = { path = "features/audio/worklet" }
 patchbay = { path = "features/patchbay" }
 midi = { path = "features/midi" }
 plugin-core = { path = "features/ui/plugin-core" }
@@ -1006,8 +1006,6 @@ signal-widgets = { path = "features/rigs/core/widgets" }
 signal-extension = { path = "features/adapters/reaper/signal-extension" }
 signal-macromod = { path = "features/rigs/macromod/macromod" }
 signal-plugin-host = { path = "features/rigs/plugin-host", default-features = false }
-signal-keys-worklet = { path = "features/audio/worklet/keys" }
-signal-guitar-worklet = { path = "features/audio/worklet/guitar" }
 openwurli-dsp = { path = "features/rigs/wurli/openwurli-dsp" }
 signal-orchestra = { path = "features/rigs/orchestra" }
 signal-synth-rig = { path = "features/rigs/synth-rig" }

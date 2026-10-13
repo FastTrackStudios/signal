@@ -8,16 +8,16 @@ use std::time::Duration;
 use sampler::RigBlock;
 use sampler::rig::prepare_chain;
 
-use crate::remote::thread::ThreadLink;
-use crate::remote::{Lag, Link};
-use crate::runner::{BuildOptions, ChainRunner, build, plan_chain};
+use crate::guitar::remote::thread::ThreadLink;
+use crate::guitar::remote::{Lag, Link};
+use crate::guitar::runner::{BuildOptions, ChainRunner, build, plan_chain};
 
 const Q: usize = 128;
 const SR: u32 = 48_000;
 
 fn model(name: &str) -> String {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../rigs/guitar/default-config/models")
+        .join("../../rigs/guitar/default-config/models")
         .join(name)
         .to_string_lossy()
         .into_owned()
@@ -114,7 +114,7 @@ fn a_lagged_model_is_the_inline_model_one_quantum_late() {
     let mut lagged = runner(&blocks, &[0], Duration::ZERO);
     assert_eq!(
         lagged.plan().places[0],
-        crate::plan::Place::Worker(Lag::One)
+        crate::guitar::plan::Place::Worker(Lag::One)
     );
     assert_eq!(lagged.added_latency(), Q as u32);
     let got = play_paced(&mut lagged, &input, Duration::from_millis(3));
@@ -143,7 +143,7 @@ fn amp_r_on_a_worker_blends_exactly_like_inline() {
     let mut remote = runner(&blocks, &[1], Duration::ZERO);
     assert_eq!(
         remote.plan().places[1],
-        crate::plan::Place::Worker(Lag::Zero)
+        crate::guitar::plan::Place::Worker(Lag::Zero)
     );
     assert_eq!(remote.added_latency(), 0);
     let got = play(&mut remote, &input);

@@ -17,7 +17,7 @@
 //! Costs are estimates to begin with and measurements once the models have
 //! run; a host re-plans when a worker starts missing.
 
-use crate::remote::Lag;
+use crate::guitar::remote::Lag;
 
 /// Where one model runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

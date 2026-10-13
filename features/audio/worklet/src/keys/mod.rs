@@ -50,7 +50,7 @@ mod web {
     use sampler::KeysRig;
     use sampler::keys_rig::LaneProgram;
 
-    use crate::wire_program_from_json;
+    use crate::keys::wire_program_from_json;
 
     fn js_err(e: impl std::fmt::Display) -> JsValue {
         JsValue::from_str(&e.to_string())

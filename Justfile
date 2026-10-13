@@ -100,21 +100,20 @@ web-stage: tailwind
     cd apps/session/desktop && dx build --platform web --release --no-default-features --features signal,session
     rm -rf apps/session/desktop/web-dist
     cp -r target/dx/session-desktop/release/web/public apps/session/desktop/web-dist
-    just keys-worklet-wasm
 
 # Stage the browser keys rig's AudioWorklet bundle (W4 of
 # crates/signal/docs/browser-keys-rig.md) into the web bundle:
-# a RELEASE wasm build of signal-keys-worklet (KeysWorklet =
+# a RELEASE wasm build of web-audio-worklet --features keys (KeysWorklet =
 # WebRenderer + headless KeysRig), wasm-bindgen'd `--target web`, plus
 # the keys-specific processor + worklet polyfill (AudioWorkletGlobalScope
 # has no dynamic import(), TextDecoder, crypto, or performance — see
-# features/rigs/keys/worklet/). The page (src/web_keys_rig.rs) expects:
+# features/audio/worklet/js/). The page (src/web_keys_rig.rs) expects:
 #   /worklet/keys_processor.js
 #   /worklet/signal_keys_worklet.js
 #   /worklet/signal_keys_worklet_bg.wasm
 # wasm-bindgen-cli comes from the dev shell, pinned to the workspace
 # wasm-bindgen version (same as task-worklet-wasm).
-keys-worklet-wasm out='apps/session/desktop/web-dist/worklet':
+keys-worklet-wasm out='apps/signal/desktop/web-dist/worklet':
     # --max-memory: default wasm linear memory caps at 2 GB — resident pack
     # bytes + decoded-PCM budget + app need the full 4 GB address space.
     #
@@ -125,16 +124,16 @@ keys-worklet-wasm out='apps/session/desktop/web-dist/worklet':
     # 128-bit lanes accelerate. Measure `renderLoad()` across this change —
     # it is the number that says whether the render fits the quantum.
     RUSTFLAGS="-C link-arg=--max-memory=4294967296 -C target-feature=+simd128" \
-    cargo build -p signal-keys-worklet --lib \
+    cargo build -p web-audio-worklet --features keys --lib \
         --target wasm32-unknown-unknown --release
     mkdir -p {{out}}
     wasm-bindgen --target web --out-dir {{out}} \
         --out-name signal_keys_worklet \
-        target/wasm32-unknown-unknown/release/signal_keys_worklet.wasm
-    cp features/rigs/keys/worklet/keys_processor.js {{out}}/keys_processor.js
-    cp features/rigs/keys/worklet/worklet_polyfill.js {{out}}/worklet_polyfill.js
-    cp features/rigs/keys/worklet/keys_decoder_worker.js {{out}}/keys_decoder_worker.js
-    cp features/rigs/keys/worklet/keys_streamer_worker.js {{out}}/keys_streamer_worker.js
+        target/wasm32-unknown-unknown/release/web_audio_worklet.wasm
+    cp features/audio/worklet/js/keys_processor.js {{out}}/keys_processor.js
+    cp features/audio/worklet/js/worklet_polyfill.js {{out}}/worklet_polyfill.js
+    cp features/audio/worklet/js/keys_decoder_worker.js {{out}}/keys_decoder_worker.js
+    cp features/audio/worklet/js/keys_streamer_worker.js {{out}}/keys_streamer_worker.js
 
 # W13: the SHARED-MEMORY worklet build — wasm threads.
 #
@@ -156,7 +155,7 @@ keys-worklet-wasm out='apps/session/desktop/web-dist/worklet':
 # Kept as its OWN recipe until it is proven: `keys-worklet-wasm` (single
 # threaded) stays the default so a toolchain problem here can never take the
 # working rig down with it.
-keys-worklet-wasm-threads out='apps/session/desktop/web-dist/worklet':
+keys-worklet-wasm-threads out='apps/signal/desktop/web-dist/worklet':
     # The four TLS symbols are exported EXPLICITLY: wasm-bindgen's threading
     # pass looks up `__wasm_init_tls` (each thread initialises its own TLS
     # block through it), and LLD garbage-collects all of them when no Rust
@@ -171,17 +170,50 @@ keys-worklet-wasm-threads out='apps/session/desktop/web-dist/worklet':
         -C link-arg=--export=__tls_size \
         -C link-arg=--export=__tls_align \
         -C link-arg=--export=__tls_base" \
-    cargo-nightly build -p signal-keys-worklet --lib \
+    cargo-nightly build -p web-audio-worklet --features keys --lib \
         -Z build-std=std,panic_abort \
         --target wasm32-unknown-unknown --release
     mkdir -p {{out}}
     wasm-bindgen --target web --out-dir {{out}} \
         --out-name signal_keys_worklet \
-        target/wasm32-unknown-unknown/release/signal_keys_worklet.wasm
-    cp features/rigs/keys/worklet/keys_processor.js {{out}}/keys_processor.js
-    cp features/rigs/keys/worklet/worklet_polyfill.js {{out}}/worklet_polyfill.js
-    cp features/rigs/keys/worklet/keys_decoder_worker.js {{out}}/keys_decoder_worker.js
-    cp features/rigs/keys/worklet/keys_streamer_worker.js {{out}}/keys_streamer_worker.js
+        target/wasm32-unknown-unknown/release/web_audio_worklet.wasm
+    cp features/audio/worklet/js/keys_processor.js {{out}}/keys_processor.js
+    cp features/audio/worklet/js/worklet_polyfill.js {{out}}/worklet_polyfill.js
+    cp features/audio/worklet/js/keys_decoder_worker.js {{out}}/keys_decoder_worker.js
+    cp features/audio/worklet/js/keys_streamer_worker.js {{out}}/keys_streamer_worker.js
+
+# Stage the browser guitar rig (features/rigs/core/docs/browser-guitar-rig.md):
+# one wasm module with two entry points — GuitarWorklet on the AudioWorklet
+# thread, NamWorker on each NAM Web Worker — plus the processor, the worker,
+# the page-side orchestrator and the worklet polyfill (shared with keys).
+# The page expects, under {{out}}:
+#   guitar_processor.js  nam_worker.js  guitar_rig.js  worklet_polyfill.js
+#   signal_guitar_worklet.js  signal_guitar_worklet_bg.wasm
+# +simd128: the NAM kernels are what decides how many models fit a quantum.
+guitar-worklet-wasm out='apps/signal/desktop/web-dist/worklet/guitar':
+    RUSTFLAGS="-C target-feature=+simd128" \
+    cargo build -p web-audio-worklet --features guitar --lib \
+        --target wasm32-unknown-unknown --release
+    mkdir -p {{out}}
+    wasm-bindgen --target web --out-dir {{out}} \
+        --out-name signal_guitar_worklet \
+        target/wasm32-unknown-unknown/release/web_audio_worklet.wasm
+    cp features/audio/worklet/js/guitar_processor.js {{out}}/
+    cp features/audio/worklet/js/nam_worker.js {{out}}/
+    cp features/audio/worklet/js/guitar_rig.js {{out}}/
+    cp features/audio/worklet/js/worklet_polyfill.js {{out}}/
+
+# Try the browser guitar rig locally: stage the worklet bundle, export the
+# rig (XDG_CONFIG_HOME picks the config), copy the reference DI, and serve
+# the harness with the COOP/COEP headers SharedArrayBuffer needs:
+#   http://127.0.0.1:8765/  (Start = the demo DI through the chosen patch)
+# `node profile.mjs <profile> <patch>` in the dir prints each block's cost.
+guitar-web-harness dir='target/guitar-web' port='8765':
+    just guitar-worklet-wasm {{dir}}
+    cargo run -q -p signal-cli -- rig web-bundle {{dir}}/rig
+    cp features/audio/worklet/harness/index.html features/audio/worklet/harness/serve.py features/audio/worklet/harness/profile.mjs {{dir}}/
+    cp "${XDG_CONFIG_HOME:-$HOME/.config}/signal/calibration/di-reference.wav" {{dir}}/ || echo "no di-reference.wav — the demo input needs one"
+    python3 {{dir}}/serve.py {{port}}
 
 # ONE engine binary serving the whole browser keys rig: stage the web
 # bundle + keys worklet (web-stage), then embed it into the release

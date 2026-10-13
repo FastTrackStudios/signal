@@ -9,9 +9,9 @@ input (or a looped reference DI) with no added latency.
 | piece | where | runs on |
 |---|---|---|
 | chain runner | `features/rigs/guitar/worklet/src/runner.rs` | AudioWorklet (render thread) |
-| NAM worker | `NamWorker` in `worklet/src/web.rs` + `nam_worker.js` | one Web Worker per remote model |
+| NAM worker | `NamWorker` in `features/audio/worklet/src/guitar/web.rs` + `nam_worker.js` | one Web Worker per remote model |
 | planner | `worklet/src/plan.rs` (`planChain` in wasm) | page and worklet — same code, same answer |
-| page orchestrator | `worklet/guitar_rig.js` | main thread |
+| page orchestrator | `features/audio/worklet/js/guitar_rig.js` | main thread |
 | bundle | `signal rig web-bundle <dir>` (`features/rigs/guitar/src/web_bundle.rs`) | build time |
 
 One wasm module serves both the worklet (`GuitarWorklet`) and the workers
