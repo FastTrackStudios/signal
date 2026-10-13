@@ -17,7 +17,7 @@ workspace = true
 # `audiocore_core::prelude`) because `#[derive(Params)]` and `nice_export_clap!`
 # expand to absolute `::nice_plug::…` paths, so the crate has to be nameable here.
 nice-plug.workspace = true
-audio = { workspace = true }
+plugin-core = { workspace = true }
 
 # The sampler engine + document scheduler
 sampler = { workspace = true }
