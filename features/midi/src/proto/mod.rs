@@ -24,6 +24,7 @@ pub mod backend;
 pub mod drum_convert;
 pub mod event;
 pub mod filter;
+pub mod note;
 pub mod number;
 pub mod port;
 pub mod raw;
@@ -34,6 +35,7 @@ pub use backend::{decode_all, BackendError, InputBackend, InputConfig, MaybeSend
 pub use drum_convert::{DrumMap, DrumMapConverter, HatThresholds};
 pub use event::{DecodeError, MidiEvent, MidiKind};
 pub use filter::Filter;
+pub use note::{note_name, NOTE_NAMES};
 pub use number::{
     Channel, ControllerNumber, ControllerValue, KeyNumber, PitchBend, Pressure, ProgramNumber,
     Velocity, U14, U4, U7,

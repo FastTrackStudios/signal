@@ -196,13 +196,6 @@ fn read_zones(tsv: &Path, spec: &NiPianoSpec) -> Result<Vec<Zone>, String> {
 
 // ── library.styx generation ──────────────────────────────────────────────────
 
-fn note_name(midi: u8) -> String {
-    const N: [&str; 12] = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
-    format!("{}{}", N[midi as usize % 12], i32::from(midi) / 12 - 1)
-}
-
 fn styx_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
@@ -229,8 +222,8 @@ fn library_styx(lib_name: &str, pack: &str, vendor: &str, zones: &[Zone]) -> Str
     let _ = write!(
         s,
         "  lowest_note {}\n  highest_note {}\n}})\n\n",
-        note_name(lo),
-        note_name(hi)
+        midi::note_name(lo),
+        midi::note_name(hi)
     );
     s.push_str("mics ({\n  id Main\n  label Main\n  kind blended\n  default true\n})\n\n");
     s.push_str("dynamics {\n  short_note_controller velocity\n}\n\n");
@@ -571,8 +564,8 @@ mod tests {
 
     #[test]
     fn note_names_match_midi_convention() {
-        assert_eq!(note_name(21), "A0"); // lowest piano key
-        assert_eq!(note_name(60), "C4"); // middle C
-        assert_eq!(note_name(108), "C8"); // highest piano key
+        assert_eq!(midi::note_name(21), "A0"); // lowest piano key
+        assert_eq!(midi::note_name(60), "C4"); // middle C
+        assert_eq!(midi::note_name(108), "C8"); // highest piano key
     }
 }

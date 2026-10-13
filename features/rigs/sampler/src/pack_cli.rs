@@ -2906,7 +2906,7 @@ fn render_report(
         let (stem_audio, _, _, _, _, _) = render_pass(Some(std::iter::once(*note).collect()))?;
         let fname = format!("{stem_base}.n{note}.wav");
         write_wav(&wav_path.with_file_name(&fname), &stem_audio)?;
-        stems.push((*note, note_name(*note), fname));
+        stems.push((*note, midi::note_name(*note), fname));
     }
 
     // Metronome click BAKED into a full-length copy of the mix (same buffer,
@@ -3075,14 +3075,6 @@ function pick(b){{
             .join(", ")
     );
     Ok(())
-}
-
-/// MIDI note → name (C4 = 60).
-fn note_name(n: u8) -> String {
-    const NN: [&str; 12] = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
-    format!("{}{}", NN[(n % 12) as usize], (n / 12) as i32 - 1)
 }
 
 // ── build ────────────────────────────────────────────────────────────────────
