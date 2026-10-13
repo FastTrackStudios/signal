@@ -72,7 +72,6 @@ members = [
     "features/song",
     # ── daw ──
     "features/audio/sample",
-    "features/ui/themes",
     "crates/daw/actions",
     "crates/daw/control",
     "crates/daw/daw",
@@ -161,7 +160,6 @@ members = [
     "features/rigs/core/tone3000",
     "features/rigs/core/tone3000-proto",
     "features/rigs/core/tone3000-ui",
-    "features/rigs/core/ui",
     "features/rigs/core/widgets",
     "features/dsp/analyzer/signal-analyzer",
     "features/dsp/separator/signal-separator",
@@ -261,7 +259,6 @@ neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-mod
 # iOS-clean session-guide) don't drag the pack engine in; each consumer
 # names the features it needs ("load" / "write" / "engine").
 fts-sample = { path = "features/audio/sample", default-features = false }
-fts-themes = { path = "features/ui/themes" }
 # Canonical MIDI facade. Defaults OFF at the root: daw-proto re-exports
 # `midicore::MidiEvent` and must not drag midicore's `vox` service traits
 # (nor the `midir` feature — midicore-midir pins midir 0.10/alsa-sys 0.3,
@@ -373,7 +370,7 @@ engraver-score = { git = "https://github.com/FastTrackStudios/keyflow", tag = "v
 
 # ── signal domain (wave 4) ────────────────────────────────────────────
 # `signal` is the facade — the only public API surface for the signal
-# domain. Apps depend on `signal`, `signal-ui`, or `signal-sampler`;
+# domain. Apps depend on `signal` or `signal-sampler`;
 # never on the internal domain crates (proto/live/storage/controller/
 # import/daw-bridge/nam-manager).
 # `default-features = false` must be declared here, not just at the use
@@ -934,7 +931,6 @@ signal-tone3000-proto = { path = "features/rigs/core/tone3000-proto" }
 signal-tone3000-ui = { path = "features/rigs/core/tone3000-ui" }
 signal = { path = "features/rigs/core/signal" }
 signal-proto = { path = "features/rigs/core/proto" }
-signal-ui = { path = "features/rigs/core/ui", default-features = false }
 signal-browser = { path = "features/rigs/core/browser", default-features = false }
 signal-space = { path = "features/rigs/core/space" }
 signal-space-proto = { path = "features/rigs/core/space/proto" }

@@ -6,7 +6,7 @@
 //! logic can drive the desktop Dioxus UI, a TUI, the CLI, or any future
 //! frontend.
 //!
-//! Rendering (the `RigGridPanel` component, etc.) lives in `signal-ui`
+//! Rendering lives with the apps that show it
 //! and consumes the headless types defined here.
 
 /// Queries against a live signal controller — native only.
@@ -18,7 +18,7 @@ pub mod grid_conversion;
 pub mod pack_registry;
 pub mod types;
 
-// Public surface used by signal-ui (mirrors what the old
+// Public surface for the rig UIs (mirrors what the old
 // `views/collection_browser/mod.rs` re-exported).
 #[cfg(feature = "native")]
 pub use data_fetching::rig_type_to_engine_type;
