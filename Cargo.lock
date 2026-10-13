@@ -4426,7 +4426,6 @@ name = "daw-synchronization"
 version = "0.1.0"
 dependencies = [
  "daw",
- "daw-reaper",
  "eyre",
  "facet",
  "studio",

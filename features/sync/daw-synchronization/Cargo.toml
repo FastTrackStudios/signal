@@ -32,8 +32,6 @@ path = "src/lib.rs"
 
 [dependencies]
 daw = { workspace = true }
-studio = { workspace = true, features = ["reaper"] }
-daw-reaper.workspace = true
 facet.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "macros", "rt"] }
 tokio-util = "0.7"
