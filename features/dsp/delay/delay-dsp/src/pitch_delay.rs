@@ -24,7 +24,7 @@ use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
 use dsp_core::num;
-use pitch_dsp::spectral::SpectralShifter;
+use pitch::spectral::SpectralShifter;
 
 /// `TimeLine` MX Ice interval menu. `Free` uses `PitchDelay::speed` raw.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

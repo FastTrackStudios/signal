@@ -7,7 +7,7 @@
 //!   cargo test -p pitch-dsp --test comparison -- --ignored --nocapture
 
 use audiocore_dsp::{AudioConfig, Processor};
-use pitch_dsp::chain::{semitones_to_ratio, Algorithm, PitchChain};
+use pitch::chain::{semitones_to_ratio, Algorithm, PitchChain};
 
 use std::f64::consts::PI;
 use std::fs;

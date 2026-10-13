@@ -34,7 +34,7 @@ pub use note::{segment_notes, Note, NoteConfig};
 pub use tracker::{spans_from_frames, track_notes, TrackConfig, TrackedNote};
 
 /// Re-export the shared pitch-shift core the correction stage drives.
-pub use pitch_dsp as shifter;
+pub use pitch as shifter;
 
 /// One-shot analysis config bundling the three stages.
 #[derive(Clone, Copy, Debug, Default)]

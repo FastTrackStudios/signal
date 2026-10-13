@@ -32,7 +32,7 @@ use crate::primitives::one_pole::Lp1;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::one_pole::OnePoleHp;
-use pitch_dsp::spectral::SpectralShifter;
+use pitch::spectral::SpectralShifter;
 
 pub struct Shimmer {
     // Reverb tank

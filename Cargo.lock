@@ -4465,7 +4465,7 @@ dependencies = [
  "gloo-timers",
  "js-sys",
  "libloading 0.8.9",
- "pitch-dsp",
+ "pitch",
  "raw-window-handle 0.6.2",
  "rtrb",
  "tempfile",
@@ -4740,7 +4740,7 @@ dependencies = [
  "audiocore-dsp",
  "dsp-core",
  "dsp-golden",
- "pitch-dsp",
+ "pitch",
 ]
 
 [[package]]
@@ -8280,7 +8280,7 @@ dependencies = [
  "level",
  "midicore-proto",
  "modulation",
- "pitch-dsp",
+ "pitch",
  "reverb",
  "saturate-dsp",
  "tune",
@@ -15112,13 +15112,6 @@ dependencies = [
 name = "pitch"
 version = "0.1.0"
 dependencies = [
- "pitch-dsp",
-]
-
-[[package]]
-name = "pitch-dsp"
-version = "0.1.0"
-dependencies = [
  "audiocore-dsp",
  "criterion",
  "hound",
@@ -15133,7 +15126,7 @@ version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
  "nice-plug",
- "pitch-dsp",
+ "pitch",
 ]
 
 [[package]]
@@ -16885,7 +16878,7 @@ dependencies = [
  "dsp-core",
  "dsp-golden",
  "fts-modulation",
- "pitch-dsp",
+ "pitch",
  "realfft",
  "symphonium",
  "thiserror 2.0.20",
@@ -22518,7 +22511,7 @@ dependencies = [
 name = "tune"
 version = "0.1.0"
 dependencies = [
- "pitch-dsp",
+ "pitch",
  "realfft",
  "tract-onnx",
  "world-sys",
@@ -22990,7 +22983,7 @@ version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
  "nice-plug",
- "pitch-dsp",
+ "pitch",
 ]
 
 [[package]]

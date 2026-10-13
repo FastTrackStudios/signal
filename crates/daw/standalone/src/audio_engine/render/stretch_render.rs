@@ -10,7 +10,7 @@
 //! A stretched take is rendered instead, once: between each pair of its
 //! markers, a stretch played at speed is copied from the source as it is
 //! and one played slower or faster is time-stretched with WSOLA
-//! ([`pitch_dsp::wsola::stretch_planar`]) — its pitch kept, its timing
+//! ([`pitch::wsola::stretch_planar`]) — its pitch kept, its timing
 //! the map's — each joined to the next across a short crossfade. The
 //! mixer then plays the render as an unstretched take. Renders are kept
 //! by take, offset and markers, so a replan after an edit renders only
@@ -143,7 +143,7 @@ fn render(audio: &AudioSource, markers: &[StretchMarker], length: f64) -> AudioS
             // hit's attack, not this decay's.
             let span = ((s1 - s0) * sr).round().max(1.0) as usize;
             let input: Vec<Vec<f32>> = (0..channels).map(|ch| read(ch, from, span)).collect();
-            pitch_dsp::wsola::stretch_planar(&input, 0, rate, n + more, grain)
+            pitch::wsola::stretch_planar(&input, 0, rate, n + more, grain)
         };
         for (ch, samples) in piece.iter().enumerate() {
             let Some(dest) = out.get_mut(ch) else {

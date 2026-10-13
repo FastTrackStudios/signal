@@ -3,7 +3,7 @@
 //! Simulated double-tracking and beyond: 2–8 pitch-shifted voices with
 //! symmetric detune, constant-power stereo spread, and per-voice
 //! decorrelation delays around the dry center — the
-//! [`pitch_dsp::unison::UnisonEngine`] that also serves as signal's
+//! [`pitch::unison::UnisonEngine`] that also serves as signal's
 //! synth unison. Two voices at full spread is the classic studio
 //! doubler; stack more for ensemble thickness.
 
@@ -11,8 +11,8 @@ use nice_plug::prelude::*;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use pitch_dsp::chain::Algorithm;
-use pitch_dsp::unison::{MAX_VOICES, UnisonEngine};
+use pitch::chain::Algorithm;
+use pitch::unison::{MAX_VOICES, UnisonEngine};
 
 const PLUGIN_NAME: &str = "FTS Unison";
 

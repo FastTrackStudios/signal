@@ -13,7 +13,7 @@ use std::thread;
 use std::time::Instant;
 
 use audiocore_dsp::{AudioConfig, Processor};
-use pitch_dsp::chain::{Algorithm, PitchChain};
+use pitch::chain::{Algorithm, PitchChain};
 
 const SAMPLE_RATE: f64 = 48000.0;
 const DURATION_SECS: f64 = 10.0;

@@ -16,7 +16,7 @@ use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
 use dsp_core::num;
-use pitch_dsp::spectral::SpectralShifter;
+use pitch::spectral::SpectralShifter;
 
 /// Shimmer delay with pitch shifting in the feedback path.
 pub struct ShimmerDelay {

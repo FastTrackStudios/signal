@@ -1528,7 +1528,7 @@ pub const TUNE_CENTS_OFF_ID: u32 = 101;
 /// and PSOLA shifting. MIDI target modes take notes straight from `PluginEvents.midi`.
 pub struct NativeTune {
     detector: tune::detect::YinDetector,
-    chain: pitch_dsp::chain::PitchChain,
+    chain: pitch::chain::PitchChain,
     scale: tune::correct::Scale,
     key: u8,
     scale_kind: u32,
@@ -1564,12 +1564,12 @@ impl NativeTune {
         let sr = sample_rate.max(1.0);
         let detector = tune::detect::YinDetector::new(sr, tune::detect::YinConfig::default());
         let window = detector.window();
-        let mut chain = pitch_dsp::chain::PitchChain::new();
+        let mut chain = pitch::chain::PitchChain::new();
         // PSOLA (pitch-synchronous — the right engine for voice), now
         // that its grain-boundary recentering is fixed: measured
         // +0.1/+1.3/+2.2 cents at -0.47/-2/+2 st, equal or better than
         // WSOLA (see autotune-plan.md status log).
-        chain.algorithm = pitch_dsp::chain::Algorithm::Psola;
+        chain.algorithm = pitch::chain::Algorithm::Psola;
         chain.semitones = 0.0;
         chain.mix = 1.0;
         Self {
@@ -5423,7 +5423,7 @@ const PITCH_PARAMS: &[ParamSpec] = &[
 ];
 
 /// Native Pitch block — a stereo pitch shifter over pitch-dsp's
-/// [`PitchChain`](pitch_dsp::chain::PitchChain), one per channel.
+/// [`PitchChain`](pitch::chain::PitchChain), one per channel.
 ///
 /// Engine 0 (default) is the phase-locked phase vocoder (`Spectral`): the
 /// only engine that is clean on chords and sustained notes alike —
@@ -5445,14 +5445,14 @@ const PITCH_PARAMS: &[ParamSpec] = &[
 /// rig the player hears the dry note on time and the shifted voice trails
 /// it (as on a harmonizer pedal). At a different pitch the two do not comb.
 pub struct NativePitch {
-    chain_l: pitch_dsp::chain::PitchChain,
-    chain_r: pitch_dsp::chain::PitchChain,
+    chain_l: pitch::chain::PitchChain,
+    chain_r: pitch::chain::PitchChain,
     /// Voice B's shifters — processed only while `b_level` > 0, and built
     /// only once it is: each chain holds only the engine it plays, and a
     /// rig prepares a pitch block in every patch, mostly with B silent.
-    voice_b: Option<Box<[pitch_dsp::chain::PitchChain; 2]>>,
+    voice_b: Option<Box<[pitch::chain::PitchChain; 2]>>,
     /// Voice B's settings, kept for when it is built.
-    algorithm: pitch_dsp::chain::Algorithm,
+    algorithm: pitch::chain::Algorithm,
     live: bool,
     b_semitones: f64,
     sample_rate: f64,
@@ -5477,7 +5477,7 @@ impl NativePitch {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
         let mk = || {
-            let mut c = pitch_dsp::chain::PitchChain::only(pitch_dsp::chain::Algorithm::Spectral);
+            let mut c = pitch::chain::PitchChain::only(pitch::chain::Algorithm::Spectral);
             c.live = false;
             c.mix = 1.0;
             c
@@ -5486,7 +5486,7 @@ impl NativePitch {
             chain_l: mk(),
             chain_r: mk(),
             voice_b: None,
-            algorithm: pitch_dsp::chain::Algorithm::Spectral,
+            algorithm: pitch::chain::Algorithm::Spectral,
             live: false,
             b_semitones: -12.0,
             sample_rate,
@@ -5515,7 +5515,7 @@ impl NativePitch {
             return;
         }
         let mk = || {
-            let mut c = pitch_dsp::chain::PitchChain::only(self.algorithm);
+            let mut c = pitch::chain::PitchChain::only(self.algorithm);
             c.live = self.live;
             c.mix = 1.0;
             c.semitones = self.b_semitones;
@@ -5539,7 +5539,7 @@ impl NativePitch {
     }
 
     fn set(&mut self, id: u32, v: f64) {
-        use pitch_dsp::chain::Algorithm;
+        use pitch::chain::Algorithm;
         match id {
             0 => {
                 self.semitones = v.clamp(-24.0, 24.0);

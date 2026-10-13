@@ -7,14 +7,14 @@
 //! default). The dry path is delayed by the same latency so a partial mix
 //! stays aligned. Double-tracking/unison lives in its own plugin —
 //! FTS Unison — which drives the same engines through
-//! `pitch_dsp::unison::UnisonEngine`.
+//! `pitch::unison::UnisonEngine`.
 
 use nice_plug::prelude::*;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use audiocore_dsp::{AudioConfig, Processor};
-use pitch_dsp::chain::{Algorithm, PitchChain};
+use pitch::chain::{Algorithm, PitchChain};
 
 const PLUGIN_NAME: &str = "FTS Pitch";
 

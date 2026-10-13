@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::thread;
 
 use audiocore_dsp::{AudioConfig, Processor};
-use pitch_dsp::chain::{Algorithm, PitchChain};
+use pitch::chain::{Algorithm, PitchChain};
 use rustfft::{num_complex::Complex, FftPlanner};
 
 const SAMPLE_RATE: f64 = 48000.0;

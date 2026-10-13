@@ -17,8 +17,8 @@ fn zc_freq(buf: &[f64]) -> f64 {
 #[test]
 fn psola_is_cents_accurate_at_small_and_moderate_shifts() {
     for st in [-0.467f64, -2.0, 2.0, 5.0, -5.0] {
-        let mut chain = pitch_dsp::chain::PitchChain::new();
-        chain.algorithm = pitch_dsp::chain::Algorithm::Psola;
+        let mut chain = pitch::chain::PitchChain::new();
+        chain.algorithm = pitch::chain::Algorithm::Psola;
         chain.semitones = st;
         chain.mix = 1.0;
         chain.update(AudioConfig {
@@ -50,11 +50,11 @@ fn psola_is_cents_accurate_at_small_and_moderate_shifts() {
 #[test]
 fn print_psola_vs_wsola_cents() {
     for algo in [
-        pitch_dsp::chain::Algorithm::Psola,
-        pitch_dsp::chain::Algorithm::Wsola,
+        pitch::chain::Algorithm::Psola,
+        pitch::chain::Algorithm::Wsola,
     ] {
         for st in [-0.467f64, -2.0, 2.0] {
-            let mut chain = pitch_dsp::chain::PitchChain::new();
+            let mut chain = pitch::chain::PitchChain::new();
             chain.algorithm = algo;
             chain.semitones = st;
             chain.mix = 1.0;

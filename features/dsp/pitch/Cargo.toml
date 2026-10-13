@@ -1,0 +1,32 @@
+[package]
+name = "pitch"
+version.workspace = true
+edition = "2021"
+authors.workspace = true
+license.workspace = true
+description = "Pitch shifting"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+rubberband = []
+
+[dependencies]
+audiocore-dsp = { workspace = true }
+realfft = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.5" }
+hound = { version = "3.5" }
+rustfft = { version = "6.2" }
+
+[[bench]]
+name = "throughput"
+harness = false
+
+[[bench]]
+name = "quality"
+harness = false

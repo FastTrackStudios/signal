@@ -32,11 +32,11 @@ use std::f64::consts::PI;
 use std::time::Instant;
 
 use audiocore_dsp::grain_pitch::GrainPitchShifter;
-use pitch_dsp::allpass_shift::AllpassShifter;
-use pitch_dsp::granular::GranularShifter;
-use pitch_dsp::pog::{OctaveShift, PolyOctave};
-use pitch_dsp::psola::PsolaShifter;
-use pitch_dsp::wsola::WsolaShifter;
+use pitch::allpass_shift::AllpassShifter;
+use pitch::granular::GranularShifter;
+use pitch::pog::{OctaveShift, PolyOctave};
+use pitch::psola::PsolaShifter;
+use pitch::wsola::WsolaShifter;
 use rustfft::{num_complex::Complex, FftPlanner};
 
 const SR: f64 = 48000.0;
@@ -193,7 +193,7 @@ fn extra_candidates() -> Vec<Candidate> {
 
 mod extra {
     use super::*;
-    use pitch_dsp::spectral::SpectralShifter;
+    use pitch::spectral::SpectralShifter;
     fn pv(r: f64, n: usize, ov: usize) -> Option<Box<dyn Shifter>> {
         let mut s = SpectralShifter::new();
         s.speed = r;

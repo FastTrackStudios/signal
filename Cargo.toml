@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/pitch",
     "features/dsp/level",
     "features/dsp/tune",
     "features/dsp/gate",
@@ -107,7 +108,6 @@ members = [
     "features/formats/dawfile-reaper",
     "features/formats/dawfile-standalone",
     "features/formats/dawfile-store",
-    "features/dsp/pitch/pitch-dsp",
     "features/launcher/fts-launcher",
     "features/adapters/reaper/daw-bridge",
     "features/adapters/reaper/daw-extension-runtime",
@@ -193,7 +193,6 @@ members = [
     "features/dsp/multiband",
     "features/dsp/core/musical-time/musical-time",
     "features/dsp/core/musical-time/musical-time-ui",
-    "features/dsp/pitch/pitch",
     "features/dsp/reverb/reverb",
     "features/dsp/reverb/reverb-dsp",
     "features/dsp/reverb/reverb-profiles",
@@ -341,6 +340,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+pitch = { path = "features/dsp/pitch" }
 level = { path = "features/dsp/level" }
 tune = { path = "features/dsp/tune" }
 # Razor edit areas: a rectangle of time by row, and the set algebra over
@@ -545,7 +545,6 @@ engraver-score = { git = "https://github.com/FastTrackStudios/keyflow", tag = "v
 # is wasm-portable; the vello/nice-plug editor is behind its `native` feature.
 # The comp plugin editor. Core (profile view data model) is portable; the
 # nice-plug/Blitz editor is behind its `native` feature.
-pitch-dsp = { path = "features/dsp/pitch/pitch-dsp" }
 world-sys = { path = "vendor/world" }
 align-dsp = { path = "features/dsp/align/align-dsp" }
 # ── The built-in FX, from the processor repo ──────────────────────────
@@ -1130,7 +1129,6 @@ comp = { path = "features/dsp/comp/comp" }
 limiter-ui = { path = "features/dsp/comp/limiter-ui" }
 reverb = { path = "features/dsp/reverb/reverb" }
 delay = { path = "features/dsp/delay/delay" }
-pitch = { path = "features/dsp/pitch/pitch" }
 modulation = { path = "features/dsp/modulation/modulation" }
 eq-dsp = { path = "features/dsp/eq/eq-dsp" }
 comp-dsp = { path = "features/dsp/comp/comp-dsp" }

@@ -15,7 +15,7 @@ basic-pitch = ["dep:tract-onnx"]
 world = ["dep:world-sys"]
 
 [dependencies]
-pitch-dsp = { workspace = true }
+pitch = { workspace = true }
 realfft = { workspace = true }
 tract-onnx = { workspace = true, optional = true }
 world-sys = { workspace = true, optional = true }

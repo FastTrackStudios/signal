@@ -18,7 +18,7 @@ use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
-use pitch_dsp::pog::{OctaveShift, PolyOctave};
+use pitch::pog::{OctaveShift, PolyOctave};
 
 /// Number of delay lines per channel.
 const NUM_LINES: usize = 4;
