@@ -49,5 +49,5 @@ libc = { workspace = true }
 
 [[bin]]
 name = "fts-launcher-standalone"
-path = "fts-launcher/src/main.rs"
+path = "src/main.rs"
 required-features = ["standalone"]
