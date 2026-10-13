@@ -14,14 +14,11 @@ workspace = true
 
 [dependencies]
 audiocore-core = { workspace = true }
-eq-dsp = { workspace = true }
-eq-profiles = { workspace = true }
+eq = { workspace = true, features = ["native", "profiles", "ui"] }
 # The full Dioxus plugin editor (control view, EQ graph, spectrum) —
 # `native` pulls nice-plug-dioxus/Blitz.
-eq-ui = { workspace = true, features = ["native"] }
 audiocore-dsp = { workspace = true }
 nice-plug = { workspace = true, features = ["vst3"] }
-spectrum-analyzer = { workspace = true }
 
 [features]
 default = []

@@ -80,7 +80,7 @@ async fn dragging_a_band_writes_the_emphasis_params() -> dioxus_test::Result<()>
     // never published by the painter, so events hit-test through the fixed
     // 800×350 fallback mapper — same as eq-ui's own tests.
     let mapper =
-        eq_ui::eq_graph_interaction::GraphMapper::new(20.0, 20_000.0, 12.0, 800.0, 350.0, 0.0);
+        eq::ui::eq_graph_interaction::GraphMapper::new(20.0, 20_000.0, 12.0, 800.0, 350.0, 0.0);
     let freq = f64::from(fx.params.emph[2].freq_hz.value());
     let x = ox + mapper.freq_to_x(freq);
     let y = oy + mapper.db_to_y(0.0);

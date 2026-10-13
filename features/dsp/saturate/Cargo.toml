@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 analysis = []
-native = ["dep:architect-ui", "dep:atomic_float", "dep:eq-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "eq-ui/native"]
+native = ["dep:architect-ui", "dep:atomic_float", "dep:eq", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "eq/native"]
 profiles = []
 ui = ["dep:crossbeam-channel", "dep:dioxus", "dep:fts-audio-ui"]
 viz = ["analysis", "dep:anyrender", "dep:kurbo", "dep:multiband-dsp", "dep:peniko"]
@@ -23,7 +23,7 @@ atomic_float = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true, optional = true }
 dioxus = { workspace = true, optional = true }
 dsp-core = { workspace = true }
-eq-ui = { workspace = true, optional = true }
+eq = { workspace = true, optional = true, features = ["ui"] }
 fts-audio-ui = { workspace = true, optional = true }
 fts-plug-ui = { workspace = true, optional = true }
 kurbo = { workspace = true, optional = true }

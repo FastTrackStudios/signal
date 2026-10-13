@@ -235,8 +235,8 @@ fn choice_index(value: f64, options: usize) -> usize {
     crate::num::index((value.clamp(0.0, 1.0) * top).round())
 }
 
-const EQ_SHAPES: [eq_ui::eq_graph_model::EqBandShape; 10] = {
-    use eq_ui::eq_graph_model::EqBandShape as S;
+const EQ_SHAPES: [eq::ui::eq_graph_model::EqBandShape; 10] = {
+    use eq::ui::eq_graph_model::EqBandShape as S;
     [
         S::Bell,
         S::LowShelf,
@@ -251,8 +251,8 @@ const EQ_SHAPES: [eq_ui::eq_graph_model::EqBandShape; 10] = {
     ]
 };
 
-const EQ_PLACEMENTS: [eq_ui::eq_graph_model::StereoMode; 5] = {
-    use eq_ui::eq_graph_model::StereoMode as M;
+const EQ_PLACEMENTS: [eq::ui::eq_graph_model::StereoMode; 5] = {
+    use eq::ui::eq_graph_model::StereoMode as M;
     [M::Stereo, M::Left, M::Right, M::Mid, M::Side]
 };
 
@@ -261,7 +261,7 @@ const EQ_PLACEMENTS: [eq_ui::eq_graph_model::StereoMode; 5] = {
 const EQ_SLOPES: usize = 11;
 
 /// What the EQ graph shows for `bands`: each slot by its band's index.
-fn eq_values(bands: &[eq_ui::eq_graph_model::EqBand]) -> Vec<(String, f64)> {
+fn eq_values(bands: &[eq::ui::eq_graph_model::EqBand]) -> Vec<(String, f64)> {
     let mut out = Vec::new();
     for slot in 0..EQ_SLOTS {
         let at = |k: &str| format!("eq/b{}_{k}", slot + 1);
@@ -293,7 +293,7 @@ fn eq_values(bands: &[eq_ui::eq_graph_model::EqBand]) -> Vec<(String, f64)> {
 }
 
 /// The EQ graph's band names.
-fn eq_texts(bands: &[eq_ui::eq_graph_model::EqBand]) -> Vec<(String, String)> {
+fn eq_texts(bands: &[eq::ui::eq_graph_model::EqBand]) -> Vec<(String, String)> {
     bands
         .iter()
         .filter(|b| b.used && b.index < EQ_SLOTS)
@@ -310,7 +310,7 @@ fn eq_edit(which: Which, tone: &mut Tone, param: &str, value: f64) -> bool {
 }
 
 /// An edit an EQ graph made on `bands`: `param` is `b{n}_field`.
-fn bands_edit(bands: &mut Vec<eq_ui::eq_graph_model::EqBand>, param: &str, value: f64) -> bool {
+fn bands_edit(bands: &mut Vec<eq::ui::eq_graph_model::EqBand>, param: &str, value: f64) -> bool {
     let Some((slot, field)) = param
         .strip_prefix('b')
         .and_then(|rest| rest.split_once('_'))
@@ -324,7 +324,7 @@ fn bands_edit(bands: &mut Vec<eq_ui::eq_graph_model::EqBand>, param: &str, value
     let at = if let Some(at) = bands.iter().position(|b| b.index == slot) {
         at
     } else {
-        bands.push(eq_ui::eq_graph_model::EqBand {
+        bands.push(eq::ui::eq_graph_model::EqBand {
             index: slot,
             used: false,
             enabled: true,
@@ -332,9 +332,9 @@ fn bands_edit(bands: &mut Vec<eq_ui::eq_graph_model::EqBand>, param: &str, value
             gain: 0.0,
             q: 0.707,
             slope: None,
-            shape: eq_ui::eq_graph_model::EqBandShape::Bell,
+            shape: eq::ui::eq_graph_model::EqBandShape::Bell,
             focus: false,
-            stereo_mode: eq_ui::eq_graph_model::StereoMode::Stereo,
+            stereo_mode: eq::ui::eq_graph_model::StereoMode::Stereo,
             name: String::new(),
         });
         bands.len() - 1
@@ -464,11 +464,11 @@ fn emphasis_edit(tone: &mut Tone, param: &str, value: f64) -> bool {
     true
 }
 
-fn band(tone: &Tone, n: usize) -> Option<&eq_ui::eq_graph_model::EqBand> {
+fn band(tone: &Tone, n: usize) -> Option<&eq::ui::eq_graph_model::EqBand> {
     tone.eq.iter().filter(|b| b.used).nth(n)
 }
 
-fn band_mut(tone: &mut Tone, n: usize) -> Option<&mut eq_ui::eq_graph_model::EqBand> {
+fn band_mut(tone: &mut Tone, n: usize) -> Option<&mut eq::ui::eq_graph_model::EqBand> {
     tone.eq.iter_mut().filter(|b| b.used).nth(n)
 }
 
@@ -854,7 +854,7 @@ mod eq_face_tests {
             .iter()
             .find(|b| b.index == first.index)
             .expect("still there");
-        assert_eq!(shaped.shape, eq_ui::eq_graph_model::EqBandShape::LowCut);
+        assert_eq!(shaped.shape, eq::ui::eq_graph_model::EqBandShape::LowCut);
 
         // A band added on the graph's last slot is made there.
         assert!(edit(Which::Eq, &mut tone, "eq/b24_used", 1.0));

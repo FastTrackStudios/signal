@@ -18,8 +18,8 @@
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use eq_ui::eq_graph::EqGraph;
-use eq_ui::eq_graph_model::{EqBand, EqBandShape};
+use eq::ui::eq_graph::EqGraph;
+use eq::ui::eq_graph_model::{EqBand, EqBandShape};
 use nice_plug::prelude::{Param, ParamPtr};
 use nice_plug_dioxus::prelude::{ParamContext, use_param_context};
 
@@ -184,7 +184,7 @@ pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
     *bands.write() = bands_vec;
 
     // No instrument cheat-sheet in an embedded EQ.
-    let overlay_off = use_signal(|| eq_ui::eq_graph::OverlayChoice::Off);
+    let overlay_off = use_signal(|| eq::ui::eq_graph::OverlayChoice::Off);
 
     let params_change: Arc<ReverbParams> = params.clone();
     let ctx_change = ctx.clone();

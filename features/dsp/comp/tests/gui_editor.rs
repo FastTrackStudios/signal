@@ -1407,7 +1407,7 @@ async fn the_sidechain_eq_sidecar_opens_and_edits_its_stage() -> dioxus_test::Re
     let graph = fx.tester.query(by_testid("sc-eq-graph-1")).immediately()?;
     let (ox, oy) = graph.document_origin();
     let mapper =
-        eq_ui::eq_graph_interaction::GraphMapper::new(20.0, 20_000.0, 24.0, 800.0, 350.0, 0.0);
+        eq::ui::eq_graph_interaction::GraphMapper::new(20.0, 20_000.0, 24.0, 800.0, 350.0, 0.0);
     let bp = &fx.params.stage1.sc_eq[2];
     let (x, y) = (
         ox + mapper.freq_to_x(bp.freq_hz.value() as f64),

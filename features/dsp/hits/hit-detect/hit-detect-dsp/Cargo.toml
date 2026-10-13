@@ -20,7 +20,7 @@ workspace = true
 # up disagreeing.
 trigger = { workspace = true }
 # Crossover filters, to ask the kick and the snare separately.
-eq-dsp = { workspace = true }
+eq = { workspace = true }
 
 [dev-dependencies]
 approx = { workspace = true }

@@ -16,8 +16,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use eq_ui::eq_graph::EqGraph;
-use eq_ui::eq_graph_model::{EqBand, EqBandShape};
+use eq::ui::eq_graph::EqGraph;
+use eq::ui::eq_graph_model::{EqBand, EqBandShape};
 use fts_audio_ui::ParamHandle;
 use nice_plug::prelude::Param;
 use nice_plug_dioxus::prelude::{ParamContext, use_param_context};
@@ -122,7 +122,7 @@ pub fn EmphasisView(
 
     // No instrument cheat-sheet in an embedded EQ — the zone labels are
     // about MIX moves, and this curve is a drive control.
-    let overlay_off = use_signal(|| eq_ui::eq_graph::OverlayChoice::Off);
+    let overlay_off = use_signal(|| eq::ui::eq_graph::OverlayChoice::Off);
 
     let params_change = params.clone();
     let ctx_change = ctx.clone();

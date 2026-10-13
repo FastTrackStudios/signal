@@ -17,8 +17,7 @@ workspace = true
 nice-plug = { workspace = true }
 nice-plug-dioxus = { workspace = true }
 audiocore-core = { workspace = true }
-eq-ui = { workspace = true, features = ["native"] }
-spectrum-analyzer = { workspace = true }
+eq = { workspace = true, features = ["native", "ui"] }
 atomic_float = { workspace = true }
 # Pulled directly so we can vendor a custom launch that captures the
 # winit EventLoopProxy + WindowId. Pinned to the SAME DioxusLabs/blitz revision

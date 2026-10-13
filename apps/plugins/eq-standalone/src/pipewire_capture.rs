@@ -10,10 +10,10 @@
 
 use std::sync::Arc;
 
-use eq_ui::params::EqUiState;
+use eq::ui::params::EqUiState;
 use pipewire as pw;
 use pw::spa;
-use spectrum_analyzer::dsp::{Analyzer, AudioFeed};
+use eq::analyzer::{Analyzer, AudioFeed};
 
 /// Spawn the `PipeWire` capture thread. Returns an error only on setup that can be
 /// observed synchronously (feed already taken, thread spawn failure); the actual

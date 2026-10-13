@@ -229,7 +229,7 @@ fn rack_knobs(d: &'static fts_audio_ui::hardware::rack::RackDesign) -> Vec<Knob>
 fn eq_faces() -> Vec<Face> {
     (1..=5)
         .filter_map(|model| {
-            let d = eq_ui::faces::units::design_for(model)?;
+            let d = eq::ui::faces::units::design_for(model)?;
             Some(Face {
                 plugin: "EQ",
                 name: d.id.replace('_', " "),

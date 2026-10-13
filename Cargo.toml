@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/eq",
     "features/dsp/modulation",
     "features/dsp/comp",
     "features/dsp/saturate",
@@ -172,13 +173,6 @@ members = [
     "features/dsp/core/dsp-core",
     "features/dsp/core/dsp-golden",
     "apps/plugins/eq-standalone",
-    "features/dsp/eq/eq",
-    "features/dsp/eq/eq-dsp",
-    "features/dsp/eq/eq-profiles",
-    "features/dsp/eq/eq-ui",
-    "features/dsp/eq/spectrum-analyzer/spectrum-analyzer",
-    "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-dsp",
-    "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-ui",
     "features/dsp/hits/hit-detect/hit-detect-dsp",
     "features/dsp/multiband",
     "features/dsp/core/musical-time/musical-time",
@@ -317,6 +311,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+eq = { path = "features/dsp/eq" }
 modulation = { path = "features/dsp/modulation" }
 comp = { path = "features/dsp/comp" }
 saturate = { path = "features/dsp/saturate" }
@@ -543,7 +538,6 @@ align-dsp = { path = "features/dsp/align/align-dsp" }
 # Core only — `default-features = false` drops the nice-plug/Blitz
 # editors, which is what keeps this to response math rather than a
 # second plugin host inside the mixer.
-eq-ui = { path = "features/dsp/eq/eq-ui", default-features = false }
 # The Depth units draw the plugins' own machines: the delay's style
 # family decides how a repeat is drawn, and the reverb's envelope is
 # the algorithm's actual impulse response, rendered by `reverb-dsp`'s
@@ -1090,12 +1084,6 @@ signal-nam = { path = "features/rigs/nam" }
 dsp-golden = { path = "features/dsp/core/dsp-golden" }
 dsp-core = { path = "features/dsp/core/dsp-core" }
 hit-detect-dsp = { path = "features/dsp/hits/hit-detect/hit-detect-dsp" }
-eq = { path = "features/dsp/eq/eq" }
-eq-profiles = { path = "features/dsp/eq/eq-profiles" }
-spectrum-analyzer = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer" }
-spectrum-analyzer-dsp = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-dsp" }
-spectrum-analyzer-ui = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-ui" }
-eq-dsp = { path = "features/dsp/eq/eq-dsp" }
 gate = { path = "features/dsp/gate" }
 multiband-dsp = { path = "features/dsp/multiband" }
 fx-stack = { path = "features/dsp/stack" }

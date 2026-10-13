@@ -5,7 +5,7 @@
 //! - Sidechain path: Input → HPF/LPF → detector → velocity → sampler trigger
 
 use audiocore_dsp::{AudioConfig, Processor};
-use eq_dsp::{CutSlope, Filter, FilterProcessor};
+use eq::{CutSlope, Filter, FilterProcessor};
 
 use crate::detector::{DetectMode, TriggerDetector};
 use crate::sampler::{MixMode, Sampler};
@@ -101,7 +101,7 @@ impl TriggerChain {
     }
 
     /// Set sidechain HPF frequency (0 = off).
-    pub fn set_sc_hpf(&mut self, freq: f64) -> Result<(), eq_dsp::Error> {
+    pub fn set_sc_hpf(&mut self, freq: f64) -> Result<(), eq::Error> {
         if freq != 0.0 {
             self.sc_hpf.configure(
                 Filter::HighPass {
@@ -117,7 +117,7 @@ impl TriggerChain {
     }
 
     /// Set sidechain LPF frequency (0 = off), retaining valid state on error.
-    pub fn set_sc_lpf(&mut self, freq: f64) -> Result<(), eq_dsp::Error> {
+    pub fn set_sc_lpf(&mut self, freq: f64) -> Result<(), eq::Error> {
         if freq != 0.0 {
             self.sc_lpf.configure(
                 Filter::LowPass {

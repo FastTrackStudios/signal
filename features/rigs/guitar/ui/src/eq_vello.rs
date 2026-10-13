@@ -1,6 +1,6 @@
 //! The EQ plugin's own editor, in the rig — the real one, not a drawing of it.
 //!
-//! [`eq_ui::eq_graph::EqGraph`] is the surface the FTS-EQ plugin puts on
+//! [`eq::ui::eq_graph::EqGraph`] is the surface the FTS-EQ plugin puts on
 //! screen: its vello painter, its hit-testing, its interaction rules — drag a
 //! node for frequency and gain, wheel for Q, double-click to add a band with
 //! the shape inferred from where you clicked, drag one out to remove it. Its
@@ -18,7 +18,7 @@
 //! believed.
 //!
 //! The SVG path stays for wasm, where there is no GPU surface to paint into.
-//! Both read the same [`eq_ui::eq_graph_model::EqBand`], so they cannot drift
+//! Both read the same [`eq::ui::eq_graph_model::EqBand`], so they cannot drift
 //! about what a band *is* — only about how it is drawn.
 //!
 //! # Wire scheme
@@ -31,12 +31,12 @@
 
 use crate::param_writer::WriteParam;
 use dioxus::prelude::*;
-use eq_ui::eq_graph::{AnalyzerSnapshot, EqGraph};
-use eq_ui::eq_graph_model::EqBand;
+use eq::ui::eq_graph::{AnalyzerSnapshot, EqGraph};
+use eq::ui::eq_graph_model::EqBand;
 use signal_guitar_proto::LiveBlock;
 use signal_guitar_proto::rig::RigClient;
 
-use eq_ui::eq_graph_model::EqBandShape;
+use eq::ui::eq_graph_model::EqBandShape;
 
 /// The plugin's graph, driving one rig block over the wire.
 #[component]
@@ -213,7 +213,7 @@ fn changed_fields(now: &EqBand, was: Option<&EqBand>) -> Vec<(&'static str, f32,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eq_ui::eq_graph_model::EqBandShape;
+    use eq::ui::eq_graph_model::EqBandShape;
 
     fn band(freq: f32, gain: f32) -> EqBand {
         EqBand {

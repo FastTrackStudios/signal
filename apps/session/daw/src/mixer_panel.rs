@@ -30,7 +30,7 @@ use anyrender::{RenderContext, Scene};
 use blitz_dom::node::{ComputedStyles, Widget};
 use blitz_traits::events::{BlitzPointerId, MouseEventButton, UiEvent};
 use dioxus::prelude::*;
-use eq_ui::eq_graph_interaction::Mods;
+use eq::ui::eq_graph_interaction::Mods;
 use vello::kurbo::Affine;
 
 use crate::engine::Edit;

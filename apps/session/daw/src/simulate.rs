@@ -267,7 +267,7 @@ fn spectrum_with(voice: Voice, envelope: f64, shimmer_at: Option<f64>) -> Vec<f3
 ///
 /// The suppressors' reduction is the one place this is a STAND-IN
 /// rather than the engine's own number. The real curve is
-/// `eq_dsp::dynamics::spectral::SpectralEngine::gain_curve`, and it
+/// `eq::dynamics::spectral::SpectralEngine::gain_curve`, and it
 /// needs audio; a simulation has a spectrum and no samples, so it
 /// approximates the engine's rule — a bin stands proud of its
 /// neighbourhood by more than the threshold — on the spectrum it has.

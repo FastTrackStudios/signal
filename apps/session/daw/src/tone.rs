@@ -16,7 +16,7 @@
 //!
 //! | panel | curve from |
 //! |---|---|
-//! | EQ | `eq_ui::eq_graph_response::calculate_combined_response` |
+//! | EQ | `eq::ui::eq_graph_response::calculate_combined_response` |
 //! | Compressor | `comp::ui::comp_graph_svg::compress_transfer` |
 //! | Saturation | `saturate::preamp::analysis::transfer_curve` |
 //!
@@ -36,9 +36,9 @@
 
 use anyrender::{PaintScene, Scene};
 use delay::engine::{DelayStyle, Family as DelayFamily};
-use eq_ui::eq_graph_interaction::{self as interaction, GraphMapper, Mods};
-use eq_ui::eq_graph_model::{EqBand, EqBandShape, StereoMode};
-use eq_ui::eq_graph_response::calculate_combined_response;
+use eq::ui::eq_graph_interaction::{self as interaction, GraphMapper, Mods};
+use eq::ui::eq_graph_model::{EqBand, EqBandShape, StereoMode};
+use eq::ui::eq_graph_response::calculate_combined_response;
 use fts_audio_ui::axis::{DbAxis, FreqAxis};
 use reverb::algorithm::{AlgorithmType, Family as RoomFamily};
 use saturate::preamp::{Circuit, ClassAPreamp, SideShaper};
@@ -162,7 +162,7 @@ pub struct Tone {
     /// Which of the three are switched out.
     pub bypass: Bypass,
     /// How far the EQ graph is zoomed, as an index into the plugin's
-    /// own [`eq_ui::eq_graph_model::DB_RANGE_STEPS`].
+    /// own [`eq::ui::eq_graph_model::DB_RANGE_STEPS`].
     ///
     /// An INDEX rather than a number of decibels, because the zoom is a
     /// list of stops the plugin publishes and a rack that invented its
@@ -374,7 +374,7 @@ impl Tone {
     /// The EQ graph's dB range, top to bottom.
     #[must_use]
     pub fn eq_db_range(&self) -> f64 {
-        eq_ui::eq_graph_model::db_range_for_index(self.eq_range)
+        eq::ui::eq_graph_model::db_range_for_index(self.eq_range)
     }
 
     /// Zoom the graph by `steps`, positive being further out.
@@ -382,7 +382,7 @@ impl Tone {
     /// Returns whether it moved, so a caller knows whether to re-record
     /// rather than guessing.
     pub fn zoom_eq(&mut self, steps: i32) -> bool {
-        let last = i32::try_from(eq_ui::eq_graph_model::DB_RANGE_STEPS.len())
+        let last = i32::try_from(eq::ui::eq_graph_model::DB_RANGE_STEPS.len())
             .unwrap_or(1)
             .saturating_sub(1);
         let to = self.eq_range.saturating_add(steps).clamp(0, last);
@@ -611,7 +611,7 @@ impl Tone {
     /// back to the first, and a click that does nothing reads as a
     /// broken control.
     pub fn cycle_eq_range(&mut self) {
-        let last = i32::try_from(eq_ui::eq_graph_model::DB_RANGE_STEPS.len()).unwrap_or(1);
+        let last = i32::try_from(eq::ui::eq_graph_model::DB_RANGE_STEPS.len()).unwrap_or(1);
         self.eq_range = self.eq_range.saturating_add(1).rem_euclid(last.max(1));
     }
 }
@@ -2789,7 +2789,7 @@ fn ground(scene: &mut Scene, palette: &Palette, at: Panel) {
 
 /// The plugin's own EQ graph, painted into the rack.
 ///
-/// Not a redraw of it — `eq_ui::eq_graph_painter` records into an
+/// Not a redraw of it — `eq::ui::eq_graph_painter` records into an
 /// `anyrender::Scene` under a transform, which is exactly what this
 /// rack does, so the strip can hand it a sub-rectangle and get the
 /// editor's own grid, curves, fills and per-shape nodes.
@@ -2825,7 +2825,7 @@ fn eq_from_plugin(
     at: Panel,
     rack: Rack,
 ) -> bool {
-    let state = eq_ui::eq_graph_model::EqGraphRenderState::new();
+    let state = eq::ui::eq_graph_model::EqGraphRenderState::new();
     state.bands.write().clone_from(&bands.to_vec());
     // The analyser, behind the curves. The painter draws it when the
     // state carries it and skips it when it does not, so a track with
@@ -2873,7 +2873,7 @@ fn eq_from_plugin(
     if width < 2 || height < 2 {
         return false;
     }
-    eq_ui::eq_graph_painter::paint_eq_graph_scene(
+    eq::ui::eq_graph_painter::paint_eq_graph_scene(
         scene,
         &state,
         Affine::translate((at.x, at.y)),
@@ -5956,7 +5956,7 @@ fn hex(value: &str) -> Color {
 /// what must not happen, since the point of the colour is that a band
 /// is the same colour in the strip as it is in the plugin window.
 fn band_color(hz: f64) -> Color {
-    hex(&eq_ui::eq_graph_model::freq_to_color(hz))
+    hex(&eq::ui::eq_graph_model::freq_to_color(hz))
 }
 
 /// A filled circle — a handle, or a marker on a curve.
@@ -10868,7 +10868,7 @@ mod grip_tests {
 
         // Clicking cycles the stops and comes back round.
         let start = tone.eq_db_range();
-        let steps = eq_ui::eq_graph_model::DB_RANGE_STEPS.len();
+        let steps = eq::ui::eq_graph_model::DB_RANGE_STEPS.len();
         for _ in 0..steps {
             tone.cycle_eq_range();
         }
@@ -10881,35 +10881,35 @@ mod grip_tests {
     fn the_zoom_walks_the_plugins_stops() {
         let mut tone = placeholder(0);
         assert!(
-            (tone.eq_db_range() - eq_ui::eq_graph_model::DEFAULT_DB_RANGE).abs() < f64::EPSILON
+            (tone.eq_db_range() - eq::ui::eq_graph_model::DEFAULT_DB_RANGE).abs() < f64::EPSILON
         );
 
         // Down is out, which is the way a wheel zooms out everywhere.
         super::wheel(&mut tone, Grip::Scale(Which::Eq), Mods::default(), -1.0);
         let out = tone.eq_db_range();
-        assert!(out > eq_ui::eq_graph_model::DEFAULT_DB_RANGE, "{out}");
+        assert!(out > eq::ui::eq_graph_model::DEFAULT_DB_RANGE, "{out}");
         super::wheel(&mut tone, Grip::Scale(Which::Eq), Mods::default(), 1.0);
         assert!(
-            (tone.eq_db_range() - eq_ui::eq_graph_model::DEFAULT_DB_RANGE).abs() < f64::EPSILON
+            (tone.eq_db_range() - eq::ui::eq_graph_model::DEFAULT_DB_RANGE).abs() < f64::EPSILON
         );
 
         for _ in 0..20 {
             super::wheel(&mut tone, Grip::Scale(Which::Eq), Mods::default(), -1.0);
         }
-        let widest = *eq_ui::eq_graph_model::DB_RANGE_STEPS
+        let widest = *eq::ui::eq_graph_model::DB_RANGE_STEPS
             .last()
             .expect("a widest stop");
         assert!((tone.eq_db_range() - widest).abs() < f64::EPSILON);
         for _ in 0..20 {
             super::wheel(&mut tone, Grip::Scale(Which::Eq), Mods::default(), 1.0);
         }
-        let tightest = eq_ui::eq_graph_model::DB_RANGE_STEPS[0];
+        let tightest = eq::ui::eq_graph_model::DB_RANGE_STEPS[0];
         assert!((tone.eq_db_range() - tightest).abs() < f64::EPSILON);
 
         // And a double-click puts it back where it started.
         super::reset(&mut tone, Grip::Scale(Which::Eq));
         assert!(
-            (tone.eq_db_range() - eq_ui::eq_graph_model::DEFAULT_DB_RANGE).abs() < f64::EPSILON
+            (tone.eq_db_range() - eq::ui::eq_graph_model::DEFAULT_DB_RANGE).abs() < f64::EPSILON
         );
     }
 
@@ -10925,7 +10925,7 @@ mod grip_tests {
             super::wheel(&mut tone, Grip::Band(Which::Eq, 0), Mods::default(), 1.0);
         }
         assert!(
-            f64::from(tone.eq[0].gain) > eq_ui::eq_graph_model::DB_RANGE_STEPS[0],
+            f64::from(tone.eq[0].gain) > eq::ui::eq_graph_model::DB_RANGE_STEPS[0],
             "a ±3 view capped the gain at ±3: {}",
             tone.eq[0].gain
         );
@@ -11438,7 +11438,7 @@ mod plugin_interaction_tests {
     use super::{
         EQ_GAIN_LIMIT, Grip, Mods, Panel, Which, dot_click, drag, grip_at, placeholder, wheel,
     };
-    use eq_ui::eq_graph_model::EqBandShape;
+    use eq::ui::eq_graph_model::EqBandShape;
 
     const ALL: [Which; 3] = [Which::Eq, Which::Comp, Which::Sat];
 
@@ -11649,7 +11649,7 @@ mod colour_tests {
     #[test]
     fn a_band_takes_the_plugins_own_hue() {
         for hz in [40.0, 250.0, 1_000.0, 4_000.0, 16_000.0] {
-            let hex = eq_ui::eq_graph_model::freq_to_color(hz);
+            let hex = eq::ui::eq_graph_model::freq_to_color(hz);
             let expected = hex.trim_start_matches('#');
             let got = band_color(hz);
             let [r, g, b, _] = got.to_rgba8().to_u8_array();

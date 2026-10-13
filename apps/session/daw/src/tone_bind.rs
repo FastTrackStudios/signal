@@ -20,8 +20,8 @@ use crate::tone::Tone;
 pub type Stage = (&'static str, Vec<(u32, f64)>);
 
 /// The plugin's name for a band type.
-const fn shape(shape: eq_ui::eq_graph_model::EqBandShape) -> &'static str {
-    use eq_ui::eq_graph_model::EqBandShape as S;
+const fn shape(shape: eq::ui::eq_graph_model::EqBandShape) -> &'static str {
+    use eq::ui::eq_graph_model::EqBandShape as S;
     match shape {
         S::Bell => "Bell",
         S::LowShelf => "Low Shelf",

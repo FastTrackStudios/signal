@@ -178,7 +178,7 @@ fn narrow(value: f64) -> f32 {
 }
 
 fn eq(tone: &mut Tone, fx: &EngineFx) {
-    use eq_ui::eq_graph_model::{EqBand, EqBandShape as S};
+    use eq::ui::eq_graph_model::{EqBand, EqBandShape as S};
     let shape = |text: &str| match text.trim() {
         "Low Shelf" => S::LowShelf,
         "High Shelf" => S::HighShelf,

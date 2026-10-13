@@ -10,7 +10,7 @@ description = "The reverb: its algorithms, their profiles and its editor"
 workspace = true
 
 [features]
-native = ["dep:architect-ui", "dep:atomic_float", "dep:eq-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "dep:preset-browser-ui", "eq-ui/native", "musical-time/params"]
+native = ["dep:architect-ui", "dep:atomic_float", "dep:eq", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "dep:preset-browser-ui", "eq/native", "musical-time/params"]
 profiles = []
 ui = ["dep:dioxus", "dep:fts-audio-ui", "dep:musical-time", "dep:musical-time-ui", "dep:web-time"]
 viz = ["dep:anyrender", "dep:blitz-dom", "dep:bytemuck", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
@@ -26,7 +26,7 @@ crossbeam-channel = { workspace = true }
 dioxus = { workspace = true, optional = true }
 dioxus-native-dom = { workspace = true, optional = true }
 dsp-core = { workspace = true }
-eq-ui = { workspace = true, optional = true }
+eq = { workspace = true, optional = true, features = ["ui"] }
 fts-audio-ui = { workspace = true, optional = true }
 fts-modulation = { workspace = true }
 fts-plug-ui = { workspace = true, optional = true }

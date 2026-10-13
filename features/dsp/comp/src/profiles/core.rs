@@ -2,4 +2,4 @@
 //!
 //! All plugin categories share the same profile abstraction.
 
-pub use eq_profiles::core::{Constraint, ParamMapping, Profile, ProfileControl};
+pub use eq::profiles::core::{Constraint, ParamMapping, Profile, ProfileControl};

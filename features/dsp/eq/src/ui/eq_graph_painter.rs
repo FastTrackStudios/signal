@@ -1,0 +1,1130 @@
+//! GPU-accelerated EQ graph painter using vello scene overlay.
+//!
+//! Renders the EQ graph visual elements (grid, curves, spectrum, nodes)
+//! directly into the vello scene each frame, giving proper anti-aliasing,
+//! smooth curves, and glow effects.
+
+use std::sync::Arc;
+
+use kurbo::{Affine, BezPath, Circle, Line, Rect, Stroke};
+use peniko::{Color, Fill};
+// The painters record into an `anyrender::Scene` — a command list, not
+// pixels — so the graph reaches whatever is drawing: vello behind a plugin
+// editor, Blitz on the desktop, WebGL2 on a browser's canvas. `PaintScene`
+// brings the `fill`/`stroke` methods into scope.
+use anyrender::{PaintScene as _, RenderContext, Scene};
+// The custom widget that hosts them on the desktop and in a plugin. The
+// painters above need none of it.
+#[cfg(feature = "graph")]
+#[cfg(not(target_arch = "wasm32"))]
+use crate::ui::widget::{ComputedStyles, UiEvent, Widget};
+
+use crate::PreparedFilter;
+
+use super::eq_graph_model::{EqBand, EqGraphRenderState, GraphConfig, freq_to_color};
+use super::eq_graph_response::{
+    calculate_band_response, graph_magnitude, prepare_band, prepare_graph,
+};
+use crate::analyzer::ui::{paint_collisions, paint_spectrum_fill, paint_spectrum_line};
+
+// ── Color helpers ───────────────────────────────────────────────────
+
+fn hex_to_color(hex: &str) -> Color {
+    let hex = hex.trim_start_matches('#');
+    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(128);
+    let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(128);
+    let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(128);
+    Color::from_rgb8(r, g, b)
+}
+
+fn hex_to_color_alpha(hex: &str, alpha: f32) -> Color {
+    let c = hex_to_color(hex);
+    c.with_alpha(alpha)
+}
+
+// ── Coordinate helpers ──────────────────────────────────────────────
+
+struct CoordMapper {
+    freq_axis: fts_audio_ui::axis::FreqAxis,
+    db_axis: fts_audio_ui::axis::DbAxis,
+    padding: f64,
+    graph_w: f64,
+    graph_h: f64,
+}
+
+impl CoordMapper {
+    fn new(cfg: &GraphConfig, padding: f64) -> Self {
+        Self {
+            freq_axis: fts_audio_ui::axis::FreqAxis::new(cfg.min_freq, cfg.max_freq),
+            db_axis: fts_audio_ui::axis::DbAxis::symmetric(cfg.db_range),
+            padding,
+            graph_w: padding.mul_add(-2.0, cfg.rect_w),
+            graph_h: padding.mul_add(-2.0, cfg.rect_h),
+        }
+    }
+
+    fn freq_to_x(&self, freq: f64) -> f64 {
+        self.freq_axis
+            .freq_to_x(freq, self.padding, self.padding + self.graph_w)
+    }
+
+    fn db_to_y(&self, db: f64) -> f64 {
+        self.db_axis
+            .db_to_y(db, self.padding, self.padding + self.graph_h)
+    }
+}
+
+// ── Painter ─────────────────────────────────────────────────────────
+// ── The custom widget ───────────────────────────────────────────────────
+//
+// Only where there is a plugin host to paint into; the painters below are
+// the portable half and stand alone (`graph-paint`).
+#[cfg(feature = "graph")]
+mod widget_host {
+    use super::*;
+
+    /// Blitz custom widget that paints the EQ graph directly into blitz's scene.
+    ///
+    /// Holds an `Arc` to the shared [`EqGraphRenderState`] the `EqGraph` component
+    /// writes to, so it always paints the latest bands/curve. Attach it to an
+    /// `object` element via `CustomWidgetAttr::new(EqGraphWidget::new(state))`.
+    pub struct EqGraphWidget {
+        state: Arc<EqGraphRenderState>,
+        /// The light: the analyser as a field and a bloom under every band,
+        /// painted beneath the vector graph. `None` where the renderer gave no
+        /// device — the graph is complete without it, which is why the glow is a
+        /// layer rather than a rewrite.
+        glow: Option<fts_audio_ui::shader::ShaderSurface>,
+        /// Kept between frames so the arrays are not rebuilt from nothing each
+        /// time; the analyser is rewritten, the bands are cleared and re-pushed.
+        glow_uniforms: crate::ui::eq_glow::Glow,
+        /// The look of the light — taste, not data. See
+        /// [`GlowStyle`](crate::ui::eq_glow::GlowStyle).
+        glow_style: crate::ui::eq_glow::GlowStyle,
+        born: web_time::Instant,
+    }
+
+    impl EqGraphWidget {
+        pub fn new(state: Arc<EqGraphRenderState>) -> Self {
+            Self {
+                state,
+                glow: None,
+                glow_uniforms: crate::ui::eq_glow::Glow::default(),
+                glow_style: crate::ui::eq_glow::GlowStyle::default(),
+                born: web_time::Instant::now(),
+            }
+        }
+
+        /// Restyle the light. A host that wants a quieter or hotter panel than the
+        /// default sets it here rather than editing the shader.
+        #[must_use]
+        pub fn with_glow_style(mut self, style: crate::ui::eq_glow::GlowStyle) -> Self {
+            self.glow_style = style;
+            self
+        }
+    }
+
+    impl EqGraphWidget {
+        /// Fill the glow's uniforms from the graph's own state and draw it.
+        ///
+        /// Reads the same `EqGraphRenderState` the vector pass reads, so the light
+        /// and the drawing can never disagree about where a band is — which is
+        /// the entire reason the halo is convincing.
+        ///
+        /// `true` when the light actually went down, which tells the caller the
+        /// vector pass must not lay its own ground on top of it.
+        fn paint_glow(
+            &mut self,
+            render_ctx: &mut dyn RenderContext,
+            scene: &mut Scene,
+            width: u32,
+            height: u32,
+        ) -> bool {
+            let Some(glow) = self.glow.as_mut() else {
+                return false;
+            };
+            let cfg = self.state.config.read().clone();
+            let bands = self.state.bands.read().clone();
+            let spectrum = self.state.spectrum_db.read().clone();
+
+            let u = &mut self.glow_uniforms;
+            u.frame[0] = f64::from(width) as f32;
+            u.frame[1] = f64::from(height) as f32;
+            u.frame[2] = self.born.elapsed().as_secs_f32();
+            u.cfg[1] = cfg.db_range as f32;
+            u.style = self.glow_style.pack();
+            let _ = &cfg;
+            u.set_spectrum(&spectrum, -90.0);
+            u.clear_nodes();
+
+            // Zero padding, as the vector pass uses, so the light lands exactly
+            // under the node rather than a few pixels off it.
+            let cfg = GraphConfig {
+                rect_w: f64::from(width),
+                rect_h: f64::from(height),
+                ..cfg
+            };
+            let cm = CoordMapper::new(&cfg, 0.0);
+            for band in bands.iter().filter(|b| b.used && b.enabled) {
+                let x = cm.freq_to_x(f64::from(band.frequency)) as f32;
+                let y = cm.db_to_y(f64::from(band.gain)) as f32;
+                // A band that is doing more gets a bigger, brighter halo — the
+                // light says how much the filter is moving, which the node's
+                // position alone does not.
+                // Presence first, gain second. A band that exists is lit in its
+                // own colour whether or not it is boosting: an EQ sitting flat is
+                // the ordinary case, and sizing the halo off `|gain|` alone left
+                // every node on a flat curve as a 9 px, 22%-bright dot — which is
+                // indistinguishable from no glow at all. Gain still reads, as a
+                // halo that grows and brightens; it just is not the whole of it.
+                let lift =
+                    (f64::from(band.gain).abs() / cfg.db_range.max(1.0)).clamp(0.0, 1.0) as f32;
+                let radius = 30.0 + 34.0 * lift;
+                let strength = 0.80 + 0.45 * lift;
+                // The band's own colour, from the one function that decides it —
+                // a halo in a different hue from its ring would read as two
+                // things sitting on top of each other.
+                let c = hex_to_color(&freq_to_color(f64::from(band.frequency))).to_rgba8();
+                u.push_node(
+                    x,
+                    y,
+                    radius,
+                    strength,
+                    [
+                        f32::from(c.r) / 255.0,
+                        f32::from(c.g) / 255.0,
+                        f32::from(c.b) / 255.0,
+                    ],
+                );
+            }
+
+            glow.draw_raw(render_ctx, scene, width, height, bytemuck::bytes_of(u))
+        }
+    }
+
+    impl EqGraphWidget {
+        /// Take a GPU device and build the glow surface — the host-agnostic
+        /// half of `Widget::can_create_surfaces`.
+        pub fn create_surfaces(&mut self, render_ctx: &mut dyn RenderContext) {
+            self.glow = render_ctx
+                .renderer_specific_context()
+                .and_then(crate::ui::eq_glow::surface);
+        }
+
+        /// Record a frame — the host-agnostic half of `Widget::paint`.
+        pub fn paint_frame(
+            &mut self,
+            render_ctx: &mut dyn RenderContext,
+            width: u32,
+            height: u32,
+            scale: f64,
+        ) -> Scene {
+            let mut scene = Scene::new();
+            // Publish the live canvas size + DPR so the component's hit-testing stays
+            // in sync (it derives CSS px as `rect_w / scale`). blitz hands us the
+            // node's box in physical pixels, so we draw 1:1 with an identity transform.
+            {
+                let mut cfg = self.state.config.write();
+                cfg.rect_w = f64::from(width);
+                cfg.rect_h = f64::from(height);
+                cfg.scale = scale.max(1.0);
+            }
+            // The light goes down first, so the curves and the node rings are read
+            // against it rather than through it. That only works if nothing
+            // repaints the ground afterwards — and the graph's own background fill
+            // covers the whole panel, so left to itself it draws the glow and then
+            // hides every pixel of it. The widget lays the ground here instead,
+            // once, before the light, and tells the graph not to lay it again.
+            let wants_ground = self.state.config.read().fill_background;
+            if wants_ground && self.glow.is_some() {
+                scene.fill(
+                    Fill::NonZero,
+                    Affine::IDENTITY,
+                    Color::from_rgb8(10, 10, 10),
+                    None,
+                    &Rect::new(0.0, 0.0, f64::from(width), f64::from(height)),
+                );
+            }
+            let glowed = self.paint_glow(render_ctx, &mut scene, width, height);
+            paint_eq_graph_scene_with(
+                &mut scene,
+                &self.state,
+                Affine::IDENTITY,
+                width,
+                height,
+                GraphPaint {
+                    // Laid above when there was a glow to protect; otherwise the
+                    // graph lays it exactly as it always did.
+                    background: wants_ground && !glowed,
+                    // The glow draws the analyser itself, as light. Drawing it
+                    // again as geometry puts two curves of the same data on the
+                    // panel with different smoothing — which reads as the
+                    // analyser being wrong, not as a second layer.
+                    spectrum: !glowed,
+                },
+            );
+            scene
+        }
+    }
+
+    /// The plugin's custom widget, natively.
+    #[cfg(not(target_arch = "wasm32"))]
+    impl Widget for EqGraphWidget {
+        fn can_create_surfaces(&mut self, render_ctx: &mut dyn RenderContext) {
+            self.create_surfaces(render_ctx);
+        }
+
+        fn paint(
+            &mut self,
+            render_ctx: &mut dyn RenderContext,
+            _styles: &ComputedStyles,
+            width: u32,
+            height: u32,
+            scale: f64,
+        ) -> Scene {
+            self.paint_frame(render_ctx, width, height, scale)
+        }
+
+        fn handle_event(&mut self, _event: &UiEvent) {
+            // Paint-only widget: pointer interaction is handled by the DOM container's
+            // event handlers (now that blitz's `element_coordinates()` is fixed), so
+            // the `<object>` keeps `pointer-events: none` and this is never called.
+            //
+            // This returned a `bool` — "did this need repainting" — for a blitz
+            // that asks for one. The rev this workspace pins does not: its
+            // `Widget::handle_event` returns `()`, and the `bool` version does not
+            // compile here (E0053). Restore it together with the blitz bump, not
+            // before; the answer was always `false`, so nothing is lost meanwhile.
+        }
+    }
+
+    /// The browser's canvas — vello on WebGPU, so the glow shader runs there
+    /// too and the graph is the lit one, not the vector fallback.
+    #[cfg(target_arch = "wasm32")]
+    impl fts_audio_ui::scene_canvas::CanvasPanel for EqGraphWidget {
+        fn can_create_surfaces(&mut self, ctx: &mut dyn RenderContext) {
+            self.create_surfaces(ctx);
+        }
+
+        fn paint(
+            &mut self,
+            ctx: &mut dyn RenderContext,
+            width: u32,
+            height: u32,
+            scale: f64,
+        ) -> Scene {
+            self.paint_frame(ctx, width, height, scale)
+        }
+    }
+}
+
+#[cfg(feature = "graph")]
+pub use widget_host::EqGraphWidget;
+
+/// Paint the EQ graph into the given anyrender scene.
+///
+/// Called by [`EqGraphWidget::paint`] (the blitz custom widget) each frame.
+/// `transform` is normally `Affine::IDENTITY` since blitz hands the widget its
+/// node box in physical pixels.
+pub fn paint_eq_graph_scene(
+    scene: &mut Scene,
+    state: &EqGraphRenderState,
+    transform: Affine,
+    width: u32,
+    height: u32,
+) {
+    let paint = GraphPaint {
+        background: state.config.read().fill_background,
+        ..GraphPaint::default()
+    };
+    paint_eq_graph_scene_with(scene, state, transform, width, height, paint);
+}
+
+/// What the vector pass should draw, for a caller that has drawn some of it
+/// already.
+///
+/// The GPU glow paints the ground and the analyser *under* the graph, so the
+/// vector pass must not paint either on top: an opaque background rect hides
+/// every pixel of the light, and a second analyser curve over the lit one is
+/// the same data drawn twice, in two different styles, disagreeing about
+/// smoothing at every pixel.
+#[derive(Clone, Copy, Debug)]
+pub struct GraphPaint {
+    /// Fill the panel's ground before drawing.
+    pub background: bool,
+    /// Draw the analyser as vector geometry.
+    pub spectrum: bool,
+}
+
+impl Default for GraphPaint {
+    /// Everything — what a caller with no GPU surface wants.
+    fn default() -> Self {
+        Self {
+            background: true,
+            spectrum: true,
+        }
+    }
+}
+
+/// Same as [`paint_eq_graph_scene`], for a caller that has drawn some of the
+/// graph itself. See [`GraphPaint`].
+pub fn paint_eq_graph_scene_with(
+    scene: &mut Scene,
+    state: &EqGraphRenderState,
+    transform: Affine,
+    width: u32,
+    height: u32,
+    paint: GraphPaint,
+) {
+    let elem_w = f64::from(width);
+    let elem_h = f64::from(height);
+    if elem_w < 1.0 || elem_h < 1.0 {
+        return;
+    }
+
+    let cfg = state.config.read().clone();
+    let bands = state.bands.read().clone();
+    let spectrum = state.spectrum_db.read().clone();
+    let analyzer = state.analyzer.read().clone();
+    let model_response = state.model_response_db.read().clone();
+    let interaction = state.interaction.read().clone();
+    let overlay = *state.overlay.read();
+
+    let cfg = GraphConfig {
+        rect_w: elem_w,
+        rect_h: elem_h,
+        ..cfg
+    };
+
+    let padding = 0.0;
+    let cm = CoordMapper::new(&cfg, padding);
+    let area = Rect::new(0.0, 0.0, elem_w, elem_h);
+
+    if paint.background {
+        let bg = Color::from_rgb8(10, 10, 10);
+        scene.fill(Fill::NonZero, transform, bg, None, &area);
+    }
+
+    if cfg.show_grid {
+        paint_grid(scene, &cm, &cfg, transform);
+    }
+
+    // EQ cheat-sheet zone overlay, behind the spectrum + curves.
+    if let Some(profile) = overlay {
+        paint_cheatsheet_overlay(scene, &cm, &cfg, profile, transform);
+    }
+
+    // Prefer the full analyzer snapshot (pre/post/external/collision); fall back
+    // to the legacy single `spectrum_db` curve when the analyzer has no data.
+    let has_analyzer = analyzer.freq_hz.len() >= 2
+        && (analyzer.pre_db.len() == analyzer.freq_hz.len()
+            || analyzer.post_db.len() == analyzer.freq_hz.len());
+    if paint.spectrum {
+        if has_analyzer {
+            paint_analyzer(scene, &cm, &cfg, &analyzer, transform, elem_h);
+        } else if spectrum.len() >= 2 {
+            paint_spectrum(scene, &cm, &cfg, &spectrum, transform);
+        }
+    }
+
+    let num_points = 400;
+    let band_dynamics = state.band_dynamics.read().clone();
+    let frequencies = generate_frequencies(&cfg, num_points);
+
+    for band in &bands {
+        if !band.used || !band.enabled {
+            continue;
+        }
+        paint_band_curve(scene, &cm, &cfg, band, &frequencies, transform);
+    }
+
+    // The dynamics envelope sits under the combined curve but over the
+    // individual band curves: it is context for a band, not a curve of its own.
+    for band in &bands {
+        if !band.used || !band.enabled {
+            continue;
+        }
+        if let Some(dynamics) = band_dynamics.get(band.index) {
+            paint_dynamic_range(scene, &cm, &cfg, band, *dynamics, &frequencies, transform);
+        }
+    }
+
+    paint_connecting_lines(scene, &cm, &cfg, &bands, transform);
+    paint_combined_curve(scene, &cm, &cfg, &bands, &frequencies, transform);
+    if model_response.len() >= 2 {
+        paint_model_response_curve(scene, &cm, &cfg, &model_response, transform);
+    }
+
+    for band in &bands {
+        if !band.used || cfg.node_scale <= 0.0 {
+            continue;
+        }
+        let is_hovered = interaction.hovered_band == Some(band.index);
+        let is_dragging = interaction.dragging_band == Some(band.index);
+        let is_focused = interaction.focused_band == Some(band.index);
+        paint_band_node(
+            scene,
+            &cm,
+            band,
+            is_hovered,
+            is_dragging,
+            is_focused,
+            interaction.selected_bands.contains(&band.index),
+            cfg.node_scale,
+            transform,
+        );
+    }
+}
+
+// ── Painting functions ──────────────────────────────────────────────
+
+/// Shade the EQ cheat-sheet zones for the active profile: a translucent band per
+/// zone (tinted red=cut / green=boost / blue=sweet / amber=sweep), a bright top
+/// accent bar, faint edges, and a white highpass marker. Labels are drawn in the
+/// DOM by the component (positioned via `freq_to_x`).
+fn paint_cheatsheet_overlay(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    cfg: &GraphConfig,
+    profile: &crate::ui::cheatsheet::InstrumentProfile,
+    transform: Affine,
+) {
+    let w = cfg.rect_w;
+    let h = cfg.rect_h;
+    for zone in profile.zones {
+        let x0 = cm.freq_to_x(f64::from(zone.lo_hz)).clamp(0.0, w);
+        let x1 = cm.freq_to_x(f64::from(zone.hi_hz)).clamp(0.0, w);
+        if x1 - x0 < 0.5 {
+            continue;
+        }
+        let (r, g, b, _) = zone.dir.rgba();
+        // Translucent fill (zones overlap; alpha accumulates where they stack).
+        scene.fill(
+            Fill::NonZero,
+            transform,
+            Color::from_rgba8(r, g, b, 24),
+            None,
+            &Rect::new(x0, 0.0, x1, h),
+        );
+        // Top accent bar.
+        scene.fill(
+            Fill::NonZero,
+            transform,
+            Color::from_rgba8(r, g, b, 200),
+            None,
+            &Rect::new(x0, 0.0, x1, 3.0),
+        );
+        // Faint edges.
+        let edge = Color::from_rgba8(r, g, b, 90);
+        scene.stroke(
+            &Stroke::new(1.0),
+            transform,
+            edge,
+            None,
+            &Line::new((x0, 0.0), (x0, h)),
+        );
+        scene.stroke(
+            &Stroke::new(1.0),
+            transform,
+            edge,
+            None,
+            &Line::new((x1, 0.0), (x1, h)),
+        );
+    }
+    // Suggested highpass marker.
+    if let Some(hp) = profile.highpass_hz {
+        let x = cm.freq_to_x(f64::from(hp)).clamp(0.0, w);
+        scene.stroke(
+            &Stroke::new(1.5),
+            transform,
+            Color::from_rgba8(255, 255, 255, 120),
+            None,
+            &Line::new((x, 0.0), (x, h)),
+        );
+    }
+}
+
+fn generate_frequencies(cfg: &GraphConfig, num_points: usize) -> Vec<f64> {
+    let log_min = cfg.min_freq.log10();
+    let log_max = cfg.max_freq.log10();
+    (0..num_points)
+        .map(|i| {
+            let t = i as f64 / (num_points - 1) as f64;
+            10.0_f64.powf(log_min + t * (log_max - log_min))
+        })
+        .collect()
+}
+
+fn paint_grid(scene: &mut Scene, cm: &CoordMapper, cfg: &GraphConfig, transform: Affine) {
+    let grid_minor = Color::from_rgba8(55, 55, 60, 90);
+    let grid_mid = Color::from_rgba8(70, 70, 75, 110);
+    let grid_major = Color::from_rgba8(90, 90, 95, 140);
+    let thin = Stroke::new(0.5);
+    let mid = Stroke::new(0.75);
+    let thick = Stroke::new(1.25);
+
+    // Full logarithmic frequency grid.
+    // tier 2 = decade boundary (100, 1k, 10k) — thickest
+    // tier 1 = mid-decade anchor (20, 50, 200, 500, …) — medium
+    // tier 0 = subdivision — thin
+    #[rustfmt::skip]
+    let freq_lines: &[(f64, u8)] = &[
+        (15.0,    0), (20.0,    1),
+        (30.0,    0), (40.0,    0), (50.0,    1),
+        (60.0,    0), (70.0,    0), (80.0,    0), (90.0,    0),
+        (100.0,   2),
+        (200.0,   1), (300.0,   0), (400.0,   0), (500.0,   1),
+        (600.0,   0), (700.0,   0), (800.0,   0), (900.0,   0),
+        (1000.0,  2),
+        (2000.0,  1), (3000.0,  0), (4000.0,  0), (5000.0,  1),
+        (6000.0,  0), (7000.0,  0), (8000.0,  0), (9000.0,  0),
+        (10000.0, 2),
+        (20000.0, 1),
+    ];
+
+    let top_y = cm.padding;
+    let bot_y = cm.padding + cm.graph_h;
+
+    for &(freq, tier) in freq_lines {
+        if freq < cfg.min_freq || freq > cfg.max_freq {
+            continue;
+        }
+        let x = cm.freq_to_x(freq);
+        let line = Line::new((x, top_y), (x, bot_y));
+        match tier {
+            2 => scene.stroke(&thick, transform, grid_major, None, &line),
+            1 => scene.stroke(&mid, transform, grid_mid, None, &line),
+            _ => scene.stroke(&thin, transform, grid_minor, None, &line),
+        }
+    }
+
+    // dB grid lines
+    let db_step = if cfg.db_range <= 6.0 {
+        2.0
+    } else if cfg.db_range <= 12.0 {
+        3.0
+    } else {
+        6.0
+    };
+
+    let mut db = -cfg.db_range;
+    while db <= cfg.db_range {
+        let y = cm.db_to_y(db);
+        let line = Line::new((cm.padding, y), (cm.padding + cm.graph_w, y));
+        let is_zero = db.abs() < 0.01;
+        if is_zero {
+            scene.stroke(&thick, transform, grid_major, None, &line);
+        } else {
+            scene.stroke(&thin, transform, grid_minor, None, &line);
+        }
+        db += db_step;
+    }
+}
+
+/// Paint the full analyzer snapshot: collisions (behind), pre-EQ, post-EQ and
+/// external spectra. Spectrum dB maps with 0 dB at the top down to `-range_db`
+/// at the bottom of the graph area.
+fn paint_analyzer(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    cfg: &GraphConfig,
+    snap: &crate::analyzer::AnalyzerSnapshot,
+    transform: Affine,
+    elem_h: f64,
+) {
+    let min_freq = cfg.min_freq;
+    let max_freq = cfg.max_freq;
+    let range = if snap.range_db > 0.0 {
+        f64::from(snap.range_db)
+    } else {
+        90.0
+    };
+    let ceiling = 0.0f64; // dB at the top of the graph
+    let freq_to_x = |f: f64| cm.freq_to_x(f);
+    let db_to_y = |db: f64| ((ceiling - db) / range).clamp(0.0, 1.0) * elem_h;
+
+    // Collisions first, behind the curves.
+    if snap.collision.len() == snap.freq_hz.len() && !snap.collision.is_empty() {
+        paint_collisions(
+            scene,
+            &snap.freq_hz,
+            &snap.collision,
+            min_freq,
+            max_freq,
+            0.0,
+            elem_h,
+            freq_to_x,
+            transform,
+        );
+    }
+
+    // Pre-EQ spectrum (dim, behind post).
+    if snap.pre_db.len() == snap.freq_hz.len() && !snap.pre_db.is_empty() {
+        paint_spectrum_fill(
+            scene,
+            &snap.freq_hz,
+            &snap.pre_db,
+            min_freq,
+            max_freq,
+            elem_h,
+            Color::from_rgba8(140, 140, 150, 70),
+            Color::from_rgba8(140, 140, 150, 16),
+            freq_to_x,
+            db_to_y,
+            transform,
+        );
+    }
+
+    // Post-EQ spectrum (bright blue).
+    if snap.post_db.len() == snap.freq_hz.len() && !snap.post_db.is_empty() {
+        paint_spectrum_fill(
+            scene,
+            &snap.freq_hz,
+            &snap.post_db,
+            min_freq,
+            max_freq,
+            elem_h,
+            Color::from_rgba8(100, 180, 255, 120),
+            Color::from_rgba8(100, 180, 255, 28),
+            freq_to_x,
+            db_to_y,
+            transform,
+        );
+    }
+
+    // External / sidechain spectrum (orange outline only).
+    if !snap.ext_db.is_empty() && snap.ext_db.len() == snap.ext_freq_hz.len() {
+        paint_spectrum_line(
+            scene,
+            &snap.ext_freq_hz,
+            &snap.ext_db,
+            min_freq,
+            max_freq,
+            Color::from_rgba8(255, 170, 80, 150),
+            1.0,
+            freq_to_x,
+            db_to_y,
+            transform,
+        );
+    }
+}
+
+fn paint_spectrum(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    cfg: &GraphConfig,
+    spectrum: &[f32],
+    transform: Affine,
+) {
+    let num_bins = spectrum.len();
+    let log_min = cfg.min_freq.log10();
+    let log_max = cfg.max_freq.log10();
+
+    let mut path = BezPath::new();
+    for (i, &db_val) in spectrum.iter().enumerate() {
+        let t = i as f64 / (num_bins - 1) as f64;
+        let freq = 10.0_f64.powf(log_min + t * (log_max - log_min));
+        let x = cm.freq_to_x(freq);
+        let clamped = f64::from(db_val).clamp(-cfg.db_range, cfg.db_range);
+        let y = cm.db_to_y(clamped);
+        if i == 0 {
+            path.move_to((x, y));
+        } else {
+            path.line_to((x, y));
+        }
+    }
+
+    // Stroke
+    let stroke_color = Color::from_rgba8(100, 180, 255, 90);
+    scene.stroke(&Stroke::new(1.0), transform, stroke_color, None, &path);
+
+    // Fill down to bottom
+    let mut fill_path = path.clone();
+    let last_freq = 10.0_f64.powf(log_max);
+    let first_freq = 10.0_f64.powf(log_min);
+    let bottom_y = cm.db_to_y(-cfg.db_range);
+    fill_path.line_to((cm.freq_to_x(last_freq), bottom_y));
+    fill_path.line_to((cm.freq_to_x(first_freq), bottom_y));
+    fill_path.close_path();
+
+    let fill_color = Color::from_rgba8(100, 180, 255, 20);
+    scene.fill(Fill::NonZero, transform, fill_color, None, &fill_path);
+}
+
+fn paint_band_curve(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    cfg: &GraphConfig,
+    band: &EqBand,
+    frequencies: &[f64],
+    transform: Affine,
+) {
+    let band_hex = freq_to_color(f64::from(band.frequency));
+    let band_color = hex_to_color(&band_hex);
+    let fill_color = hex_to_color_alpha(&band_hex, 0.25);
+    let zero_y = cm.db_to_y(0.0);
+
+    let mut stroke_path = BezPath::new();
+    let mut fill_path = BezPath::new();
+
+    // Start fill at zero line
+    fill_path.move_to((cm.freq_to_x(frequencies[0]), zero_y));
+
+    let filter = prepare_band(band, cfg.sample_rate);
+    for (i, &freq) in frequencies.iter().enumerate() {
+        let db = filter
+            .as_ref()
+            .map_or(f64::NAN, |f| f.magnitude_db(freq).unwrap_or(f64::NAN));
+        if !db.is_finite() {
+            continue;
+        }
+        let x = cm.freq_to_x(freq);
+        let y = cm.db_to_y(db);
+
+        if i == 0 {
+            stroke_path.move_to((x, y));
+        } else {
+            stroke_path.line_to((x, y));
+        }
+        fill_path.line_to((x, y));
+    }
+
+    // Close fill back to zero
+    fill_path.line_to((cm.freq_to_x(*frequencies.last().unwrap()), zero_y));
+    fill_path.close_path();
+
+    // Fill
+    if cfg.fill_curve {
+        scene.fill(Fill::NonZero, transform, fill_color, None, &fill_path);
+    }
+
+    // Stroke
+    scene.stroke(
+        &Stroke::new(1.5),
+        transform,
+        band_color.with_alpha(0.6),
+        None,
+        &stroke_path,
+    );
+}
+
+/// Draw the range a dynamic band may travel, the way Pro-Q 4 draws it.
+///
+/// Checked against the real thing rather than invented: make a band dynamic in
+/// Pro-Q and it becomes a **filled ribbon in the band's own colour**, spanning
+/// from the static curve to the curve at full dynamic range — the static curve
+/// forms one edge and the range stretches away from it, down for a negative
+/// range and up for a positive one. There is no dashed extent line, and a
+/// spectral band renders *identically* to a dynamic one; the only thing that
+/// distinguishes them is the lit icon on the control, not the curve.
+///
+/// So this deliberately does not colour the ribbon by mode. An earlier pass
+/// drew it amber for dynamic and violet for spectral with a dashed edge, which
+/// looked informative and was wrong twice over: it broke the band-colour
+/// association the rest of the graph relies on, and it invented a visual
+/// distinction the processing does not have at the curve level.
+///
+/// The live curve is drawn only when dynamics have actually moved the band —
+/// at rest it lies exactly on the static edge, and stroking it there just
+/// thickens that edge for no information.
+fn paint_dynamic_range(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    cfg: &GraphConfig,
+    band: &EqBand,
+    dynamics: crate::ui::eq_graph_model::BandDyn,
+    frequencies: &[f64],
+    transform: Affine,
+) {
+    if dynamics.range_db.abs() < 0.05 {
+        return;
+    }
+
+    let band_hex = freq_to_color(f64::from(band.frequency));
+    let edge = hex_to_color(&band_hex);
+    let ribbon = hex_to_color_alpha(&band_hex, 0.32);
+
+    // The band at full travel is a different filter, not the static curve
+    // offset by a constant: a bell of another gain has another shape.
+    let mut extreme = band.clone();
+    extreme.gain = band.gain + dynamics.range_db;
+    let mut live = band.clone();
+    live.gain = band.gain + dynamics.live_db;
+
+    let base_filter = prepare_band(band, cfg.sample_rate);
+    let extreme_filter = prepare_band(&extreme, cfg.sample_rate);
+    let live_filter = prepare_band(&live, cfg.sample_rate);
+
+    // Same accessor `paint_band_curve` uses: a filter that failed to design
+    // reads NaN, and NaN points are skipped rather than drawn at zero.
+    let db_at = |f: &Result<PreparedFilter, crate::Error>, hz: f64| -> f64 {
+        f.as_ref().map_or(f64::NAN, |filter| {
+            filter.magnitude_db(hz).unwrap_or(f64::NAN)
+        })
+    };
+
+    let mut ribbon_path = BezPath::new();
+    let mut extreme_edge = BezPath::new();
+    let mut live_line = BezPath::new();
+    let mut started = false;
+    let mut back: Vec<(f64, f64)> = Vec::with_capacity(frequencies.len());
+    // Only worth stroking the live curve once it has left the static edge.
+    let mut live_moved = false;
+
+    for &freq in frequencies {
+        let hi = db_at(&extreme_filter, freq);
+        let lo = db_at(&base_filter, freq);
+        if !hi.is_finite() || !lo.is_finite() {
+            continue;
+        }
+        let x = cm.freq_to_x(freq);
+        let (y_hi, y_lo) = (cm.db_to_y(hi), cm.db_to_y(lo));
+        if started {
+            ribbon_path.line_to((x, y_hi));
+            extreme_edge.line_to((x, y_hi));
+        } else {
+            ribbon_path.move_to((x, y_hi));
+            extreme_edge.move_to((x, y_hi));
+            started = true;
+        }
+        back.push((x, y_lo));
+
+        let lv = db_at(&live_filter, freq);
+        if lv.is_finite() {
+            if (lv - lo).abs() > 0.05 {
+                live_moved = true;
+            }
+            let y_lv = cm.db_to_y(lv);
+            if live_line.elements().is_empty() {
+                live_line.move_to((x, y_lv));
+            } else {
+                live_line.line_to((x, y_lv));
+            }
+        }
+    }
+
+    if !started {
+        return;
+    }
+    for (x, y) in back.into_iter().rev() {
+        ribbon_path.line_to((x, y));
+    }
+    ribbon_path.close_path();
+
+    scene.fill(Fill::NonZero, transform, ribbon, None, &ribbon_path);
+    // A quiet edge on the far side so the ribbon reads as bounded rather than
+    // as a fill that fades out.
+    scene.stroke(
+        &Stroke::new(1.0),
+        transform,
+        edge.with_alpha(0.45),
+        None,
+        &extreme_edge,
+    );
+    if live_moved {
+        scene.stroke(
+            &Stroke::new(1.75),
+            transform,
+            edge.with_alpha(0.95),
+            None,
+            &live_line,
+        );
+    }
+}
+
+fn paint_connecting_lines(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    cfg: &GraphConfig,
+    bands: &[EqBand],
+    transform: Affine,
+) {
+    let zero_y = cm.db_to_y(0.0);
+    // Stops short of the node it hangs from, so the two read as one
+    // object — which means it has to know how big that node is.
+    let node_r = 7.0 * cfg.node_scale;
+
+    for band in bands {
+        if !band.used || !band.enabled {
+            continue;
+        }
+        let db = calculate_band_response(band, f64::from(band.frequency), cfg.sample_rate);
+        if db.abs() <= 0.1 {
+            continue;
+        }
+        let bx = cm.freq_to_x(f64::from(band.frequency));
+        let node_y = cm.db_to_y(f64::from(band.gain));
+        let start_y = if node_y < zero_y {
+            node_y + node_r
+        } else {
+            node_y - node_r
+        };
+
+        let line = Line::new((bx, start_y), (bx, zero_y));
+        let color = hex_to_color_alpha(&freq_to_color(f64::from(band.frequency)), 0.5);
+        scene.stroke(&Stroke::new(1.5), transform, color, None, &line);
+    }
+}
+
+fn paint_combined_curve(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    cfg: &GraphConfig,
+    bands: &[EqBand],
+    frequencies: &[f64],
+    transform: Affine,
+) {
+    let golden = Color::from_rgb8(212, 169, 50);
+    let fill_color = Color::from_rgba8(212, 169, 50, 20);
+    let zero_y = cm.db_to_y(0.0);
+
+    let mut stroke_path = BezPath::new();
+    let mut fill_path = BezPath::new();
+    fill_path.move_to((cm.freq_to_x(frequencies[0]), zero_y));
+
+    let prepared = prepare_graph(bands, cfg.sample_rate);
+    for (i, &freq) in frequencies.iter().enumerate() {
+        let db = prepared
+            .as_ref()
+            .map_or(f64::NAN, |eq| graph_magnitude(eq, freq));
+        if !db.is_finite() {
+            continue;
+        }
+        let x = cm.freq_to_x(freq);
+        let y = cm.db_to_y(db);
+        if i == 0 {
+            stroke_path.move_to((x, y));
+        } else {
+            stroke_path.line_to((x, y));
+        }
+        fill_path.line_to((x, y));
+    }
+
+    fill_path.line_to((cm.freq_to_x(*frequencies.last().unwrap()), zero_y));
+    fill_path.close_path();
+
+    if cfg.fill_curve {
+        scene.fill(Fill::NonZero, transform, fill_color, None, &fill_path);
+    }
+
+    scene.stroke(&Stroke::new(2.0), transform, golden, None, &stroke_path);
+}
+
+fn paint_model_response_curve(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    cfg: &GraphConfig,
+    response_db: &[f32],
+    transform: Affine,
+) {
+    let color = Color::from_rgb8(92, 214, 179);
+    let fill_color = Color::from_rgba8(92, 214, 179, 18);
+    let zero_y = cm.db_to_y(0.0);
+    let log_min = cfg.min_freq.log10();
+    let log_max = cfg.max_freq.log10();
+
+    let mut stroke_path = BezPath::new();
+    let mut fill_path = BezPath::new();
+    fill_path.move_to((cm.freq_to_x(cfg.min_freq), zero_y));
+
+    for (i, &db) in response_db.iter().enumerate() {
+        let t = i as f64 / (response_db.len() - 1) as f64;
+        let freq = 10.0_f64.powf(log_min + t * (log_max - log_min));
+        let x = cm.freq_to_x(freq);
+        let y = cm.db_to_y(f64::from(db));
+        if i == 0 {
+            stroke_path.move_to((x, y));
+        } else {
+            stroke_path.line_to((x, y));
+        }
+        fill_path.line_to((x, y));
+    }
+
+    fill_path.line_to((cm.freq_to_x(cfg.max_freq), zero_y));
+    fill_path.close_path();
+
+    if cfg.fill_curve {
+        scene.fill(Fill::NonZero, transform, fill_color, None, &fill_path);
+    }
+    scene.stroke(&Stroke::new(2.4), transform, color, None, &stroke_path);
+}
+
+fn paint_band_node(
+    scene: &mut Scene,
+    cm: &CoordMapper,
+    band: &EqBand,
+    is_hovered: bool,
+    is_dragging: bool,
+    is_focused: bool,
+    // Part of a multi-band selection. Selection already drove the group drag
+    // — it was simply never drawn, so the one gesture that acts on several
+    // bands at once gave no sign of which bands it would act on.
+    is_selected: bool,
+    // A multiplier on the authored radius — see `GraphConfig::node_scale`.
+    node_scale: f64,
+    transform: Affine,
+) {
+    let x = cm.freq_to_x(f64::from(band.frequency));
+    let y = cm.db_to_y(f64::from(band.gain));
+    let band_color = hex_to_color(&freq_to_color(f64::from(band.frequency)));
+    let inactive_color = Color::from_rgb8(85, 85, 85);
+
+    let radius = if is_dragging {
+        10.0
+    } else if is_hovered {
+        9.0
+    } else {
+        7.0
+    } * node_scale;
+
+    let fill = if band.enabled {
+        band_color
+    } else {
+        inactive_color
+    };
+
+    // Glow ring (subtle white outer ring with blur simulation)
+    if band.enabled {
+        let glow_alpha = if is_dragging {
+            0.25
+        } else if is_hovered || is_focused {
+            0.18
+        } else {
+            0.08
+        };
+        let glow_color = Color::from_rgba8(255, 255, 255, (glow_alpha * 255.0) as u8);
+        let glow_circle = Circle::new((x, y), radius + 4.0);
+        scene.stroke(&Stroke::new(3.0), transform, glow_color, None, &glow_circle);
+    }
+
+    // White outline
+    let outline_alpha = if !band.enabled {
+        0.0
+    } else if is_dragging {
+        0.9
+    } else if is_hovered {
+        0.7
+    } else {
+        0.4
+    };
+    let outline_color = Color::from_rgba8(255, 255, 255, (outline_alpha * 255.0) as u8);
+
+    let node = Circle::new((x, y), radius);
+    scene.fill(Fill::NonZero, transform, fill, None, &node);
+    scene.stroke(&Stroke::new(1.5), transform, outline_color, None, &node);
+
+    // Selection marker: a detached ring outside the node, in the band's own
+    // colour. Drawn last so it survives whatever the node did, and kept clear
+    // of the node's edge so it reads as "this one is picked" rather than as a
+    // thicker outline — which is what hover and drag already use.
+    if is_selected && band.enabled {
+        let ring = Circle::new((x, y), radius + 5.0);
+        scene.stroke(
+            &Stroke::new(1.5),
+            transform,
+            band_color.with_alpha(0.9),
+            None,
+            &ring,
+        );
+    }
+}

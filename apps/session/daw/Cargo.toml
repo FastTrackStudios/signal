@@ -102,7 +102,7 @@ fts-audio-ui = { workspace = true }
 # this window's rack. Without it only the portable core compiles (the
 # model, the response maths and the interaction helpers), which is what
 # the wasm remotes take.
-eq-ui = { workspace = true }
+eq = { workspace = true, features = ["ui"] }
 saturate = { workspace = true, features = ["analysis", "profiles", "ui", "viz"] }
 # The delay's style families and the reverb's rendered impulse — the
 # Depth panels draw the machine, not a picture of its knob.
@@ -270,7 +270,7 @@ native = [
     "dep:winit",
     "dep:tokio",
     "dep:tracing-subscriber",
-    "eq-ui/native",
+    "eq/native",
     "daw/standalone-rpp",
     "daw/standalone-bootstrap",
     # Take peaks folded from the `.sessionpeaks` (or REAPER's `.reapeaks`)

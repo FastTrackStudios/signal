@@ -41,14 +41,14 @@ pub(crate) fn span(f: f64, lo: f32, hi: f32) -> f32 {
 /// The first and the last band the EQ uses: its low and high shelves,
 /// as a chain is seeded.
 fn end_band(
-    bands: &mut [eq_ui::eq_graph_model::EqBand],
+    bands: &mut [eq::ui::eq_graph_model::EqBand],
     last: bool,
-) -> Option<&mut eq_ui::eq_graph_model::EqBand> {
+) -> Option<&mut eq::ui::eq_graph_model::EqBand> {
     let mut used = bands.iter_mut().filter(|b| b.used);
     if last { used.next_back() } else { used.next() }
 }
 
-fn band_gain(bands: &[eq_ui::eq_graph_model::EqBand], last: bool) -> f32 {
+fn band_gain(bands: &[eq::ui::eq_graph_model::EqBand], last: bool) -> f32 {
     let mut used = bands.iter().filter(|b| b.used);
     let band = if last { used.next_back() } else { used.next() };
     band.map_or(0.0, |b| b.gain)

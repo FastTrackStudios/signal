@@ -9,8 +9,8 @@ description = "The compressors (VCA, FET, opto, tube, look-ahead) and the limite
 workspace = true
 
 [features]
-native = ["dep:architect-ui", "dep:atomic_float", "dep:audiocore-core", "dep:eq-ui", "dep:fts-plug-ui", "dep:musical-time", "dep:musical-time-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "dep:preset-browser-ui", "eq-ui/native"]
-profiles = ["dep:eq-profiles"]
+native = ["dep:architect-ui", "dep:atomic_float", "dep:audiocore-core", "dep:eq", "dep:fts-plug-ui", "dep:musical-time", "dep:musical-time-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "dep:preset-browser-ui", "eq/native"]
+profiles = ["dep:eq"]
 ui = ["dep:atomic_float", "dep:audiocore-core", "dep:dioxus", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:web-time"]
 viz = ["dep:anyrender", "dep:blitz-dom", "dep:bytemuck", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
 
@@ -25,8 +25,7 @@ bytemuck = { version = "1", features = ["derive"], optional = true }
 dioxus = { workspace = true, optional = true }
 dioxus-native-dom = { workspace = true, optional = true }
 dsp-core = { workspace = true }
-eq-profiles = { workspace = true, optional = true }
-eq-ui = { workspace = true, optional = true }
+eq = { workspace = true, optional = true, features = ["profiles", "ui"] }
 fts-audio-ui = { workspace = true, optional = true }
 fts-plug-ui = { workspace = true, optional = true }
 musical-time = { workspace = true, features = ["params"], optional = true }

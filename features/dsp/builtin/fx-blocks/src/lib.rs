@@ -93,7 +93,7 @@ pub const EQ_FIELDS: usize = 6;
 
 // Appended param blocks (ids are APPEND-ONLY — the 0..143 layout is
 // frozen by saved rig patches):
-/// `b{i}_slope` — canonical slope index 0..10 (`eq_dsp::Slope` table).
+/// `b{i}_slope` — canonical slope index 0..10 (`eq::Slope` table).
 pub const EQ_SLOPE_BASE: u32 = 144;
 /// `output_gain` dB.
 pub const EQ_OUTPUT_GAIN_ID: u32 = 168;

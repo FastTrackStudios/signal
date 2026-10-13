@@ -23,7 +23,7 @@ use std::rc::Rc;
 use anyrender::Scene;
 use blitz_traits::events::{BlitzPointerEvent, BlitzPointerId, MouseEventButton, UiEvent};
 use dioxus::prelude::*;
-use eq_ui::eq_graph_interaction::Mods;
+use eq::ui::eq_graph_interaction::Mods;
 use vello::kurbo::Affine;
 
 use crate::tone::{Folded, Grip, Panel, Shared, Which};

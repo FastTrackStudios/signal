@@ -221,7 +221,7 @@ pub fn App() -> Element {
         // popup's layout classes are undefined and collapse
         // (`fx.embed-eq.one-surface`).
         document::Style { {nice_plug_dioxus::TAILWIND_CSS} }
-        document::Style { {eq_ui::TAILWIND_CSS} }
+        document::Style { {eq::ui::TAILWIND_CSS} }
         ThemeProvider { state: theme,
             // Knobs capture the pointer through the shared drag provider —
             // without it a knob panics the moment it is drawn.
