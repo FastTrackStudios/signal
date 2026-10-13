@@ -1,0 +1,37 @@
+{
+  "scenarioId": "layout.auto-layout-hug-fill",
+  "strictEqual": true,
+  "byteEqual": false,
+  "structureEqual": true,
+  "canonicalEqual": true,
+  "canonicalNote": "ok_via_structure_tolerance",
+  "expectedSvg": "tests/frame/parity/scenarios/layout.auto-layout-hug-fill/expected.svg",
+  "actualSvg": "tests/frame/parity/scenarios/layout.auto-layout-hug-fill/actual.svg",
+  "expectedSha256": "72c62c212552bfc5965f998563c8e50f879f02a02418392289d3c020ba1d9aa7",
+  "actualSha256": "2cdba19ac32e6a3062bd6d24cb2f547ebcdd5ed3d77fcd09b5a67fcd00aaf03a",
+  "expectedBytes": 34152,
+  "actualBytes": 34388,
+  "canonicalDiff": {
+    "equal": false,
+    "actual_path": "tests/frame/parity/scenarios/layout.auto-layout-hug-fill/actual.svg",
+    "expected_path": "tests/frame/parity/scenarios/layout.auto-layout-hug-fill/expected.svg",
+    "precision": 4,
+    "actual_elements": 12,
+    "expected_elements": 12,
+    "actual_paths": 2,
+    "expected_paths": 2,
+    "actual_canonical_len": 36073,
+    "expected_canonical_len": 35826,
+    "first_diff_offset": 1236,
+    "first_diff_actual": "5 35.4716C32.9015 34.8513 32.5488 34.3613 32.0753 34.0014C31.6065 33.6368 31.0171 33.4546 30.3068 33.4546C29.625 33.4546 29.0521 33.6274 28.5881 33.973C28.1241 ",
+    "first_diff_expected": "5 35.4716C32.9015 34.8513 32.5488 34.3613 32.0753 34.0014C31.6065 33.6368 31.017 33.4545 30.3068 33.4545C29.625 33.4545 29.0521 33.6274 28.5881 33.973C28.1241 3"
+  },
+  "structureDiff": {
+    "equal": true,
+    "actual_path": "tests/frame/parity/scenarios/layout.auto-layout-hug-fill/actual.svg",
+    "expected_path": "tests/frame/parity/scenarios/layout.auto-layout-hug-fill/expected.svg",
+    "abs_tol": 0.006,
+    "rel_tol": 0.0,
+    "first_mismatch": null
+  }
+}

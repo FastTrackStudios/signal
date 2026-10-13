@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "description": "Parity scenario manifest template. Copy to manifest.json and fill in Figma links/owners/status.",
+  "naming": {
+    "idPattern": "<category>.<case>",
+    "example": "paint.alpha-steps",
+    "frameNamePattern": "parity/<category>/<case>",
+    "exportJsonFile": "export/latest-bridge-export.json",
+    "expectedPngDir": "expected",
+    "actualPngDir": "actual"
+  },
+  "global": {
+    "pngScale": "1x",
+    "diffThresholdPercent": 0.0,
+    "target": "100% pixel parity",
+    "recommendedSet": "core10"
+  },
+  "scenarios": [
+    {
+      "id": "primitives.fractional-geometry",
+      "category": "primitives",
+      "case": "fractional-geometry",
+      "title": "Subpixel coordinates and fractional sizes",
+      "frameName": "parity/primitives/fractional-geometry",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    },
+    {
+      "id": "paint.alpha-steps",
+      "category": "paint",
+      "case": "alpha-steps",
+      "title": "Solid fills with alpha 1.0/0.5/0.01",
+      "frameName": "parity/paint/alpha-steps",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    },
+    {
+      "id": "effects.layer-background-blur",
+      "category": "effects",
+      "case": "layer-background-blur",
+      "title": "Layer and background blur behavior",
+      "frameName": "parity/effects/layer-background-blur",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    },
+    {
+      "id": "text.mixed-style-runs",
+      "category": "text",
+      "case": "mixed-style-runs",
+      "title": "Mixed font style runs in one text node",
+      "frameName": "parity/text/mixed-style-runs",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    },
+    {
+      "id": "paint.gradient-matrix",
+      "category": "paint",
+      "case": "gradient-matrix",
+      "title": "Linear/radial/angular gradient fidelity",
+      "frameName": "parity/paint/gradient-matrix",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    },
+    {
+      "id": "strokes.caps-joins-dashes",
+      "category": "strokes",
+      "case": "caps-joins-dashes",
+      "title": "Stroke caps/joins/dashes",
+      "frameName": "parity/strokes/caps-joins-dashes",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    },
+    {
+      "id": "masks.vector-text-image-mask",
+      "category": "masks",
+      "case": "vector-text-image-mask",
+      "title": "Vector/text/image mask behavior",
+      "frameName": "parity/masks/vector-text-image-mask",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    },
+    {
+      "id": "images.fill-mode-matrix",
+      "category": "images",
+      "case": "fill-mode-matrix",
+      "title": "Image fill/fit/crop/tile mode behavior",
+      "frameName": "parity/images/fill-mode-matrix",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    },
+    {
+      "id": "layout.auto-layout-hug-fill",
+      "category": "layout",
+      "case": "auto-layout-hug-fill",
+      "title": "Auto-layout hug/fill interactions",
+      "frameName": "parity/layout/auto-layout-hug-fill",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    },
+    {
+      "id": "regression.kitchen-sink",
+      "category": "regression",
+      "case": "kitchen-sink",
+      "title": "Combined broad-spectrum regression frame",
+      "frameName": "parity/regression/kitchen-sink",
+      "figmaNodeUrl": "",
+      "owner": "",
+      "status": "todo",
+      "notes": ""
+    }
+  ]
+}

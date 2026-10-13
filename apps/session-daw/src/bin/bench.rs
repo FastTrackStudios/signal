@@ -2398,7 +2398,7 @@ fn faces_bench(which: &str) {
     let dir = std::env::var_os("FTS_FRAME_DIR").map_or_else(
         || {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../../../frame/examples/plugins")
+                .join("../../frame/examples/plugins")
         },
         Into::into,
     );

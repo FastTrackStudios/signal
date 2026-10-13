@@ -1,0 +1,20 @@
+[package]
+name = "surface-widgets"
+description = "Canonical controls (knob, fader, button, footswitch, meter, readout), one theme, and catalog → surface templates."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+surface-proto = { path = "../surface-proto" }
+surface-runtime = { path = "../surface-runtime" }
+document-proto = { path = "../../document/document-proto", default-features = false }
+
+[dev-dependencies]
+document-text = { path = "../../document/document-text" }
+document-loro = { path = "../../document/document-loro" }
+document-bundle = { path = "../../document/document-bundle" }
+surface-memory = { path = "../surface-memory" }
+
+[lints]
+workspace = true

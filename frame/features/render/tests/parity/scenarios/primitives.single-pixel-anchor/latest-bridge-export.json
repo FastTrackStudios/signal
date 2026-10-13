@@ -1,0 +1,181 @@
+{
+  "schema": "fts.figma.export/v2",
+  "generatedAt": "2026-02-19T16:23:07.219Z",
+  "source": {
+    "plugin": "fts-figma-parity-plugin",
+    "pluginVersion": "v2.1",
+    "editorType": "figma",
+    "page": {
+      "id": "0:1",
+      "name": "Page 1"
+    }
+  },
+  "selection": {
+    "ids": [
+      "8:912"
+    ],
+    "names": [
+      "parity/primitives/single-pixel-anchor"
+    ],
+    "totalRoots": 1,
+    "totalNodes": 2
+  },
+  "options": {
+    "includeSvg": false,
+    "includePng": false,
+    "maxDepth": 16
+  },
+  "assets": [],
+  "nodes": [
+    {
+      "id": "8:912",
+      "name": "parity/primitives/single-pixel-anchor",
+      "type": "FRAME",
+      "visible": true,
+      "absoluteBoundingBox": {
+        "x": 0,
+        "y": 5700,
+        "width": 1920,
+        "height": 1080
+      },
+      "relativeTransform": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          5700
+        ]
+      ],
+      "rotation": 0,
+      "opacity": 1,
+      "blendMode": "PASS_THROUGH",
+      "clipsContent": true,
+      "layoutMode": "NONE",
+      "layoutWrap": "NO_WRAP",
+      "layoutSizingHorizontal": "FIXED",
+      "layoutSizingVertical": "FIXED",
+      "layoutAlign": "INHERIT",
+      "layoutGrow": 0,
+      "primaryAxisSizingMode": "AUTO",
+      "primaryAxisAlignItems": "MIN",
+      "counterAxisSizingMode": "FIXED",
+      "counterAxisAlignItems": "MIN",
+      "paddingTop": 0,
+      "paddingRight": 0,
+      "paddingBottom": 0,
+      "paddingLeft": 0,
+      "itemSpacing": 0,
+      "effects": [],
+      "fills": [
+        {
+          "type": "SOLID",
+          "visible": true,
+          "opacity": 1,
+          "blendMode": "NORMAL",
+          "color": {
+            "r": 0.9607843160629272,
+            "g": 0.9607843160629272,
+            "b": 0.9607843160629272
+          },
+          "boundVariables": {}
+        }
+      ],
+      "strokes": [],
+      "strokeWeight": 1,
+      "strokeMiterLimit": 4,
+      "strokeAlign": "INSIDE",
+      "strokeJoin": "MITER",
+      "strokeCap": "NONE",
+      "dashPattern": [],
+      "isMask": false,
+      "maskType": "ALPHA",
+      "cornerSmoothing": 0,
+      "cornerRadius": 0,
+      "topLeftRadius": 0,
+      "topRightRadius": 0,
+      "bottomLeftRadius": 0,
+      "bottomRightRadius": 0,
+      "fillGeometry": [
+        {
+          "windingRule": "NONZERO",
+          "data": "M0 0 L1920 0 L1920 1080 L0 1080 L0 0 Z"
+        }
+      ],
+      "strokeGeometry": [],
+      "children": [
+        {
+          "id": "15:1397",
+          "name": "Rectangle",
+          "type": "RECTANGLE",
+          "visible": true,
+          "absoluteBoundingBox": {
+            "x": 137,
+            "y": 5911,
+            "width": 1,
+            "height": 1
+          },
+          "relativeTransform": [
+            [
+              1,
+              0,
+              137
+            ],
+            [
+              0,
+              1,
+              211
+            ]
+          ],
+          "rotation": 0,
+          "opacity": 1,
+          "blendMode": "PASS_THROUGH",
+          "layoutSizingHorizontal": "FIXED",
+          "layoutSizingVertical": "FIXED",
+          "layoutAlign": "INHERIT",
+          "layoutGrow": 0,
+          "effects": [],
+          "fills": [
+            {
+              "type": "SOLID",
+              "visible": true,
+              "opacity": 1,
+              "blendMode": "NORMAL",
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 0
+              },
+              "boundVariables": {}
+            }
+          ],
+          "strokes": [],
+          "strokeWeight": 1,
+          "strokeMiterLimit": 4,
+          "strokeAlign": "INSIDE",
+          "strokeJoin": "MITER",
+          "strokeCap": "NONE",
+          "dashPattern": [],
+          "isMask": false,
+          "maskType": "ALPHA",
+          "cornerSmoothing": 0,
+          "cornerRadius": 0,
+          "topLeftRadius": 0,
+          "topRightRadius": 0,
+          "bottomLeftRadius": 0,
+          "bottomRightRadius": 0,
+          "fillGeometry": [
+            {
+              "windingRule": "NONZERO",
+              "data": "M0 0 L1 0 L1 1 L0 1 L0 0 Z"
+            }
+          ],
+          "strokeGeometry": []
+        }
+      ]
+    }
+  ]
+}

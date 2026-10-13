@@ -1,0 +1,17 @@
+[package]
+name = "figma-model"
+description = "Figma-shaped document model (transitional: the renderer reads this until document-proto lands)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+figma-api = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+base64 = "0.22"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+
+[lints]
+workspace = true

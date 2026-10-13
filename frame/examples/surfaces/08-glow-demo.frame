@@ -1,0 +1,65 @@
+<Document>
+  <Page name="Surface">
+    <Frame name="Glow Demo" w=720 h=300 radius=6 clip fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#1c1c20"}, {"position": 1, "color": "#111114"}]}}}]}>
+      <Text name="title" x=24 y=14 w=300 h=14 size=10 fill="#8a8578" text-align="left">LIGHT + SHADER EFFECTS</Text>
+
+      <Frame name="VU bezel" x=24 y=40 w=236 h=164 radius=10 fill="#0a0a0b" stroke="#2c2c30" stroke-weight=1>
+        <Frame name="VU face" x=10 y=10 w=216 h=144 radius=6 clip fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#fff6dc"}, {"position": 0.7, "color": "#f3dca4"}, {"position": 1, "color": "#d9b574"}]}}}]} emission={{"color":"#ffb24a","intensity":0.9,"radius":30}} shader={{"shader":"glass","params":{"strength":0.8}}}>
+          <Vector name="scale arc" w=216 h=144 stroke="#2a2418" stroke-weight=1.2 geometry="M 38 86 A 92 92 0 0 1 178 86" />
+          <Vector name="red zone" w=216 h=144 fill="#c0301f" geometry="M 150.0 60.0 A 92 92 0 0 1 178.0 86.0 L 174.0 89.0 A 87 87 0 0 0 147.5 64.5 Z" />
+          <Text name="m20" x=22 y=80 w=24 h=12 size=9 fill="#2a2418" text-align="center">20</Text>
+          <Text name="m10" x=52 y=50 w=24 h=12 size=9 fill="#2a2418" text-align="center">10</Text>
+          <Text name="m5" x=96 y=38 w=24 h=12 size=9 fill="#2a2418" text-align="center">5</Text>
+          <Text name="m0" x=140 y=46 w=24 h=12 size=9 fill="#c0301f" text-align="center">0</Text>
+          <Text name="m3" x=172 y=72 w=24 h=12 size=9 fill="#c0301f" text-align="center">+3</Text>
+          <Text name="vu" x=88 y=96 w=40 h=18 size=15 fill="#2a2418" text-align="center">VU</Text>
+          <Rectangle name="needle" w=1.6 h=110 fill="#141414" transform={{"a": 0.9063, "b": -0.4226, "tx": 153.76, "c": 0.4226, "d": 0.9063, "ty": 35.97}} />
+          <Ellipse name="pivot" x=100 y=128 w=16 h=16 fill="#1a1a1a" />
+        </Frame>
+      </Frame>
+
+      <Text name="jewels label" x=286 y=40 w=150 h=12 size=9 fill="#8a8578" text-align="left">JEWELS</Text>
+      <Ellipse name="bezel" x=286 y=60 w=34 h=34 fill="#b9b9b6" />
+      <Ellipse name="jewel red" x=291 y=65 w=24 h=24 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#ff9a8a"}, {"position": 0.45, "color": "#e33a2a"}, {"position": 1, "color": "#7a120b"}]}}}]} emission={{"color":"#ff3a22","intensity":1.4,"radius":22}} />
+      <Ellipse name="bezel" x=336 y=60 w=34 h=34 fill="#b9b9b6" />
+      <Ellipse name="jewel amber" x=341 y=65 w=24 h=24 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#ffe29a"}, {"position": 0.45, "color": "#f0a020"}, {"position": 1, "color": "#7a4a0b"}]}}}]} emission={{"color":"#ffaa22","intensity":1.2,"radius":22}} />
+      <Ellipse name="bezel" x=386 y=60 w=34 h=34 fill="#b9b9b6" />
+      <Ellipse name="jewel green (off)" x=391 y=65 w=24 h=24 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#6a8a6a"}, {"position": 1, "color": "#1b2a1b"}]}}}]} />
+
+      <Text name="leds label" x=286 y=112 w=150 h=12 size=9 fill="#8a8578" text-align="left">LEDS</Text>
+      <Ellipse name="led" x=286 y=130 w=10 h=10 fill="#44ff66" emission={{"color":"#33ff55","intensity":1.2,"radius":10}} />
+      <Ellipse name="led" x=302 y=130 w=10 h=10 fill="#44ff66" emission={{"color":"#33ff55","intensity":1.2,"radius":10}} />
+      <Ellipse name="led" x=318 y=130 w=10 h=10 fill="#44ff66" emission={{"color":"#33ff55","intensity":1.2,"radius":10}} />
+      <Ellipse name="led" x=334 y=130 w=10 h=10 fill="#44ff66" emission={{"color":"#33ff55","intensity":1.2,"radius":10}} />
+      <Ellipse name="led" x=350 y=130 w=10 h=10 fill="#ffe044" emission={{"color":"#ffd022","intensity":1.2,"radius":10}} />
+      <Ellipse name="led" x=366 y=130 w=10 h=10 fill="#ffe044" emission={{"color":"#ffd022","intensity":1.2,"radius":10}} />
+      <Ellipse name="led dim" x=382 y=130 w=10 h=10 fill="#ff4433" opacity=0.3 emission={{"color":"#ff3322","intensity":1.2,"radius":10}} />
+      <Ellipse name="led off" x=398 y=130 w=10 h=10 fill="#3a1410" />
+
+      <Text name="readout label" x=286 y=162 w=150 h=12 size=9 fill="#8a8578" text-align="left">CRT READOUT</Text>
+      <Frame name="readout" x=286 y=180 w=160 h=56 radius=4 fill="#04120a" stroke="#1d2b22" stroke-weight=1 shader={{"shader":"crt","params":{"strength":0.85,"scale":3}}}>
+        <Text name="value" x=0 y=12 w=160 h=32 size=28 fill="#6dff9c" text-align="center" emission={{"color":"#48ff88","intensity":0.9,"radius":10}}>-12.4 dB</Text>
+      </Frame>
+
+      <Text name="knob label" x=478 y=40 w=110 h=12 size=9 fill="#8a8578" text-align="center">LIT KNOB</Text>
+      <Frame name="knob" x=488 y=60 w=90 h=90 shader={{"shader":"lighting","params":{"strength":0.9,"angle":135,"elevation":40}}}>
+        <Ellipse name="skirt" w=90 h=90 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#2a2a2e"}, {"position": 0.8, "color": "#111113"}, {"position": 1, "color": "#050506"}]}}}]} />
+        <Ellipse name="cap" x=14 y=14 w=62 h=62 fill={[{"kind": {"AngularGradient": {"stops": [{"position": 0, "color": "#d8d8d4"}, {"position": 0.125, "color": "#8c8c88"}, {"position": 0.25, "color": "#e4e4e0"}, {"position": 0.375, "color": "#8c8c88"}, {"position": 0.5, "color": "#d8d8d4"}, {"position": 0.625, "color": "#8c8c88"}, {"position": 0.75, "color": "#e4e4e0"}, {"position": 0.875, "color": "#8c8c88"}, {"position": 1, "color": "#d8d8d4"}]}}}]} />
+        <Rectangle name="index" x=43 y=16 w=4 h=24 radius=2 fill="#1a1a1a" />
+      </Frame>
+
+      <Text name="tube label" x=610 y=40 w=90 h=12 size=9 fill="#8a8578" text-align="center">TUBE</Text>
+      <Frame name="tube" x=630 y=60 w=50 h=90 shader={{"shader":"flicker","params":{"strength":0.4,"speed":12}}}>
+        <Rectangle name="glass" x=5 y=0 w=40 h=90 radius=20 fill="#2a1a10" stroke="#5a4030" stroke-weight=1 />
+        <Rectangle name="filament" x=17 y=22 w=16 h=46 radius=8 fill="#ffb060" emission={{"color":"#ff8a2a","intensity":1.6,"radius":26}} />
+      </Frame>
+
+      <Text name="lamp label" x=478 y=176 w=220 h=12 size=9 fill="#8a8578" text-align="left">BACKLIT PANEL</Text>
+      <Frame name="panel" x=478 y=194 w=220 h=42 radius=4 fill="#12303c" emission={{"color":"#3ab0ff","intensity":0.5,"radius":18}}>
+        <Text name="legend" x=0 y=12 w=220 h=18 size=13 fill="#e8f6ff" text-align="center">LIMITING AMPLIFIER</Text>
+      </Frame>
+
+      <Text name="footer" x=24 y=270 w=600 h=12 size=9 fill="#5d5a52" text-align="left">frame · effects stage · --fx gpu | fallback | off</Text>
+    </Frame>
+  </Page>
+</Document>

@@ -1,0 +1,15 @@
+{
+  "id": "4af3aed8-d8ed-43f3-afa5-91f2935a2a7a",
+  "status": "interrupted",
+  "startedAt": "2026-02-27T07:45:16.791Z",
+  "updatedAt": "2026-02-27T17:34:57.668Z",
+  "agentPlugin": "claude",
+  "trackerPlugin": "beads-bv",
+  "epicId": "bd-der",
+  "currentIteration": 11,
+  "maxIterations": 11,
+  "totalTasks": 0,
+  "tasksCompleted": 8,
+  "cwd": "/Users/codywright/Documents/Development/FastTrackStudio/frame",
+  "endedAt": "2026-02-27T17:34:57.668Z"
+}

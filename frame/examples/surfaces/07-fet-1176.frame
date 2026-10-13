@@ -1,0 +1,287 @@
+<Document>
+  <Page name="Surface">
+    <Frame name="FET Limiter" w=1060 h=330 radius=4 clip fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#1d1d21"}, {"position": 0.5, "color": "#151518"}, {"position": 1, "color": "#1a1a1e"}]}}}]} effects={[{"kind":"DropShadow","color":"#000000aa","offset_y":10,"radius":30}]}>
+    <Rectangle name="grain" x=40 y=0 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=3 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=6 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=9 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=12 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=15 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=18 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=21 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=24 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=27 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=30 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=33 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=36 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=39 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=42 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=45 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=48 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=51 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=54 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=57 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=60 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=63 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=66 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=69 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=72 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=75 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=78 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=81 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=84 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=87 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=90 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=93 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=96 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=99 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=102 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=105 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=108 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=111 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=114 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=117 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=120 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=123 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=126 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=129 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=132 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=135 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=138 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=141 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=144 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=147 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=150 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=153 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=156 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=159 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=162 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=165 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=168 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=171 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=174 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=177 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=180 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=183 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=186 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=189 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=192 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=195 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=198 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=201 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=204 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=207 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=210 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=213 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=216 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=219 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=222 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=225 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=228 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=231 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=234 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=237 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=240 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=243 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=246 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=249 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=252 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=255 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=258 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=261 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=264 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=267 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=270 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=273 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=276 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=279 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=282 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=285 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=288 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=291 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=294 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=297 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=300 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=303 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=306 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=309 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=312 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Rectangle name="grain" x=40 y=315 w=980 h=1 fill="#ffffff" opacity=0.0120 />
+    <Rectangle name="grain" x=40 y=318 w=980 h=1 fill="#ffffff" opacity=0.0140 />
+    <Rectangle name="grain" x=40 y=321 w=980 h=1 fill="#ffffff" opacity=0.0160 />
+    <Rectangle name="grain" x=40 y=324 w=980 h=1 fill="#ffffff" opacity=0.0180 />
+    <Rectangle name="grain" x=40 y=327 w=980 h=1 fill="#ffffff" opacity=0.0200 />
+    <Frame name="ear" x=0 y=0 w=40 h=330 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#26262a"}, {"position": 0.5, "color": "#34343a"}, {"position": 1, "color": "#26262a"}]}}}]}><Rectangle name="slot" x=8 y=40 w=24 h=12 radius=6 fill="#070708" /><Rectangle name="slot" x=8 y=278 w=24 h=12 radius=6 fill="#070708" /></Frame>
+    <Frame name="ear" x=1020 y=0 w=40 h=330 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#26262a"}, {"position": 0.5, "color": "#34343a"}, {"position": 1, "color": "#26262a"}]}}}]}><Rectangle name="slot" x=8 y=40 w=24 h=12 radius=6 fill="#070708" /><Rectangle name="slot" x=8 y=278 w=24 h=12 radius=6 fill="#070708" /></Frame>
+    <Text name="model" x=60 y=18 w=300 h=16 size=11 fill="#9a9384" text-align="left">FET LIMITING AMPLIFIER</Text>
+    <Text name="maker" x=60 y=300 w=300 h=14 size=9.5 fill="#6d6a62" text-align="left">frame · 1176-style</Text>
+    <Ellipse name="dot" x=123.85 y=200.95 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=102.97 y=204.03 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">∞</Text>
+    <Ellipse name="dot" x=106.61 y=168.69 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=82.44 y=165.63 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">48</Text>
+    <Ellipse name="dot" x=110.2 y=132.29 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=86.71 y=122.3 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">36</Text>
+    <Ellipse name="dot" x=133.4 y=104.02 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=114.33 y=88.64 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">30</Text>
+    <Ellipse name="dot" x=168.4 y=93.4 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=156 y=76 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">24</Text>
+    <Ellipse name="dot" x=203.4 y=104.02 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=197.67 y=88.64 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">18</Text>
+    <Ellipse name="dot" x=226.6 y=132.29 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=225.29 y=122.3 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">12</Text>
+    <Ellipse name="dot" x=230.19 y=168.69 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=229.56 y=165.63 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">6</Text>
+    <Ellipse name="dot" x=212.95 y=200.95 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=209.03 y=204.03 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">0</Text>
+    <Frame name="Input" x=114 y=102 w=112 h=112 control={{"kind": {"Knob": {"sweep_degrees": 270.0}}, "binding": {"source": {"Param": {"addr": "1176/input"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Needle", "node": "2d0d5879-8a0d-4cc3-8c2a-0f3dbd40d4c4"}, {"role": "Value", "node": "de48c1d0-937b-45b9-92c0-0f973fb0a1ff"}]}}>
+      <Ellipse name="skirt" w=112 h=112 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#2a2a2e"}, {"position": 0.8, "color": "#111113"}, {"position": 1, "color": "#050506"}]}}}]} effects={[{"kind":"DropShadow","color":"#00000099","offset_y":4,"radius":8}]} />
+      <Ellipse name="knurl" x=16.04 y=16.04 w=79.92 h=79.92 fill="#3a3a3f" stroke="#6d6d74" stroke-weight=1 />
+      <Ellipse name="cap" x=19.04 y=19.04 w=73.92 h=73.92 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#f4f4f2"}, {"position": 0.55, "color": "#c9c9c6"}, {"position": 1, "color": "#8e8e8b"}]}}}]} />
+      <Rectangle name="index" id="2d0d5879-8a0d-4cc3-8c2a-0f3dbd40d4c4" x=54 y=6.72 w=4 h=40.32 radius=2 fill="#f7f4ea" />
+    </Frame>
+    <Text name="Input legend" x=120 y=240 w=100 h=16 size=11 fill="#e2dccd" text-align="center">INPUT</Text>
+    <Text name="Input value" id="de48c1d0-937b-45b9-92c0-0f973fb0a1ff" x=120 y=256 w=100 h=14 size=10 fill="#9a9384" text-align="center"></Text>
+    <Ellipse name="dot" x=333.85 y=200.95 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=312.97 y=204.03 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">∞</Text>
+    <Ellipse name="dot" x=316.61 y=168.69 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=292.44 y=165.63 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">48</Text>
+    <Ellipse name="dot" x=320.2 y=132.29 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=296.71 y=122.3 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">36</Text>
+    <Ellipse name="dot" x=343.4 y=104.02 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=324.33 y=88.64 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">30</Text>
+    <Ellipse name="dot" x=378.4 y=93.4 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=366 y=76 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">24</Text>
+    <Ellipse name="dot" x=413.4 y=104.02 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=407.67 y=88.64 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">18</Text>
+    <Ellipse name="dot" x=436.6 y=132.29 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=435.29 y=122.3 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">12</Text>
+    <Ellipse name="dot" x=440.19 y=168.69 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=439.56 y=165.63 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">6</Text>
+    <Ellipse name="dot" x=422.95 y=200.95 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=419.03 y=204.03 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">0</Text>
+    <Frame name="Output" x=324 y=102 w=112 h=112 control={{"kind": {"Knob": {"sweep_degrees": 270.0}}, "binding": {"source": {"Param": {"addr": "1176/output"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Needle", "node": "46252bad-105d-4d61-a0b8-869780232145"}, {"role": "Value", "node": "6c6dbf07-ffc0-4ab8-9337-9479c3a715a0"}]}}>
+      <Ellipse name="skirt" w=112 h=112 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#2a2a2e"}, {"position": 0.8, "color": "#111113"}, {"position": 1, "color": "#050506"}]}}}]} effects={[{"kind":"DropShadow","color":"#00000099","offset_y":4,"radius":8}]} />
+      <Ellipse name="knurl" x=16.04 y=16.04 w=79.92 h=79.92 fill="#3a3a3f" stroke="#6d6d74" stroke-weight=1 />
+      <Ellipse name="cap" x=19.04 y=19.04 w=73.92 h=73.92 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#f4f4f2"}, {"position": 0.55, "color": "#c9c9c6"}, {"position": 1, "color": "#8e8e8b"}]}}}]} />
+      <Rectangle name="index" id="46252bad-105d-4d61-a0b8-869780232145" x=54 y=6.72 w=4 h=40.32 radius=2 fill="#f7f4ea" />
+    </Frame>
+    <Text name="Output legend" x=330 y=240 w=100 h=16 size=11 fill="#e2dccd" text-align="center">OUTPUT</Text>
+    <Text name="Output value" id="6c6dbf07-ffc0-4ab8-9337-9479c3a715a0" x=330 y=256 w=100 h=14 size=10 fill="#9a9384" text-align="center"></Text>
+    <Ellipse name="dot" x=520.94 y=121.86 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=500.06 y=124.94 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">1</Text>
+    <Ellipse name="dot" x=510.4 y=96.4 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=486 y=91 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">2</Text>
+    <Ellipse name="dot" x=520.94 y=70.94 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=500.06 y=57.06 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">3</Text>
+    <Ellipse name="dot" x=546.4 y=60.4 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=534 y=43 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">4</Text>
+    <Ellipse name="dot" x=571.86 y=70.94 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=567.94 y=57.06 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">5</Text>
+    <Ellipse name="dot" x=582.4 y=96.4 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=582 y=91 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">6</Text>
+    <Ellipse name="dot" x=571.86 y=121.86 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=567.94 y=124.94 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">7</Text>
+    <Frame name="Attack" x=519 y=69 w=58 h=58 control={{"kind": {"Knob": {"sweep_degrees": 270.0}}, "binding": {"source": {"Param": {"addr": "1176/attack"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Needle", "node": "37d76372-20e6-4e57-9e6d-763c47d3d5ef"}, {"role": "Value", "node": "eca7327d-ad73-41e7-a29a-f1499f1a2398"}]}}>
+      <Ellipse name="skirt" w=58 h=58 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#2a2a2e"}, {"position": 0.8, "color": "#111113"}, {"position": 1, "color": "#050506"}]}}}]} effects={[{"kind":"DropShadow","color":"#00000099","offset_y":4,"radius":8}]} />
+      <Ellipse name="knurl" x=6.86 y=6.86 w=44.28 h=44.28 fill="#3a3a3f" stroke="#6d6d74" stroke-weight=1 />
+      <Ellipse name="cap" x=9.86 y=9.86 w=38.28 h=38.28 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#f4f4f2"}, {"position": 0.55, "color": "#c9c9c6"}, {"position": 1, "color": "#8e8e8b"}]}}}]} />
+      <Rectangle name="index" id="37d76372-20e6-4e57-9e6d-763c47d3d5ef" x=27 y=3.48 w=4 h=20.88 radius=2 fill="#f7f4ea" />
+    </Frame>
+    <Text name="Attack legend" x=498 y=140 w=100 h=16 size=11 fill="#e2dccd" text-align="center">ATTACK</Text>
+    <Text name="Attack value" id="eca7327d-ad73-41e7-a29a-f1499f1a2398" x=498 y=156 w=100 h=14 size=10 fill="#9a9384" text-align="center"></Text>
+    <Ellipse name="dot" x=520.94 y=255.86 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=500.06 y=258.94 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">1</Text>
+    <Ellipse name="dot" x=510.4 y=230.4 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=486 y=225 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">2</Text>
+    <Ellipse name="dot" x=520.94 y=204.94 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=500.06 y=191.06 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">3</Text>
+    <Ellipse name="dot" x=546.4 y=194.4 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=534 y=177 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">4</Text>
+    <Ellipse name="dot" x=571.86 y=204.94 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=567.94 y=191.06 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">5</Text>
+    <Ellipse name="dot" x=582.4 y=230.4 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=582 y=225 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">6</Text>
+    <Ellipse name="dot" x=571.86 y=255.86 w=3.2 h=3.2 fill="#e2dccd" />
+    <Text name="scale" x=567.94 y=258.94 w=28 h=14 size=9.5 fill="#9a9384" text-align="center">7</Text>
+    <Frame name="Release" x=519 y=203 w=58 h=58 control={{"kind": {"Knob": {"sweep_degrees": 270.0}}, "binding": {"source": {"Param": {"addr": "1176/release"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Needle", "node": "0b7328ac-8c90-436b-9b22-bf286396ee8d"}, {"role": "Value", "node": "abf0a48b-5de2-4041-b1f3-d7e2e0f1f174"}]}}>
+      <Ellipse name="skirt" w=58 h=58 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#2a2a2e"}, {"position": 0.8, "color": "#111113"}, {"position": 1, "color": "#050506"}]}}}]} effects={[{"kind":"DropShadow","color":"#00000099","offset_y":4,"radius":8}]} />
+      <Ellipse name="knurl" x=6.86 y=6.86 w=44.28 h=44.28 fill="#3a3a3f" stroke="#6d6d74" stroke-weight=1 />
+      <Ellipse name="cap" x=9.86 y=9.86 w=38.28 h=38.28 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#f4f4f2"}, {"position": 0.55, "color": "#c9c9c6"}, {"position": 1, "color": "#8e8e8b"}]}}}]} />
+      <Rectangle name="index" id="0b7328ac-8c90-436b-9b22-bf286396ee8d" x=27 y=3.48 w=4 h=20.88 radius=2 fill="#f7f4ea" />
+    </Frame>
+    <Text name="Release legend" x=498 y=274 w=100 h=16 size=11 fill="#e2dccd" text-align="center">RELEASE</Text>
+    <Text name="Release value" id="abf0a48b-5de2-4041-b1f3-d7e2e0f1f174" x=498 y=290 w=100 h=14 size=10 fill="#9a9384" text-align="center"></Text>
+    <Text name="Ratio legend" x=626 y=46 w=66 h=14 size=10 fill="#e2dccd" text-align="center">RATIO</Text>
+    <Frame name="Ratio All" x=636 y=70 w=46 h=32 radius=4 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#2f2f34"}, {"position": 1, "color": "#222226"}]}}}]} stroke="#050506" stroke-weight=1 control={{"kind": {"Button": {"mode": {"Select": {"index": 4, "count": 5}}}}, "binding": {"source": {"Param": {"addr": "1176/ratio"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "e843e986-0584-4185-b5bf-2f53e1f53c3a"}]}}>
+      <Rectangle name="engaged" id="e843e986-0584-4185-b5bf-2f53e1f53c3a" x=4 y=4 w=38 h=24 radius=3 fill="#d8cfb8" opacity=0.9 />
+      <Text name="label" x=0 y=9 w=46 h=14 size=11 fill="#111113" text-align="center">All</Text>
+    </Frame>
+    <Frame name="Ratio 20" x=636 y=110 w=46 h=32 radius=4 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#2f2f34"}, {"position": 1, "color": "#222226"}]}}}]} stroke="#050506" stroke-weight=1 control={{"kind": {"Button": {"mode": {"Select": {"index": 3, "count": 5}}}}, "binding": {"source": {"Param": {"addr": "1176/ratio"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "4847dba1-eeba-4663-8a0d-def2843214f2"}]}}>
+      <Rectangle name="engaged" id="4847dba1-eeba-4663-8a0d-def2843214f2" x=4 y=4 w=38 h=24 radius=3 fill="#d8cfb8" opacity=0.9 />
+      <Text name="label" x=0 y=9 w=46 h=14 size=11 fill="#111113" text-align="center">20</Text>
+    </Frame>
+    <Frame name="Ratio 12" x=636 y=150 w=46 h=32 radius=4 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#2f2f34"}, {"position": 1, "color": "#222226"}]}}}]} stroke="#050506" stroke-weight=1 control={{"kind": {"Button": {"mode": {"Select": {"index": 2, "count": 5}}}}, "binding": {"source": {"Param": {"addr": "1176/ratio"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "395bc93d-8fd0-474a-97d4-5db17da85dbc"}]}}>
+      <Rectangle name="engaged" id="395bc93d-8fd0-474a-97d4-5db17da85dbc" x=4 y=4 w=38 h=24 radius=3 fill="#d8cfb8" opacity=0.9 />
+      <Text name="label" x=0 y=9 w=46 h=14 size=11 fill="#111113" text-align="center">12</Text>
+    </Frame>
+    <Frame name="Ratio 8" x=636 y=190 w=46 h=32 radius=4 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#2f2f34"}, {"position": 1, "color": "#222226"}]}}}]} stroke="#050506" stroke-weight=1 control={{"kind": {"Button": {"mode": {"Select": {"index": 1, "count": 5}}}}, "binding": {"source": {"Param": {"addr": "1176/ratio"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "5b2dea4a-b54f-47e1-855f-a293fb442bf1"}]}}>
+      <Rectangle name="engaged" id="5b2dea4a-b54f-47e1-855f-a293fb442bf1" x=4 y=4 w=38 h=24 radius=3 fill="#d8cfb8" opacity=0.9 />
+      <Text name="label" x=0 y=9 w=46 h=14 size=11 fill="#111113" text-align="center">8</Text>
+    </Frame>
+    <Frame name="Ratio 4" x=636 y=230 w=46 h=32 radius=4 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#2f2f34"}, {"position": 1, "color": "#222226"}]}}}]} stroke="#050506" stroke-weight=1 control={{"kind": {"Button": {"mode": {"Select": {"index": 0, "count": 5}}}}, "binding": {"source": {"Param": {"addr": "1176/ratio"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "32d0c857-dbb6-4a96-9673-cf4d85a30122"}]}}>
+      <Rectangle name="engaged" id="32d0c857-dbb6-4a96-9673-cf4d85a30122" x=4 y=4 w=38 h=24 radius=3 fill="#d8cfb8" opacity=0.9 />
+      <Text name="label" x=0 y=9 w=46 h=14 size=11 fill="#111113" text-align="center">4</Text>
+    </Frame>
+    <Rectangle name="meter band" x=712 y=0 w=226 h=330 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#164f65"}, {"position": 0.5, "color": "#1b5f79"}, {"position": 1, "color": "#164f65"}]}}}]} />
+    <Frame name="Power" x=812 y=16 w=26 h=26 control={{"kind": {"Button": {"mode": "Toggle"}}, "binding": {"source": {"Param": {"addr": "1176/on"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "578a0091-681d-4b3b-a0a7-e1dad19ff206"}]}}>
+      <Ellipse name="bezel" w=26 h=26 fill="#b9b9b6" />
+      <Ellipse name="jewel" id="578a0091-681d-4b3b-a0a7-e1dad19ff206" x=4 y=4 w=18 h=18 fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#ff8a7a"}, {"position": 0.45, "color": "#e33a2a"}, {"position": 1, "color": "#7a120b"}]}}}]} effects={[{"kind":"DropShadow","color":"#ff3b2f99","radius":10}]} />
+    </Frame>
+    <Frame name="VU" x=737 y=54 w=176 h=122 radius=6 clip fill={[{"kind": {"RadialGradient": {"stops": [{"position": 0, "color": "#fbf3dc"}, {"position": 1, "color": "#e6d9b6"}]}}}]} stroke="#0b0b0c" stroke-weight=3 effects={[{"kind":"InnerShadow","color":"#00000066","offset_y":2,"radius":6}]} control={{"kind": {"Gauge": {"sweep_degrees": 96.0, "floor_db": -20.0, "ceiling_db": 3.0}}, "binding": {"source": {"Stream": {"id": "1176/gr"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Needle", "node": "80b84051-506a-4a69-a0e1-9e135fcce2ab"}, {"role": "Value", "node": "a5563fb9-f66a-4c08-8d81-277d2b7443ef"}]}}>
+      <Rectangle name="tick" w=1.6 h=10 fill="#1c1c1c" transform={{"a": 0.6691306063588582, "b": 0.7431448254773942, "tx": 18.352226745515253, "c": -0.7431448254773942, "d": 0.6691306063588582, "ty": 64.3653694690081}} />
+      <Text name="mark" x=0.94 y=51.42 w=24 h=12 size=9 fill="#1c1c1c" text-align="center">20</Text>
+      <Rectangle name="tick" w=1.6 h=10 fill="#1c1c1c" transform={{"a": 0.9940356672322036, "b": 0.10905545502278972, "tx": 77.0626141490948, "c": -0.10905545502278972, "d": 0.9940356672322036, "ty": 33.641927311423295}} />
+      <Text name="mark" x=64.99 y=18.6 w=24 h=12 size=9 fill="#1c1c1c" text-align="center">10</Text>
+      <Rectangle name="tick" w=1.6 h=10 fill="#1c1c1c" transform={{"a": 0.9940356672322036, "b": -0.10905545502278964, "tx": 97.34692878333368, "c": 0.10905545502278964, "d": 0.9940356672322036, "ty": 33.46743858338683}} />
+      <Text name="mark" x=87.01 y=18.6 w=24 h=12 size=9 fill="#1c1c1c" text-align="center">7</Text>
+      <Rectangle name="tick" w=1.6 h=10 fill="#1c1c1c" transform={{"a": 0.967670903335148, "b": -0.25221622239368074, "tx": 110.68197195994419, "c": 0.25221622239368074, "d": 0.967670903335148, "ty": 35.80483301191628}} />
+      <Text name="mark" x=101.47 y=21.27 w=24 h=12 size=9 fill="#1c1c1c" text-align="center">5</Text>
+      <Rectangle name="tick" w=1.6 h=10 fill="#1c1c1c" transform={{"a": 0.9208010903366307, "b": -0.3900325012545391, "tx": 123.53638174440282, "c": 0.3900325012545391, "d": 0.9208010903366307, "ty": 40.05347259768971}} />
+      <Text name="mark" x=115.39 y=26 w=24 h=12 size=9 fill="#1c1c1c" text-align="center">3</Text>
+      <Rectangle name="tick" w=1.6 h=6 fill="#1c1c1c" transform={{"a": 0.8899706994241854, "b": -0.45601771255777573, "tx": 128.78563528321826, "c": 0.45601771255777573, "d": 0.8899706994241854, "ty": 44.647852182352906}} />
+      <Rectangle name="tick" w=1.6 h=6 fill="#1c1c1c" transform={{"a": 0.8544194045464886, "b": -0.5195839500354336, "tx": 134.59860392958728, "c": 0.5195839500354336, "d": 0.8544194045464886, "ty": 47.83216702624119}} />
+      <Rectangle name="tick" w=1.6 h=10 fill="#b3261e" transform={{"a": 0.8143357897199199, "b": -0.5803940226959908, "tx": 141.32517547895122, "c": 0.5803940226959908, "d": 0.8143357897199199, "ty": 49.802456337890646}} />
+      <Text name="mark" x=134.62 y=36.75 w=24 h=12 size=9 fill="#b3261e" text-align="center">0</Text>
+      <Rectangle name="tick" w=1.6 h=6 fill="#b3261e" transform={{"a": 0.7699324809290193, "b": -0.6381253597926392, "tx": 145.45346175638696, "c": 0.6381253597926392, "d": 0.7699324809290193, "ty": 55.425643947625126}} />
+      <Rectangle name="tick" w=1.6 h=6 fill="#b3261e" transform={{"a": 0.7214450182389557, "b": -0.6924717219195257, "tx": 150.43777068008566, "c": 0.6924717219195257, "d": 0.7214450182389557, "ty": 59.79452596271941}} />
+      <Rectangle name="tick" w=1.6 h=10 fill="#b3261e" transform={{"a": 0.6691306063588582, "b": -0.7431448254773942, "tx": 156.57716428431056, "c": 0.7431448254773942, "d": 0.6691306063588582, "ty": 63.17633774824428}} />
+      <Text name="mark" x=151.06 y=51.42 w=24 h=12 size=9 fill="#b3261e" text-align="center">3</Text>
+      <Vector name="red zone" w=176 h=122 fill="#b3261e" geometry="M 140.82 51.90 A 91 91 0 0 1 155.63 65.11 L 152.65 67.79 A 87 87 0 0 0 138.49 55.15 Z" />
+      <Text name="vu" x=68 y=63.44 w=40 h=18 size=15 fill="#1c1c1c" text-align="center">VU</Text>
+      <Text name="gr" id="a5563fb9-f66a-4c08-8d81-277d2b7443ef" x=48 y=81.44 w=80 h=12 size=8.5 fill="#6b6252" text-align="center"></Text>
+      <Frame name="needle pivot" x=0 y=38 w=176 h=176>
+      <Rectangle name="needle" id="80b84051-506a-4a69-a0e1-9e135fcce2ab" x=87.2 y=-6 w=1.6 h=94 fill="#141414" />
+    </Frame>
+    </Frame>
+    <Text name="band title" x=712 y=200 w=226 h=18 size=13 fill="#f0f5f8" text-align="center">LIMITING AMPLIFIER</Text>
+    <Text name="band sub" x=712 y=222 w=226 h=14 size=9.5 fill="#bcd8e4" text-align="center">PEAK LIMITER</Text>
+    <Text name="Meter legend" x=950 y=46 w=66 h=14 size=10 fill="#e2dccd" text-align="center">METER</Text>
+    <Frame name="Meter GR" x=960 y=70 w=46 h=32 radius=4 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#2f2f34"}, {"position": 1, "color": "#222226"}]}}}]} stroke="#050506" stroke-weight=1 control={{"kind": {"Button": {"mode": {"Select": {"index": 0, "count": 4}}}}, "binding": {"source": {"Param": {"addr": "1176/meter"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "babea4c5-5719-4eb5-a471-a9b14f2489ee"}]}}>
+      <Rectangle name="engaged" id="babea4c5-5719-4eb5-a471-a9b14f2489ee" x=4 y=4 w=38 h=24 radius=3 fill="#d8cfb8" opacity=0.9 />
+      <Text name="label" x=0 y=9 w=46 h=14 size=11 fill="#111113" text-align="center">GR</Text>
+    </Frame>
+    <Frame name="Meter +8" x=960 y=110 w=46 h=32 radius=4 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#2f2f34"}, {"position": 1, "color": "#222226"}]}}}]} stroke="#050506" stroke-weight=1 control={{"kind": {"Button": {"mode": {"Select": {"index": 1, "count": 4}}}}, "binding": {"source": {"Param": {"addr": "1176/meter"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "c1581de4-38ad-4c37-9392-ce819a69ebb4"}]}}>
+      <Rectangle name="engaged" id="c1581de4-38ad-4c37-9392-ce819a69ebb4" x=4 y=4 w=38 h=24 radius=3 fill="#d8cfb8" opacity=0.9 />
+      <Text name="label" x=0 y=9 w=46 h=14 size=11 fill="#111113" text-align="center">+8</Text>
+    </Frame>
+    <Frame name="Meter +4" x=960 y=150 w=46 h=32 radius=4 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#2f2f34"}, {"position": 1, "color": "#222226"}]}}}]} stroke="#050506" stroke-weight=1 control={{"kind": {"Button": {"mode": {"Select": {"index": 2, "count": 4}}}}, "binding": {"source": {"Param": {"addr": "1176/meter"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "2033b5a2-ad29-46ae-9165-38fc38c8e887"}]}}>
+      <Rectangle name="engaged" id="2033b5a2-ad29-46ae-9165-38fc38c8e887" x=4 y=4 w=38 h=24 radius=3 fill="#d8cfb8" opacity=0.9 />
+      <Text name="label" x=0 y=9 w=46 h=14 size=11 fill="#111113" text-align="center">+4</Text>
+    </Frame>
+    <Frame name="Meter Off" x=960 y=190 w=46 h=32 radius=4 fill={[{"kind": {"LinearGradient": {"stops": [{"position": 0, "color": "#2f2f34"}, {"position": 1, "color": "#222226"}]}}}]} stroke="#050506" stroke-weight=1 control={{"kind": {"Button": {"mode": {"Select": {"index": 3, "count": 4}}}}, "binding": {"source": {"Param": {"addr": "1176/meter"}}, "curve": "Linear", "min": 0.0, "max": 1.0}, "slots": [{"role": "Led", "node": "f02c43bd-e964-446d-a2ed-1950467eac55"}]}}>
+      <Rectangle name="engaged" id="f02c43bd-e964-446d-a2ed-1950467eac55" x=4 y=4 w=38 h=24 radius=3 fill="#d8cfb8" opacity=0.9 />
+      <Text name="label" x=0 y=9 w=46 h=14 size=11 fill="#111113" text-align="center">Off</Text>
+    </Frame>
+    </Frame>
+  </Page>
+</Document>

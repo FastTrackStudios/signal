@@ -1,0 +1,24 @@
+[package]
+name = "theme-runtime"
+description = "A host's views (a mixer strip, a track row) drawn from frame documents: compiled once per theme and mode, laid out once per size, recorded per instance, live parts per frame."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+document-proto = { path = "../../document/document-proto", default-features = false }
+document-text = { path = "../../document/document-text" }
+render = { path = "../../render/render", default-features = false }
+render-canvas = { path = "../../render/render-canvas" }
+theme-expr = { path = "../theme-expr" }
+kurbo = { workspace = true }
+
+[features]
+# Paint into an anyrender 0.11 scene (session's mixer).
+anyrender-0-11 = ["render-canvas/anyrender-0-11"]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+peniko = { workspace = true }

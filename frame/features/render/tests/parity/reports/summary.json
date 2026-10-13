@@ -1,0 +1,142 @@
+{
+  "generatedAt": "2026-03-04T08:03:20Z",
+  "root": "tests/frame/parity",
+  "mode": "all",
+  "thresholdPercent": 0,
+  "total": 26,
+  "passed": 23,
+  "failed": 3,
+  "skipped": 0,
+  "scenarios": [
+    {
+      "scenarioId": "effects.background-blur-stress",
+      "status": "fail",
+      "report": "tests/frame/parity/scenarios/effects.background-blur-stress/report.json"
+    },
+    {
+      "scenarioId": "effects.drop-shadow-matrix",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/effects.drop-shadow-matrix/report.json"
+    },
+    {
+      "scenarioId": "effects.effect-ordering",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/effects.effect-ordering/report.json"
+    },
+    {
+      "scenarioId": "effects.inner-shadow-matrix",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/effects.inner-shadow-matrix/report.json"
+    },
+    {
+      "scenarioId": "effects.layer-background-blur",
+      "status": "fail",
+      "report": "tests/frame/parity/scenarios/effects.layer-background-blur/report.json"
+    },
+    {
+      "scenarioId": "effects.shadow-matrix",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/effects.shadow-matrix/report.json"
+    },
+    {
+      "scenarioId": "images.fill-mode-matrix",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/images.fill-mode-matrix/report.json"
+    },
+    {
+      "scenarioId": "images.image-sampling",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/images.image-sampling/report.json"
+    },
+    {
+      "scenarioId": "layout.auto-layout-hug-fill",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/layout.auto-layout-hug-fill/report.json"
+    },
+    {
+      "scenarioId": "masks.clip-content-nesting",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/masks.clip-content-nesting/report.json"
+    },
+    {
+      "scenarioId": "masks.mask-clip-interactions",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/masks.mask-clip-interactions/report.json"
+    },
+    {
+      "scenarioId": "masks.vector-text-image-mask",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/masks.vector-text-image-mask/report.json"
+    },
+    {
+      "scenarioId": "paint.blend-mode-combos",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/paint.blend-mode-combos/report.json"
+    },
+    {
+      "scenarioId": "paint.blend-mode-stack",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/paint.blend-mode-stack/report.json"
+    },
+    {
+      "scenarioId": "paint.gradient-matrix",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/paint.gradient-matrix/report.json"
+    },
+    {
+      "scenarioId": "primitives.fractional-geometry",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/primitives.fractional-geometry/report.json"
+    },
+    {
+      "scenarioId": "primitives.single-pixel-anchor",
+      "status": "fail",
+      "report": "tests/frame/parity/scenarios/primitives.single-pixel-anchor/report.json"
+    },
+    {
+      "scenarioId": "regression.kitchen-sink",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/regression.kitchen-sink/report.json"
+    },
+    {
+      "scenarioId": "regression.tough-1176-blue-face",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/regression.tough-1176-blue-face/report.json"
+    },
+    {
+      "scenarioId": "strokes.caps-joins-dashes",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/strokes.caps-joins-dashes/report.json"
+    },
+    {
+      "scenarioId": "text.alignment-truncation",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/text.alignment-truncation/report.json"
+    },
+    {
+      "scenarioId": "text.font-weight-style",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/text.font-weight-style/report.json"
+    },
+    {
+      "scenarioId": "text.mixed-style-runs",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/text.mixed-style-runs/report.json"
+    },
+    {
+      "scenarioId": "text.text-advanced",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/text.text-advanced/report.json"
+    },
+    {
+      "scenarioId": "transform.nested-transform-stack",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/transform.nested-transform-stack/report.json"
+    },
+    {
+      "scenarioId": "transform.transform-precision",
+      "status": "pass",
+      "report": "tests/frame/parity/scenarios/transform.transform-precision/report.json"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+[package]
+name = "surface-runtime"
+description = "Runs a control surface: gestures, value → visuals, meter ballistics, edit coalescing, engine sync."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+surface-proto = { path = "../surface-proto", default-features = false }
+document-proto = { path = "../../document/document-proto", default-features = false }
+motion-runtime = { path = "../../motion/motion-runtime" }
+uuid.workspace = true
+architect = { workspace = true, optional = true }
+vox-core = { workspace = true, optional = true }
+vox-websocket = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+[features]
+default = ["vox"]
+# The async bridge to a `SurfaceEngine` (`sync`).
+rpc = ["surface-proto/rpc"]
+# The vox client as an `Engine` (remote engines).
+vox = ["rpc", "surface-proto/vox"]
+# Connect to a remote engine over a WebSocket (`sync::connect_ws`,
+# `sync::connect_ws_stream`) and pump its streams (`sync::Telemetry`).
+remote = ["vox", "dep:architect", "architect/vox", "dep:vox-core", "dep:vox-websocket", "dep:tokio"]
+
+[dev-dependencies]
+architect = { workspace = true, features = ["vox", "local"] }
+vox-core.workspace = true
+vox-websocket.workspace = true
+surface-proto = { path = "../surface-proto" }
+surface-memory = { path = "../surface-memory" }
+tokio.workspace = true
+render = { path = "../../render/render", features = ["anyrender"] }
+vello = { version = "0.10.0" }  # frame's own version (not the workspace's)
+kurbo.workspace = true
+peniko.workspace = true
+
+[lints]
+workspace = true

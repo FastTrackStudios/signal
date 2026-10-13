@@ -1,0 +1,105 @@
+{
+  "id": "viz.mod_lfo",
+  "version": 1,
+  "params": [
+    {
+      "addr": "mod/rate",
+      "name": "Rate",
+      "short_name": "Rate",
+      "group": "Modulation",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.05,
+        "max": 10.0,
+        "scale": "Logarithmic",
+        "unit": "Hz",
+        "steps": null
+      },
+      "default": 0.5455263544885197,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "mod/depth",
+      "name": "Depth",
+      "short_name": "Depth",
+      "group": "Modulation",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": null
+      },
+      "default": 0.75,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "mod/mix",
+      "name": "Mix",
+      "short_name": "Mix",
+      "group": "Modulation",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": null
+      },
+      "default": 0.5,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "mod/engine",
+      "name": "Engine",
+      "short_name": "Engine",
+      "group": "Modulation",
+      "kind": {
+        "Choice": {
+          "options": [
+            "Chorus",
+            "Flanger",
+            "Phaser",
+            "Tremolo",
+            "Vibrato",
+            "Rotary"
+          ]
+        }
+      },
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": 6
+      },
+      "default": 0.0,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "mod/on",
+      "name": "On",
+      "short_name": "On",
+      "group": "Modulation",
+      "kind": "Toggle",
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": 2
+      },
+      "default": 1.0,
+      "bipolar": false,
+      "featured": false
+    }
+  ],
+  "actions": [],
+  "streams": [],
+  "collections": []
+}

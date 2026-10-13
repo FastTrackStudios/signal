@@ -1,0 +1,94 @@
+{
+  "id": "viz.adsr",
+  "version": 1,
+  "params": [
+    {
+      "addr": "env/attack",
+      "name": "Attack",
+      "short_name": null,
+      "group": "Envelope",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.001,
+        "max": 2.0,
+        "scale": "Logarithmic",
+        "unit": "Seconds",
+        "steps": null
+      },
+      "default": 0.5765139939630113,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "env/decay",
+      "name": "Decay",
+      "short_name": null,
+      "group": "Envelope",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.005,
+        "max": 4.0,
+        "scale": "Logarithmic",
+        "unit": "Seconds",
+        "steps": null
+      },
+      "default": 0.6731594673936465,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "env/sustain",
+      "name": "Sustain",
+      "short_name": null,
+      "group": "Envelope",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": null
+      },
+      "default": 0.6,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "env/release",
+      "name": "Release",
+      "short_name": null,
+      "group": "Envelope",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.005,
+        "max": 6.0,
+        "scale": "Logarithmic",
+        "unit": "Seconds",
+        "steps": null
+      },
+      "default": 0.7607290684265153,
+      "bipolar": false,
+      "featured": false
+    }
+  ],
+  "actions": [],
+  "streams": [
+    {
+      "id": "env/voices",
+      "name": "Voices",
+      "kind": {
+        "Envelope": {
+          "stages": [
+            "A",
+            "D",
+            "S",
+            "R"
+          ],
+          "voices": 4
+        }
+      },
+      "rate_hz": 60.0
+    }
+  ],
+  "collections": []
+}

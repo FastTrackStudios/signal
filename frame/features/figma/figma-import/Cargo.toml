@@ -1,0 +1,16 @@
+[package]
+name = "figma-import"
+description = "Figma → frame document import (REST JSON and plugin/bridge exports)"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+document-proto = { path = "../../document/document-proto", default-features = false }
+figma-model = { path = "../figma-model" }
+figma-api = { workspace = true }
+serde_json = { workspace = true }
+base64 = "0.22"
+
+[lints]
+workspace = true

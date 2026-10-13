@@ -1900,3 +1900,10 @@ assets:
         n=$((n+1))
     done < assets.txt
     echo "linked $n assets from ${#fetched[@]} repos"
+
+# Generate frame's plugin faces (frame/examples/plugins: every `.frame`, the
+# catalogs and rig-faces/faces.json) from examples/plugin-faces. They are
+# not kept in git; session-daw and signal read them from here at runtime.
+# Deterministic: unchanged sources rewrite every file byte for byte.
+faces *ONLY:
+    cargo run -q --release -p plugin-faces -- frame/examples/plugins {{ if ONLY != "" { "--only " + ONLY } else { "" } }}

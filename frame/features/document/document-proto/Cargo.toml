@@ -1,0 +1,22 @@
+[package]
+name = "document-proto"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "frame's document model: the typed Scene and the ops that edit it."
+
+[dependencies]
+facet.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+serde.workspace = true
+blake3 = "1"
+surface-proto = { path = "../../surface/surface-proto", default-features = false }
+motion-proto = { path = "../../motion/motion-proto" }
+
+[dev-dependencies]
+facet-json = "0.50.0-rc.7"
+serde_json.workspace = true
+
+[lints]
+workspace = true

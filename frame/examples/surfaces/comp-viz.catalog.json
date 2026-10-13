@@ -1,0 +1,116 @@
+{
+  "id": "viz.comp",
+  "version": 1,
+  "params": [
+    {
+      "addr": "comp/threshold",
+      "name": "Threshold",
+      "short_name": null,
+      "group": "Compressor",
+      "kind": "Continuous",
+      "range": {
+        "min": -60.0,
+        "max": 0.0,
+        "scale": "Linear",
+        "unit": "Db",
+        "steps": null
+      },
+      "default": 0.6,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "comp/ratio",
+      "name": "Ratio",
+      "short_name": null,
+      "group": "Compressor",
+      "kind": "Continuous",
+      "range": {
+        "min": 1.0,
+        "max": 20.0,
+        "scale": "Logarithmic",
+        "unit": "Ratio",
+        "steps": null
+      },
+      "default": 0.46275642631951835,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "comp/knee",
+      "name": "Knee",
+      "short_name": null,
+      "group": "Compressor",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.0,
+        "max": 24.0,
+        "scale": "Linear",
+        "unit": "Db",
+        "steps": null
+      },
+      "default": 0.25,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "comp/makeup",
+      "name": "Makeup",
+      "short_name": null,
+      "group": "Compressor",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.0,
+        "max": 24.0,
+        "scale": "Linear",
+        "unit": "Db",
+        "steps": null
+      },
+      "default": 0.0,
+      "bipolar": false,
+      "featured": false
+    }
+  ],
+  "actions": [],
+  "streams": [
+    {
+      "id": "comp/in",
+      "name": "Input",
+      "kind": {
+        "Level": {
+          "channels": 1
+        }
+      },
+      "rate_hz": 30.0
+    },
+    {
+      "id": "comp/gr",
+      "name": "Gain Reduction",
+      "kind": "GainReduction",
+      "rate_hz": 30.0
+    },
+    {
+      "id": "comp/in_history",
+      "name": "Input History",
+      "kind": {
+        "History": {
+          "of": "Level",
+          "len": 300
+        }
+      },
+      "rate_hz": 60.0
+    },
+    {
+      "id": "comp/gr_history",
+      "name": "GR History",
+      "kind": {
+        "History": {
+          "of": "GainReduction",
+          "len": 300
+        }
+      },
+      "rate_hz": 60.0
+    }
+  ],
+  "collections": []
+}

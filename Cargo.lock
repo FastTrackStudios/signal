@@ -1830,7 +1830,7 @@ dependencies = [
  "bitflags 2.13.1",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -3978,6 +3978,7 @@ dependencies = [
  "ident_case",
  "proc-macro2",
  "quote",
+ "strsim 0.11.1",
  "syn 2.0.119",
 ]
 
@@ -4946,6 +4947,37 @@ dependencies = [
  "rustc_version",
  "syn 2.0.119",
  "unicode-xid",
+]
+
+[[package]]
+name = "design-lint"
+version = "0.1.0"
+dependencies = [
+ "document-proto",
+ "facet",
+ "motion-runtime",
+ "render",
+ "serde",
+ "surface-memory",
+ "surface-proto",
+ "surface-widgets",
+]
+
+[[package]]
+name = "design-session"
+version = "0.1.0"
+dependencies = [
+ "design-lint",
+ "document-io",
+ "document-proto",
+ "document-text",
+ "render-fonts",
+ "serde_json",
+ "surface-kit",
+ "surface-memory",
+ "surface-proto",
+ "surface-widgets",
+ "uuid",
 ]
 
 [[package]]
@@ -5938,26 +5970,11 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "chrono",
- "document-loro 0.1.0",
- "document-proto 0.1.0",
+ "document-loro",
+ "document-proto",
  "facet",
  "facet-styx",
- "thiserror 2.0.20",
- "uuid",
- "zip 2.4.2",
-]
-
-[[package]]
-name = "document-bundle"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
-dependencies = [
- "blake3",
- "chrono",
- "document-loro 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "document-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "facet",
- "facet-styx",
+ "figma-import",
  "thiserror 2.0.20",
  "uuid",
  "zip 2.4.2",
@@ -5976,22 +5993,9 @@ dependencies = [
 name = "document-io"
 version = "0.1.0"
 dependencies = [
- "document-bundle 0.1.0",
- "document-proto 0.1.0",
- "document-text 0.1.0",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "document-io"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
-dependencies = [
- "document-bundle 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "document-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "document-text 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
+ "document-bundle",
+ "document-proto",
+ "document-text",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -6002,20 +6006,8 @@ name = "document-loro"
 version = "0.1.0"
 dependencies = [
  "crdt",
- "document-proto 0.1.0",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "document-loro"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
-dependencies = [
- "crdt",
- "document-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
+ "document-proto",
+ "figma-import",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -6028,23 +6020,11 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "facet",
- "motion-proto 0.1.0",
+ "facet-json",
+ "motion-proto",
  "serde",
- "surface-proto 0.1.0",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "document-proto"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
-dependencies = [
- "blake3",
- "facet",
- "motion-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "serde",
- "surface-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
+ "serde_json",
+ "surface-proto",
  "thiserror 2.0.20",
  "uuid",
 ]
@@ -6053,20 +6033,12 @@ dependencies = [
 name = "document-text"
 version = "0.1.0"
 dependencies = [
- "document-proto 0.1.0",
+ "document-proto",
+ "figma-import",
+ "proptest",
  "serde",
  "serde_json",
- "uuid",
-]
-
-[[package]]
-name = "document-text"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
-dependencies = [
- "document-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "serde",
- "serde_json",
+ "surface-proto",
  "uuid",
 ]
 
@@ -7029,7 +7001,7 @@ dependencies = [
  "const-fnv1a-hash",
  "iddqd",
  "impls",
- "indexmap",
+ "indexmap 2.14.1",
  "taxon",
  "uuid",
 ]
@@ -7244,7 +7216,7 @@ dependencies = [
  "facet-core",
  "facet-format",
  "facet-reflect",
- "indexmap",
+ "indexmap 2.14.1",
 ]
 
 [[package]]
@@ -7302,20 +7274,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
-name = "feed-proto"
+name = "feed-dsp"
 version = "0.1.0"
 dependencies = [
- "facet",
- "serde",
+ "feed-proto",
+]
+
+[[package]]
+name = "feed-memory"
+version = "0.1.0"
+dependencies = [
+ "feed-proto",
 ]
 
 [[package]]
 name = "feed-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
 dependencies = [
  "facet",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -7335,6 +7313,54 @@ dependencies = [
 ]
 
 [[package]]
+name = "figma-api"
+version = "0.31.4"
+source = "git+https://github.com/gridaco/figma-api-rust.git#e284c687b55fe7a31352de69fe668b1a3392b607"
+dependencies = [
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "serde_with",
+ "url",
+]
+
+[[package]]
+name = "figma-import"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "document-proto",
+ "figma-api",
+ "figma-model",
+ "serde_json",
+]
+
+[[package]]
+name = "figma-model"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "figma-api",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "uuid",
+ "zip 2.4.2",
+]
+
+[[package]]
+name = "figma-rest"
+version = "0.1.0"
+dependencies = [
+ "figma-api",
+ "figma-model",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "figue"
 version = "5.0.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7351,7 +7377,7 @@ dependencies = [
  "facet-reflect",
  "figue-attrs",
  "heck 0.5.0",
- "indexmap",
+ "indexmap 2.14.1",
  "owo-colors 4.4.0",
  "strip-ansi-escapes",
  "strsim 0.11.1",
@@ -7746,38 +7772,146 @@ dependencies = [
 ]
 
 [[package]]
-name = "frame-live"
+name = "frame"
+version = "0.1.0"
+dependencies = [
+ "figma-model",
+ "figma-rest",
+ "render",
+]
+
+[[package]]
+name = "frame-cli"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "design-lint",
+ "document-io",
+ "document-proto",
+ "document-text",
+ "feed-memory",
+ "figma-import",
+ "figma-rest",
+ "image",
+ "kurbo 0.13.1",
+ "peniko 0.6.1",
+ "pollster",
+ "render",
+ "roxmltree 0.20.0",
+ "serde",
+ "serde_json",
+ "skrifa 0.26.6",
+ "surface-kit",
+ "surface-memory",
+ "surface-proto",
+ "surface-runtime",
+ "surface-widgets",
+ "tokio",
+ "vello 0.10.0",
+ "winit 0.30.13",
+]
+
+[[package]]
+name = "frame-desktop"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "design-lint",
+ "document-io",
+ "document-proto",
+ "document-text",
+ "feed-memory",
+ "image",
+ "kurbo 0.13.1",
+ "library-fs",
+ "library-link",
+ "peniko 0.6.1",
+ "pollster",
+ "render",
+ "serde_json",
+ "surface-memory",
+ "surface-proto",
+ "surface-runtime",
+ "surface-widgets",
+ "tokio",
+ "vello 0.10.0",
+ "winit 0.30.13",
+]
+
+[[package]]
+name = "frame-embed"
 version = "0.1.0"
 dependencies = [
  "anyrender 0.11.1",
- "anyrender_svg 0.12.0",
- "document-io 0.1.0",
- "document-proto 0.1.0",
+ "document-proto",
+ "image",
  "kurbo 0.13.1",
+ "nice-plug-core",
  "peniko 0.6.1",
- "render 0.1.0",
+ "render",
+ "render-canvas",
+ "render-fonts",
+ "serde",
+ "skrifa 0.26.6",
+ "surface-kit",
+ "surface-memory",
+ "surface-proto",
+ "surface-runtime",
+ "surface-widgets",
+ "vello_cpu",
+]
+
+[[package]]
+name = "frame-library-server"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "document-io",
+ "document-proto",
+ "image",
+ "kurbo 0.13.1",
+ "library-fs",
+ "library-link",
+ "peniko 0.6.1",
+ "render",
  "serde_json",
- "surface-proto 0.1.0",
- "surface-runtime 0.1.0",
- "vello 0.10.0",
+ "tokio",
 ]
 
 [[package]]
 name = "frame-live"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
 dependencies = [
  "anyrender 0.11.1",
  "anyrender_svg 0.12.0",
- "document-io 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "document-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
+ "document-io",
+ "document-proto",
  "kurbo 0.13.1",
  "peniko 0.6.1",
- "render 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
+ "pollster",
+ "render",
  "serde_json",
- "surface-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "surface-runtime 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
+ "surface-proto",
+ "surface-runtime",
  "vello 0.10.0",
+ "wgpu",
+]
+
+[[package]]
+name = "frame-mcp"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "design-session",
+ "document-io",
+ "document-proto",
+ "library-fs",
+ "library-link",
+ "serde_json",
+ "surface-memory",
+ "surface-proto",
+ "surface-runtime",
+ "tokio",
 ]
 
 [[package]]
@@ -8860,7 +8994,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
- "indexmap",
+ "indexmap 2.14.1",
  "slab",
  "tokio",
  "tokio-util",
@@ -8920,6 +9054,12 @@ checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
 dependencies = [
  "byteorder",
 ]
+
+[[package]]
+name = "hashbrown"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hashbrown"
@@ -9770,7 +9910,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
 dependencies = [
  "byteorder-lite",
- "quick-error",
+ "quick-error 2.0.1",
 ]
 
 [[package]]
@@ -9830,12 +9970,25 @@ checksum = "964de6e86d545b246d84badc0fef527924ace5134f30641c203ef52ba83f58d5"
 
 [[package]]
 name = "indexmap"
+version = "1.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
+dependencies = [
+ "autocfg",
+ "hashbrown 0.12.3",
+ "serde",
+]
+
+[[package]]
+name = "indexmap"
 version = "2.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07aa2048142242915a31d35844fb311e0e53fcca590c3a0a40dcf1b841fa09eb"
 dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -9876,7 +10029,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
 dependencies = [
  "ahash",
- "indexmap",
+ "indexmap 2.14.1",
  "is-terminal",
  "itoa",
  "log",
@@ -10975,6 +11128,49 @@ name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
+name = "library-fs"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "document-io",
+ "document-proto",
+ "facet",
+ "library-proto",
+ "serde",
+ "serde_json",
+ "surface-proto",
+ "tokio",
+]
+
+[[package]]
+name = "library-link"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "library-fs",
+ "library-proto",
+ "surface-proto",
+ "tokio",
+ "vox-core",
+ "vox-websocket",
+]
+
+[[package]]
+name = "library-proto"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "document-bundle",
+ "document-proto",
+ "document-text",
+ "facet",
+ "serde",
+ "serde_json",
+ "surface-proto",
+ "vox",
+]
 
 [[package]]
 name = "libredox"
@@ -12275,32 +12471,15 @@ version = "0.1.0"
 dependencies = [
  "facet",
  "serde",
-]
-
-[[package]]
-name = "motion-proto"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
-dependencies = [
- "facet",
- "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "motion-runtime"
 version = "0.1.0"
 dependencies = [
- "document-proto 0.1.0",
- "motion-proto 0.1.0",
-]
-
-[[package]]
-name = "motion-runtime"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
-dependencies = [
- "document-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "motion-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
+ "document-proto",
+ "motion-proto",
 ]
 
 [[package]]
@@ -12481,7 +12660,7 @@ dependencies = [
  "half",
  "hashbrown 0.16.1",
  "hexf-parse",
- "indexmap",
+ "indexmap 2.14.1",
  "libm",
  "log",
  "num-traits",
@@ -14388,7 +14567,7 @@ dependencies = [
  "facet",
  "facet-styx",
  "gethostname",
- "indexmap",
+ "indexmap 2.14.1",
  "styx-tree",
  "tempfile",
  "thiserror 2.0.20",
@@ -15045,7 +15224,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da1d65da6dd5d1e44199ac0f58712d241c0f439f80adea8924d832384087f85"
 dependencies = [
  "base64 0.22.1",
- "indexmap",
+ "indexmap 2.14.1",
  "quick-xml 0.41.0",
  "serde",
  "time",
@@ -15077,6 +15256,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51bae2ac328883f7acdfea3d66a7c35751187f870bc81f94563733a154d7a670"
 dependencies = [
  "plotters-backend",
+]
+
+[[package]]
+name = "plugin-faces"
+version = "0.1.0"
+dependencies = [
+ "design-lint",
+ "document-io",
+ "document-proto",
+ "document-text",
+ "kurbo 0.13.1",
+ "motion-runtime",
+ "render",
+ "render-fonts",
+ "serde_json",
+ "skrifa 0.26.6",
+ "surface-kit",
+ "surface-proto",
+ "surface-runtime",
+ "surface-widgets",
+ "uuid",
 ]
 
 [[package]]
@@ -15460,6 +15660,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "proptest"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b45fcc2344c680f5025fe57779faef368840d0bd1f42f216291f0dc4ace4744"
+dependencies = [
+ "bit-set 0.8.0",
+ "bit-vec 0.8.0",
+ "bitflags 2.13.1",
+ "num-traits",
+ "rand 0.9.5",
+ "rand_chacha 0.9.0",
+ "rand_xorshift",
+ "regex-syntax",
+ "rusty-fork",
+ "tempfile",
+ "unarray",
+]
+
+[[package]]
 name = "prost"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15593,6 +15812,12 @@ checksum = "7f6d64c71eb498fe9eae14ce4ec935c555749aef511cca85b5568910d6e48001"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "quick-error"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quick-error"
@@ -15839,6 +16064,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_xorshift"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
+dependencies = [
+ "rand_core 0.9.5",
+]
+
+[[package]]
 name = "rand_xoshiro"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15991,7 +16225,7 @@ dependencies = [
  "avif-serialize",
  "imgref",
  "loop9",
- "quick-error",
+ "quick-error 2.0.1",
  "rav1e",
  "rayon",
  "rgb",
@@ -16467,13 +16701,14 @@ dependencies = [
  "anyrender_svg 0.14.0",
  "anyrender_vello 0.14.0",
  "base64 0.22.1",
- "document-proto 0.1.0",
+ "document-proto",
+ "figma-import",
  "fixed",
  "image",
  "kurbo 0.13.1",
  "peniko 0.6.1",
  "pollster",
- "render-fonts 0.1.0",
+ "render-fonts",
  "roxmltree 0.20.0",
  "rust_decimal",
  "serde",
@@ -16481,34 +16716,6 @@ dependencies = [
  "skrifa 0.26.6",
  "svg",
  "taffy 0.7.7",
- "vello 0.10.0",
- "winit 0.30.13",
-]
-
-[[package]]
-name = "render"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
-dependencies = [
- "anyrender 0.13.0",
- "anyrender_svg 0.14.0",
- "anyrender_vello 0.14.0",
- "base64 0.22.1",
- "document-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "fixed",
- "image",
- "kurbo 0.13.1",
- "peniko 0.6.1",
- "pollster",
- "render-fonts 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "roxmltree 0.20.0",
- "rust_decimal",
- "serde",
- "serde_json",
- "skrifa 0.26.6",
- "svg",
- "taffy 0.7.7",
- "tokio",
  "vello 0.10.0",
  "winit 0.30.13",
 ]
@@ -16518,26 +16725,17 @@ name = "render-canvas"
 version = "0.1.0"
 dependencies = [
  "anyrender 0.11.1",
- "document-proto 0.1.0",
+ "document-proto",
  "kurbo 0.13.1",
  "peniko 0.6.1",
- "render 0.1.0",
- "render-fonts 0.1.0",
+ "render",
+ "render-fonts",
  "skrifa 0.26.6",
 ]
 
 [[package]]
 name = "render-fonts"
 version = "0.1.0"
-dependencies = [
- "kurbo 0.13.1",
- "skrifa 0.26.6",
-]
-
-[[package]]
-name = "render-fonts"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
 dependencies = [
  "kurbo 0.13.1",
  "skrifa 0.26.6",
@@ -17087,6 +17285,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
+name = "rusty-fork"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc6bf79ff24e648f6da1f8d1f011e9cac26491b619e6b9280f2b47f1774e6ee2"
+dependencies = [
+ "fnv",
+ "quick-error 1.2.3",
+ "tempfile",
+ "wait-timeout",
+]
+
+[[package]]
 name = "rusty_link"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17237,6 +17447,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91c1b7e4904c873ef0710c1f407dde2e6287de2bebc1bbbf7d430bb7cbffd939"
 dependencies = [
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "schemars"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cd191f9397d57d581cddd31014772520aa448f65ef991055d7f61582c65165f"
+dependencies = [
+ "dyn-clone",
+ "ref-cast",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab508826f74a77ca9d5aba6ff19b522583ee3eaf28a19384ff3d0e5835fadf6e"
+dependencies = [
+ "dyn-clone",
+ "ref-cast",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -17729,12 +17963,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_with"
+version = "3.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "381b283ce7bc6b476d903296fb59d0d36633652b633b27f64db4fb46dcbfc3b9"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "hex",
+ "indexmap 1.9.3",
+ "indexmap 2.14.1",
+ "schemars 0.9.0",
+ "schemars 1.2.3",
+ "serde_core",
+ "serde_json",
+ "serde_with_macros",
+ "time",
+]
+
+[[package]]
+name = "serde_with_macros"
+version = "3.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6d4e30573c8cb306ed6ab1dca8423eec9a463ea0e155f45399455e0368b27e0"
+dependencies = [
+ "darling 0.21.3",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "serde_yaml"
 version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap",
+ "indexmap 2.14.1",
  "itoa",
  "ryu",
  "serde",
@@ -17877,7 +18142,7 @@ dependencies = [
  "eyre",
  "facet",
  "facet-json",
- "frame-live 0.1.0",
+ "frame-live",
  "fts-audio-ui",
  "fts-sample",
  "futures-channel",
@@ -18674,7 +18939,7 @@ dependencies = [
  "dioxus-native",
  "dioxus-native-dom",
  "eq-ui",
- "frame-live 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
+ "frame-live",
  "fts-audio-ui",
  "fts-chrome",
  "futures",
@@ -19909,7 +20174,7 @@ dependencies = [
  "futures-util",
  "hashbrown 0.15.5",
  "hashlink",
- "indexmap",
+ "indexmap 2.14.1",
  "log",
  "memchr",
  "once_cell",
@@ -20340,7 +20605,7 @@ dependencies = [
  "encoding_rs",
  "euclid",
  "icu_segmenter",
- "indexmap",
+ "indexmap 2.14.1",
  "itertools 0.14.0",
  "itoa",
  "log",
@@ -20603,48 +20868,75 @@ dependencies = [
 ]
 
 [[package]]
-name = "surface-proto"
+name = "surface-kit"
 version = "0.1.0"
 dependencies = [
- "facet",
- "feed-proto 0.1.0",
- "serde",
+ "design-lint",
+ "document-proto",
+ "document-text",
+ "library-proto",
+ "miniz_oxide 0.8.9",
+ "render",
  "serde_json",
- "uuid",
+ "surface-memory",
+ "surface-proto",
+ "surface-runtime",
+ "surface-widgets",
+]
+
+[[package]]
+name = "surface-memory"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "feed-memory",
+ "surface-proto",
+ "tokio",
 ]
 
 [[package]]
 name = "surface-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
 dependencies = [
  "architect",
  "facet",
- "feed-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
+ "feed-proto",
  "serde",
  "serde_json",
  "uuid",
+ "vox",
 ]
 
 [[package]]
 name = "surface-runtime"
 version = "0.1.0"
 dependencies = [
- "document-proto 0.1.0",
- "motion-runtime 0.1.0",
- "surface-proto 0.1.0",
+ "architect",
+ "document-proto",
+ "kurbo 0.13.1",
+ "motion-runtime",
+ "peniko 0.6.1",
+ "render",
+ "surface-memory",
+ "surface-proto",
+ "tokio",
  "uuid",
+ "vello 0.10.0",
+ "vox-core",
+ "vox-websocket",
 ]
 
 [[package]]
-name = "surface-runtime"
+name = "surface-widgets"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7#295add1d28d98bb2dc3c60a2267f55c05d305d3e"
 dependencies = [
- "document-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "motion-runtime 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "surface-proto 0.1.0 (git+https://github.com/FastTrackStudios/frame?branch=fleet-rc7)",
- "uuid",
+ "document-bundle",
+ "document-loro",
+ "document-proto",
+ "document-text",
+ "surface-memory",
+ "surface-proto",
+ "surface-runtime",
 ]
 
 [[package]]
@@ -21275,10 +21567,11 @@ dependencies = [
 name = "theme-runtime"
 version = "0.1.0"
 dependencies = [
- "document-proto 0.1.0",
- "document-text 0.1.0",
+ "document-proto",
+ "document-text",
  "kurbo 0.13.1",
- "render 0.1.0",
+ "peniko 0.6.1",
+ "render",
  "render-canvas",
  "theme-expr",
 ]
@@ -21696,7 +21989,7 @@ version = "1.1.5+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12c0ba9680044b4ce98d391a62094047eada0d64860b80166c39f4a6b5640785"
 dependencies = [
- "indexmap",
+ "indexmap 2.14.1",
  "serde_core",
  "serde_spanned 1.1.1",
  "toml_datetime 1.1.1+spec-1.1.0",
@@ -21729,7 +22022,7 @@ version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
- "indexmap",
+ "indexmap 2.14.1",
  "toml_datetime 0.6.3",
  "winnow 0.5.40",
 ]
@@ -21740,7 +22033,7 @@ version = "0.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "396e4d48bbb2b7554c944bde63101b5ae446cff6ec4a24227428f15eb72ef338"
 dependencies = [
- "indexmap",
+ "indexmap 2.14.1",
  "serde",
  "serde_spanned 0.6.9",
  "toml_datetime 0.6.3",
@@ -21753,7 +22046,7 @@ version = "0.25.15+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1340ea94a5856333492c9064b02c778b191dd2c853778d9609debdcdfea3a614"
 dependencies = [
- "indexmap",
+ "indexmap 2.14.1",
  "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
  "winnow 1.0.4",
@@ -22590,6 +22883,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "unarray"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
+
+[[package]]
 name = "uncased"
 version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23331,7 +23630,7 @@ dependencies = [
  "facet-reflect",
  "facet-value",
  "heck 0.5.0",
- "indexmap",
+ "indexmap 2.14.1",
  "structstruck",
  "tokio",
  "vox-phon",
@@ -23403,6 +23702,15 @@ version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
  "fts-modulation",
+]
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -24019,7 +24327,7 @@ dependencies = [
  "cfg_aliases",
  "document-features",
  "hashbrown 0.16.1",
- "indexmap",
+ "indexmap 2.14.1",
  "log",
  "naga",
  "once_cell",
@@ -25496,6 +25804,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
+name = "xtask"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "resvg",
+]
+
+[[package]]
 name = "xterm-query"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -25668,7 +25984,7 @@ dependencies = [
  "crossbeam-utils",
  "displaydoc",
  "flate2",
- "indexmap",
+ "indexmap 2.14.1",
  "memchr",
  "thiserror 2.0.20",
  "zopfli",
@@ -25688,7 +26004,7 @@ dependencies = [
  "flate2",
  "getrandom 0.4.3",
  "hmac 0.13.0",
- "indexmap",
+ "indexmap 2.14.1",
  "lzma-rust2",
  "memchr",
  "pbkdf2",

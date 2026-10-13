@@ -1,0 +1,13 @@
+[package]
+name = "motion-runtime"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Evaluates a document's motions per frame: fixed-step dynamics, sources sampled from the host, shape providers, state kept across live reloads."
+
+[dependencies]
+motion-proto = { path = "../motion-proto" }
+document-proto = { path = "../../document/document-proto", default-features = false }
+
+[lints]
+workspace = true

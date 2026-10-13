@@ -1,0 +1,188 @@
+{
+  "id": "viz.delay_taps",
+  "version": 1,
+  "params": [
+    {
+      "addr": "delay/time",
+      "name": "Time",
+      "short_name": "Time",
+      "group": "Delay",
+      "kind": "Continuous",
+      "range": {
+        "min": 10.0,
+        "max": 2000.0,
+        "scale": "Logarithmic",
+        "unit": "Milliseconds",
+        "steps": null
+      },
+      "default": 0.6710334273172837,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "delay/feedback",
+      "name": "Feedback",
+      "short_name": "Feedback",
+      "group": "Delay",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.0,
+        "max": 0.98,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": null
+      },
+      "default": 0.5612244897959184,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "delay/mix",
+      "name": "Mix",
+      "short_name": "Mix",
+      "group": "Delay",
+      "kind": "Continuous",
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": null
+      },
+      "default": 0.5,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "delay/tap_div_l",
+      "name": "Left",
+      "short_name": "Left",
+      "group": "Delay",
+      "kind": {
+        "Choice": {
+          "options": [
+            "1/4",
+            "1/8.",
+            "1/8",
+            "1/8T",
+            "1/16",
+            "Golden",
+            "Silver",
+            "Free",
+            "1/4.",
+            "1/2",
+            "1/4T"
+          ]
+        }
+      },
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": 11
+      },
+      "default": 0.0,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "delay/tap_div_r",
+      "name": "Right",
+      "short_name": "Right",
+      "group": "Delay",
+      "kind": {
+        "Choice": {
+          "options": [
+            "1/4",
+            "1/8.",
+            "1/8",
+            "1/8T",
+            "1/16",
+            "Golden",
+            "Silver",
+            "Free",
+            "1/4.",
+            "1/2",
+            "1/4T"
+          ]
+        }
+      },
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": 11
+      },
+      "default": 0.1,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "delay/family",
+      "name": "Machine",
+      "short_name": "Machine",
+      "group": "Delay",
+      "kind": {
+        "Choice": {
+          "options": [
+            "Digital",
+            "Tape",
+            "Analog",
+            "Pitch",
+            "Rhythmic",
+            "Special"
+          ]
+        }
+      },
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": 6
+      },
+      "default": 0.2,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "delay/bpm",
+      "name": "Tempo",
+      "short_name": "Tempo",
+      "group": "Delay",
+      "kind": "Continuous",
+      "range": {
+        "min": 40.0,
+        "max": 240.0,
+        "scale": "Linear",
+        "unit": "Bpm",
+        "steps": null
+      },
+      "default": 0.4,
+      "bipolar": false,
+      "featured": false
+    },
+    {
+      "addr": "delay/on",
+      "name": "On",
+      "short_name": "On",
+      "group": "Delay",
+      "kind": "Toggle",
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": 2
+      },
+      "default": 1.0,
+      "bipolar": false,
+      "featured": false
+    }
+  ],
+  "actions": [],
+  "streams": [],
+  "collections": []
+}

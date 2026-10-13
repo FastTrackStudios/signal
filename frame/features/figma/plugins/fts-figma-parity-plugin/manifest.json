@@ -1,0 +1,13 @@
+{
+	"documentAccess": "dynamic-page",
+	"api": "1.0.0",
+	"networkAccess": {
+		"reasoning": "Uses a local bridge during development to save exported parity PNGs into test scenario directories.",
+		"allowedDomains": ["http://localhost:43123"],
+		"devAllowedDomains": ["http://localhost:43123"]
+	},
+	"id": "com.fts.figma.parity.generator",
+	"name": "FTS Parity Scenario Generator",
+	"main": "src/main/main.ts",
+	"editorType": ["figma"]
+}

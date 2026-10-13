@@ -295,6 +295,44 @@ members = [
     "patchbay/crates/host-coreaudio",
     "patchbay/app",
     "patchbay/app/web",
+    # ── frame ──
+    "frame/apps/frame/cli",
+    "frame/apps/frame/mcp",
+    "frame/apps/frame/desktop",
+    "frame/apps/frame/library-server",
+    "frame/crates/frame",
+    "frame/crates/frame-embed",
+    "frame/crates/frame-live",
+    "frame/features/design/design-lint",
+    "frame/features/design/design-session",
+    "frame/features/document/document-proto",
+    "frame/features/document/document-loro",
+    "frame/features/document/document-bundle",
+    "frame/features/document/document-text",
+    "frame/features/document/document-io",
+    "frame/features/feed/feed-proto",
+    "frame/features/feed/feed-dsp",
+    "frame/features/feed/feed-memory",
+    "frame/features/figma/figma-import",
+    "frame/features/figma/figma-model",
+    "frame/features/figma/figma-rest",
+    "frame/features/library/library-proto",
+    "frame/features/library/library-fs",
+    "frame/features/library/library-link",
+    "frame/features/motion/motion-proto",
+    "frame/features/motion/motion-runtime",
+    "frame/features/render/render",
+    "frame/features/render/render-fonts",
+    "frame/features/render/render-canvas",
+    "frame/features/surface/surface-proto",
+    "frame/features/surface/surface-memory",
+    "frame/features/surface/surface-runtime",
+    "frame/features/surface/surface-widgets",
+    "frame/features/surface/surface-kit",
+    "frame/features/theme/theme-expr",
+    "frame/features/theme/theme-runtime",
+    "frame/examples/plugin-faces",
+    "frame/xtask",
 ]
 
 [workspace.package]
@@ -372,11 +410,11 @@ input-keybinds = { path = "daw/crates/input/input-keybinds" }
 # docs/frame-themes.md. A path dep on a local checkout of
 # github.com/FastTrackStudios/frame while the theme runtime is built out;
 # becomes a tagged git dep once frame cuts one.
-theme-runtime = { path = "../../frame/features/theme/theme-runtime", features = ["anyrender-0-11"] }
+theme-runtime = { path = "frame/features/theme/theme-runtime", features = ["anyrender-0-11"] }
 # A frame face running live: a control surface designed in frame (the
 # rig's pedals, amps and Time blocks, a reverb's machine), painted into
 # the host's scene and played by its pointer — the FX view's devices.
-frame-live = { path = "../../frame/crates/frame-live", features = ["anyrender-0-11"] }
+frame-live = { path = "frame/crates/frame-live", features = ["anyrender-0-11"] }
 
 # ── daw domain (wave 2) ───────────────────────────────────────────────
 # Facade crate — the only public API surface for the daw domain.
@@ -1189,6 +1227,12 @@ socket2 = { version = "0.6", features = ["all"] }
 raw-window-metal = { path = "processor/vendor/raw-window-metal" }  # from processor
 winit-uikit = { path = "signal/libs/vendor/winit-uikit" }  # from signal
 wgpu-hal = { path = "signal/libs/vendor/wgpu-hal" }  # from signal
+
+# ── from frame's workspace (joined into studio) ──
+figma-api = { git = "https://github.com/gridaco/figma-api-rust.git" }
+anyrender_svg = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main" }
+taffy = { version = "0.7", default-features = false, features = ["std", "flexbox", "taffy_tree"] }
+winit = "0.30"
 
 [patch.crates-io]
 # Vendored one-line fix: parse_schema_bytes rejected every real schema

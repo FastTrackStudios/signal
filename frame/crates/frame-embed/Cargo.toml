@@ -1,0 +1,55 @@
+[package]
+name = "frame-embed"
+description = "Frame surfaces embedded in a host's strip: a mixer channel's Tone rack, REAPER's TCP/MCP inline UI. Paints into the host's own scene (record once, replay under a transform) or rasterises on the CPU."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# A `crates/` library, not a `features/*` slice: it is what a host (session's
+# mixer, a nice-plug plugin) reaches for, and it composes several features
+# (surface runtime + kit + widgets, the render collector) behind one small
+# API. It has no wire contract or backends of its own.
+
+[dependencies]
+surface-proto = { path = "../../features/surface/surface-proto", default-features = false }
+surface-runtime = { path = "../../features/surface/surface-runtime", default-features = false }
+surface-widgets = { path = "../../features/surface/surface-widgets" }
+surface-kit = { path = "../../features/surface/surface-kit" }
+document-proto = { path = "../../features/document/document-proto", default-features = false }
+# Only the primitive collector: no GPU backend is pulled in.
+render = { path = "../../features/render/render", default-features = false }
+render-fonts = { path = "../../features/render/render-fonts" }
+render-canvas = { path = "../../features/render/render-canvas" }
+
+kurbo = { workspace = true }
+peniko = { workspace = true }
+skrifa = "0.26"
+serde = { workspace = true }
+
+# CPU rasteriser (REAPER's LICE bitmap, headless renders, tests).
+vello_cpu = { version = "0.0.9", default-features = false, features = ["std", "u8_pipeline"], optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+
+# Paint straight into an anyrender 0.11 `PaintScene` (session's mixer
+# records into `anyrender::Scene` 0.11). Renamed so frame's own anyrender
+# (git main) can sit beside it in one graph.
+# REAPER TCP/MCP embedding through nice-plug's `EmbeddedEditor`.
+nice-plug-core = { git = "https://github.com/FastTrackStudios/nice-plug.git", branch = "fts-baseview-03", optional = true }
+
+anyrender_0_11 = { package = "anyrender", version = "0.11", optional = true }
+
+[features]
+default = ["cpu"]
+cpu = ["dep:vello_cpu", "dep:image"]
+anyrender-0-11 = ["dep:anyrender_0_11", "render-canvas/anyrender-0-11"]
+nice-plug = ["cpu", "dep:nice-plug-core"]
+
+[dev-dependencies]
+surface-memory = { path = "../../features/surface/surface-memory" }
+
+[[example]]
+name = "strips"
+required-features = ["cpu"]
+
+[lints]
+workspace = true

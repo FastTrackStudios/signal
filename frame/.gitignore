@@ -1,0 +1,22 @@
+/target/
+**/target/
+*.rs.bk
+*.pdb
+.DS_Store
+.direnv/
+.env
+*.log
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+node_modules/
+.pnpm-store/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
+.beads/.beads-credential-key
+.tmp/
+.claude/worktrees/

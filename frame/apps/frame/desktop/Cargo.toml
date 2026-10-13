@@ -1,0 +1,40 @@
+[package]
+name = "frame-desktop"
+description = "Frame desktop player: runs a control surface live against an engine, hot-reloading its markup."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "frame"
+path = "src/main.rs"
+
+[dependencies]
+render = { path = "../../../features/render/render", features = ["anyrender"] }
+document-proto = { path = "../../../features/document/document-proto", default-features = false }
+document-text = { path = "../../../features/document/document-text" }
+document-io = { path = "../../../features/document/document-io" }
+surface-proto = { path = "../../../features/surface/surface-proto" }
+surface-runtime = { path = "../../../features/surface/surface-runtime", features = ["remote"] }
+surface-widgets = { path = "../../../features/surface/surface-widgets" }
+surface-memory = { path = "../../../features/surface/surface-memory" }
+feed-memory = { path = "../../../features/feed/feed-memory" }
+library-link = { path = "../../../features/library/library-link" }
+design-lint = { path = "../../../features/design/design-lint" }
+serde_json = { workspace = true }
+kurbo = { workspace = true }
+peniko = { workspace = true }
+vello = { version = "0.10.0" }  # frame's own version (not the workspace's)
+winit = { workspace = true }
+pollster = { workspace = true }
+image = { version = "0.25" }  # frame's own version (not the workspace's)
+# `--engine`: the background runtime that owns the remote engine link.
+tokio = { workspace = true }
+architect = { workspace = true, features = ["platform"] }
+
+[dev-dependencies]
+library-fs = { path = "../../../features/library/library-fs" }
+architect = { workspace = true, features = ["platform", "vox", "local"] }
+
+[lints]
+workspace = true

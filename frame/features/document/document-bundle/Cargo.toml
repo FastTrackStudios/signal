@@ -1,0 +1,23 @@
+[package]
+name = "document-bundle"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "The `.frame` file: a zip of a styx manifest, the Loro snapshot and content-addressed assets."
+
+[dependencies]
+document-proto = { path = "../document-proto", default-features = false }
+document-loro = { path = "../document-loro" }
+facet.workspace = true
+facet-styx = "5.0.0-rc.7"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+blake3 = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "wasmbind", "serde"] }  # frame's own version (not the workspace's)
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+figma-import = { path = "../../figma/figma-import" }
+
+[lints]
+workspace = true

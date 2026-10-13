@@ -1,0 +1,17 @@
+{
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "plugma dev",
+		"watch": "plugma dev",
+		"build": "plugma build",
+		"release": "plugma release"
+	},
+	"devDependencies": {
+		"vite": "^7.0.0",
+		"@figma/plugin-typings": "^1.100.2",
+		"plugma": "^2.2.3",
+		"tslib": "^2.8.0",
+		"typescript": "~5.6.2"
+	}
+}

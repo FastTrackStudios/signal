@@ -1,0 +1,164 @@
+{
+  "id": "comp.fet_1176",
+  "version": 1,
+  "params": [
+    {
+      "addr": "1176/input",
+      "name": "Input",
+      "short_name": null,
+      "group": "FET",
+      "kind": "Continuous",
+      "range": {
+        "min": -48.0,
+        "max": 0.0,
+        "scale": "Linear",
+        "unit": "Db",
+        "steps": null
+      },
+      "default": 0.62,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "1176/output",
+      "name": "Output",
+      "short_name": null,
+      "group": "FET",
+      "kind": "Continuous",
+      "range": {
+        "min": -48.0,
+        "max": 0.0,
+        "scale": "Linear",
+        "unit": "Db",
+        "steps": null
+      },
+      "default": 0.75,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "1176/attack",
+      "name": "Attack",
+      "short_name": null,
+      "group": "FET",
+      "kind": "Continuous",
+      "range": {
+        "min": 1.0,
+        "max": 7.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": null
+      },
+      "default": 0.5,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "1176/release",
+      "name": "Release",
+      "short_name": null,
+      "group": "FET",
+      "kind": "Continuous",
+      "range": {
+        "min": 1.0,
+        "max": 7.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": null
+      },
+      "default": 0.5,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "1176/ratio",
+      "name": "Ratio",
+      "short_name": null,
+      "group": "FET",
+      "kind": {
+        "Choice": {
+          "options": [
+            "4",
+            "8",
+            "12",
+            "20",
+            "All"
+          ]
+        }
+      },
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": 5
+      },
+      "default": 0.0,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "1176/meter",
+      "name": "Meter",
+      "short_name": null,
+      "group": "FET",
+      "kind": {
+        "Choice": {
+          "options": [
+            "GR",
+            "+8",
+            "+4",
+            "Off"
+          ]
+        }
+      },
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": 4
+      },
+      "default": 0.0,
+      "bipolar": false,
+      "featured": true
+    },
+    {
+      "addr": "1176/on",
+      "name": "Power",
+      "short_name": null,
+      "group": "FET",
+      "kind": "Toggle",
+      "range": {
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "Linear",
+        "unit": "None",
+        "steps": 2
+      },
+      "default": 1.0,
+      "bipolar": false,
+      "featured": true
+    }
+  ],
+  "actions": [],
+  "streams": [
+    {
+      "id": "1176/gr",
+      "name": "Gain Reduction",
+      "kind": "GainReduction",
+      "rate_hz": 30.0
+    },
+    {
+      "id": "1176/out",
+      "name": "Output",
+      "kind": {
+        "Level": {
+          "channels": 2
+        }
+      },
+      "rate_hz": 30.0
+    }
+  ],
+  "collections": []
+}

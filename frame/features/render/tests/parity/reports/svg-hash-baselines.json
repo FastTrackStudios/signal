@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "baselines": [
+    {
+      "scenario": "primitives.single-pixel-anchor",
+      "sha256": "5ffa24fe69b9cb2a17b58f827a4656b6de0f4404287941c71693592acfa86599"
+    }
+  ]
+}

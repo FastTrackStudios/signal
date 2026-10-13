@@ -1,0 +1,139 @@
+{
+  "generatedAt": "2026-03-04T08:01:55Z",
+  "exportPath": "tests/frame/parity/scenarios/effects.inner-shadow-matrix/latest-bridge-export.json",
+  "featureCoverage": {
+    "schema": "fts.figma.export/v2",
+    "nodeCount": 6,
+    "nodeTypeCounts": {
+      "FRAME": 1,
+      "RECTANGLE": 3,
+      "TEXT": 2
+    },
+    "features": {
+      "hasMask": 0,
+      "alphaMask": 0,
+      "luminanceMask": 0,
+      "hasClip": 1,
+      "nonNormalBlend": 0,
+      "gradientFill": 0,
+      "imageFill": 0,
+      "dropShadow": 0,
+      "innerShadow": 3,
+      "layerBlur": 0,
+      "backgroundBlur": 0,
+      "svgExported": 0
+    }
+  },
+  "visualAcceptance": {
+    "actualDir": "tests/frame/parity/scenarios/effects.inner-shadow-matrix/actual.png",
+    "expectedDir": "tests/frame/parity/scenarios/effects.inner-shadow-matrix/expected.png",
+    "thresholdPercent": 0,
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "missingActual": 0,
+    "results": [
+      {
+        "path": "expected.png",
+        "status": "fail",
+        "error": "warning: associated functions `from_fts_export_json` and `from_grida_bridge_json` are never used\n   --> crates/frame-proto/src/document.rs:147:8\n    |\n146 | impl FrameDocument {\n    | ------------------ associated functions in this implementation\n147 |     fn from_fts_export_json(json: &str) -> Result<Self, FrameDocumentError> {\n    |        ^^^^^^^^^^^^^^^^^^^^\n...\n251 |     fn from_grida_bridge_json(json: &str) -> Result<Self, FrameDocumentError> {\n    |        ^^^^^^^^^^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused variable: `x`\n    --> crates/frame-ui/src/anyrender_renderer/paint.rs:1074:9\n     |\n1074 |         x: f64,\n     |         ^ help: if this is intentional, prefix it with an underscore: `_x`\n     |\n     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused variable: `y`\n    --> crates/frame-ui/src/anyrender_renderer/paint.rs:1075:9\n     |\n1075 |         y: f64,\n     |         ^ help: if this is intentional, prefix it with an underscore: `_y`\n\n{\"actual\":\"tests/frame/parity/scenarios/effects.inner-shadow-matrix/actual.png\",\"expected\":\"tests/frame/parity/scenarios/effects.inner-shadow-matrix/expected.png\",\"width\":1920,\"height\":1080,\"diffPixels\":19112,\"diffPercent\":0.921682,\"meanAbsDeltaPerChannel\":0.197554,\"maxChannelDelta\":245,\"thresholdPercent\":0.000000,\"passed\":false}\nvisual_diff error: diff_percent 0.9217% exceeded threshold 0.0000%"
+      }
+    ]
+  },
+  "performance": {
+    "avg": {
+      "importMs": 1.7106806666666667,
+      "layoutMs": 0.136972,
+      "nodeCount": 7,
+      "passCounts": {
+        "clipEnd": 0,
+        "clipStart": 0,
+        "layerEnd": 0,
+        "layerStart": 0,
+        "maskApplyEnd": 0,
+        "maskApplyStart": 0,
+        "maskDefEnd": 0,
+        "maskDefStart": 0,
+        "path": 5,
+        "rect": 1,
+        "text": 0
+      },
+      "primitiveCount": 6,
+      "primitiveMs": 0.198014,
+      "sceneMs": 1.677028,
+      "totalMs": 3.751194333333333
+    },
+    "bytes": 55998,
+    "input": "tests/frame/parity/scenarios/effects.inner-shadow-matrix/latest-bridge-export.json",
+    "iterations": 3,
+    "readMs": 0.097959,
+    "root": "0:1",
+    "samples": [
+      {
+        "importMs": 2.778792,
+        "layoutMs": 0.345458,
+        "nodeCount": 7,
+        "primitiveCount": 6,
+        "primitiveMs": 0.35612499999999997,
+        "sceneMs": 3.024209,
+        "totalMs": 6.581917
+      },
+      {
+        "importMs": 1.2381250000000001,
+        "layoutMs": 0.039792,
+        "nodeCount": 7,
+        "primitiveCount": 6,
+        "primitiveMs": 0.143084,
+        "sceneMs": 1.1119999999999999,
+        "totalMs": 2.5377910000000004
+      },
+      {
+        "importMs": 1.115125,
+        "layoutMs": 0.025666,
+        "nodeCount": 7,
+        "primitiveCount": 6,
+        "primitiveMs": 0.094833,
+        "sceneMs": 0.8948750000000001,
+        "totalMs": 2.1338749999999997
+      }
+    ]
+  },
+  "renderDiagnostics": {
+    "input": "tests/frame/parity/scenarios/effects.inner-shadow-matrix/latest-bridge-export.json",
+    "root": "0:1",
+    "summary": "Render diag: nodes 7 | blend 0 | grad 0 | image 0 | drop 0 | inner 3 | blur 0 (approx 0) | bg-blur 0 (approx 0) | alpha-mask 0 | luminance-mask 0*",
+    "diagnostics": {
+      "totalNodes": 7,
+      "nonNormalBlendNodes": 0,
+      "gradientFillNodes": 0,
+      "imageFillNodes": 0,
+      "dropShadowNodes": 0,
+      "innerShadowNodes": 3,
+      "layerBlurNodes": 0,
+      "layerBlurApproxNodes": 0,
+      "backgroundBlurNodes": 0,
+      "backgroundBlurApproxNodes": 0,
+      "alphaMaskNodes": 0,
+      "luminanceMaskNodes": 0
+    }
+  },
+  "importDiagnostics": {
+    "input": "tests/frame/parity/scenarios/effects.inner-shadow-matrix/latest-bridge-export.json",
+    "sourceSchema": "fts.figma.export/v2",
+    "normalizedAliases": 0,
+    "unsupportedNodeKeyCount": 0,
+    "topUnsupportedKeys": []
+  },
+  "gates": {
+    "visualPass": false,
+    "hasLuminanceMasks": false,
+    "hasLayerBlur": false,
+    "hasBackgroundBlur": false,
+    "renderHasLayerBlurApprox": false,
+    "renderHasBackgroundBlurApprox": false,
+    "renderHasLuminanceMaskApprox": false,
+    "importHasUnsupportedKeys": false,
+    "parityPass": true,
+    "blockers": []
+  }
+}

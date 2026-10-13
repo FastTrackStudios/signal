@@ -1,0 +1,439 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #1b1c1f;
+        color: #f1f3f5;
+      }
+      .root {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+      }
+      .card {
+        background: #24262b;
+        border: 1px solid #343841;
+        border-radius: 8px;
+        padding: 10px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .row.wrap {
+        flex-wrap: wrap;
+      }
+      .title {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #a9b1bf;
+        margin: 0 0 8px 0;
+      }
+      .muted {
+        color: #a9b1bf;
+        font-size: 12px;
+      }
+      .strong {
+        font-weight: 600;
+        color: #f8f9fb;
+      }
+      label {
+        font-size: 12px;
+      }
+      button {
+        border: 1px solid #3f77ff;
+        background: #2a5be6;
+        color: white;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      button.secondary {
+        border-color: #4f5565;
+        background: #303444;
+      }
+      button.ghost {
+        border-color: #4f5565;
+        background: transparent;
+      }
+      input[type='number'] {
+        width: 70px;
+        background: #1b1c1f;
+        color: #fff;
+        border: 1px solid #4f5565;
+        border-radius: 4px;
+        padding: 4px 6px;
+      }
+      input[type='text'] {
+        width: 100%;
+        background: #1b1c1f;
+        color: #fff;
+        border: 1px solid #4f5565;
+        border-radius: 4px;
+        padding: 6px 8px;
+        box-sizing: border-box;
+      }
+      textarea {
+        width: 100%;
+        height: 260px;
+        resize: vertical;
+        border: 1px solid #4f5565;
+        border-radius: 6px;
+        background: #111216;
+        color: #d5d9e2;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.35;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      .status {
+        font-size: 12px;
+      }
+      .status.error {
+        color: #ff8f8f;
+      }
+      .status.ok {
+        color: #95d8a6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="root">
+      <div class="card">
+        <p class="title">Selection</p>
+        <div id="selectionText" class="muted">No layers selected.</div>
+        <div id="pinnedText" class="muted" style="margin-top: 6px">Pinned export frame: none</div>
+        <div class="row wrap" style="margin-top: 8px">
+          <select id="framePicker" style="flex: 1; min-width: 180px; background: #1b1c1f; color: #fff; border: 1px solid #4f5565; border-radius: 4px; padding: 6px 8px;">
+            <option value="">No frames on this page</option>
+          </select>
+          <button id="selectFrame" class="secondary">Select Frame</button>
+          <button id="pinFromSelection" class="secondary">Use Canvas Selection</button>
+          <button id="clearPinned" class="ghost">Clear</button>
+          <button id="refreshFrames" class="ghost">Refresh</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="title">Export Options</p>
+        <div class="row wrap">
+          <label><input id="includeSvg" type="checkbox" checked /> Include SVG per node</label>
+          <label><input id="includePng" type="checkbox" /> Include PNG per node</label>
+          <label><input id="liveBridge" type="checkbox" checked /> Live sync sends to bridge</label>
+        </div>
+        <div class="row" style="margin-top: 8px">
+          <label>Max depth</label>
+          <input id="maxDepth" type="number" min="1" max="32" value="16" />
+        </div>
+        <div class="row wrap" style="margin-top: 10px">
+          <button id="exportNow">Export Now</button>
+          <button id="exportBridge">Send to /tmp Bridge</button>
+          <button id="copyJson" class="secondary">Copy JSON</button>
+          <button id="downloadJson" class="secondary">Download JSON</button>
+          <button id="toggleLive" class="ghost">Enable Live Sync</button>
+        </div>
+        <div style="margin-top: 8px">
+          <label>Bridge URL</label>
+          <input id="bridgeUrl" type="text" value="http://localhost:43123/figma-export" />
+        </div>
+        <div style="margin-top: 8px">
+          <label>Parity root dir (bridge host path)</label>
+          <input id="parityRootDir" type="text" value="/Users/codywright/Documents/Development/FastTrackStudio/frame/features/render/tests/parity/scenarios" />
+        </div>
+        <div class="row wrap" style="margin-top: 10px">
+          <button id="validateCore10" class="secondary">Validate Core 10 Frames</button>
+          <button id="generateCore10" class="secondary">Generate Core 10 Scenarios</button>
+          <button id="exportCore10" class="secondary">Export Core 10 to Bridge</button>
+          <button id="exportAllParity" class="secondary">Export All Parity to Bridge</button>
+        </div>
+        <div id="status" class="status muted" style="margin-top: 8px">Ready.</div>
+      </div>
+
+      <div class="card">
+        <p class="title">Payload</p>
+        <textarea id="payload" placeholder="Exported payload appears here..."></textarea>
+      </div>
+    </div>
+
+    <script>
+      const selectionText = document.getElementById('selectionText');
+      const pinnedText = document.getElementById('pinnedText');
+      const framePicker = document.getElementById('framePicker');
+      const includeSvg = document.getElementById('includeSvg');
+      const includePng = document.getElementById('includePng');
+      const maxDepth = document.getElementById('maxDepth');
+      const payload = document.getElementById('payload');
+      const status = document.getElementById('status');
+      const toggleLive = document.getElementById('toggleLive');
+      const bridgeUrl = document.getElementById('bridgeUrl');
+      const liveBridge = document.getElementById('liveBridge');
+      const parityRootDir = document.getElementById('parityRootDir');
+
+      let latestJson = '';
+      let liveEnabled = false;
+      let frameCatalog = [];
+      let pinnedIds = [];
+
+      function readOptions() {
+        return {
+          includeSvg: includeSvg.checked,
+          includePng: includePng.checked,
+          maxDepth: Number(maxDepth.value) || 16,
+        };
+      }
+
+      function setStatus(message, kind = 'muted') {
+        status.textContent = message;
+        status.className = `status ${kind}`;
+      }
+
+      document.getElementById('exportNow').onclick = () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: 'export-now',
+              options: readOptions(),
+            },
+          },
+          '*',
+        );
+        setStatus('Exporting...', 'muted');
+      };
+
+      document.getElementById('copyJson').onclick = async () => {
+        if (!latestJson) {
+          setStatus('Nothing to copy yet. Export first.', 'error');
+          return;
+        }
+        await navigator.clipboard.writeText(latestJson);
+        setStatus('Copied payload to clipboard.', 'ok');
+      };
+
+      document.getElementById('exportBridge').onclick = () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: 'export-to-bridge',
+              options: readOptions(),
+              bridgeUrl: bridgeUrl.value,
+            },
+          },
+          '*',
+        );
+        setStatus('Sending to bridge...', 'muted');
+      };
+
+      document.getElementById('downloadJson').onclick = () => {
+        if (!latestJson) {
+          setStatus('Nothing to download yet. Export first.', 'error');
+          return;
+        }
+        const blob = new Blob([latestJson], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fts-figma-export-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setStatus('Downloaded JSON payload.', 'ok');
+      };
+
+      toggleLive.onclick = () => {
+        liveEnabled = !liveEnabled;
+        toggleLive.textContent = liveEnabled ? 'Disable Live Sync' : 'Enable Live Sync';
+        parent.postMessage({ pluginMessage: { type: 'set-live', enabled: liveEnabled } }, '*');
+      };
+
+      liveBridge.onchange = () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: 'set-live-bridge',
+              bridgeEnabled: liveBridge.checked,
+              bridgeUrl: bridgeUrl.value,
+            },
+          },
+          '*',
+        );
+      };
+
+      document.getElementById('selectFrame').onclick = () => {
+        const nodeId = framePicker.value;
+        if (!nodeId) {
+          setStatus('Choose a frame first.', 'error');
+          return;
+        }
+        parent.postMessage({ pluginMessage: { type: 'set-export-root-by-id', nodeId } }, '*');
+      };
+
+      document.getElementById('pinFromSelection').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'set-export-roots-from-selection' } }, '*');
+      };
+
+      document.getElementById('clearPinned').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'clear-export-roots' } }, '*');
+      };
+
+      document.getElementById('refreshFrames').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'refresh-frames' } }, '*');
+      };
+
+      document.getElementById('validateCore10').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'validate-core10' } }, '*');
+        setStatus('Validating Core 10 frame coverage...', 'muted');
+      };
+
+      document.getElementById('generateCore10').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'generate-core10-scenarios' } }, '*');
+        setStatus('Generating Core 10 scenario frames...', 'muted');
+      };
+
+      document.getElementById('exportCore10').onclick = () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: 'export-core10-to-bridge',
+              options: readOptions(),
+              bridgeUrl: bridgeUrl.value,
+              parityRootDir: parityRootDir.value,
+            },
+          },
+          '*',
+        );
+        setStatus('Exporting Core 10 parity pack to bridge...', 'muted');
+      };
+
+      document.getElementById('exportAllParity').onclick = () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: 'export-all-parity-to-bridge',
+              options: readOptions(),
+              bridgeUrl: bridgeUrl.value,
+              parityRootDir: parityRootDir.value,
+            },
+          },
+          '*',
+        );
+        setStatus('Exporting all parity frames to bridge...', 'muted');
+      };
+
+      function renderFramePicker() {
+        const current = framePicker.value;
+        framePicker.innerHTML = '';
+        if (frameCatalog.length === 0) {
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = 'No frames on this page';
+          framePicker.appendChild(option);
+          return;
+        }
+        for (const frame of frameCatalog) {
+          const option = document.createElement('option');
+          option.value = frame.id;
+          option.textContent = `${frame.name} (${frame.id})`;
+          framePicker.appendChild(option);
+        }
+        if (pinnedIds.length > 0) {
+          framePicker.value = pinnedIds[0];
+        } else if (current && frameCatalog.some((f) => f.id === current)) {
+          framePicker.value = current;
+        }
+      }
+
+      window.onmessage = (event) => {
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
+
+        if (msg.type === 'selection-summary') {
+          if (!msg.hasSelection) {
+            selectionText.textContent = 'No layers selected.';
+            return;
+          }
+          selectionText.innerHTML = `<span class="strong">${msg.selectionCount}</span> selected: ${msg.selectedNames.join(', ')}`;
+          return;
+        }
+
+        if (msg.type === 'pinned-roots-summary') {
+          if (!msg.hasPinned) {
+            pinnedText.textContent = 'Pinned export frame: none';
+          } else {
+            pinnedText.innerHTML = `<span class="strong">Pinned</span>: ${msg.names.join(', ')}`;
+          }
+          return;
+        }
+
+        if (msg.type === 'frame-catalog') {
+          frameCatalog = Array.isArray(msg.frames) ? msg.frames : [];
+          pinnedIds = Array.isArray(msg.pinnedIds) ? msg.pinnedIds : [];
+          renderFramePicker();
+          return;
+        }
+
+        if (msg.type === 'export-result') {
+          latestJson = msg.json;
+          payload.value = latestJson;
+          setStatus(
+            `Exported ${msg.stats.totalNodes} nodes (${msg.stats.totalRoots} roots, ${msg.stats.bytes.toLocaleString()} bytes).`,
+            'ok',
+          );
+          return;
+        }
+
+        if (msg.type === 'export-error') {
+          setStatus(msg.message, 'error');
+          return;
+        }
+
+        if (msg.type === 'bridge-result') {
+          const scenarioNote =
+            typeof msg.totalScenarios === 'number'
+              ? ` (${msg.totalScenarios} scenarios)`
+              : '';
+          const missing = Array.isArray(msg.missingCoreFrames) ? msg.missingCoreFrames : [];
+          const missingNote =
+            missing.length > 0
+              ? ` Missing Core frames: ${missing.join(', ')}.`
+              : '';
+          setStatus(
+            `Bridge wrote ${msg.bytes?.toLocaleString?.() ?? 'payload'} bytes (${msg.totalNodes} nodes)${scenarioNote} to ${msg.path}.${missingNote}`,
+            missing.length > 0 ? 'muted' : 'ok',
+          );
+          return;
+        }
+
+        if (msg.type === 'bridge-error') {
+          setStatus(msg.message, 'error');
+          return;
+        }
+
+        if (msg.type === 'core10-validation-result') {
+          const missing = Array.isArray(msg.missing) ? msg.missing : [];
+          const found = Array.isArray(msg.found) ? msg.found : [];
+          const extras = Array.isArray(msg.extraParityFrames) ? msg.extraParityFrames : [];
+          if (missing.length === 0) {
+            setStatus(
+              `Core 10 validated: found ${found.length}/10${extras.length > 0 ? `, extra parity frames: ${extras.length}` : ''}.`,
+              'ok',
+            );
+          } else {
+            setStatus(`Missing Core 10 frames: ${missing.join(', ')}`, 'error');
+          }
+        }
+      };
+    </script>
+  </body>
+</html>

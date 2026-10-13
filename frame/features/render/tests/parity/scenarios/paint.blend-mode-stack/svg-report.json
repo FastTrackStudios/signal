@@ -1,0 +1,37 @@
+{
+  "scenarioId": "paint.blend-mode-stack",
+  "strictEqual": true,
+  "byteEqual": false,
+  "structureEqual": true,
+  "canonicalEqual": true,
+  "canonicalNote": "ok_via_structure_tolerance",
+  "expectedSvg": "tests/frame/parity/scenarios/paint.blend-mode-stack/expected.svg",
+  "actualSvg": "tests/frame/parity/scenarios/paint.blend-mode-stack/actual.svg",
+  "expectedSha256": "bfcbe652364014f610398fe6114d8e2bea05fb607412f06863c4cd5c59f6a500",
+  "actualSha256": "7af59facb687691d587bd3c868e749df34de2b9bfb79251799652e4124bbe389",
+  "expectedBytes": 44891,
+  "actualBytes": 45742,
+  "canonicalDiff": {
+    "equal": false,
+    "actual_path": "tests/frame/parity/scenarios/paint.blend-mode-stack/actual.svg",
+    "expected_path": "tests/frame/parity/scenarios/paint.blend-mode-stack/expected.svg",
+    "precision": 4,
+    "actual_elements": 11,
+    "expected_elements": 11,
+    "actual_paths": 3,
+    "expected_paths": 3,
+    "actual_canonical_len": 47726,
+    "expected_canonical_len": 46824,
+    "first_diff_offset": 1236,
+    "first_diff_actual": "5 35.4716C32.9015 34.8513 32.5488 34.3613 32.0753 34.0014C31.6065 33.6368 31.0171 33.4546 30.3068 33.4546C29.625 33.4546 29.0521 33.6274 28.5881 33.973C28.1241 ",
+    "first_diff_expected": "5 35.4716C32.9015 34.8513 32.5488 34.3613 32.0753 34.0014C31.6065 33.6368 31.017 33.4545 30.3068 33.4545C29.625 33.4545 29.0521 33.6274 28.5881 33.973C28.1241 3"
+  },
+  "structureDiff": {
+    "equal": true,
+    "actual_path": "tests/frame/parity/scenarios/paint.blend-mode-stack/actual.svg",
+    "expected_path": "tests/frame/parity/scenarios/paint.blend-mode-stack/expected.svg",
+    "abs_tol": 0.006,
+    "rel_tol": 0.0,
+    "first_mismatch": null
+  }
+}

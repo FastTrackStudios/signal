@@ -1,0 +1,21 @@
+[package]
+name = "document-text"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "frame markup: the JSX-like text form of a Scene (git diffs, LLM authoring). Law: parse(print(s)) == s."
+
+[dependencies]
+document-proto = { path = "../document-proto", default-features = false }
+serde.workspace = true
+# `float_roundtrip`: numbers inside `{json}` values must parse back to the exact f64.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+uuid.workspace = true
+
+[dev-dependencies]
+figma-import = { path = "../../figma/figma-import" }
+proptest = "1"
+surface-proto = { path = "../../surface/surface-proto", default-features = false }
+
+[lints]
+workspace = true

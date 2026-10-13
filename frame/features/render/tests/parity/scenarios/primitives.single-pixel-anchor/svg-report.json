@@ -1,0 +1,30 @@
+{
+  "scenarioId": "primitives.single-pixel-anchor",
+  "strictEqual": true,
+  "byteEqual": true,
+  "structureEqual": false,
+  "canonicalEqual": true,
+  "canonicalNote": "ok",
+  "expectedSvg": "tests/frame/parity/scenarios/primitives.single-pixel-anchor/expected.svg",
+  "actualSvg": "tests/frame/parity/scenarios/primitives.single-pixel-anchor/actual.svg",
+  "expectedSha256": "5ffa24fe69b9cb2a17b58f827a4656b6de0f4404287941c71693592acfa86599",
+  "actualSha256": "5ffa24fe69b9cb2a17b58f827a4656b6de0f4404287941c71693592acfa86599",
+  "expectedBytes": 219,
+  "actualBytes": 219,
+  "canonicalDiff": {
+    "equal": true,
+    "actual_path": "tests/frame/parity/scenarios/primitives.single-pixel-anchor/actual.svg",
+    "expected_path": "tests/frame/parity/scenarios/primitives.single-pixel-anchor/expected.svg",
+    "precision": 4,
+    "actual_elements": 3,
+    "expected_elements": 3,
+    "actual_paths": 0,
+    "expected_paths": 0,
+    "actual_canonical_len": 168,
+    "expected_canonical_len": 168,
+    "first_diff_offset": null,
+    "first_diff_actual": null,
+    "first_diff_expected": null
+  },
+  "structureDiff": null
+}

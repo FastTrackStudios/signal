@@ -24,7 +24,7 @@ while read -r _repo from to; do
     [[ -z $_repo || $_repo == \#* ]] && continue
     excludes+=("${to:-$from}")
 done < assets.txt
-while read -r repo dir branch from; do
+while read -r repo dir branch from skip; do
     [[ -z $repo || $repo == \#* ]] && continue
     if (( ${#want[@]} )) && [[ ! " ${want[*]} " == *" $repo "* ]]; then continue; fi
     src=$FTS/$repo
@@ -36,6 +36,8 @@ while read -r repo dir branch from; do
         if [[ $dir == . ]]; then ex+=(":(exclude)$f")
         elif [[ $f == "$dir"/* ]]; then ex+=(":(exclude)${f#"$dir"/}"); fi
     done
+    IFS=, read -ra never <<< "${skip:-}"
+    for n in "${never[@]}"; do ex+=(":(exclude)$n"); done
     pathspec=(. ":(exclude)Cargo.toml" ":(exclude)Cargo.lock" "${ex[@]}")
     [[ $dir == . ]] && pathspec=(. "${ex[@]}" ":(exclude)Cargo.lock")
     echo "$repo: ${from:0:9}..${to:0:9} ($(git -C "$src" rev-list --count "$from..$to") commits)"

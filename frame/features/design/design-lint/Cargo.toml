@@ -1,0 +1,21 @@
+[package]
+name = "design-lint"
+description = "Surface lint: wiring, slots, touch targets, consistency, contrast, overlap — actionable issues for people and models."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+document-proto = { path = "../../document/document-proto", default-features = false }
+surface-proto = { path = "../../surface/surface-proto", default-features = false }
+render = { path = "../../render/render", default-features = false }
+motion-runtime = { path = "../../motion/motion-runtime" }
+facet.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+surface-widgets = { path = "../../surface/surface-widgets" }
+surface-memory = { path = "../../surface/surface-memory" }
+
+[lints]
+workspace = true

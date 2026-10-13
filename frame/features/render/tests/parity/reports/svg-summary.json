@@ -1,0 +1,171 @@
+{
+  "generatedAt": "2026-03-04T08:03:50Z",
+  "root": "tests/frame/parity",
+  "mode": "all",
+  "precision": 4,
+  "canonicalTool": "frame-ui/svg_canonical_diff",
+  "total": 26,
+  "strictPass": 24,
+  "strictFail": 2,
+  "canonicalPass": 24,
+  "canonicalFail": 2,
+  "skipped": 0,
+  "scenarios": [
+    {
+      "scenarioId": "effects.background-blur-stress",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/effects.background-blur-stress/svg-report.json"
+    },
+    {
+      "scenarioId": "effects.drop-shadow-matrix",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/effects.drop-shadow-matrix/svg-report.json"
+    },
+    {
+      "scenarioId": "effects.effect-ordering",
+      "strictEqual": false,
+      "canonicalEqual": false,
+      "report": "tests/frame/parity/scenarios/effects.effect-ordering/svg-report.json"
+    },
+    {
+      "scenarioId": "effects.inner-shadow-matrix",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/effects.inner-shadow-matrix/svg-report.json"
+    },
+    {
+      "scenarioId": "effects.layer-background-blur",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/effects.layer-background-blur/svg-report.json"
+    },
+    {
+      "scenarioId": "effects.shadow-matrix",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/effects.shadow-matrix/svg-report.json"
+    },
+    {
+      "scenarioId": "images.fill-mode-matrix",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/images.fill-mode-matrix/svg-report.json"
+    },
+    {
+      "scenarioId": "images.image-sampling",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/images.image-sampling/svg-report.json"
+    },
+    {
+      "scenarioId": "layout.auto-layout-hug-fill",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/layout.auto-layout-hug-fill/svg-report.json"
+    },
+    {
+      "scenarioId": "masks.clip-content-nesting",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/masks.clip-content-nesting/svg-report.json"
+    },
+    {
+      "scenarioId": "masks.mask-clip-interactions",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/masks.mask-clip-interactions/svg-report.json"
+    },
+    {
+      "scenarioId": "masks.vector-text-image-mask",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/masks.vector-text-image-mask/svg-report.json"
+    },
+    {
+      "scenarioId": "paint.blend-mode-combos",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/paint.blend-mode-combos/svg-report.json"
+    },
+    {
+      "scenarioId": "paint.blend-mode-stack",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/paint.blend-mode-stack/svg-report.json"
+    },
+    {
+      "scenarioId": "paint.gradient-matrix",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/paint.gradient-matrix/svg-report.json"
+    },
+    {
+      "scenarioId": "primitives.fractional-geometry",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/primitives.fractional-geometry/svg-report.json"
+    },
+    {
+      "scenarioId": "primitives.single-pixel-anchor",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/primitives.single-pixel-anchor/svg-report.json"
+    },
+    {
+      "scenarioId": "regression.kitchen-sink",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/regression.kitchen-sink/svg-report.json"
+    },
+    {
+      "scenarioId": "regression.tough-1176-blue-face",
+      "strictEqual": false,
+      "canonicalEqual": false,
+      "report": "tests/frame/parity/scenarios/regression.tough-1176-blue-face/svg-report.json"
+    },
+    {
+      "scenarioId": "strokes.caps-joins-dashes",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/strokes.caps-joins-dashes/svg-report.json"
+    },
+    {
+      "scenarioId": "text.alignment-truncation",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/text.alignment-truncation/svg-report.json"
+    },
+    {
+      "scenarioId": "text.font-weight-style",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/text.font-weight-style/svg-report.json"
+    },
+    {
+      "scenarioId": "text.mixed-style-runs",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/text.mixed-style-runs/svg-report.json"
+    },
+    {
+      "scenarioId": "text.text-advanced",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/text.text-advanced/svg-report.json"
+    },
+    {
+      "scenarioId": "transform.nested-transform-stack",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/transform.nested-transform-stack/svg-report.json"
+    },
+    {
+      "scenarioId": "transform.transform-precision",
+      "strictEqual": true,
+      "canonicalEqual": true,
+      "report": "tests/frame/parity/scenarios/transform.transform-precision/svg-report.json"
+    }
+  ]
+}

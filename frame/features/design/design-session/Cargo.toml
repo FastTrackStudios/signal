@@ -1,0 +1,24 @@
+[package]
+name = "design-session"
+description = "One document-editing session with one tool registry — the surface every AI adapter (MCP, chat, CLI) dispatches into."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+document-proto = { path = "../../document/document-proto", default-features = false }
+document-text = { path = "../../document/document-text" }
+document-io = { path = "../../document/document-io" }
+surface-proto = { path = "../../surface/surface-proto", default-features = false }
+surface-widgets = { path = "../../surface/surface-widgets" }
+surface-kit = { path = "../../surface/surface-kit" }
+design-lint = { path = "../design-lint" }
+render-fonts = { path = "../../render/render-fonts" }
+serde_json = { workspace = true }
+uuid.workspace = true
+
+[dev-dependencies]
+surface-memory = { path = "../../surface/surface-memory" }
+
+[lints]
+workspace = true

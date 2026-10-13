@@ -1,0 +1,12 @@
+[package]
+name = "feed-dsp"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Realtime-safe feed producers engines share: spectrum, history, level, scope and envelope taps (audio thread pushes, control thread publishes)."
+
+[dependencies]
+feed-proto = { path = "../feed-proto" }
+
+[lints]
+workspace = true
