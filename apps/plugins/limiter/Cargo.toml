@@ -25,11 +25,10 @@ nice-plug-dioxus.workspace = true
 # Params, shared UI state and the editor's Dioxus components. The param tree
 # lives there (not here) so the control view can render against it without a
 # circular dep — same split as comp-plugin / comp-ui.
-limiter-ui.workspace = true
+comp = { workspace = true, features = ["ui"] }
 
 # The DSP facade (`comp::limiter` — the limiter engine surface). Never depend
 # on limiter-dsp / comp-dsp directly.
-comp.workspace = true
 
 [features]
 default = []

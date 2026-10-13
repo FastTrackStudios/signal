@@ -21,13 +21,12 @@ audiocore-core = { workspace = true }
 nice-plug = { workspace = true, features = ["vst3"] }
 
 # The DSP facade (re-exports comp-dsp). Never depend on comp-dsp directly.
-comp.workspace = true
+comp = { workspace = true, features = ["native", "ui"] }
 # The stack core (docs/spec/fx/stack.md): lanes of serial stages, sum laws,
 # lane latency compensation.
 fx-stack.workspace = true
 # The full Dioxus plugin editor (control view, params, GR meter) —
 # `native` pulls nice-plug-dioxus/Blitz.
-comp-ui = { workspace = true, features = ["native"] }
 
 [features]
 default = []

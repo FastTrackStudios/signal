@@ -13,8 +13,8 @@
 //! onto that chain (Input → drive, Ceiling → output ceiling, Release →
 //! `BlockParty` release, Character → clip-stage morph).
 //!
-//! Params + shared UI state live in [`limiter_ui::params`] (like `comp-ui`),
-//! so the Dioxus editor ([`limiter_ui::control_view::App`]) renders against
+//! Params + shared UI state live in [`comp::ui::limiter::params`] (like `comp-ui`),
+//! so the Dioxus editor ([`comp::ui::limiter::control_view::App`]) renders against
 //! them without a circular dep.
 
 use nice_plug::prelude::*;
@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use comp::limiter::{GoldenClip, sin_clip};
-use limiter_ui::params::{LimiterParams, LimiterUiState};
+use comp::ui::limiter::params::{LimiterParams, LimiterUiState};
 
 const PLUGIN_NAME: &str = "FTS Limiter";
 
@@ -143,11 +143,11 @@ impl Default for FtsLimiter {
             ui_state,
             editor_state: DioxusState::new(|| {
                 (
-                    limiter_ui::control_view::EDITOR_W,
-                    limiter_ui::control_view::EDITOR_H,
+                    comp::ui::limiter::control_view::EDITOR_W,
+                    comp::ui::limiter::control_view::EDITOR_H,
                 )
             })
-            .with_resize_hint(limiter_ui::control_view::resize_hint()),
+            .with_resize_hint(comp::ui::limiter::control_view::resize_hint()),
             channels: Vec::new(),
             sample_rate: 48_000.0,
         }
@@ -180,7 +180,7 @@ impl Plugin for FtsLimiter {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
             self.ui_state.clone(),
-            limiter_ui::control_view::App,
+            comp::ui::limiter::control_view::App,
         )
     }
 

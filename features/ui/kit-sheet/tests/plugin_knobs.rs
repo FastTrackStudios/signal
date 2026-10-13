@@ -252,10 +252,10 @@ fn eq_faces() -> Vec<Face> {
 /// and its three small pointer knobs are different parts — so the row is
 /// whatever the item asked for, at the size it asked for.
 fn comp_faces() -> Vec<Face> {
-    comp_profiles::all_profiles()
+    comp::profiles::all_profiles()
         .iter()
         .filter_map(|p| {
-            let d = comp_ui::faces::units::design_for(p.id())?;
+            let d = comp::ui::faces::units::design_for(p.id())?;
             Some(Face {
                 plugin: "Comp",
                 name: p.name().to_string(),

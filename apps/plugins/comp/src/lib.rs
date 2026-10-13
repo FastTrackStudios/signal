@@ -1,7 +1,7 @@
 //! FTS Comp — CLAP/VST3 compressor plugin.
 //!
 //! A nice-plug shell over a **stack** of [`comp::CompChain`]s
-//! (docs/spec/fx/stack.md): up to [`comp_ui::params::MAX_STAGES`] complete
+//! (docs/spec/fx/stack.md): up to [`comp::ui::params::MAX_STAGES`] complete
 //! compressors — each with its own profile, classic and extended surface —
 //! arranged into parallel lanes of serial stages by the stack params and run
 //! through [`fx_stack::StagePool`]. The default is one stage on one lane:
@@ -13,8 +13,8 @@
 //! smoothing and metering stay per channel inside the shared
 //! `ProC3Compressor` core.
 //!
-//! Params + shared UI state live in [`comp_ui::params`] (like `eq-ui`), so
-//! the Dioxus editor ([`comp_ui::control_view::App`]) renders against them
+//! Params + shared UI state live in [`comp::ui::params`] (like `eq-ui`), so
+//! the Dioxus editor ([`comp::ui::control_view::App`]) renders against them
 //! without a circular dep.
 
 use audiocore_core::prelude::*;
@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use comp::CompChain;
-use comp_ui::params::{CompParams, CompStageParams, CompUiState, MAX_STAGES};
+use comp::ui::params::{CompParams, CompStageParams, CompUiState, MAX_STAGES};
 use fx_stack::{LaneCtl, Stage, StagePool, SumMode};
 
 const PLUGIN_NAME: &str = "FTS Comp";
@@ -34,7 +34,7 @@ const MAX_LOOKAHEAD_MS: f64 = 10.0;
 // The param layer and the DSP must agree on the sidechain EQ's band count —
 // they cannot share the constant (comp-ui does not link the DSP), so the
 // crate that links both pins it.
-const _: () = assert!(comp_ui::params::SC_EQ_BANDS == comp::chain::SC_EQ_BANDS);
+const _: () = assert!(comp::ui::params::SC_EQ_BANDS == comp::chain::SC_EQ_BANDS);
 
 // ── Stage adapter ─────────────────────────────────────────────────────────
 
@@ -174,16 +174,16 @@ impl Default for FtsComp {
         Self {
             params,
             ui_state,
-            // Sized by the editor surface itself — see comp_ui::control_view::
+            // Sized by the editor surface itself — see comp::ui::control_view::
             // EDITOR_W/EDITOR_H for why it is a hard constraint rather than a
             // preference.
             editor_state: DioxusState::new(|| {
                 (
-                    comp_ui::control_view::EDITOR_W,
-                    comp_ui::control_view::EDITOR_H,
+                    comp::ui::control_view::EDITOR_W,
+                    comp::ui::control_view::EDITOR_H,
                 )
             })
-            .with_resize_hint(comp_ui::control_view::resize_hint()),
+            .with_resize_hint(comp::ui::control_view::resize_hint()),
             pool: StagePool::new((0..MAX_STAGES).map(|_| CompStage::new()).collect()),
             buf_l: Vec::new(),
             buf_r: Vec::new(),
@@ -264,7 +264,7 @@ impl Plugin for FtsComp {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
             self.ui_state.clone(),
-            comp_ui::control_view::App,
+            comp::ui::control_view::App,
         )
     }
 

@@ -17,7 +17,7 @@
 //! | panel | curve from |
 //! |---|---|
 //! | EQ | `eq_ui::eq_graph_response::calculate_combined_response` |
-//! | Compressor | `comp_ui::comp_graph_svg::compress_transfer` |
+//! | Compressor | `comp::ui::comp_graph_svg::compress_transfer` |
 //! | Saturation | `saturate::preamp::analysis::transfer_curve` |
 //!
 //! None of the maths is here, and that is the point: a curve in the
@@ -3315,7 +3315,7 @@ fn comp(
     // Taken from the plugin so the threshold line, the ladder and
     // whatever level is drawn over them land on the same numbers it
     // uses.
-    let to_y = |db: f64| at.y + comp_ui::comp_graph_svg::db_to_y(db, at.height);
+    let to_y = |db: f64| at.y + comp::ui::comp_graph_svg::db_to_y(db, at.height);
 
     // The ladder the levels are read against. Without it the threshold
     // is a line at a height rather than a line at a level.
@@ -3332,7 +3332,7 @@ fn comp(
     // over the levels is the comparison.
     let y = threshold_y(comp, at);
     let held = matches!(lit, Some(Grip::Threshold(_)));
-    let red = hex(comp_ui::comp_graph_svg::colors::THRESHOLD);
+    let red = hex(comp::ui::comp_graph_svg::colors::THRESHOLD);
     rule_wide(
         scene,
         red,
@@ -3360,7 +3360,7 @@ fn comp(
 /// itself, the envelope glyph that meets it, and the hit test that
 /// decides which of the two a click belongs to.
 fn threshold_y(comp: Comp, at: Panel) -> f64 {
-    let y = at.y + comp_ui::comp_graph_svg::db_to_y(f64::from(comp.threshold), at.height);
+    let y = at.y + comp::ui::comp_graph_svg::db_to_y(f64::from(comp.threshold), at.height);
     y.clamp(at.y, at.y + at.height)
 }
 
@@ -3376,7 +3376,7 @@ fn threshold_y(comp: Comp, at: Panel) -> f64 {
 /// so a departure from the default is a bar in the direction it
 /// departed.
 fn envelope(scene: &mut Scene, font: &Font, comp: Comp, at: Panel, lit: Option<Grip>) {
-    let red = hex(comp_ui::comp_graph_svg::colors::THRESHOLD);
+    let red = hex(comp::ui::comp_graph_svg::colors::THRESHOLD);
     if let Some(strips) = Strips::of(at) {
         strips.draw(scene, font, comp, red, lit);
     }
@@ -3710,7 +3710,7 @@ fn gate(
     let at = display_of(at, Which::Gate, rack);
     let right = at.x + at.width;
     let bottom = at.y + at.height;
-    let to_y = |db: f64| at.y + comp_ui::comp_graph_svg::db_to_y(db, at.height);
+    let to_y = |db: f64| at.y + comp::ui::comp_graph_svg::db_to_y(db, at.height);
 
     if rack.detailed() {
         for db in [-12.0, -24.0, -36.0, -48.0] {
@@ -5464,7 +5464,7 @@ fn minimal_body(
         }
         // The level against the threshold, and a light for the door.
         Which::Gate => {
-            let to_y = |db: f64| at.y + comp_ui::comp_graph_svg::db_to_y(db, at.height);
+            let to_y = |db: f64| at.y + comp::ui::comp_graph_svg::db_to_y(db, at.height);
             let line = to_y(f64::from(tone.gate.threshold)).clamp(at.y, bottom);
             rule(
                 scene,
@@ -5476,7 +5476,7 @@ fn minimal_body(
                 scene.fill(
                     Fill::NonZero,
                     Affine::IDENTITY,
-                    hex(comp_ui::comp_graph_svg::colors::GREY).multiply_alpha(0.6),
+                    hex(comp::ui::comp_graph_svg::colors::GREY).multiply_alpha(0.6),
                     None,
                     &Rect::new(at.x + 2.0, top, right - 2.0, bottom),
                 );
@@ -5498,7 +5498,7 @@ fn minimal_body(
                 tone.rescue_comp
             };
             let reduction = peak_db.map_or(0.0, |db| {
-                let out = comp_ui::comp_graph_svg::compress_transfer(
+                let out = comp::ui::comp_graph_svg::compress_transfer(
                     crate::mcp::f64_to_f32(db),
                     comp.threshold,
                     comp.ratio,
@@ -5509,16 +5509,16 @@ fn minimal_body(
             // The threshold where the panel would draw it, and the
             // reduction hanging from the ceiling in the panel's red.
             let line = (at.y
-                + comp_ui::comp_graph_svg::db_to_y(f64::from(comp.threshold), at.height))
+                + comp::ui::comp_graph_svg::db_to_y(f64::from(comp.threshold), at.height))
             .clamp(at.y, bottom);
             rule(
                 scene,
-                hex(comp_ui::comp_graph_svg::colors::THRESHOLD).multiply_alpha(0.7),
+                hex(comp::ui::comp_graph_svg::colors::THRESHOLD).multiply_alpha(0.7),
                 Line::new((at.x, line), (right, line)),
             );
             bar(
                 scene,
-                hex(comp_ui::comp_graph_svg::colors::REDUCTION_EDGE),
+                hex(comp::ui::comp_graph_svg::colors::REDUCTION_EDGE),
                 reduction / 60.0,
             );
         }
@@ -8755,7 +8755,7 @@ fn gate_grip(gate: Gate, body: Panel, rack: Rack, x: f64, y: f64) -> Grip {
     if !rack.detailed() {
         return Grip::Threshold(Which::Gate);
     }
-    let to_y = |db: f64| display.y + comp_ui::comp_graph_svg::db_to_y(db, display.height);
+    let to_y = |db: f64| display.y + comp::ui::comp_graph_svg::db_to_y(db, display.height);
     let bottom = display.y + display.height;
     let line = to_y(f64::from(gate.threshold)).clamp(display.y, bottom);
     let floor = to_y(f64::from(gate.threshold + gate.range)).clamp(display.y, bottom);
@@ -8910,7 +8910,7 @@ fn transfer_curve(
     at: Panel,
     lit: Option<Grip>,
 ) {
-    let red = hex(comp_ui::comp_graph_svg::colors::THRESHOLD);
+    let red = hex(comp::ui::comp_graph_svg::colors::THRESHOLD);
     let right = at.x + at.width;
     let bottom = at.y + at.height;
     // Level to position: 0 dB at the top and the right, -60 at the floor
@@ -12071,7 +12071,7 @@ mod comp_tests {
         let rack_tier = Rack::at(rack().width);
         let display = super::comp_split(body, rack_tier);
         let at_db = |comp: Comp| {
-            display.y + comp_ui::comp_graph_svg::db_to_y(f64::from(comp.threshold), display.height)
+            display.y + comp::ui::comp_graph_svg::db_to_y(f64::from(comp.threshold), display.height)
         };
         let before = at_db(tone.comp);
         let moved = 24.0;
@@ -12318,7 +12318,7 @@ impl Levels {
         {
             return Some(std::sync::Arc::clone(path));
         }
-        let d = comp_ui::comp_graph_svg::smooth_path(&self.scaled(), width, height, true, true);
+        let d = comp::ui::comp_graph_svg::smooth_path(&self.scaled(), width, height, true, true);
         let built = std::sync::Arc::new(BezPath::from_svg(&d).ok()?);
         self.path = Some((width, height, std::sync::Arc::clone(&built)));
         Some(built)
@@ -12362,7 +12362,7 @@ impl Levels {
                     0.0
                 } else {
                     let db = 20.0 * peak.log10();
-                    let out = comp_ui::comp_graph_svg::compress_transfer(
+                    let out = comp::ui::comp_graph_svg::compress_transfer(
                         db,
                         comp.threshold,
                         comp.ratio,
@@ -12399,11 +12399,11 @@ impl Levels {
         {
             return Some(std::sync::Arc::clone(path));
         }
-        let gr = comp_ui::comp_graph_svg::scale_gr_wave(&self.reduction_db(comp));
+        let gr = comp::ui::comp_graph_svg::scale_gr_wave(&self.reduction_db(comp));
         if gr.iter().all(|v| *v <= f32::EPSILON) {
             return None;
         }
-        let d = comp_ui::comp_graph_svg::smooth_path(&gr, width, height, false, true);
+        let d = comp::ui::comp_graph_svg::smooth_path(&gr, width, height, false, true);
         let built = std::sync::Arc::new(BezPath::from_svg(&d).ok()?);
         self.reduction = Some((width, height, comp, std::sync::Arc::clone(&built)));
         Some(built)
@@ -12422,7 +12422,7 @@ impl Levels {
     #[must_use]
     pub fn scaled(&self) -> Vec<f32> {
         let raw: Vec<f32> = self.peaks.iter().copied().collect();
-        comp_ui::comp_graph_svg::scale_input_wave(&raw)
+        comp::ui::comp_graph_svg::scale_input_wave(&raw)
     }
 }
 
@@ -12681,7 +12681,7 @@ fn one_level(
         // outline makes that a comparison of two lines instead. Dim,
         // because the threshold is drawn over it and a solid fill makes
         // the line the thing you cannot see.
-        let grey = hex(comp_ui::comp_graph_svg::colors::GREY);
+        let grey = hex(comp::ui::comp_graph_svg::colors::GREY);
         scene.fill(
             Fill::NonZero,
             at,
@@ -12702,8 +12702,8 @@ fn one_level(
     // one thing on this panel that is a REDUCTION, and it shares its
     // colour with the threshold that caused it.
     if let Some(path) = levels.reduction_path(comp, body.width, body.height) {
-        let fill = hex(comp_ui::comp_graph_svg::colors::REDUCTION_FILL);
-        let edge = hex(comp_ui::comp_graph_svg::colors::REDUCTION_EDGE);
+        let fill = hex(comp::ui::comp_graph_svg::colors::REDUCTION_FILL);
+        let edge = hex(comp::ui::comp_graph_svg::colors::REDUCTION_EDGE);
         scene.fill(
             Fill::NonZero,
             at,
@@ -12747,7 +12747,7 @@ mod level_tests {
         levels.push(1.0);
         levels.push(0.5);
         let got = levels.scaled();
-        let want = comp_ui::comp_graph_svg::scale_input_wave(&[1.0, 0.5]);
+        let want = comp::ui::comp_graph_svg::scale_input_wave(&[1.0, 0.5]);
         assert_eq!(got, want);
     }
 }
@@ -12905,9 +12905,9 @@ mod hex_tests {
     #[test]
     fn a_plugin_colour_survives_the_trip() {
         for value in [
-            comp_ui::comp_graph_svg::colors::GREY,
-            comp_ui::comp_graph_svg::colors::REDUCTION_EDGE,
-            comp_ui::comp_graph_svg::colors::THRESHOLD,
+            comp::ui::comp_graph_svg::colors::GREY,
+            comp::ui::comp_graph_svg::colors::REDUCTION_EDGE,
+            comp::ui::comp_graph_svg::colors::THRESHOLD,
         ] {
             let [r, g, b, a] = hex(value).to_rgba8().to_u8_array();
             assert_eq!(format!("#{r:02x}{g:02x}{b:02x}"), value);
@@ -13181,7 +13181,7 @@ mod face_tests {
     fn the_gates_table_is_grabbed_by_its_edges() {
         let tone = placeholder(0);
         let at = display_of(body(Which::Gate), Which::Gate, Rack::Full);
-        let to_y = |db: f64| at.y + comp_ui::comp_graph_svg::db_to_y(db, at.height);
+        let to_y = |db: f64| at.y + comp::ui::comp_graph_svg::db_to_y(db, at.height);
         let line = to_y(f64::from(tone.gate.threshold));
         let floor = to_y(f64::from(tone.gate.threshold + tone.gate.range));
         let shape = super::GateGlyph::of(tone.gate, at, line, floor).expect("room for a glyph");

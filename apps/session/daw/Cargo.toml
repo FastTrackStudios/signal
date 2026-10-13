@@ -93,7 +93,7 @@ audiocore-dsp = { workspace = true }
 
 # The Tone rack's response math — the plugins' own, not a copy. See the
 # `signal` block in the root manifest for why these are core-only.
-comp-ui = { workspace = true }
+comp = { workspace = true, features = ["ui"] }
 # The shared frequency/dB axes the FX editors map their graphs with, so
 # the strip's curve lands on the same pixels as the plugin's.
 fts-audio-ui = { workspace = true }

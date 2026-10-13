@@ -1,0 +1,65 @@
+[package]
+name = "comp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The compressors (VCA, FET, opto, tube, look-ahead) and the limiter: engines, profiles, editors"
+
+[lints]
+workspace = true
+
+[features]
+native = ["dep:architect-ui", "dep:atomic_float", "dep:audiocore-core", "dep:eq-ui", "dep:fts-plug-ui", "dep:musical-time", "dep:musical-time-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "dep:preset-browser-ui", "eq-ui/native"]
+profiles = ["dep:eq-profiles"]
+ui = ["dep:atomic_float", "dep:audiocore-core", "dep:dioxus", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:web-time"]
+viz = ["dep:anyrender", "dep:blitz-dom", "dep:bytemuck", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
+
+[dependencies]
+anyrender = { workspace = true, optional = true }
+architect-ui = { workspace = true, optional = true }
+atomic_float = { workspace = true, optional = true }
+audiocore-core = { workspace = true, optional = true }
+audiocore-dsp = { workspace = true }
+blitz-dom = { workspace = true, features = ["custom-widget"], optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+dioxus = { workspace = true, optional = true }
+dioxus-native-dom = { workspace = true, optional = true }
+dsp-core = { workspace = true }
+eq-profiles = { workspace = true, optional = true }
+eq-ui = { workspace = true, optional = true }
+fts-audio-ui = { workspace = true, optional = true }
+fts-plug-ui = { workspace = true, optional = true }
+musical-time = { workspace = true, features = ["params"], optional = true }
+musical-time-ui = { workspace = true, optional = true }
+nice-plug = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+preset-browser = { workspace = true, optional = true }
+preset-browser-ui = { workspace = true, optional = true }
+vello = { workspace = true, optional = true }
+web-time = { workspace = true, optional = true }
+
+[dev-dependencies]
+dioxus = { workspace = true }
+dioxus-test = { workspace = true }
+dsp-golden = { workspace = true }
+fts-audio-ui = { workspace = true, features = ["probe"] }
+naga = { version = "29", features = ["wgsl-in"] }
+png = { version = "0.18" }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[test]]
+name = "gui_editor"
+required-features = ["native"]
+
+[[test]]
+name = "screenshots"
+required-features = ["native"]
+
+[[test]]
+name = "param_round_trip"
+required-features = ["native"]
+
+[[test]]
+name = "tempo_sync"
+required-features = ["native"]

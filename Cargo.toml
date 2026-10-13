@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/comp",
     "features/dsp/saturate",
     "features/dsp/reverb",
     "features/dsp/delay",
@@ -167,11 +168,6 @@ members = [
     "apps/plugins/tune",
     "apps/plugins/unison",
     "xtask/plugins",
-    "features/dsp/comp/comp",
-    "features/dsp/comp/comp-dsp",
-    "features/dsp/comp/comp-profiles",
-    "features/dsp/comp/comp-ui",
-    "features/dsp/comp/limiter-ui",
     "features/dsp/core/dsp-core",
     "features/dsp/core/dsp-golden",
     "apps/plugins/eq-standalone",
@@ -327,6 +323,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+comp = { path = "features/dsp/comp" }
 saturate = { path = "features/dsp/saturate" }
 reverb = { path = "features/dsp/reverb" }
 delay = { path = "features/dsp/delay" }
@@ -551,7 +548,6 @@ align-dsp = { path = "features/dsp/align/align-dsp" }
 # Core only — `default-features = false` drops the nice-plug/Blitz
 # editors, which is what keeps this to response math rather than a
 # second plugin host inside the mixer.
-comp-ui = { path = "features/dsp/comp/comp-ui", default-features = false }
 eq-ui = { path = "features/dsp/eq/eq-ui", default-features = false }
 # The Depth units draw the plugins' own machines: the delay's style
 # family decides how a repeat is drawn, and the reverb's envelope is
@@ -1105,11 +1101,8 @@ eq-profiles = { path = "features/dsp/eq/eq-profiles" }
 spectrum-analyzer = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer" }
 spectrum-analyzer-dsp = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-dsp" }
 spectrum-analyzer-ui = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-ui" }
-comp = { path = "features/dsp/comp/comp" }
-limiter-ui = { path = "features/dsp/comp/limiter-ui" }
 modulation = { path = "features/dsp/modulation/modulation" }
 eq-dsp = { path = "features/dsp/eq/eq-dsp" }
-comp-dsp = { path = "features/dsp/comp/comp-dsp" }
 gate = { path = "features/dsp/gate" }
 chorus-dsp = { path = "features/dsp/modulation/chorus-dsp" }
 modulation-profiles = { path = "features/dsp/modulation/modulation-profiles" }
