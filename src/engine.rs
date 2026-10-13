@@ -21,8 +21,8 @@
 
 use std::sync::OnceLock;
 
-use signal_tone3000::{Config, Tone3000Backend};
-use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
+use signal_tone3000::client::{Config, Tone3000Backend};
+use signal_tone3000::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// The established clients, plus the scope keeping the server's acceptor
 /// tasks alive.
