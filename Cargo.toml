@@ -172,7 +172,7 @@ members = [
     "features/rigs/core/widgets",
     "features/dsp/analyzer/signal-analyzer",
     "features/dsp/separator/signal-separator",
-    "features/rigs/macromod/macromod",
+    "features/dsp/macromod",
     "features/rigs/nam",
     "features/rigs/plugin-host",
     "features/adapters/reaper/signal-extension",
@@ -964,7 +964,7 @@ signal-rig-host = { path = "features/rigs/core/rig-host" }
 signal-rigs-proto = { path = "features/rigs/core/rigs-proto" }
 signal-widgets = { path = "features/rigs/core/widgets" }
 signal-extension = { path = "features/adapters/reaper/signal-extension" }
-signal-macromod = { path = "features/rigs/macromod/macromod" }
+signal-macromod = { path = "features/dsp/macromod" }
 signal-plugin-host = { path = "features/rigs/plugin-host", default-features = false }
 openwurli-dsp = { path = "features/rigs/wurli/openwurli-dsp" }
 signal-orchestra = { path = "features/rigs/orchestra" }
