@@ -10,7 +10,7 @@
 //! designed against the running app instead of by relaunching it.
 //!
 //! Where designs come from: `SIGNAL_FRAME_DIR`, else frame's generated
-//! faces in this repo (`features/faces/generated`, written by `just
+//! faces in this repo (`features/ui/plugin-faces/generated`, written by `just
 //! faces`); a surface is named by its path under that, `rig-faces/<file>`.
 //! Machine-specific while the faces are being designed; they ship as data
 //! later.
@@ -27,7 +27,7 @@ use dioxus::prelude::*;
 #[derive(Clone, Copy)]
 pub struct FacesMove(pub Signal<bool>);
 
-/// frame's generated faces (`features/faces/generated`, `just faces`),
+/// frame's generated faces (`features/ui/plugin-faces/generated`, `just faces`),
 /// unless `SIGNAL_FRAME_DIR` says otherwise.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn design_dir() -> std::path::PathBuf {
@@ -35,8 +35,8 @@ pub(crate) fn design_dir() -> std::path::PathBuf {
         return dir.into();
     }
     // The faces `just faces` generates, in this repo (features/rigs/guitar/ui →
-    // features/faces/generated).
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../faces/generated")
+    // features/ui/plugin-faces/generated).
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/plugin-faces/generated")
 }
 
 /// One frame face, `name` (its path under the faces directory without
