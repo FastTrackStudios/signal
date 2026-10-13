@@ -18,7 +18,7 @@ workspace = true
 # song's hits, and how hard is it hitting" — so it reuses rather than
 # reimplements. A second onset detector in one tree is how two of them end
 # up disagreeing.
-trigger-dsp = { workspace = true }
+trigger = { workspace = true }
 # Crossover filters, to ask the kick and the snare separately.
 eq-dsp = { workspace = true }
 

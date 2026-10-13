@@ -9347,7 +9347,7 @@ dependencies = [
  "approx",
  "eq-dsp",
  "fts-sample",
- "trigger-dsp",
+ "trigger",
 ]
 
 [[package]]
@@ -22445,18 +22445,21 @@ dependencies = [
 name = "trigger"
 version = "0.1.0"
 dependencies = [
- "trigger-dsp",
-]
-
-[[package]]
-name = "trigger-dsp"
-version = "0.1.0"
-dependencies = [
  "approx",
+ "architect-ui",
+ "atomic_float",
+ "audiocore-core",
  "audiocore-dsp",
+ "dioxus",
+ "dioxus-test",
  "eq-dsp",
+ "fts-audio-ui",
+ "fts-plug-ui",
+ "nice-plug",
+ "nice-plug-dioxus",
  "rustfft",
  "symphonia",
+ "tokio",
 ]
 
 [[package]]
@@ -22466,23 +22469,6 @@ dependencies = [
  "nice-plug",
  "nice-plug-dioxus",
  "trigger",
- "trigger-ui",
-]
-
-[[package]]
-name = "trigger-ui"
-version = "0.1.0"
-dependencies = [
- "architect-ui",
- "atomic_float",
- "audiocore-core",
- "dioxus",
- "dioxus-test",
- "fts-audio-ui",
- "fts-plug-ui",
- "nice-plug",
- "nice-plug-dioxus",
- "tokio",
 ]
 
 [[package]]

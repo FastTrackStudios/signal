@@ -1,6 +1,6 @@
 //! Trigger editor — Dioxus GUI root component.
 //!
-//! The analysis waveform ([`crate::trigger_waveform::TriggerWaveform`] —
+//! The analysis waveform ([`crate::ui::trigger_waveform::TriggerWaveform`] —
 //! scrolling input peaks, dB grid, hit markers, draggable threshold line) on
 //! top, with the trigger control surface below: knobs for the detection
 //! params (threshold / sensitivity / retrigger / dynamics, sidechain
@@ -13,8 +13,8 @@ use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_
 use audiocore_core::prelude::*;
 use fts_audio_ui::prelude::*;
 
-use crate::param_adapter::param_handle;
-use crate::params::TriggerUiState;
+use crate::ui::param_adapter::param_handle;
+use crate::ui::params::TriggerUiState;
 
 /// Root editor component.
 ///
@@ -30,7 +30,7 @@ pub fn App() -> Element {
         // CSS above only covers nice-plug-dioxus's widgets, so without this
         // every layout-critical class (flex-1, min-h-0, …) is undefined and
         // the layout collapses in DAW hosts. `just tailwind-trigger`.
-        document::Style { {include_str!("../assets/tailwind.css")} }
+        document::Style { {include_str!("../../assets/tailwind.css")} }
         ThemeProvider { state: theme_state, AppShell {} }
     }
 }
@@ -122,9 +122,9 @@ fn AppShell() -> Element {
                     "data-testid": "trigger-graph",
                     style: format!(
                         "height:{}px; flex:none; position:relative; overflow:hidden;",
-                        crate::trigger_waveform::GRAPH_H
+                        crate::ui::trigger_waveform::GRAPH_H
                     ),
-                    crate::trigger_waveform::TriggerWaveform {}
+                    crate::ui::trigger_waveform::TriggerWaveform {}
                 }
 
                 // ── Control surface ─────────────────────────────────

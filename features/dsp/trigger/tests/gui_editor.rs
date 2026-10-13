@@ -1,6 +1,6 @@
 //! Behavioral tests for the REAL FTS Trigger plugin editor UI.
 //!
-//! Mounts `trigger_ui::control_view::App` — the exact Dioxus surface the
+//! Mounts `trigger::ui::control_view::App` — the exact Dioxus surface the
 //! CLAP/VST3 plugin embeds — on the vendored dioxus-test harness (headless
 //! Blitz DOM, no GPU, no window) and drives it with real hit-tested pointer
 //! events, including a threshold-line drag that must change the parameter
@@ -34,10 +34,10 @@ use dioxus_test::{
     render,
 };
 
-use trigger_ui::control_view::App;
-use trigger_ui::params::{TriggerParams, TriggerUiState};
-use trigger_ui::trigger_waveform::GRAPH_H;
-use trigger_ui::trigger_waveform_svg::db_to_y;
+use trigger::ui::control_view::App;
+use trigger::ui::params::{TriggerParams, TriggerUiState};
+use trigger::ui::trigger_waveform::GRAPH_H;
+use trigger::ui::trigger_waveform_svg::db_to_y;
 
 use audiocore_core::prelude::Param;
 use nice_plug_dioxus::{ParamContext, SharedState};

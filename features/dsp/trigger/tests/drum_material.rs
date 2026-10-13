@@ -25,10 +25,10 @@
 )]
 
 use audiocore_dsp::{AudioConfig, Processor};
-use trigger_dsp::TriggerChain;
-use trigger_dsp::detector::{DetectMode, TriggerDetector};
-use trigger_dsp::sampler::{MixMode, Sample};
-use trigger_dsp::velocity::VelocityMapper;
+use trigger::TriggerChain;
+use trigger::detector::{DetectMode, TriggerDetector};
+use trigger::sampler::{MixMode, Sample};
+use trigger::velocity::VelocityMapper;
 
 use symphonia::core::audio::{AudioBufferRef, Signal};
 use symphonia::core::codecs::DecoderOptions;
@@ -259,7 +259,7 @@ fn kick_velocity_distribution() {
     // Check MIDI velocity spread
     let midi_vels: Vec<u8> = velocities
         .iter()
-        .map(|&v| trigger_dsp::velocity::VelocityMapper::to_midi(v))
+        .map(|&v| trigger::velocity::VelocityMapper::to_midi(v))
         .collect();
     let mut unique: Vec<u8> = midi_vels;
     unique.sort_unstable();

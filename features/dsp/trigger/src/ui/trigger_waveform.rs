@@ -9,7 +9,7 @@
 //! threshold line floats over everything. The legacy linear-amplitude y axis
 //! is remapped to the comp graph's dB-linear axis so the threshold line is
 //! exact in dB. All path math lives in the portable
-//! [`crate::trigger_waveform_svg`] module.
+//! [`crate::ui::trigger_waveform_svg`] module.
 //!
 //! Interactions drive nice-plug parameters through the editor's
 //! `ParamContext` begin/set/end idiom (the same host-gesture pattern as
@@ -22,15 +22,15 @@
 //!
 //! The SVG uses a fixed `0 0 360 260` viewBox with
 //! `preserveAspectRatio: none`. The host container
-//! ([`crate::control_view`]) pins the graph height to exactly [`GRAPH_H`]
+//! ([`crate::ui::control_view`]) pins the graph height to exactly [`GRAPH_H`]
 //! CSS px, so element-relative pointer y IS viewBox y — no async rect
 //! measurement (unreliable under Blitz, see eq-ui's notes) and no scale
 //! drift. The width stretches freely; no interaction depends on x.
 
 use audiocore_core::prelude::*;
 
-use crate::params::{TriggerUiState, WAVE_HISTORY_LEN};
-use crate::trigger_waveform_svg::{
+use crate::ui::params::{TriggerUiState, WAVE_HISTORY_LEN};
+use crate::ui::trigger_waveform_svg::{
     DB_MARKERS, RANGE_DB, bars_path, db_to_y, marker_columns, scale_peaks, threshold_line_y,
     y_to_db,
 };

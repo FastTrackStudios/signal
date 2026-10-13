@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/trigger",
     "features/dsp/stretch",
     "features/dsp/pitch",
     "features/dsp/level",
@@ -204,9 +205,6 @@ members = [
     "features/dsp/saturate/saturate-ui",
     "features/dsp/builtin/fx-blocks",
     "features/dsp/stack",
-    "features/dsp/trigger/trigger",
-    "features/dsp/trigger/trigger-dsp",
-    "features/dsp/trigger/trigger-ui",
     "features/preset-browser/preset-browser",
     "features/preset-browser/preset-browser-ui",
     "features/ui/fts-audio-ui",
@@ -339,6 +337,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+trigger = { path = "features/dsp/trigger" }
 stretch = { path = "features/dsp/stretch" }
 pitch = { path = "features/dsp/pitch" }
 level = { path = "features/dsp/level" }
@@ -1116,10 +1115,7 @@ signal-nam = { path = "features/rigs/nam" }
 saturate = { path = "features/dsp/saturate/saturate" }
 dsp-golden = { path = "features/dsp/core/dsp-golden" }
 dsp-core = { path = "features/dsp/core/dsp-core" }
-trigger = { path = "features/dsp/trigger/trigger" }
-trigger-dsp = { path = "features/dsp/trigger/trigger-dsp" }
 hit-detect-dsp = { path = "features/dsp/hits/hit-detect/hit-detect-dsp" }
-trigger-ui = { path = "features/dsp/trigger/trigger-ui", default-features = false }
 eq = { path = "features/dsp/eq/eq" }
 eq-profiles = { path = "features/dsp/eq/eq-profiles" }
 spectrum-analyzer = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer" }

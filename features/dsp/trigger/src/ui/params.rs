@@ -1,7 +1,7 @@
 //! `nice_plug` parameter definitions and shared UI state.
 //!
 //! Lives in `trigger-ui` (not `trigger-plugin`) so the
-//! [`crate::control_view`] component can render against the param tree
+//! [`crate::ui::control_view`] component can render against the param tree
 //! without forcing a circular dep — same split as `comp-ui::params`. The
 //! param ids and ranges are the plugin's originals (moved here verbatim),
 //! so existing host sessions keep loading.
@@ -80,7 +80,7 @@ impl WaveRing {
 /// hit nonzero so zero unambiguously means "empty slot". `block_index` is
 /// [`WaveRing::head`] at the time of the hit; the UI matches it against the
 /// current head to place the marker in the scrolling window
-/// ([`crate::trigger_waveform_svg::marker_columns`]).
+/// ([`crate::ui::trigger_waveform_svg::marker_columns`]).
 pub struct HitRing {
     buf: [AtomicU64; HIT_RING_LEN],
     head: AtomicUsize,

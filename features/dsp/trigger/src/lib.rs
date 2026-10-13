@@ -82,6 +82,11 @@
     reason = "pending the DSP algorithm rewrite; see the note above"
 )]
 
+#[cfg(feature = "ui")]
+pub mod ui;
+pub use crate as dsp;
+
+
 pub mod chain;
 pub mod detector;
 pub mod fingerprint;

@@ -21,9 +21,9 @@
 )]
 
 use audiocore_dsp::{AudioConfig, Processor};
-use trigger_dsp::chain::TriggerChain;
-use trigger_dsp::detector::TriggerDetector;
-use trigger_dsp::velocity::{VelocityCurve, VelocityMapper};
+use trigger::chain::TriggerChain;
+use trigger::detector::TriggerDetector;
+use trigger::velocity::{VelocityCurve, VelocityMapper};
 
 const SR: f64 = 48_000.0;
 

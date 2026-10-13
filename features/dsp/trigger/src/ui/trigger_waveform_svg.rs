@@ -7,7 +7,7 @@
 //! uses (0 dBFS at the top … −[`RANGE_DB`] at the bottom), so a threshold
 //! drag lands exactly on the pointer's dB. No plugin framework, no Dioxus —
 //! compiles for every target (same split as comp-ui's `comp_graph_svg`). The
-//! `native`-gated [`crate::trigger_waveform`] component renders these paths
+//! `native`-gated [`crate::ui::trigger_waveform`] component renders these paths
 //! and adds the interactions.
 
 use std::fmt::Write as _;

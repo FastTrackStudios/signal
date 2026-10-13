@@ -80,7 +80,7 @@
     reason = "pending the DSP algorithm rewrite; see the note above"
 )]
 
-use trigger_dsp::spectral_flux::{FluxMode, SpectralFluxDetector};
+use trigger::spectral_flux::{FluxMode, SpectralFluxDetector};
 
 /// Which part of the spectrum a hit was found in.
 ///

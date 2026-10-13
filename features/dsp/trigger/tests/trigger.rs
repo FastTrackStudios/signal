@@ -14,10 +14,10 @@
 )]
 
 use audiocore_dsp::{AudioConfig, Processor};
-use trigger_dsp::chain::TriggerChain;
-use trigger_dsp::detector::{DetectAlgorithm, DetectMode, TriggerDetector};
-use trigger_dsp::sampler::{MixMode, Sample, Sampler, VelocityLayer};
-use trigger_dsp::velocity::{VelocityCurve, VelocityMapper};
+use trigger::chain::TriggerChain;
+use trigger::detector::{DetectAlgorithm, DetectMode, TriggerDetector};
+use trigger::sampler::{MixMode, Sample, Sampler, VelocityLayer};
+use trigger::velocity::{VelocityCurve, VelocityMapper};
 
 const SAMPLE_RATE: f64 = 48000.0;
 

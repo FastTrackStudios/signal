@@ -22,8 +22,8 @@
 //! file-management UI/state, so this shell is MIDI-out + passthrough only;
 //! it is a follow-up.
 //!
-//! Params + shared UI state live in [`trigger_ui::params`] (like `comp-ui`),
-//! so the Dioxus editor ([`trigger_ui::control_view::App`] — analysis
+//! Params + shared UI state live in [`trigger::ui::params`] (like `comp-ui`),
+//! so the Dioxus editor ([`trigger::ui::control_view::App`] — analysis
 //! waveform with draggable threshold + hit markers, knob/select surface)
 //! renders against them without a circular dep. `process()` feeds the
 //! editor's lock-free rings: one mono-sum input peak per block plus a
@@ -37,7 +37,7 @@ use std::sync::atomic::Ordering;
 use trigger::detector::DetectAlgorithm;
 use trigger::velocity::{VelocityCurve, VelocityMapper};
 use trigger::{AudioConfig, Processor, TriggerChain};
-use trigger_ui::params::{TriggerParams, TriggerUiState};
+use trigger::ui::params::{TriggerParams, TriggerUiState};
 
 const PLUGIN_NAME: &str = "FTS Trigger";
 
@@ -50,7 +50,7 @@ const CLICK_LEN_MS: f32 = 2.0;
 const CLICK_FREQ_HZ: f32 = 1_000.0;
 
 // ── Parameters ────────────────────────────────────────────────────────────
-// The param tree moved to trigger_ui::params (same ids/ranges — host
+// The param tree moved to trigger::ui::params (same ids/ranges — host
 // sessions keep loading); only the engine-enum mappings live here.
 
 fn algorithm_from_index(i: i32) -> DetectAlgorithm {
@@ -236,7 +236,7 @@ impl Plugin for FtsTrigger {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
             self.ui_state.clone(),
-            trigger_ui::control_view::App,
+            trigger::ui::control_view::App,
         )
     }
 
