@@ -2,7 +2,7 @@
 //! looped through the chain in the instrument's place (`Rig::play_di`) so
 //! tones can be dialled in with no guitar to hand.
 //!
-//! They ship with the app, in the order of `signal_guitar_proto::DI_CLIPS`:
+//! They ship with the app, in the order of `crate::proto::DI_CLIPS`:
 //! the player's own guitar, recorded dry — chords, palm-muted picking, a
 //! riff — 48 kHz mono, at the level they were played (what the captures
 //! were trained to hear).
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn every_clip_decodes_to_a_recording() {
-        assert_eq!(RECORDINGS.len(), signal_guitar_proto::DI_CLIPS.len());
+        assert_eq!(RECORDINGS.len(), crate::proto::DI_CLIPS.len());
         for clip in 0..RECORDINGS.len() as u32 {
             let r = recording(clip, RECORDED_RATE);
             assert!(r.len() > 3 * RECORDED_RATE as usize, "clip {clip} is seconds long");

@@ -12,7 +12,7 @@ workspace = true
 daw-standalone = { workspace = true }
 daw-proto = { workspace = true }
 signal-sampler = { workspace = true }
-signal-guitar = { workspace = true }
+guitar = { workspace = true }
 dirs = "6"
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -33,9 +33,9 @@
 
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::RigPerf;
-use signal_guitar::proto::rig::RigClient;
+use guitar::GuitarRigBackend;
+use guitar::proto::RigPerf;
+use guitar::proto::rig::RigClient;
 
 /// A cumulative sample: enough to difference two of them into a window.
 struct Sample {

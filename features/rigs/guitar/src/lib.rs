@@ -8,7 +8,7 @@
 //! the product.
 //!
 //! ```no_run
-//! use signal_guitar::AmpEngine;
+//! use crate::AmpEngine;
 //! use signal_sampler::RigAudioPrefs;
 //! let mut amp = AmpEngine::open(&RigAudioPrefs::default())?;
 //! amp.load_model("/path/to/amp.nam")?;
@@ -16,6 +16,12 @@
 //! let (in_pk, out_pk) = (amp.input_peak(), amp.output_peak());
 //! # Ok::<(), String>(())
 //! ```
+
+pub mod proto;
+#[cfg(feature = "ui")]
+pub mod ui;
+pub mod phones;
+
 
 use std::path::Path;
 
@@ -42,8 +48,6 @@ pub use library::RigHome;
 pub use session::{GuitarRigBackend, RigHost};
 // Re-export the wire contract so front-end/app crates get types + clients
 // from one place.
-pub use signal_guitar_proto as proto;
-
 /// What the audio session says about input, on one line — `None` where
 /// there is no session (everywhere but iOS). For the shell's own telemetry
 /// (route changes, access), beside the rig's at open.

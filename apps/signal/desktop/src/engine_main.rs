@@ -17,8 +17,8 @@
 
 use architect::host::{self, EngineHost, WebBundle};
 use architect::rig::RigBackend as _;
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::Rig as _;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::Rig as _;
 
 /// Default bind address; override with `SIGNAL_ENGINE_ADDR` (or the legacy
 /// `RIGD_ADDR`, still honored so existing live setups keep working).

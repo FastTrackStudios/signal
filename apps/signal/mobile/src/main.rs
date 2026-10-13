@@ -10,9 +10,9 @@
 //! runs on (`ws://10.0.2.2:4040/vox`), else the local engine.
 
 use dioxus::prelude::*;
-use signal_guitar_proto::audio::AudioSettingsClient;
-use signal_guitar_proto::rig::{RigClient, RigStreamClient};
-use signal_guitar_ui::GuitarRigRemote;
+use guitar::proto::audio::AudioSettingsClient;
+use guitar::proto::rig::{RigClient, RigStreamClient};
+use guitar::ui::GuitarRigRemote;
 
 /// The signal UI's compiled Tailwind (the desktop app's sheet).
 const SIGNAL_TAILWIND: &str = include_str!("../../desktop/assets/tailwind-signal.css");
@@ -75,9 +75,9 @@ async fn connect(url: &str) -> Option<Clients> {
 fn App() -> Element {
     // The window's size in points (and its aspect): the form factor.
     let mut aspect = use_signal(|| 874.0 / 402.0);
-    use_context_provider(|| signal_guitar_ui::WindowAspect(aspect));
+    use_context_provider(|| guitar::ui::WindowAspect(aspect));
     let mut size = use_signal(|| (874.0_f64, 402.0_f64));
-    use_context_provider(|| signal_guitar_ui::WindowSize(size));
+    use_context_provider(|| guitar::ui::WindowSize(size));
     let window = dioxus_native::use_window();
     use_future(move || {
         let window = window.clone();

@@ -140,7 +140,7 @@ pub fn run(command: Command) -> ExitCode {
     match command {
         Command::Reload { timeout } => reload(timeout),
         Command::WebBundle { out, profiles } => {
-            match signal_guitar::web_bundle::export(&out, &profiles) {
+            match guitar::web_bundle::export(&out, &profiles) {
                 Ok((bundle, skipped)) => {
                     let patches: usize = bundle.profiles.iter().map(|p| p.patches.len()).sum();
                     let bytes: u64 = bundle.assets.iter().map(|a| a.bytes).sum();
@@ -177,8 +177,8 @@ pub fn run(command: Command) -> ExitCode {
                 eprintln!("cannot read {}", map.display());
                 return ExitCode::FAILURE;
             };
-            let amp_map = signal_guitar::compose::parse_amp_map(&text);
-            let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
+            let amp_map = guitar::compose::parse_amp_map(&text);
+            let lib = guitar::library::RigLibrary::load_or_bootstrap();
             let Some(mut def) = lib
                 .profiles
                 .iter()
@@ -188,8 +188,8 @@ pub fn run(command: Command) -> ExitCode {
                 eprintln!("no profile named {profile:?}");
                 return ExitCode::FAILURE;
             };
-            let mut comp = signal_guitar::library::RigLibrary::load_compositions();
-            let unmapped = signal_guitar::compose::recompose(
+            let mut comp = guitar::library::RigLibrary::load_compositions();
+            let unmapped = guitar::compose::recompose(
                 &mut def,
                 &mut comp,
                 &amp_map,
@@ -232,8 +232,8 @@ pub fn run(command: Command) -> ExitCode {
                 return ExitCode::FAILURE;
             }
             if write {
-                signal_guitar::library::RigLibrary::save_compositions(&comp);
-                signal_guitar::library::RigLibrary::save_profile(&def);
+                guitar::library::RigLibrary::save_compositions(&comp);
+                guitar::library::RigLibrary::save_profile(&def);
                 println!("written.");
             } else {
                 println!("(dry run — pass --write to save)");
@@ -245,7 +245,7 @@ pub fn run(command: Command) -> ExitCode {
             sample_rate,
         } => {
             let started = std::time::Instant::now();
-            let results = signal_guitar::levelling::level_modules(sample_rate, dry_run);
+            let results = guitar::levelling::level_modules(sample_rate, dry_run);
             let mut failed = 0;
             for r in &results {
                 match r.lufs {
@@ -269,10 +269,10 @@ pub fn run(command: Command) -> ExitCode {
             ExitCode::SUCCESS
         }
         Command::RegroupPresets { write } => {
-            let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
-            let mut comp = signal_guitar::library::RigLibrary::load_compositions();
+            let lib = guitar::library::RigLibrary::load_or_bootstrap();
+            let mut comp = guitar::library::RigLibrary::load_compositions();
             let mut profiles = lib.profiles.clone();
-            let moved = signal_guitar::compose::regroup_by_gear(&mut comp, &mut profiles);
+            let moved = guitar::compose::regroup_by_gear(&mut comp, &mut profiles);
             let mut last = String::new();
             for m in &moved {
                 if m.from_preset != last {
@@ -305,9 +305,9 @@ pub fn run(command: Command) -> ExitCode {
                     .join(", ")
             );
             if write {
-                signal_guitar::library::RigLibrary::save_compositions(&comp);
+                guitar::library::RigLibrary::save_compositions(&comp);
                 for p in &profiles {
-                    signal_guitar::library::RigLibrary::save_profile(p);
+                    guitar::library::RigLibrary::save_profile(p);
                 }
                 println!("written.");
             } else {
@@ -321,11 +321,11 @@ pub fn run(command: Command) -> ExitCode {
             threads,
             preset,
         } => {
-            signal_guitar::levelling::apply_nam_calibration();
-            let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
-            let mut comp = signal_guitar::library::RigLibrary::load_compositions();
+            guitar::levelling::apply_nam_calibration();
+            let lib = guitar::library::RigLibrary::load_or_bootstrap();
+            let mut comp = guitar::library::RigLibrary::load_compositions();
             let started = std::time::Instant::now();
-            let results = signal_guitar::compose::dial_post_comp(
+            let results = guitar::compose::dial_post_comp(
                 &mut comp,
                 &lib.profile,
                 &lib.drive_presets,
@@ -352,7 +352,7 @@ pub fn run(command: Command) -> ExitCode {
                 }
             }
             if !dry_run {
-                signal_guitar::library::RigLibrary::save_compositions(&comp);
+                guitar::library::RigLibrary::save_compositions(&comp);
             }
             println!(
                 "\n{} snapshots in {:.0}s, {} failed{}",
@@ -376,19 +376,19 @@ pub fn run(command: Command) -> ExitCode {
             sample_rate,
             threads,
         } => {
-            let cal = signal_guitar::levelling::apply_nam_calibration();
+            let cal = guitar::levelling::apply_nam_calibration();
             println!(
                 "NAM calibration: {}",
                 cal.map_or("off".to_string(), |c| format!("{c} dBu interface"))
             );
-            let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
-            let mut comp = signal_guitar::library::RigLibrary::load_compositions();
+            let lib = guitar::library::RigLibrary::load_or_bootstrap();
+            let mut comp = guitar::library::RigLibrary::load_compositions();
             if comp.presets.is_empty() {
                 eprintln!("no presets loaded");
                 return ExitCode::FAILURE;
             }
             let started = std::time::Instant::now();
-            let results = signal_guitar::compose::level_presets(
+            let results = guitar::compose::level_presets(
                 &mut comp,
                 &lib.profile,
                 &lib.drive_presets,
@@ -417,7 +417,7 @@ pub fn run(command: Command) -> ExitCode {
                 }
             }
             if !dry_run {
-                signal_guitar::library::RigLibrary::save_compositions(&comp);
+                guitar::library::RigLibrary::save_compositions(&comp);
             }
             println!(
                 "\n{} snapshots in {:.0}s, {} failed{}",
@@ -438,8 +438,8 @@ pub fn run(command: Command) -> ExitCode {
         }
         Command::Freeze { preset, snapshot, epochs, play, check_only } => freeze(&preset, snapshot.as_deref(), epochs, play, check_only),
         Command::Frozen { preset, snapshot, state } => {
-            let mut comp = signal_guitar::library::RigLibrary::load_compositions();
-            let Some(s) = signal_guitar::freeze::snapshot_mut(&mut comp, &preset, &snapshot) else {
+            let mut comp = guitar::library::RigLibrary::load_compositions();
+            let Some(s) = guitar::freeze::snapshot_mut(&mut comp, &preset, &snapshot) else {
                 eprintln!("no Core snapshot {preset} · {snapshot}");
                 return ExitCode::FAILURE;
             };
@@ -449,11 +449,11 @@ pub fn run(command: Command) -> ExitCode {
             }
             s.frozen = matches!(state.as_str(), "on" | "frozen" | "true" | "1");
             println!("{preset} · {snapshot} plays {}", if s.frozen { "frozen" } else { "live" });
-            signal_guitar::library::RigLibrary::save_compositions(&comp);
+            guitar::library::RigLibrary::save_compositions(&comp);
             ExitCode::SUCCESS
         }
         Command::Modules => {
-            let comp = signal_guitar::library::RigLibrary::load_compositions();
+            let comp = guitar::library::RigLibrary::load_compositions();
             if comp.modules.is_empty() {
                 eprintln!("no module presets loaded — modules.styx is missing or did not parse");
                 return ExitCode::FAILURE;
@@ -481,7 +481,7 @@ pub fn run(command: Command) -> ExitCode {
             }
             let mut dangling = 0;
             let block_ok =
-                |c: &signal_guitar::compose::BlockChoiceDef| comp.block_preset(&c.preset).is_some();
+                |c: &guitar::compose::BlockChoiceDef| comp.block_preset(&c.preset).is_some();
             for m in &comp.modules {
                 for snap in &m.snapshots {
                     for c in snap.blocks.iter().filter(|c| !block_ok(c)) {
@@ -543,7 +543,7 @@ pub fn run(command: Command) -> ExitCode {
             }
         }
         Command::Migrate { profile, write } => {
-            match signal_guitar::compose::migrate_profile(&profile, !write) {
+            match guitar::compose::migrate_profile(&profile, !write) {
                 Ok(m) => {
                     println!("Module presets:");
                     for module in &m.modules {
@@ -607,7 +607,7 @@ pub fn run(command: Command) -> ExitCode {
             dry_run,
             sample_rate,
         } => {
-            match signal_guitar::levelling::level_profile(profile.as_deref(), sample_rate, dry_run)
+            match guitar::levelling::level_profile(profile.as_deref(), sample_rate, dry_run)
             {
                 Ok(results) => {
                     let mut failed = false;
@@ -648,8 +648,8 @@ pub fn run(command: Command) -> ExitCode {
 /// running rig to answer it (it deletes the request), and print its report
 /// lines from the reload log.
 fn reload(timeout: u64) -> ExitCode {
-    use signal_guitar::config_watch::{RELOAD_REQUEST, log_path};
-    let dir = signal_guitar::library::rig_dir();
+    use guitar::config_watch::{RELOAD_REQUEST, log_path};
+    let dir = guitar::library::rig_dir();
     let request = dir.join(RELOAD_REQUEST);
     let log = log_path();
     let from = std::fs::metadata(&log).map_or(0, |m| m.len());
@@ -691,11 +691,11 @@ fn reload(timeout: u64) -> ExitCode {
 const TRAIN_SCRIPT: &str = include_str!("../../../../features/rigs/guitar/scripts/nam_freeze_train.py");
 
 fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_only: bool) -> ExitCode {
-    use signal_guitar::freeze;
-    let cal = signal_guitar::levelling::apply_nam_calibration();
+    use guitar::freeze;
+    let cal = guitar::levelling::apply_nam_calibration();
     println!("NAM calibration: {}", cal.map_or("off".to_string(), |c| format!("{c} dBu interface")));
-    let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
-    let mut comp = signal_guitar::library::RigLibrary::load_compositions();
+    let lib = guitar::library::RigLibrary::load_or_bootstrap();
+    let mut comp = guitar::library::RigLibrary::load_compositions();
     let Some(p) = comp.presets.iter().find(|p| p.name.eq_ignore_ascii_case(preset)) else {
         eprintln!("no Core preset {preset}");
         return ExitCode::FAILURE;
@@ -807,7 +807,7 @@ fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_o
                         s.frozen = true;
                     }
                 }
-                signal_guitar::library::RigLibrary::save_compositions(&comp);
+                guitar::library::RigLibrary::save_compositions(&comp);
                 println!("  saved beside the live Core (trim {trim:+.2} dB){}", if play { " — playing frozen" } else { "" });
             }
             Err(e) => {

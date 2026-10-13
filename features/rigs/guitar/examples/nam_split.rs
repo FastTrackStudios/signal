@@ -2,9 +2,9 @@
 use std::time::Instant;
 
 fn main() {
-    let def = signal_guitar::profiles::worship_def();
-    let dps = signal_guitar::profiles::drive_presets();
-    let profile = signal_guitar::profiles::build_profile(&def, &dps);
+    let def = guitar::profiles::worship_def();
+    let dps = guitar::profiles::drive_presets();
+    let profile = guitar::profiles::build_profile(&def, &dps);
     let mut paths: Vec<String> = Vec::new();
     for p in &profile.patches {
         for b in &p.chain {

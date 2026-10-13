@@ -8711,6 +8711,76 @@ dependencies = [
 ]
 
 [[package]]
+name = "guitar"
+version = "0.1.0"
+dependencies = [
+ "anyrender 0.11.1",
+ "anyrender_vello 0.12.0",
+ "anyrender_vello_hybrid",
+ "architect",
+ "audio",
+ "base64 0.22.1",
+ "blake3",
+ "blitz-dom",
+ "blitz-paint",
+ "blitz-traits",
+ "builtin",
+ "bytemuck",
+ "chrono",
+ "comp",
+ "delay",
+ "dioxus",
+ "dioxus-native",
+ "dioxus-native-dom",
+ "eq",
+ "facet",
+ "facet-json",
+ "facet-styx",
+ "frame-live",
+ "fts-audio-ui",
+ "fts-chrome",
+ "futures",
+ "hound",
+ "image",
+ "kurbo 0.13.1",
+ "libc",
+ "lumen-blocks",
+ "memmap2",
+ "midicore",
+ "modulation",
+ "naga",
+ "neural-amp-modeler",
+ "parley 0.10.0",
+ "reverb",
+ "rustc-hash 2.1.3",
+ "serde_json",
+ "signal-account-proto",
+ "signal-grid",
+ "signal-grid-ui",
+ "signal-macromod",
+ "signal-nam",
+ "signal-proto",
+ "signal-rig-host",
+ "signal-rigs-proto",
+ "signal-sampler",
+ "signal-tone3000-proto",
+ "signal-tone3000-ui",
+ "signal-widgets",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "vello 0.9.0",
+ "vello_hybrid",
+ "vox",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+ "web-sys",
+ "wgpu",
+ "wgpu_context 0.7.0",
+]
+
+[[package]]
 name = "guitarpro"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18233,9 +18303,9 @@ name = "signal-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "guitar",
  "serde_json",
  "signal-account",
- "signal-guitar",
  "signal-nam",
  "signal-rig-host",
  "signal-tone3000",
@@ -18292,6 +18362,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "getrandom 0.3.4",
+ "guitar",
  "include_dir",
  "js-sys",
  "keys",
@@ -18307,9 +18378,6 @@ dependencies = [
  "sha2 0.10.9",
  "signal-account",
  "signal-account-proto",
- "signal-guitar",
- "signal-guitar-proto",
- "signal-guitar-ui",
  "signal-nam",
  "signal-pack-library",
  "signal-packs-proto",
@@ -18363,10 +18431,10 @@ dependencies = [
  "daw-proto",
  "daw-standalone",
  "dirs",
+ "guitar",
  "num-traits",
  "serde",
  "serde_json",
- "signal-guitar",
  "signal-sampler",
  "tracing",
 ]
@@ -18392,103 +18460,6 @@ dependencies = [
  "signal-proto",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "signal-guitar"
-version = "0.1.0"
-dependencies = [
- "architect",
- "blake3",
- "builtin",
- "chrono",
- "facet",
- "facet-json",
- "facet-styx",
- "hound",
- "libc",
- "midicore",
- "neural-amp-modeler",
- "reverb",
- "signal-guitar-proto",
- "signal-macromod",
- "signal-nam",
- "signal-phones",
- "signal-proto",
- "signal-rig-host",
- "signal-rigs-proto",
- "signal-sampler",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "vox",
-]
-
-[[package]]
-name = "signal-guitar-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "signal-proto",
- "signal-rigs-proto",
- "vox",
-]
-
-[[package]]
-name = "signal-guitar-ui"
-version = "0.1.0"
-dependencies = [
- "anyrender 0.11.1",
- "anyrender_vello 0.12.0",
- "anyrender_vello_hybrid",
- "architect",
- "base64 0.22.1",
- "blitz-dom",
- "blitz-paint",
- "blitz-traits",
- "bytemuck",
- "chrono",
- "comp",
- "delay",
- "dioxus",
- "dioxus-native",
- "dioxus-native-dom",
- "eq",
- "frame-live",
- "fts-audio-ui",
- "fts-chrome",
- "futures",
- "image",
- "kurbo 0.13.1",
- "lumen-blocks",
- "modulation",
- "naga",
- "parley 0.10.0",
- "reverb",
- "rustc-hash 2.1.3",
- "serde_json",
- "signal-account-proto",
- "signal-grid",
- "signal-grid-ui",
- "signal-guitar",
- "signal-guitar-proto",
- "signal-proto",
- "signal-tone3000-proto",
- "signal-tone3000-ui",
- "signal-widgets",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "vello 0.9.0",
- "vello_hybrid",
- "wasm-bindgen",
- "wasm-bindgen-test",
- "web-sys",
- "wgpu",
- "wgpu_context 0.7.0",
 ]
 
 [[package]]
@@ -18609,8 +18580,7 @@ dependencies = [
  "blitz-shell",
  "dioxus",
  "dioxus-native",
- "signal-guitar-proto",
- "signal-guitar-ui",
+ "guitar",
  "tracing",
  "tracing-subscriber",
  "vox-core",
@@ -18675,17 +18645,6 @@ dependencies = [
  "thiserror 2.0.20",
  "vox",
  "vox-types",
-]
-
-[[package]]
-name = "signal-phones"
-version = "0.1.0"
-dependencies = [
- "audio",
- "libc",
- "memmap2",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -18997,6 +18956,7 @@ dependencies = [
  "dock-proto",
  "dsp-core",
  "getrandom 0.3.4",
+ "guitar",
  "lumen-blocks",
  "midicore",
  "modulation",
@@ -19006,8 +18966,6 @@ dependencies = [
  "signal-controller",
  "signal-daw-bridge",
  "signal-grid-ui",
- "signal-guitar-proto",
- "signal-guitar-ui",
  "signal-proto",
  "signal-widgets",
  "tokio",
@@ -19023,8 +18981,8 @@ dependencies = [
  "console_error_panic_hook",
  "dioxus",
  "dioxus-router",
+ "guitar",
  "keys",
- "signal-guitar-ui",
  "signal-proto",
  "ssg",
  "ssg-build",

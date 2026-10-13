@@ -11,8 +11,8 @@
 //! THD under ~3 % reads clean, 3–10 % edge of breakup, past that driven.
 //! Nothing in the library is written.
 
-use signal_guitar::library::RigLibrary;
-use signal_guitar::measure::render_through;
+use guitar::library::RigLibrary;
+use guitar::measure::render_through;
 use signal_sampler::rig_profile::RigPatch;
 
 const SR: u32 = 48_000;
@@ -99,14 +99,14 @@ fn main() {
     let out = args.get(1).filter(|a| *a != "--models").map(std::path::PathBuf::from);
     let models_mode = args.iter().any(|a| a == "--models");
     // The instrument first (`SIGNAL_INSTRUMENT=bass`): it names the library.
-    signal_guitar::instrument::init();
-    signal_guitar::levelling::apply_nam_calibration();
+    guitar::instrument::init();
+    guitar::levelling::apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let Some(def) = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(name)) else {
         eprintln!("no profile {name}");
         std::process::exit(2);
     };
-    let built = signal_guitar::nodes::profile_from_library(def, &lib.drive_presets);
+    let built = guitar::nodes::profile_from_library(def, &lib.drive_presets);
     if args.iter().any(|a| a == "--trims") {
         for p in &built.patches {
             for b in p.chain.iter().filter(|b| b.name.starts_with("Amp ") && !b.nam.is_empty()) {
@@ -120,12 +120,12 @@ fn main() {
         // How loud each patch's delays and reverbs sit under the playing:
         // the chords DI with them off, then each alone, the difference
         // being the wet signal — its loudness against the dry, dB.
-        let chords = signal_guitar::di_player::recording(0, SR);
+        let chords = guitar::di_player::recording(0, SR);
         let is_dly = |n: &str| n.to_lowercase().starts_with("dly");
         let is_verb = |n: &str| n.to_lowercase().starts_with("verb");
         let lufs = |x: &[f64]| signal_sampler::loudness::integrated_lufs(x, f64::from(SR));
         let mono = |(l, r): (Vec<f32>, Vec<f32>)| -> Vec<f64> { l.iter().zip(&r).map(|(a, b)| f64::from(a + b) * 0.5).collect() };
-        let rows = signal_guitar::levelling::par_map(&built.patches, 0, |p| {
+        let rows = guitar::levelling::par_map(&built.patches, 0, |p| {
             let lim = |n: &str| n.eq_ignore_ascii_case("limiter");
             let dry = with(p, |n| is_dly(n) || is_verb(n) || lim(n));
             let dly = with(p, |n| is_verb(n) || lim(n));
@@ -152,11 +152,11 @@ fn main() {
     }
     if models_mode {
         // Every capture in the library's models/, alone in Amp L.
-        let dir = signal_guitar::library::rig_dir().join("models");
+        let dir = guitar::library::rig_dir().join("models");
         let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "nam")).collect();
         files.sort();
         let template = built.patches.first().expect("a patch").clone();
-        let rows = signal_guitar::levelling::par_map(&files, 0, |f| {
+        let rows = guitar::levelling::par_map(&files, 0, |f| {
             let mut p = with(&template, |n| n != "Amp L");
             for b in &mut p.chain {
                 if b.name == "Amp L" {
@@ -182,16 +182,16 @@ fn main() {
         }
         return;
     }
-    let chords = signal_guitar::di_player::recording(0, SR);
+    let chords = guitar::di_player::recording(0, SR);
     // Every capture's level curve first, so a trimmed amp keeps its level.
     let mut caps: Vec<String> = built.patches.iter().flat_map(|p| p.chain.iter().filter(|b| !b.nam.is_empty()).map(|b| b.nam.clone())).collect();
     caps.sort();
     caps.dedup();
-    signal_guitar::levelling::par_map(&caps, 0, |c| {
+    guitar::levelling::par_map(&caps, 0, |c| {
         let _ = signal_sampler::nam_calibrate::drive_curve(std::path::Path::new(c), f64::from(SR));
     });
-    let built = signal_guitar::nodes::profile_from_library(def, &lib.drive_presets);
-    let rows = signal_guitar::levelling::par_map(&built.patches, 0, |p| {
+    let built = guitar::nodes::profile_from_library(def, &lib.drive_presets);
+    let rows = guitar::levelling::par_map(&built.patches, 0, |p| {
         let full = with(p, is_time);
         let amps = with(p, |n| !amp_only(n));
         let lufs = render_through(p, SR, &chords).map_or(f64::NAN, |(l, r)| {

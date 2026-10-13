@@ -7,7 +7,7 @@
 #[cfg(test)]
 mod signal_rig {
     use daw_standalone::plugin::{FxFactory, PluginEvents};
-    use signal_guitar::proto::rig::Rig as _;
+    use guitar::proto::rig::Rig as _;
 
     const RATE: f64 = 48_000.0;
     const BLOCK: usize = 480;

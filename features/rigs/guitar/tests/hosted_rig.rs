@@ -3,16 +3,16 @@
 //! while the service — what the switches and the browser drive — changes
 //! what plays. No audio device is opened.
 
-use signal_guitar::instrument::Instrument;
-use signal_guitar::proto::rig::Rig;
-use signal_guitar::{GuitarRigBackend, RigHome};
+use guitar::instrument::Instrument;
+use guitar::proto::rig::Rig;
+use guitar::{GuitarRigBackend, RigHome};
 
 const RATE: u32 = 48_000;
 const BLOCK: usize = 480;
 
 /// The host's output level over `blocks` blocks of a low E (41 Hz) at 0.3,
 /// the last half of them.
-fn level(host: &signal_guitar::RigHost, from: usize, blocks: usize) -> f32 {
+fn level(host: &guitar::RigHost, from: usize, blocks: usize) -> f32 {
     let (mut l, mut r) = (vec![0.0; BLOCK], vec![0.0; BLOCK]);
     let mut sum = 0.0_f32;
     let mut n = 0_usize;

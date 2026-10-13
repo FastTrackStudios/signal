@@ -20,9 +20,9 @@
 
 use std::sync::Arc;
 
-use signal_guitar::library::RigLibrary;
-use signal_guitar::measure::apply_chain_bypass;
-use signal_guitar::nodes::profile_from_library;
+use guitar::library::RigLibrary;
+use guitar::measure::apply_chain_bypass;
+use guitar::nodes::profile_from_library;
 use signal_sampler::rig::GuitarRig;
 use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 
@@ -114,7 +114,7 @@ fn main() {
     let per_block = args.iter().any(|a| a == "--per-block");
     let only = args.iter().find(|a| !a.starts_with("--"));
 
-    signal_guitar::levelling::apply_nam_calibration();
+    guitar::levelling::apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let mut late = Vec::new();
 

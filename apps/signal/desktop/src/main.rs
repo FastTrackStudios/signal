@@ -624,14 +624,14 @@ fn apply_open_args() {
         }
     }
     // Two flags for running the real rig without consequences — see
-    // `signal_guitar::library` for what they do. Translated to environment
+    // `guitar::library` for what they do. Translated to environment
     // here rather than threaded through as arguments because the rig core is
     // reached by more than one path (this app, `--engine`, the benchmark
     // examples) and all of them should honour the same switch.
     let silent = args.iter().any(|a| a == "--silent");
     let ephemeral = args.iter().any(|a| a == "--ephemeral" || a == "--no-save");
     // Design mode: the UI over a synthesised rig — no device, no MIDI, no DSP,
-    // so several copies run side by side. See `signal_guitar::library`.
+    // so several copies run side by side. See `guitar::library`.
     let design = args.iter().any(|a| a == "--design" || a == "--mock");
     // SAFETY: single-threaded, before any GUI or thread init.
     unsafe {

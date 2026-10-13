@@ -56,7 +56,7 @@ webview = []
 # engine (rig_engine.rs) + the mobile shell (mobile_view.rs). Kept separate
 # from `signal` because the drums/keys/synth rig UIs pull signal-ui's
 # Vello/baseview surfaces, which don't build for iOS.
-signal-guitar = ["dep:signal-guitar-proto", "dep:signal-guitar-ui", "dep:signal-tone3000-proto", "dep:signal-tone3000-ui", "dep:signal-packs-proto", "dep:session-ui", "dep:vox-core", "dep:vox-websocket", "dep:architect", "architect/iroh", "architect/local", "dep:signal-guitar", "dep:tokio", "dep:vox", "dep:facet-json", "dep:futures-util", "dep:futures-channel", "dep:sha2", "dep:reqwest", "dep:facet", "dep:eyre"]
+signal-guitar = ["dep:guitar", "guitar?/ui", "dep:signal-tone3000-proto", "dep:signal-tone3000-ui", "dep:signal-packs-proto", "dep:session-ui", "dep:vox-core", "dep:vox-websocket", "dep:architect", "architect/iroh", "architect/local", "dep:tokio", "dep:vox", "dep:facet-json", "dep:futures-util", "dep:futures-channel", "dep:sha2", "dep:reqwest", "dep:facet", "dep:eyre"]
 # The keys rig on the phone: the in-process sampler engine (signal-keys →
 # signal-sampler over CoreAudio, MIDI via midir/CoreMIDI) + the wire types
 # for the mobile keys view + pack downloads. iOS-clean by construction: the
@@ -140,13 +140,12 @@ daw-proto.workspace = true
 tracing.workspace = true
 
 # Signal domain (the rig)
-signal-guitar-proto = { workspace = true, optional = true }
+guitar = { workspace = true, optional = true, features = ["ui"] }
 # TONE3000: the wire contract and the tone browser. Both wasm-clean, so
 # the browser remote gets the same page the desktop app does.
 signal-tone3000-proto = { workspace = true, optional = true }
 signal-tone3000-ui = { workspace = true, optional = true }
 fts-chrome.workspace = true
-signal-guitar-ui = { workspace = true, optional = true }
 drums = { workspace = true, optional = true, features = ["ui"] }
 keys = { workspace = true, optional = true, features = ["ui"] }
 # MidiEvent — the in-tab keys backend (web_keys_backend.rs) decodes the raw
@@ -248,7 +247,7 @@ builtin = { workspace = true, optional = true }
 
 # ── Engine mode (`--engine`, feature `signal`) — the former
 #    apps/signal-engine, native only ─────────────────────────────────────
-signal-guitar = { workspace = true, optional = true }
+guitar = { workspace = true, optional = true }
 drums = { workspace = true, optional = true }
 keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }

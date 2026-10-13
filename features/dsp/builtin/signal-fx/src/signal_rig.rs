@@ -1,7 +1,7 @@
 //! `FTS Signal Rig`: signal's guitar or bass rig, whole, on a track.
 //!
 //! The track's FX is the rig's audio: signal's rig service built
-//! [`hosted`](signal_guitar::GuitarRigBackend::hosted) — every profile,
+//! [`hosted`](guitar::GuitarRigBackend::hosted) — every profile,
 //! stack and patch signal has, its crossfades and tails — played a block
 //! at a time by the track ([`RigHost::process`]). The service itself is
 //! kept here, by the rig's id ([`rig`]), for what drives it: the window's
@@ -23,9 +23,9 @@ use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 use daw_standalone::plugin::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
-use signal_guitar::instrument::Instrument;
-use signal_guitar::proto::rig::Rig as _;
-use signal_guitar::{GuitarRigBackend, RigHome, RigHost};
+use guitar::instrument::Instrument;
+use guitar::proto::rig::Rig as _;
+use guitar::{GuitarRigBackend, RigHome, RigHost};
 
 /// A rig playing on a track: its service, and where its audio is played.
 pub struct Playing {
@@ -208,7 +208,7 @@ impl Playing {
 
     /// The profile's patches, as the service says them.
     #[must_use]
-    pub fn service_patches(&self) -> Vec<signal_guitar::proto::PatchInfo> {
+    pub fn service_patches(&self) -> Vec<guitar::proto::PatchInfo> {
         self.service.patches()
     }
 

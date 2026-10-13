@@ -3,8 +3,8 @@
 //! other's, and comes back to the first as it was. Design-mode rig over a
 //! throwaway config root.
 
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::Rig;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::Rig;
 
 fn stacks(rig: &GuitarRigBackend) -> Vec<String> {
     Rig::perf(rig).stacks.into_iter().map(|s| s.name).collect()

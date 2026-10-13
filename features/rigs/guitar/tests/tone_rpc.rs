@@ -3,8 +3,8 @@
 //! it plays it too; the sidebar lists it as the Preset module's, live on
 //! both.
 
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::Rig;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::Rig;
 
 static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
 

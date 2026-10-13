@@ -11,9 +11,9 @@
 
 use std::sync::Arc;
 
-use signal_guitar::compose::snapshot_patch;
-use signal_guitar::library::RigLibrary;
-use signal_guitar::measure::apply_chain_bypass;
+use guitar::compose::snapshot_patch;
+use guitar::library::RigLibrary;
+use guitar::measure::apply_chain_bypass;
 use signal_sampler::nam_calibrate::DiReference;
 use signal_sampler::rig::GuitarRig;
 use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
@@ -89,7 +89,7 @@ fn main() {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
-    signal_guitar::levelling::apply_nam_calibration();
+    guitar::levelling::apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let comp = RigLibrary::load_compositions();
     let base = lib.profiles.first().expect("a profile").clone();
@@ -115,10 +115,10 @@ fn main() {
         })
         .collect();
 
-    let results = signal_guitar::levelling::par_map(&jobs, 0, |(preset, snap, post)| {
+    let results = guitar::levelling::par_map(&jobs, 0, |(preset, snap, post)| {
         let mut def = base.clone();
         def.patches = vec![snapshot_patch(&base, preset, snap, "verify")?];
-        let patch = signal_guitar::nodes::profile_from_library(&def, &lib.drive_presets)
+        let patch = guitar::nodes::profile_from_library(&def, &lib.drive_presets)
             .patches
             .into_iter()
             .next()?;

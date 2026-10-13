@@ -38,10 +38,10 @@
 use std::time::Duration;
 
 use dioxus::prelude::*;
-use signal_guitar_ui::proto::{
+use guitar::ui::proto::{
     BlockParam, LiveBlock, LiveNode, LivePreset, PerfStack, PerformanceModel,
 };
-use signal_guitar_ui::{ControlView, PerformGrid, RigViewState};
+use guitar::ui::{ControlView, PerformGrid, RigViewState};
 use signal_proto::block::BlockType;
 
 /// A band in the demo EQ curve: (frequency, gain dB, Q, shape index).

@@ -13,9 +13,9 @@
 use dioxus::prelude::*;
 use drums::proto::drum::{DrumRigClient, DrumRigStreamClient};
 use drums::ui::DrumRigRemote;
-use signal_guitar_proto::audio::AudioSettingsClient;
-use signal_guitar_proto::rig::{RigClient, RigStreamClient};
-use signal_guitar_ui::GuitarRigRemote;
+use guitar::proto::audio::AudioSettingsClient;
+use guitar::proto::rig::{RigClient, RigStreamClient};
+use guitar::ui::GuitarRigRemote;
 use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
 use keys::ui::KeysRigRemote;
 use signal_synth_proto::synth::{SynthRigClient, SynthRigStreamClient};
@@ -295,12 +295,12 @@ fn GuitarRigView(instrument: &'static str) -> Element {
     // whole rig on an ultrawide). Blitz has no resize events, so it is
     // polled from the window a few times a second.
     let mut aspect = use_signal(|| 1.0_f64);
-    use_context_provider(|| signal_guitar_ui::WindowAspect(aspect));
+    use_context_provider(|| guitar::ui::WindowAspect(aspect));
     // Its size in points, for the form factor (a phone held sideways lays
     // the chain out a page at a time).
     #[allow(unused_mut)]
     let mut size = use_signal(|| (0.0_f64, 0.0_f64));
-    use_context_provider(|| signal_guitar_ui::WindowSize(size));
+    use_context_provider(|| guitar::ui::WindowSize(size));
     #[cfg(all(not(any(target_arch = "wasm32", target_os = "ios")), not(feature = "webview")))]
     {
         let window = dioxus_native::use_window();

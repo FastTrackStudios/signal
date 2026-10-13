@@ -16,8 +16,7 @@ description = "Signal on a phone — the guitar rig's phone pages as a remote of
 dioxus = { workspace = true }
 dioxus-native = { workspace = true }
 blitz-shell = { workspace = true, features = ["custom-widget"] }
-signal-guitar-ui = { workspace = true }
-signal-guitar-proto = { workspace = true }
+guitar = { workspace = true, features = ["ui"] }
 vox-core = { workspace = true }
 vox-websocket = { workspace = true }
 architect = { workspace = true, features = ["vox", "platform"] }

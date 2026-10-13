@@ -21,9 +21,9 @@
 
 use std::sync::Arc;
 
-use signal_guitar::compose::snapshot_patch;
-use signal_guitar::library::RigLibrary;
-use signal_guitar::measure::apply_chain_bypass;
+use guitar::compose::snapshot_patch;
+use guitar::library::RigLibrary;
+use guitar::measure::apply_chain_bypass;
 use signal_sampler::nam_calibrate::DiReference;
 use signal_sampler::rig::GuitarRig;
 use signal_sampler::rig_node::Param;
@@ -252,7 +252,7 @@ fn main() {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
-    signal_guitar::levelling::apply_nam_calibration();
+    guitar::levelling::apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let base = lib.profiles.first().expect("a profile").clone();
     let di: Vec<f32> = DiReference::load_or_synthetic(f64::from(SR))
@@ -263,7 +263,7 @@ fn main() {
     let build = |preset: &str, snap: &str| -> Option<RigPatch> {
         let mut def = base.clone();
         def.patches = vec![snapshot_patch(&base, preset, snap, "dial")?];
-        signal_guitar::nodes::profile_from_library(&def, &lib.drive_presets)
+        guitar::nodes::profile_from_library(&def, &lib.drive_presets)
             .patches
             .into_iter()
             .next()
@@ -276,7 +276,7 @@ fn main() {
 
     // One preset per core: each dial is a chain of dependent renders (a
     // bisection), but the presets are independent of each other.
-    let dialled = signal_guitar::levelling::par_map(SPECS, 0, |s| -> Option<(String, String)> {
+    let dialled = guitar::levelling::par_map(SPECS, 0, |s| -> Option<(String, String)> {
         let (comp, keep, sources): (&str, &[&str], Vec<RigPatch>) = match s.pos {
             Pos::Pre => (
                 "Pre Comp",

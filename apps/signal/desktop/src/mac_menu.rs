@@ -3,7 +3,7 @@
 //!
 //! - **Audio readout** — a menu-bar item after the app's own menus titled
 //!   like REAPER's (`48 kHz · 64 spls · 2.7 ms · DSP 12%`), refreshed every
-//!   second from the embedded rig's [`RigPerf`](signal_guitar_proto::RigPerf).
+//!   second from the embedded rig's [`RigPerf`](guitar::proto::RigPerf).
 //!   Its menu holds the detail: render times, dropped blocks, xruns.
 //! - **Audio Settings… ⌘,** in the app menu and at the top of the Audio
 //!   menu — the rig's device, outputs and headphone mix. The app's own
@@ -194,7 +194,7 @@ fn show(title: &str, lines: &[String]) {
 }
 
 /// The rig's audio state, as the bar title and the detail lines.
-fn describe(status: Option<&signal_guitar_proto::RigStatus>) -> (String, Vec<String>) {
+fn describe(status: Option<&guitar::proto::RigStatus>) -> (String, Vec<String>) {
     let Some(status) = status else {
         return ("Audio —".into(), vec!["No rig engine in this app".into()]);
     };
@@ -252,7 +252,7 @@ pub fn MacMenuBar(on_settings: Callback<()>) -> Element {
                     on_settings.call(());
                 }
                 if AUDIO_SETTINGS_REQUESTED.swap(false, Ordering::Relaxed) {
-                    signal_guitar_ui::open_audio_settings();
+                    guitar::ui::open_audio_settings();
                 }
                 let status = match crate::rig_engine::engine() {
                     Some(e) => e.rig.status().await.ok(),

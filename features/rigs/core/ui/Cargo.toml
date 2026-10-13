@@ -22,10 +22,9 @@ dsp-core = { workspace = true, features = ["modulation"] }
 modulation = { workspace = true, features = ["ui"] }
 # The guitar-rig wire contract (types + vox service clients) — the detachable
 # GUI boundary. wasm-clean; NOT the audio backend.
-signal-guitar-proto.workspace = true
+guitar = { workspace = true, features = ["ui"] }
 # Feature-scoped rig components (perform grid, meters, settings modal, chain
 # strip) — shared verbatim with the browser remote (apps/web).
-signal-guitar-ui.workspace = true
 # The extracted zoomable rig graph (wasm-clean) — re-exported under the old paths.
 signal-grid-ui.workspace = true
 # `use_stream` (atom + vox): subscribe components to `#[subscribe]` event

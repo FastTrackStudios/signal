@@ -6,7 +6,7 @@
 //! types are the wire contract every remote GUI shares. signal-ui adds only
 //! its desktop-shell composition on top.
 
-pub use signal_guitar_proto::{
+pub use guitar::proto::{
     AudioDevice, AudioDevices, AudioPrefs, LiveBlock, PerfStack, PerformanceModel,
 };
-pub use signal_guitar_ui::{AudioSettingsBridge, AudioSettingsModal};
+pub use guitar::ui::{AudioSettingsBridge, AudioSettingsModal};

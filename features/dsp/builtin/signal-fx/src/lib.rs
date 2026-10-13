@@ -31,7 +31,7 @@ pub mod signal_rig;
 
 /// signal's rig crate, for what drives a rig from outside: its service's
 /// calls, its homes and instruments.
-pub use signal_guitar;
+pub use guitar as signal_guitar;
 
 use daw_standalone::plugin::{FxFactory, PluginInstance};
 

@@ -16,9 +16,9 @@ use std::sync::{Arc, OnceLock};
 use architect::rig::RigBackend as _;
 #[cfg(feature = "tone3000")]
 use signal_account_proto::account::AccountAuthClient;
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::audio::AudioSettingsClient;
-use signal_guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
+use guitar::GuitarRigBackend;
+use guitar::proto::audio::AudioSettingsClient;
+use guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 #[cfg(feature = "signal-keys-rig")]
 use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
 #[cfg(feature = "tone3000")]
@@ -156,7 +156,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         // Design mode (the simulator) opens no device: `start` only lays the
         // profile out, which is what the pages draw from.
         #[cfg(target_os = "ios")]
-        if crate::ios_audio::has_external_input() || signal_guitar::library::rig_is_design() {
+        if crate::ios_audio::has_external_input() || guitar::library::rig_is_design() {
             backend.start();
         } else {
             // No interface yet: the whole surface, with no audio — the top
@@ -247,7 +247,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             // the access changes: the one event that answers "why is the
             // guitar not heard" (see `daw_audio_io::session_report`).
             let report = |why: &str| {
-                if let Some(session) = signal_guitar::audio_session_report() {
+                if let Some(session) = guitar::audio_session_report() {
                     tracing::info!(audio.session = %session, audio.why = why, "audio session");
                 }
             };

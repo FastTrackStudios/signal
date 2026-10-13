@@ -9,10 +9,10 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::library::{SetlistLib, SongLib};
-use signal_guitar::profiles::ProfileDef;
-use signal_guitar::proto::rig::Rig;
+use guitar::GuitarRigBackend;
+use guitar::library::{SetlistLib, SongLib};
+use guitar::profiles::ProfileDef;
+use guitar::proto::rig::Rig;
 
 fn read<T: for<'a> facet::Facet<'a>>(path: &Path) -> T {
     facet_styx::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
@@ -266,12 +266,12 @@ fn a_config_file_edited_under_the_running_rig_applies_live_and_sticks() {
     sets.setlists[0].name = "Renamed Set".into();
     write(&sets_path, &sets);
     std::fs::write(
-        dir.join(signal_guitar::config_watch::RELOAD_REQUEST),
+        dir.join(guitar::config_watch::RELOAD_REQUEST),
         "req-42",
     )
     .unwrap();
     eventually("the request is answered", || {
-        !dir.join(signal_guitar::config_watch::RELOAD_REQUEST)
+        !dir.join(guitar::config_watch::RELOAD_REQUEST)
             .exists()
     });
     let logged = std::fs::read_to_string(&log).unwrap();

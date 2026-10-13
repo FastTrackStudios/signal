@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/rigs/guitar",
     "features/formats",
     "features/ui/daw-ui",
     "features/dynamic-template",
@@ -198,10 +199,6 @@ members = [
     "features/rigs/plugin-host",
     "features/adapters/reaper/signal-extension",
     "features/adapters/reaper/signal-reaper-controller",
-    "features/rigs/guitar",
-    "features/rigs/guitar/proto",
-    "features/rigs/guitar/ui",
-    "features/rigs/guitar/phones",
     "features/audio/worklet/keys",
     "features/audio/worklet/guitar",
     "features/rigs/orchestra",
@@ -276,6 +273,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+guitar = { path = "features/rigs/guitar" }
 formats = { path = "features/formats" }
 daw-ui = { path = "features/ui/daw-ui" }
 dynamic-template = { path = "features/dynamic-template" }
@@ -525,7 +523,6 @@ signal-fx = { path = "features/dsp/builtin/signal-fx" }
 signal-sampler = { path = "features/rigs/sampler/signal-sampler" }
 # signal's rig library — its profiles, scenes and how a profile becomes the
 # chains a scene plays (the bass rig's profile mode, signal-fx).
-signal-guitar = { path = "features/rigs/guitar" }
 expression-editor-audio = { path = "features/expression-editor/expression-editor-audio" }
 expression-editor-core = { path = "features/expression-editor/expression-editor-core" }
 expression-editor-corpus = { path = "features/expression-editor/expression-editor-corpus" }
@@ -1063,9 +1060,6 @@ signal-macromod = { path = "features/rigs/macromod/macromod" }
 signal-plugin-host = { path = "features/rigs/plugin-host", default-features = false }
 signal-packs-proto = { path = "features/rigs/sampler/packs-proto" }
 signal-pack-library = { path = "features/rigs/sampler/pack-library" }
-signal-guitar-proto = { path = "features/rigs/guitar/proto" }
-signal-guitar-ui = { path = "features/rigs/guitar/ui" }
-signal-phones = { path = "features/rigs/guitar/phones" }
 signal-keys-worklet = { path = "features/audio/worklet/keys" }
 signal-guitar-worklet = { path = "features/audio/worklet/guitar" }
 openwurli-dsp = { path = "features/rigs/wurli/openwurli-dsp" }

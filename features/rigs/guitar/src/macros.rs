@@ -56,7 +56,7 @@
 
 use std::collections::HashMap;
 
-use signal_guitar_proto::{BlockParam, LiveBlock, MacroChildView, MacroKnobView};
+use crate::proto::{BlockParam, LiveBlock, MacroChildView, MacroKnobView};
 use signal_macromod::{MacroBank, MacroBinding, MacroKnob};
 use signal_proto::block::BlockType;
 
@@ -2660,7 +2660,7 @@ impl MacroEngine {
         &self,
         parent: &MacroKnob,
         blocks: &[LiveBlock],
-    ) -> Vec<signal_guitar_proto::MacroTuneView> {
+    ) -> Vec<crate::proto::MacroTuneView> {
         let stages = self.journeys.get(&parent.id);
         let mut out = Vec::new();
         let kids: Vec<&MacroKnob> = std::iter::once(parent)
@@ -2706,7 +2706,7 @@ impl MacroEngine {
                     .find(|b| b.id == t.block)
                     .map_or(0.0, |b| value(b, "algorithm", 0.0));
                 let edit = t.edit.clone().unwrap_or_default();
-                out.push(signal_guitar_proto::MacroTuneView {
+                out.push(crate::proto::MacroTuneView {
                     knob: k.id.clone(),
                     block: t.block.clone(),
                     group,

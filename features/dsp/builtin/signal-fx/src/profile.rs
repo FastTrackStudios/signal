@@ -70,13 +70,13 @@ pub fn library() -> &'static Library {
         // The bass's library in Session's own folder — a home of its own,
         // so a guitar rig beside it keeps its own, and the process's
         // instrument and library are left as they are.
-        let home = signal_guitar::RigHome::new(signal_guitar::instrument::Instrument::Bass, &dir);
+        let home = guitar::RigHome::new(guitar::instrument::Instrument::Bass, &dir);
         let library = home.load_or_bootstrap();
         let profiles = library
             .profiles
             .iter()
             .map(|def| {
-                signal_guitar::nodes::profile_from_library_in(&home, def, &library.drive_presets)
+                guitar::nodes::profile_from_library_in(&home, def, &library.drive_presets)
             })
             .collect();
         Library { dir, profiles }
