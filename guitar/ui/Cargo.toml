@@ -54,7 +54,7 @@ modulation-ui = { workspace = true, features = ["viz"] }
 delay = { workspace = true, features = ["ui", "viz"] }
 reverb = { workspace = true, features = ["ui", "viz"] }
 # The engine's own decay → seconds law, so the Time readouts are what plays.
-comp-ui = { workspace = true, features = ["viz"] }
+comp = { workspace = true, features = ["ui", "viz"] }
 # BlockType — chain-strip coloring.
 signal-proto.workspace = true
 # The zoomable rig graph + the headless slot conversion (both wasm-clean).
