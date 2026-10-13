@@ -486,24 +486,23 @@ fn add_fx_slot(daw: &Standalone, track_guid: &str, label: &str) -> eyre::Result<
 /// Ask `PipeWire` for the quantum before the JACK client connects (the client
 /// can't set the buffer there). No-op unless built with the `jack` feature, or
 /// when `PIPEWIRE_LATENCY` is already set / no buffer size is requested.
-#[cfg(not(target_arch = "wasm32"))]
-pub const fn request_low_latency_quantum(prefs: &AudioIoPrefs) {
-    #[cfg(feature = "jack")]
-    {
-        if prefs.buffer_size != 0 && std::env::var_os("PIPEWIRE_LATENCY").is_none() {
-            let rate = if prefs.sample_rate != 0 {
-                prefs.sample_rate
-            } else {
-                48_000
-            };
-            let buf = prefs.buffer_size;
-            unsafe { std::env::set_var("PIPEWIRE_LATENCY", format!("{buf}/{rate}")) };
-            tracing::info!(quantum = %format!("{buf}/{rate}"), "rig host: requesting PipeWire low-latency quantum");
-        }
+#[cfg(all(not(target_arch = "wasm32"), feature = "jack"))]
+pub fn request_low_latency_quantum(prefs: &AudioIoPrefs) {
+    if prefs.buffer_size != 0 && std::env::var_os("PIPEWIRE_LATENCY").is_none() {
+        let rate = if prefs.sample_rate != 0 {
+            prefs.sample_rate
+        } else {
+            48_000
+        };
+        let buf = prefs.buffer_size;
+        unsafe { std::env::set_var("PIPEWIRE_LATENCY", format!("{buf}/{rate}")) };
+        tracing::info!(quantum = %format!("{buf}/{rate}"), "rig host: requesting PipeWire low-latency quantum");
     }
-    #[cfg(not(feature = "jack"))]
-    let _ = prefs;
 }
+
+/// Without the `jack` feature there is no JACK client to ask for: a no-op.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "jack")))]
+pub const fn request_low_latency_quantum(_prefs: &AudioIoPrefs) {}
 
 /// Process-unique guid string for rig project guids — shared by every rig
 /// host so ids never collide within one engine process.
