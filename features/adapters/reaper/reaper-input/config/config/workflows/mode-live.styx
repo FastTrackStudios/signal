@@ -1,5 +1,0 @@
-// Live mode workflow. id = "mode-live", name = "Mode Live".
-// Skeleton — see mode-organize.styx for the override-block menu.
-
-name        "Live"
-description "Performance / setlist playback view."
