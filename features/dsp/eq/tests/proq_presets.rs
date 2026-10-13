@@ -89,7 +89,7 @@ fn what_the_plugin_cannot_recall_is_reported_rather_than_dropped() {
 
     let handles: HashMap<String, fts_audio_ui::ParamHandle> = HashMap::new();
     let (_applied, unmatched) =
-        preset_browser_ui::apply_to_handles(&a_translated_dynamic_preset(), &handles);
+        preset_browser::ui::apply_to_handles(&a_translated_dynamic_preset(), &handles);
 
     // With no handles at all every name is unmatched — the point is that the
     // function reports them, name by name, instead of returning success.

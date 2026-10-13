@@ -17,7 +17,7 @@ use preset_browser::PresetBrowser;
 /// Where the reverb's presets live.
 #[must_use]
 pub fn preset_library_root() -> std::path::PathBuf {
-    preset_browser_ui::library_root(
+    preset_browser::ui::library_root(
         "FTS_REVERB_PRESETS",
         "/run/media/AudioHaven/Signal/Libraries/Presets/FTS-Reverb",
     )
@@ -26,7 +26,7 @@ pub fn preset_library_root() -> std::path::PathBuf {
 /// The reverb's library: every bank under the root, as one list.
 #[must_use]
 pub fn load_library() -> (PresetBrowser, String) {
-    preset_browser_ui::load_library_tree(&preset_library_root())
+    preset_browser::ui::load_library_tree(&preset_library_root())
 }
 
 /// Write a preset to the plugin's parameters, and report anything that did not
@@ -39,7 +39,7 @@ pub fn apply(
     handles: &HashMap<String, ParamHandle>,
     mut note: Signal<String>,
 ) {
-    let (applied, unmatched) = preset_browser_ui::apply_to_handles(params, handles);
+    let (applied, unmatched) = preset_browser::ui::apply_to_handles(params, handles);
     if unmatched.is_empty() {
         note.set(String::new());
     } else {
@@ -73,7 +73,7 @@ pub fn ReverbPresetSidecar(
                     "{message}"
                 }
             }
-            preset_browser_ui::PresetBrowserPanel {
+            preset_browser::ui::PresetBrowserPanel {
                 browser,
                 ink: ink,
                 accent: accent,

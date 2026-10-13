@@ -1,0 +1,28 @@
+[package]
+name = "preset-browser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Presets: storage, browsing, and its panel"
+
+[lints]
+workspace = true
+
+[features]
+ui = ["dep:dioxus", "dep:fts-audio-ui"]
+
+[dependencies]
+dioxus = { workspace = true, optional = true }
+fts-audio-ui = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+dioxus = { workspace = true }
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[test]]
+name = "panel"
+path = "tests/panel.rs"
+required-features = ["ui"]

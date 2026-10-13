@@ -20,6 +20,10 @@
 //! keeps one library type usable for every processor, and it is already the
 //! shape the translated Valhalla and `FabFilter` presets are stored in.
 
+
+#[cfg(feature = "ui")]
+pub mod ui;
+
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};

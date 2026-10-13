@@ -471,7 +471,7 @@ fn AppShell() -> Element {
                             "position:absolute; top:0; left:0; right:0; \
                              height:{PRESET_BAR_H}px;"
                         ),
-                        preset_browser_ui::PresetBar {
+                        preset_browser::ui::PresetBar {
                         browser: preset_browser,
                         browsing,
                         accent: skin.accent.to_string(),

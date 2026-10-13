@@ -10,7 +10,7 @@ description = "The reverb: its algorithms, their profiles and its editor"
 workspace = true
 
 [features]
-native = ["dep:architect-ui", "dep:atomic_float", "dep:eq", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "dep:preset-browser-ui", "eq/native", "musical-time/params"]
+native = ["dep:architect-ui", "dep:atomic_float", "dep:eq", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "dep:preset-browser", "eq/native", "musical-time/params"]
 profiles = []
 ui = ["dep:dioxus", "dep:fts-audio-ui", "dep:musical-time", "dep:musical-time-ui", "dep:web-time"]
 viz = ["dep:anyrender", "dep:blitz-dom", "dep:bytemuck", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
@@ -36,8 +36,7 @@ nice-plug = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 pitch = { workspace = true }
-preset-browser = { workspace = true, optional = true }
-preset-browser-ui = { workspace = true, optional = true }
+preset-browser = { workspace = true, optional = true, features = ["ui"] }
 realfft = { version = "3.4" }
 symphonium = { version = "0.6", default-features = false, features = ["wav", "pcm", "fft-resampler"] }
 thiserror = { workspace = true }

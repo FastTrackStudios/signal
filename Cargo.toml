@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/preset-browser",
     "features/control-surfaces",
     "features/chords",
     "features/dsp/hits",
@@ -176,8 +177,6 @@ members = [
     "features/dsp/core/musical-time/musical-time-ui",
     "features/dsp/builtin/fx-blocks",
     "features/dsp/stack",
-    "features/preset-browser/preset-browser",
-    "features/preset-browser/preset-browser-ui",
     "features/ui/fts-audio-ui",
     "features/ui/kit-sheet",
     "features/ui/fts-plug-ui",
@@ -308,6 +307,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+preset-browser = { path = "features/preset-browser" }
 control-surfaces = { path = "features/control-surfaces" }
 chords = { path = "features/chords" }
 hits = { path = "features/dsp/hits" }
@@ -1083,8 +1083,6 @@ multiband-dsp = { path = "features/dsp/multiband" }
 fx-stack = { path = "features/dsp/stack" }
 musical-time = { path = "features/dsp/core/musical-time/musical-time" }
 musical-time-ui = { path = "features/dsp/core/musical-time/musical-time-ui" }
-preset-browser = { path = "features/preset-browser/preset-browser" }
-preset-browser-ui = { path = "features/preset-browser/preset-browser-ui" }
 fx-blocks = { path = "features/dsp/builtin/fx-blocks" }
 web-time = "1"
 

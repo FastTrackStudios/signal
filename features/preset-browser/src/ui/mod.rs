@@ -5,7 +5,7 @@
 //! searching, filtering, the list, stepping — is the same problem in all three
 //! and lives here once.
 //!
-//! The browsing itself is [`preset_browser::PresetBrowser`], which is headless
+//! The browsing itself is [`crate::PresetBrowser`], which is headless
 //! and separately tested. This crate is rendering.
 //!
 //! # Styling
@@ -17,7 +17,7 @@
 //! rather than imposing its own look.
 
 use dioxus::prelude::*;
-use preset_browser::{Preset, PresetBrowser};
+use crate::{Preset, PresetBrowser};
 
 /// How a preset is applied, and what the panel should look like doing it.
 #[derive(Props, Clone, PartialEq)]
@@ -579,7 +579,7 @@ pub fn load_library_tree(root: &std::path::Path) -> (PresetBrowser, String) {
     banks.insert(0, root.to_path_buf());
 
     for bank in banks {
-        if let Ok(report) = preset_browser::load_directory(&bank) {
+        if let Ok(report) = crate::load_directory(&bank) {
             skipped += report.skipped.len();
             presets.extend(report.presets);
         }

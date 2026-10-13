@@ -31,7 +31,7 @@ macro_rules! recording_harness {
         fn $harness() -> Element {
             let browser = use_signal(|| PresetBrowser::new(library()));
             rsx! {
-                preset_browser_ui::PresetBrowserPanel {
+                preset_browser::ui::PresetBrowserPanel {
                     browser,
                     title: "Reverb Presets".to_string(),
                     on_apply: move |p: preset_browser::Preset| {
@@ -73,7 +73,7 @@ fn library() -> Vec<Preset> {
 fn Harness() -> Element {
     let browser = use_signal(|| PresetBrowser::new(library()));
     rsx! {
-        preset_browser_ui::PresetBrowserPanel {
+        preset_browser::ui::PresetBrowserPanel {
             browser,
             title: "Reverb Presets".to_string(),
             on_apply: move |_: preset_browser::Preset| {},
@@ -207,7 +207,7 @@ async fn only_measured_presets_carry_a_match_badge() -> dioxus_test::Result<()> 
 fn BarDisplayHarness() -> Element {
     let browser = use_signal(|| PresetBrowser::new(library()));
     rsx! {
-        preset_browser_ui::PresetBar {
+        preset_browser::ui::PresetBar {
             browser,
             on_apply: move |_: preset_browser::Preset| {},
             on_browse: move |()| {},
@@ -225,7 +225,7 @@ fn bar_log() -> &'static Applied {
 fn BarHarness() -> Element {
     let browser = use_signal(|| PresetBrowser::new(library()));
     rsx! {
-        preset_browser_ui::PresetBar {
+        preset_browser::ui::PresetBar {
             browser,
             on_apply: move |p: preset_browser::Preset| {
                 bar_log().lock().unwrap().push(p.parameters);

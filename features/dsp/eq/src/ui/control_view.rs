@@ -654,7 +654,7 @@ fn AppShell() -> Element {
                     }
                 },
 
-            preset_browser_ui::PresetBar {
+            preset_browser::ui::PresetBar {
                 browser: preset_browser,
                 browsing,
                 accent: "#8aa4ff".to_string(),

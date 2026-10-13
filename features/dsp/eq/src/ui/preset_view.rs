@@ -21,7 +21,7 @@ use crate::ui::params::{EqUiState, FtsEqParams, NUM_BANDS};
 /// Where the EQ's presets live.
 #[must_use]
 pub fn preset_library_root() -> std::path::PathBuf {
-    preset_browser_ui::library_root(
+    preset_browser::ui::library_root(
         "FTS_EQ_PRESETS",
         "/run/media/AudioHaven/Signal/Libraries/Presets/FTS-EQ",
     )
@@ -30,7 +30,7 @@ pub fn preset_library_root() -> std::path::PathBuf {
 /// The EQ's library: every bank under the root, as one list.
 #[must_use]
 pub fn load_library() -> (PresetBrowser, String) {
-    preset_browser_ui::load_library_tree(&preset_library_root())
+    preset_browser::ui::load_library_tree(&preset_library_root())
 }
 
 /// Every parameter a preset can name, by the name it uses.
@@ -140,7 +140,7 @@ fn band_key(index: usize, field: &str) -> String {
 /// one entry in [`BAND_TEXT_FIELDS`], not an edit in three places.
 ///
 /// A miss is silent for the same reason
-/// [`preset_browser_ui::apply_to_handles`] reports rather than panics: a
+/// [`preset_browser::ui::apply_to_handles`] reports rather than panics: a
 /// library outlives a build, and a preset from a version with more bands must
 /// cost only the settings it names.
 fn band_text_slot<'a>(
@@ -265,7 +265,7 @@ pub fn apply(
     mut note: Signal<String>,
 ) {
     apply_band_text(params, &preset.text_parameters);
-    let (applied, unmatched) = preset_browser_ui::apply_to_handles(&preset.parameters, handles);
+    let (applied, unmatched) = preset_browser::ui::apply_to_handles(&preset.parameters, handles);
     if unmatched.is_empty() {
         note.set(String::new());
     } else {
@@ -309,7 +309,7 @@ pub fn EqPresetSidecar(
                     "{message}"
                 }
             }
-            preset_browser_ui::PresetBrowserPanel {
+            preset_browser::ui::PresetBrowserPanel {
                 browser,
                 ink: ink,
                 accent: accent,

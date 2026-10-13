@@ -14,7 +14,7 @@ analyzer-ui = ["dep:anyrender", "dep:dioxus", "dep:kurbo", "dep:peniko"]
 gpu-tests = []
 graph = ["analyzer", "analyzer-ui", "dep:architect-ui", "dep:atomic_float", "dep:blitz-traits", "dep:bytemuck", "dep:dioxus-native", "dep:futures-timer", "fts-audio-ui/shader", "graph-paint"]
 graph-paint = ["analyzer", "analyzer-ui", "dep:anyrender", "dep:kurbo", "dep:peniko"]
-native = ["analyzer", "analyzer-ui", "dep:audiocore-core", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:preset-browser", "dep:preset-browser-ui", "graph", "panel", "profiles"]
+native = ["analyzer", "analyzer-ui", "dep:audiocore-core", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:preset-browser", "dep:preset-browser", "graph", "panel", "profiles"]
 panel = ["dep:architect-ui", "dep:audiocore-core", "dep:fts-audio-ui", "dep:nice-plug-dioxus"]
 profiles = []
 ui = ["dep:blitz-dom", "dep:dioxus", "dep:fts-audio-ui", "dep:parking_lot", "dep:web-time"]
@@ -38,8 +38,7 @@ nice-plug-dioxus = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 parking_lot = { version = "0.12", optional = true }
 peniko = { workspace = true, optional = true }
-preset-browser = { workspace = true, optional = true }
-preset-browser-ui = { workspace = true, optional = true }
+preset-browser = { workspace = true, optional = true, features = ["ui"] }
 realfft = { workspace = true }
 rtrb = { version = "0.3", optional = true }
 smallvec = { version = "1.15.2" }

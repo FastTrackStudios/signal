@@ -349,7 +349,7 @@ pub fn App() -> Element {
 
                     // Always visible: what is loaded, and how to move off it.
                     // The side rail selects the space; this selects the preset.
-                    preset_browser_ui::PresetBar {
+                    preset_browser::ui::PresetBar {
                         browser: preset_browser,
                         browsing: preset_open,
                         ink: design.ink.to_string(),
