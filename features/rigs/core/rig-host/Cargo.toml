@@ -18,6 +18,9 @@ pipewire = []
 jack = ["audio/io", "audio/jack"]
 
 [dependencies]
+# Note names (midi::note_name) on every target; the native table adds the
+# input backends.
+midi = { workspace = true }
 # Base: the project/track/FX-slot topology half — wasm-clean (`standalone`
 # only). The realtime-engine half (RigHost / start_output / start_duplex)
 # is native and pulls `standalone-audio` + daw-audio-io via the target
