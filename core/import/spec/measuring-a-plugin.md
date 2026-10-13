@@ -186,7 +186,7 @@ cargo run --release -p signal-analyzer --example eq_bundle_check
 plugins:
 
 ```sh
-cargo build --release -p fts-convert
+cargo build --release -p signal-desktop --features cli --bin fts-convert
 ./target/release/fts-convert song.rpp --dry-run --engine-too
 ```
 
