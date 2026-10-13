@@ -10,7 +10,15 @@ description = "Sample library playback engine for Signal — loads and plays orc
 workspace = true
 
 [features]
+# Native PipeWire backend (no JACK shim) — the live rig talks to PipeWire
+# directly via cpal's pipewire host. The rig picks the interface + input channel
+# by name and daw targets that device, so PipeWire maps its capture channels to
+# the rig in order and the chosen channel lands on the tapped input. Requires
+# libpipewire at build/link time (provided by the flake dev shell).
+# PipeWire is DEFAULT on Linux (target-gated in daw-audio-io); alias only.
 pipewire = []
+# Legacy JACK backend (pipewire-jack shim). Kept as a fallback for systems
+# without the native PipeWire host; run under `pw-jack`. Requires libjack.
 jack = ["cpal/jack", "audio/io", "audio/jack", "signal-rig-host/jack"]
 
 [dependencies]

@@ -110,20 +110,67 @@ dawfile-reaper = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
+# Resident source decoding (fts-sample/symphonium) without cpal.
+# WASM-compatible — the decoder is pure Rust and doesn't touch the audio
+# device. `budget` bounds the decoded-bytes accounting (see materialize).
+# `rtrb` because the renderer's live-input and live-MIDI rings are built
+# natively whenever it is — a native-only target dep, so a no-op on wasm.
 decode = ["fts-sample/load", "fts-sample/decode-compressed", "fts-sample/budget", "dep:rtrb"]
+# Full audio engine = decode + cpal output stream. Native-only audio
+# output (cpal+wasm-bindgen on WASM, but cpal pulls JS bindings).
+# `daw-audio-io` + `rtrb` are native-only (`cfg(not(wasm32))` target
+# deps); enabling them here is a no-op on wasm32 where Cargo ignores
+# the target dep, and the live-input paths are themselves `cfg`-gated.
 audio = ["decode", "dep:cpal", "audio/io", "dep:rtrb"]
+# Native PipeWire duplex engine (`DuplexAudioEngine`) — one realtime callback
+# (input+output, no ring) via daw-audio-io's `pw_filter` backend. Linux-only.
+# PipeWire is DEFAULT on Linux (daw-audio-io target-gates it); alias kept
+# for existing `daw-standalone/pipewire` references. Still pulls `audio`.
 pipewire = ["audio"]
+# Parse `.rpp` files into `Standalone::ProjectState` (tracks, items,
+# takes, markers, regions, tempo, routing). Native default pulls
+# rayon via `dawfile-reaper/parallel`. For WASM, enable
+# `rpp-project` without default features:
+#   default-features = false, features = ["rpp-project-wasm"]
 rpp-project = ["dep:dawfile-reaper", "dawfile-reaper/parallel"]
+# Save an opened project back to a NEW .rpp beside its original, via
+# dawfile-standalone's patched export (verbatim source + minimal patch).
 rpp-save = ["rpp-project", "dep:dawfile-standalone"]
+# Save a live project as a `.session` directory and open one back
+# (`session_file::{save_session, load_session, session_rpp_text}`): the
+# engine state written as REAPER text over the project's original, through
+# dawfile-standalone's `.session` format. Native-only (rpp-project pulls
+# rayon).
 session-file = ["rpp-project", "dep:dawfile-standalone"]
+# REAPER .reapeaks peak-cache reading (waveform drawing) — much lighter
+# than rpp-project (no parallel parser).
 reapeaks = ["dep:dawfile-reaper"]
 rpp-project-wasm = ["dep:dawfile-reaper"]
+# Adds audio decoding on top of rpp-project — for the in-process
+# mixer example that streams the resolved item audio. Native-only.
 rpp-loader = ["audio", "rpp-project"]
+# Build an in-process `daw_control::Daw` client over Standalone via
+# `bootstrap::build_in_process_daw`. Optional because it pulls daw-control.
 bootstrap = ["dep:daw-control", "dep:eyre"]
+# `HttpBaseUrlResolver` — fetch sources from a base URL on native
+# (e.g. Nextcloud / S3 / a static host). Browsers should fetch on the
+# JS side and push bytes via `InMemoryResolver`; this feature is for
+# native testing of the same flow.
 http-resolver = ["dep:ureq"]
+# Host CLAP plugins (load .clap bundles, inspect params, process audio).
+# Native-only (clack-host dynamically loads native dylibs). A hosted
+# plugin only runs inside the audio engine, so this pulls `audio`.
 clap-host = ["audio", "dep:clack-host", "dep:clack-extensions", "dep:raw-window-handle-06"]
+# Host VST3 plugins (load .vst3 bundles, inspect descriptor, process audio).
+# Native-only (libloading + native dylibs). Pulls `audio` for the same
+# reason as clap-host — on its own it did not compile.
 vst3-host = ["audio", "dep:vst3", "dep:libloading"]
+# Browser bindings: a wasm-bindgen wrapper that an AudioWorklet
+# processor can construct + drive. Only meaningful on wasm32.
 web = ["decode", "dep:wasm-bindgen", "dep:js-sys"]
+# Streamed takes decoded from Ogg Vorbis proxies a window at a time
+# (`audio_engine::streamed`) — pure Rust, wasm-clean: how a browser plays
+# a session whose originals it cannot hold.
 stream-ogg = ["decode", "fts-sample/engine-core"]
 
 [[example]]
@@ -159,4 +206,8 @@ required-features = ["vst3-host"]
 
 [[example]]
 name = "fx_render"
+required-features = ["vst3-host"]
+
+[[example]]
+name = "plugin_render"
 required-features = ["vst3-host"]

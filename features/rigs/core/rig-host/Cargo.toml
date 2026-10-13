@@ -10,7 +10,11 @@ description = "Shared daw-backed host for signal live rigs — one project/track
 workspace = true
 
 [features]
+# PipeWire is DEFAULT on Linux (target-gated in daw-audio-io); alias kept so
+# existing `signal-rig-host/pipewire` references parse.
 pipewire = []
+# Legacy JACK backend (pipewire-jack shim) — enables the PIPEWIRE_LATENCY
+# quantum request before the JACK client connects.
 jack = ["audio/io", "audio/jack"]
 
 [dependencies]

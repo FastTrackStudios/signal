@@ -13,7 +13,7 @@ workspace = true
 analysis = []
 native = ["dep:architect-ui", "dep:atomic_float", "dep:eq", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "eq/native"]
 profiles = []
-ui = ["dep:crossbeam-channel", "dep:dioxus", "dep:fts-audio-ui"]
+ui = ["dep:crossbeam-channel", "dep:dioxus", "dep:fts-audio-ui", "profiles"]
 viz = ["analysis", "dep:anyrender", "dep:kurbo", "dep:multiband-dsp", "dep:peniko"]
 
 [dependencies]

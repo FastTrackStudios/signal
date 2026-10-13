@@ -12,7 +12,7 @@ workspace = true
 default = []
 native = ["dep:architect-ui", "dep:atomic_float", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot"]
 profiles = []
-ui = ["dep:dioxus", "dep:fts-audio-ui", "dep:web-time"]
+ui = ["dep:dioxus", "dep:fts-audio-ui", "dep:web-time", "profiles"]
 viz = ["dep:anyrender", "dep:blitz-dom", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
 
 [dependencies]

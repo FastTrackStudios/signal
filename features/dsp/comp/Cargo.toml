@@ -11,7 +11,7 @@ workspace = true
 [features]
 native = ["dep:architect-ui", "dep:atomic_float", "dep:audio", "dep:eq", "dep:fts-plug-ui", "dsp-core/time-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "eq/native"]
 profiles = ["dep:eq"]
-ui = ["dep:atomic_float", "dep:audio", "dep:dioxus", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:web-time"]
+ui = ["dep:atomic_float", "dep:audio", "dep:dioxus", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:web-time", "profiles"]
 viz = ["dep:anyrender", "dep:blitz-dom", "dep:bytemuck", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
 
 [dependencies]

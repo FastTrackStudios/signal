@@ -17,7 +17,7 @@ graph-paint = ["analyzer", "analyzer-ui", "dep:anyrender", "dep:kurbo", "dep:pen
 native = ["analyzer", "analyzer-ui", "dep:audio", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:preset-browser", "graph", "panel", "profiles"]
 panel = ["dep:architect-ui", "dep:audio", "dep:fts-audio-ui", "dep:nice-plug-dioxus"]
 profiles = []
-ui = ["dep:blitz-dom", "dep:dioxus", "dep:fts-audio-ui", "dep:parking_lot", "dep:web-time"]
+ui = ["dep:blitz-dom", "dep:dioxus", "dep:fts-audio-ui", "dep:parking_lot", "dep:web-time", "profiles", "analyzer"]
 
 [dependencies]
 anyrender = { workspace = true, optional = true }

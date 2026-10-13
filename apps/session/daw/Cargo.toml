@@ -251,12 +251,43 @@ tokio = { version = "1.48", default-features = false, features = ["sync", "macro
 
 [features]
 default = ["native"]
+# signal's rigs run in Session's own engine: the bass rig's NAM amp and
+# cab on a bass track, the drum sampler's per-mic voices on the kit.
 signal = ["native", "dep:signal-fx"]
+# The desktop app: dioxus-native (Blitz) hosts for the panels, the
+# in-process engine with its audio device, threads, the plugin-UI graph.
 native = ["dep:dioxus-native", "dep:realfft", "dep:architect-mcp", "dep:anyrender_vello", "dep:wgpu", "dep:wgpu-context-07", "dep:pollster", "dep:dirs", "dep:winit", "dep:tokio", "dep:tracing-subscriber", "eq/native", "daw/standalone-rpp", "daw/standalone-bootstrap", "daw-standalone/reapeaks", "daw-standalone/stream-ogg", "daw/standalone-session-file", "daw/cli", "dynamic-template/reaper", "dep:patch-list", "dep:editor-view", "editor-view/native", "dep:editor-state", "dep:keyflow-editor-lang", "dep:futures-channel", "dep:rayon", "dep:hits", "dep:dawfile-store", "dep:futures-util", "session/collab", "dep:architect", "architect/iroh", "dep:crdt", "dep:vox-core", "dep:uuid", "dep:editor-crdt", "dep:futures-timer", "dep:daw-transport-sync", "dep:fts-sample", "fts-sample/engine-native", "fts-sample/write", "dep:dawfile-reaper", "dep:builtin", "builtin?/engine", "dawfile-reaper/peaks-wav", "dawfile-reaper/peaks-ogg", "dep:session-library", "dep:auth-client", "dep:live-proto", "dep:task-dial", "dep:reqwest"]
+# The browser: the same widgets, hosted in <canvas> elements under
+# dioxus-web and drawn with vello_hybrid's WebGL renderer (keyflow-ui's
+# `wasm-graphics` pattern). See `web_host`.
 web = ["dioxus/web", "dep:web-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:anyrender_vello_hybrid", "dep:vello_hybrid", "dep:vello_common", "dep:rustc-hash", "dep:gloo-timers", "daw-standalone/stream-ogg", "dep:fts-sample", "dep:futures-util", "dep:reqwest", "daw/standalone-session-file", "session/collab", "dep:architect", "dep:crdt", "dep:uuid", "dep:daw-transport-sync", "dep:live-proto", "dep:task-dial", "dep:vox", "daw-standalone/reapeaks", "dep:futures-channel"]
+# The `#[reaper_test]` suites, which need a REAPER to talk to. Behind a
+# feature so an ordinary `cargo nextest run --workspace` does not try to
+# reach one that is not running — `just reaper-test` turns it on, via
+# session-reaper-xtask, which starts the REAPER first.
 reaper-tests = ["daw/test-harness"]
+# A sampling profiler on the headless benchmarks. Behind a feature so an
+# ordinary build never links a signal handler: `pprof` installs a SIGPROF
+# timer, which is exactly what you want while measuring and nothing you
+# want in a window somebody is using.
+#
+#   cargo run --release -p session-daw --bin blitz_shot --features profile
+#
+# with `FTS_BLITZ_PROFILE=/tmp/frame.svg`.
 profile = ["dep:pprof"]
+# Vello's own per-frame split — `cmd / render / present / wait` — on
+# stdout, one line a frame. Behind a feature because that is a line a
+# frame, which is a log nobody reads and a cost nobody wants in a
+# window somebody is using; turned on to answer "which half of the
+# frame is this" when the two atomics the shell records are not enough.
+#
+#   cargo run --release -p session-daw --bin blitz_shot --features frame-times
+#
+# See #119, and libs/vendor/anyrender_vello/UPSTREAM.md.
 frame-times = ["anyrender_vello?/log_frame_times"]
+
+
+# Every binary is a desktop one.
 
 [[bin]]
 name = "bench"
