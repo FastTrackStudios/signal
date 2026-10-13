@@ -3,6 +3,10 @@
 //! (re)builds with a progress stream. Wasm-clean — the browser remote's map
 //! view consumes exactly this surface.
 
+#[cfg(feature = "engine")]
+pub mod engine;
+
+
 use facet::Facet;
 
 /// One space (a built map) the engine knows about.

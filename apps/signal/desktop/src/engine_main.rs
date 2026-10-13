@@ -226,7 +226,7 @@ async fn async_main() {
     let router = router.merge_router(account_rpc.router());
 
     // ── Sample space (similarity maps over the sample libraries, #77) ────
-    let space = signal_space::service::SpaceBackend::new();
+    let space = signal_space::engine::service::SpaceBackend::new();
     let router = router.merge_router(space.router());
 
     // ── Electronic Kit (pad grid over the sample space, #77) ─────────────

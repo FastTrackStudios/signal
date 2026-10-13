@@ -4,8 +4,8 @@
 //! filter is sent to the engine, which applies it to `map()` and `similar()`).
 
 use dioxus::prelude::*;
-use signal_space_proto::space::SampleSpaceClient;
-use signal_space_proto::{MapItem, SpaceFilter, SpaceInfo};
+use signal_space::space::SampleSpaceClient;
+use signal_space::{MapItem, SpaceFilter, SpaceInfo};
 
 use crate::remote::{EngineTarget, establish};
 
@@ -46,7 +46,7 @@ pub fn SpaceView() -> Element {
     let mut text_filter = use_signal(String::new);
     let mut class_off = use_signal(Vec::<String>::new);
     let mut selected = use_signal(|| None::<MapItem>);
-    let mut similar = use_signal(Vec::<signal_space_proto::SimilarHit>::new);
+    let mut similar = use_signal(Vec::<signal_space::SimilarHit>::new);
     let mut items = use_signal(Vec::<MapItem>::new);
 
     let filter = move || {

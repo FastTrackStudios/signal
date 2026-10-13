@@ -6,8 +6,8 @@ use std::time::UNIX_EPOCH;
 
 use rayon::prelude::*;
 
-use crate::analyze::{self, DIM};
-use crate::{SPACE_VERSION, Space, SpaceItem};
+use crate::engine::analyze::{self, DIM};
+use crate::engine::{SPACE_VERSION, Space, SpaceItem};
 
 /// Progress callback: (`analyzed_so_far`, `total_to_analyze`).
 pub type Progress = dyn Fn(usize, usize) + Sync;
@@ -235,7 +235,7 @@ pub fn build(
                 .file_name()
                 .map(|s| s.to_string_lossy().to_lowercase())
                 .unwrap_or_default();
-            let class = crate::classify::classify(&a, &name_lc);
+            let class = crate::engine::classify::classify(&a, &name_lc);
             Out::Ok(Box::new(Row {
                 item: SpaceItem {
                     path: rel,
@@ -276,7 +276,7 @@ pub fn build(
     }
 
     // ── project ──
-    let coords = crate::project::project_2d(&features, items.len(), DIM);
+    let coords = crate::engine::project::project_2d(&features, items.len(), DIM);
     for (item, (x, y)) in items.iter_mut().zip(coords) {
         item.x = x;
         item.y = y;
@@ -394,7 +394,7 @@ fn build_pieces(
             let hint = key.to_lowercase();
             let class = rep_a
                 .as_ref()
-                .map_or("perc", |a| crate::classify::classify(a, &hint));
+                .map_or("perc", |a| crate::engine::classify::classify(a, &hint));
             Out::Ok(
                 Box::new(SpaceItem {
                     path: key.clone(),
@@ -433,7 +433,7 @@ fn build_pieces(
             Out::Err(p, e) => failed.push((p, e)),
         }
     }
-    let coords = crate::project::project_2d(&features, items.len(), DIM);
+    let coords = crate::engine::project::project_2d(&features, items.len(), DIM);
     for (item, (x, y)) in items.iter_mut().zip(coords) {
         item.x = x;
         item.y = y;

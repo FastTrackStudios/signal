@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/rigs/core/space",
     "features/rigs/core/tone3000",
     "features/ui/fts-audio-ui",
     "features/editing",
@@ -153,8 +154,6 @@ members = [
     "features/rigs/core/rig-host",
     "features/rigs/core/rigs-proto",
     "features/rigs/core/signal",
-    "features/rigs/core/space/engine",
-    "features/rigs/core/space/proto",
     "features/rigs/core/storage",
     "features/rigs/core/widgets",
     "features/dsp/analyzer/signal-analyzer",
@@ -189,6 +188,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+signal-space = { path = "features/rigs/core/space" }
 signal-tone3000 = { path = "features/rigs/core/tone3000" }
 fts-audio-ui = { path = "features/ui/fts-audio-ui" }
 editing = { path = "features/editing" }
@@ -924,8 +924,6 @@ web-time = "1"
 signal = { path = "features/rigs/core/signal" }
 signal-proto = { path = "features/rigs/core/proto" }
 signal-browser = { path = "features/rigs/core/browser", default-features = false }
-signal-space = { path = "features/rigs/core/space/engine" }
-signal-space-proto = { path = "features/rigs/core/space/proto" }
 signal-grid = { path = "features/rigs/core/grid" }
 signal-grid-ui = { path = "features/rigs/core/grid-ui" }
 signal-controller = { path = "features/rigs/core/controller" }

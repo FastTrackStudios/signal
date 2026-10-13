@@ -5,7 +5,7 @@
 use dioxus::prelude::*;
 use ekit::proto::ekit::{EkitRigClient, EkitRigStreamClient};
 use ekit::proto::{EkitEvent, EkitStatus, Pad};
-use signal_space_proto::space::SampleSpaceClient;
+use signal_space::space::SampleSpaceClient;
 
 use crate::remote::{EngineTarget, establish};
 

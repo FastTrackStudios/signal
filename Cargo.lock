@@ -17567,7 +17567,6 @@ dependencies = [
  "signal-rig-host",
  "signal-rigs-proto",
  "signal-space",
- "signal-space-proto",
  "signal-synth-rig",
  "signal-tone3000",
  "synth",
@@ -17885,23 +17884,15 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "bhtsne",
+ "facet",
  "fts-sample",
  "rayon",
  "realfft",
  "serde",
  "serde_json",
- "signal-space-proto",
  "tracing",
- "walkdir",
-]
-
-[[package]]
-name = "signal-space-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
  "vox",
+ "walkdir",
 ]
 
 [[package]]

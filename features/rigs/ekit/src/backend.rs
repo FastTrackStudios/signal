@@ -11,7 +11,7 @@ use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use sampler::{PreloadProfile, SamplerRig};
-use signal_space::{Space, knn};
+use signal_space::engine::{Space, knn};
 
 pub const DEFAULT_ROWS: u32 = 4;
 pub const DEFAULT_COLS: u32 = 4;
@@ -237,7 +237,7 @@ impl EkitBackend {
         {
             return Some(cur.clone());
         }
-        let (_, space, features) = signal_space::find_space(name)?;
+        let (_, space, features) = signal_space::engine::find_space(name)?;
         let loaded = Arc::new(LoadedSpace { space, features });
         *self
             .inner

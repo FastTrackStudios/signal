@@ -95,7 +95,7 @@ signal-guitar = ["dep:guitar", "guitar?/ui", "dep:signal-tone3000", "signal-tone
 # iOS). Packs stream in via pack_client.rs and land in
 # Documents/FastTrackStudio/Packs/Keys.
 signal-keys-rig = ["signal-guitar", "dep:keys"]
-signal = ["signal-guitar", "dep:drums", "dep:keys", "dep:midi", "dep:synth", "synth?/ui", "dep:launcher", "dep:signal-synth-rig", "dep:sampler", "sampler?/library", "dep:signal-space", "dep:signal-space-proto", "dep:ekit", "tone3000", "dep:axum", "dep:tower-http"]
+signal = ["signal-guitar", "dep:drums", "dep:keys", "dep:midi", "dep:synth", "synth?/ui", "dep:launcher", "dep:signal-synth-rig", "dep:sampler", "sampler?/library", "dep:signal-space", "signal-space?/engine", "dep:ekit", "tone3000", "dep:axum", "dep:tower-http"]
 # TONE3000 and the FastTrackStudio account in the app itself (the iPad's
 # embedded engine): search, download and import captures, signing in
 # through the account. Part of `signal`; the iOS build adds it on its own.
@@ -159,7 +159,7 @@ utils.workspace = true
 # Sample-space + Electronic Kit WIRE CONTRACTS (#77). Wasm-clean — the
 # browser remote renders the map and the pad grid from these; their
 # backends (signal-space / signal-ekit) stay native-only below.
-signal-space-proto = { workspace = true, optional = true }
+signal-space = { workspace = true, optional = true }
 ekit = { workspace = true, optional = true }
 signal-rigs-proto.workspace = true
 # Standard-MIDI-file codec (daw-proto's `midi::smf`) — the browser keys
@@ -286,7 +286,7 @@ drums = { workspace = true, optional = true }
 keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }
 sampler = { workspace = true, optional = true, features = ["library"] }
-signal-space = { workspace = true, optional = true }
+signal-space = { workspace = true, optional = true, features = ["engine"] }
 ekit = { workspace = true, optional = true }
 signal-tone3000 = { workspace = true, optional = true, features = ["client"] }
 signal-nam = { workspace = true, optional = true }

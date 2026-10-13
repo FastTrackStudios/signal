@@ -8,7 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_space::{Space, build, knn};
+use signal_space::engine::{Space, build, knn};
 
 fn main() {
     tracing_subscriber_init();
