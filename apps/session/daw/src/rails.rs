@@ -24,7 +24,7 @@ use anyrender::PaintScene;
 use vello::kurbo::{Affine, Rect};
 use vello::peniko::{Color, Fill};
 
-use daw_theme_art::mixer_controls::Interaction;
+use daw_ui::art::mixer_controls::Interaction;
 use vello::peniko::ImageBrush;
 
 use crate::arrangement::Palette;

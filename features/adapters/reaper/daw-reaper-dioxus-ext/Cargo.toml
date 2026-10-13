@@ -21,7 +21,7 @@ daw = { workspace = true, features = ["reaper", "reaper-ui"] }
 daw-extension-runtime.workspace = true
 daw-module = { workspace = true }
 daw-reaper-dioxus = { workspace = true }
-daw-ui = { workspace = true, default-features = false, features = ["reaper-test-panels"] }
+daw-ui = { workspace = true, features = ["reaper-test-panels"] }
 crossbeam-channel = "0.5"
 eyre = "0.6"
 fragile.workspace = true

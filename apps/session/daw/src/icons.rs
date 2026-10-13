@@ -24,7 +24,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use daw_theme_art::mixer_controls::Interaction;
+use daw_ui::art::mixer_controls::Interaction;
 use vello::peniko::{Blob, ImageAlphaType, ImageBrush, ImageData, ImageFormat};
 
 /// Where REAPER keeps its resources on this machine.

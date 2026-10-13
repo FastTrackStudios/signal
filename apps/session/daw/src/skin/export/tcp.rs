@@ -15,10 +15,10 @@
 
 use std::fmt::Write as _;
 
-use daw_theme_art::geometry::tcp as gt;
-use daw_theme_art::mixer_controls::Interaction;
-use daw_theme_art::paint::tcp as art;
-use daw_theme_art::paint::{Align, Drawing, Op};
+use daw_ui::art::geometry::tcp as gt;
+use daw_ui::art::mixer_controls::Interaction;
+use daw_ui::art::paint::tcp as art;
+use daw_ui::art::paint::{Align, Drawing, Op};
 
 use super::{Follow, Gen, Place, STATES, hex, n, q, state};
 use crate::tcp::to_theme;
@@ -465,8 +465,8 @@ impl Gen<'_> {
             }
             self.line(5, "</Frame>");
         }
-        let start = f64::from(daw_theme_art::vector_controls::VOLUME_KNOB_START);
-        let sweep = f64::from(daw_theme_art::vector_controls::VOLUME_KNOB_SWEEP);
+        let start = f64::from(daw_ui::art::vector_controls::VOLUME_KNOB_START);
+        let sweep = f64::from(daw_ui::art::vector_controls::VOLUME_KNOB_SWEEP);
         self.line(
             5,
             &format!(
@@ -579,8 +579,8 @@ impl Gen<'_> {
                 "phase",
                 n(tint_w + f64::from(gt::GUTTER_BUTTON_X) + 3.0),
                 format!("h - {}", n(f64::from(gt::PHASE_FROM_FLOOR))),
-                n(f64::from(daw_theme_art::geometry::mcp::PHASE_W)),
-                n(f64::from(daw_theme_art::geometry::mcp::PHASE_W)),
+                n(f64::from(daw_ui::art::geometry::mcp::PHASE_W)),
+                n(f64::from(daw_ui::art::geometry::mcp::PHASE_W)),
                 format!("h >= {}", n(f64::from(gt::PHASE_HIDE_H))),
             ),
         ];
@@ -625,7 +625,7 @@ mod tests {
                     .join("\n")
             )
         });
-        let width = f64::from(daw_theme_art::geometry::tcp::ROW_W);
+        let width = f64::from(daw_ui::art::geometry::tcp::ROW_W);
         let mut checked = 0;
         for depth in 0..8 {
             let mut h = 4.0;

@@ -32,7 +32,7 @@ use crate::engine::{Edit, db_to_gain};
 /// silence: a fader dragged to the bottom has moved down to here, not
 /// to minus infinity, and the others come up by that much between
 /// them.
-const FLOOR_DB: f64 = daw_theme_art::paint::tcp::FADER_BOTTOM_DB;
+const FLOOR_DB: f64 = daw_ui::art::paint::tcp::FADER_BOTTOM_DB;
 
 /// Below this a track is OUT of the balance.
 const OUT: f64 = 1e-5;
@@ -138,7 +138,7 @@ impl Groups {
                 // comes back up with the next move the other way. Only
                 // the hand takes a track out.
                 let db = (db_of(t.volume) + share)
-                    .clamp(FLOOR_DB + HAIR_DB, daw_theme_art::paint::tcp::FADER_TOP_DB);
+                    .clamp(FLOOR_DB + HAIR_DB, daw_ui::art::paint::tcp::FADER_TOP_DB);
                 Edit::SetVolume(t.guid.clone(), db_to_gain(db))
             })
             .collect()

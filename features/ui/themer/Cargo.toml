@@ -11,18 +11,17 @@ workspace = true
 
 [features]
 default = ["cli"]
-apply = ["dep:daw-theme", "fs"]
+apply = ["fs"]
 cli = ["apply", "dep:clap", "fs", "generate", "shot"]
 fs = ["dep:image"]
-generate = ["apply", "daw-theme-art/render", "dep:dioxus"]
+generate = ["apply", "daw-ui/render", "dep:dioxus"]
 shot = ["daw/test-harness", "dep:daw", "fs"]
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 daw = { workspace = true, optional = true }
-daw-theme = { workspace = true, optional = true }
-daw-theme-art = { workspace = true, default-features = false }
+daw-ui = { workspace = true }
 dioxus = { workspace = true, optional = true, features = ["lib"] }
 image = { workspace = true, optional = true }
 palette = { workspace = true }

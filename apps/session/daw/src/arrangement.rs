@@ -46,14 +46,14 @@ pub const TCP_WIDTH: f64 = 343.0;
 /// together — the hardware face, its edge and its mark — and a palette
 /// assembled from scratch would silently lose the ones this theme has
 /// nothing to say about.
-fn chrome(theme: &daw_ui::theming::Theme) -> daw_theme::Chrome {
-    let c = |col: daw_ui::theming::Color| daw_theme::Color {
+fn chrome(theme: &daw_ui::theming::Theme) -> daw_ui::theme::Chrome {
+    let c = |col: daw_ui::theming::Color| daw_ui::theme::Color {
         r: col.r,
         g: col.g,
         b: col.b,
         a: col.a,
     };
-    daw_theme::Chrome {
+    daw_ui::theme::Chrome {
         surface: c(theme.tokens.surface),
         surface_raised: c(theme.tokens.surface_raised),
         surface_sunken: c(theme.tokens.surface_sunken),
@@ -74,7 +74,7 @@ fn chrome(theme: &daw_ui::theming::Theme) -> daw_theme::Chrome {
         // vanish against its own housing, which is why the fader's grip
         // needed hand-brightening at the call site.
         hardware_mark: c(theme.tokens.text_dim).mix(c(theme.tokens.text), 0.5),
-        ..daw_theme::Theme::default().chrome
+        ..daw_ui::theme::Theme::default().chrome
     }
 }
 
@@ -130,7 +130,7 @@ pub struct Palette {
     /// the default put the track panel's buttons in a grey the rest of
     /// the window had moved away from. So the drawings take a palette,
     /// and this is it.
-    pub chrome: daw_theme::Chrome,
+    pub chrome: daw_ui::theme::Chrome,
 }
 
 impl Palette {

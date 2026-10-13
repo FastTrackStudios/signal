@@ -11,7 +11,7 @@
 //! that axis carries no meaning. So a control's rect is not simply
 //! present or absent, and [`Row::indicator`] says which form it is in.
 
-use daw_theme_art::geometry::tcp as g;
+use daw_ui::art::geometry::tcp as g;
 use vello::kurbo::Rect;
 
 use crate::tcp::{BUTTON, BUTTON_GAP, Density, KNOB_LEGIBLE, Tcp};
@@ -340,8 +340,8 @@ impl Row {
                     // The glyph's own width, which is one measurement
                     // shared by both panels — the phase button is the
                     // same art in the strip and in the row.
-                    x + f64::from(daw_theme_art::geometry::mcp::PHASE_W),
-                    y + f64::from(daw_theme_art::geometry::mcp::PHASE_W),
+                    x + f64::from(daw_ui::art::geometry::mcp::PHASE_W),
+                    y + f64::from(daw_ui::art::geometry::mcp::PHASE_W),
                 ))
             })?,
             Control::Fx => self.fits_buttons().then(|| {

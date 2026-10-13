@@ -4460,33 +4460,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "daw-theme"
-version = "0.1.0"
-dependencies = [
- "facet",
- "facet-styx",
-]
-
-[[package]]
-name = "daw-theme-art"
-version = "0.1.0"
-dependencies = [
- "daw-theme",
- "dioxus",
- "dioxus-ssr",
- "image",
- "resvg",
-]
-
-[[package]]
-name = "daw-theme-reaper"
-version = "0.1.0"
-dependencies = [
- "image",
- "thiserror 2.0.20",
-]
-
-[[package]]
 name = "daw-transport-sync"
 version = "0.1.0"
 dependencies = [
@@ -4503,9 +4476,6 @@ dependencies = [
  "daw-module",
  "daw-proto",
  "daw-reaper-dioxus",
- "daw-theme",
- "daw-theme-art",
- "daw-theme-reaper",
  "dioxus",
  "dioxus-native",
  "dioxus-ssr",
@@ -4513,8 +4483,13 @@ dependencies = [
  "dock-dioxus",
  "dock-proto",
  "eyre",
+ "facet",
+ "facet-styx",
  "futures-timer",
+ "image",
  "input",
+ "resvg",
+ "thiserror 2.0.20",
  "tokio",
  "tracing",
  "wasm-bindgen",
@@ -6745,7 +6720,7 @@ version = "0.1.0"
 dependencies = [
  "adaptive-grid",
  "anyrender 0.11.1",
- "daw-theme",
+ "daw-ui",
  "expression-editor-core",
  "input",
  "kurbo 0.13.1",
@@ -6780,8 +6755,6 @@ dependencies = [
  "blitz-traits",
  "daw",
  "daw-control",
- "daw-theme",
- "daw-theme-art",
  "daw-ui",
  "dawfile-reaper",
  "dawfile-standalone",
@@ -6826,7 +6799,7 @@ dependencies = [
  "anyrender_vello_cpu",
  "base64 0.22.1",
  "blitz-dom",
- "daw-theme",
+ "daw-ui",
  "dioxus",
  "dioxus-native-dom",
  "dioxus-ssr",
@@ -17809,8 +17782,6 @@ dependencies = [
  "daw-control",
  "daw-proto",
  "daw-standalone",
- "daw-theme",
- "daw-theme-art",
  "daw-transport-sync",
  "daw-ui",
  "dawfile-reaper",
@@ -21094,8 +21065,7 @@ dependencies = [
  "anyhow",
  "clap",
  "daw",
- "daw-theme",
- "daw-theme-art",
+ "daw-ui",
  "dioxus",
  "image",
  "palette",

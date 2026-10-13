@@ -7,7 +7,7 @@
 //! being edited here, so for now the preview shows the product's real
 //! UI at its stock look while the editor's colour panels stay the
 //! authoritative view of the palette edit. Wiring the ini palette
-//! through `daw_theme_art::dress` so colour edits re-skin this render
+//! through `daw_ui::art::dress` so colour edits re-skin this render
 //! is the follow-up; faking it by tinting a screenshot is not.
 //!
 //! Element artwork was already vector-fallback in the old preview (the

@@ -1,6 +1,6 @@
 //! `daw_theme_art` drawings, painted into the recorded scene.
 //!
-//! This is the second consumer of [`daw_theme_art::paint`]: the first is
+//! This is the second consumer of [`daw_ui::art::paint`]: the first is
 //! the SVG the DOM and the PNG rasteriser use. Both read the same shape
 //! data, so the knob on the canvas and the knob in the browser are the
 //! same knob — which is the entire reason the shape layer exists rather
@@ -10,8 +10,8 @@
 //! it is wrong in `paint`, and fixing it there fixes both surfaces.
 
 use anyrender::{PaintScene, Scene};
-use daw_theme::Color as ThemeColor;
-use daw_theme_art::paint::{Align, Brush, Drawing, Op, Shape};
+use daw_ui::theme::Color as ThemeColor;
+use daw_ui::art::paint::{Align, Brush, Drawing, Op, Shape};
 use vello::kurbo::{
     Affine, Arc, BezPath, Ellipse, Line, Point, Rect, RoundedRect, Shape as _, Stroke as KStroke,
     Vec2,

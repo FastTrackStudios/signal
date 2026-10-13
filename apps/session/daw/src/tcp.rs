@@ -4,7 +4,7 @@
 //!
 //! `daw_ui::components::tcp::TrackRow` is the REAPER-matched panel, and
 //! it stays the reference: every coordinate here comes from
-//! `daw_theme_art::geometry::tcp`, the same measured constants that row
+//! `daw_ui::art::geometry::tcp`, the same measured constants that row
 //! positions its controls with. Neither file is allowed to invent a
 //! number. When REAPER's layout is re-measured, both move, because both
 //! read the same constants.
@@ -31,11 +31,11 @@
 
 use anyrender::PaintScene;
 use daw_proto::Track;
-use daw_theme_art::geometry::tcp as g;
+use daw_ui::art::geometry::tcp as g;
 use vello::kurbo::{Affine, Rect, Vec2};
 use vello::peniko::{Color, Fill};
 
-use daw_theme_art::paint::tcp as art;
+use daw_ui::art::paint::tcp as art;
 
 use crate::arrangement::Palette;
 use crate::text::Font;
@@ -937,7 +937,7 @@ pub(crate) fn mix(a: Color, b: Color, t: f32) -> Color {
 /// silence. A fader you cannot read a level off is a handle.
 ///
 /// It now goes through the measured taper — see
-/// `daw_theme_art::paint::tcp::gain_norm` — which is linear in dB, so
+/// `daw_ui::art::paint::tcp::gain_norm` — which is linear in dB, so
 /// the dB scale beside it labels the positions it actually uses.
 ///
 /// **Known limit**: that taper tops out at unity, because the labels it
@@ -948,26 +948,26 @@ pub(crate) fn mix(a: Color, b: Color, t: f32) -> Color {
 /// measurement with a boosted track rather than a guess at `+12`.
 #[must_use]
 pub fn volume_fraction(volume: f64) -> f64 {
-    daw_theme_art::paint::tcp::gain_norm(volume)
+    daw_ui::art::paint::tcp::gain_norm(volume)
 }
 
 /// Mute and solo take their lit colour from the resolved theme, so a
 /// REAPER theme's own mute red reaches the canvas rather than the art
 /// crate's default.
 #[must_use]
-pub fn mute_lit(palette: &Palette) -> daw_theme::Color {
+pub fn mute_lit(palette: &Palette) -> daw_ui::theme::Color {
     to_theme(palette.mute)
 }
 
 #[must_use]
-pub fn solo_lit(palette: &Palette) -> daw_theme::Color {
+pub fn solo_lit(palette: &Palette) -> daw_ui::theme::Color {
     to_theme(palette.solo)
 }
 
 #[must_use]
-pub fn to_theme(color: Color) -> daw_theme::Color {
+pub fn to_theme(color: Color) -> daw_ui::theme::Color {
     let [red, green, blue, alpha] = color.to_rgba8().to_u8_array();
-    daw_theme::Color {
+    daw_ui::theme::Color {
         r: red,
         g: green,
         b: blue,

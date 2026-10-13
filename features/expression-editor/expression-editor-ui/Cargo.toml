@@ -40,7 +40,7 @@ expression-editor-paint = { workspace = true }
 adaptive-grid = { workspace = true }
 level = { workspace = true }
 # The canonical FTS palette — every colour below comes from here.
-daw-theme = { workspace = true }
+daw-ui = { workspace = true }
 dioxus = { workspace = true }
 # The painter. `anyrender::Scene` is a plain recording of draw commands —
 # no window, no GPU, no renderer — so `paint` stays portable and the

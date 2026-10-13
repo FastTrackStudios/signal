@@ -23,10 +23,7 @@ serde = { workspace = true }
 themer = { workspace = true }
 
 # The preview renderer: the native main window, already wasm-clean.
-daw-ui = { workspace = true, default-features = false, features = [
-    "web",
-    "reaper-theme",
-] }
+daw-ui = { workspace = true, features = ["reaper-theme", "web"] }
 # The facade types the native components take (Track / Item).
 daw-proto = { workspace = true }
 

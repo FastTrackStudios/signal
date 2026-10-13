@@ -1,6 +1,6 @@
 //! Round-trip editing of a `.ReaperTheme` ini.
 //!
-//! `daw_theme_reaper::Palette` parses the file into a `HashMap`, which is all
+//! `daw_ui::reaper_theme::Palette` parses the file into a `HashMap`, which is all
 //! a *reader* needs. An editor needs more: REAPER rewrites this file itself
 //! (every color you change in its own dialogs), so we must not reorder keys,
 //! drop the `[REAPER]` font blobs, or normalise anything we didn't touch —

@@ -7,7 +7,7 @@
 //! on. Tailwind classes may be added on top, but never depended on.
 //!
 //! The colours themselves are **not** defined here. They are re-exported
-//! from [`daw_theme::defaults`], the canonical FastTrackStudio palette that
+//! from [`daw_ui::theme::defaults`], the canonical FastTrackStudio palette that
 //! also drives the Dioxus panels and generates the REAPER theme. Change a
 //! colour there and this editor, the mixer and REAPER all move together —
 //! that shared vocabulary is the point, and a local literal would quietly
@@ -17,7 +17,7 @@
 //! runtime) because inline styles are built in `rsx!` at every call site;
 //! a runtime theme is the next step, and wants a context, not a global.
 
-use daw_theme::defaults as d;
+use daw_ui::theme::defaults as d;
 
 /// Canvas background.
 pub const BG: &str = d::SURFACE;
@@ -263,7 +263,7 @@ mod tests {
             }
             assert!(
                 line.contains("d::"),
-                "colour defined locally instead of in daw_theme::defaults:\n  {line}"
+                "colour defined locally instead of in daw_ui::theme::defaults:\n  {line}"
             );
         }
     }
@@ -296,7 +296,7 @@ mod tests {
         let found = super::hex_literals(MODULES);
         assert!(
             found.is_empty(),
-            "hex literals must come from daw_theme::defaults:\n  {}",
+            "hex literals must come from daw_ui::theme::defaults:\n  {}",
             found.join("\n  ")
         );
     }

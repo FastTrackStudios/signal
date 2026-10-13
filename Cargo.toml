@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/ui/daw-ui",
     "features/dynamic-template",
     "features/audio",
     "features/dsp/builtin",
@@ -56,10 +57,6 @@ members = [
     "features/expression-editor/expression-editor-tools",
     "features/expression-editor/expression-editor-paint",
     "features/expression-editor/expression-editor-ui",
-    "features/ui/daw-ui/daw-ui",
-    "features/ui/daw-ui/daw-theme",
-    "features/ui/daw-ui/daw-theme-art",
-    "features/ui/daw-ui/daw-theme-reaper",
     "features/ui/themer/fts-themer-ui",
     "features/adapters/reaper/daw-reaper-dioxus-ext",
     "features/adapters/reaper/daw-reaper-dioxus-ext-test",
@@ -285,6 +282,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+daw-ui = { path = "features/ui/daw-ui" }
 dynamic-template = { path = "features/dynamic-template" }
 audio = { path = "features/audio" }
 builtin = { path = "features/dsp/builtin" }
@@ -423,10 +421,6 @@ reaper-dioxus = { path = "features/adapters/reaper/reaper-dioxus" }
 # consumer (fts-extensions) wants it off; enable per-member if needed.
 reaper-input = { path = "features/adapters/reaper/reaper-input", default-features = false }
 daw-standalone = { path = "crates/daw/standalone" }
-daw-ui = { path = "features/ui/daw-ui/daw-ui", default-features = false }
-daw-theme = { path = "features/ui/daw-ui/daw-theme" }
-daw-theme-art = { path = "features/ui/daw-ui/daw-theme-art", default-features = false }
-daw-theme-reaper = { path = "features/ui/daw-ui/daw-theme-reaper" }
 
 # ── session domain (wave 3) ───────────────────────────────────────────
 # `session` is the facade — the only public API surface for the session

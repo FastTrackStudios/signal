@@ -705,9 +705,9 @@ pub fn drag(
             // way up moves it a third of the way up the SCALE rather
             // than a third of the way up the gain — which at the top of
             // a fader is most of its range and at the bottom is none.
-            let at = daw_theme_art::paint::tcp::gain_norm(from.volume);
+            let at = daw_ui::art::paint::tcp::gain_norm(from.volume);
             let to = (at + fraction).clamp(0.0, 1.0);
-            let db = daw_theme_art::paint::tcp::fader_db(to);
+            let db = daw_ui::art::paint::tcp::fader_db(to);
             Some(Edit::SetVolume(guid.to_owned(), db_to_gain(db)))
         }
         crate::mcp::Control::Pan => {
@@ -992,7 +992,7 @@ async fn read_transport() -> Option<Reading> {
 pub fn db_to_gain(db: f64) -> f64 {
     // Silence rather than an infinitesimal gain: the bottom of the
     // fader means off, and a gain of 1e-14 is off with extra steps.
-    if db <= daw_theme_art::paint::tcp::FADER_BOTTOM_DB {
+    if db <= daw_ui::art::paint::tcp::FADER_BOTTOM_DB {
         return 0.0;
     }
     10.0_f64.powf(db / 20.0)
@@ -1161,7 +1161,7 @@ mod tests {
         };
         let db = 20.0 * gain.log10();
         let span =
-            daw_theme_art::paint::tcp::FADER_TOP_DB - daw_theme_art::paint::tcp::FADER_BOTTOM_DB;
+            daw_ui::art::paint::tcp::FADER_TOP_DB - daw_ui::art::paint::tcp::FADER_BOTTOM_DB;
         assert!(
             (db + span * 0.25).abs() < 0.01,
             "a quarter of the travel should be a quarter of the scale: {db} dB"
@@ -1180,7 +1180,7 @@ mod tests {
         let Some(Edit::SetVolume(_, up)) = drag(Control::Volume, "k", &unity, 5.0) else {
             panic!("expected a volume edit");
         };
-        let ceiling = 10.0_f64.powf(daw_theme_art::paint::tcp::FADER_TOP_DB / 20.0);
+        let ceiling = 10.0_f64.powf(daw_ui::art::paint::tcp::FADER_TOP_DB / 20.0);
         assert!(
             (up - ceiling).abs() < 1e-6,
             "should have stopped at +12 dB: {up}"
@@ -1195,7 +1195,7 @@ mod tests {
     /// The bottom of the fader is OFF, not a gain too small to hear.
     #[test]
     fn the_bottom_of_the_fader_is_silence() {
-        assert!(db_to_gain(daw_theme_art::paint::tcp::FADER_BOTTOM_DB).abs() < f64::EPSILON);
+        assert!(db_to_gain(daw_ui::art::paint::tcp::FADER_BOTTOM_DB).abs() < f64::EPSILON);
         assert!((db_to_gain(0.0) - 1.0).abs() < 1e-9);
     }
 
@@ -3021,7 +3021,7 @@ pub fn meter_fraction(peak: f32) -> f64 {
     // The METER's scale, which runs past unity: a signal over 0 dBFS
     // has to land above the 0 mark rather than pinning to the same full
     // bar a clean −1 draws.
-    daw_theme_art::paint::tcp::meter_norm(db)
+    daw_ui::art::paint::tcp::meter_norm(db)
 }
 
 #[cfg(test)]
@@ -3034,7 +3034,7 @@ mod meter_tests {
     /// ending at unity cannot.
     #[test]
     fn the_meter_reads_in_decibels() {
-        use daw_theme_art::paint::tcp::{METER_TOP_DB, meter_norm};
+        use daw_ui::art::paint::tcp::{METER_TOP_DB, meter_norm};
         assert!(meter_fraction(0.0) < 1e-6, "silence is empty");
         let unity = meter_fraction(1.0);
         assert!(

@@ -287,7 +287,7 @@ fn main() -> Result<()> {
                 let rgb = Rgb::parse_hex(value).with_context(|| format!("colour for {key}"))?;
                 source
                     .overrides
-                    .insert(key.to_string(), daw_theme::Color::rgb(rgb.r, rgb.g, rgb.b));
+                    .insert(key.to_string(), daw_ui::theme::Color::rgb(rgb.r, rgb.g, rgb.b));
             }
 
             let report =
@@ -317,7 +317,7 @@ fn main() -> Result<()> {
 
         Command::Restyle { from, dry_run } => {
             let source = themer::apply::load_theme(from.as_deref())?;
-            let ramp = daw_theme::Ramp::for_chrome(&source);
+            let ramp = daw_ui::theme::Ramp::for_chrome(&source);
             let report = themer::restyle::restyle(&theme, &ramp, dry_run)?;
             for (path, err) in &report.failed {
                 eprintln!("FAILED {}: {err}", path.display());
@@ -368,7 +368,7 @@ fn main() -> Result<()> {
 
         Command::Walter { dry_run } => {
             let source = themer::apply::load_theme(None)?;
-            let ramp = daw_theme::Ramp::for_chrome(&source);
+            let ramp = daw_ui::theme::Ramp::for_chrome(&source);
             let changes = themer::walter_colors::retint_file_from(
                 &theme.rtconfig_path(),
                 &theme.images_dir().join(themer::restyle::SOURCE_DIR),

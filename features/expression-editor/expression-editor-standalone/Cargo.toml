@@ -32,8 +32,6 @@ daw = { workspace = true, features = [
 # exported from (PR #279's main window). `daw-theme-art` carries the
 # panel geometry both columns align on.
 daw-ui = { workspace = true, features = ["web"] }
-daw-theme = { workspace = true }
-daw-theme-art = { workspace = true }
 daw-control = { workspace = true }
 # Component-context timer for the workstation's reconnect loops.
 # dioxus-native schedules futures itself with no tokio runtime; a tokio

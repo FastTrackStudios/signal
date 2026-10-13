@@ -1,6 +1,6 @@
 //! Painting a REAPER theme from the canonical FTS theme.
 //!
-//! [`daw_theme::Theme`] is the authored source; this writes the keys it
+//! [`daw_ui::theme::Theme`] is the authored source; this writes the keys it
 //! determines into a `.ReaperTheme`. Everything else in the file — the keys
 //! the palette has no opinion about, the blend words, the font blobs — is
 //! left exactly as it was, so applying is a **merge onto** a theme rather
@@ -45,7 +45,7 @@ impl ApplyReport {
 ///
 /// `dry_run` computes the diff without touching the file — worth having,
 /// because this rewrites a file the user may have hand-edited.
-pub fn apply_theme(dir: &Path, theme: &daw_theme::Theme, dry_run: bool) -> Result<ApplyReport> {
+pub fn apply_theme(dir: &Path, theme: &daw_ui::theme::Theme, dry_run: bool) -> Result<ApplyReport> {
     apply_theme_to(dir, theme, dry_run, None)
 }
 
@@ -59,7 +59,7 @@ pub fn apply_theme(dir: &Path, theme: &daw_theme::Theme, dry_run: bool) -> Resul
 /// top and grey dialogs throughout.
 pub fn apply_theme_to(
     dir: &Path,
-    theme: &daw_theme::Theme,
+    theme: &daw_ui::theme::Theme,
     dry_run: bool,
     resource_dir: Option<&Path>,
 ) -> Result<ApplyReport> {
@@ -123,15 +123,15 @@ pub fn apply_theme_to(
 }
 
 /// Load a canonical theme from a styx file, or the built-in default.
-pub fn load_theme(path: Option<&Path>) -> Result<daw_theme::Theme> {
+pub fn load_theme(path: Option<&Path>) -> Result<daw_ui::theme::Theme> {
     match path {
         Some(p) => {
             let text =
                 std::fs::read_to_string(p).with_context(|| format!("read {}", p.display()))?;
-            daw_theme::Theme::from_styx(&text)
+            daw_ui::theme::Theme::from_styx(&text)
                 .map_err(|e| anyhow::anyhow!("parse {}: {e}", p.display()))
         }
-        None => Ok(daw_theme::Theme::default()),
+        None => Ok(daw_ui::theme::Theme::default()),
     }
 }
 
@@ -165,7 +165,7 @@ mod tests {
     fn writes_the_themes_colours_and_leaves_the_rest_alone() {
         let d = tmpdir("write");
         fixture(&d);
-        let theme = daw_theme::Theme::default();
+        let theme = daw_ui::theme::Theme::default();
         let report = apply_theme(&d, &theme, false).unwrap();
         assert!(!report.is_empty());
 
@@ -189,7 +189,7 @@ mod tests {
         let d = tmpdir("dry");
         fixture(&d);
         let before = std::fs::read_to_string(d.join("T.ReaperTheme")).unwrap();
-        let report = apply_theme(&d, &daw_theme::Theme::default(), true).unwrap();
+        let report = apply_theme(&d, &daw_ui::theme::Theme::default(), true).unwrap();
         assert!(!report.is_empty());
         assert_eq!(
             std::fs::read_to_string(d.join("T.ReaperTheme")).unwrap(),
@@ -204,7 +204,7 @@ mod tests {
         // reporting changes would mean the write and the read disagree.
         let d = tmpdir("idem");
         fixture(&d);
-        let theme = daw_theme::Theme::default();
+        let theme = daw_ui::theme::Theme::default();
         apply_theme(&d, &theme, false).unwrap();
         let second = apply_theme(&d, &theme, false).unwrap();
         assert!(
@@ -217,15 +217,15 @@ mod tests {
 
     #[test]
     fn default_theme_is_used_when_no_file_given() {
-        assert_eq!(load_theme(None).unwrap(), daw_theme::Theme::default());
+        assert_eq!(load_theme(None).unwrap(), daw_ui::theme::Theme::default());
     }
 
     #[test]
     fn a_styx_theme_round_trips_through_load() {
         let d = tmpdir("styx");
-        let mut theme = daw_theme::Theme::default();
+        let mut theme = daw_ui::theme::Theme::default();
         theme.name = "Roundtrip".into();
-        theme.chrome.accent = daw_theme::Color::rgb(1, 2, 3);
+        theme.chrome.accent = daw_ui::theme::Color::rgb(1, 2, 3);
         let path = d.join("t.styx");
         std::fs::write(&path, theme.to_styx().unwrap()).unwrap();
         assert_eq!(load_theme(Some(&path)).unwrap(), theme);
@@ -254,10 +254,10 @@ mod override_tests {
     #[test]
     fn an_override_reaches_the_theme_file() {
         let dir = scratch("ok");
-        let mut theme = daw_theme::Theme::default();
+        let mut theme = daw_ui::theme::Theme::default();
         theme.overrides.insert(
             "col_arrangebg".into(),
-            daw_theme::Color::rgb(0x42, 0x42, 0x42),
+            daw_ui::theme::Color::rgb(0x42, 0x42, 0x42),
         );
 
         apply_theme(&dir, &theme, false).unwrap();
@@ -275,10 +275,10 @@ mod override_tests {
     #[test]
     fn a_key_this_theme_lacks_is_reported_not_written() {
         let dir = scratch("unknown");
-        let mut theme = daw_theme::Theme::default();
+        let mut theme = daw_ui::theme::Theme::default();
         theme
             .overrides
-            .insert("col_arrangeblag".into(), daw_theme::Color::rgb(1, 2, 3));
+            .insert("col_arrangeblag".into(), daw_ui::theme::Color::rgb(1, 2, 3));
 
         let report = apply_theme(&dir, &theme, false).unwrap();
         assert!(
@@ -294,10 +294,10 @@ mod override_tests {
     #[test]
     fn a_non_colour_key_is_refused() {
         let dir = scratch("mode");
-        let mut theme = daw_theme::Theme::default();
+        let mut theme = daw_ui::theme::Theme::default();
         theme
             .overrides
-            .insert("mcp_bg_drawmode".into(), daw_theme::Color::rgb(1, 2, 3));
+            .insert("mcp_bg_drawmode".into(), daw_ui::theme::Color::rgb(1, 2, 3));
 
         let report = apply_theme(&dir, &theme, false).unwrap();
         assert!(

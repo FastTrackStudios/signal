@@ -15,7 +15,7 @@
 //! cells per control and `Interaction` names them, so hovering is
 //! choosing a cell rather than inventing a highlight.
 
-use daw_theme_art::mixer_controls::Interaction;
+use daw_ui::art::mixer_controls::Interaction;
 
 use crate::mcp::Control;
 

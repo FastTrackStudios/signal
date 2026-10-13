@@ -34,8 +34,8 @@ use dioxus::prelude::*;
 
 use daw::service::{Fx, Item, Track};
 use daw::standalone::Standalone;
-use daw_theme_art::geometry::mcp::STRIP_W;
-use daw_theme_art::geometry::tcp::{ROW_H, ROW_W};
+use daw_ui::art::geometry::mcp::STRIP_W;
+use daw_ui::art::geometry::tcp::{ROW_H, ROW_W};
 use daw_ui::components::arrangement_view::{
     ArrangePreview, ItemPreview, plan_rows, waveform_from_peaks,
 };
@@ -605,7 +605,7 @@ pub fn WorkstationApp() -> Element {
     let editor_shown = if editor_open() { "" } else { "display: none;" };
     let mixer_shown = if mixer_open() { "" } else { "display: none;" };
 
-    let t = daw_theme::Theme::default();
+    let t = daw_ui::theme::Theme::default();
     let ground = t.chrome.surface.css();
     let bar_bg = t.chrome.surface_sunken.shade(-0.05).css();
     let rule = t.chrome.surface_sunken.shade(-0.25).css();

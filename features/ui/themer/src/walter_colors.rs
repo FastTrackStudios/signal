@@ -26,7 +26,7 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use daw_theme::Ramp;
+use daw_ui::theme::Ramp;
 
 /// A literal that was rewritten.
 #[derive(Debug, Clone, PartialEq)]
@@ -125,7 +125,7 @@ fn rewrite_literal(inner: &str, ramp: &Ramp) -> String {
         _ => return inner.to_string(),
     };
 
-    let c = daw_theme::Color::rgb(
+    let c = daw_ui::theme::Color::rgb(
         nums[rgb_at] as u8,
         nums[rgb_at + 1] as u8,
         nums[rgb_at + 2] as u8,
@@ -187,7 +187,7 @@ pub fn retint_file_from(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use daw_theme::Theme;
+    use daw_ui::theme::Theme;
 
     fn ramp() -> Ramp {
         Ramp::for_chrome(&Theme::default())
@@ -203,10 +203,10 @@ mod tests {
     fn contrasting_ramp() -> Ramp {
         let mut theme = Theme::default();
         let c = &mut theme.chrome;
-        c.surface = daw_theme::Color::hex("#0d0d11").unwrap();
-        c.surface_raised = daw_theme::Color::hex("#15151c").unwrap();
-        c.surface_sunken = daw_theme::Color::hex("#0a0a0e").unwrap();
-        c.border = daw_theme::Color::hex("#2b2b38").unwrap();
+        c.surface = daw_ui::theme::Color::hex("#0d0d11").unwrap();
+        c.surface_raised = daw_ui::theme::Color::hex("#15151c").unwrap();
+        c.surface_sunken = daw_ui::theme::Color::hex("#0a0a0e").unwrap();
+        c.border = daw_ui::theme::Color::hex("#2b2b38").unwrap();
         Ramp::for_chrome(&theme)
     }
 

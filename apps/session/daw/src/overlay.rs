@@ -13,9 +13,9 @@
 
 use anyrender::PaintScene;
 use daw_proto::Track;
-use daw_theme_art::geometry::mcp as g;
-use daw_theme_art::mixer_controls::Interaction;
-use daw_theme_art::paint::tcp as art;
+use daw_ui::art::geometry::mcp as g;
+use daw_ui::art::mixer_controls::Interaction;
+use daw_ui::art::paint::tcp as art;
 use vello::kurbo::Affine;
 
 use crate::arrangement::Palette;
@@ -1163,7 +1163,7 @@ fn draw_strip_controls(
         if pointer.state(crate::pointer::Spot {
             row,
             control: Control::Volume,
-        }) == daw_theme_art::mixer_controls::Interaction::Pressed
+        }) == daw_ui::art::mixer_controls::Interaction::Pressed
         {
             readout(
                 scene,
@@ -1321,7 +1321,7 @@ mod clip_tests {
 /// red lamp under it read as a second arm. Through is a light grey —
 /// a lamp that is on — and the tape-style mode, which is the one you
 /// set deliberately, is the one that gets a colour.
-fn monitor_lit(palette: &Palette, mode: art::Monitoring) -> daw_theme::Color {
+fn monitor_lit(palette: &Palette, mode: art::Monitoring) -> daw_ui::theme::Color {
     match mode {
         art::Monitoring::NotWhenPlaying => TAPE,
         art::Monitoring::Off | art::Monitoring::Normal => crate::tcp::to_theme(palette.text),
@@ -1330,7 +1330,7 @@ fn monitor_lit(palette: &Palette, mode: art::Monitoring) -> daw_theme::Color {
 
 /// The tape-style monitoring colour: an orange, so it is neither the
 /// arm's red nor the grey of monitoring straight through.
-const TAPE: daw_theme::Color = daw_theme::Color {
+const TAPE: daw_ui::theme::Color = daw_ui::theme::Color {
     r: 0xf0,
     g: 0x8c,
     b: 0x2e,
@@ -1542,11 +1542,11 @@ pub fn row_meters(
     transform: Affine,
 ) -> bool {
     use crate::row::{Control, Row};
-    use daw_theme_art::paint::tcp::METER_ZONES;
+    use daw_ui::art::paint::tcp::METER_ZONES;
 
     let mut lit = false;
     // The zone boundaries along a strip, as fractions of its length.
-    let edges = METER_ZONES.map(|db| daw_theme_art::paint::tcp::meter_norm(db));
+    let edges = METER_ZONES.map(|db| daw_ui::art::paint::tcp::meter_norm(db));
     let colors = [
         palette.meter_safe,
         palette.meter_warn,
@@ -1737,7 +1737,7 @@ fn control_row(
 ) {
     use crate::pointer::RowSpot;
     use crate::row::{Control as C, Indicator, Row};
-    use daw_theme_art::geometry::tcp as gt;
+    use daw_ui::art::geometry::tcp as gt;
 
     let (Some((track, depth)), Some(live)) = (rows.get(index), map.live(tracks, index)) else {
         return;

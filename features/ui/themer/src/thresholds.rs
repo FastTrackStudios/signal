@@ -28,7 +28,7 @@ use anyhow::{Context, Result, bail};
 /// One generated line: the WALTER name, and the value it must carry.
 ///
 /// The names are REAPER's, from `rtconfig.txt`. The values come from
-/// `daw_theme_art::collapse::Thresholds` via [`generated_lines`], so there is one
+/// `daw_ui::art::collapse::Thresholds` via [`generated_lines`], so there is one
 /// place to change a number and both sides move together.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Threshold {
@@ -55,7 +55,7 @@ pub struct Threshold {
 /// `mcp_io_hide_h`, `mcp_env_hide_h` and `mcp_phase_hide_h`.
 pub fn generated_lines() -> Vec<Threshold> {
     // Kept in the order the file states them, so a diff reads top to bottom.
-    let t = daw_theme_art::collapse::REAPER;
+    let t = daw_ui::art::collapse::REAPER;
     vec![
         Threshold {
             name: "hide_inputFX",
@@ -88,7 +88,7 @@ pub fn generated_lines() -> Vec<Threshold> {
 /// question being asked is only "has one of these numbers moved without the
 /// other".
 pub fn section_heights_agree(text: &str) -> Vec<String> {
-    let bands = daw_theme_art::collapse::REAPER_BANDS;
+    let bands = daw_ui::art::collapse::REAPER_BANDS;
     let mut wrong = Vec::new();
     for (name, number, what) in [
         ("fx_sec", bands.fx, "fx section"),
@@ -126,7 +126,7 @@ fn first_set_states<'t>(text: &'t str, name: &str, wanted: &str) -> Option<(&'t 
 
 /// Do the theme's stated offsets still match the geometry constants?
 ///
-/// #239: the strip lays out on `daw_theme_art::geometry::mcp`, whose
+/// #239: the strip lays out on `daw_ui::art::geometry::mcp`, whose
 /// numbers come off `rtconfig.txt`'s `[dx dy w h]` literals — the column
 /// chain, the record arm's cell, the input fields. Those literals sit
 /// inside expressions this tool must not rewrite, so like
@@ -139,7 +139,7 @@ fn first_set_states<'t>(text: &'t str, name: &str, wanted: &str) -> Option<(&'t 
 /// group only has to appear on one of them, because that is the line the
 /// constant was read from.
 pub fn offsets_agree(text: &str) -> Vec<String> {
-    use daw_theme_art::geometry::mcp as g;
+    use daw_ui::art::geometry::mcp as g;
 
     let quad = |a: f32, b: f32, c: f32, d: f32| {
         format!(

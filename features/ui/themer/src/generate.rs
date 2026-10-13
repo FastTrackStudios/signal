@@ -51,7 +51,7 @@ pub fn generate(theme: &ThemeDir, dry_run: bool, vectors_only: bool) -> Result<G
             // The traced art is keyed on the 100% names; a DPI variant
             // finds the same drawing and renders it at the size that
             // folder wants.
-            let Some(art) = daw_theme_art::generated::by_name(name) else {
+            let Some(art) = daw_ui::art::generated::by_name(name) else {
                 continue;
             };
 
@@ -68,7 +68,7 @@ pub fn generate(theme: &ThemeDir, dry_run: bool, vectors_only: bool) -> Result<G
             // mistake. That looks exactly like a fix not taking effect.
             let measured_from = pristine(&dir, name).unwrap_or_else(|| path.clone());
             let measured = match image::open(&measured_from) {
-                Ok(img) => daw_theme_art::DerivedSpec::from_image(&img.to_rgba8()),
+                Ok(img) => daw_ui::art::DerivedSpec::from_image(&img.to_rgba8()),
                 Err(e) => {
                     report.failed.push((name.into(), format!("read: {e}")));
                     continue;
@@ -77,7 +77,7 @@ pub fn generate(theme: &ThemeDir, dry_run: bool, vectors_only: bool) -> Result<G
 
             // A vector control if one draws this image, the trace
             // otherwise. Both stamp the same measured markers back.
-            let vector = daw_theme_art::cell_markup(name, Default::default()).is_some();
+            let vector = daw_ui::art::cell_markup(name, Default::default()).is_some();
             // The traced half rewrites art nothing here authored, through
             // a ramp built from the theme's own palette. Skipping it is
             // the default; see the `--traced` flag for why.
@@ -85,7 +85,7 @@ pub fn generate(theme: &ThemeDir, dry_run: bool, vectors_only: bool) -> Result<G
                 continue;
             }
             let drawn = if vector {
-                daw_theme_art::render_control(name, &measured).map_err(|e| format!("{e}"))
+                daw_ui::art::render_control(name, &measured).map_err(|e| format!("{e}"))
             } else {
                 render_art(art, &measured)
             };
@@ -135,10 +135,10 @@ fn pristine(dir: &std::path::Path, name: &str) -> Option<PathBuf> {
 /// rather than an obviously wrong one, so it is worth being explicit
 /// about here.
 fn render_art(
-    art: daw_theme_art::ArtData,
-    spec: &daw_theme_art::DerivedSpec,
+    art: daw_ui::art::ArtData,
+    spec: &daw_ui::art::DerivedSpec,
 ) -> std::result::Result<image::RgbaImage, String> {
-    use daw_theme_art::art_data::{ArtImage, ArtImageProps, ColorMode};
+    use daw_ui::art::art_data::{ArtImage, ArtImageProps, ColorMode};
 
     // Split by the *trace's* cell count, not the measured one.
     //
@@ -155,8 +155,8 @@ fn render_art(
         spec.cells = (0..n).map(|i| (i * w, w)).collect();
     }
 
-    daw_theme_art::composite_cells(&spec, |i, w| {
-        Ok(daw_theme_art::render_svg(
+    daw_ui::art::composite_cells(&spec, |i, w| {
+        Ok(daw_ui::art::render_svg(
             ArtImage,
             ArtImageProps {
                 art,

@@ -89,7 +89,7 @@ session-domain = [
     # signal,session`, which doesn't go through this feature).
     "architect/server-axum",
     "dep:axum",
-    "dep:daw-proto",
+    "dep:daw-proto"
 ]
 # Charts: keyflow chart writing (the Charts workspace). Keyflow is also pulled
 # by Session (chart parsing), so this is additive; a charts-only build gets it

@@ -18,11 +18,11 @@
 //! broken: a control's position is not recalculated at the point of
 //! use. If two places need it, they read the same [`Strip`].
 
-use daw_theme_art::geometry::mcp as g;
+use daw_ui::art::geometry::mcp as g;
 use daw_ui::controls::{Collapse, VolumeWidget};
 use vello::kurbo::Rect;
 
-use daw_theme_art::paint::tcp as art;
+use daw_ui::art::paint::tcp as art;
 
 use crate::mcp::{Columns, Control, Squeeze};
 
@@ -102,7 +102,7 @@ pub fn fx_section(live: bool, touch: bool) -> f64 {
     if touch {
         0.0
     } else {
-        f64::from(daw_theme_art::collapse::FX_SECTION)
+        f64::from(daw_ui::art::collapse::FX_SECTION)
     }
 }
 
@@ -112,7 +112,7 @@ pub fn fx_section(live: bool, touch: bool) -> f64 {
 pub fn shape_for(height: f64, live: bool, touch: bool) -> Collapse {
     let mut c = shape(height, live);
     if touch {
-        c.stretch += daw_theme_art::collapse::FX_SECTION;
+        c.stretch += daw_ui::art::collapse::FX_SECTION;
     }
     c
 }
@@ -125,7 +125,7 @@ pub fn shape_for(height: f64, live: bool, touch: bool) -> Collapse {
 pub fn shape(height: f64, live: bool) -> Collapse {
     let mut c = Collapse::at(crate::mcp::f64_to_f32(height.max(1.0)));
     if live {
-        let band = daw_theme_art::collapse::PAN_SECTION_UNLABELLED;
+        let band = daw_ui::art::collapse::PAN_SECTION_UNLABELLED;
         let freed = c.input_band + c.pan_band - band;
         c.stretch = (c.stretch + freed).max(0.0);
         c.pan_band = band;
@@ -234,8 +234,8 @@ impl Strip {
         self.touch = touch;
         if touch {
             // No FX row (`fx_section`): its height to the fader.
-            self.shared.stretch += daw_theme_art::collapse::FX_SECTION;
-            self.own.stretch += daw_theme_art::collapse::FX_SECTION;
+            self.shared.stretch += daw_ui::art::collapse::FX_SECTION;
+            self.own.stretch += daw_ui::art::collapse::FX_SECTION;
         }
         if self.big_buttons() {
             // The scale and the fader, as one instrument, in the middle.
@@ -561,7 +561,7 @@ impl Strip {
                     7.0,
                     self.rack_h + f64::from(g::FX_PILL_TOP),
                     self.chrome_width() - 7.0,
-                    self.rack_h + f64::from(daw_theme_art::collapse::FX_SECTION),
+                    self.rack_h + f64::from(daw_ui::art::collapse::FX_SECTION),
                 )
             }),
             Control::Pan => (self.squeeze.head()
@@ -664,7 +664,7 @@ impl Strip {
                     fader.x0,
                     fader.y0,
                     fader.x1,
-                    fader.y0 + daw_theme_art::paint::tcp::CLIP_H,
+                    fader.y0 + daw_ui::art::paint::tcp::CLIP_H,
                 )
             }),
             // Sat directly on the colour band, not at the top of the
@@ -744,7 +744,7 @@ mod tests {
         );
         let band = live.band_bottom() - live.band_top();
         assert!(
-            (band - f64::from(daw_theme_art::collapse::PAN_SECTION_UNLABELLED)).abs() < 1e-9,
+            (band - f64::from(daw_ui::art::collapse::PAN_SECTION_UNLABELLED)).abs() < 1e-9,
             "{band}"
         );
         assert!(

@@ -29,7 +29,7 @@
 
 use anyrender::{PaintScene, Scene};
 use daw_proto::Track;
-use daw_theme_art::geometry::mcp as g;
+use daw_ui::art::geometry::mcp as g;
 use daw_ui::controls::{Collapse, PanAnchor};
 use daw_ui::studio::{ProjectRef, RowsRef};
 use vello::kurbo::{Affine, Rect};
@@ -2140,7 +2140,7 @@ mod selection_tests {
 #[cfg(test)]
 mod column_tests {
     use super::{Columns, STRIP_W};
-    use daw_theme_art::geometry::mcp as g;
+    use daw_ui::art::geometry::mcp as g;
 
     /// The constraint the whole model rests on: expressing the measured
     /// offsets as RULES must not change what they evaluate to at the
@@ -2171,7 +2171,7 @@ mod column_tests {
         // 32. Measured against the CAP rather than the column, because
         // the column grew to carry the meter either side of it — the
         // handle is what has to land where REAPER's handle lands.
-        let cap = c.fader_x + (c.fader_w - daw_theme_art::paint::tcp::cap_w(c.fader_w)) / 2.0;
+        let cap = c.fader_x + (c.fader_w - daw_ui::art::paint::tcp::cap_w(c.fader_w)) / 2.0;
         assert!((cap - 32.0).abs() < 0.5, "the cap sits at {cap}");
         // REAPER draws no meter at this width because the scale and
         // the fader have taken it all. We draw one anyway, because it
@@ -2227,7 +2227,7 @@ mod column_tests {
                 (c.fader_w - super::FADER_W).abs() < f64::EPSILON,
                 "the fader fattened at {w}"
             );
-            let groove = daw_theme_art::paint::tcp::groove_w(c.fader_w);
+            let groove = daw_ui::art::paint::tcp::groove_w(c.fader_w);
             assert!(
                 groove >= 4.0 && groove < c.fader_w,
                 "groove at {w}: {groove}"

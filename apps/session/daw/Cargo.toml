@@ -51,7 +51,6 @@ futures-channel = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
 # The project file: one Turso file per song, its Loro doc and blobs.
 dawfile-store = { workspace = true, optional = true }
-daw-theme-art = { workspace = true }
 # The mix phases the mixer's left rail lists.
 session = { workspace = true }
 # The performance panels (the progress bar), drawn under Blitz — see
@@ -78,7 +77,6 @@ patch-list = { workspace = true, optional = true }
 # The mouse-modifier contexts a hit reports, so bindings stay
 # configurable rather than being hard-coded per widget.
 input = { workspace = true }
-daw-theme = { workspace = true }
 
 # The expression editor: its engine, its painter and gestures (no
 # dioxus), and the take-to-document conversion.

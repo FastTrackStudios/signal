@@ -38,11 +38,11 @@
 
 use std::fmt::Write as _;
 
-use daw_theme::Color as Tc;
-use daw_theme_art::geometry::mcp as g;
-use daw_theme_art::mixer_controls::Interaction;
-use daw_theme_art::paint::tcp as art;
-use daw_theme_art::paint::{Align, Brush, Drawing, Op, Shape};
+use daw_ui::theme::Color as Tc;
+use daw_ui::art::geometry::mcp as g;
+use daw_ui::art::mixer_controls::Interaction;
+use daw_ui::art::paint::tcp as art;
+use daw_ui::art::paint::{Align, Brush, Drawing, Op, Shape};
 use vello::kurbo::Shape as _;
 
 use crate::arrangement::Palette;
@@ -452,8 +452,8 @@ impl Gen<'_> {
         });
         let stretch = format!(
             "max(h - {} - {pan} - {input} - {}, 0)",
-            n(f64::from(daw_theme_art::collapse::FX_SECTION)),
-            n(f64::from(daw_theme_art::collapse::BOTTOM_SECTION))
+            n(f64::from(daw_ui::art::collapse::FX_SECTION)),
+            n(f64::from(daw_ui::art::collapse::BOTTOM_SECTION))
         );
         format!(
             "clamp({} - 3 - {}, 0, {stretch})",
@@ -1591,7 +1591,7 @@ fn gradient_up(stops: &[(f32, Tc)]) -> String {
 
 /// The meter's colours up its travel, as `paint::tcp::level_brush` lays
 /// them.
-fn level_brush(chrome: &daw_theme::Chrome, zones: [Tc; 3]) -> Vec<(f32, Tc)> {
+fn level_brush(chrome: &daw_ui::theme::Chrome, zones: [Tc; 3]) -> Vec<(f32, Tc)> {
     match art::fader_track(chrome, (1.0, 1.0), (0.0, 0.0), false, zones, 30.0, 100.0)
         .ops
         .iter()

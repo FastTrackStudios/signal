@@ -18,7 +18,7 @@ input = { workspace = true }
 # The grid that follows the zoom.
 adaptive-grid = { workspace = true }
 # The canonical FTS palette — every colour in `theme` comes from here.
-daw-theme = { workspace = true }
+daw-ui = { workspace = true }
 # The painter. `anyrender::Scene` is a plain recording of draw commands.
 anyrender = { workspace = true }
 peniko = { workspace = true }

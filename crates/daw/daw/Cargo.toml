@@ -148,7 +148,7 @@ cli = [
     "dep:facet-json",
     "dep:libc",
     "dep:vox-stream",
-    "dep:tracing-subscriber",
+    "dep:tracing-subscriber"
 ]
 # The architect rpc macro gates its vox-emitted items on the consumer
 # crate's `vox` feature (used by the batch wire-probe integration test).
@@ -176,7 +176,7 @@ test-harness = [
     "dep:daw-test-macro",
     # geteuid() for the socket owner check in find_fts_daw_socket
     # (skip cross-user stale /tmp sockets).
-    "dep:libc",
+    "dep:libc"
 ]
 
 [lints]

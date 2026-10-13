@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use daw::service::{Fx, Track};
-use daw_theme_art::geometry::mcp::STRIP_W;
+use daw_ui::art::geometry::mcp::STRIP_W;
 use daw_ui::components::folders::FolderState;
 use daw_ui::components::mixer::ChannelStripPreview;
 use daw_ui::controls::FxSlotStack;

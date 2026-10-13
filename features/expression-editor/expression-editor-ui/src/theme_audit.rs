@@ -18,7 +18,7 @@ mod tests {
         let found = expression_editor_paint::theme::hex_literals(MODULES);
         assert!(
             found.is_empty(),
-            "hex literals must come from daw_theme::defaults:\n  {}",
+            "hex literals must come from daw_ui::theme::defaults:\n  {}",
             found.join("\n  ")
         );
     }

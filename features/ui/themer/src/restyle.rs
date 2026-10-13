@@ -6,7 +6,7 @@
 //! exactly like the theme it was forked from.
 //!
 //! This walks the image folder and pushes every neutral pixel through
-//! [`daw_theme::Ramp`]. Bevels, gradients and antialiasing survive because
+//! [`daw_ui::theme::Ramp`]. Bevels, gradients and antialiasing survive because
 //! only *absolute* lightness moves; relative lightness is preserved.
 //!
 //! Three kinds of pixel are never touched:
@@ -52,7 +52,7 @@ pub const SOURCE_DIR: &str = ".source-art";
 ///
 /// `dry_run` reports without writing — worth having, because this rewrites
 /// a few thousand files at once.
-pub fn restyle(theme: &ThemeDir, ramp: &daw_theme::Ramp, dry_run: bool) -> Result<RestyleReport> {
+pub fn restyle(theme: &ThemeDir, ramp: &daw_ui::theme::Ramp, dry_run: bool) -> Result<RestyleReport> {
     let mut report = RestyleReport::default();
     let root = theme.images_dir();
     let source = root.join(SOURCE_DIR);
@@ -130,7 +130,7 @@ fn snapshot(root: &Path, dest: &Path) -> Result<()> {
 }
 
 /// Restyle one PNG from `src` into `dest`. Returns whether anything changed.
-fn restyle_one(src: &Path, dest: &Path, ramp: &daw_theme::Ramp, dry_run: bool) -> Result<bool> {
+fn restyle_one(src: &Path, dest: &Path, ramp: &daw_ui::theme::Ramp, dry_run: bool) -> Result<bool> {
     let mut img = image::open(src)
         .with_context(|| format!("read {}", src.display()))?
         .to_rgba8();
@@ -142,7 +142,7 @@ fn restyle_one(src: &Path, dest: &Path, ramp: &daw_theme::Ramp, dry_run: bool) -
         if is_marker(Rgb::new(*r, *g, *b)) {
             continue;
         }
-        let mapped = ramp.apply(daw_theme::Color::rgb(*r, *g, *b));
+        let mapped = ramp.apply(daw_ui::theme::Color::rgb(*r, *g, *b));
         (*r, *g, *b) = (mapped.r, mapped.g, mapped.b);
     }
 
@@ -200,8 +200,8 @@ mod tests {
         d
     }
 
-    fn ramp() -> daw_theme::Ramp {
-        daw_theme::Ramp::for_chrome(&daw_theme::Theme::default())
+    fn ramp() -> daw_ui::theme::Ramp {
+        daw_ui::theme::Ramp::for_chrome(&daw_ui::theme::Theme::default())
     }
 
     #[test]
