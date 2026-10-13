@@ -1734,3 +1734,28 @@ opt-level = 3
 inherits = "release"
 lto = "thin"
 codegen-units = 16
+
+# architect's action-list branch (the Action List and architect-mcp, which
+# session-daw serves) — pushed, not yet tagged. Every use of architect,
+# keyflow's, task's and editor's included, gets it here, so there is one
+# architect. The www. host is a different source to cargo (GitHub redirects
+# it), which is what lets this patch the plain one. Repin to a tag when architect cuts one.
+[patch."https://github.com/FastTrackStudios/architect"]
+architect = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-atom = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-launcher-core = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-mcp = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-launcher-providers = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-launcher-ui = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-telemetry = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+auth-client = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+crdt = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }
+crdt-derive = { git = "https://www.github.com/FastTrackStudios/architect", branch = "action-list" }

@@ -845,6 +845,7 @@ dependencies = [
 [[package]]
 name = "architect"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "architect-action-derive",
  "architect-atom",
@@ -876,6 +877,7 @@ dependencies = [
 [[package]]
 name = "architect-action-derive"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -885,6 +887,7 @@ dependencies = [
 [[package]]
 name = "architect-atom"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "dioxus",
 ]
@@ -892,6 +895,7 @@ dependencies = [
 [[package]]
 name = "architect-derive"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -902,6 +906,7 @@ dependencies = [
 [[package]]
 name = "architect-launcher-core"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "chrono",
  "facet",
@@ -917,6 +922,7 @@ dependencies = [
 [[package]]
 name = "architect-launcher-providers"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "architect-launcher-core",
  "serde",
@@ -928,6 +934,7 @@ dependencies = [
 [[package]]
 name = "architect-launcher-ui"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "architect-launcher-core",
  "architect-ui",
@@ -939,6 +946,7 @@ dependencies = [
 [[package]]
 name = "architect-mcp"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "architect",
  "axum",
@@ -949,6 +957,7 @@ dependencies = [
 [[package]]
 name = "architect-permissions"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "serde",
  "serde_json",
@@ -958,6 +967,7 @@ dependencies = [
 [[package]]
 name = "architect-rpc-derive"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -967,6 +977,7 @@ dependencies = [
 [[package]]
 name = "architect-story-core"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "linkme",
 ]
@@ -974,6 +985,7 @@ dependencies = [
 [[package]]
 name = "architect-story-macros"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -984,6 +996,7 @@ dependencies = [
 [[package]]
 name = "architect-story-runtime"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "architect-story-core",
  "architect-story-macros",
@@ -994,6 +1007,7 @@ dependencies = [
 [[package]]
 name = "architect-telemetry"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -1009,6 +1023,7 @@ dependencies = [
 [[package]]
 name = "architect-ui"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "architect-story-runtime",
  "chrono",
@@ -1475,6 +1490,7 @@ dependencies = [
 [[package]]
 name = "auth-client"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "base64 0.22.1",
  "serde",
@@ -3569,6 +3585,7 @@ dependencies = [
 [[package]]
 name = "crdt"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "architect",
  "async-trait",
@@ -3588,6 +3605,7 @@ dependencies = [
 [[package]]
 name = "crdt-derive"
 version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?branch=action-list#b00bb69e447c800bb43e493557a18e9e9403251c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -25758,43 +25776,3 @@ checksum = "29ce2c8a9384ad323cf564b67da86e21d3cfdff87908bc1223ed5c99bc792713"
 dependencies = [
  "zune-core",
 ]
-
-[[patch.unused]]
-name = "architect-auth"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "architect-form"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "architect-permissions-proto"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "architect-story-parity"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "architect-story-shell"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "architect-story-snapshots"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "auth"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "auth-db"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "auth-proto"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "crdt-seaorm"
-version = "0.1.0"
