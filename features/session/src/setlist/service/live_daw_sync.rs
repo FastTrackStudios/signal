@@ -21,7 +21,7 @@ use daw::rpc::Project;
 use daw::service::item::Item;
 use daw::service::primitives::{Duration, PositionInSeconds};
 use daw::service::{ItemEvent, MarkerEvent, RegionEvent};
-use daw_synchronization::{SyncConfig, SyncDomain, SyncSession, SynchronizationEngine};
+use daw_sync::{SyncConfig, SyncDomain, SyncSession, SynchronizationEngine};
 use tokio::sync::RwLock;
 use tokio::sync::broadcast::error::RecvError;
 use tracing::{debug, info, warn};

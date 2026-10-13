@@ -4138,10 +4138,9 @@ dependencies = [
  "daw",
  "daw-allocator",
  "daw-audio-sync",
- "daw-network",
  "daw-proto",
  "daw-reaper-dioxus",
- "daw-synchronization",
+ "daw-sync",
  "dawfile-reaper",
  "eyre",
  "formats",
@@ -4197,31 +4196,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "daw-link"
-version = "0.1.0"
-dependencies = [
- "rusty_link",
- "tracing",
-]
-
-[[package]]
 name = "daw-module"
 version = "0.1.0"
 dependencies = [
  "tokio",
- "tracing",
-]
-
-[[package]]
-name = "daw-network"
-version = "0.1.0"
-dependencies = [
- "daw",
- "daw-synchronization",
- "facet",
- "facet-postcard",
- "tokio",
- "tokio-util",
  "tracing",
 ]
 
@@ -4422,12 +4400,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "daw-synchronization"
+name = "daw-sync"
 version = "0.1.0"
 dependencies = [
  "daw",
  "eyre",
  "facet",
+ "facet-postcard",
+ "rusty_link",
  "studio",
  "tokio",
  "tokio-util",
@@ -17149,7 +17129,7 @@ dependencies = [
  "daw-proto",
  "daw-reaper",
  "daw-standalone",
- "daw-synchronization",
+ "daw-sync",
  "daw-transport-sync",
  "dawfile-reaper",
  "dioxus",

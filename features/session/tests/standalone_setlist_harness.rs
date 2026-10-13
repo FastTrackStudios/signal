@@ -474,7 +474,7 @@ fn sync_engine_backend_agnostic_over_standalone() -> eyre::Result<()> {
 }
 
 async fn sync_engine_inner() -> eyre::Result<()> {
-    use daw_synchronization::{SyncConfig, SyncDomain, SyncSession, SynchronizationEngine};
+    use daw_sync::{SyncConfig, SyncDomain, SyncSession, SynchronizationEngine};
 
     let _ = tracing_subscriber::fmt::try_init();
 

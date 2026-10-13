@@ -22,8 +22,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use daw::rpc::Daw;
-use daw_network::{MeshConfig, MeshPeerEvent, PeerMesh};
-use daw_synchronization::{SyncConfig, SyncSession, SynchronizationEngine, heartbeat};
+use daw_sync::network::{MeshConfig, MeshPeerEvent, PeerMesh};
+use daw_sync::{SyncConfig, SyncSession, SynchronizationEngine, heartbeat};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
@@ -127,7 +127,7 @@ async fn handle_peer_events(
 /// Pipe inbound peer events into `engine.apply_remote`.
 async fn handle_incoming(
     engine: Arc<SynchronizationEngine>,
-    mut rx: tokio::sync::mpsc::Receiver<daw_synchronization::SyncEvent>,
+    mut rx: tokio::sync::mpsc::Receiver<daw_sync::SyncEvent>,
 ) {
     let pid = std::process::id();
     while let Some(event) = rx.recv().await {

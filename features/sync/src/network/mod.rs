@@ -19,7 +19,7 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use daw_synchronization::SyncEvent;
+use crate::SyncEvent;
 use facet::Facet;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -27,7 +27,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
 
-use daw_synchronization::suppression::SuppressionSet;
+use crate::suppression::SuppressionSet;
 
 /// Configuration for the peer mesh.
 #[derive(Clone, Debug)]
@@ -631,7 +631,7 @@ async fn broadcast_forwarder(
                         // (echo suppression — prevents infinite feedback loops)
                         {
                             let sup = suppression.lock().await;
-                            if daw_synchronization::engine::is_event_suppressed(&sup, &event) {
+                            if crate::engine::is_event_suppressed(&sup, &event) {
                                 trace!(
                                     "Suppressed outbound echo for {:?}",
                                     std::mem::discriminant(&event.domain),
@@ -672,7 +672,7 @@ async fn broadcast_forwarder(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use daw_synchronization::SyncDomain;
+    use crate::SyncDomain;
     use tokio::sync::broadcast;
 
     fn empty_suppression() -> Arc<tokio::sync::Mutex<SuppressionSet>> {

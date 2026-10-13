@@ -4,7 +4,7 @@
 //! The `LinkCallbacks` trait is host-agnostic by design, so we provide a
 //! `MockCallbacks` that records all mutations for assertion.
 
-use daw_link::{Engine, EngineConfig, LinkCallbacks, LinkState, Mode};
+use daw_sync::link::{Engine, EngineConfig, LinkCallbacks, LinkState, Mode};
 use std::cell::RefCell;
 
 fn default_state() -> LinkState {

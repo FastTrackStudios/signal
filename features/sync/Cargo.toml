@@ -1,0 +1,34 @@
+[package]
+name = "daw-sync"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Keeping DAWs in sync: the backend-agnostic sync engine and drift corrector, the TCP peer mesh (network) and the Ableton Link adapter (link)"
+
+[lints]
+workspace = true
+
+[features]
+link = ["dep:rusty_link"]
+network = ["dep:facet-postcard", "tokio/io-util", "tokio/net"]
+
+[dependencies]
+daw = { workspace = true }
+facet = { workspace = true }
+facet-postcard = { version = "0.50.0-rc.1", optional = true }
+rusty_link = { version = "0.4", optional = true }
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+tokio-util = { version = "0.7" }
+tracing = { workspace = true }
+
+[dev-dependencies]
+daw = { workspace = true }
+eyre = { workspace = true }
+studio = { workspace = true, features = ["reaper", "test-harness"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+
+[[test]]
+name = "link_engine"
+path = "tests/link_engine.rs"
+required-features = ["link"]

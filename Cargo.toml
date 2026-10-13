@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/sync",
     "crates/frame",
     "features/audio/worklet",
     "features/patchbay",
@@ -105,9 +106,6 @@ members = [
     "crates/daw/standalone",
     "features/adapters/reaper/daw-audio-sync",
     "crates/daw/transport-sync",
-    "features/sync/daw-link",
-    "features/sync/daw-network",
-    "features/sync/daw-synchronization",
     "features/ui/adaptive-grid",
     "crates/daw/macros",
     "xtask/devtools",
@@ -204,6 +202,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+daw-sync = { path = "features/sync" }
 frame = { path = "crates/frame" }
 web-audio-worklet = { path = "features/audio/worklet" }
 patchbay = { path = "features/patchbay" }
@@ -313,9 +312,6 @@ daw-audio-graph = { path = "crates/daw/audio-graph" }
 # RT-aware allocator — offloads RT deallocation to background thread
 daw-allocator = { path = "crates/daw/allocator" }
 audio-controls = { path = "features/ui/audio-controls" }
-daw-synchronization = { path = "features/sync/daw-synchronization" }
-daw-link = { path = "features/sync/daw-link" }
-daw-network = { path = "features/sync/daw-network" }
 daw-audio-sync = { path = "features/adapters/reaper/daw-audio-sync" }
 daw-transport-sync = { path = "crates/daw/transport-sync" }
 dawfile-reaper = { path = "features/formats/dawfile-reaper" }

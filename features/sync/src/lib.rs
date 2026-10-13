@@ -43,6 +43,12 @@
 //! wires `outbound()` → peer connection → `apply_remote()` on the
 //! other side.
 
+#[cfg(feature = "network")]
+pub mod network;
+#[cfg(feature = "link")]
+pub mod link;
+
+
 pub mod apply;
 pub mod daw_module;
 pub mod drift;

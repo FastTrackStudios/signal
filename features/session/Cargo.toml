@@ -18,7 +18,7 @@ desktop = ["dioxus", "dock-dioxus/web"]
 engine = ["dep:daw-control", "dep:daw-standalone"]
 library = ["dep:collection-proto", "dep:files-client", "dep:files-proto", "dep:futures-util", "dep:links-proto", "dep:resources-proto", "dep:task-dial", "dep:vox-core"]
 net = ["dep:crdt", "dep:futures"]
-reaper = ["studio/reaper", "dep:daw-actions", "dep:daw-reaper", "dep:daw-synchronization", "dep:reaper-high", "dep:reaper-low", "dep:reaper-medium"]
+reaper = ["studio/reaper", "dep:daw-actions", "dep:daw-reaper", "dep:daw-sync", "dep:reaper-high", "dep:reaper-low", "dep:reaper-medium"]
 tts = ["dep:chatterbox-rs", "dep:ort", "ort/load-dynamic"]
 ui = ["dep:architect-ui", "dep:dock-dioxus", "dep:dock-proto", "dep:lucide-dioxus", "web"]
 vox = []
@@ -85,7 +85,7 @@ studio = { workspace = true, features = ["file", "test-harness"] }
 daw-control = { workspace = true }
 daw-proto = { workspace = true }
 daw-standalone = { workspace = true, features = ["audio", "bootstrap", "decode", "rpp-project", "session-file"] }
-daw-synchronization = { workspace = true }
+daw-sync = { workspace = true }
 dioxus-test = { workspace = true }
 eyre = { workspace = true }
 facet-postcard = { workspace = true }
@@ -104,7 +104,7 @@ daw = { workspace = true }
 studio = { workspace = true, features = ["file"] }
 daw-actions = { workspace = true, optional = true }
 daw-reaper = { workspace = true, optional = true }
-daw-synchronization = { workspace = true, optional = true }
+daw-sync = { workspace = true, optional = true }
 dynamic-template = { workspace = true, features = ["reaper"] }
 reaper-high = { workspace = true, optional = true }
 reaper-low = { workspace = true, optional = true }

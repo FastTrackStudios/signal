@@ -13,7 +13,7 @@
 use std::time::Duration;
 
 use studio::test::reaper_test;
-use daw_synchronization::{SyncConfig, SyncDomain, SyncSession, SynchronizationEngine};
+use daw_sync::{SyncConfig, SyncDomain, SyncSession, SynchronizationEngine};
 
 const PEER_ID: &str = "test-peer";
 
