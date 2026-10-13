@@ -11,11 +11,11 @@
 
 use std::time::Duration;
 
-use studio::test::reaper_test;
 use futures::future::join_all;
 use signal::macro_bank::{MacroBank, MacroKnob};
 use signal::{Block, BlockParameter, MacroBinding};
 use signal_live::macro_setup;
+use studio::test::reaper_test;
 
 /// Small sleep to let REAPER process changes.
 async fn settle() {
@@ -296,7 +296,9 @@ async fn macro_setup_direct_reacomp_parameter_binding(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn macro_setup_direct_multi_plugin(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn macro_setup_direct_multi_plugin(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     // Create track with two ReaComp instances

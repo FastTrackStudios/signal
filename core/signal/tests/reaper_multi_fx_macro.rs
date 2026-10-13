@@ -115,7 +115,9 @@ fn find_param(params: &[daw::service::FxParameter], needle: &str) -> eyre::Resul
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn multi_fx_macro_drives_comp_and_eq(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn multi_fx_macro_drives_comp_and_eq(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== MULTI-FX MACRO TEST ===");

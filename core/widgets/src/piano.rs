@@ -41,13 +41,13 @@ use std::cell::RefCell;
 #[cfg(not(target_arch = "wasm32"))]
 use std::rc::Rc;
 
-#[cfg(not(target_arch = "wasm32"))]
-use plugin_core::canvas::viz::{CanvasPainter, VelloCanvas};
 use dioxus::prelude::*;
 #[cfg(not(target_arch = "wasm32"))]
 use nice_plug_dioxus::prelude::vello::kurbo::{Affine, Rect, RoundedRect};
 #[cfg(not(target_arch = "wasm32"))]
 use nice_plug_dioxus::prelude::vello::peniko::{Color, Fill, Gradient};
+#[cfg(not(target_arch = "wasm32"))]
+use plugin_core::canvas::viz::{CanvasPainter, VelloCanvas};
 
 // ── Geometry constants (SVG user units; scaled to container via viewBox) ──────
 

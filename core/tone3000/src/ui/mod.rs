@@ -35,9 +35,9 @@ pub use art::{ToneArt, use_art_cache};
 pub use detail::ToneDetail;
 pub use state::{Tone3000State, UrlOpener, use_tone3000_state};
 
-use dioxus::prelude::*;
 use crate::tone3000::Tone3000Client;
 use crate::{PickedTone, TonePage, ToneQuery, ToneShelf, ToneSummary};
+use dioxus::prelude::*;
 
 /// What the grid is currently showing.
 #[derive(Clone, PartialEq)]

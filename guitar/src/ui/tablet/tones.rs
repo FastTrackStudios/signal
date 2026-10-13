@@ -11,8 +11,8 @@ use crate::proto::{CaptureImport, ImportOutcome};
 use dioxus::prelude::*;
 use signal_tone3000::account_proto::account::AccountAuthClient;
 use signal_tone3000::tone3000::Tone3000Client;
-use signal_tone3000::{PickedTone, ToneQuery, ToneSummary};
 use signal_tone3000::ui::{ToneArt, UrlOpener, use_art_cache, use_tone3000_state};
+use signal_tone3000::{PickedTone, ToneQuery, ToneSummary};
 
 use super::tokens::*;
 

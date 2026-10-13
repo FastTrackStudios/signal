@@ -10,12 +10,12 @@
 
 use std::time::Duration;
 
-use studio::test::reaper_test;
 use signal::rig::RigSceneId;
 use signal::seed_id;
 use signal_live::daw_rig_builder::instantiate_rig;
 use signal_proto::overrides::NodeOverrideOp;
 use signal_proto::rig_template::{EngineTemplate, LayerTemplate, RigTemplate};
+use studio::test::reaper_test;
 
 /// Small sleep to let REAPER process track/FX changes.
 async fn settle() {

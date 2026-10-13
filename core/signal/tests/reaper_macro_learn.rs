@@ -52,7 +52,10 @@ async fn wait_for_signal_extension(ctx: &studio::test::ReaperTestContext) -> eyr
 }
 
 /// Run a signal action by command name, retrying until the action is registered.
-async fn run_signal_action(ctx: &studio::test::ReaperTestContext, action: &str) -> eyre::Result<()> {
+async fn run_signal_action(
+    ctx: &studio::test::ReaperTestContext,
+    action: &str,
+) -> eyre::Result<()> {
     wait_for_signal_extension(ctx).await?;
 
     let project = ctx.project();
@@ -104,7 +107,9 @@ async fn poll_param(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn load_signal_controller_on_track(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn load_signal_controller_on_track(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Controller Load Test", None).await?;
 

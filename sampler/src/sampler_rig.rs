@@ -320,6 +320,17 @@ pub struct BusTrack {
 
 /// Shared inner state, behind an `Arc` so [`SamplerRig`] is cheap to
 /// [`Clone`] (the audio engine + bank are shared, like `SamplerPlayer`).
+impl Drop for Inner {
+    /// The last handle of a rig on a shared engine takes its tracks with it.
+    fn drop(&mut self) {
+        if let Some(rig) = self.rig.as_ref()
+            && let Err(e) = rig.remove()
+        {
+            tracing::warn!(error = %e, "sampler rig: removing its tracks failed");
+        }
+    }
+}
+
 struct Inner {
     /// `None` in offline mode (no device opened).
     daw: Option<Standalone>,
@@ -443,14 +454,20 @@ impl SamplerRig {
         prefs: &AudioIoPrefs,
         cache_budget_bytes: Option<usize>,
     ) -> eyre::Result<Self> {
+        // Output-only (a sampler generates, never records).
+        let mut io = prefs.clone();
+        io.want_input = false;
+        // The process's engine, when the app installed one.
+        if let Some(engine) = signal_rig_host::engine::shared() {
+            engine.ensure_audio(&io)?;
+            return Self::open_in(&engine, cache_budget_bytes);
+        }
         let engine = Engine::new(SAMPLER_PROJECT_NAME);
         let rig = engine.add_rig(SAMPLER_PROJECT_NAME)?;
         let bank_track = rig.add_track(BANK_TRACK_NAME)?;
         let bank_fx_guid = rig.add_fx_slot(&bank_track, "sampler-bank")?;
-        // Output-only (a sampler generates, never records).
-        let mut io = prefs.clone();
-        io.want_input = false;
         engine.start_audio(&io)?;
+        engine.play();
         Self::with_bank(engine, rig, bank_track, bank_fx_guid, cache_budget_bytes)
     }
 

@@ -8,10 +8,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use architect::dispatch::CurrentThreadDispatcher;
-use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use crate::space::SampleSpace;
 use crate::{MapItem, SimilarHit, SpaceEvent, SpaceFilter, SpaceInfo};
+use architect::dispatch::CurrentThreadDispatcher;
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 
 use crate::engine::{Space, build, knn};
 
@@ -290,9 +290,6 @@ impl crate::space::SampleSpaceStreamSource for SpaceBackend {
 
 impl Services for SpaceBackend {
     fn layers() -> impl Layer<Self> {
-        layers![
-            crate::space::Service,
-            crate::space::StreamService
-        ]
+        layers![crate::space::Service, crate::space::StreamService]
     }
 }

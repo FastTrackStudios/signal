@@ -290,7 +290,7 @@ impl DrumRigBackend {
         if let Some(idx) = idx {
             self.do_load_kit(idx);
         }
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
+        self.reattach_midi(midi::telemetry::AttachTrigger::RigOpen);
         self.paint_light_guide(); // opens the keyboard's Light Guide, paints the kit
         self.publish_all();
     }
@@ -357,7 +357,7 @@ impl DrumRigBackend {
             s.pieces = pieces;
             s.engines = engines;
         }
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
+        self.reattach_midi(midi::telemetry::AttachTrigger::RigOpen);
         self.paint_light_guide();
         self.publish_all();
     }
@@ -507,7 +507,7 @@ impl DrumRigBackend {
             s.pieces = pieces;
             s.engines = engines;
         }
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
+        self.reattach_midi(midi::telemetry::AttachTrigger::RigOpen);
         self.paint_light_guide();
         self.publish_all();
     }
@@ -686,7 +686,7 @@ impl DrumRigBackend {
         }
     }
 
-    fn reattach_midi(&self, trigger: signal_rig_host::midi::AttachTrigger) {
+    fn reattach_midi(&self, trigger: midi::telemetry::AttachTrigger) {
         let (port, map) = {
             let s = self
                 .inner
@@ -695,7 +695,7 @@ impl DrumRigBackend {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             (s.midi_port.clone(), s.input_map)
         };
-        signal_rig_host::midi::reattach_instrumented(
+        midi::telemetry::reattach_instrumented(
             "drums",
             trigger,
             port.as_deref(),
@@ -840,7 +840,7 @@ impl RigBackend for DrumRigBackend {
         // A device plugged in after the rig started (e.g. the mioXM) is merged
         // into the omni stream without touching the UI.
         tracing::info!(?ports, "drum rig: MIDI ports changed — re-attaching");
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortsChanged);
+        self.reattach_midi(midi::telemetry::AttachTrigger::PortsChanged);
         self.inner
             .events
             .publish(DrumEvent::Status(DrumRig::status(self)));
@@ -1402,7 +1402,7 @@ impl DrumRig for DrumRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
+        self.reattach_midi(midi::telemetry::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(DrumEvent::Status(DrumRig::status(self)));
@@ -1412,7 +1412,7 @@ impl DrumRig for DrumRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.input_map = map;
         }
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
+        self.reattach_midi(midi::telemetry::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(DrumEvent::Status(DrumRig::status(self)));

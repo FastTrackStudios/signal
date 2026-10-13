@@ -21,11 +21,11 @@ use signal::daw_compat::TrackHandleCompat;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use studio::file::RppSerialize;
-use studio::test::reaper_test;
 use signal::ops::rig_importer::{ImportBlock, ImportChain, ImportModule};
 use signal_proto::ModuleBlockSource;
 use signal_proto::plugin_block::{FxRole, TrackRole};
+use studio::file::RppSerialize;
+use studio::test::reaper_test;
 
 /// Small sleep to let REAPER process track/FX changes.
 async fn settle() {

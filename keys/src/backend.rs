@@ -85,7 +85,7 @@ struct State {
     midi_port: Option<String>,
     /// The rig's subscription to the shared process-wide MIDI hub. Dropping
     /// it detaches this rig only; the hardware ports stay open for the others.
-    midi_handle: Option<signal_rig_host::midi_hub::Subscription>,
+    midi_handle: Option<midi::hub::Subscription>,
     /// The last audio-open failure, for UIs with no log access (phones).
     last_error: Option<String>,
     /// The active profile — the engine/layer mixer shape + its stacks.
@@ -3687,7 +3687,7 @@ impl KeysRigBackend {
                 // caller of ensure_open (start, preset load, rebuild) needs
                 // one — attaching here makes this THE single open path, so a
                 // rig can never end up audible-but-deaf.
-                self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
+                self.reattach_midi(midi::telemetry::AttachTrigger::RigOpen);
                 if let Ok(mut s) = self.inner.state.lock() {
                     if s.loaded.is_none() {
                         s.loaded = Some(idx);
@@ -3766,7 +3766,7 @@ impl KeysRigBackend {
     /// per port for the whole process and fans events out. Subscribing is
     /// cheap and synchronous — the expensive part (opening ports) happens
     /// once, in `rescan`, however many rigs are listening.
-    fn reattach_midi(&self, trigger: signal_rig_host::midi::AttachTrigger) {
+    fn reattach_midi(&self, trigger: midi::telemetry::AttachTrigger) {
         let port = self
             .inner
             .state
@@ -3839,7 +3839,7 @@ impl KeysRigBackend {
             }
             sink(ev);
         };
-        let hub = signal_rig_host::midi_hub::hub();
+        let hub = midi::hub::hub();
         let sub = hub.subscribe("keys", port.clone(), sink);
         if let Ok(mut s) = self.inner.state.lock() {
             // Replacing the old subscription drops it, detaching the previous
@@ -3929,7 +3929,7 @@ impl RigBackend for KeysRigBackend {
         // A keyboard plugged in after the rig started is merged into the
         // omni stream without touching the UI.
         tracing::info!(?ports, "keys rig: MIDI ports changed — re-attaching");
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortsChanged);
+        self.reattach_midi(midi::telemetry::AttachTrigger::PortsChanged);
         self.inner
             .events
             .publish(KeysEvent::Status(KeysRigSvc::status(self)));
@@ -4228,7 +4228,7 @@ impl KeysRigSvc for KeysRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
+        self.reattach_midi(midi::telemetry::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(KeysEvent::Status(KeysRigSvc::status(self)));

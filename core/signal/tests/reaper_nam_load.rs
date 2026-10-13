@@ -8,11 +8,11 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use studio::test::reaper_test;
 use signal_nam::{
     NamCatalog, merge_into_catalog, nam_root_from_env, resolve_path, scan_directory,
     vst_chunk::{decode_chunk, encode_chunk, rewrite_paths},
 };
+use studio::test::reaper_test;
 
 /// Small sleep to let REAPER/CLAP process changes.
 async fn settle() {

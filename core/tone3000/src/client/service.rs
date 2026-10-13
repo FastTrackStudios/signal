@@ -18,13 +18,13 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use futures_util::StreamExt as _;
 use crate::tone3000::{Tone3000, Tone3000StreamSource};
 use crate::{
     AuthRequest, DownloadProgress, ImageData, PickedTone, SignInStatus, TonePage, ToneQuery,
     ToneShelf,
 };
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
+use futures_util::StreamExt as _;
 use tone3000 as api;
 
 use crate::client::config::Config;
@@ -988,10 +988,7 @@ impl Tone3000StreamSource for Tone3000Backend {
 
 impl Services for Tone3000Backend {
     fn layers() -> impl Layer<Self> {
-        layers![
-            crate::tone3000::Service,
-            crate::tone3000::StreamService
-        ]
+        layers![crate::tone3000::Service, crate::tone3000::StreamService]
     }
 }
 

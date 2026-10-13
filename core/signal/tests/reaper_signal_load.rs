@@ -12,9 +12,9 @@
 
 use std::time::Duration;
 
-use studio::test::reaper_test;
 use signal::{BlockType, ModulePresetId, ModuleType, PresetId, seed_id};
 use signal_proto::plugin_block::TrackRole;
+use studio::test::reaper_test;
 
 /// Small sleep to let REAPER/CLAP process changes.
 async fn settle() {

@@ -18,14 +18,13 @@
 //! The GUI never sees a token, a verifier or the `state` nonce. It is a
 //! courier for a URL in one direction and a callback in the other.
 
+#[cfg(feature = "client")]
+pub mod account;
 pub mod account_proto;
 #[cfg(feature = "client")]
 pub mod client;
-#[cfg(feature = "client")]
-pub mod account;
 #[cfg(feature = "ui")]
 pub mod ui;
-
 
 use facet::Facet;
 

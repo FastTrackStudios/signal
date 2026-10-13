@@ -10,12 +10,12 @@
 
 use std::time::{Duration, Instant};
 
-use studio::test::reaper_test;
 use futures::future::try_join_all;
 use signal::BlockType;
 use signal_import::fabfilter::FabFilterImporter;
 use signal_import::{IMPORT_NAMESPACE, import_preset_id};
 use signal_proto::SnapshotId;
+use studio::test::reaper_test;
 use uuid::Uuid;
 
 /// Small sleep to let REAPER/CLAP process changes.

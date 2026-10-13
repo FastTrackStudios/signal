@@ -11,11 +11,11 @@
 
 use std::time::Instant;
 
-use studio::test::reaper_test;
 use signal::{BlockType, ModuleType, Preset};
 use signal_live::daw_rig_builder::instantiate_rig;
 use signal_proto::rig_template::{EngineTemplate, LayerTemplate, RigTemplate};
 use signal_proto::{ModulePresetId, PresetId, seed_id};
+use studio::test::reaper_test;
 
 /// Ensure REAPER's audio engine is running.
 async fn ensure_audio(ctx: &studio::test::ReaperTestContext) {
