@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use daw_audio_io::duplex::{Backend, DuplexBackend, DuplexConfig, ProcessBlock};
+use audio::io::duplex::{Backend, DuplexBackend, DuplexConfig, ProcessBlock};
 use signal_phones::{MixerState, PhonesLink, claim, default_state_path, fader_gain};
 
 /// How often the control loop looks at the file and the device.

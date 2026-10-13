@@ -34,7 +34,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwapOption;
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
 use signal_sampler::spec::LibrarySpec;

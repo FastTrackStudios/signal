@@ -55,7 +55,7 @@ pub struct RigAudioPrefs {
     pub phones_mixer: bool,
     /// Let the rig open a built-in microphone as its input. Off by default —
     /// the laptop mic through the laptop speakers feeds back the moment the
-    /// rig opens (see `daw_audio_io::input_guard`). `allow_builtin_mic true`
+    /// rig opens (see `audio::io::input_guard`). `allow_builtin_mic true`
     /// in the rig's styx turns it on.
     #[facet(default)]
     pub allow_builtin_mic: bool,
@@ -154,7 +154,7 @@ impl RigAudioPrefs {
 /// is forced on. The per-track input *channel* lives on [`RigAudioPrefs`] but
 /// not on `AudioIoPrefs` (which is engine-global) — it's applied to the rig
 /// track's `RecordInput` separately, in `GuitarRig::open`.
-impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
+impl From<&RigAudioPrefs> for audio::io::AudioIoPrefs {
     fn from(p: &RigAudioPrefs) -> Self {
         Self {
             input_device: p.input_device.clone(),

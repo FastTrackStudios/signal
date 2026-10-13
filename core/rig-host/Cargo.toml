@@ -10,12 +10,8 @@ description = "Shared daw-backed host for signal live rigs — one project/track
 workspace = true
 
 [features]
-# PipeWire is DEFAULT on Linux (target-gated in daw-audio-io); alias kept so
-# existing `signal-rig-host/pipewire` references parse.
 pipewire = []
-# Legacy JACK backend (pipewire-jack shim) — enables the PIPEWIRE_LATENCY
-# quantum request before the JACK client connects.
-jack = ["daw-audio-io/jack"]
+jack = ["audio/io", "audio/jack"]
 
 [dependencies]
 # Base: the project/track/FX-slot topology half — wasm-clean (`standalone`
@@ -39,4 +35,4 @@ midicore-proto.workspace = true
 # Drain-style hub subscriptions (mirrors MidiStream's bounded channel).
 crossbeam-channel.workspace = true
 daw = { workspace = true, features = ["standalone-audio"] }
-daw-audio-io.workspace = true
+audio = { workspace = true, features = ["io"] }

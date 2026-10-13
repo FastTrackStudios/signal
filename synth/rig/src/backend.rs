@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use daw_audio_io::AudioIoPrefs;
+use audio::io::AudioIoPrefs;
 use midicore::MidiEvent;
 use keys::KeysRig;
 use signal_sampler::rig_node::{Container, RigNode, Role};

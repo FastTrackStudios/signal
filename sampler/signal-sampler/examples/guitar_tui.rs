@@ -20,7 +20,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use daw_audio_io::pw::{self, ClockSettings, DeviceLatency};
+use audio::io::pw::{self, ClockSettings, DeviceLatency};
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};

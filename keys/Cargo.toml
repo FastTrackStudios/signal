@@ -19,7 +19,7 @@ vox = ["architect/vox", "dep:vox"]
 architect = { workspace = true, features = ["atom", "platform", "rig", "vox"] }
 architect-telemetry = { workspace = true }
 daw = { workspace = true }
-daw-audio-io = { workspace = true, features = ["monitor"] }
+audio = { workspace = true, features = ["io", "monitor"] }
 dioxus = { workspace = true, optional = true }
 eyre = { workspace = true }
 facet = { workspace = true }

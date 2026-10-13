@@ -19,7 +19,7 @@ use daw::service::handle::DawHandle as _;
 use daw::standalone::Standalone;
 use daw::standalone::metering::Meters;
 #[cfg(not(target_arch = "wasm32"))]
-use daw_audio_io::AudioIoPrefs;
+use audio::io::AudioIoPrefs;
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
@@ -595,11 +595,11 @@ static RENDER_LOAD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32:
 /// to a deliberately leaked `Arc`: an old one stays valid forever (a few
 /// hundred bytes per device open) and a read never takes a lock.
 #[cfg(not(target_arch = "wasm32"))]
-static ENGINE_STATS: std::sync::atomic::AtomicPtr<daw_audio_io::duplex::EngineStats> =
+static ENGINE_STATS: std::sync::atomic::AtomicPtr<audio::io::duplex::EngineStats> =
     std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 #[cfg(not(target_arch = "wasm32"))]
-fn set_engine_stats(stats: Arc<daw_audio_io::duplex::EngineStats>) {
+fn set_engine_stats(stats: Arc<audio::io::duplex::EngineStats>) {
     let p = Arc::into_raw(stats).cast_mut();
     ENGINE_STATS.store(p, std::sync::atomic::Ordering::Release);
 }
@@ -1181,7 +1181,7 @@ impl KeysRig {
     /// it: cpal gave no way to see that the rig was missing its deadline dozens
     /// of times a second while its average load read a comfortable 20%.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn engine_stats(&self) -> Option<std::sync::Arc<daw_audio_io::duplex::EngineStats>> {
+    pub fn engine_stats(&self) -> Option<std::sync::Arc<audio::io::duplex::EngineStats>> {
         self._host
             .as_ref()
             .and_then(signal_rig_host::RigHost::stats)

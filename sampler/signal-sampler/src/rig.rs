@@ -53,7 +53,7 @@ use daw::standalone::Standalone;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::metering::{Meters, linear_to_db};
 #[cfg(not(target_arch = "wasm32"))]
-use daw_audio_io::duplex::EngineStats;
+use audio::io::duplex::EngineStats;
 // The shared daw-backed host: project seeding, track/FX-slot reservation, the
 // realtime engine (native duplex `pw_filter` on Linux with the `pipewire`
 // feature, cpal fallback elsewhere), meters, transport.
@@ -2019,7 +2019,7 @@ impl GuitarRig {
         //    device/routing config; the host forces `want_input` on unless
         //    this open is output only) and the per-track meter bank (one
         //    cell, post-fader output peak).
-        let mut io: daw_audio_io::AudioIoPrefs = prefs.into();
+        let mut io: audio::io::AudioIoPrefs = prefs.into();
         io.want_input = want_input;
         let host = project.start_duplex_as_given(&io)?;
         let sample_rate = host.sample_rate();
@@ -2301,25 +2301,25 @@ impl GuitarRig {
     /// there is no session (everywhere but iOS).
     #[must_use]
     pub fn session_report() -> Option<String> {
-        daw_audio_io::session_report()
+        audio::io::session_report()
     }
 
     /// Whether the app may read inputs at all — on iOS, the microphone
     /// access the player gave: `"granted"`, `"denied"` or `"undetermined"`.
     #[must_use]
     pub fn input_access() -> &'static str {
-        match daw_audio_io::input_access() {
-            daw_audio_io::InputAccess::Granted => "granted",
-            daw_audio_io::InputAccess::Denied => "denied",
-            daw_audio_io::InputAccess::Undetermined => "undetermined",
+        match audio::io::input_access() {
+            audio::io::InputAccess::Granted => "granted",
+            audio::io::InputAccess::Denied => "denied",
+            audio::io::InputAccess::Undetermined => "undetermined",
         }
     }
 
     /// List available input devices (name + channel count + native rate).
     #[must_use]
     pub fn input_devices() -> Vec<DeviceInfo> {
-        let host = daw_audio_io::audio_host();
-        daw_audio_io::input_devices(&host)
+        let host = audio::io::audio_host();
+        audio::io::input_devices(&host)
             .into_iter()
             .map(|d| DeviceInfo {
                 name: d.name,
@@ -2332,8 +2332,8 @@ impl GuitarRig {
     /// List available output devices.
     #[must_use]
     pub fn output_devices() -> Vec<DeviceInfo> {
-        let host = daw_audio_io::audio_host();
-        daw_audio_io::output_devices(&host)
+        let host = audio::io::audio_host();
+        audio::io::output_devices(&host)
             .into_iter()
             .map(|d| DeviceInfo {
                 name: d.name,
@@ -3186,7 +3186,7 @@ impl GuitarRig {
 
     /// Every dropout the engine has seen since `*seen` (a sequence number,
     /// 0 to start), oldest first — for a drop log. Empty for an offline rig.
-    pub fn collect_drops(&self, seen: &mut u64) -> Vec<daw_audio_io::duplex::DropEvent> {
+    pub fn collect_drops(&self, seen: &mut u64) -> Vec<audio::io::duplex::DropEvent> {
         self.engine_stats
             .as_ref()
             .map(|s| s.drops.collect(seen))
