@@ -31,7 +31,7 @@
 //! straight back off, and they should fail loudly if the assets
 //! arrive in a different shape.
 
-use fts_themer::thresholds;
+use themer::thresholds;
 
 /// The theme REAPER actually loads.
 fn theme() -> String {

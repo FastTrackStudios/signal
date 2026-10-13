@@ -1,7 +1,7 @@
 //! The editor shell: group nav, swatch grid, and the live preview.
 
 use dioxus::prelude::*;
-use fts_themer::{Group, ThemeIni, color::Rgb, groups};
+use themer::{Group, ThemeIni, color::Rgb, groups};
 
 use crate::preview::Preview;
 use crate::server::{ThemeSources, add_accent, load_theme, save_theme};

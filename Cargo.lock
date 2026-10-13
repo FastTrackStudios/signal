@@ -7975,29 +7975,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "fts-themer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "daw",
- "daw-theme",
- "daw-theme-art",
- "dioxus",
- "image",
- "palette",
- "serde",
-]
-
-[[package]]
 name = "fts-themer-ui"
 version = "0.1.0"
 dependencies = [
  "daw-proto",
  "daw-ui",
  "dioxus",
- "fts-themer",
  "serde",
+ "themer",
 ]
 
 [[package]]
@@ -21282,6 +21267,21 @@ dependencies = [
  "render",
  "render-canvas",
  "theme-expr",
+]
+
+[[package]]
+name = "themer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "daw",
+ "daw-theme",
+ "daw-theme-art",
+ "dioxus",
+ "image",
+ "palette",
+ "serde",
 ]
 
 [[package]]

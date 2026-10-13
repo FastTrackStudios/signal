@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use fts_themer::{ThemeDir, add_accent, color::Rgb, groups};
+use themer::{ThemeDir, add_accent, color::Rgb, groups};
 
 /// Default theme location, relative to the repo root.
 const DEFAULT_THEME: &str = "features/reaper/fts-theme";
@@ -279,7 +279,7 @@ fn main() -> Result<()> {
             set,
             swell,
         } => {
-            let mut source = fts_themer::apply::load_theme(from.as_deref())?;
+            let mut source = themer::apply::load_theme(from.as_deref())?;
             for pair in &set {
                 let (key, value) = pair
                     .split_once('=')
@@ -291,7 +291,7 @@ fn main() -> Result<()> {
             }
 
             let report =
-                fts_themer::apply::apply_theme_to(&cli.theme, &source, dry_run, swell.as_deref())?;
+                themer::apply::apply_theme_to(&cli.theme, &source, dry_run, swell.as_deref())?;
             for (key, before, after) in &report.changed {
                 println!("{key:<26} {} -> {}", before.to_hex(), after.to_hex());
             }
@@ -316,9 +316,9 @@ fn main() -> Result<()> {
         }
 
         Command::Restyle { from, dry_run } => {
-            let source = fts_themer::apply::load_theme(from.as_deref())?;
+            let source = themer::apply::load_theme(from.as_deref())?;
             let ramp = daw_theme::Ramp::for_chrome(&source);
-            let report = fts_themer::restyle::restyle(&theme, &ramp, dry_run)?;
+            let report = themer::restyle::restyle(&theme, &ramp, dry_run)?;
             for (path, err) in &report.failed {
                 eprintln!("FAILED {}: {err}", path.display());
             }
@@ -338,7 +338,7 @@ fn main() -> Result<()> {
         }
 
         Command::Generate { dry_run, traced } => {
-            let report = fts_themer::generate::generate(&theme, dry_run, !traced)?;
+            let report = themer::generate::generate(&theme, dry_run, !traced)?;
             for (name, err) in &report.failed {
                 eprintln!("FAILED {name}: {err}");
             }
@@ -367,11 +367,11 @@ fn main() -> Result<()> {
         }
 
         Command::Walter { dry_run } => {
-            let source = fts_themer::apply::load_theme(None)?;
+            let source = themer::apply::load_theme(None)?;
             let ramp = daw_theme::Ramp::for_chrome(&source);
-            let changes = fts_themer::walter_colors::retint_file_from(
+            let changes = themer::walter_colors::retint_file_from(
                 &theme.rtconfig_path(),
-                &theme.images_dir().join(fts_themer::restyle::SOURCE_DIR),
+                &theme.images_dir().join(themer::restyle::SOURCE_DIR),
                 &ramp,
                 dry_run,
             )?;
@@ -390,7 +390,7 @@ fn main() -> Result<()> {
         }
 
         Command::Thresholds { check } => {
-            use fts_themer::thresholds;
+            use themer::thresholds;
 
             let path = cli.theme.join(format!("{}/rtconfig.txt", theme.name));
             let text = std::fs::read_to_string(&path)
@@ -437,7 +437,7 @@ fn main() -> Result<()> {
             window,
             full,
         } => {
-            use fts_themer::shot::{self, Profile, ShotOptions};
+            use themer::shot::{self, Profile, ShotOptions};
 
             let mut opts = ShotOptions::new(&cli.theme, &out);
             opts.geometry = geometry;
@@ -446,9 +446,9 @@ fn main() -> Result<()> {
             opts.plugins = plugins;
             opts.startup_actions = actions;
             opts.window = if full {
-                fts_themer::shot::Capture::Screen
+                themer::shot::Capture::Screen
             } else if let Some(title) = window {
-                fts_themer::shot::Capture::Window(title)
+                themer::shot::Capture::Window(title)
             } else {
                 opts.window
             };

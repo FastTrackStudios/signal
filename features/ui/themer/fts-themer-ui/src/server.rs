@@ -25,7 +25,7 @@ pub struct ThemeSources {
 /// Read a theme directory.
 #[server]
 pub async fn load_theme(path: String) -> Result<ThemeSources, ServerFnError> {
-    use fts_themer::ThemeDir;
+    use themer::ThemeDir;
 
     let theme = ThemeDir::open(&path).map_err(err)?;
     let ini = std::fs::read_to_string(theme.ini_path()).map_err(err)?;
@@ -47,7 +47,7 @@ pub async fn load_theme(path: String) -> Result<ThemeSources, ServerFnError> {
 /// and the round trip is what guarantees the untouched lines are byte-identical.
 #[server]
 pub async fn save_theme(path: String, ini: String) -> Result<String, ServerFnError> {
-    use fts_themer::{ThemeDir, ThemeIni};
+    use themer::{ThemeDir, ThemeIni};
 
     let theme = ThemeDir::open(&path).map_err(err)?;
     let parsed = ThemeIni::parse(&ini);
@@ -70,11 +70,11 @@ pub async fn add_accent(
     from: String,
     keep_tone: bool,
 ) -> Result<Vec<String>, ServerFnError> {
-    use fts_themer::{ThemeDir, color::Rgb};
+    use themer::{ThemeDir, color::Rgb};
 
     let theme = ThemeDir::open(&path).map_err(err)?;
     let color = Rgb::parse_hex(&color).map_err(err)?;
-    let report = fts_themer::add_accent(&theme, &name, color, &from, keep_tone).map_err(err)?;
+    let report = themer::add_accent(&theme, &name, color, &from, keep_tone).map_err(err)?;
     Ok(report
         .images
         .iter()

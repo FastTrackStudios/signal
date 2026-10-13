@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/ui/themer",
     "features/launcher",
     "features/preset-browser",
     "features/control-surfaces",
@@ -52,7 +53,6 @@ members = [
     "features/ui/daw-ui/daw-theme",
     "features/ui/daw-ui/daw-theme-art",
     "features/ui/daw-ui/daw-theme-reaper",
-    "features/ui/themer/fts-themer",
     "features/ui/themer/fts-themer-ui",
     "features/adapters/reaper/daw-reaper-dioxus-ext",
     "features/adapters/reaper/daw-reaper-dioxus-ext-test",
@@ -305,6 +305,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+themer = { path = "features/ui/themer", default-features = false }
 launcher = { path = "features/launcher" }
 preset-browser = { path = "features/preset-browser" }
 control-surfaces = { path = "features/control-surfaces" }
@@ -433,7 +434,6 @@ daw-reaper-dioxus-ext = { path = "features/adapters/reaper/daw-reaper-dioxus-ext
 daw-reaper-embed = { path = "features/adapters/reaper/daw-reaper-embed" }
 reaper-launcher = { path = "features/adapters/reaper/reaper-launcher" }
 fts-icons = { path = "features/adapters/reaper/fts-icons" }
-fts-themer = { path = "features/ui/themer/fts-themer", default-features = false }
 fts-themer-ui = { path = "features/ui/themer/fts-themer-ui" }
 reaper-config = { path = "features/adapters/reaper/reaper-config" }
 reaper-kbd = { path = "features/adapters/reaper/reaper-kbd" }

@@ -14,13 +14,15 @@
 //! from the edited string on every keystroke.
 //!
 //! ```no_run
-//! use fts_themer::{color::Rgb, ThemeDir};
+//! use crate::{color::Rgb, ThemeDir};
 //!
 //! let mut theme = ThemeDir::open("features/reaper/fts-theme")?;
 //! theme.ini_mut().set_color("col_cursor", Rgb::parse_hex("#00b0f9")?);
 //! theme.save_ini()?;
 //! # Ok::<(), anyhow::Error>(())
 //! ```
+
+
 
 #[cfg(feature = "apply")]
 pub mod apply;

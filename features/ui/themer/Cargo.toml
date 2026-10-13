@@ -1,0 +1,34 @@
+[package]
+name = "themer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "The theme editor"
+
+[lints]
+workspace = true
+
+[features]
+default = ["cli"]
+apply = ["dep:daw-theme", "fs"]
+cli = ["apply", "dep:clap", "fs", "generate", "shot"]
+fs = ["dep:image"]
+generate = ["apply", "daw-theme-art/render", "dep:dioxus"]
+shot = ["daw/test-harness", "dep:daw", "fs"]
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, optional = true }
+daw = { workspace = true, optional = true }
+daw-theme = { workspace = true, optional = true }
+daw-theme-art = { workspace = true, default-features = false }
+dioxus = { workspace = true, optional = true, features = ["lib"] }
+image = { workspace = true, optional = true }
+palette = { workspace = true }
+serde = { workspace = true }
+
+[[bin]]
+name = "fts-themer"
+path = "src/bin/fts-themer.rs"
+required-features = ["cli"]
