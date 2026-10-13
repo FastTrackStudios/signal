@@ -37,7 +37,10 @@ vox = ["architect/vox", "dep:vox", "rpc"]
 
 [dependencies]
 anyrender = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main", optional = true }
-anyrender_0_11 = { package = "anyrender", version = "0.11", optional = true }
+# The host scene anyrender (0.11): the blitz fork the workspace patches
+# crates.io anyrender to, named directly — dx's metadata reader cannot
+# match a renamed dependency to a patched source.
+anyrender_0_11 = { package = "anyrender", git = "https://github.com/FastTrackStudios/blitz", tag = "fts-focus-2026-10", optional = true }
 anyrender_svg_0_12 = { package = "anyrender_svg", version = "0.12", optional = true }
 anyrender_svg = { workspace = true, optional = true }
 anyrender_vello = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main", optional = true }
