@@ -19,14 +19,14 @@
 //! remembers how it was and Esc puts it back), Enter keeps.
 
 use dioxus::prelude::*;
-use signal_keys_proto::keys::KeysRigClient;
-use signal_keys_proto::{KeysMixer, KeysPreset};
+use crate::proto::keys::KeysRigClient;
+use crate::proto::{KeysMixer, KeysPreset};
 use signal_widgets::kit::{MenuItem, Picked};
 use signal_widgets::{BrowseChip, BrowseEntry, BrowseScope, SoundBrowser};
 
-use crate::control::engine_color;
-use crate::selection::{Selection, use_selection};
-use crate::state::KeysViewState;
+use crate::ui::control::engine_color;
+use crate::ui::selection::{Selection, use_selection};
+use crate::ui::state::KeysViewState;
 
 /// How many rows the list draws before it asks you to narrow it. The library
 /// is ~41k presets — drawing all of them is what made the rig take half a
@@ -121,7 +121,7 @@ fn is_live(p: &KeysPreset, level: Level, sel: &Selection, mixer: &KeysMixer) -> 
     match level {
         Level::Stacks => false,
         Level::Engine => sel.engine().is_some_and(|e| {
-            let lanes: Vec<&signal_keys_proto::KeysLayerModel> = mixer
+            let lanes: Vec<&crate::proto::KeysLayerModel> = mixer
                 .engines
                 .iter()
                 .filter(|x| x.name == e)

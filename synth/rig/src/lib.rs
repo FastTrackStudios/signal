@@ -5,7 +5,7 @@
 //! plays them from hardware MIDI or UI notes.
 //!
 //! The audio host itself is instrument-agnostic — the synth rig reuses
-//! [`signal_keys::KeysRig`] (an output-only daw project hosting one composition
+//! [`keys::KeysRig`] (an output-only daw project hosting one composition
 //! tree as a `PluginInstance`) rather than duplicating the engine plumbing. Only
 //! the preset source (the Omnisphere library scan) and the wire service
 //! ([`signal_synth_proto::synth::SynthRig`]) are synth-specific.

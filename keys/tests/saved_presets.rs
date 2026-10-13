@@ -7,11 +7,11 @@
 //! Needs the sample libraries (`FTS_PACK_LIBRARY`, …) to open the rig
 //! headless; skipped without them.
 
-use signal_keys::KeysRigBackend;
-use signal_keys::proto::KeysMixer;
-use signal_keys::proto::keys::KeysRig as _;
+use keys::KeysRigBackend;
+use keys::proto::KeysMixer;
+use keys::proto::keys::KeysRig as _;
 
-fn lane<'a>(m: &'a KeysMixer, name: &str) -> &'a signal_keys::proto::KeysLayerModel {
+fn lane<'a>(m: &'a KeysMixer, name: &str) -> &'a keys::proto::KeysLayerModel {
     m.engines
         .iter()
         .flat_map(|e| &e.layers)

@@ -25,7 +25,7 @@ fn main() {
     let hits: usize = args.first().and_then(|v| v.parse().ok()).unwrap_or(8);
     let block: u32 = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(128);
     let sr = 48_000u32;
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     let program = backend.debug_profile_lane_program().expect("lane program");
     let rig = KeysRig::open_headless(sr, &program).expect("open_headless");
     rig.set_scope(&Scope::Rig, 0.0, 0.0, 0.0, true);

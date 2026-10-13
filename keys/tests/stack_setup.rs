@@ -3,8 +3,8 @@
 //! restart. Its own process: it points the config dir at a temp dir so the
 //! player's real profile is never touched.
 
-use signal_keys::KeysRigBackend;
-use signal_keys::proto::keys::KeysRig as _;
+use keys::KeysRigBackend;
+use keys::proto::keys::KeysRig as _;
 
 #[test]
 fn stacks_set_up_on_the_switches_are_kept() {

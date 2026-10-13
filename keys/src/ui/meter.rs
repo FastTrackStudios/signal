@@ -1,7 +1,7 @@
 //! Level meters — **the edge of the thing that is sounding**.
 //!
 //! The rig's console idiom is that a level lives on an edge rather than in a
-//! row: an engine's fader IS its card's left edge ([`EdgeFader`](crate::fader::EdgeFader)).
+//! row: an engine's fader IS its card's left edge ([`EdgeFader`](crate::ui::fader::EdgeFader)).
 //! A meter is the same move on the opposite edge — what actually came out,
 //! along the bottom of the card, and along the bottom of a lane's letter.
 //! Nothing new to look at, no row of numbers: the shape you already reach for
@@ -125,7 +125,7 @@ pub fn fmt_dbfs(peak: f32) -> String {
 /// index. Reading the signal still subscribes the calling component, which is
 /// what makes the meter move.
 pub fn peak_of(kind: &str, name: &str) -> f32 {
-    let Some(state) = try_consume_context::<crate::state::KeysViewState>() else {
+    let Some(state) = try_consume_context::<crate::ui::state::KeysViewState>() else {
         return 0.0;
     };
     let status = state.status.read();

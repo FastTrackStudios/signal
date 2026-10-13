@@ -1,68 +1,56 @@
 [package]
-name = "signal-keys"
+name = "keys"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 authors.workspace = true
+license.workspace = true
+description = "The keys rig: pianos, organs, keyboards, and its editor"
 
 [lints]
 workspace = true
 
 [features]
-# PipeWire mode: audio via cpal's pipewire host AND MIDI via the
-# pipewire-jack backend (so hardware MIDI stays a routable graph node
-# instead of an exclusive ALSA grab). midir's jack swap is whole-binary.
-# PipeWire (audio + MIDI) is DEFAULT on Linux — audio is target-gated in
-# daw-audio-io, MIDI via the linux target table below. Alias only.
+default = ["vox"]
 pipewire = []
+ui = ["dep:dioxus", "dep:fts-chrome", "dep:midicore-ui", "dep:signal-browser", "dep:signal-ui", "dep:signal-widgets"]
+vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
-signal-rigs-proto.workspace = true
-# Shared sampler core — the keys rig composes the engine's node-render tree,
-# nord presets, and rig system. Keys is a thin instrument handle on top.
-signal-sampler.workspace = true
-# Cross-rig utilities: shared mixer math (mute/solo folding, dB→linear).
-signal-rig-host.workspace = true
-daw.workspace = true
+architect = { workspace = true, features = ["atom", "platform", "rig", "vox"] }
+architect-telemetry = { workspace = true }
+daw = { workspace = true }
 daw-audio-io = { workspace = true, features = ["monitor"] }
+dioxus = { workspace = true, optional = true }
+eyre = { workspace = true }
+facet = { workspace = true }
+facet-json = { workspace = true }
+facet-styx = { workspace = true }
+fts-chrome = { workspace = true, optional = true }
 midicore = { workspace = true, features = ["vox", "midir"] }
-signal-plugin-host.workspace = true
-# The wire contract this crate's headless backend implements (KeysRig service)
-# + the architect Layer/Services/PubSub machinery to serve it as a vox remote.
-signal-keys-proto.workspace = true
-# Profiles are Facet data (styx-authorable, like every other rig spec).
-facet.workspace = true
-facet-styx.workspace = true
-# The browser boot payload: `lane_program_wire` serializes the profile's
-# WireProgram mirror as the JSON the keys worklet's `openLanes` parses.
-facet-json.workspace = true
-signal-proto.workspace = true
-# The Signal Engine — every lane is one of its layers (source stack →
-# filters → amp → FX). Keys and Synth are the same engine; this crate owns it.
-signal-synth.workspace = true
-architect = { workspace = true, features = ["vox", "rig"] }
-# The open/load worker threads enter this runtime so the daw-standalone
-# engine's task spawns have a reactor wherever the backend is hosted
-# (in-process on iOS, engine mode, tests).
+midicore-proto = { workspace = true }
+midicore-ui = { workspace = true, optional = true }
+signal-browser = { workspace = true, default-features = false, optional = true }
+signal-plugin-host = { workspace = true }
+signal-proto = { workspace = true }
+signal-rig-host = { workspace = true }
+signal-rigs-proto = { workspace = true }
+signal-sampler = { workspace = true }
+signal-synth = { workspace = true }
+signal-ui = { workspace = true, features = ["web"], optional = true }
+signal-widgets = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
-tracing.workspace = true
-# Wide-event enrichment (`wide::set`) on architect's per-RPC span. No
-# `otel` feature here — the calls are no-op stubs unless the hosting
-# binary (fasttrackstudio) enables it, which unifies the feature on.
-architect-telemetry.workspace = true
-eyre.workspace = true
+tracing = { workspace = true }
+vox = { workspace = true, optional = true }
 
 [dev-dependencies]
-vox-core = { workspace = true }
-vox-websocket = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 eyre = { workspace = true }
 fts-sample = { workspace = true }
-ratatui = "0.30"
-libc = "0.2"
-tracing-subscriber.workspace = true
+libc = { version = "0.2" }
+ratatui = { version = "0.30" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+tracing-subscriber = { workspace = true }
+vox-core = { workspace = true }
+vox-websocket = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# Hardware MIDI as a routable PipeWire graph node (midir on the
-# pipewire-jack backend) — the Linux default, matching the audio host.
 midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }

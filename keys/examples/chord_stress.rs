@@ -46,7 +46,7 @@ fn main() {
     let hits: usize = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(6);
     let block: usize = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(128);
     let sr = 48_000u32;
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     let program = backend.debug_profile_program().expect("profile program");
     let tree = if which == "all" {
         program

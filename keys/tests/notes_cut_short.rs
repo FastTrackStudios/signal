@@ -31,7 +31,7 @@ fn normal_playing_cuts_no_note_short() {
         std::env::remove_var("FTS_KEYS_PROFILE");
     }
 
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     assert!(backend.debug_open_headless(SR), "open the rig headless");
     let renderer = backend
         .debug_with_rig(|r| ProjectRenderer::new(r.daw(), r.project_guid(), SR))

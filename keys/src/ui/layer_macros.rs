@@ -14,11 +14,11 @@
 //! centred knob is never a mystery.
 
 use dioxus::prelude::*;
-use signal_keys_proto::{KeysLayerDetail, KeysMacro};
+use crate::proto::{KeysLayerDetail, KeysMacro};
 
-use crate::fader::{Fader, fmt_db};
-use crate::graphs::{Adsr, ModuleCurve, module_color};
-use crate::module_edit::{KnobRow, Panel};
+use crate::ui::fader::{Fader, fmt_db};
+use crate::ui::graphs::{Adsr, ModuleCurve, module_color};
+use crate::ui::module_edit::{KnobRow, Panel};
 
 /// Every module as an overlay curve — its envelopes, its filter, its colour.
 fn curves(detail: &KeysLayerDetail) -> Vec<ModuleCurve> {
@@ -180,16 +180,16 @@ pub fn LayerMacros(
                 style: "display: grid; gap: 16px; \
                         grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));",
                 for (i, shape) in [
-                    crate::macro_panel::Shape::Unison,
-                    crate::macro_panel::Shape::Vibrato,
-                    crate::macro_panel::Shape::FilterResponse,
-                    crate::macro_panel::Shape::FilterEnv,
-                    crate::macro_panel::Shape::AmpEnv,
+                    crate::ui::macro_panel::Shape::Unison,
+                    crate::ui::macro_panel::Shape::Vibrato,
+                    crate::ui::macro_panel::Shape::FilterResponse,
+                    crate::ui::macro_panel::Shape::FilterEnv,
+                    crate::ui::macro_panel::Shape::AmpEnv,
                 ]
                 .into_iter()
                 .enumerate()
                 {
-                    crate::macro_panel::ShapeCard {
+                    crate::ui::macro_panel::ShapeCard {
                         key: "{i}",
                         shape,
                         macros: detail.layer_macros.clone(),

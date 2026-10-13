@@ -21,7 +21,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Gauge, Paragraph};
-use signal_keys::KeysRig;
+use keys::KeysRig;
 use signal_sampler::{
     Container, MidiEvent, MidiInputHandle, MidiSelection, PresetRegistry, RigNode,
 };

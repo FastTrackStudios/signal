@@ -13,7 +13,7 @@
 //! ```
 
 use daw::standalone::audio_engine::render::ProjectRenderer;
-use signal_keys_proto::keys::KeysRig as _;
+use keys::proto::keys::KeysRig as _;
 
 const SR: u32 = 48_000;
 const BLOCK: usize = 128;
@@ -35,7 +35,7 @@ fn main() {
         .map(|v| v.split(',').filter_map(|k| k.trim().parse().ok()).collect())
         .unwrap_or_else(|| vec![48, 55, 60, 64, 67]);
 
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     assert!(backend.debug_open_headless(SR), "open headless");
     for lane in env("RIG_MUTE").unwrap_or_default().split(',').filter(|l| !l.is_empty()) {
         backend.set_layer_mute(lane.to_string(), true);

@@ -76,7 +76,7 @@ fn proc_stat_field(idx: usize) -> u64 {
         .unwrap_or(0)
 }
 
-use signal_keys_proto::keys::KeysRig as KeysRigSvc;
+use keys::proto::keys::KeysRig as KeysRigSvc;
 
 /// Chord shapes, stacked into octaves by [`voicing`] to reach the target note
 /// count — enough simultaneous voice starts to expose the note-on spike,
@@ -118,7 +118,7 @@ fn main() {
         .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()))
         .init();
 
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     KeysRigSvc::start(&backend);
 
     // Opening loads sample packs; on a cold cache that is genuinely slow.

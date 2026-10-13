@@ -7,9 +7,9 @@
 //!     cargo run -p signal-keys --example mixer_probe
 //! ```
 
-use signal_keys_proto::keys::KeysRig as KeysRigSvc;
+use keys::proto::keys::KeysRig as KeysRigSvc;
 
-fn dump(backend: &signal_keys::KeysRigBackend) {
+fn dump(backend: &keys::KeysRigBackend) {
     let m = KeysRigSvc::mixer(backend);
     println!("\nprofile {} (master {:+.1} dB)", m.profile, m.master_db);
     for e in &m.engines {
@@ -39,7 +39,7 @@ fn dump(backend: &signal_keys::KeysRigBackend) {
 
 fn main() {
     tracing_subscriber::fmt().with_env_filter("warn").init();
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
 
     let presets = KeysRigSvc::presets(&backend);
     println!(

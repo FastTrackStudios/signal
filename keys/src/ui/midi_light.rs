@@ -8,9 +8,9 @@
 use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
-use signal_keys_proto::keys::KeysRigClient;
+use crate::proto::keys::KeysRigClient;
 
-use crate::state::held_notes;
+use crate::ui::state::held_notes;
 
 /// The activity light's colour, flashing on every event that lands and going
 /// solid while notes are held. A hook: the flash is a timer.

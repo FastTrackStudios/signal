@@ -23,7 +23,7 @@ signal-synth.workspace = true
 # The shared, instrument-agnostic composition-tree audio host. The synth rig
 # plays its imported Container on the very same host the keys rig uses; only
 # the preset source + wire service differ.
-signal-keys.workspace = true
+keys = { workspace = true }
 signal-sampler.workspace = true
 # Filesystem-direct pack discovery + tagging for the BROWSE view (scan_packs).
 signal-browser = { workspace = true, features = ["native"] }

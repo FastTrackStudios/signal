@@ -11,12 +11,12 @@
 
 use std::time::Duration;
 
-use signal_keys_proto::keys::KeysRig as KeysRigSvc;
+use keys::proto::keys::KeysRig as KeysRigSvc;
 
 /// Play `note` and report the loudest each lane got while it rang. Waits for
 /// the previous note's tail (and the meters' own fall-back) to clear first —
 /// a pad ringing from the last strike would otherwise be read as this one's.
-fn strike(backend: &signal_keys::KeysRigBackend, note: u32) -> Vec<(String, f32)> {
+fn strike(backend: &keys::KeysRigBackend, note: u32) -> Vec<(String, f32)> {
     for _ in 0..80 {
         std::thread::sleep(Duration::from_millis(50));
         let loudest = KeysRigSvc::status(backend)
@@ -61,7 +61,7 @@ fn lanes(peaks: &[(String, f32)], names: &[String]) -> String {
 
 fn main() {
     tracing_subscriber::fmt().with_env_filter("warn").init();
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     KeysRigSvc::start(&backend);
 
     // The device + the program open off-thread; wait for a running rig with

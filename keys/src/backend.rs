@@ -3,7 +3,7 @@
 //! Owns a live [`KeysRig`] (composition-tree instrument on the shared engine),
 //! scans the Keyscape library for presets, loads a single-instrument program
 //! per preset, and plays it from hardware MIDI or UI notes. Implements the
-//! [`signal_keys_proto::keys::KeysRig`] service + its `#[subscribe]` stream;
+//! [`crate::proto::keys::KeysRig`] service + its `#[subscribe]` stream;
 //! mount `router()` (`architect::rig::RigBackend`) on a vox transport.
 
 use std::collections::BTreeMap;
@@ -16,8 +16,8 @@ use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
-use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
-use signal_keys_proto::{
+use crate::proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
+use crate::proto::{
     KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
     KeysMeter, KeysMixer, KeysNode, KeysPackRef, KeysPerform, KeysPreset, KeysStack, KeysStatus,
 };
@@ -1500,7 +1500,7 @@ struct EngineState {
     muted: bool,
     /// A drone engine's held note: pitch class (0 = C), the octave it sounds
     /// in, and whether it is sounding. `None` for engines that are played.
-    drone: Option<signal_keys_proto::KeysDrone>,
+    drone: Option<crate::proto::KeysDrone>,
     /// Engine macro values that belong to the engine itself (its Tone,
     /// Limiter, FX bypass) — the ones with no module target.
     globals: BTreeMap<String, f32>,
@@ -1774,15 +1774,15 @@ fn keys_runtime() -> &'static tokio::runtime::Runtime {
     })
 }
 
-/// The output-artefact half of [`signal_keys_proto::KeysRealtime`], read from
+/// The output-artefact half of [`crate::proto::KeysRealtime`], read from
 /// the sampler's process-wide counters (`engine::output_glitches`).
 ///
 /// Split out so `status` can spread it into the struct. These are global to
 /// the process rather than per-rig, because the audio thread bumps them from
 /// wherever it happens to be rendering.
-fn artefacts() -> signal_keys_proto::KeysRealtime {
+fn artefacts() -> crate::proto::KeysRealtime {
     let g = signal_sampler::engine::output_glitches();
-    signal_keys_proto::KeysRealtime {
+    crate::proto::KeysRealtime {
         holes: g.gap_runs as u64,
         hole_frames: g.gap_frames as u64,
         longest_hole: g.longest_gap as u64,
@@ -1852,9 +1852,9 @@ impl KeysRigBackend {
     }
 
     /// A module's envelope in macro units (its own values, else defaults).
-    fn module_env(lane: &LaneState, index: usize, prefix: &str) -> signal_keys_proto::KeysEnv {
+    fn module_env(lane: &LaneState, index: usize, prefix: &str) -> crate::proto::KeysEnv {
         let v = |seg: &str| Self::module_value(lane, index, &format!("{prefix}.{seg}"));
-        signal_keys_proto::KeysEnv {
+        crate::proto::KeysEnv {
             attack_ms: v("attack"),
             decay_ms: v("decay"),
             sustain: v("sustain"),
@@ -3186,7 +3186,7 @@ impl KeysRigBackend {
     /// Non-pack specs (raw `library.styx` extractions, `.prt_omn` patches)
     /// are skipped: a browser can only stream built packs, and those lanes
     /// are exactly the ones that stay silent natively too.
-    fn profile_pack_refs(&self) -> (Vec<KeysPackRef>, Vec<signal_keys_proto::KeysLaneRef>) {
+    fn profile_pack_refs(&self) -> (Vec<KeysPackRef>, Vec<crate::proto::KeysLaneRef>) {
         let Some((profile, index, _lanes)) = self.profile_inputs() else {
             return (Vec::new(), Vec::new());
         };
@@ -3431,7 +3431,7 @@ impl KeysRigBackend {
                     // A drone engine carries its key selector; the card
                     // embeds it instead of the usual played-engine chrome.
                     drone: est.drone.clone().or_else(|| {
-                        is_drone(&engine.name).then_some(signal_keys_proto::KeysDrone {
+                        is_drone(&engine.name).then_some(crate::proto::KeysDrone {
                             key: 0,
                             playing: false,
                             octave: 3,
@@ -3461,7 +3461,7 @@ impl KeysRigBackend {
                                         lane.modules
                                             .iter()
                                             .enumerate()
-                                            .map(|(i, m)| signal_keys_proto::KeysModule {
+                                            .map(|(i, m)| crate::proto::KeysModule {
                                                 index: i as u32,
                                                 slot: signal_synth::engine::module_slot(i),
                                                 patch: m.patch.clone(),
@@ -4012,7 +4012,7 @@ impl KeysRigSvc for KeysRigBackend {
                 .map(|st| {
                     use std::sync::atomic::Ordering::Relaxed;
                     let (last_ms, peak_ms) = st.render_ms();
-                    signal_keys_proto::KeysRealtime {
+                    crate::proto::KeysRealtime {
                         xruns: st.xruns.load(Relaxed),
                         over_budget: st.over_budget.load(Relaxed),
                         mean_render_ms: st.mean_render_ms() as f32,
@@ -4421,7 +4421,7 @@ impl KeysRigSvc for KeysRigBackend {
             .modules
             .iter()
             .enumerate()
-            .map(|(i, m)| signal_keys_proto::KeysModule {
+            .map(|(i, m)| crate::proto::KeysModule {
                 index: i as u32,
                 slot: signal_synth::engine::module_slot(i),
                 patch: m.patch.clone(),
@@ -5189,8 +5189,8 @@ impl KeysRigStreamSource for KeysRigBackend {
 impl Services for KeysRigBackend {
     fn layers() -> impl Layer<Self> {
         layers![
-            signal_keys_proto::keys::Service,
-            signal_keys_proto::keys::StreamService
+            crate::proto::keys::Service,
+            crate::proto::keys::StreamService
         ]
     }
 }
@@ -5396,7 +5396,7 @@ fn pack_refs_for(profile: &KeysProfile, index: &BTreeMap<String, PathBuf>) -> Ve
 fn lane_refs_for(
     profile: &KeysProfile,
     index: &BTreeMap<String, PathBuf>,
-) -> Vec<signal_keys_proto::KeysLaneRef> {
+) -> Vec<crate::proto::KeysLaneRef> {
     let mut out = Vec::new();
     for engine in &profile.engines {
         for layer in &engine.layers {
@@ -5410,7 +5410,7 @@ fn lane_refs_for(
                 })
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            out.push(signal_keys_proto::KeysLaneRef {
+            out.push(crate::proto::KeysLaneRef {
                 engine: engine.name.clone(),
                 name: layer.name.clone(),
                 key,
