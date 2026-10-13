@@ -146,9 +146,13 @@ fn render(audio: &AudioSource, markers: &[StretchMarker], length: f64) -> AudioS
             pitch_dsp::wsola::stretch_planar(&input, 0, rate, n + more, grain)
         };
         for (ch, samples) in piece.iter().enumerate() {
-            let Some(dest) = out.get_mut(ch) else { continue };
+            let Some(dest) = out.get_mut(ch) else {
+                continue;
+            };
             for (i, s) in samples.iter().enumerate() {
-                let Some(slot) = dest.get_mut(at + i) else { break };
+                let Some(slot) = dest.get_mut(at + i) else {
+                    break;
+                };
                 // Fading in over the joint the one before fades out on.
                 let gain = if k > 0 && i < joint {
                     (i as f32 + 0.5) / joint as f32
@@ -206,7 +210,10 @@ mod tests {
         // not the 220 a varispeed at a quarter would give.
         let (a, b) = (4_800, 14_400);
         let x: Vec<f32> = (a..b).map(|i| out.channel_interp(i, i, 0.0, 0)).collect();
-        let crossings = x.windows(2).filter(|w| (w[0] < 0.0) != (w[1] < 0.0)).count() as f64
+        let crossings = x
+            .windows(2)
+            .filter(|w| (w[0] < 0.0) != (w[1] < 0.0))
+            .count() as f64
             / ((b - a) as f64 / 48_000.0);
         assert!((crossings - 880.0).abs() < 880.0 * 0.05, "{crossings:.0}");
         // And where it plays at speed, the source sample for sample.

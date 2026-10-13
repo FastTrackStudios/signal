@@ -1455,6 +1455,7 @@ impl Editor {
             | Action::RevertDrums
             | Action::QuantizePanel
             | Action::SlipDrums { .. }
+            | Action::StretchDrums { .. }
             | Action::Frame { .. }
             | Action::RemoveRange { .. }
             | Action::GainStage { .. }
@@ -1710,6 +1711,151 @@ impl Editor {
             effects.push(Effect::ReRecord);
         }
     }
+}
+
+impl Editor {
+    /// Stretch edits made where they were worked out (`HITS_STRETCH`, with
+    /// the engine's stretch markers to hand): each slice to its new place
+    /// and length, playing its take through its new markers. One undo
+    /// step, `label`.
+    pub fn stretch_items(
+        project: &mut Project,
+        edits: &[(String, Warped)],
+        label: &str,
+        effects: &mut Vec<Effect>,
+    ) {
+        use daw_proto::primitives::{Duration, PositionInSeconds};
+        let from = effects.len();
+        for (guid, w) in edits {
+            let Some(item) = project
+                .items
+                .values_mut()
+                .flatten()
+                .find(|i| i.guid == *guid)
+            else {
+                continue;
+            };
+            item.position = PositionInSeconds::from_seconds(w.position);
+            item.length = Duration::from_seconds(w.length);
+            effects.push(Effect::Send(Edit::TrimItem(
+                guid.clone(),
+                w.position,
+                w.length,
+            )));
+            effects.push(Effect::Send(Edit::SetStretchMarkers(
+                guid.clone(),
+                w.markers.clone(),
+            )));
+        }
+        if effects.len() > from {
+            as_one_step(label, from, effects);
+            effects.push(Effect::ReRecord);
+        }
+    }
+}
+
+/// The fastest a stretch plays a take, as a rate: a hit dragged later
+/// squeezes the audio before the next one, at most this much.
+pub const STRETCH_MOST_RATE: f64 = 4.0;
+
+/// A slice as a stretch edits it.
+///
+/// Where it plays, how long, and how it plays its take — `(played,
+/// source)` seconds, played counted from the slice's start (its stretch
+/// markers, or the two ends of it as recorded).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Warped {
+    pub position: f64,
+    pub length: f64,
+    pub markers: Vec<(f64, f64)>,
+}
+
+/// Where `markers` play the take at `t` (played seconds): between two,
+/// on the line through them; past either end, at speed.
+fn source_at(markers: &[(f64, f64)], t: f64) -> f64 {
+    let (Some(&(p0, s0)), Some(&(pn, sn))) = (markers.first(), markers.last()) else {
+        return t;
+    };
+    if t <= p0 {
+        return s0 - (p0 - t);
+    }
+    if t >= pn {
+        return sn + (t - pn);
+    }
+    markers
+        .windows(2)
+        .find_map(|pair| {
+            let [(a, sa), (b, sb)] = pair else {
+                return None;
+            };
+            (t >= *a && t <= *b && b > a).then(|| sa + (t - a) / (b - a) * (sb - sa))
+        })
+        .unwrap_or(t)
+}
+
+/// `w` played over `length` instead: everything up to `keep` (its attack)
+/// as it was, the rest of its markers spread or squeezed to fit. `None`
+/// when that leaves it no longer than its attack, or plays any of it
+/// slower than [`TAIL_LEAST_RATE`] or faster than [`STRETCH_MOST_RATE`].
+fn rescaled(w: &Warped, keep: f64, length: f64) -> Option<Warped> {
+    /// The least a slice keeps after its attack, seconds.
+    const LEAST: f64 = 0.002;
+    let keep = keep.clamp(0.0, w.length);
+    if length < keep + LEAST || w.length < keep + LEAST {
+        return None;
+    }
+    let mut markers: Vec<(f64, f64)> = w.markers.clone();
+    if !markers.iter().any(|(p, _)| (p - keep).abs() < 1e-9) {
+        markers.push((keep, source_at(&w.markers, keep)));
+        markers.sort_by(|a, b| a.0.total_cmp(&b.0));
+    }
+    let scale = (length - keep) / (w.length - keep);
+    let markers: Vec<(f64, f64)> = markers
+        .into_iter()
+        .map(|(p, s)| {
+            if p <= keep + 1e-9 {
+                (p, s)
+            } else {
+                ((p - keep).mul_add(scale, keep), s)
+            }
+        })
+        .collect();
+    let fits = markers.windows(2).all(|pair| {
+        let [(a, sa), (b, sb)] = pair else {
+            return true;
+        };
+        if b - a <= 1e-9 {
+            return true;
+        }
+        let rate = (sb - sa) / (b - a);
+        (TAIL_LEAST_RATE - 1e-9..=STRETCH_MOST_RATE + 1e-9).contains(&rate)
+    });
+    fits.then_some(Warped {
+        position: w.position,
+        length,
+        markers,
+    })
+}
+
+/// A hit moved `by` seconds by stretching, not slipping.
+///
+/// `before` (the slice before it) is drawn out or squeezed to end where
+/// it now starts, `hit` (its slice) starts `by` later and is squeezed or
+/// drawn out so it still ends where it did — the hits either side stay
+/// where they play, and each slice's attack (`attacks`: how far into each
+/// its hit is, played seconds) and the [`STRETCH_KEEP`] after it play as
+/// recorded. `None` when either would leave its rates ([`rescaled`]).
+#[must_use]
+pub fn stretch_around(
+    before: &Warped,
+    hit: &Warped,
+    attacks: (f64, f64),
+    by: f64,
+) -> Option<(Warped, Warped)> {
+    let drawn = rescaled(before, attacks.0 + STRETCH_KEEP, before.length + by)?;
+    let mut moved = rescaled(hit, attacks.1 + STRETCH_KEEP, hit.length - by)?;
+    moved.position = hit.position + by;
+    Some((drawn, moved))
 }
 
 /// The fade across each edge a removal leaves, seconds: enough that the
@@ -4434,6 +4580,40 @@ mod tests {
     }
 
     /// A slice too short to slow that far is not stretched.
+    /// A hit dragged 20 ms later by stretching: the slice before ends 20
+    /// ms later, its attack as played; the hit's slice starts 20 ms later
+    /// and still ends where it did, its own attack as played — and the
+    /// take is played from the same places, only faster or slower.
+    #[test]
+    fn a_hit_stretched_later_keeps_its_neighbours_and_its_attack() {
+        let before = super::Warped {
+            position: 10.0,
+            length: 0.2,
+            markers: vec![(0.0, 50.0), (0.2, 50.2)],
+        };
+        let hit = super::Warped {
+            position: 10.2,
+            length: 0.2,
+            markers: vec![(0.0, 50.2), (0.2, 50.4)],
+        };
+        let (a, b) = super::stretch_around(&before, &hit, (0.005, 0.005), 0.02).expect("fits");
+        assert!((a.position - 10.0).abs() < 1e-9 && (a.length - 0.22).abs() < 1e-9);
+        assert!((b.position - 10.22).abs() < 1e-9);
+        assert!(
+            (b.position + b.length - 10.4).abs() < 1e-9,
+            "the next hit stays: ends {}",
+            b.position + b.length
+        );
+        // The attacks as recorded: the first 35 ms of each at speed.
+        assert!((super::source_at(&a.markers, 0.035) - 50.035).abs() < 1e-9);
+        assert!((super::source_at(&b.markers, 0.035) - 50.235).abs() < 1e-9);
+        // The same take from the same places, end to end.
+        assert!((a.markers.last().map_or(0.0, |m| m.1) - 50.2).abs() < 1e-9);
+        assert!((b.markers.last().map_or(0.0, |m| m.1) - 50.4).abs() < 1e-9);
+        // Too far: the hit's slice would be shorter than its attack.
+        assert!(super::stretch_around(&before, &hit, (0.005, 0.005), 0.18).is_none());
+    }
+
     /// Too far for 0.85 all the way: the attack as played, the hit's body
     /// at 0.85, only the far tail slower — and it reaches.
     #[test]

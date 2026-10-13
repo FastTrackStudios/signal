@@ -30,6 +30,10 @@ use input::{
 use crate::which_key::{Entry, WhichKey};
 
 /// What a key asks for.
+/// One slice of a stretch: its guid, where it plays and how long (µs),
+/// and its stretch markers (`(played, source)`, µs).
+pub type StretchEdit = (String, i64, i64, Vec<(i64, i64)>);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Action {
     PlayStop,
@@ -64,6 +68,13 @@ pub enum Action {
         tracks: Vec<String>,
         from_us: i64,
         to_us: i64,
+    },
+    /// Hits moved by stretching the audio either side of them (a hit
+    /// marker's foot dragged, `HITS_STRETCH`): each slice's new place,
+    /// length and stretch markers, µs — `(guid, position, length,
+    /// [(played, source)])`.
+    StretchDrums {
+        edits: Vec<StretchEdit>,
     },
     SlipDrums {
         moves: Vec<(i64, i64)>,

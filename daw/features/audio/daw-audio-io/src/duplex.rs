@@ -297,10 +297,10 @@ pub trait DuplexBackend: Send + Sized {
 // land here as they're implemented.
 #[cfg(target_os = "macos")]
 pub use crate::duplex_coreaudio::CoreAudioBackend as Backend;
-#[cfg(target_os = "linux")]
-pub use crate::duplex_pw::PipewireBackend as Backend;
 #[cfg(target_os = "ios")]
 pub use crate::duplex_ios::RemoteIoBackend as Backend;
+#[cfg(target_os = "linux")]
+pub use crate::duplex_pw::PipewireBackend as Backend;
 
 #[cfg(test)]
 mod drop_ring_tests {

@@ -86,7 +86,11 @@ impl DrumRide {
 /// drum mostly sounds like. `None` with no strokes.
 #[must_use]
 pub fn target(hits: &[Hit]) -> Option<f64> {
-    let mut levels: Vec<f64> = hits.iter().filter(|h| h.stroke).map(|h| h.level_db).collect();
+    let mut levels: Vec<f64> = hits
+        .iter()
+        .filter(|h| h.stroke)
+        .map(|h| h.level_db)
+        .collect();
     levels.sort_by(f64::total_cmp);
     levels.get(levels.len() / 2).copied()
 }
@@ -112,7 +116,10 @@ pub fn target_at(hits: &[Hit], t: f64) -> Option<f64> {
     let at = strokes.partition_point(|h| h.t_s < t);
     let (mut lo, mut hi) = (at, at);
     while hi.saturating_sub(lo) < AROUND {
-        let left = lo.checked_sub(1).and_then(|i| strokes.get(i)).map(|h| t - h.t_s);
+        let left = lo
+            .checked_sub(1)
+            .and_then(|i| strokes.get(i))
+            .map(|h| t - h.t_s);
         let right = strokes.get(hi).map(|h| h.t_s - t);
         match (left, right) {
             (Some(l), Some(r)) if l <= r => lo = lo.saturating_sub(1),
@@ -186,7 +193,10 @@ mod tests {
         assert!((at(2.0) + 3.0).abs() < 1e-9, "the hard one down");
         assert!(at(3.0).abs() < 1e-9, "the one at the target, as it is");
         // The gain is in place before each attack, and only just.
-        let step = curve.iter().find(|p| (p.db - 3.0).abs() < 1e-9).expect("a step");
+        let step = curve
+            .iter()
+            .find(|p| (p.db - 3.0).abs() < 1e-9)
+            .expect("a step");
         assert!((step.t_s - 0.996).abs() < 1e-9);
     }
 
@@ -215,7 +225,11 @@ mod tests {
         hits.extend((32..64).map(|i| hit(f64::from(i), -12.0)));
         assert!((target_at(&hits, 5.0).expect("strokes") + 30.0).abs() < 1e-9);
         assert!((target_at(&hits, 60.0).expect("strokes") + 12.0).abs() < 1e-9);
-        let curve = ride(&hits, |t| target_at(&hits, t).unwrap_or(-12.0), &DrumRide::KICK);
+        let curve = ride(
+            &hits,
+            |t| target_at(&hits, t).unwrap_or(-12.0),
+            &DrumRide::KICK,
+        );
         assert!(curve.is_empty(), "each passage even already: {curve:?}");
     }
 

@@ -367,7 +367,12 @@ pub fn phrase_levels(analysis: &Analysis, window_s: f64) -> Vec<Option<f64>> {
     let mut count = vec![0_usize; n + 1];
     for i in 0..n {
         let sung = analysis.is_sung(i);
-        power[i + 1] = power[i] + if sung { 10f64.powf(analysis.rms_db[i] / 10.0) } else { 0.0 };
+        power[i + 1] = power[i]
+            + if sung {
+                10f64.powf(analysis.rms_db[i] / 10.0)
+            } else {
+                0.0
+            };
         count[i + 1] = count[i] + usize::from(sung);
     }
     (0..n)
@@ -398,7 +403,12 @@ pub fn phrase_ride(
     let mut held = 0.0_f64;
     let dense: Vec<EnvPoint> = (0..analysis.blocks())
         .map(|i| {
-            if let Some(level) = levels.get(i).copied().flatten().filter(|_| analysis.is_sung(i)) {
+            if let Some(level) = levels
+                .get(i)
+                .copied()
+                .flatten()
+                .filter(|_| analysis.is_sung(i))
+            {
                 held = ((target_db - level) * amount.clamp(0.0, 1.0))
                     .clamp(-max_cut_db.abs(), max_gain_db.abs());
             }
@@ -623,7 +633,11 @@ mod tests {
     /// up to it.
     #[test]
     fn a_gate_opens_as_a_step_in_the_sum() {
-        let held = |t_s: f64, db: f64| EnvPoint { t_s, db, hold: true };
+        let held = |t_s: f64, db: f64| EnvPoint {
+            t_s,
+            db,
+            hold: true,
+        };
         let parts = Contributions {
             gate: vec![held(0.0, -30.0), held(1.0, 0.0)],
             ride: vec![EnvPoint::new(0.0, 2.0), EnvPoint::new(3.0, 2.0)],
@@ -631,8 +645,16 @@ mod tests {
         };
         let sum = composite(&parts);
         let at = |t: f64| value_at(&sum, t);
-        assert!((at(0.999) - (-28.0)).abs() < 1e-6, "closed before: {}", at(0.999));
-        assert!((at(1.0) - 2.0).abs() < 1e-6, "open at the edge: {}", at(1.0));
+        assert!(
+            (at(0.999) - (-28.0)).abs() < 1e-6,
+            "closed before: {}",
+            at(0.999)
+        );
+        assert!(
+            (at(1.0) - 2.0).abs() < 1e-6,
+            "open at the edge: {}",
+            at(1.0)
+        );
         assert!((at(2.0) - 2.0).abs() < 1e-6, "and after it: {}", at(2.0));
     }
 
@@ -664,7 +686,11 @@ mod tests {
         let a = sung(&levels);
         let curve = phrase_ride(&a, &phrase_levels(&a, 0.5), -20.0, 1.0, (12.0, 12.0), 0.25);
         let at = |t: f64| value_at(&curve, t);
-        assert!((at(1.0) - 12.0).abs() < 0.3, "the verse up 12 dB: {}", at(1.0));
+        assert!(
+            (at(1.0) - 12.0).abs() < 0.3,
+            "the verse up 12 dB: {}",
+            at(1.0)
+        );
         assert!(at(3.0).abs() < 0.3, "the chorus as it is: {}", at(3.0));
     }
 
@@ -678,7 +704,11 @@ mod tests {
         }
         let a = sung(&levels);
         let curve = phrase_ride(&a, &phrase_levels(&a, 0.5), -20.0, 1.0, (12.0, 12.0), 0.25);
-        assert!(value_at(&curve, 1.03) < 1.0, "the dip not filled in: {}", value_at(&curve, 1.03));
+        assert!(
+            value_at(&curve, 1.03) < 1.0,
+            "the dip not filled in: {}",
+            value_at(&curve, 1.03)
+        );
     }
 
     #[test]

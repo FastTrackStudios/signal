@@ -1177,10 +1177,7 @@ pub mod tcp {
             (w / 2.0, to)
         };
         if (to - from) > 0.5 {
-            drawing.fill(
-                rect(from, 3.0, to - from, 2.0, 1.0),
-                ink.with_alpha(140),
-            );
+            drawing.fill(rect(from, 3.0, to - from, 2.0, 1.0), ink.with_alpha(140));
         }
         drawing.fill(
             rect(

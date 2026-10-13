@@ -62,9 +62,7 @@ pub mod monitor;
 
 pub use device::{
     DeviceCaps, DeviceInfo, InputAccess, device_caps, device_name, input_access, input_channels,
-    negotiate_sample_rate, session_report,
-    input_devices,
-    output_devices, pick_device,
+    input_devices, negotiate_sample_rate, output_devices, pick_device, session_report,
 };
 pub use host::{audio_host, host_is_graph, host_is_jack, host_is_pipewire};
 pub use open::{OpenedInput, OpenedOutput, open_input, open_output};

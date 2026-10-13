@@ -244,6 +244,10 @@ pub(crate) fn mods(from: Modifiers) -> crate::mousemap::Mods {
 /// How tall the strip at the top of a piece's row is where its hits are
 /// taken by hand — their flags — px.
 const FLAG_STRIP: f64 = 10.0;
+
+/// How far up from a kit row's foot a press takes a hit marker to
+/// stretch it, pixels: the strip its stretches are drawn in, and a little.
+const FOOT_STRIP: f64 = 22.0;
 /// How near a flag a press must land to take it, px.
 const FLAG_REACH: f64 = 5.0;
 /// How far a flag must be dragged to move its hit, px: under it, a click.
@@ -260,6 +264,9 @@ struct HitDrag {
     /// was found is corrected, the audio stays. Without it the kit moves
     /// so the hit plays where it is dropped.
     marker_only: bool,
+    /// Taken by its foot: the hit moved by stretching the audio either
+    /// side of it (`HITS_STRETCH`), not slipping it.
+    stretch: bool,
 }
 
 /// What is under the pointer in a piece row's flag strip.
@@ -270,6 +277,8 @@ struct FlagSpot {
     pieces: Vec<String>,
     /// Where it is, project seconds as the song plays now.
     time: f64,
+    /// On the row's foot, where a marker is taken to stretch.
+    foot: bool,
 }
 
 /// The Quantize panel asked for on the Action List: the frame that
@@ -1054,11 +1063,14 @@ impl ArrangementWidget {
         let time = (x - ox) / pps;
         let rows = self.piece_rows(kit, &hits);
         let mut in_strip = false;
+        let mut foot = false;
         let (row, _) = rows.iter().find(|(row, _)| {
             self.scene.row_box(*row).is_some_and(|(top, height)| {
                 let y0 = top.mul_add(view.zoom_y, oy);
+                let y1 = height.mul_add(view.zoom_y, y0);
                 in_strip = y >= y0 && y <= y0 + FLAG_STRIP;
-                y >= y0 && y <= height.mul_add(view.zoom_y, y0)
+                foot = y >= y1 - FOOT_STRIP && y <= y1;
+                y >= y0 && y <= y1
             })
         })?;
         let pieces: Vec<usize> = rows
@@ -1083,6 +1095,7 @@ impl ArrangementWidget {
                 .filter_map(|p| hits.pieces.get(*p).cloned())
                 .collect(),
             time,
+            foot,
         })
     }
 
@@ -1194,6 +1207,7 @@ impl ArrangementWidget {
                             from_x: x,
                             x,
                             marker_only: held.ctrl,
+                            stretch: spot.foot && !held.ctrl,
                         });
                         true
                     }
@@ -1254,7 +1268,13 @@ impl ArrangementWidget {
                         .pps
                         .max(f64::EPSILON);
                     let ms = (x - drag.from_x) / pps * 1_000.0;
-                    if drag.ids.len() > 1 && !drag.marker_only {
+                    if drag.stretch {
+                        // By its foot: stretched there, its neighbours kept.
+                        run_hit_action(
+                            "HITS_STRETCH",
+                            format!(r#"{{"id":"{}","by_ms":{ms}}}"#, drag.id),
+                        );
+                    } else if drag.ids.len() > 1 && !drag.marker_only {
                         // The selection moved together, the kit with it.
                         let ids = serde_json::Value::from(drag.ids);
                         run_hit_action(
@@ -2730,6 +2750,35 @@ impl ArrangementWidget {
                     attacks: attacks_us.iter().map(|us| seconds(*us)).collect(),
                 };
                 handled |= self.slip_drums(moves, cut);
+                continue;
+            }
+            if let crate::keys::Action::StretchDrums { edits } = &action {
+                let seconds = |us: i64| num_traits::ToPrimitive::to_f64(&us).unwrap_or(0.0) / 1e6;
+                let edits: Vec<(String, crate::arrange_edit::Warped)> = edits
+                    .iter()
+                    .map(|(guid, at, length, markers)| {
+                        (
+                            guid.clone(),
+                            crate::arrange_edit::Warped {
+                                position: seconds(*at),
+                                length: seconds(*length),
+                                markers: markers
+                                    .iter()
+                                    .map(|(p, s)| (seconds(*p), seconds(*s)))
+                                    .collect(),
+                            },
+                        )
+                    })
+                    .collect();
+                let mut effects = Vec::new();
+                crate::arrange_edit::Editor::stretch_items(
+                    &mut self.project,
+                    &edits,
+                    "Stretch a drum hit",
+                    &mut effects,
+                );
+                self.settle(effects);
+                handled = true;
                 continue;
             }
             if let crate::keys::Action::GainStage { clear } = action {

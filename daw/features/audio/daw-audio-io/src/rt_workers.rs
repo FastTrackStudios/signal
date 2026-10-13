@@ -104,7 +104,12 @@ mod macos {
         fn mach_thread_self() -> u32;
         fn mach_port_deallocate(task: u32, name: u32) -> i32;
         fn mach_timebase_info(info: *mut Timebase) -> i32;
-        fn thread_policy_set(thread: u32, flavor: u32, policy: *const TimeConstraint, count: u32) -> i32;
+        fn thread_policy_set(
+            thread: u32,
+            flavor: u32,
+            policy: *const TimeConstraint,
+            count: u32,
+        ) -> i32;
         static mach_task_self_: u32;
     }
 
@@ -118,7 +123,9 @@ mod macos {
         if tb.numer == 0 {
             return;
         }
-        let abs = |ns: u64| (ns * u64::from(tb.denom) / u64::from(tb.numer)).min(u64::from(u32::MAX)) as u32;
+        let abs = |ns: u64| {
+            (ns * u64::from(tb.denom) / u64::from(tb.numer)).min(u64::from(u32::MAX)) as u32
+        };
         let policy = TimeConstraint {
             period: abs(period_ns),
             computation: abs(period_ns / 2),
@@ -129,8 +136,12 @@ mod macos {
         // flavour and count; the port right is released after.
         unsafe {
             let me = mach_thread_self();
-            let status =
-                thread_policy_set(me, THREAD_TIME_CONSTRAINT_POLICY, &policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+            let status = thread_policy_set(
+                me,
+                THREAD_TIME_CONSTRAINT_POLICY,
+                &policy,
+                THREAD_TIME_CONSTRAINT_POLICY_COUNT,
+            );
             mach_port_deallocate(mach_task_self_, me);
             if status != 0 {
                 tracing::warn!(status, "render worker: realtime policy refused");
@@ -139,7 +150,10 @@ mod macos {
     }
 
     pub fn join(wg: *mut c_void) -> Option<JoinToken> {
-        let mut token = JoinToken { sig: 0, opaque: [0; 36] };
+        let mut token = JoinToken {
+            sig: 0,
+            opaque: [0; 36],
+        };
         // SAFETY: `wg` is a retained, never-released workgroup; the token is
         // kept until the matching leave, on this same thread.
         let status = unsafe { os_workgroup_join(wg, &mut token) };

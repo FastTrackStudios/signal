@@ -186,9 +186,11 @@ impl<'d, D: Tracks + ?Sized> TrackHandle<'d, D> {
     /// input alone left a guitar rig's track silent while the interface
     /// delivered the guitar.
     pub fn arm_audio_input(&self, channel: u32) -> DawResult<()> {
-        self.scope.set_record_input(RecordInput::Audio { channel })?;
+        self.scope
+            .set_record_input(RecordInput::Audio { channel })?;
         self.scope.set_armed(true)?;
-        self.scope.set_input_monitor(crate::track::InputMonitoringMode::Normal)
+        self.scope
+            .set_input_monitor(crate::track::InputMonitoringMode::Normal)
     }
 }
 

@@ -126,7 +126,10 @@ mod ffi {
             component: AudioComponent,
             desc: *const AudioComponentDescription,
         ) -> AudioComponent;
-        pub fn AudioComponentInstanceNew(component: AudioComponent, out: *mut AudioUnit) -> OSStatus;
+        pub fn AudioComponentInstanceNew(
+            component: AudioComponent,
+            out: *mut AudioUnit,
+        ) -> OSStatus;
         pub fn AudioComponentInstanceDispose(unit: AudioUnit) -> OSStatus;
         pub fn AudioUnitSetProperty(
             unit: AudioUnit,
@@ -193,7 +196,8 @@ fn prefer(frames: u32, rate: u32) {
         }
         if frames > 0 {
             let r = if rate > 0 { f64::from(rate) } else { 48_000.0 };
-            let _: Bool = msg_send![s, setPreferredIOBufferDuration: f64::from(frames) / r, error: null];
+            let _: Bool =
+                msg_send![s, setPreferredIOBufferDuration: f64::from(frames) / r, error: null];
         }
     }
 }
@@ -220,7 +224,9 @@ fn route() -> Route {
                     let t: *mut AnyObject = msg_send![port, portType];
                     if !t.is_null() {
                         let c: *const std::os::raw::c_char = msg_send![t, UTF8String];
-                        if !c.is_null() && std::ffi::CStr::from_ptr(c).to_bytes() == b"MicrophoneBuiltIn" {
+                        if !c.is_null()
+                            && std::ffi::CStr::from_ptr(c).to_bytes() == b"MicrophoneBuiltIn"
+                        {
                             builtin = true;
                         }
                     }
@@ -261,7 +267,12 @@ const PROBED_CHANNELS: usize = 8;
 /// that never reaches the rig shows here as renders failing (the status
 /// says why) or as peaks at zero on every channel: the interface sends
 /// nothing to the app.
-fn input_reporter(probe: Arc<InputProbe>, stop: Arc<std::sync::atomic::AtomicBool>, input: bool, hw_in: usize) {
+fn input_reporter(
+    probe: Arc<InputProbe>,
+    stop: Arc<std::sync::atomic::AtomicBool>,
+    input: bool,
+    hw_in: usize,
+) {
     let _ = std::thread::Builder::new().name("ios-input-report".into()).spawn(move || {
         while !stop.load(Ordering::Relaxed) {
             for _ in 0..50 {
@@ -407,7 +418,14 @@ unsafe fn render_block(
                 (*b).data_byte_size = (n * 4) as u32;
                 (*b).data = st.in_bufs[c].as_mut_ptr().cast();
             }
-            let status = ffi::AudioUnitRender(st.unit, action_flags, time_stamp, ffi::INPUT_BUS, frames, list);
+            let status = ffi::AudioUnitRender(
+                st.unit,
+                action_flags,
+                time_stamp,
+                ffi::INPUT_BUS,
+                frames,
+                list,
+            );
             st.probe.last_status.store(status, Ordering::Relaxed);
             if status != 0 {
                 st.probe.renders_failed.fetch_add(1, Ordering::Relaxed);
@@ -425,7 +443,9 @@ unsafe fn render_block(
                 st.render_failures = 0;
                 st.probe.renders_ok.fetch_add(1, Ordering::Relaxed);
                 for (c, peak) in st.probe.peaks.iter().enumerate().take(st.hw_in) {
-                    let p = st.in_bufs[c][..n].iter().fold(0.0f32, |m, s| m.max(s.abs()));
+                    let p = st.in_bufs[c][..n]
+                        .iter()
+                        .fold(0.0f32, |m, s| m.max(s.abs()));
                     peak.fetch_max(p.to_bits(), Ordering::Relaxed);
                 }
             }
@@ -443,18 +463,29 @@ unsafe fn render_block(
             let span = at..at + len;
             st.in_slices.clear();
             for c in 0..st.want_in {
-                let src: &[f32] = if st.input && c < st.hw_in { &st.in_bufs[c][span.clone()] } else { &st.silence[..len] };
-                st.in_slices.push(std::mem::transmute::<&[f32], &'static [f32]>(src));
+                let src: &[f32] = if st.input && c < st.hw_in {
+                    &st.in_bufs[c][span.clone()]
+                } else {
+                    &st.silence[..len]
+                };
+                st.in_slices
+                    .push(std::mem::transmute::<&[f32], &'static [f32]>(src));
             }
             st.out_slices.clear();
             for buf in &mut st.out_bufs {
                 st.out_slices
-                    .push(std::mem::transmute::<&mut [f32], &'static mut [f32]>(&mut buf[span.clone()]));
+                    .push(std::mem::transmute::<&mut [f32], &'static mut [f32]>(
+                        &mut buf[span.clone()],
+                    ));
             }
             {
                 let inputs: &[&[f32]] = std::mem::transmute(&st.in_slices[..]);
                 let outputs: &mut [&mut [f32]] = std::mem::transmute(&mut st.out_slices[..]);
-                let mut block = ProcessBlock { inputs, outputs, frames: len };
+                let mut block = ProcessBlock {
+                    inputs,
+                    outputs,
+                    frames: len,
+                };
                 (st.process)(&mut block);
             }
             st.in_slices.clear();
@@ -491,7 +522,9 @@ fn float_format(rate: f64, channels: usize) -> ffi::AudioStreamBasicDescription 
     ffi::AudioStreamBasicDescription {
         sample_rate: rate,
         format_id: ffi::kAudioFormatLinearPCM,
-        format_flags: ffi::kAudioFormatFlagIsFloat | ffi::kAudioFormatFlagIsPacked | ffi::kAudioFormatFlagIsNonInterleaved,
+        format_flags: ffi::kAudioFormatFlagIsFloat
+            | ffi::kAudioFormatFlagIsPacked
+            | ffi::kAudioFormatFlagIsNonInterleaved,
         bytes_per_packet: 4,
         frames_per_packet: 1,
         bytes_per_frame: 4,
@@ -502,11 +535,29 @@ fn float_format(rate: f64, channels: usize) -> ffi::AudioStreamBasicDescription 
 }
 
 /// Set a property, saying which one failed.
-unsafe fn set<T>(unit: ffi::AudioUnit, id: u32, scope: u32, element: u32, value: &T, what: &str) -> Result<(), String> {
+unsafe fn set<T>(
+    unit: ffi::AudioUnit,
+    id: u32,
+    scope: u32,
+    element: u32,
+    value: &T,
+    what: &str,
+) -> Result<(), String> {
     let status = unsafe {
-        ffi::AudioUnitSetProperty(unit, id, scope, element, (value as *const T).cast(), std::mem::size_of::<T>() as u32)
+        ffi::AudioUnitSetProperty(
+            unit,
+            id,
+            scope,
+            element,
+            (value as *const T).cast(),
+            std::mem::size_of::<T>() as u32,
+        )
     };
-    if status == 0 { Ok(()) } else { Err(format!("RemoteIO: {what} failed (OSStatus {status})")) }
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(format!("RemoteIO: {what} failed (OSStatus {status})"))
+    }
 }
 
 /// A live RemoteIO duplex unit. Dropping it stops audio.
@@ -531,7 +582,10 @@ impl DuplexBackend for RemoteIoBackend {
         let _ = crate::duplex::clock_ns();
         if let Some(name) = cfg.input_device.as_deref().filter(|n| !n.is_empty()) {
             if !crate::ios_session::prefer_input(name) {
-                tracing::warn!(audio.input_device = name, "ios duplex: no session input by that name — the route's own");
+                tracing::warn!(
+                    audio.input_device = name,
+                    "ios duplex: no session input by that name — the route's own"
+                );
             }
         }
         match cfg.latency {
@@ -547,9 +601,12 @@ impl DuplexBackend for RemoteIoBackend {
         // `FTS_ALLOW_BUILTIN_MIC=1`: take the built-in microphone as the
         // input anyway — the simulator's only input (the Mac's), so the
         // whole input path can be run there.
-        let allow_mic = cfg.allow_builtin_mic || std::env::var_os("FTS_ALLOW_BUILTIN_MIC").is_some();
+        let allow_mic =
+            cfg.allow_builtin_mic || std::env::var_os("FTS_ALLOW_BUILTIN_MIC").is_some();
         if input && r.input_is_builtin && !allow_mic {
-            tracing::warn!("ios duplex: the route's input is the built-in microphone — opened without input");
+            tracing::warn!(
+                "ios duplex: the route's input is the built-in microphone — opened without input"
+            );
             input = false;
         }
         let hw_in = if input { r.in_channels } else { 0 };
@@ -607,22 +664,64 @@ impl DuplexBackend for RemoteIoBackend {
             (|| -> Result<(), String> {
                 let on: u32 = 1;
                 let off: u32 = 0;
-                set(unit, ffi::kAudioOutputUnitProperty_EnableIO, ffi::kAudioUnitScope_Input, ffi::INPUT_BUS, if input { &on } else { &off }, "enable input")?;
-                set(unit, ffi::kAudioOutputUnitProperty_EnableIO, ffi::kAudioUnitScope_Output, ffi::OUTPUT_BUS, &on, "enable output")?;
+                set(
+                    unit,
+                    ffi::kAudioOutputUnitProperty_EnableIO,
+                    ffi::kAudioUnitScope_Input,
+                    ffi::INPUT_BUS,
+                    if input { &on } else { &off },
+                    "enable input",
+                )?;
+                set(
+                    unit,
+                    ffi::kAudioOutputUnitProperty_EnableIO,
+                    ffi::kAudioUnitScope_Output,
+                    ffi::OUTPUT_BUS,
+                    &on,
+                    "enable output",
+                )?;
                 let max = MAX_FRAMES as u32;
-                set(unit, ffi::kAudioUnitProperty_MaximumFramesPerSlice, ffi::kAudioUnitScope_Global, 0, &max, "max frames")?;
+                set(
+                    unit,
+                    ffi::kAudioUnitProperty_MaximumFramesPerSlice,
+                    ffi::kAudioUnitScope_Global,
+                    0,
+                    &max,
+                    "max frames",
+                )?;
                 // What we give the output bus, and what we take from the
                 // input bus: float, one buffer per channel, at the session's
                 // rate, every channel the route has.
-                set(unit, ffi::kAudioUnitProperty_StreamFormat, ffi::kAudioUnitScope_Input, ffi::OUTPUT_BUS, &float_format(rate, hw_out), "output format")?;
+                set(
+                    unit,
+                    ffi::kAudioUnitProperty_StreamFormat,
+                    ffi::kAudioUnitScope_Input,
+                    ffi::OUTPUT_BUS,
+                    &float_format(rate, hw_out),
+                    "output format",
+                )?;
                 if input {
-                    set(unit, ffi::kAudioUnitProperty_StreamFormat, ffi::kAudioUnitScope_Output, ffi::INPUT_BUS, &float_format(rate, hw_in), "input format")?;
+                    set(
+                        unit,
+                        ffi::kAudioUnitProperty_StreamFormat,
+                        ffi::kAudioUnitScope_Output,
+                        ffi::INPUT_BUS,
+                        &float_format(rate, hw_in),
+                        "input format",
+                    )?;
                 }
                 let callback = ffi::AURenderCallbackStruct {
                     input_proc: render,
                     input_proc_ref_con: (&mut *state as *mut IoState).cast(),
                 };
-                set(unit, ffi::kAudioUnitProperty_SetRenderCallback, ffi::kAudioUnitScope_Input, ffi::OUTPUT_BUS, &callback, "render callback")?;
+                set(
+                    unit,
+                    ffi::kAudioUnitProperty_SetRenderCallback,
+                    ffi::kAudioUnitScope_Input,
+                    ffi::OUTPUT_BUS,
+                    &callback,
+                    "render callback",
+                )?;
                 let status = ffi::AudioUnitInitialize(unit);
                 if status != 0 {
                     return Err(format!("RemoteIO: initialize failed (OSStatus {status})"));
@@ -643,7 +742,10 @@ impl DuplexBackend for RemoteIoBackend {
         input_reporter(probe, report_stop.clone(), input, hw_in);
 
         let frames = |s: f64| (s * rate).round() as u32;
-        let latency = (frames(r.in_latency + r.io_buffer), frames(r.out_latency + r.io_buffer));
+        let latency = (
+            frames(r.in_latency + r.io_buffer),
+            frames(r.out_latency + r.io_buffer),
+        );
         tracing::info!(
             audio.rate = rate,
             audio.hw_in = hw_in,

@@ -16,9 +16,9 @@ use wgpu_context::{
     DeviceHandle, SurfaceRenderer, SurfaceRendererConfiguration, TextureConfiguration, WGPUContext,
 };
 
-use anyrender::PaintScene;
 use crate::compositor::Compositor;
 use crate::{DEFAULT_THREADS, VelloScenePainter};
+use anyrender::PaintScene;
 
 /// Drive the wgpu init future. On wasm32 we spawn it onto the JS microtask
 /// queue (blocking is not allowed). On native we drive it inline with
@@ -128,8 +128,10 @@ impl RenderContext for VelloWindowRenderer {
 
         if let Ok(texture) = resource.downcast::<Texture>() {
             let id = ResourceId::new();
-            self.texture_views
-                .insert(id, texture.create_view(&wgpu::TextureViewDescriptor::default()));
+            self.texture_views.insert(
+                id,
+                texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            );
             self.texture_handles
                 .insert(id, active.renderer.register_texture(*texture));
             Ok(id)
@@ -395,10 +397,22 @@ impl WindowRenderer for VelloWindowRenderer {
 
             // FTS: the page content lifted over layers, rasterised with it.
             for layer in anyrender::composite::layers() {
-                let anyrender::composite::Layer::Overlay { id, rect, scene: Some(content) } = layer else { continue };
+                let anyrender::composite::Layer::Overlay {
+                    id,
+                    rect,
+                    scene: Some(content),
+                } = layer
+                else {
+                    continue;
+                };
                 let origin = (rect.x0.floor(), rect.y0.floor());
-                let overlay_size = ((rect.x1 - origin.0).ceil() as u32, (rect.y1 - origin.1).ceil() as u32);
-                let view = state.compositor.overlay_view(render_surface.device(), id, overlay_size);
+                let overlay_size = (
+                    (rect.x1 - origin.0).ceil() as u32,
+                    (rect.y1 - origin.1).ceil() as u32,
+                );
+                let view = state
+                    .compositor
+                    .overlay_view(render_surface.device(), id, overlay_size);
                 VelloScenePainter {
                     inner: &mut self.scene,
                     renderer: Some(&mut state.renderer),
@@ -406,7 +420,10 @@ impl WindowRenderer for VelloWindowRenderer {
                     texture_handles: Some(&mut self.texture_handles),
                     texture_views: None,
                 }
-                .append_scene((*content).clone(), kurbo::Affine::translate((-origin.0, -origin.1)));
+                .append_scene(
+                    (*content).clone(),
+                    kurbo::Affine::translate((-origin.0, -origin.1)),
+                );
                 state
                     .renderer
                     .render_to_texture(

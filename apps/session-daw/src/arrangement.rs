@@ -2433,6 +2433,16 @@ pub fn hits_overlay(
                 None,
                 &vello::kurbo::Line::new((x, y0), (x, foot)),
             );
+            // Its foot: the handle that stretches it.
+            if clear && !m.ghost && y1 - y0 > 30.0 {
+                painter.fill(
+                    Fill::NonZero,
+                    Affine::IDENTITY,
+                    colour,
+                    None,
+                    &Rect::new(x - 2.5, y1 - 6.0, x + 2.5, y1 - 1.0),
+                );
+            }
             let colour =
                 flag_colour.map_or(colour, |c| c.multiply_alpha(if clear { 0.95 } else { 0.5 }));
             if clear && y1 - y0 > 10.0 {

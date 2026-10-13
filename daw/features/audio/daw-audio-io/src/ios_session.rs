@@ -51,7 +51,9 @@ unsafe fn ports(list: *mut AnyObject) -> Vec<*mut AnyObject> {
         return Vec::new();
     }
     let count: usize = msg_send![list, count];
-    (0..count).map(|i| msg_send![list, objectAtIndex: i]).collect()
+    (0..count)
+        .map(|i| msg_send![list, objectAtIndex: i])
+        .collect()
 }
 
 /// The session's rate now (what the route plays at).
@@ -115,16 +117,31 @@ pub(crate) fn report() -> String {
         let s = session();
         let describe = |list: Vec<*mut AnyObject>| -> String {
             list.into_iter()
-                .map(|p| format!("{} [{}, {} ch]", port_name(p), port_type(p), port_channels(p)))
+                .map(|p| {
+                    format!(
+                        "{} [{}, {} ch]",
+                        port_name(p),
+                        port_type(p),
+                        port_channels(p)
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("; ")
         };
         let available = describe(ports(msg_send![s, availableInputs]));
         let route_in = describe(route_inputs());
         let route: *mut AnyObject = msg_send![s, currentRoute];
-        let route_out = if route.is_null() { String::new() } else { describe(ports(msg_send![route, outputs])) };
+        let route_out = if route.is_null() {
+            String::new()
+        } else {
+            describe(ports(msg_send![route, outputs]))
+        };
         let preferred: *mut AnyObject = msg_send![s, preferredInput];
-        let preferred = if preferred.is_null() { "none".to_string() } else { port_name(preferred) };
+        let preferred = if preferred.is_null() {
+            "none".to_string()
+        } else {
+            port_name(preferred)
+        };
         let rate: f64 = msg_send![s, sampleRate];
         let io: f64 = msg_send![s, IOBufferDuration];
         let in_ch: isize = msg_send![s, inputNumberOfChannels];
@@ -161,7 +178,10 @@ pub(crate) fn outputs() -> Vec<(String, u16)> {
 pub(crate) fn prefer_input(name: &str) -> bool {
     unsafe {
         let list: *mut AnyObject = msg_send![session(), availableInputs];
-        let Some(port) = ports(list).into_iter().find(|p| port_name(*p).contains(name)) else {
+        let Some(port) = ports(list)
+            .into_iter()
+            .find(|p| port_name(*p).contains(name))
+        else {
             return false;
         };
         let set: Bool = msg_send![

@@ -79,22 +79,33 @@ impl Rasterizer {
 
     /// Render `scene` into the texture, `size` device pixels; the texture,
     /// and whether it is a new one (first, or resized) to register again.
-    pub fn render(&mut self, scene: anyrender::Scene, size: (u32, u32)) -> Option<(wgpu::Texture, bool)> {
+    pub fn render(
+        &mut self,
+        scene: anyrender::Scene,
+        size: (u32, u32),
+    ) -> Option<(wgpu::Texture, bool)> {
         let size = (size.0.max(1), size.1.max(1));
         let fresh = self.target.as_ref().is_none_or(|(_, _, s)| *s != size);
         if fresh {
-            let texture = self.device_handle.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("anyrender rasterizer"),
-                size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::STORAGE_BINDING
-                    | wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            });
+            let texture = self
+                .device_handle
+                .device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some("anyrender rasterizer"),
+                    size: wgpu::Extent3d {
+                        width: size.0,
+                        height: size.1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    usage: wgpu::TextureUsages::STORAGE_BINDING
+                        | wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                });
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
             self.target = Some((texture, view, size));
         }
@@ -140,7 +151,8 @@ impl RenderContext for Rasterizer {
             return Err(RegisterResourceErrorKind::UnsupportedResourceKind.into());
         };
         let id = ResourceId::new();
-        self.textures.insert(id, self.renderer.borrow_mut().register_texture(*texture));
+        self.textures
+            .insert(id, self.renderer.borrow_mut().register_texture(*texture));
         Ok(id)
     }
 

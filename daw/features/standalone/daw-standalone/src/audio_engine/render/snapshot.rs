@@ -678,15 +678,13 @@ fn snapshot_track(
             let plain = (play_rate - 1.0).abs() < 1e-9
                 && take_pitch.abs() < 1e-9
                 && take_pitch_env.is_none();
-            let (audio, start_offset, stretch_markers) = match audio
-                .as_ref()
-                .filter(|_| plain)
-                .and_then(|a| {
+            let (audio, start_offset, stretch_markers) =
+                match audio.as_ref().filter(|_| plain).and_then(|a| {
                     stretch_render::rendered(a, &stretch_markers, item.length.as_seconds())
                 }) {
-                Some(render) => (Some(render), 0.0, Vec::new()),
-                None => (audio, start_offset, stretch_markers),
-            };
+                    Some(render) => (Some(render), 0.0, Vec::new()),
+                    None => (audio, start_offset, stretch_markers),
+                };
             items.push(ItemSnapshot {
                 audio,
                 fixed_lane: item.fixed_lane,

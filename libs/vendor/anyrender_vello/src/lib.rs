@@ -1,8 +1,8 @@
 //! A [`vello`] backend for the [`anyrender`] 2D drawing abstraction
 
+mod compositor;
 #[cfg(not(target_arch = "wasm32"))]
 mod image_renderer;
-mod compositor;
 #[cfg(not(target_arch = "wasm32"))]
 mod rasterizer;
 mod scene;

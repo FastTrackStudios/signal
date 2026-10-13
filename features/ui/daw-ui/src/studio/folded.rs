@@ -915,7 +915,11 @@ mod lane_fold_tests {
                 .filter(|i| i.fixed_lane == Some(lane))
                 .count()
         };
-        assert_eq!((on(0), on(1)), (2, 1), "the comp's two pieces, the take whole");
+        assert_eq!(
+            (on(0), on(1)),
+            (2, 1),
+            "the comp's two pieces, the take whole"
+        );
         assert_eq!(fold.items.len(), fold.spans.len());
         let take = fold
             .items
@@ -933,7 +937,11 @@ mod lane_fold_tests {
                 .filter(|i| i.fixed_lane == Some(lane))
                 .count()
         };
-        assert_eq!((on(0), on(1)), (1, 1), "the comp's seam joined, the take its own");
+        assert_eq!(
+            (on(0), on(1)),
+            (1, 1),
+            "the comp's seam joined, the take its own"
+        );
 
         super::refold(&mut project, &shown, true);
         let fold = project.folds.get("kit").expect("folded again");

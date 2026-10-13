@@ -28,7 +28,10 @@ impl RenderContext for VelloScenePainter<'_, '_> {
             if let Ok(texture) = resource.downcast::<Texture>() {
                 let id = ResourceId::new();
                 if let Some(views) = &mut self.texture_views {
-                    views.insert(id, texture.create_view(&wgpu::TextureViewDescriptor::default()));
+                    views.insert(
+                        id,
+                        texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    );
                 }
                 texture_handles.insert(id, renderer.register_texture(*texture));
                 Ok(id)

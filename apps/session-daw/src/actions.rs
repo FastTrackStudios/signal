@@ -186,6 +186,7 @@ fn id_and_args(action: &Action) -> Option<(&'static str, String)> {
         // window does not do: straight to the window.
         Action::Unbound(_)
         | Action::SlipDrums { .. }
+        | Action::StretchDrums { .. }
         | Action::Frame { .. }
         | Action::RemoveRange { .. } => {
             return None;
@@ -5478,6 +5479,189 @@ struct PlaceArg {
 /// How near a line a dropped hit snaps to it, seconds.
 const PLACE_SNAP: f64 = 0.012;
 
+static STRETCH: ActionMeta = meta(
+    "HITS_STRETCH",
+    "hits_stretch",
+    "Stretch a drum hit into place",
+    "Move the hit `id` to `to` (project seconds, as the song plays now) or `by_ms` later by stretching, not slipping: on every mic of the kit, in phase, the slice before it drawn out or squeezed to end where it now starts and its own slice squeezed or drawn out to end where it did — the hits either side stay where they play, each attack plays as recorded, the take is played at its own pitch. What dragging a hit marker's foot does. Refused where a slice would play slower than 0.1 or faster than 4 times, or be shorter than its attack. One undo step.",
+    "Drums",
+    "",
+);
+
+/// Which hit, and where.
+#[derive(Facet)]
+struct StretchArg {
+    id: String,
+    to: Option<f64>,
+    by_ms: Option<f64>,
+}
+
+/// What a stretch did.
+#[derive(Facet)]
+struct Stretched {
+    /// Where the hit plays now, project seconds.
+    at: f64,
+    /// The slices stretched, two a mic.
+    slices: u32,
+}
+
+/// How near its slice's attack a hit is that slice's, seconds.
+const OWN_SLICE: f64 = 0.004;
+
+/// Every kit mic's two slices around the hit at `hit`, stretched to move
+/// it `by` seconds ([`crate::arrange_edit::stretch_around`]).
+///
+/// # Errors
+/// A mic not cut at this hit, with no slice before it, or past what a
+/// stretch can do.
+fn stretch_edits(
+    daw: &daw::standalone::Standalone,
+    project: &ProjectContext,
+    hit: f64,
+    by: f64,
+) -> Result<Vec<(String, crate::arrange_edit::Warped)>, String> {
+    use crate::arrange_edit::Warped;
+    let lead = crate::drum_settings::current().lead_ms / 1_000.0;
+    let mut edits: Vec<(String, Warped)> = Vec::new();
+    for track in crate::drum_lanes::kit_tracks(daw, project) {
+        let mut items: Vec<daw_proto::Item> = daw::service::Items::get_items(
+            daw,
+            project.clone(),
+            TrackRef::Guid(track.guid.clone()),
+        )
+        .into_iter()
+        .filter(|i| !i.muted && crate::drum_edit::is_edited(&track, i))
+        .collect();
+        // Audio only: a Sample track's notes follow the hit as the slip's
+        // do (`drum_samples::follow`), not by their slices.
+        let audio = items.first().is_some_and(|i| {
+            daw_proto::Takes::get_active_take(
+                daw,
+                project.clone(),
+                daw_proto::ItemRef::Guid(i.guid.clone()),
+            )
+            .is_some_and(|t| t.source_file_path.is_some())
+        });
+        if !audio {
+            continue;
+        }
+        items.sort_by(|x, y| x.position.as_seconds().total_cmp(&y.position.as_seconds()));
+        // How far into a slice its hit is: its snap offset, else the lead.
+        let attack = |i: &daw_proto::Item| {
+            let snap = i.snap_offset.as_seconds();
+            if snap > 0.0 { snap } else { lead }
+        };
+        let k = items
+            .iter()
+            .position(|i| (i.position.as_seconds() + attack(i) - hit).abs() <= OWN_SLICE)
+            .ok_or_else(|| {
+                format!(
+                    "{} is not cut at this hit: place it (HITS_PLACE) or quantize first",
+                    track.name
+                )
+            })?;
+        let (Some(before), Some(own)) = (k.checked_sub(1).and_then(|p| items.get(p)), items.get(k))
+        else {
+            return Err(format!(
+                "{}: no slice before this hit to stretch",
+                track.name
+            ));
+        };
+        let warped = |i: &daw_proto::Item| {
+            let markers: Vec<(f64, f64)> = daw_proto::StretchMarkers::get_stretch_markers(
+                daw,
+                project.clone(),
+                daw_proto::ItemRef::Guid(i.guid.clone()),
+                daw_proto::TakeRef::Active,
+            )
+            .into_iter()
+            .map(|m| (m.position, m.source_position))
+            .collect();
+            let (offset, length) = (i.start_offset.as_seconds(), i.length.as_seconds());
+            Warped {
+                position: i.position.as_seconds(),
+                length,
+                markers: if markers.len() > 1 {
+                    markers
+                } else {
+                    vec![(0.0, offset), (length, offset + length)]
+                },
+            }
+        };
+        let (drawn, moved) = crate::arrange_edit::stretch_around(
+            &warped(before),
+            &warped(own),
+            (attack(before), attack(own)),
+            by,
+        )
+        .ok_or_else(|| {
+            format!(
+                "{}: that far is past what a stretch can do (0.1–4 times, the attack kept)",
+                track.name
+            )
+        })?;
+        edits.push((before.guid.clone(), drawn));
+        edits.push((own.guid.clone(), moved));
+    }
+    Ok(edits)
+}
+
+fn register_stretch(list: &ActionList) {
+    list.register(&STRETCH, Effect::Mutating, |a: StretchArg| {
+        let (daw, project) = song()?;
+        let hit = crate::hits::playback(daw, &project)
+            .into_iter()
+            .find(|p| p.id == a.id)
+            .ok_or_else(|| format!("{} plays nowhere now", a.id))?
+            .time;
+        let to = match (a.to, a.by_ms) {
+            (Some(to), _) => to,
+            (None, Some(ms)) => hit + ms / 1_000.0,
+            (None, None) => return Err("say where: `to` or `by_ms`".to_owned()),
+        };
+        let by = to - hit;
+        let edits = stretch_edits(daw, &project, hit, by)?;
+        if edits.is_empty() {
+            return Err("no kit track to stretch".to_owned());
+        }
+        // The samples move with the hit, as they do with a slip.
+        #[cfg(feature = "signal")]
+        if let Err(why) = crate::drum_samples::follow(daw, &project, |t| {
+            if (t - hit).abs() <= OWN_SLICE {
+                t + by
+            } else {
+                t
+            }
+        }) {
+            tracing::warn!(why, "drums: the samples could not follow the stretch");
+        }
+        crate::hits::mark_placed(daw, &project, &a.id);
+        let us = |s: f64| num_traits::ToPrimitive::to_i64(&(s * 1_000_000.0).round()).unwrap_or(0);
+        let slices = u32::try_from(edits.len()).unwrap_or(u32::MAX);
+        queue(Action::StretchDrums {
+            edits: edits
+                .into_iter()
+                .map(|(guid, w)| {
+                    let markers = w.markers.iter().map(|(p, s)| (us(*p), us(*s))).collect();
+                    (guid, us(w.position), us(w.length), markers)
+                })
+                .collect(),
+        });
+        // Until the engine has it: the hit where it was sent.
+        for _ in 0..60 {
+            let now = crate::hits::playback(daw, &project)
+                .into_iter()
+                .find(|p| p.id == a.id)
+                .map(|p| p.time);
+            if now.is_some_and(|t| (t - to).abs() < 0.001) {
+                return Ok(Stretched { at: to, slices });
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        Ok(Stretched { at: to, slices })
+    });
+}
+
 static REVERT: ActionMeta = meta(
     "DRUMS_REVERT",
     "drums_revert",
@@ -5785,6 +5969,7 @@ fn register_requantize(list: &ActionList) {
 fn register_quantize(list: &ActionList) {
     register_requantize(list);
     register_place(list);
+    register_stretch(list);
     register_revert(list);
     list.register(&QUANTIZE, Effect::Mutating, |a: QuantizeArg| {
         let (daw, project) = song()?;

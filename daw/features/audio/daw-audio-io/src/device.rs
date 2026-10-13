@@ -90,7 +90,12 @@ pub fn input_devices(host: &cpal::Host) -> Vec<DeviceInfo> {
         let rate = crate::ios_session::sample_rate();
         crate::ios_session::inputs()
             .into_iter()
-            .map(|(name, channels)| DeviceInfo { name, channels, default_sample_rate: rate, is_input: true })
+            .map(|(name, channels)| DeviceInfo {
+                name,
+                channels,
+                default_sample_rate: rate,
+                is_input: true,
+            })
             .collect()
     }
     #[cfg(not(target_os = "ios"))]
@@ -123,7 +128,12 @@ pub fn output_devices(host: &cpal::Host) -> Vec<DeviceInfo> {
         let rate = crate::ios_session::sample_rate();
         crate::ios_session::outputs()
             .into_iter()
-            .map(|(name, channels)| DeviceInfo { name, channels, default_sample_rate: rate, is_input: false })
+            .map(|(name, channels)| DeviceInfo {
+                name,
+                channels,
+                default_sample_rate: rate,
+                is_input: false,
+            })
             .collect()
     }
     #[cfg(not(target_os = "ios"))]
@@ -214,10 +224,22 @@ pub fn pick_device(
     #[cfg(target_os = "ios")]
     if let Some(n) = name.filter(|s| !s.is_empty()) {
         if input && !crate::ios_session::prefer_input(n) {
-            tracing::warn!(device = n, "daw-audio-io: no such input port; using the route's");
+            tracing::warn!(
+                device = n,
+                "daw-audio-io: no such input port; using the route's"
+            );
         }
-        let def = if input { host.default_input_device() } else { host.default_output_device() };
-        return def.ok_or_else(|| format!("no default audio {} device", if input { "input" } else { "output" }));
+        let def = if input {
+            host.default_input_device()
+        } else {
+            host.default_output_device()
+        };
+        return def.ok_or_else(|| {
+            format!(
+                "no default audio {} device",
+                if input { "input" } else { "output" }
+            )
+        });
     }
     if let Some(n) = name.filter(|s| !s.is_empty()) {
         // A pro interface can surface under one name as several nodes — e.g. a

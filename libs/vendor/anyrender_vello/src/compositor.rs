@@ -137,7 +137,15 @@ impl Compositor {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        Self { opaque, over, layout, sampler, base: None, groups: FxHashMap::default(), overlays: FxHashMap::default() }
+        Self {
+            opaque,
+            over,
+            layout,
+            sampler,
+            base: None,
+            groups: FxHashMap::default(),
+            overlays: FxHashMap::default(),
+        }
     }
 
     fn group(&self, device: &wgpu::Device, view: &wgpu::TextureView) -> wgpu::BindGroup {
@@ -145,8 +153,14 @@ impl Compositor {
             label: Some("anyrender compositor"),
             layout: &self.layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
             ],
         })
     }
@@ -158,11 +172,19 @@ impl Compositor {
 
     /// The base texture to rasterise the page into, made (or remade) for
     /// `size`.
-    pub(crate) fn base_view(&mut self, device: &wgpu::Device, size: (u32, u32)) -> wgpu::TextureView {
+    pub(crate) fn base_view(
+        &mut self,
+        device: &wgpu::Device,
+        size: (u32, u32),
+    ) -> wgpu::TextureView {
         if !self.has_base(size) {
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("anyrender compositor base"),
-                size: wgpu::Extent3d { width: size.0.max(1), height: size.1.max(1), depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width: size.0.max(1),
+                    height: size.1.max(1),
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
@@ -174,16 +196,28 @@ impl Compositor {
             let group = self.group(device, &view);
             self.base = Some(Base { size, view, group });
         }
-        self.base.as_ref().map(|b| b.view.clone()).expect("base just made")
+        self.base
+            .as_ref()
+            .map(|b| b.view.clone())
+            .expect("base just made")
     }
 
     /// Overlay `id`'s texture to rasterise into, `size` device pixels.
-    pub(crate) fn overlay_view(&mut self, device: &wgpu::Device, id: u32, size: (u32, u32)) -> wgpu::TextureView {
+    pub(crate) fn overlay_view(
+        &mut self,
+        device: &wgpu::Device,
+        id: u32,
+        size: (u32, u32),
+    ) -> wgpu::TextureView {
         let size = (size.0.max(1), size.1.max(1));
         if self.overlays.get(&id).is_none_or(|o| o.size != size) {
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("anyrender compositor overlay"),
-                size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
@@ -223,7 +257,9 @@ impl Compositor {
     ) {
         // Textures unregistered since (through a scene painter) go too.
         self.groups.retain(|id, _| textures.contains_key(id));
-        let Some(base) = self.base.as_ref().filter(|b| b.size == size) else { return };
+        let Some(base) = self.base.as_ref().filter(|b| b.size == size) else {
+            return;
+        };
         let (w, h) = (f64::from(size.0.max(1)), f64::from(size.1.max(1)));
         let ndc = |x: f64, y: f64| [(x / w * 2.0 - 1.0) as f32, (1.0 - y / h * 2.0) as f32];
         let quad = |x0: f64, y0: f64, x1: f64, y1: f64, alpha: f32| -> [[f32; 5]; 6] {
@@ -238,7 +274,11 @@ impl Compositor {
             ]
         };
         // Overlays no longer drawn go.
-        self.overlays.retain(|id, _| layers.iter().any(|l| matches!(l, Layer::Overlay { id: i, .. } if i == id)));
+        self.overlays.retain(|id, _| {
+            layers
+                .iter()
+                .any(|l| matches!(l, Layer::Overlay { id: i, .. } if i == id))
+        });
         // Each drawable layer: its bind group and its scissor.
         let mut draws: Vec<(Draw, [u32; 4])> = Vec::new();
         let mut verts: Vec<[f32; 5]> = Vec::with_capacity(6 * (layers.len() + 1));
@@ -251,9 +291,18 @@ impl Compositor {
         };
         for layer in layers {
             match layer {
-                Layer::Texture { resource, rect, clip, opacity } => {
-                    let Some(view) = textures.get(resource) else { continue };
-                    let Some(sc) = scissor(clip.intersect(*rect)) else { continue };
+                Layer::Texture {
+                    resource,
+                    rect,
+                    clip,
+                    opacity,
+                } => {
+                    let Some(view) = textures.get(resource) else {
+                        continue;
+                    };
+                    let Some(sc) = scissor(clip.intersect(*rect)) else {
+                        continue;
+                    };
                     if !self.groups.contains_key(resource) {
                         let group = self.group(device, view);
                         self.groups.insert(*resource, group);
@@ -262,7 +311,9 @@ impl Compositor {
                     draws.push((Draw::Texture(*resource), sc));
                 }
                 Layer::Overlay { id, rect, .. } => {
-                    let Some(overlay) = self.overlays.get(id) else { continue };
+                    let Some(overlay) = self.overlays.get(id) else {
+                        continue;
+                    };
                     let full = kurbo::Rect::new(
                         rect.x0.floor(),
                         rect.y0.floor(),
@@ -280,7 +331,9 @@ impl Compositor {
             contents: bytemuck_cast(&verts),
             usage: wgpu::BufferUsages::VERTEX,
         });
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("anyrender compositor") });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("anyrender compositor"),
+        });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("anyrender compositor"),
@@ -288,7 +341,10 @@ impl Compositor {
                     view: target,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,

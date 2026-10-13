@@ -775,6 +775,9 @@ mod offline_tests {
         let input = vec![vec![0.5_f32; 480]];
         let out = stretch_planar(&input, 0, 0.2, 2_400, 1024);
         assert_eq!(out[0].len(), 2_400);
-        assert!(out[0].iter().all(|s| (s - 0.5).abs() < 1e-6), "only the input's own audio");
+        assert!(
+            out[0].iter().all(|s| (s - 0.5).abs() < 1e-6),
+            "only the input's own audio"
+        );
     }
 }
