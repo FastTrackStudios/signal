@@ -257,7 +257,7 @@ impl LaneState {
 
 /// One macro's declaration: id, panel, display name, range, unit, and whether
 /// its block has DSP yet (the engine's stack is placeholder-first — see
-/// `signal_synth::engine`).
+/// `synth::engine`).
 struct MacroDef {
     id: &'static str,
     name: &'static str,
@@ -1416,7 +1416,7 @@ fn set_macro_clamped(macros: &mut BTreeMap<String, f32>, id: &str, v: f32) {
 /// unison — the values the patch itself plays with.
 fn seed_module_macros(
     macros: &mut BTreeMap<String, f32>,
-    m: &signal_synth::engine::ImportedModule,
+    m: &synth::engine::ImportedModule,
 ) {
     set_macro_clamped(macros, "filter.cutoff", m.cutoff_hz);
     set_macro_clamped(macros, "filter.reso", m.resonance);
@@ -2204,7 +2204,7 @@ impl KeysRigBackend {
         // A keys module is "<lane> A"; an imported Omnisphere patch keeps
         // its own "Layer A".."Layer D". Both name their parts alike
         // ("Soundsource", "Filter 1", "Amp", "Amp Env", "Filter Env").
-        let slot = signal_synth::engine::module_slot(module_idx);
+        let slot = synth::engine::module_slot(module_idx);
         let modules = [format!("{layer} {slot}"), format!("Layer {slot}")];
         let Ok(rig) = self.inner.rig.lock() else {
             return false;
@@ -2593,7 +2593,7 @@ impl KeysRigBackend {
             .map(|p| p.name.clone())
             .collect();
         let canonical = |want: &str| -> Option<String> {
-            use signal_synth::omni_import::resolve_name;
+            use synth::omni_import::resolve_name;
             resolve_name(want, pack_names.iter().map(String::as_str))
                 .or_else(|| resolve_name(want, known.iter().map(String::as_str)))
                 .map(str::to_string)
@@ -2690,7 +2690,7 @@ impl KeysRigBackend {
         let modules = |lane: &str| -> Vec<String> {
             (0..4)
                 .flat_map(|i| {
-                    let slot = signal_synth::engine::module_slot(i);
+                    let slot = synth::engine::module_slot(i);
                     [format!("{lane} {slot}"), format!("Layer {slot}")]
                 })
                 .collect()
@@ -2833,14 +2833,14 @@ impl KeysRigBackend {
                 .collect()
         };
         for (name, path, patch) in todo {
-            let layers = match signal_synth::engine::import_omni_layers(&path) {
+            let layers = match synth::engine::import_omni_layers(&path) {
                 Ok(l) => l,
                 Err(e) => {
                     tracing::warn!(lane = %name, ?path, "keys rig: Omnisphere seed failed: {e}");
                     continue;
                 }
             };
-            let lfos = signal_synth::engine::import_omni_lfos(&path).unwrap_or_default();
+            let lfos = synth::engine::import_omni_lfos(&path).unwrap_or_default();
             let Ok(mut s) = self.inner.state.lock() else {
                 return;
             };
@@ -3043,9 +3043,9 @@ impl KeysRigBackend {
         lanes: &BTreeMap<String, LaneState>,
         layer: &str,
         module: usize,
-    ) -> signal_synth::engine::ModuleSettings {
+    ) -> synth::engine::ModuleSettings {
         let Some(lane) = lanes.get(layer) else {
-            return signal_synth::engine::ModuleSettings::default();
+            return synth::engine::ModuleSettings::default();
         };
         let mut set =
             Self::settings_from_macros(lane, lane.modules.get(module).map(|m| &m.macros));
@@ -3063,8 +3063,8 @@ impl KeysRigBackend {
     fn settings_from_macros(
         lane: &LaneState,
         macros: Option<&BTreeMap<String, f32>>,
-    ) -> signal_synth::engine::ModuleSettings {
-        let mut set = signal_synth::engine::ModuleSettings::default();
+    ) -> synth::engine::ModuleSettings {
+        let mut set = synth::engine::ModuleSettings::default();
         let v = |id: &str| {
             macros
                 .and_then(|m| m.get(id).copied())
@@ -3103,7 +3103,7 @@ impl KeysRigBackend {
         set.body = v("tone.body");
         set.drive = v("tone.drive");
         set.chorus = if fx_on { v("fx.chorus") } else { 0.0 };
-        set.ambience = signal_synth::engine::AmbienceSettings {
+        set.ambience = synth::engine::AmbienceSettings {
             on: fx_on && v("amb.bypass") < 0.5,
             algo: v("amb.algo"),
             size: v("amb.size"),
@@ -3124,7 +3124,7 @@ impl KeysRigBackend {
             (Some(factor), Some(bpm)) => 60_000.0 / bpm * factor,
             _ => v("dly.time"),
         };
-        set.delay = signal_synth::engine::DelaySettings {
+        set.delay = synth::engine::DelaySettings {
             on: fx_on && v("dly.bypass") < 0.5,
             style: v("dly.algo"),
             time_ms,
@@ -3151,12 +3151,12 @@ impl KeysRigBackend {
             set.mod_env_dh[i] = (v(&format!("{e}.delay")), v(&format!("{e}.hold")));
             set.mod_env_depth[i] = v(&format!("{e}.depth"));
             set.mod_env_dest[i] =
-                signal_synth::engine::ModDest::from_value(v(&format!("{e}.dest")));
+                synth::engine::ModDest::from_value(v(&format!("{e}.dest")));
         }
         for n in 0..4 {
             set.lfo_fade_ms[n] = v(&format!("lfo{}.fade", n + 1));
             set.lfo_dest[n] =
-                signal_synth::engine::ModDest::from_value(v(&format!("lfo{}.dest", n + 1)));
+                synth::engine::ModDest::from_value(v(&format!("lfo{}.dest", n + 1)));
         }
         set
     }
@@ -3237,7 +3237,7 @@ impl KeysRigBackend {
                     // Modules are named "<layer> <slot>" in the lane's tree.
                     for i in 0..lane.modules.len() {
                         let module_name =
-                            format!("{name} {}", signal_synth::engine::module_slot(i));
+                            format!("{name} {}", synth::engine::module_slot(i));
                         cells.set(Role::Module, &module_name, lane.module_gain(i) * audible);
                     }
                 }
@@ -3256,7 +3256,7 @@ impl KeysRigBackend {
                 cells.set(Role::Layer, name, s.lane_gain(name));
                 // Modules are named "<layer> <slot>" in the tree.
                 for i in 0..lane.modules.len() {
-                    let module_name = format!("{name} {}", signal_synth::engine::module_slot(i));
+                    let module_name = format!("{name} {}", synth::engine::module_slot(i));
                     cells.set(Role::Module, &module_name, lane.module_gain(i));
                 }
             }
@@ -3342,7 +3342,7 @@ impl KeysRigBackend {
     /// the patch doesn't reach are left alone, so a one-layer preset only
     /// touches the module you dropped it on.
     fn load_omni_patch(&self, layer: &str, start: usize, file: &std::path::Path) {
-        let imported = match signal_synth::engine::import_omni_patch(file) {
+        let imported = match synth::engine::import_omni_patch(file) {
             Ok(p) => p,
             Err(e) => {
                 tracing::error!(?file, "keys rig: patch import failed: {e}");
@@ -3463,7 +3463,7 @@ impl KeysRigBackend {
                                             .enumerate()
                                             .map(|(i, m)| crate::proto::KeysModule {
                                                 index: i as u32,
-                                                slot: signal_synth::engine::module_slot(i),
+                                                slot: synth::engine::module_slot(i),
                                                 patch: m.patch.clone(),
                                                 variant: m.variant.clone(),
                                                 live: !m.patch.is_empty(),
@@ -4423,7 +4423,7 @@ impl KeysRigSvc for KeysRigBackend {
             .enumerate()
             .map(|(i, m)| crate::proto::KeysModule {
                 index: i as u32,
-                slot: signal_synth::engine::module_slot(i),
+                slot: synth::engine::module_slot(i),
                 patch: m.patch.clone(),
                 variant: m.variant.clone(),
                 live: !m.patch.is_empty(),
@@ -4473,7 +4473,7 @@ impl KeysRigSvc for KeysRigBackend {
             })
             .collect();
         // The selected MODULE's slice of the live program.
-        let module_name = format!("{layer} {}", signal_synth::engine::module_slot(slot));
+        let module_name = format!("{layer} {}", synth::engine::module_slot(slot));
         let tree = s
             .tree
             .as_ref()

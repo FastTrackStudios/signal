@@ -7,7 +7,7 @@
 //! ```
 //!
 //! The layer zoom is where a patch actually lives: because every lane is the
-//! same engine program (`signal_synth::signal_layer`), this one surface
+//! same engine program (`synth::signal_layer`), this one surface
 //! controls a Keyscape piano, an Omnisphere soundsource and a wavetable
 //! identically.
 

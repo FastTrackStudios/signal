@@ -10,7 +10,7 @@
 
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use sampler::node_render::RenderNode;
-use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
+use synth::omni_import::{SoundsourceIndex, load_patch_file};
 
 fn note_event(on: bool, key: u8, vel: u8) -> PluginMidiEvent {
     use daw::service::{Channel, KeyNumber, MidiEvent, Velocity};
@@ -122,7 +122,7 @@ fn main() {
     };
     if std::env::var_os("RENDER_DEBUG").is_some() {
         if let Ok(xml) = std::fs::read_to_string(patch) {
-            if let Ok(p) = signal_synth::omni_import::parse_patch(&xml) {
+            if let Ok(p) = synth::omni_import::parse_patch(&xml) {
                 for (i, l) in p.layers.iter().enumerate() {
                     eprintln!(
                         "layer {i}: enabled {} level {:.3} ss {:?} waves {:?} shape {:.2}",

@@ -4,7 +4,7 @@
 //! scans an Omnisphere patch library for presets, imports the selected
 //! `.prt_omn` / `.mlt_omn` into a composition tree (realizing its Soundsources
 //! against the local extraction), and plays it from hardware MIDI or UI notes.
-//! Implements the [`signal_synth_proto::synth::SynthRig`] service + its
+//! Implements the [`synth::proto::synth::SynthRig`] service + its
 //! `#[subscribe]` stream; mount `router()` (`architect::rig::RigBackend`) on a
 //! vox transport.
 
@@ -19,11 +19,11 @@ use audio::io::AudioIoPrefs;
 use midicore::MidiEvent;
 use keys::KeysRig;
 use sampler::rig_node::{Container, RigNode, Role};
-use signal_synth::omni_import::{
+use synth::omni_import::{
     OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,
 };
-use signal_synth_proto::synth::{SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource};
-use signal_synth_proto::{
+use synth::proto::synth::{SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource};
+use synth::proto::{
     BrowseItem, SynthArticulation, SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer,
     SynthMapping, SynthMic, SynthModRoute, SynthNode, SynthPreset, SynthStatus, SynthZone,
 };
@@ -631,8 +631,8 @@ impl SynthRigStreamSource for SynthRigBackend {
 impl Services for SynthRigBackend {
     fn layers() -> impl Layer<Self> {
         layers![
-            signal_synth_proto::synth::Service,
-            signal_synth_proto::synth::StreamService
+            synth::proto::synth::Service,
+            synth::proto::synth::StreamService
         ]
     }
 }
@@ -789,8 +789,8 @@ fn role_tag(role: Role) -> String {
 /// Project a parsed patch's layers into the wire [`SynthLayer`]s for the Edit
 /// page. Filter cutoff is the calibrated Hz; routes are scoped to the layer by
 /// the `A/B/C/D ` target prefix.
-fn project_layers(patch: &signal_synth::omni_import::OmniPatch) -> Vec<SynthLayer> {
-    use signal_synth::omni_import::{classify_filter_full, filter_model, omni_cutoff_hz};
+fn project_layers(patch: &synth::omni_import::OmniPatch) -> Vec<SynthLayer> {
+    use synth::omni_import::{classify_filter_full, filter_model, omni_cutoff_hz};
     const NAMES: [&str; 4] = ["Layer A", "Layer B", "Layer C", "Layer D"];
     const LETTERS: [&str; 4] = ["A", "B", "C", "D"];
 
@@ -1115,7 +1115,7 @@ mod tests {
     #[test]
     #[ignore = "requires the built OB-8 pack + factory library"]
     fn mapping_exposes_real_zones() {
-        use signal_synth_proto::synth::SynthRig as _;
+        use synth::proto::synth::SynthRig as _;
 
         let b = SynthRigBackend::new();
         // Seed the loaded tree without opening audio.
@@ -1165,7 +1165,7 @@ mod tests {
     #[test]
     #[ignore = "requires the factory Omnisphere library"]
     fn layers_expose_filter_env_and_routes() {
-        use signal_synth_proto::synth::SynthRig as _;
+        use synth::proto::synth::SynthRig as _;
 
         let b = SynthRigBackend::new();
         let layers = b.layers();

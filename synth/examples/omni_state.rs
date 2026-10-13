@@ -12,7 +12,7 @@
 //! or an XML), applying `ATTR=VAL` rewrites first — the calibration sweep
 //! hook (VAL is the raw attribute string, IEEE-754 hex for floats).
 
-use signal_synth::omni_import::state;
+use synth::omni_import::state;
 
 fn read_xml(path: &str) -> String {
     let bytes = std::fs::read(path).expect("read input");

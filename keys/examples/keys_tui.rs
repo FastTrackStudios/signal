@@ -66,9 +66,9 @@ fn main() -> eyre::Result<()> {
     // soundsources against the local extraction, and select it.
     let mut preset_name = preset_name;
     if let Some(patch_path) = arg(&args, "--omni") {
-        let index = signal_synth::omni_import::SoundsourceIndex::scan_default();
+        let index = synth::omni_import::SoundsourceIndex::scan_default();
         let tree =
-            signal_synth::omni_import::load_patch_file(std::path::Path::new(&patch_path), &index)
+            synth::omni_import::load_patch_file(std::path::Path::new(&patch_path), &index)
                 .map_err(|e| eyre::eyre!("omni import: {e}"))?;
         preset_name = tree.name.clone();
         registry.register_code(tree);
