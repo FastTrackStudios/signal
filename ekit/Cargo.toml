@@ -1,30 +1,34 @@
 [package]
-name = "signal-ekit"
+name = "ekit"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 authors.workspace = true
-description = "Electronic Kit rig — a pad grid over the sample space, with kit generation and similarity morphing (#77)"
+license.workspace = true
+description = "The electronic-kit rig, and its editor"
 
 [lints]
 workspace = true
 
 [features]
-# PipeWire (audio + MIDI) is the Linux default via target-gated deps.
+default = ["vox"]
 pipewire = []
+ui = ["dep:dioxus"]
+vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
-signal-ekit-proto = { workspace = true }
+architect = { workspace = true, features = ["atom", "platform", "rig", "vox"] }
+daw = { workspace = true }
+dioxus = { workspace = true, optional = true }
+facet = { workspace = true }
+midicore = { workspace = true, features = ["vox", "midir"] }
 signal-rigs-proto = { workspace = true }
 signal-sampler = { workspace = true }
 signal-space = { workspace = true }
-midicore = { workspace = true, features = ["vox", "midir"] }
-architect = { workspace = true, features = ["vox", "rig"] }
-daw = { workspace = true }
 tracing = { workspace = true }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
+vox = { workspace = true, optional = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
