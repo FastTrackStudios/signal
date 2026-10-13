@@ -52,6 +52,9 @@ use daw::standalone::metering::Meters;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
 
+/// One engine per process, rigs as tracks in it.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod engine;
 pub mod gestures;
 pub mod lock;
 /// Instrumented MIDI attach.
