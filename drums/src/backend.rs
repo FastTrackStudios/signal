@@ -2,7 +2,7 @@
 //!
 //! Owns a live [`SamplerRig`], loads GGD-style `.signalpreset` kits, plays them
 //! from hardware MIDI (through the drum-map converter) or UI pads, and exposes
-//! the multi-mic drum mixer. Implements the [`signal_drums_proto::drum::DrumRig`]
+//! the multi-mic drum mixer. Implements the [`crate::proto::drum::DrumRig`]
 //! service + its `#[subscribe]` event stream; mount `router()` (`architect::rig::RigBackend`)
 //! on a vox transport (in-process, WebSocket, iroh).
 
@@ -13,8 +13,8 @@ use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, Velocity};
-use signal_drums_proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
-use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
+use crate::proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
+use crate::proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
 use signal_rig_host::mixer::db_to_linear;
 use signal_sampler::{MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
 
@@ -189,7 +189,7 @@ struct Inner {
     pump_started: std::sync::atomic::AtomicBool,
     /// The sample-library catalog (every swappable `.signalengine`, grouped by
     /// kind on the client). Scanned once at construction.
-    library: Vec<signal_drums_proto::LibraryPiece>,
+    library: Vec<crate::proto::LibraryPiece>,
     /// Available MM2 (Cradle) mix presets — `(name, path)` of `.preset` files
     /// under the library's `Mixes/` dir — whose per-strip level + FX we can
     /// import onto the loaded kit.
@@ -981,7 +981,7 @@ impl DrumRig for DrumRigBackend {
         pieces
     }
 
-    fn kit_slots(&self) -> Vec<signal_drums_proto::KitSlot> {
+    fn kit_slots(&self) -> Vec<crate::proto::KitSlot> {
         // Source of truth = the engines actually loaded (reflects swaps), not
         // the on-disk preset file.
         let engines = self
@@ -1008,7 +1008,7 @@ impl DrumRig for DrumRigBackend {
                     .map(|p| p.kind.clone())
                     .filter(|k| !k.is_empty())
                     .unwrap_or_else(|| crate::library::kind_from_slot(&id).to_string());
-                signal_drums_proto::KitSlot {
+                crate::proto::KitSlot {
                     label: crate::library::slot_label(&id),
                     kind,
                     current_name,
@@ -1019,7 +1019,7 @@ impl DrumRig for DrumRigBackend {
             .collect()
     }
 
-    fn library(&self) -> Vec<signal_drums_proto::LibraryPiece> {
+    fn library(&self) -> Vec<crate::proto::LibraryPiece> {
         self.inner.library.clone()
     }
 
@@ -1030,7 +1030,7 @@ impl DrumRig for DrumRigBackend {
             .spawn(move || b.do_swap_piece(slot_id, engine_path));
     }
 
-    fn similar_pieces(&self, slot_id: String) -> Vec<signal_drums_proto::LibraryPiece> {
+    fn similar_pieces(&self, slot_id: String) -> Vec<crate::proto::LibraryPiece> {
         let current = {
             let s = self
                 .inner
@@ -1178,7 +1178,7 @@ impl DrumRig for DrumRigBackend {
                 .iter()
                 .enumerate()
                 .filter(|(_, snd)| snd.piece == pi)
-                .map(|(si, snd)| signal_drums_proto::SendInfo {
+                .map(|(si, snd)| crate::proto::SendInfo {
                     idx: si as u32,
                     bus_label: mix
                         .buses
@@ -1252,7 +1252,7 @@ impl DrumRig for DrumRigBackend {
         strips
     }
 
-    fn meters(&self) -> signal_drums_proto::MeterSnapshot {
+    fn meters(&self) -> crate::proto::MeterSnapshot {
         let (meters, voices) = {
             let rig = self
                 .inner
@@ -1301,7 +1301,7 @@ impl DrumRig for DrumRigBackend {
             master = master.max(p);
             strips.push(p);
         }
-        signal_drums_proto::MeterSnapshot {
+        crate::proto::MeterSnapshot {
             master,
             strips,
             voices,
@@ -1476,8 +1476,8 @@ impl DrumRigStreamSource for DrumRigBackend {
 impl Services for DrumRigBackend {
     fn layers() -> impl Layer<Self> {
         layers![
-            signal_drums_proto::drum::Service,
-            signal_drums_proto::drum::StreamService
+            crate::proto::drum::Service,
+            crate::proto::drum::StreamService
         ]
     }
 }

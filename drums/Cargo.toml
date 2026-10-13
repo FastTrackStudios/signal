@@ -1,48 +1,41 @@
 [package]
-name = "signal-drums"
+name = "drums"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 authors.workspace = true
+license.workspace = true
+description = "The drum rig: kits, samples, triggers, and its editor"
 
 [lints]
 workspace = true
 
 [features]
-# PipeWire mode: route this rig's hardware MIDI through the pipewire-jack
-# backend (routable graph node, not an exclusive ALSA grab).
-# PipeWire (audio + MIDI) is DEFAULT on Linux — audio is target-gated in
-# daw-audio-io, MIDI via the linux target table below. Alias only.
+default = ["vox"]
 pipewire = []
+ui = ["dep:dioxus", "dep:midicore-ui", "dep:signal-ui"]
+vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
-signal-rigs-proto.workspace = true
-# Drums are plain sample zones on the shared engine — no drum-specific DSP.
-signal-sampler.workspace = true
-# The similarity space over the library's swappable pieces (#77 M4).
-signal-space.workspace = true
-# Cross-rig utilities: shared mixer math (dB→linear).
-signal-rig-host.workspace = true
-# daw services — every strip fader/mute/solo/send is a daw track/route op.
-daw.workspace = true
-# The wire contract this crate's headless backend implements (DrumRig service).
-signal-drums-proto.workspace = true
-# Layer/Services composition + dispatchers + PubSub for mounting the services.
-architect = { workspace = true, features = ["vox", "rig"] }
-# Hardware MIDI ports + the drum-map converter for the live input path.
-midicore = { workspace = true, features = ["vox", "midir", "native"] }
-# NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs.
+architect = { workspace = true, features = ["atom", "platform", "rig", "vox"] }
 control-surfaces = { workspace = true, features = ["kontrol"] }
-# Built-in FX (NativeEq/NativeComp/NativeReverb) + the plugin-host wrapper, so
-# an imported MM2 (Cradle) mix can be reproduced with our own DSP per piece.
-fx-blocks.workspace = true
-signal-plugin-host.workspace = true
-tracing.workspace = true
+daw = { workspace = true }
+dioxus = { workspace = true, optional = true }
+facet = { workspace = true }
+fx-blocks = { workspace = true }
+midicore = { workspace = true, features = ["vox", "midir", "native"] }
+midicore-proto = { workspace = true }
+midicore-ui = { workspace = true, optional = true }
+signal-plugin-host = { workspace = true }
+signal-rig-host = { workspace = true }
+signal-rigs-proto = { workspace = true }
+signal-sampler = { workspace = true }
+signal-space = { workspace = true }
+signal-ui = { workspace = true, features = ["web"], optional = true }
+tracing = { workspace = true }
+vox = { workspace = true, optional = true }
 
 [dev-dependencies]
-tracing-subscriber.workspace = true
+tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# Hardware MIDI as a routable PipeWire graph node (midir on the
-# pipewire-jack backend) — the Linux default, matching the audio host.
 midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }

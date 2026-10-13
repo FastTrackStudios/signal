@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use signal_drums::{cradle, mm2fx};
+use drums::{cradle, mm2fx};
 
 fn norm(s: &str) -> String {
     s.chars()

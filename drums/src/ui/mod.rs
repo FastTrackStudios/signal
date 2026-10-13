@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
-use signal_drums_proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
-use signal_drums_proto::{
+use crate::proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
+use crate::proto::{
     DrumStatus, InputMap, KitInfo, KitSlot, LibraryPiece, MeterSnapshot, MixerStrip, PieceInfo,
     StripKind,
 };

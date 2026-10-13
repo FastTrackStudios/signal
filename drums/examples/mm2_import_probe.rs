@@ -3,7 +3,7 @@
 //! install it on the kick channel, and confirm the rendered kick changes.
 //!   cargo run -p signal-drums --example `mm2_import_probe` -- <MM2.preset>
 
-use signal_drums::{cradle, mm2fx};
+use drums::{cradle, mm2fx};
 use signal_sampler::{FxTarget, SamplerRig};
 
 const KIT: &str = "kit";
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("usage: mm2_import_probe <MM2.preset>")?;
     let sr = 48_000;
     let rig = SamplerRig::new_offline(sr);
-    signal_drums::load_preset_kit(&rig, KIT, PRESET)?;
+    drums::load_preset_kit(&rig, KIT, PRESET)?;
 
     let mut buf = vec![0.0f32; 512 * 2];
     let warm = |rig: &SamplerRig, buf: &mut Vec<f32>| {
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     let hit_kick = |rig: &SamplerRig, buf: &mut Vec<f32>| -> (f32, f64) {
-        rig.midi_message(signal_drums::GM_DRUM_CHANNEL, 0x90, 35, 120);
+        rig.midi_message(drums::GM_DRUM_CHANNEL, 0x90, 35, 120);
         let (mut pk, mut rms) = (0.0f32, 0.0f64);
         let mut n = 0u64;
         for _ in 0..40 {

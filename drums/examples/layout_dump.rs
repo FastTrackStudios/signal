@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .ok_or("usage: layout_dump <kit.signalpreset>")?;
     let rig = SamplerRig::new_offline(48_000);
-    signal_drums::load_preset_kit(&rig, KIT, &path)?;
+    drums::load_preset_kit(&rig, KIT, &path)?;
     let layout = rig.drum_mixer_layout(KIT).ok_or("no layout")?;
     println!(
         "{} engines, {} buses",

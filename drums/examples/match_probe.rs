@@ -3,7 +3,7 @@
 //! the id-scheme mismatch (Metal Monster `snare` vs Pound `snare-a`).
 //!   cargo run -p signal-drums --example `match_probe` -- <kit.signalpreset> <mm2.preset>
 
-use signal_drums::{cradle, library, mm2fx};
+use drums::{cradle, library, mm2fx};
 use signal_sampler::SamplerRig;
 
 const KIT: &str = "kit";
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("usage: match_probe <kit> <mm2.preset>")?;
 
     let rig = SamplerRig::new_offline(48_000);
-    signal_drums::load_preset_kit(&rig, KIT, &kit)?;
+    drums::load_preset_kit(&rig, KIT, &kit)?;
     let layout = rig.drum_mixer_layout(KIT).ok_or("no layout")?;
     let mixer = cradle::parse_mixer(&std::fs::read_to_string(&mm2)?)?;
 
