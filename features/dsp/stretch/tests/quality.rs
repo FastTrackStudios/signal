@@ -22,7 +22,7 @@
     clippy::missing_const_for_fn
 )]
 
-use stretch_dsp::{Config, Source, Stretcher};
+use stretch::{Config, Source, Stretcher};
 
 const SR: f64 = 48_000.0;
 

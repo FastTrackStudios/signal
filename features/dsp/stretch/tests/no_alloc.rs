@@ -25,7 +25,7 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use stretch_dsp::{Config, Source, Stretcher};
+use stretch::{Config, Source, Stretcher};
 
 struct Counting;
 

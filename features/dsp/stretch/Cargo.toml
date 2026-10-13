@@ -1,0 +1,14 @@
+[package]
+name = "stretch"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Time stretching"
+
+[lints]
+workspace = true
+
+[dependencies]
+dsp-core = { workspace = true }
+realfft = { workspace = true }

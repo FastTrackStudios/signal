@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/stretch",
     "features/dsp/pitch",
     "features/dsp/level",
     "features/dsp/tune",
@@ -197,8 +198,6 @@ members = [
     "features/dsp/reverb/reverb-dsp",
     "features/dsp/reverb/reverb-profiles",
     "features/dsp/reverb/reverb-ui",
-    "features/dsp/stretch/stretch",
-    "features/dsp/stretch/stretch-dsp",
     "features/dsp/saturate/saturate",
     "features/dsp/saturate/saturate-dsp",
     "features/dsp/saturate/saturate-profiles",
@@ -340,6 +339,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+stretch = { path = "features/dsp/stretch" }
 pitch = { path = "features/dsp/pitch" }
 level = { path = "features/dsp/level" }
 tune = { path = "features/dsp/tune" }
@@ -1135,8 +1135,6 @@ comp-dsp = { path = "features/dsp/comp/comp-dsp" }
 gate = { path = "features/dsp/gate" }
 mic-dsp = { path = "features/dsp/mic/mic-dsp" }
 mic-ui = { path = "features/dsp/mic/mic-ui" }
-stretch = { path = "features/dsp/stretch/stretch" }
-stretch-dsp = { path = "features/dsp/stretch/stretch-dsp" }
 chorus-dsp = { path = "features/dsp/modulation/chorus-dsp" }
 modulation-profiles = { path = "features/dsp/modulation/modulation-profiles" }
 multiband-dsp = { path = "features/dsp/multiband" }

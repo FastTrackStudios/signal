@@ -43,6 +43,8 @@
 //!
 //! Allocation happens in [`Stretcher::new`] only.
 
+
+
 use std::sync::Arc;
 
 use dsp_core::num::{count_to_f32, count_to_f64, f32_to_index, f64_to_index, trunc_to_i64};
@@ -505,4 +507,12 @@ fn wrap(x: f32) -> f32 {
     use core::f32::consts::{PI, TAU};
     let y = TAU.mul_add(-(x / TAU).round(), x);
     if y <= -PI { y + TAU } else { y }
+}
+
+
+// ── from the stretch facade ──
+/// The frequency factor for a transposition in semitones (+12 = ×2).
+#[must_use]
+pub fn semitones(semitones: f32) -> f32 {
+    (semitones / 12.0).exp2()
 }
