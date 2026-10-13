@@ -38,9 +38,7 @@ use plugin_core::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
 use sampler::spec::LibrarySpec;
-use sampler::{
-    BlockTransport, RealtimeScheduler, SamplerBank, Schedule, TrackDocument, annotate,
-};
+use sampler::{BlockTransport, RealtimeScheduler, SamplerBank, Schedule, TrackDocument, annotate};
 
 use crate::config::{INSTRUMENT_ID, PatchConfig};
 

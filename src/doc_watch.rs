@@ -29,8 +29,8 @@
 //! }
 //! ```
 
-use serde::Deserialize;
 use sampler::{DocCc, DocNote, TempoPoint, TrackDocument};
+use serde::Deserialize;
 
 /// Env var pointing at a watched `TrackDocument` JSON file (dev-only).
 pub const DOC_ENV: &str = "SIGNAL_SAMPLER_CLAP_DOC";
