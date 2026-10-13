@@ -1007,7 +1007,7 @@ impl Standalone {
     pub fn attach_duplex_engine(
         &self,
         guid: &str,
-        prefs: &daw_audio_io::AudioIoPrefs,
+        prefs: &audio::io::AudioIoPrefs,
     ) -> Result<crate::audio_engine::DuplexAudioEngine, String> {
         let bundle = self.transport_engine_for(guid);
         bundle.disable_soft_clock();
@@ -1027,7 +1027,7 @@ impl Standalone {
     pub fn attach_audio_engine_with_prefs(
         &self,
         guid: &str,
-        prefs: &daw_audio_io::AudioIoPrefs,
+        prefs: &audio::io::AudioIoPrefs,
     ) -> Result<crate::audio_engine::AudioEngine, String> {
         crate::audio_engine::AudioEngine::attached_to_prefs(self, guid, prefs)
     }

@@ -5,7 +5,7 @@
 //! dep — same split as `eq-ui::params`.
 
 use atomic_float::AtomicF32;
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 

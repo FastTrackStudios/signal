@@ -7,7 +7,7 @@
 
 use std::sync::atomic::Ordering;
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 // The concrete `GuiContext` is not in nice-plug's prelude (which carries the
 // `GuiContextInner` trait); upstream's own backends import it directly too.
 use architect_ui::prelude::{

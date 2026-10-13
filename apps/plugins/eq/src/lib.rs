@@ -3,7 +3,7 @@
 //! Pro-Q 4 style parametric equalizer with draggable band nodes,
 //! frequency response visualization, and per-band filter type selection.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -337,7 +337,7 @@ impl Plugin for FtsEqPlugin {
 
     // `Plugin::Editor` is an associated type as of the baseview 0.3 rework,
     // so the editor is named here rather than returned as a trait object.
-    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
+    type Editor = audio::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 

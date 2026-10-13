@@ -16,7 +16,7 @@ workspace = true
 [dependencies]
 nice-plug = { workspace = true }
 nice-plug-dioxus = { workspace = true }
-audiocore-core = { workspace = true }
+audio = { workspace = true }
 eq = { workspace = true, features = ["native", "ui"] }
 atomic_float = { workspace = true }
 # Pulled directly so we can vendor a custom launch that captures the

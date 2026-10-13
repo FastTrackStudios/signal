@@ -197,8 +197,8 @@ pub(crate) fn prefer_input(name: &str) -> bool {
 /// is a recording, and without this it is silent (and the session may list
 /// no inputs at all). `AVAudioApplication` from iOS 17 (the session's own
 /// `recordPermission` is deprecated there), the session's before.
-pub(crate) fn input_access() -> crate::device::InputAccess {
-    use crate::device::InputAccess;
+pub(crate) fn input_access() -> crate::io::device::InputAccess {
+    use crate::io::device::InputAccess;
     // The four-char codes both classes answer with.
     const GRANTED: usize = 0x6772_6e74; // 'grnt'
     const DENIED: usize = 0x6465_6e79; // 'deny'

@@ -14,7 +14,7 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use daw_audio_io::AudioIoPrefs;
+use audio::io::AudioIoPrefs;
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};

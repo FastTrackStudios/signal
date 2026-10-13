@@ -14,7 +14,7 @@
 //! let project = RigProject::new("FTS Keys");
 //! let track = project.add_track("Keys")?;
 //! let fx = project.add_fx_slot(&track, "keys")?;
-//! let host = project.start_output(&daw_audio_io::AudioIoPrefs::default())?;
+//! let host = project.start_output(&audio::io::AudioIoPrefs::default())?;
 //! let meters = host.install_meters(1);
 //! // … insert PluginInstances into `fx` via host.daw() …
 //! host.play();
@@ -48,9 +48,9 @@ use daw::standalone::metering::Meters;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
 #[cfg(not(target_arch = "wasm32"))]
-use daw_audio_io::AudioIoPrefs;
+use audio::io::AudioIoPrefs;
 #[cfg(not(target_arch = "wasm32"))]
-use daw_audio_io::duplex::EngineStats;
+use audio::io::duplex::EngineStats;
 
 pub mod gestures;
 pub mod lock;

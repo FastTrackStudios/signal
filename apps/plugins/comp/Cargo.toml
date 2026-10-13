@@ -14,7 +14,7 @@ crate-type = ["cdylib", "lib"]
 workspace = true
 
 [dependencies]
-audiocore-core = { workspace = true }
+audio = { workspace = true }
 # Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
 # `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
 # paths, so the crate has to be nameable here. `vst3` is on by default.

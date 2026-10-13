@@ -17,7 +17,7 @@
 //! the Dioxus editor ([`comp::ui::control_view::App`]) renders against them
 //! without a circular dep.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -252,7 +252,7 @@ impl Plugin for FtsComp {
 
     // `Plugin::Editor` is an associated type as of the baseview 0.3 rework,
     // so the editor is named here rather than returned as a trait object.
-    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
+    type Editor = audio::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 

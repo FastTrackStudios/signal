@@ -10,7 +10,7 @@
 //! from the vox clients in context, which here come from the in-process
 //! engine ([`crate::engine`]).
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use signal_tone3000_ui::{ToneBrowser, ToneImport, UrlOpener};
 
 use crate::state::NamUi;

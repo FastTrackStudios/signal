@@ -16,7 +16,7 @@ pub mod units;
 
 use std::sync::Arc;
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use crate::profiles::Profile;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::shell::ShellItem;

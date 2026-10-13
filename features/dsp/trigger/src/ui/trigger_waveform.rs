@@ -27,7 +27,7 @@
 //! measurement (unreliable under Blitz, see eq-ui's notes) and no scale
 //! drift. The width stretches freely; no interaction depends on x.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 
 use crate::ui::params::{TriggerUiState, WAVE_HISTORY_LEN};
 use crate::ui::trigger_waveform_svg::{

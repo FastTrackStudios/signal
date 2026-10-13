@@ -10,13 +10,13 @@ description = "Drum trigger: hit detection to MIDI, and its editor"
 workspace = true
 
 [features]
-native = ["dep:architect-ui", "dep:atomic_float", "dep:audiocore-core", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus"]
+native = ["dep:architect-ui", "dep:atomic_float", "dep:audio", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus"]
 ui = []
 
 [dependencies]
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
-audiocore-core = { workspace = true, optional = true }
+audio = { workspace = true, optional = true }
 dsp-core = { workspace = true }
 eq = { workspace = true }
 fts-audio-ui = { workspace = true, optional = true }

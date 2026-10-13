@@ -66,7 +66,7 @@ pub struct AudioIoPrefs {
     /// Let a built-in microphone be opened as the live input. Off by default:
     /// with nothing plugged in the default input is the laptop's own mic, and
     /// monitoring it through the laptop's own speakers feeds back instantly.
-    /// See [`input_guard`](crate::input_guard).
+    /// See [`input_guard`](crate::io::input_guard).
     #[facet(default)]
     pub allow_builtin_mic: bool,
 }

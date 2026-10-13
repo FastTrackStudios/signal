@@ -7,7 +7,7 @@
 //! layout tables readable and stops a control on one panel from resolving
 //! against another model's parameter.
 
-use audiocore_core::prelude::Param;
+use audio::prelude::Param;
 use nice_plug::prelude::ParamPtr;
 
 use crate::ui::params::FtsEqParams;

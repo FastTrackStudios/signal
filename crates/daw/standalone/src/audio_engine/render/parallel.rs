@@ -176,7 +176,7 @@ impl Drop for LanePool {
 
 fn worker(shared: &Shared) {
     #[cfg(feature = "audio")]
-    let mut seat = daw_audio_io::rt_workers::WorkerSeat::default();
+    let mut seat = audio::io::rt_workers::WorkerSeat::default();
     let mut seen = unpack(shared.state.load(Ordering::Acquire)).0;
     let mut idle_since = Instant::now();
     loop {

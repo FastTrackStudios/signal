@@ -13,6 +13,6 @@ pub mod param_queue;
 pub mod plugin;
 pub mod scene_timer;
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 
 nice_export_clap!(plugin::FtsSignalController);

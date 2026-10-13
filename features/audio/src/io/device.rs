@@ -42,7 +42,7 @@ pub enum InputAccess {
 pub fn negotiate_sample_rate(requested: Option<u32>) -> Option<u32> {
     #[cfg(target_os = "ios")]
     {
-        Some(crate::ios_session::negotiate_rate(requested)).filter(|r| *r > 0)
+        Some(crate::io::ios_session::negotiate_rate(requested)).filter(|r| *r > 0)
     }
     #[cfg(not(target_os = "ios"))]
     {
@@ -58,7 +58,7 @@ pub fn negotiate_sample_rate(requested: Option<u32>) -> Option<u32> {
 pub fn session_report() -> Option<String> {
     #[cfg(target_os = "ios")]
     {
-        Some(crate::ios_session::report())
+        Some(crate::io::ios_session::report())
     }
     #[cfg(not(target_os = "ios"))]
     {
@@ -72,7 +72,7 @@ pub fn session_report() -> Option<String> {
 pub fn input_access() -> InputAccess {
     #[cfg(target_os = "ios")]
     {
-        crate::ios_session::input_access()
+        crate::io::ios_session::input_access()
     }
     #[cfg(not(target_os = "ios"))]
     {
@@ -87,8 +87,8 @@ pub fn input_devices(host: &cpal::Host) -> Vec<DeviceInfo> {
     #[cfg(target_os = "ios")]
     {
         let _ = host;
-        let rate = crate::ios_session::sample_rate();
-        crate::ios_session::inputs()
+        let rate = crate::io::ios_session::sample_rate();
+        crate::io::ios_session::inputs()
             .into_iter()
             .map(|(name, channels)| DeviceInfo {
                 name,
@@ -125,8 +125,8 @@ pub fn output_devices(host: &cpal::Host) -> Vec<DeviceInfo> {
     #[cfg(target_os = "ios")]
     {
         let _ = host;
-        let rate = crate::ios_session::sample_rate();
-        crate::ios_session::outputs()
+        let rate = crate::io::ios_session::sample_rate();
+        crate::io::ios_session::outputs()
             .into_iter()
             .map(|(name, channels)| DeviceInfo {
                 name,
@@ -223,7 +223,7 @@ pub fn pick_device(
     // through it.
     #[cfg(target_os = "ios")]
     if let Some(n) = name.filter(|s| !s.is_empty()) {
-        if input && !crate::ios_session::prefer_input(n) {
+        if input && !crate::io::ios_session::prefer_input(n) {
             tracing::warn!(
                 device = n,
                 "daw-audio-io: no such input port; using the route's"
@@ -279,7 +279,7 @@ pub fn pick_device(
 }
 
 /// What a device can be asked for: the sample rates and buffer sizes it
-/// accepts. Used to validate a requested [`AudioIoPrefs`](crate::AudioIoPrefs)
+/// accepts. Used to validate a requested [`AudioIoPrefs`](crate::io::AudioIoPrefs)
 /// rate/buffer before opening, and to populate a settings picker.
 #[derive(Clone, Debug, Default, PartialEq, Facet)]
 pub struct DeviceCaps {

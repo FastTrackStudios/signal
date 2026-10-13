@@ -12,7 +12,7 @@
 //! skip those writes rather than failing: a profile mapping that mentions an
 //! unexposed param should still drive the params that do exist.
 
-use audiocore_core::prelude::Param;
+use audio::prelude::Param;
 use nice_plug::prelude::ParamPtr;
 
 use crate::ui::params::CompStageParams;

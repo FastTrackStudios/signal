@@ -55,7 +55,7 @@ use midicore::MidiMonitor;
 use daw::service::{FxChainContext, FxChains, ProjectContext, TrackRef, Tracks};
 use daw::standalone::Standalone;
 use daw::standalone::metering::{Meters, linear_to_db};
-use daw_audio_io::AudioIoPrefs;
+use audio::io::AudioIoPrefs;
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };

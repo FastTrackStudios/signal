@@ -4,7 +4,7 @@
 //! nice_plug_dioxus Blitz renderer. Import everything via the prelude:
 //!
 //! ```ignore
-//! use audiocore_core::ui::prelude::*;
+//! use crate::ui::prelude::*;
 //! ```
 //!
 //! The shared component library lives in the `audiocore-gui` crate.

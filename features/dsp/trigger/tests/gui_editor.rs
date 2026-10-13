@@ -39,7 +39,7 @@ use trigger::ui::params::{TriggerParams, TriggerUiState};
 use trigger::ui::trigger_waveform::GRAPH_H;
 use trigger::ui::trigger_waveform_svg::db_to_y;
 
-use audiocore_core::prelude::Param;
+use audio::prelude::Param;
 use nice_plug_dioxus::{ParamContext, SharedState};
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -10,9 +10,9 @@
 //!
 //! | OS | impl | mechanism |
 //! |----|------|-----------|
-//! | Linux | [`crate::duplex_pw::PipewireBackend`] | `pw_filter` (capture+playback ports, one process cb) |
-//! | macOS | [`crate::duplex_coreaudio::CoreAudioBackend`] | AUHAL unit, input pulled in the output render callback |
-//! | iOS | [`crate::duplex_ios::RemoteIoBackend`] | one RemoteIO unit, input pulled in the output render callback |
+//! | Linux | [`crate::io::duplex_pw::PipewireBackend`] | `pw_filter` (capture+playback ports, one process cb) |
+//! | macOS | [`crate::io::duplex_coreaudio::CoreAudioBackend`] | AUHAL unit, input pulled in the output render callback |
+//! | iOS | [`crate::io::duplex_ios::RemoteIoBackend`] | one RemoteIO unit, input pulled in the output render callback |
 //! | Windows | _todo_ | WASAPI duplex / ASIO |
 //!
 //! The rig's signal processing (tap input channel → FX chain → stereo out) is the
@@ -49,7 +49,7 @@ pub struct DuplexConfig {
     pub input_device: Option<String>,
     pub output_device: Option<String>,
     /// Let a built-in microphone be the capture device — see
-    /// [`input_guard`](crate::input_guard). Off by default.
+    /// [`input_guard`](crate::io::input_guard). Off by default.
     pub allow_builtin_mic: bool,
 }
 
@@ -296,11 +296,11 @@ pub trait DuplexBackend: Send + Sized {
 // The platform backend. Linux = native PipeWire `pw_filter`; other platforms
 // land here as they're implemented.
 #[cfg(target_os = "macos")]
-pub use crate::duplex_coreaudio::CoreAudioBackend as Backend;
+pub use crate::io::duplex_coreaudio::CoreAudioBackend as Backend;
 #[cfg(target_os = "ios")]
-pub use crate::duplex_ios::RemoteIoBackend as Backend;
+pub use crate::io::duplex_ios::RemoteIoBackend as Backend;
 #[cfg(target_os = "linux")]
-pub use crate::duplex_pw::PipewireBackend as Backend;
+pub use crate::io::duplex_pw::PipewireBackend as Backend;
 
 #[cfg(test)]
 mod drop_ring_tests {

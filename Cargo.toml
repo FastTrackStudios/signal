@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/audio",
     "features/dsp/builtin",
     "features/dsp/core",
     "features/rigs/keys",
@@ -83,7 +84,6 @@ members = [
     "features/adapters/reaper/session-extension/xtask",
     "features/song",
     # ── daw ──
-    "features/audio/audiocore-core",
     "features/ui/audiocore-gui",
     "features/audio/sample",
     "features/ui/themes",
@@ -106,8 +106,6 @@ members = [
     "features/ui/audio-controls",
     "crates/daw/allocator",
     "crates/daw/audio-graph",
-    "features/audio/audio-io",
-    "features/audio/audio-proto",
     "features/formats/dawfile-aaf",
     "features/formats/dawfile-ableton",
     "features/formats/dawfile-dawproject",
@@ -289,6 +287,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+audio = { path = "features/audio" }
 builtin = { path = "features/dsp/builtin" }
 dsp-core = { path = "features/dsp/core" }
 keys = { path = "features/rigs/keys" }
@@ -341,7 +340,6 @@ utils = { path = "crates/daw/utils" }
 # either depending on the other.
 adaptive-grid = { path = "features/ui/adaptive-grid" }
 neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-modeler-rs", tag = "v0.1.1" }
-audiocore-core = { path = "features/audio/audiocore-core" }
 audiocore-gui = { path = "features/ui/audiocore-gui" }
 # Defaults OFF at the root so lean consumers (probe-only scanners, the
 # iOS-clean session-guide) don't drag the pack engine in; each consumer
@@ -387,10 +385,8 @@ daw-module = { path = "crates/daw/module" }
 fts-devtools = { path = "xtask/devtools" }
 daw-test-macro = { path = "crates/daw/macros" }
 daw-audio-graph = { path = "crates/daw/audio-graph" }
-daw-audio-io = { path = "features/audio/audio-io" }
 # RT-aware allocator — offloads RT deallocation to background thread
 daw-allocator = { path = "crates/daw/allocator" }
-fts-audio-proto = { path = "features/audio/audio-proto" }
 audio-controls = { path = "features/ui/audio-controls" }
 daw-synchronization = { path = "features/sync/daw-synchronization" }
 daw-link = { path = "features/sync/daw-link" }

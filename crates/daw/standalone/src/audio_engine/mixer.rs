@@ -34,12 +34,12 @@ use super::routing;
 const AUX_MAX_FRAMES: usize = 16_384;
 
 // Engine-level device selection. On native this is the shared
-// `daw_audio_io::AudioIoPrefs`; on wasm (where `daw_audio_io` is a
+// `audio::io::AudioIoPrefs`; on wasm (where `daw_audio_io` is a
 // native-only dep) a minimal local shim with the same all-default
 // "system default output" meaning keeps the public constructor
 // signatures target-agnostic.
 #[cfg(not(target_arch = "wasm32"))]
-pub use daw_audio_io::AudioIoPrefs;
+pub use audio::io::AudioIoPrefs;
 
 /// wasm fallback `AudioIoPrefs` — `daw_audio_io` is native-only, so on
 /// the web only the all-default value is meaningful (system default
@@ -55,7 +55,7 @@ pub struct AudioIoPrefs {
 }
 
 /// Resolved output device + stream config, opened from [`AudioIoPrefs`].
-/// Two target impls: native goes through `daw_audio_io::open_output`
+/// Two target impls: native goes through `audio::io::open_output`
 /// (JACK-aware device selection); wasm uses the cpal default host.
 struct ResolvedOutput {
     device: cpal::Device,
@@ -68,8 +68,8 @@ struct ResolvedOutput {
 impl ResolvedOutput {
     #[cfg(not(target_arch = "wasm32"))]
     fn open(prefs: &AudioIoPrefs) -> Result<Self, String> {
-        let host = daw_audio_io::audio_host();
-        let out = daw_audio_io::open_output(&host, prefs)?;
+        let host = audio::io::audio_host();
+        let out = audio::io::open_output(&host, prefs)?;
         Ok(Self {
             sample_rate: out.sample_rate,
             channels: out.channels,
@@ -272,7 +272,7 @@ pub struct AudioEngine {
     /// device actually runs at, render time, over-budget blocks. Same
     /// type the duplex engine reports. Project mode only.
     #[cfg(not(target_arch = "wasm32"))]
-    stats: Option<Arc<daw_audio_io::duplex::EngineStats>>,
+    stats: Option<Arc<audio::io::duplex::EngineStats>>,
 }
 
 impl AudioEngine {
@@ -359,7 +359,7 @@ impl AudioEngine {
 
     /// As [`with_shared_metered`](Self::with_shared_metered), but the output
     /// device / sample rate / buffer come from `prefs` (resolved via
-    /// `daw_audio_io::open_output`). `AudioIoPrefs::default()` reproduces the
+    /// `audio::io::open_output`). `AudioIoPrefs::default()` reproduces the
     /// classic default-output-device, native-rate, default-buffer behavior.
     pub fn with_shared_prefs(
         shared: Arc<TransportShared>,
@@ -523,7 +523,7 @@ impl AudioEngine {
             let tracks_want_input = max_armed.is_some() && cfg!(not(target_os = "ios"));
             if prefs.want_input || tracks_want_input {
                 let max_channel = max_armed.unwrap_or(0);
-                let host = daw_audio_io::audio_host();
+                let host = audio::io::audio_host();
                 match Self::open_live_input(&host, prefs, sample_rate, max_channel, &renderer) {
                     Ok(s) => Some(s),
                     Err(e) => {
@@ -549,7 +549,7 @@ impl AudioEngine {
             .clone();
         let stream_error = Arc::new(AtomicBool::new(false));
         #[cfg(not(target_arch = "wasm32"))]
-        let stats = Arc::new(daw_audio_io::duplex::EngineStats::default());
+        let stats = Arc::new(audio::io::duplex::EngineStats::default());
         let stream = match out.sample_format {
             SampleFormat::F32 => Self::build_project_stream::<f32>(
                 &out.device,
@@ -660,7 +660,7 @@ impl AudioEngine {
     #[cfg(not(target_arch = "wasm32"))]
     fn open_live_input(
         host: &cpal::Host,
-        prefs: &daw_audio_io::AudioIoPrefs,
+        prefs: &audio::io::AudioIoPrefs,
         sample_rate: u32,
         max_channel: usize,
         renderer: &ProjectRenderer,
@@ -668,7 +668,7 @@ impl AudioEngine {
         use cpal::traits::{DeviceTrait, StreamTrait};
         use std::sync::atomic::{AtomicU64, Ordering};
 
-        let inp = daw_audio_io::open_input(host, prefs, sample_rate, max_channel)?;
+        let inp = audio::io::open_input(host, prefs, sample_rate, max_channel)?;
         let channels = inp.channels;
         // Ring sized for ~100ms of interleaved input (min 8192 frames worth),
         // matching the duplex monitor's headroom.
@@ -686,7 +686,7 @@ impl AudioEngine {
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
                     if !realtime {
                         realtime = true;
-                        let _ = daw_audio_io::realtime::promote_current_thread();
+                        let _ = audio::io::realtime::promote_current_thread();
                     }
                     // Push every interleaved sample (all channels); the
                     // renderer de-interleaves per track in stage 0.
@@ -724,7 +724,7 @@ impl AudioEngine {
         aux: AuxSlot,
         soft_clock_enabled: Arc<AtomicBool>,
         stream_error: Arc<AtomicBool>,
-        #[cfg(not(target_arch = "wasm32"))] stats: Arc<daw_audio_io::duplex::EngineStats>,
+        #[cfg(not(target_arch = "wasm32"))] stats: Arc<audio::io::duplex::EngineStats>,
     ) -> Result<Stream, String> {
         let channels = config.channels as usize;
         // Publish the device's real channel count so the metronome UI can
@@ -769,7 +769,7 @@ impl AudioEngine {
         // the callback; stamps every buffer's sync snapshot.
         let mut stamps = daw_transport_sync::BufferClock::default();
         // The callback's thread goes realtime on its first block (see
-        // `daw_audio_io::realtime`).
+        // `audio::io::realtime`).
         let mut realtime = false;
         let stream = device
             .build_output_stream(
@@ -777,7 +777,7 @@ impl AudioEngine {
                 move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
                     if !realtime {
                         realtime = true;
-                        let _ = daw_audio_io::realtime::promote_current_thread();
+                        let _ = audio::io::realtime::promote_current_thread();
                     }
                     let entry_micros = crate::transport_sync::now_micros();
                     let num_samples = data.len();
@@ -930,7 +930,7 @@ impl AudioEngine {
     /// size the device actually runs at, render time, over-budget blocks.
     /// `None` for the legacy track-list engines.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn stats(&self) -> Option<Arc<daw_audio_io::duplex::EngineStats>> {
+    pub fn stats(&self) -> Option<Arc<audio::io::duplex::EngineStats>> {
         self.stats.clone()
     }
 
@@ -967,7 +967,7 @@ impl AudioEngine {
                 move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
                     if !realtime {
                         realtime = true;
-                        let _ = daw_audio_io::realtime::promote_current_thread();
+                        let _ = audio::io::realtime::promote_current_thread();
                     }
                     let num_samples = data.len();
                     let mut mix = mix_buffer.lock().unwrap();

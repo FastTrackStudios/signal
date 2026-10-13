@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use daw_audio_io::duplex::{Backend, DuplexBackend, DuplexConfig, ProcessBlock};
+use audio::io::duplex::{Backend, DuplexBackend, DuplexConfig, ProcessBlock};
 
 fn main() -> Result<(), String> {
     tracing_subscriber::fmt()

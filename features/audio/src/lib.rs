@@ -6,9 +6,15 @@
 //! # Usage
 //!
 //! ```ignore
-//! use audiocore_core::prelude::*;  // nice_plug + nice_plug_dioxus re-exports
-//! use audiocore_core::ui::prelude::*;  // FTS UI components (Toggle, Section, etc.)
+//! use crate::prelude::*;  // nice_plug + nice_plug_dioxus re-exports
+//! use crate::ui::prelude::*;  // FTS UI components (Toggle, Section, etc.)
 //! ```
+
+#![cfg_attr(not(any(feature = "io")), no_std)]
+
+#[cfg(feature = "io")]
+pub mod io;
+pub mod proto;
 
 // Re-export core dependencies
 pub use nice_plug;

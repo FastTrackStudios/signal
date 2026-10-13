@@ -15,7 +15,7 @@
 //! GUI is deliberately absent for now (headless, host-generic params), matching
 //! `signal-sampler-clap`; the nice-plug-dioxus editor is a follow-up.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use reverb::ui::params::{ReverbParams, ReverbUiState};
 use std::sync::Arc;
 
@@ -157,7 +157,7 @@ impl Plugin for FtsReverb {
         ..AudioIOLayout::const_default()
     }];
 
-    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
+    type Editor = audio::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 

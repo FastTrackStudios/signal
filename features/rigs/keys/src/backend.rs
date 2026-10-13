@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use daw_audio_io::AudioIoPrefs;
+use audio::io::AudioIoPrefs;
 use midicore::MidiEvent;
 use crate::proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
 use crate::proto::{
@@ -6187,7 +6187,7 @@ pub const KEYS_RIG_NAME: &str = "Keys Rig";
 /// slowest lane), so a spike says what it was. Quiet while it keeps up.
 #[cfg(not(target_arch = "wasm32"))]
 fn spawn_engine_watch(
-    stats: std::sync::Arc<daw_audio_io::duplex::EngineStats>,
+    stats: std::sync::Arc<audio::io::duplex::EngineStats>,
     daw: daw::standalone::Standalone,
     project: String,
 ) {

@@ -11,7 +11,7 @@
 //! GUI is deliberately absent for now (headless, host-generic params),
 //! matching level-plugin; the nice-plug-dioxus editor is a follow-up.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use std::sync::Arc;
 
 use delay::ui::params::{DelayParams, DelayUiState};
@@ -126,7 +126,7 @@ impl Plugin for FtsDelay {
     }];
 
     // No editor yet — the host shows its generic parameter UI.
-    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
+    type Editor = audio::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 

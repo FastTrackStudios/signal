@@ -27,7 +27,7 @@ use std::time::Instant;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{class, msg_send};
 
-use crate::duplex::{DuplexBackend, DuplexConfig, EngineStats, ProcessBlock, ProcessFn};
+use crate::io::duplex::{DuplexBackend, DuplexConfig, EngineStats, ProcessBlock, ProcessFn};
 
 #[allow(non_upper_case_globals, non_snake_case, dead_code)]
 mod ffi {
@@ -579,9 +579,9 @@ unsafe impl Send for RemoteIoBackend {}
 
 impl DuplexBackend for RemoteIoBackend {
     fn start(cfg: DuplexConfig, process: ProcessFn) -> Result<Self, String> {
-        let _ = crate::duplex::clock_ns();
+        let _ = crate::io::duplex::clock_ns();
         if let Some(name) = cfg.input_device.as_deref().filter(|n| !n.is_empty()) {
-            if !crate::ios_session::prefer_input(name) {
+            if !crate::io::ios_session::prefer_input(name) {
                 tracing::warn!(
                     audio.input_device = name,
                     "ios duplex: no session input by that name — the route's own"

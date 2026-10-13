@@ -21,7 +21,7 @@ nice-plug.workspace = true
 
 # The Dioxus editor stack (nice-plug-dioxus + Blitz), re-exported through
 # audiocore-core the way every other FTS plugin editor takes it.
-audiocore-core = { workspace = true }
+audio = { workspace = true }
 # The tone browser — the same component the app and the browser remote
 # mount — and the engine half it drives.
 signal-tone3000-ui.workspace = true

@@ -71,7 +71,7 @@ pub mod test_tone;
 pub use aux_render::{AuxClock, AuxRenderer};
 /// Realtime metrics both engines report (block size, render time, xruns).
 #[cfg(all(feature = "audio", not(target_arch = "wasm32")))]
-pub use daw_audio_io::duplex::EngineStats;
+pub use audio::io::duplex::EngineStats;
 #[cfg(any(feature = "decode", feature = "audio"))]
 pub use decoder::{DecodedAudio, decode_audio, decode_audio_with_extension};
 #[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "ios")))]

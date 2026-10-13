@@ -4,7 +4,7 @@
 //! render against the param tree without a circular dep — same split as
 //! `comp-ui::params` and `eq-ui::params`.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use fts_plug_ui::prelude::{PeakMeter, WaveRing};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;

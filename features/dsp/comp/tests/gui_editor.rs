@@ -32,7 +32,7 @@ use dioxus_test::{
 
 use comp::ui::comp_graph_svg::db_to_y;
 
-use audiocore_core::prelude::Param;
+use audio::prelude::Param;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Fixture

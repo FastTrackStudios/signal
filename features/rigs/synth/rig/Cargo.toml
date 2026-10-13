@@ -27,7 +27,7 @@ keys = { workspace = true }
 signal-sampler.workspace = true
 # Filesystem-direct pack discovery + tagging for the BROWSE view (scan_packs).
 signal-browser = { workspace = true, features = ["native"] }
-daw-audio-io = { workspace = true, features = ["monitor"] }
+audio = { workspace = true, features = ["io", "monitor"] }
 # Shared cross-rig utilities — here for the instrumented MIDI attach.
 signal-rig-host.workspace = true
 midicore = { workspace = true, features = ["vox", "midir"] }

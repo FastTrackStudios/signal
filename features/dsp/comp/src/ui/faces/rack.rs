@@ -20,7 +20,7 @@
 
 use std::sync::atomic::Ordering;
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 
 use crate::ui::faces::use_face_context;
 use crate::ui::hardware::knob::HardwareKnob;

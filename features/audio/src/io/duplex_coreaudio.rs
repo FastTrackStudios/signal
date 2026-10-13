@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
-use crate::duplex::{DuplexBackend, DuplexConfig, EngineStats, ProcessBlock, ProcessFn};
+use crate::io::duplex::{DuplexBackend, DuplexConfig, EngineStats, ProcessBlock, ProcessFn};
 
 // ── CoreAudio / CoreFoundation FFI ────────────────────────────────────────
 
@@ -433,7 +433,7 @@ fn is_builtin(device: AudioObjectID) -> bool {
 
 /// Whether the CoreAudio input called exactly `name` is built in, or `None`
 /// when CoreAudio has no input by that name (the caller falls back to
-/// matching the name). See [`crate::input_guard`].
+/// matching the name). See [`crate::io::input_guard`].
 pub(crate) fn input_is_builtin(name: &str) -> Option<bool> {
     get_ids(ffi::SYSTEM_OBJECT, ffi::HW_DEVICES, ffi::SCOPE_GLOBAL)
         .into_iter()
@@ -782,7 +782,7 @@ unsafe extern "C" fn on_property(
                     let frames = stats.block_frames.load(Ordering::Relaxed);
                     stats
                         .drops
-                        .push(crate::duplex::DropKind::DeviceOverload, 0, 0, frames);
+                        .push(crate::io::duplex::DropKind::DeviceOverload, 0, 0, frames);
                 }
                 ffi::DEVICE_IS_ALIVE => {
                     stats.stream_state.store(STATE_ERROR, Ordering::Relaxed);
@@ -830,7 +830,7 @@ impl DuplexBackend for CoreAudioBackend {
     fn start(cfg: DuplexConfig, process: ProcessFn) -> Result<Self, String> {
         // The drop log's clock starts here, not on the realtime thread's
         // first drop.
-        let _ = crate::duplex::clock_ns();
+        let _ = crate::io::duplex::clock_ns();
         let output = if cfg.outputs > 0 {
             Some(find_device(
                 cfg.output_device.as_deref(),
@@ -845,7 +845,7 @@ impl DuplexBackend for CoreAudioBackend {
                 let name = get_string(id, ffi::OBJECT_NAME).unwrap_or_default();
                 // Transport type is exact here; the guard's name matching is
                 // only the fallback for names CoreAudio does not know.
-                crate::input_guard::check_input_known(&name, true, cfg.allow_builtin_mic)?;
+                crate::io::input_guard::check_input_known(&name, true, cfg.allow_builtin_mic)?;
             }
             Some(id)
         } else {
@@ -1015,7 +1015,7 @@ impl DuplexBackend for CoreAudioBackend {
         // The property hands over a retained `os_workgroup_t`.
         let workgroup = get::<usize>(device, ffi::DEVICE_IO_THREAD_WORKGROUP, ffi::SCOPE_GLOBAL)
             .unwrap_or(0) as *mut c_void;
-        crate::rt_workers::publish(
+        crate::io::rt_workers::publish(
             workgroup,
             u64::from(buffer) * 1_000_000_000 / u64::from(rate.max(1)),
         );
@@ -1099,7 +1099,7 @@ mod tests {
     #[test]
     fn builtin_inputs_are_refused_unless_allowed() {
         use super::{channel_count, ffi, get_ids, get_string, is_builtin};
-        use crate::input_guard::check_input;
+        use crate::io::input_guard::check_input;
         for d in get_ids(ffi::SYSTEM_OBJECT, ffi::HW_DEVICES, ffi::SCOPE_GLOBAL) {
             if channel_count(d, ffi::SCOPE_INPUT) == 0 {
                 continue;

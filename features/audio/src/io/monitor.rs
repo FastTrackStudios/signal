@@ -18,10 +18,10 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use cpal::traits::{DeviceTrait, StreamTrait};
 
-use crate::device::device_name;
-use crate::host::audio_host;
-use crate::open::{open_input, open_output};
-use crate::prefs::{AudioIoPrefs, TrackIo};
+use crate::io::device::device_name;
+use crate::io::host::audio_host;
+use crate::io::open::{open_input, open_output};
+use crate::io::prefs::{AudioIoPrefs, TrackIo};
 
 /// Max block the scratch buffers are sized for. cpal callback blocks are
 /// normally 64–1024 frames; 8192 is safe against larger backend buffers.

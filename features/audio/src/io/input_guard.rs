@@ -7,11 +7,11 @@
 //! instant it opens. That is not a setting anyone wants by accident, so every
 //! path that opens an input asks [`check_input`] first:
 //!
-//! - the cpal path ([`open_input`](crate::open_input)),
+//! - the cpal path ([`open_input`](crate::io::open_input)),
 //! - the CoreAudio duplex backend (by the device's own transport type),
 //! - the PipeWire duplex linker (by the capture node it would link).
 //!
-//! [`AudioIoPrefs::allow_builtin_mic`](crate::AudioIoPrefs::allow_builtin_mic)
+//! [`AudioIoPrefs::allow_builtin_mic`](crate::io::AudioIoPrefs::allow_builtin_mic)
 //! turns the guard off for the rare case that wants it (headphones on, testing
 //! with the laptop mic).
 //!
@@ -50,7 +50,7 @@ pub fn name_says_builtin_mic(name: &str) -> bool {
 #[must_use]
 pub fn is_builtin_microphone(name: &str) -> bool {
     #[cfg(target_os = "macos")]
-    if let Some(builtin) = crate::duplex_coreaudio::input_is_builtin(name) {
+    if let Some(builtin) = crate::io::duplex_coreaudio::input_is_builtin(name) {
         return builtin;
     }
     name_says_builtin_mic(name)

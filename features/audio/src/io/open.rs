@@ -7,9 +7,9 @@
 use cpal::traits::DeviceTrait;
 use cpal::{BufferSize, SampleFormat, StreamConfig};
 
-use crate::device::pick_device;
-use crate::host::{host_is_graph, host_is_jack};
-use crate::prefs::AudioIoPrefs;
+use crate::io::device::pick_device;
+use crate::io::host::{host_is_graph, host_is_jack};
+use crate::io::prefs::AudioIoPrefs;
 
 /// An opened output device + the config to build its stream with.
 pub struct OpenedOutput {
@@ -82,8 +82,8 @@ pub fn open_input(
     // Under JACK/PipeWire the cpal device is the graph, not a microphone; the
     // duplex linker guards the capture node it links instead.
     if !host_is_graph(host) {
-        crate::input_guard::check_input(
-            &crate::device::device_name(&device),
+        crate::io::input_guard::check_input(
+            &crate::io::device::device_name(&device),
             prefs.allow_builtin_mic,
         )?;
     }

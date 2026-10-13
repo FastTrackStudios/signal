@@ -12,7 +12,7 @@
 //! Everything a chip writes is a host parameter (`fx.stack.params`), through
 //! the same gesture path as any knob.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 
 use crate::ui::focus::FocusedStage;
 use crate::ui::params::{CompParams, CompUiState, MAX_STAGES};

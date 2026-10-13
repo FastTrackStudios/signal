@@ -29,7 +29,7 @@ use dioxus_test::{DocumentTester, by_testid, render};
 use eq::ui::control_view::App;
 use eq::ui::params::{EqUiState, FtsEqParams};
 
-use audiocore_core::prelude::Param;
+use audio::prelude::Param;
 use nice_plug::context::gui::{GuiContext, GuiContextInner};
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{ParamContext, SharedState};

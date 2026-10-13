@@ -909,4 +909,4 @@ impl PlayerPatch {
 }
 
 /// The drop log's event types and time base (see [`rig::GuitarRig::collect_drops`]).
-pub use daw_audio_io::duplex::{DropEvent, DropKind, clock_ns};
+pub use audio::io::duplex::{DropEvent, DropKind, clock_ns};

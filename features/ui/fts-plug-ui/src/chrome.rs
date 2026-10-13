@@ -22,7 +22,7 @@
 //!   Comp editor's Basic/Advanced split) rather than letting them wrap.
 
 use architect_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use fts_audio_ui::prelude::*;
 
 use crate::skin::Skin;

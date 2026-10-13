@@ -32,7 +32,7 @@
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
-use daw_audio_io::AudioIoPrefs;
+use audio::io::AudioIoPrefs;
 use daw_proto::ProjectContext;
 use daw_proto::transport::service::Transport;
 use daw_standalone::media_bay::ProjectRelativeResolver;
@@ -296,9 +296,9 @@ fn parse_u32(s: &str) -> Result<u32, String> {
 }
 
 fn list_devices() {
-    let host = daw_audio_io::audio_host();
-    for dev in daw_audio_io::output_devices(&host) {
-        match daw_audio_io::device_caps(&host, Some(&dev.name), false) {
+    let host = audio::io::audio_host();
+    for dev in audio::io::output_devices(&host) {
+        match audio::io::device_caps(&host, Some(&dev.name), false) {
             Ok(caps) => println!(
                 "  {}  ({} ch)  rates {:?}  buffer {}  [now {} Hz]",
                 caps.name,

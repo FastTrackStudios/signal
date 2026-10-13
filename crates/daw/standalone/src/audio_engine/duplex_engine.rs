@@ -1,7 +1,7 @@
 //! Native **duplex** engine — drives the project renderer from one
 //! realtime callback (input + output, same cycle, no ring bridge between
 //! separate streams). The backend is PipeWire `pw_filter` on Linux and a
-//! CoreAudio HAL IOProc on macOS (`daw_audio_io::duplex::Backend`). This is the low-latency path real DAWs use; it replaces
+//! CoreAudio HAL IOProc on macOS (`audio::io::duplex::Backend`). This is the low-latency path real DAWs use; it replaces
 //! the cpal output-stream + separate input-stream + lock-free ring of
 //! [`AudioEngine`](super::AudioEngine) for live-input work.
 //!
@@ -18,10 +18,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_os = "linux")]
 use std::time::Duration;
 
-use daw_audio_io::AudioIoPrefs;
-use daw_audio_io::duplex::{Backend, DuplexBackend, DuplexConfig, EngineStats, ProcessBlock};
+use audio::io::AudioIoPrefs;
+use audio::io::duplex::{Backend, DuplexBackend, DuplexConfig, EngineStats, ProcessBlock};
 #[cfg(target_os = "linux")]
-use daw_audio_io::pw;
+use audio::io::pw;
 
 use crate::Standalone;
 use crate::audio_engine::render::ProjectRenderer;
@@ -156,7 +156,7 @@ impl DuplexAudioEngine {
         // will actually run at — the prefs' asked for first — so the
         // renderer is built for it: an interface that only runs at 44.1 kHz
         // otherwise met a renderer built for 48 and the engine refused it.
-        let sample_rate = daw_audio_io::negotiate_sample_rate(prefs.sample_rate_opt())
+        let sample_rate = audio::io::negotiate_sample_rate(prefs.sample_rate_opt())
             .or_else(|| prefs.sample_rate_opt())
             .unwrap_or_else(|| native_rate(prefs));
         let buffer = prefs.buffer_size_opt().unwrap_or(128);
@@ -384,9 +384,9 @@ impl DuplexAudioEngine {
 fn native_rate(prefs: &AudioIoPrefs) -> u32 {
     #[cfg(target_os = "macos")]
     {
-        let host = daw_audio_io::audio_host();
+        let host = audio::io::audio_host();
         let name = prefs.output_name().or(prefs.input_name());
-        if let Ok(caps) = daw_audio_io::device_caps(&host, name, false) {
+        if let Ok(caps) = audio::io::device_caps(&host, name, false) {
             return caps.default_sample_rate;
         }
     }
@@ -431,7 +431,7 @@ fn link_pass(
     node_name: &str,
     allow_builtin_mic: bool,
 ) -> LinkPass {
-    use daw_audio_io::pw::LinkStatus;
+    use audio::io::pw::LinkStatus;
     fn run(pass: &mut LinkPass, src: &str, dst: &str) {
         pass.total += 1;
         match pw::ensure_link(src, dst) {
@@ -454,7 +454,7 @@ fn link_pass(
     }
     // Never link a built-in mic into a live rig: through the speakers it
     // feeds back. The node plays output-only instead (see input_guard).
-    .filter(|dev| daw_audio_io::input_guard::check_input(dev, allow_builtin_mic).is_ok());
+    .filter(|dev| audio::io::input_guard::check_input(dev, allow_builtin_mic).is_ok());
     let out_dev = match output {
         Some(n) => pw::device_node_name(n, false),
         None => pw::default_device_node_name(false),

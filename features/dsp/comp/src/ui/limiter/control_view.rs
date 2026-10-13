@@ -4,7 +4,7 @@
 //! (Gain / Release / Ceiling) beside the I/O + GR meters. Everything but the
 //! trace comes from [`fts_plug_ui`]'s shared chrome.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use fts_plug_ui::prelude::*;
 use nice_plug::editor::ResizeHint;
 use nice_plug::editor::dpi::LogicalSize;

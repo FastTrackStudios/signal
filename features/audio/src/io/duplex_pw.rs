@@ -18,7 +18,7 @@ use std::time::Instant;
 use libspa::sys as spa;
 use pipewire::sys as pw;
 
-use crate::duplex::{DuplexBackend, DuplexConfig, EngineStats, ProcessBlock, ProcessFn};
+use crate::io::duplex::{DuplexBackend, DuplexConfig, EngineStats, ProcessBlock, ProcessFn};
 
 /// Realtime-thread state behind the filter's `process` callback.
 struct DuplexState {
@@ -60,7 +60,7 @@ unsafe extern "C" fn on_process(data: *mut c_void, position: *mut spa::spa_io_po
             let frames = st.stats.block_frames.load(Ordering::Relaxed);
             st.stats
                 .drops
-                .push(crate::duplex::DropKind::DeviceOverload, 0, 0, frames);
+                .push(crate::io::duplex::DropKind::DeviceOverload, 0, 0, frames);
         }
         st.last_xrun = xrun;
         if n == 0 {

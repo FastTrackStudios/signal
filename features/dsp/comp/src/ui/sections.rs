@@ -9,7 +9,7 @@
 //! [`crate::ui::profile_view::ProfileSkin`] so a profile change re-tints the whole
 //! surface without the layout code knowing which profile is active.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use fts_audio_ui::prelude::*;
 
 use crate::ui::profile_view::ProfileSkin;

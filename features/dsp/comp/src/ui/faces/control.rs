@@ -15,7 +15,7 @@
 //! Advanced still *swaps* the knobs rather than adding a row, so the working
 //! area stays the same size whichever page you are on.
 
-use audiocore_core::prelude::*;
+use audio::prelude::*;
 use fts_audio_ui::prelude::*;
 
 use crate::ui::param_adapter::param_handle;
