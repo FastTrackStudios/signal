@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/patchbay",
     "features/midi",
     "features/expression-editor",
     "features/session",
@@ -187,16 +188,7 @@ members = [
     "features/rigs/wurli/openwurli-dsp",
     "apps/plugins/sampler",
     # ── patchbay ──
-    "features/patchbay/patchbay",
-    "features/patchbay/proto",
-    "features/patchbay/ui",
-    "features/patchbay/device",
     "features/patchbay/driver",
-    "features/patchbay/adapters/antelope",
-    "features/patchbay/adapters/yamaha",
-    "features/patchbay/adapters/dante",
-    "features/patchbay/host",
-    "features/patchbay/host-coreaudio",
     "apps/patchbay",
     "apps/patchbay/web",
     # ── frame ──
@@ -248,6 +240,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+patchbay = { path = "features/patchbay" }
 midi = { path = "features/midi" }
 plugin-core = { path = "features/ui/plugin-core" }
 expression-editor = { path = "features/expression-editor" }
@@ -1022,15 +1015,6 @@ signal-analyzer = { path = "features/dsp/analyzer/signal-analyzer" }
 signal-separator = { path = "features/dsp/separator/signal-separator" }
 
 # ── from patchbay's workspace (joined into studio) ──
-patchbay = { path = "features/patchbay/patchbay" }
-patchbay-proto = { path = "features/patchbay/proto" }
-patchbay-ui = { path = "features/patchbay/ui" }
-patchbay-device = { path = "features/patchbay/device" }
-patchbay-antelope = { path = "features/patchbay/adapters/antelope" }
-patchbay-yamaha = { path = "features/patchbay/adapters/yamaha" }
-patchbay-dante = { path = "features/patchbay/adapters/dante" }
-patchbay-host = { path = "features/patchbay/host" }
-patchbay-host-coreaudio = { path = "features/patchbay/host-coreaudio" }
 socket2 = { version = "0.6", features = ["all"] }
 
 # ── joined into studio ──
