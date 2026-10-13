@@ -152,14 +152,14 @@ members = [
     "features/rigs/core/rig-host",
     "features/rigs/core/rigs-proto",
     "features/rigs/core/signal",
-    "features/rigs/core/space",
+    "features/rigs/core/space/engine",
     "features/rigs/core/space/proto",
     "features/rigs/core/storage",
-    "features/rigs/core/account",
-    "features/rigs/core/account-proto",
-    "features/rigs/core/tone3000",
-    "features/rigs/core/tone3000-proto",
-    "features/rigs/core/tone3000-ui",
+    "features/rigs/core/tone3000/account",
+    "features/rigs/core/tone3000/account-proto",
+    "features/rigs/core/tone3000/client",
+    "features/rigs/core/tone3000/proto",
+    "features/rigs/core/tone3000/ui",
     "features/rigs/core/widgets",
     "features/dsp/analyzer/signal-analyzer",
     "features/dsp/separator/signal-separator",
@@ -924,15 +924,15 @@ fx-stack = { path = "features/dsp/stack" }
 web-time = "1"
 
 # ── from signal's workspace (joined into studio) ──
-signal-account = { path = "features/rigs/core/account" }
-signal-tone3000 = { path = "features/rigs/core/tone3000" }
-signal-account-proto = { path = "features/rigs/core/account-proto" }
-signal-tone3000-proto = { path = "features/rigs/core/tone3000-proto" }
-signal-tone3000-ui = { path = "features/rigs/core/tone3000-ui" }
+signal-account = { path = "features/rigs/core/tone3000/account" }
+signal-tone3000 = { path = "features/rigs/core/tone3000/client" }
+signal-account-proto = { path = "features/rigs/core/tone3000/account-proto" }
+signal-tone3000-proto = { path = "features/rigs/core/tone3000/proto" }
+signal-tone3000-ui = { path = "features/rigs/core/tone3000/ui" }
 signal = { path = "features/rigs/core/signal" }
 signal-proto = { path = "features/rigs/core/proto" }
 signal-browser = { path = "features/rigs/core/browser", default-features = false }
-signal-space = { path = "features/rigs/core/space" }
+signal-space = { path = "features/rigs/core/space/engine" }
 signal-space-proto = { path = "features/rigs/core/space/proto" }
 signal-grid = { path = "features/rigs/core/grid" }
 signal-grid-ui = { path = "features/rigs/core/grid-ui" }
