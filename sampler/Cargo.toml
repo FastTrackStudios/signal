@@ -17,6 +17,8 @@ pipewire = []
 vox = ["architect/vox", "dep:vox", "dep:vox-types"]
 
 [dependencies]
+# BS.1770 loudness (crate::loudness re-exports it).
+dsp-core = { workspace = true, features = ["audio"] }
 architect = { workspace = true }
 architect-telemetry = { workspace = true, optional = true }
 base64 = { version = "0.22" }

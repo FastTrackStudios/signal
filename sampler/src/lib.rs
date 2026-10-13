@@ -191,10 +191,7 @@ pub use engine::{ArticClass, EmittedMarker, LegatoFireEvent, LineId, PlayMode, S
 pub use engine_spec::{BlockRef, EngineLayerSpec, EngineSpec, FxChainSlot, PortSpec, VoiceConfig};
 pub use instrument::SamplerInstrument;
 pub use keys_rig::{KeysInstrument, KeysRig};
-pub use mixer::{
-    Bus, BusStrip, ChannelStrip, DirectChannel, DrumMixer, EngineStrip, FxBackend, FxSlotStrip,
-    FxTarget, MixerLayout, MixerMeters, Send as MixerSend, SendStrip,
-};
+pub use mixer::{FxBackend, FxSlotStrip};
 pub use module_spec::{ModulePort, ModuleSpec};
 pub use nam::NamProcessor;
 pub use native_osc::{NativeOscillator, OscWave};

@@ -40,16 +40,43 @@ use crate::{DuplexEngine, HostedEngine};
 use crate::{lock::LockExt as _, uuid_string};
 
 /// The process's engine, once the app installs one ([`install_shared`]).
+/// Native only: the browser has no process-wide engine (and its daw is not
+/// `Sync`).
+#[cfg(not(target_arch = "wasm32"))]
 static SHARED: Mutex<Option<Arc<Engine>>> = Mutex::new(None);
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Make `engine` the process's engine: every rig opened from here on joins
 /// it instead of opening an engine (and a device) of its own. An app calls
 /// this once at start-up, before its rigs open; without it each rig keeps
 /// an engine to itself (tests, command-line tools).
 pub fn install_shared(engine: Arc<Engine>) {
+    // The transport, held where the audio thread can read the tempo without
+    // a lock (`crate::tempo::get`). Resolving it starts the project's clock,
+    // so this is called from the app's runtime.
+    let _ = SHARED_TRANSPORT.set(engine.transport().clone());
     *SHARED.lock_ok() = Some(engine);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+/// The process's engine's transport, once installed — read lock-free.
+static SHARED_TRANSPORT: std::sync::OnceLock<Arc<TransportShared>> = std::sync::OnceLock::new();
+
+/// The process's engine's transport, if the app installed an engine.
+/// Lock-free: safe on the audio thread.
+#[must_use]
+pub fn shared_transport() -> Option<&'static Arc<TransportShared>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        SHARED_TRANSPORT.get()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        None
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 /// The process's engine, if the app installed one.
 #[must_use]
 pub fn shared() -> Option<Arc<Engine>> {
@@ -182,6 +209,7 @@ impl Engine {
     }
 
     /// Close the device (the project and its rigs stay).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn stop_audio(&self) {
         self.audio.lock_ok().take();
     }
@@ -209,7 +237,6 @@ impl Engine {
         })
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     /// Roll the transport — for an engine a rig owns, so its renderer runs
     /// every block on engines that render only while rolling (the cpal one).
     /// An engine shared with Session leaves its transport to Session.
@@ -220,6 +247,7 @@ impl Engine {
 
     /// The device's sample rate, once [`start_audio`](Self::start_audio)
     /// opened it.
+    #[cfg(not(target_arch = "wasm32"))]
     #[must_use]
     pub fn sample_rate(&self) -> Option<u32> {
         self.audio.lock_ok().as_ref().map(|a| a.sample_rate())
