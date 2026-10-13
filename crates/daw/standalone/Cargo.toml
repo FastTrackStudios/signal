@@ -16,6 +16,7 @@ crate-type = ["cdylib", "rlib"]
 rustdoc-args = ["--html-in-header", "arborium-header.html"]
 
 [dependencies]
+midi = { workspace = true, optional = true }
 daw-proto = { workspace = true }
 # WSOLA: a stretched take rendered at its own pitch (render/stretch_render).
 pitch = { workspace = true }
@@ -110,6 +111,9 @@ dawfile-reaper = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
+# Hardware MIDI into the tracks armed for it (Standalone::route_midi_input),
+# from the process's one MIDI input (midi::hub).
+midi-input = ["audio", "dep:midi", "midi?/native"]
 # Resident source decoding (fts-sample/symphonium) without cpal.
 # WASM-compatible — the decoder is pure Rust and doesn't touch the audio
 # device. `budget` bounds the decoded-bytes accounting (see materialize).

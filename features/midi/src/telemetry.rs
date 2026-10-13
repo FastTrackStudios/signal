@@ -1,6 +1,6 @@
 //! Instrumented MIDI attach — one wide event per attempt, for every rig.
 //!
-//! [`midi::attach::reattach`] owns the *lifecycle* (drop-before-open,
+//! [`crate::attach::reattach`] owns the *lifecycle* (drop-before-open,
 //! sink wiring). This owns the *telemetry*, because the interesting failure
 //! is not one attach going wrong — it is the shape across attaches:
 //!
@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use midi::proto::PortSelector;
+use crate::proto::PortSelector;
 
 /// Why an attach is happening. Distinguishing these is the whole point: a
 /// storm looks identical to healthy hot-plug until you can see the trigger.
@@ -73,7 +73,7 @@ fn bump(rig: &'static str) -> (u64, Option<u128>) {
 
 /// Attach `rig`'s MIDI and emit one wide event describing the attempt.
 ///
-/// A thin wrapper over [`midi::attach::reattach`] — same arguments, same
+/// A thin wrapper over [`crate::attach::reattach`] — same arguments, same
 /// semantics, same return — so no rig has to re-derive either the lifecycle
 /// or the instrumentation. `ports_seen` is passed in rather than enumerated
 /// here: the caller already has the list, and enumerating twice is exactly
@@ -89,7 +89,7 @@ pub fn reattach_instrumented<H>(
 ) -> bool {
     let (seq, since_last_ms) = bump(rig);
     let started = Instant::now();
-    let attached = midi::attach::reattach(rig, port, drop_old, open, store);
+    let attached = crate::attach::reattach(rig, port, drop_old, open, store);
 
     let selector = if port.is_some_and(|p| !p.is_empty()) {
         "named"
@@ -140,7 +140,7 @@ pub fn reattach_instrumented<H>(
     attached
 }
 
-/// Instrumented [`midi::attach::rescan_stream`] — the polled hot-plug
+/// Instrumented [`crate::attach::rescan_stream`] — the polled hot-plug
 /// path, which reopens the whole port set whenever it fires.
 ///
 /// This one is worth watching more closely than the attach path, because its
@@ -158,7 +158,7 @@ pub fn reattach_instrumented<H>(
 /// very problem it is measuring worse.
 pub fn rescan_stream_instrumented(
     rig: &'static str,
-    stream: &mut Option<midi::midir::MidiStream>,
+    stream: &mut Option<crate::midir::MidiStream>,
     known_ports: &mut Vec<String>,
 ) {
     let had_stream = stream.is_some();
@@ -178,7 +178,7 @@ pub fn rescan_stream_instrumented(
     // empty scan; this brings the polled path in line. A genuine unplug is
     // not lost, only deferred to the next poll, where a *stable* empty list
     // still reads as empty.
-    if had_stream && !before.is_empty() && midi::input_ports().is_empty() {
+    if had_stream && !before.is_empty() && crate::input_ports().is_empty() {
         tracing::warn!(
             midi.rig = rig,
             midi.ports_before = before.len(),
@@ -189,7 +189,7 @@ pub fn rescan_stream_instrumented(
         return;
     }
 
-    midi::attach::rescan_stream(stream, known_ports);
+    crate::attach::rescan_stream(stream, known_ports);
 
     // `rescan_stream` reopens exactly when the stream was absent or the list
     // differs, and it writes the fresh list back — so this reproduces its

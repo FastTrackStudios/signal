@@ -63,7 +63,7 @@ use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginParamInfo,
 };
 #[cfg(not(target_arch = "wasm32"))]
-use signal_rig_host::{DuplexRigHost, RigProject};
+use signal_rig_host::engine::{Engine, Rig};
 
 use crate::convolver::Convolver;
 use crate::mixer::FX_PREPARE_BLOCK;
@@ -1922,11 +1922,23 @@ impl HostedAudio {
 /// A live guitar rig: a single input-armed daw track whose FX chain is the
 /// active patch, running on daw's realtime `AudioEngine`.
 #[cfg(not(target_arch = "wasm32"))]
+impl Drop for GuitarRig {
+    /// A rig leaving a shared engine takes its tracks with it.
+    fn drop(&mut self) {
+        if let Err(e) = self.rig.remove() {
+            tracing::warn!(error = %e, "guitar rig: removing its tracks failed");
+        }
+    }
+}
+
 pub struct GuitarRig {
     daw: Standalone,
-    // The shared daw host (project + realtime engine + transport); drop =
-    // stop audio. `None` for an offline rig (see `open_offline`).
-    _host: Option<DuplexRigHost>,
+    /// The engine the rig plays on — its own (dropping the rig closes the
+    /// device), one shared with other rigs, or (offline) one without a
+    /// device.
+    engine: Arc<Engine>,
+    /// The rig's folder and its track in the engine's project.
+    rig: Rig,
     /// The offline rig's renderer and playhead — the same `ProjectRenderer`
     /// the realtime callback drives, pulled here by `render_offline` instead
     /// of by an audio device. `None` for a live rig.
@@ -1938,7 +1950,6 @@ pub struct GuitarRig {
     /// Live realtime metrics (render time / block size) from the duplex engine,
     /// driving the rig's DSP-load meter. `None` under the cpal fallback.
     engine_stats: Option<Arc<EngineStats>>,
-    meters: Arc<Meters>,
     track_guid: String,
     /// Fixed fx-guids for the chain slots (constant for the project's life).
     slot_guids: Vec<String>,
@@ -2025,27 +2036,45 @@ impl GuitarRig {
     ///
     /// As [`open`](Self::open).
     pub fn open_with(prefs: &RigAudioPrefs, want_input: bool) -> eyre::Result<Self> {
-        let (project, track_guid, slot_guids, output_tap_guid) =
-            Self::seed(prefs.input_channel as u32)?;
+        let mut io: audio::io::AudioIoPrefs = prefs.into();
+        io.want_input = want_input;
+        // On the process's engine when the app installed one — the guitar rig
+        // owns the device settings, so it (re)opens the device with its own —
+        // else on an engine of its own.
+        let shared = signal_rig_host::engine::shared();
+        let owned = shared.is_none();
+        let engine = match shared {
+            Some(engine) => {
+                engine.restart_audio(&io)?;
+                engine
+            }
+            None => Engine::new(RIG_PROJECT_NAME),
+        };
+        let (rig, track_guid, slot_guids, output_tap_guid) =
+            Self::seed(&engine, prefs.input_channel as u32)?;
 
         // 3. Open the duplex realtime engine (`prefs.into()` carries the
         //    device/routing config; the host forces `want_input` on unless
         //    this open is output only) and the per-track meter bank (one
         //    cell, post-fader output peak).
-        let mut io: audio::io::AudioIoPrefs = prefs.into();
-        io.want_input = want_input;
-        let host = project.start_duplex_as_given(&io)?;
-        let sample_rate = host.sample_rate();
-        let engine_stats = host.stats();
-        let meters = host.install_meters(1);
-        let daw = host.daw().clone();
+        if owned {
+            engine.start_audio(&io)?;
+        }
+        let sample_rate = engine
+            .sample_rate()
+            .ok_or_else(|| eyre::eyre!("guitar rig: the engine has no device"))?;
+        let engine_stats = engine.stats();
+        let daw = engine.daw().clone();
 
         let (input_meter, output_tap, output_guid) =
             Self::populate(&daw, sample_rate, &slot_guids, output_tap_guid);
 
-        // 5. Roll the transport so the renderer runs (and the live input flows
-        //    through the chain to master) every block.
-        host.play();
+        // 5. Roll the transport of an engine of its own so the renderer runs
+        //    (and the live input flows through the chain to master) every
+        //    block; a shared engine's transport is the app's.
+        if owned {
+            engine.play();
+        }
 
         // Tracing only — never println/eprintln here: the live-rig TUI owns the
         // terminal, and a stray write to stdout/stderr corrupts the render. A
@@ -2053,7 +2082,7 @@ impl GuitarRig {
         tracing::info!(
             input_channel = prefs.input_channel,
             sample_rate,
-            project = %host.project_guid(),
+            project = %engine.project_guid(),
             "signal-sampler: guitar rig started on daw engine (in ch{} → FX chain → master @ {} Hz)",
             prefs.input_channel,
             sample_rate,
@@ -2080,10 +2109,10 @@ impl GuitarRig {
 
         Ok(Self::assemble(
             daw,
-            Some(host),
+            engine,
+            rig,
             None,
             engine_stats,
-            meters,
             track_guid,
             slot_guids,
             input_meter,
@@ -2091,6 +2120,44 @@ impl GuitarRig {
             output_guid,
             sample_rate,
             effective,
+        ))
+    }
+
+    /// The rig as one more rig on a running `engine` — its input armed on
+    /// `input_channel` of the engine's device; the engine's transport is
+    /// left alone (the duplex engine runs live input and FX while stopped).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the engine has no device, or the track or its
+    /// slots cannot be set up.
+    pub fn open_in(engine: &Arc<Engine>, input_channel: u32) -> eyre::Result<Self> {
+        let (rig, track_guid, slot_guids, output_tap_guid) = Self::seed(engine, input_channel)?;
+        let sample_rate = engine
+            .sample_rate()
+            .ok_or_else(|| eyre::eyre!("guitar rig: the engine has no device"))?;
+        let daw = engine.daw().clone();
+        let (input_meter, output_tap, output_guid) =
+            Self::populate(&daw, sample_rate, &slot_guids, output_tap_guid);
+        tracing::info!(input_channel, sample_rate, project = %engine.project_guid(), "signal-sampler: guitar rig joined the engine");
+        let prefs = RigAudioPrefs {
+            input_channel: input_channel as usize,
+            sample_rate,
+            ..RigAudioPrefs::default()
+        };
+        Ok(Self::assemble(
+            daw,
+            engine.clone(),
+            rig,
+            None,
+            engine.stats(),
+            track_guid,
+            slot_guids,
+            input_meter,
+            output_tap,
+            output_guid,
+            sample_rate,
+            prefs,
         ))
     }
 
@@ -2110,15 +2177,17 @@ impl GuitarRig {
     ///
     /// If the project or its slots cannot be set up.
     pub fn open_offline(sample_rate: u32) -> eyre::Result<Self> {
-        let (project, track_guid, slot_guids, output_tap_guid) = Self::seed(0)?;
-        let daw = project.daw().clone();
-        let meters = Meters::new(1);
-        daw.set_meters(meters.clone());
+        let engine = Engine::new(RIG_PROJECT_NAME);
+        let (rig, track_guid, slot_guids, output_tap_guid) = Self::seed(&engine, 0)?;
+        let daw = engine.daw().clone();
+        // No device to install a meter bank: install one (it grows with the
+        // tracks), so the renderer meters.
+        daw.set_meters(Meters::new(2));
         let (input_meter, output_tap, output_guid) =
             Self::populate(&daw, sample_rate, &slot_guids, output_tap_guid);
         let renderer = daw::standalone::audio_engine::render::ProjectRenderer::new(
             &daw,
-            project.project_guid(),
+            engine.project_guid(),
             sample_rate,
         );
         let prefs = RigAudioPrefs {
@@ -2127,10 +2196,10 @@ impl GuitarRig {
         };
         Ok(Self::assemble(
             daw,
-            None,
+            engine,
+            rig,
             Some(Arc::new(std::sync::Mutex::new((renderer, 0)))),
             None,
-            meters,
             track_guid,
             slot_guids,
             input_meter,
@@ -2143,10 +2212,13 @@ impl GuitarRig {
 
     /// Steps 1–2, shared by both engines: the one-track project, armed, with
     /// its fixed FX slots.
-    fn seed(input_channel: u32) -> eyre::Result<(RigProject, String, Vec<String>, String)> {
-        // 1. Seed a one-track project (current, so the FX-chain service
-        //    targets it); arm the track to monitor the hardware input channel.
-        let project = RigProject::new(RIG_PROJECT_NAME);
+    fn seed(
+        engine: &Arc<Engine>,
+        input_channel: u32,
+    ) -> eyre::Result<(Rig, String, Vec<String>, String)> {
+        // 1. The rig's folder and its one track, armed to monitor the
+        //    hardware input channel.
+        let project = engine.add_rig(RIG_PROJECT_NAME)?;
         let track_guid = project.add_track(RIG_TRACK_NAME)?;
         project.arm_input(&track_guid, input_channel)?;
 
@@ -2197,10 +2269,10 @@ impl GuitarRig {
     #[expect(clippy::too_many_arguments, reason = "one constructor, two engines")]
     fn assemble(
         daw: Standalone,
-        host: Option<DuplexRigHost>,
+        engine: Arc<Engine>,
+        rig: Rig,
         offline: Option<Arc<OfflineRenderer>>,
         engine_stats: Option<Arc<EngineStats>>,
-        meters: Arc<Meters>,
         track_guid: String,
         slot_guids: Vec<String>,
         input_meter: Arc<InputMeterShared>,
@@ -2211,11 +2283,11 @@ impl GuitarRig {
     ) -> Self {
         Self {
             daw,
-            _host: host,
+            engine,
+            rig,
             offline,
             hosted: AtomicBool::new(false),
             engine_stats,
-            meters,
             track_guid,
             slot_guids,
             input_meter,
@@ -3027,7 +3099,7 @@ impl GuitarRig {
         let out_lin = signal_rig_host::mixer::db_to_linear(db) as f64;
         let _ = <Standalone as Tracks>::set_volume(
             &self.daw,
-            ProjectContext::Current,
+            ProjectContext::Project(self.engine.project_guid().to_string()),
             TrackRef::guid(self.track_guid.as_str()),
             out_lin,
         );
@@ -3172,16 +3244,13 @@ impl GuitarRig {
 
     /// Output peak (linear) — the track's post-fader meter cell.
     pub fn output_peak(&self) -> f32 {
-        self.meters
-            .cell(0)
-            .map_or(0.0, |c| c.peak(0).max(c.peak(1)))
+        let (l, r) = self.output_peak_lr();
+        l.max(r)
     }
 
     /// Per-channel output peaks (linear) — stereo metering.
     pub fn output_peak_lr(&self) -> (f32, f32) {
-        self.meters
-            .cell(0)
-            .map_or((0.0, 0.0), |c| (c.peak(0), c.peak(1)))
+        self.rig.peak(&self.track_guid).unwrap_or((0.0, 0.0))
     }
 
     /// Realtime xruns. The duplex engine has no input ring (input and output are

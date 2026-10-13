@@ -152,6 +152,10 @@ async fn async_main() {
     // shared. Per-rig start policy differs (the worship guitar auto-opens
     // audio; other rigs stay dormant until a remote starts them), but the
     // wiring is identical.
+    // One engine for every rig in the process (docs/design/one-engine.md):
+    // the rigs join it as folders of tracks, and the guitar rig opens its
+    // device with the guitar's audio settings.
+    signal_rig_host::engine::install_shared(signal_rig_host::engine::Engine::new("Signal"));
     let guitar = GuitarRigBackend::new();
     guitar.start(); // worship rig: open audio + load profile off-thread
     let drums = drums::DrumRigBackend::new(); // dormant until started
@@ -189,6 +193,17 @@ async fn async_main() {
     let router = mount_core!(router, Rig::Keys, keys.clone());
     let router = mount_core!(router, Rig::Synth, synth.clone());
 
+    // The engine's daw — its project, every rig's tracks, transport, peaks —
+    // over the same /vox, so a daw client (Session's UI among them) sees
+    // the rigs as the tracks they are.
+    let router = match signal_rig_host::engine::shared() {
+        Some(engine) => {
+            use architect::Services as _;
+            router.merge_router(engine.daw().clone().into_router())
+        }
+        None => router,
+    };
+
     // ── Pack library ──────────────────────────────────────────────────────
     // Sample-pack distribution: serves the built `.signalpack` trees
     // (proxy + full) so remotes — the phone keys rig above all — can list
@@ -210,11 +225,12 @@ async fn async_main() {
     let account = std::sync::Arc::new(signal_tone3000::account::Account::new(
         signal_tone3000::account::AccountConfig::from_env(&config_dir_t3k),
     ));
-    let tone3000 = signal_tone3000::client::Tone3000Backend::new(signal_tone3000::client::Config::from_env(
-        &config_dir_t3k,
-        signal_nam::nam_root_from_env(&config_dir_t3k.join("nam")),
-    ))
-    .with_account(account.clone());
+    let tone3000 =
+        signal_tone3000::client::Tone3000Backend::new(signal_tone3000::client::Config::from_env(
+            &config_dir_t3k,
+            signal_nam::nam_root_from_env(&config_dir_t3k.join("nam")),
+        ))
+        .with_account(account.clone());
     let router = router.merge_router(tone3000.router());
     // The account's own sign-in RPC — a GUI's way to link this device to
     // auth.fasttrackstudio.app, so TONE3000 (and whatever else the account

@@ -5,9 +5,9 @@
 //! The API terms require the credit to survive; showing it at the moment of
 //! the download is also just the honest place for it.
 
-use dioxus::prelude::*;
 use crate::tone3000::Tone3000Client;
 use crate::{PickedTone, ToneModel};
+use dioxus::prelude::*;
 
 use crate::ui::ToneImport;
 use crate::ui::art::ToneArt;

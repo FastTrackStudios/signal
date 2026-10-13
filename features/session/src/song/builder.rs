@@ -16,11 +16,11 @@
 // REAPER FFI backend + the sync service traits it implements — used only by
 // the `*_native` builders below (the async builders drive the backend-agnostic
 // `daw::rpc::Project` handle). Native-only.
-#[cfg(all(not(target_arch = "wasm32"), feature = "reaper"))]
-use studio::reaper::Reaper;
 use daw::rpc::Project;
 use daw::service::{Marker, ProjectContext, Region};
 use daw::service::{Markers, Projects, Regions, TempoMap};
+#[cfg(all(not(target_arch = "wasm32"), feature = "reaper"))]
+use studio::reaper::Reaper;
 
 /// What [`SongBuilder::build_on`] reads from a backend: project info and
 /// ruler lanes, markers, regions, and the tempo map. REAPER and

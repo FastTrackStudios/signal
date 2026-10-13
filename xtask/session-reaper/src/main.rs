@@ -21,8 +21,8 @@
 //!   cargo run -p session-reaper-xtask `<filter>`     # matching test NAMES
 //!   cargo run -p session-reaper-xtask -- --gui     # watch it drive REAPER
 
-use studio::test::runner::{TestPackage, TestRunner};
 use std::path::{Path, PathBuf};
+use studio::test::runner::{TestPackage, TestRunner};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();

@@ -7,9 +7,9 @@
 //!   cargo xtask reaper-test -- `edge_case`
 
 use daw::rpc::Project;
-use studio::test::reaper_test;
 use session::{SongBuilder, stamp_demo_into_project};
 use std::time::Duration;
+use studio::test::reaper_test;
 
 /// Remove all markers and regions from a project so each test starts clean.
 async fn clear_project(project: &Project) -> eyre::Result<()> {

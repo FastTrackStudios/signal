@@ -6,9 +6,9 @@
 //! Run with:
 //!   cargo xtask reaper-test -- transport
 
-use studio::test::reaper_test;
 use session::stamp_demo_into_project;
 use std::time::Duration;
+use studio::test::reaper_test;
 
 /// Helper: stamp demo data and wait for it to settle.
 async fn setup_demo(project: &daw::rpc::Project) -> eyre::Result<()> {

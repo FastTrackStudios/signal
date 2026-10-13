@@ -4372,6 +4372,7 @@ dependencies = [
  "gloo-timers",
  "js-sys",
  "libloading 0.8.9",
+ "midi",
  "pitch",
  "raw-window-handle 0.6.2",
  "rtrb",

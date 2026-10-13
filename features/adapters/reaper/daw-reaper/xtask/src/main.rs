@@ -15,9 +15,9 @@
 //! Invoked via `just daw-reaper-test` (sets FTS_REAPER_EXECUTABLE to the
 //! wrapper script that resolves the local REAPER install).
 
-use studio::test::runner::{self, TestPackage, TestRunner};
 use std::env;
 use std::path::{Path, PathBuf};
+use studio::test::runner::{self, TestPackage, TestRunner};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();

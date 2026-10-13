@@ -431,6 +431,9 @@ fn spawn_audio_thread(
             // treated as a switch.
             let mut attached_guid = String::new();
             let mut engine: Option<daw_standalone::audio_engine::AudioEngine> = None;
+            // Hardware MIDI into the attached project's armed tracks — kept
+            // with the engine: attached together, dropped together.
+            let mut midi_route: Option<daw_standalone::midi_input::MidiInputRoute> = None;
             // Ticks (×150 ms) to wait before retrying after a failed/absent
             // device, so a persistently-missing output doesn't spam re-opens.
             // Reset to 0 on success; capped so recovery stays reasonably prompt.
@@ -446,6 +449,7 @@ fn spawn_audio_thread(
                 let Some(current) = current else {
                     // Nothing loaded (yet, or a setlist was just torn down
                     // mid-reload) — make sure no stale device stays open.
+                    midi_route = None;
                     if engine.take().is_some() {
                         tracing::info!("no active project; audio engine detached");
                     }
@@ -471,6 +475,9 @@ fn spawn_audio_thread(
                     // the new one so the single output device is free.
                     drop(engine.take());
                     engine = attach(&current);
+                    midi_route = engine
+                        .as_ref()
+                        .map(|_| standalone.route_midi_input(&current));
                     attached_guid = current;
                     retry_backoff = 0;
                     continue;
@@ -492,6 +499,9 @@ fn spawn_audio_thread(
                     }
                     drop(engine.take()); // close the dead stream before reopening
                     engine = attach(&attached_guid);
+                    midi_route = engine
+                        .as_ref()
+                        .map(|_| standalone.route_midi_input(&attached_guid));
                     // On success clear backoff; on failure wait ~2s before retry.
                     retry_backoff = if engine.is_some() { 0 } else { 13 };
                 }

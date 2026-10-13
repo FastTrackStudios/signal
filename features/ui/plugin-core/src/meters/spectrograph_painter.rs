@@ -10,10 +10,10 @@
 use std::sync::Arc;
 
 use dsp_core::meter::spectrum::SpectrumState;
+use nice_plug_dioxus::prelude::SceneOverlay;
+use nice_plug_dioxus::prelude::vello::Scene;
 use nice_plug_dioxus::prelude::vello::kurbo::{Affine, Rect};
 use nice_plug_dioxus::prelude::vello::peniko::{Color, Fill};
-use nice_plug_dioxus::prelude::vello::Scene;
-use nice_plug_dioxus::prelude::SceneOverlay;
 
 // ── Colormap ──────────────────────────────────────────────────────────────────
 

@@ -98,17 +98,18 @@ impl Shot<'_> {
             self.player.shader_inputs()
         };
         // Time advances with the simulated clock, so a flicker animates.
-        self.offscreen.render_with_effects(&frame::render::fx::Frame {
-            transform: view.affine(),
-            base,
-            fonts: Some(crate::player::fonts()),
-            mode: self.args.fx,
-            time_s: t / 1000.0,
-            values: Some(&values),
-            inputs: Some(&inputs),
-            overlay: Some(&self.overlay),
-            ..frame::render::fx::Frame::new(&doc, page, w, h)
-        })
+        self.offscreen
+            .render_with_effects(&frame::render::fx::Frame {
+                transform: view.affine(),
+                base,
+                fonts: Some(crate::player::fonts()),
+                mode: self.args.fx,
+                time_s: t / 1000.0,
+                values: Some(&values),
+                inputs: Some(&inputs),
+                overlay: Some(&self.overlay),
+                ..frame::render::fx::Frame::new(&doc, page, w, h)
+            })
     }
 }
 

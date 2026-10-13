@@ -21,9 +21,9 @@
 //!   cargo run -p session-extension-xtask -- --gui         # visible REAPER window
 //!   FTS_KEEP_OPEN=1 cargo run -p session-extension-xtask  # keep REAPER open after
 
-use studio::test::runner::{ExtensionPackage, TestPackage, TestRunner};
 use std::env;
 use std::path::{Path, PathBuf};
+use studio::test::runner::{ExtensionPackage, TestPackage, TestRunner};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();

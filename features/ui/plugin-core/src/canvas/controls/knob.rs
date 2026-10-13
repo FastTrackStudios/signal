@@ -7,7 +7,7 @@
 //! Drag capture is handled by the `DragProvider` wrapper at the editor root.
 //! The knob only fires `onmousedown` to start a drag.
 
-use crate::canvas::drag::{begin_drag, DragState, TextEditState};
+use crate::canvas::drag::{DragState, TextEditState, begin_drag};
 use crate::canvas::theme::use_theme;
 use nice_plug::prelude::ParamPtr;
 use nice_plug_dioxus::prelude::dioxus_elements::geometry::WheelDelta;

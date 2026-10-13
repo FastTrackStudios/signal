@@ -83,6 +83,8 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
     let engine = runtime.block_on(async {
         // The backend spawns its own OS threads (meter pump, drive
         // calibration) and opens audio off-thread on start().
+        // One engine for every rig in the process, as in engine_main.rs.
+        signal_rig_host::engine::install_shared(signal_rig_host::engine::Engine::new("Signal"));
         let backend = GuitarRigBackend::new();
         let router = backend.router();
 

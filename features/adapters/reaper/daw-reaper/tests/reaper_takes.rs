@@ -8,10 +8,10 @@
 //!
 //! Run with: `cargo xtask reaper-test -- reaper_takes`
 
-use studio::test::reaper_test;
 use daw_proto::SourceType;
 use std::fs;
 use std::path::PathBuf;
+use studio::test::reaper_test;
 
 /// Write a 0.1-second 44.1k mono silent PCM-16 WAV to `/tmp` and return
 /// the path. Hand-rolled — we don't want a `hound`/`tempfile` dep just
@@ -87,7 +87,9 @@ async fn take_delete_decreases_count(ctx: &studio::test::ReaperTestContext) -> e
 }
 
 #[reaper_test(isolated)]
-async fn take_preserve_pitch_round_trips(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn take_preserve_pitch_round_trips(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Preserve Pitch Track", None).await?;
     let item = track

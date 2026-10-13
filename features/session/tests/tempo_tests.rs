@@ -11,8 +11,8 @@
 //! Run with:
 //!   cargo xtask reaper-test -- tempo
 
-use studio::test::reaper_test;
 use std::time::Duration;
+use studio::test::reaper_test;
 
 /// Verify default tempo is readable and reasonable.
 #[reaper_test]
@@ -125,7 +125,9 @@ async fn time_signature_set(ctx: &studio::test::ReaperTestContext) -> eyre::Resu
 
 /// Time signature visible in transport state.
 #[reaper_test]
-async fn time_signature_in_transport_state(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn time_signature_in_transport_state(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let tempo_map = ctx.project.tempo_map();
     let transport = ctx.project.transport();
 

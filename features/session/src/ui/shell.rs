@@ -9,10 +9,10 @@
 
 use std::rc::Rc;
 
-use dock::ui::{DOCK_WORKSPACE, DockProvider, DockRoot, PanelRenderer, PanelRendererRegistry};
 use dock::PanelRegistry;
 use dock::builder::DockLayoutBuilder as B;
 use dock::panel::PanelId;
+use dock::ui::{DOCK_WORKSPACE, DockProvider, DockRoot, PanelRenderer, PanelRendererRegistry};
 use dock::workspace::{DockWorkspace, WindowBounds};
 
 use crate::ui::layouts::top_bar::{ConnectionState, VERSION};

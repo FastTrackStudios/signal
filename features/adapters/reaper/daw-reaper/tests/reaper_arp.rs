@@ -11,12 +11,12 @@
 //! ```
 
 use daw::rpc::TakeHandle;
-use studio::test::reaper_test;
 use daw_proto::midi::MidiNoteCreate;
 use daw_proto::primitives::{Duration, PositionInSeconds};
 use expression_editor::ops::arp::{
     Arp, ArpSession, DEFAULT_GAP_PPQ, Direction, PPQ, TimedNote, group_chords,
 };
+use studio::test::reaper_test;
 
 /// Write a chord as simultaneous whole notes on a fresh track.
 async fn chord_take(

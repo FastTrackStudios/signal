@@ -57,8 +57,8 @@ struct State {
     tree: Option<Container>,
     midi_port: Option<String>,
     /// Subscription to the shared process-wide MIDI hub — see
-    /// `signal_rig_host::midi_hub`. Dropping it detaches this rig only.
-    midi_handle: Option<signal_rig_host::midi_hub::Subscription>,
+    /// `midi::hub`. Dropping it detaches this rig only.
+    midi_handle: Option<midi::hub::Subscription>,
     /// Master output gain (linear), applied to the rig on open + live changes.
     volume: f32,
     /// Live global controls (Omnisphere-style macros over the loaded patch).
@@ -201,7 +201,7 @@ impl SynthRigBackend {
                 // caller of ensure_open needs one — attaching here makes
                 // this THE single open path, so a rig can never end up
                 // audible-but-deaf.
-                self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
+                self.reattach_midi(midi::telemetry::AttachTrigger::RigOpen);
                 if let Ok(mut s) = self.inner.state.lock() {
                     if s.loaded.is_none() {
                         s.loaded = Some(idx);
@@ -242,7 +242,7 @@ impl SynthRigBackend {
         self.publish_all();
     }
 
-    fn reattach_midi(&self, trigger: signal_rig_host::midi::AttachTrigger) {
+    fn reattach_midi(&self, trigger: midi::telemetry::AttachTrigger) {
         let port = self
             .inner
             .state
@@ -264,7 +264,7 @@ impl SynthRigBackend {
                 None => return,
             }
         };
-        let hub = signal_rig_host::midi_hub::hub();
+        let hub = midi::hub::hub();
         let sub = hub.subscribe("synth", port.clone(), sink);
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_handle = Some(sub);
@@ -436,7 +436,7 @@ impl SynthRigSvc for SynthRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
+        self.reattach_midi(midi::telemetry::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(SynthEvent::Status(SynthRigSvc::status(self)));

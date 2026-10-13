@@ -4,8 +4,8 @@
 //!
 //!   cargo xtask reaper-test -- reaper_window_geometry
 
-use studio::test::reaper_test;
 use daw_proto::WindowTarget;
+use studio::test::reaper_test;
 
 #[reaper_test(isolated)]
 async fn get_rect_returns_main_window_size(ctx: &ReaperTestContext) -> eyre::Result<()> {

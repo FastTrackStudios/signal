@@ -352,7 +352,8 @@ fn run() -> Result<(), String> {
     }
     if let Some(path) = &save_markup {
         // The sheet as markup, for `render_surface --markup` (animations).
-        std::fs::write(path, frame::document::text::print(&scene)).map_err(|e| format!("{path}: {e}"))?;
+        std::fs::write(path, frame::document::text::print(&scene))
+            .map_err(|e| format!("{path}: {e}"))?;
     }
 
     let mut rt = Runtime::new(Surface::from_scene(scene), catalog);
@@ -425,14 +426,16 @@ fn run() -> Result<(), String> {
         .iter()
         .map(|(id, c)| (*id, rt.position(*id, c)))
         .collect();
-    let px = frame::render::offscreen::Offscreen::new()?.render_with_effects(&frame::render::fx::Frame {
-        transform: kurbo::Affine::scale(scale),
-        base: peniko::Color::from_rgba8(58, 58, 62, 255),
-        fonts: Some(frame::render::FontBook::bundled()),
-        mode: fx,
-        values: Some(&values),
-        ..frame::render::fx::Frame::new(&frame, frame.pages()[0], w, h)
-    })?;
+    let px = frame::render::offscreen::Offscreen::new()?.render_with_effects(
+        &frame::render::fx::Frame {
+            transform: kurbo::Affine::scale(scale),
+            base: peniko::Color::from_rgba8(58, 58, 62, 255),
+            fonts: Some(frame::render::FontBook::bundled()),
+            mode: fx,
+            values: Some(&values),
+            ..frame::render::fx::Frame::new(&frame, frame.pages()[0], w, h)
+        },
+    )?;
     image::RgbaImage::from_raw(px.width, px.height, px.rgba)
         .ok_or("bad pixels")?
         .save(&out)

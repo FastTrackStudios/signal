@@ -380,7 +380,10 @@ pub fn start(args: &Args) -> Result<Started, String> {
     let catalog = pollster::block_on(engine.catalog()).map_err(|e| format!("engine: {e}"))?;
     if let (Some(lib), Some(_)) = (&mut library, &args.engine) {
         // Only offer surfaces whose bindings all resolve on this engine.
-        lib.set_fits(&catalog.id, frame::library::link::Signature::of_catalog(&catalog));
+        lib.set_fits(
+            &catalog.id,
+            frame::library::link::Signature::of_catalog(&catalog),
+        );
     }
     let loaded = match &mut library {
         Some(lib) => lib.initial().map(|s| s.unwrap_or_else(source::placeholder)),

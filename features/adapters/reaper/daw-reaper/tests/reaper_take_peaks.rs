@@ -15,12 +15,12 @@
 //!
 //! Run the REAPER half with: `cargo run -p daw-reaper-xtask -- peaks_parity`
 
-use studio::test::reaper_test;
 use daw_proto::midi::Midi;
 use daw_proto::{
     Duration, Peaks, ProjectContext, ProjectInfo, TakePeakData, TakeRef, Takes, TrackRef, Tracks,
 };
 use std::path::PathBuf;
+use studio::test::reaper_test;
 
 /// Two `.reapeaks` least-significant bits. REAPER answers from its i16
 /// peak cache (`(v × 32767) as i16`, truncating toward zero) while

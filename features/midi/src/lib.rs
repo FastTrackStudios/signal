@@ -69,3 +69,16 @@ pub use native::{input_ports, input_sources, MidiInput, DEFAULT_INPUT_NAME};
 // hot-plug rescan) — one helper per pattern, so no rig re-derives it.
 #[cfg(feature = "midir")]
 pub mod attach;
+
+/// One shared hardware-MIDI input for the whole process, fanned out to
+/// every subscriber (every rig, the engine's live MIDI).
+#[cfg(all(
+    feature = "native",
+    not(target_arch = "wasm32"),
+    any(target_os = "linux", target_os = "macos", feature = "midir")
+))]
+pub mod hub;
+
+/// Instrumented MIDI attach: the one wide event every (re)attach emits.
+#[cfg(all(feature = "midir", not(target_arch = "wasm32")))]
+pub mod telemetry;

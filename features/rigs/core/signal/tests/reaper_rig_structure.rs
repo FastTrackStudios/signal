@@ -9,9 +9,9 @@
 
 use std::time::Duration;
 
-use studio::test::reaper_test;
 use signal_live::daw_rig_builder::{instantiate_rack, instantiate_rig};
 use signal_proto::rig_template::{RackTemplate, RigTemplate};
+use studio::test::reaper_test;
 
 /// Small sleep to let REAPER process track changes.
 async fn settle() {

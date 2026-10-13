@@ -1397,11 +1397,18 @@ fn KeysChrome(packs: Signal<Vec<PackRow>>, master: Signal<f32>, profile: String)
         // Rig-wide Resolution — PROMINENT: a player in the first minute
         // must see the sound is not final yet.
         let pill = if resolution < 100 {
-            fts_audio_ui::chrome::StatusItem::pill(format!("RESOLUTION {resolution}%"), "#fbbf24", "#292312")
+            fts_audio_ui::chrome::StatusItem::pill(
+                format!("RESOLUTION {resolution}%"),
+                "#fbbf24",
+                "#292312",
+            )
         } else {
             fts_audio_ui::chrome::StatusItem::pill("FULL RESOLUTION", "#22c55e", "#0f2417")
         };
-        status.push(fts_audio_ui::chrome::StatusItem::tagged("rig-resolution", pill));
+        status.push(fts_audio_ui::chrome::StatusItem::tagged(
+            "rig-resolution",
+            pill,
+        ));
         if streaming {
             status.push(fts_audio_ui::chrome::StatusItem::text(format!(
                 "{ready_count}/{pack_count} soundsources"
@@ -1411,12 +1418,20 @@ fn KeysChrome(packs: Signal<Vec<PackRow>>, master: Signal<f32>, profile: String)
     status.push(fts_audio_ui::chrome::StatusItem::meter(master(), "#22c55e"));
     level.status(status);
     level.panels(vec![
-        fts_audio_ui::chrome::PanelSpec::new("web.ssm", "Soundsources", fts_audio_ui::chrome::Icon::Browser)
-            .width(400)
-            .testid("ssm-button"),
-        fts_audio_ui::chrome::PanelSpec::new("web.audio", "Audio", fts_audio_ui::chrome::Icon::Engine)
-            .width(320)
-            .testid("audio-button"),
+        fts_audio_ui::chrome::PanelSpec::new(
+            "web.ssm",
+            "Soundsources",
+            fts_audio_ui::chrome::Icon::Browser,
+        )
+        .width(400)
+        .testid("ssm-button"),
+        fts_audio_ui::chrome::PanelSpec::new(
+            "web.audio",
+            "Audio",
+            fts_audio_ui::chrome::Icon::Engine,
+        )
+        .width(320)
+        .testid("audio-button"),
     ]);
     rsx! {}
 }

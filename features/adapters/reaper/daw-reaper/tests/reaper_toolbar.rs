@@ -9,8 +9,8 @@
 //!
 //! Run with: `cargo xtask reaper-test -- reaper_toolbar`
 
-use studio::test::reaper_test;
 use daw_proto::{ToolbarButton, ToolbarTarget};
+use studio::test::reaper_test;
 
 const TEST_WORKFLOW: &str = "fts.test.toolbar";
 
@@ -54,7 +54,9 @@ async fn add_button_succeeds_and_returns_command_id(
 }
 
 #[reaper_test(isolated)]
-async fn workflow_remove_cleans_up_batch(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn workflow_remove_cleans_up_batch(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let actions = ctx.daw.action_registry();
     let toolbar = ctx.daw.toolbar();
 

@@ -15,8 +15,8 @@
 //!
 //! Run with: `cargo run -p daw-reaper-xtask -- reaper_track_groups`
 
-use studio::test::reaper_test;
 use daw_proto::track::{GroupFamily, GroupRole};
+use studio::test::reaper_test;
 
 /// Name the top slot and read it back through the same project-info key.
 /// Slot 1 is the negative control: naming works at all in this rig.
@@ -147,7 +147,9 @@ async fn vca_lead_mute_does_not_move_followers_button(
 /// track a volume follower, and the flags survive a read-back through
 /// the live membership API on a slot above 64.
 #[reaper_test(isolated)]
-async fn per_family_flags_are_independent(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn per_family_flags_are_independent(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Gang", None).await?;
 

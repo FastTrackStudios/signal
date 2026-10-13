@@ -265,7 +265,7 @@ daw-control = { workspace = true, optional = true }
 # (`project_loader::load_rpp_via_bay`) — the Home page's "Load & Play"
 # loads a setlist's songs this way instead of hand-seeding stems.
 # "session-file": `--engine --project Song.session` (engine_open.rs).
-daw-standalone = { workspace = true, features = ["bootstrap", "audio", "rpp-project", "rpp-loader", "session-file"], optional = true }
+daw-standalone = { workspace = true, features = ["bootstrap", "audio", "midi-input", "rpp-project", "rpp-loader", "session-file"], optional = true }
 
 # ── iPhone (dx build --platform ios) — the phone shell ──
 [target.'cfg(target_os = "ios")'.dependencies]

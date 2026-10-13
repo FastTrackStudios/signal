@@ -195,14 +195,14 @@ async fn a_local_session_wins_over_a_linked_account() {
         &auth_client::StoredSession::new("fts-token"),
     )
     .unwrap();
-    let backend = backend.with_account(std::sync::Arc::new(signal_tone3000::account::Account::new(
-        signal_tone3000::account::AccountConfig {
+    let backend = backend.with_account(std::sync::Arc::new(
+        signal_tone3000::account::Account::new(signal_tone3000::account::AccountConfig {
             issuer: issuer.uri(),
             client_id: "signal".into(),
             redirect_uri: "http://localhost:4040/account/callback".into(),
             session_path,
-        },
-    )));
+        }),
+    ));
 
     let status = backend.status().await;
     assert_eq!(status.via, "tone3000");

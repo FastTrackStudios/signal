@@ -13,12 +13,12 @@
 //! theory says "these MIDI numbers", and REAPER has to end up holding
 //! exactly those, in one item, at the cursor.
 
-use studio::test::reaper_test;
 use daw_proto::midi::MidiNoteCreate;
 use daw_proto::primitives::{Duration, PositionInSeconds};
 use keyflow::chord::palette::{grid, variations};
 use keyflow::key::Key;
 use keyflow::primitives::MusicalNote;
+use studio::test::reaper_test;
 
 const PPQ: f64 = 960.0;
 

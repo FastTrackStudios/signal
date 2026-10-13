@@ -75,6 +75,9 @@ pub mod media_bay;
 pub mod media_seed;
 pub mod metering;
 mod midi;
+/// Hardware MIDI into the tracks armed for it.
+#[cfg(feature = "midi-input")]
+pub mod midi_input;
 /// Offline effect rendering for A/B work against reference plugins.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod offline_fx;

@@ -39,6 +39,23 @@ use daw::standalone::transport_engine::TransportShared;
 use crate::{DuplexEngine, HostedEngine};
 use crate::{lock::LockExt as _, uuid_string};
 
+/// The process's engine, once the app installs one ([`install_shared`]).
+static SHARED: Mutex<Option<Arc<Engine>>> = Mutex::new(None);
+
+/// Make `engine` the process's engine: every rig opened from here on joins
+/// it instead of opening an engine (and a device) of its own. An app calls
+/// this once at start-up, before its rigs open; without it each rig keeps
+/// an engine to itself (tests, command-line tools).
+pub fn install_shared(engine: Arc<Engine>) {
+    *SHARED.lock_ok() = Some(engine);
+}
+
+/// The process's engine, if the app installed one.
+#[must_use]
+pub fn shared() -> Option<Arc<Engine>> {
+    SHARED.lock_ok().clone()
+}
+
 /// A running device, whatever engine type opened it.
 #[cfg(not(target_arch = "wasm32"))]
 trait Running: Send {
@@ -137,6 +154,33 @@ impl Engine {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
+    /// Open the device with `prefs` unless one is already open — what a rig
+    /// that does not own the device settings asks for.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the device fails to open.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn ensure_audio(&self, prefs: &AudioIoPrefs) -> eyre::Result<()> {
+        if self.audio.lock_ok().is_some() {
+            return Ok(());
+        }
+        self.start_audio(prefs)
+    }
+
+    /// Reopen the device with `prefs` — what the rig that owns the device
+    /// settings does when they change. Every rig on the engine drops out
+    /// for the moment the device takes to reopen.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the device fails to open.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn restart_audio(&self, prefs: &AudioIoPrefs) -> eyre::Result<()> {
+        self.stop_audio();
+        self.start_audio(prefs)
+    }
+
     /// Close the device (the project and its rigs stay).
     pub fn stop_audio(&self) {
         self.audio.lock_ok().take();
@@ -166,6 +210,14 @@ impl Engine {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
+    /// Roll the transport — for an engine a rig owns, so its renderer runs
+    /// every block on engines that render only while rolling (the cpal one).
+    /// An engine shared with Session leaves its transport to Session.
+    pub fn play(&self) {
+        self.transport()
+            .set_play_state(daw::standalone::transport_engine::PlayStateRepr::Playing);
+    }
+
     /// The device's sample rate, once [`start_audio`](Self::start_audio)
     /// opened it.
     #[must_use]
@@ -416,7 +468,7 @@ impl Rig {
     /// # Errors
     ///
     /// Returns an error if a track cannot be removed.
-    pub fn remove(self) -> eyre::Result<()> {
+    pub fn remove(&self) -> eyre::Result<()> {
         let ctx = self.engine.context();
         let tracks = self.tracks();
         for guid in tracks.iter().rev().chain(std::iter::once(&self.folder)) {

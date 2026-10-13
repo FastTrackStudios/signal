@@ -228,8 +228,12 @@ mod tests {
             std::env::temp_dir().join(format!("frame-desktop-src-kind-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let bundle = dir.join("b.frame");
-        frame::document::io::save_surface_as(&bundle, &placeholder().scene, frame::document::io::Format::Bundle)
-            .unwrap();
+        frame::document::io::save_surface_as(
+            &bundle,
+            &placeholder().scene,
+            frame::document::io::Format::Bundle,
+        )
+        .unwrap();
         assert!(matches!(Source::from_path(bundle), Source::Bundle(_)));
         let text = dir.join("t.frame");
         std::fs::write(&text, "<Document/>").unwrap();

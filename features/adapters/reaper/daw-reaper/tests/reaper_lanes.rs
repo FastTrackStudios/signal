@@ -9,9 +9,9 @@
 //!
 //! Run with: `just reaper daw-test lanes`
 
-use studio::test::reaper_test;
 use daw_proto::track::{Comp, CompArea, LaneComping, LaneDisplay};
 use daw_proto::{Duration, PositionInSeconds};
+use studio::test::reaper_test;
 
 fn area(comp_lane: u32, source_lane: u32, start: f64, end: f64) -> CompArea {
     CompArea {

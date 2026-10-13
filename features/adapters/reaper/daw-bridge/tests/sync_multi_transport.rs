@@ -10,8 +10,8 @@
 
 use std::time::Duration;
 
-use studio::test::{DawInstanceConfig, run_multi_reaper_test};
 use eyre::Result;
+use studio::test::{DawInstanceConfig, run_multi_reaper_test};
 
 /// Spawn 3 REAPER instances, connect peers directly, and test transport sync.
 #[test]

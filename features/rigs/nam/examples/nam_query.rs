@@ -9,7 +9,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let needle = args.next().unwrap_or_default().to_lowercase();
     let k: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(6);
-    let (space, _) = signal_space::engine::Space::load(&signal_space::engine::Space::space_dir(&root, "nam"))?;
+    let (space, _) =
+        signal_space::engine::Space::load(&signal_space::engine::Space::space_dir(&root, "nam"))?;
     let it = space
         .items
         .iter()

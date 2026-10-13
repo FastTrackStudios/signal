@@ -11,9 +11,9 @@
 use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
-use studio::test::reaper_test;
 use signal::track_template::{self, Instrument, TemplateTier};
 use signal::{BlockRepo, BlockType};
+use studio::test::reaper_test;
 
 /// Sleep to let REAPER process changes.
 async fn settle() {

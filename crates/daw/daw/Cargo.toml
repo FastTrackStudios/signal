@@ -55,6 +55,8 @@ standalone = ["dep:daw-standalone"]
 # turns on the live-MIDI queue (`Standalone::push_live_midi`) on wasm32.
 standalone-decode = ["standalone", "daw-standalone/decode"]
 standalone-audio = ["standalone", "daw-standalone/audio"]
+# Hardware MIDI into armed tracks (`daw::standalone::midi_input`).
+standalone-midi-input = ["standalone-audio", "daw-standalone/midi-input"]
 # Native PipeWire duplex engine (`daw::standalone::audio_engine::DuplexAudioEngine`)
 # — one low-latency realtime callback (input+output, no ring). Linux-only.
 # PipeWire is DEFAULT on Linux; alias still pulls the audio engine.

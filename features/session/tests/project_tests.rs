@@ -5,8 +5,8 @@
 //! Run with:
 //!   cargo xtask reaper-test -- project_
 
-use studio::test::reaper_test;
 use std::time::Duration;
+use studio::test::reaper_test;
 
 /// List all open projects.
 #[reaper_test]

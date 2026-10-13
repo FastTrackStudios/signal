@@ -165,7 +165,8 @@ pub fn bare_examples() -> Vec<Example> {
             controls: &mut controls,
             theme: &theme,
         };
-        frame::surface::kit::place(&mut b, page, id, &place).unwrap_or_else(|e| panic!("{id}: {e}"));
+        frame::surface::kit::place(&mut b, page, id, &place)
+            .unwrap_or_else(|e| panic!("{id}: {e}"));
         let file: &'static str = Box::leak(format!("bare-{kind}.frame").into_boxed_str());
         let catalog_file: &'static str =
             Box::leak(format!("bare-{kind}.catalog.json").into_boxed_str());
@@ -259,8 +260,8 @@ impl Doc {
             controls: &mut self.controls,
             theme: &theme,
         };
-        let node =
-            frame::surface::kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
+        let node = frame::surface::kit::place(&mut b, self.root, id, p)
+            .unwrap_or_else(|e| panic!("{id}: {e}"));
         self.scene.node_mut(node).expect("placed").transform = Transform::translate(x, y);
         node
     }
@@ -279,8 +280,8 @@ impl Doc {
                 .size(46.0)
                 .bind(Binding::param(*addr))
                 .legend(*legend);
-            let knob =
-                frame::surface::kit::place_in_cell(&mut b, self.root, KNOB, &p).expect("knob places");
+            let knob = frame::surface::kit::place_in_cell(&mut b, self.root, KNOB, &p)
+                .expect("knob places");
             let holder = self
                 .scene
                 .node(knob)
@@ -547,7 +548,11 @@ mod tests {
             let back = frame::document::text::parse(&text, scene.assets.clone())
                 .unwrap_or_else(|e| panic!("{}: {e}", ex.file));
             assert_eq!(back, scene, "{}: parse(print(s)) == s", ex.file);
-            let issues = frame::design::lint::lint(&scene, &ex.catalog, &frame::design::lint::Config::default());
+            let issues = frame::design::lint::lint(
+                &scene,
+                &ex.catalog,
+                &frame::design::lint::Config::default(),
+            );
             let errors: Vec<String> = issues
                 .iter()
                 .filter(|i| i.severity == frame::design::lint::Severity::Error)
@@ -656,7 +661,8 @@ mod tests {
         };
         for ex in bare_examples() {
             let n = 60;
-            let mut rt = frame::surface::runtime::Runtime::new(ex.surface.clone(), ex.catalog.clone());
+            let mut rt =
+                frame::surface::runtime::Runtime::new(ex.surface.clone(), ex.catalog.clone());
             let started = std::time::Instant::now();
             for i in 0..n {
                 let t = f64::from(i) / 60.0;

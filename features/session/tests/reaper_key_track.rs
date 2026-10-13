@@ -10,9 +10,9 @@
 //! just reaper daw-test --gui key_track_round_trips   # watch it
 //! ```
 
-use studio::test::reaper_test;
 use daw_proto::primitives::{Duration, PositionInSeconds};
 use session::key::{KEY_TRACK, format_key, parse_key};
+use studio::test::reaper_test;
 
 use keyflow::key::Key;
 use keyflow::primitives::MusicalNote;
@@ -61,7 +61,9 @@ async fn key_track_round_trips_through_reaper(
 /// Several changes, each on its own item, stay distinct and keep their
 /// positions — the property "the key at bar N" depends on.
 #[reaper_test(isolated)]
-async fn key_changes_keep_their_positions(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn key_changes_keep_their_positions(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add(KEY_TRACK, None).await?;
 

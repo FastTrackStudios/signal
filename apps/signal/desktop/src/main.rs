@@ -150,7 +150,7 @@ fn main() {
     // through the thread that connected first — make that one with a run
     // loop, or a footswitch switched on after launch is never seen.
     #[cfg(target_os = "macos")]
-    signal_rig_host::midi_hub::init_platform();
+    midi::hub::init_platform();
     // NVIDIA + Wayland: force the WebKitGTK webview through XWayland before
     // tao builds the event loop (`gtk::init` reads GDK_BACKEND there). Dioxus
     // sets these itself, but only inside `App::new`, AFTER the event loop is
@@ -704,7 +704,12 @@ fn App() -> Element {
     // one app-level flyout, Settings (engine status included), opens from
     // the gear beside the window controls.
     level.panels(vec![
-        fts_audio_ui::chrome::PanelSpec::new("settings", "Settings", fts_audio_ui::chrome::Icon::Settings).width(300),
+        fts_audio_ui::chrome::PanelSpec::new(
+            "settings",
+            "Settings",
+            fts_audio_ui::chrome::Icon::Settings,
+        )
+        .width(300),
     ]);
 
     // The window's own controls, for whichever bar is showing: the app's, or

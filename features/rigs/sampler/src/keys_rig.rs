@@ -1201,8 +1201,9 @@ impl KeysRig {
     }
 
     /// Open a device, build the project, and host `tree` as the playable
-    /// preset — on an engine of its own; [`open_in`](Self::open_in) joins one
-    /// shared with other rigs.
+    /// preset — on the process's engine when the app installed one
+    /// ([`signal_rig_host::engine::install_shared`]), else on an engine of
+    /// its own; [`open_in`](Self::open_in) joins a given engine.
     ///
     /// # Errors
     ///
@@ -1211,9 +1212,14 @@ impl KeysRig {
     // r[impl keys.rig.output-only]
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open(prefs: &AudioIoPrefs, tree: &Container) -> eyre::Result<Self> {
+        if let Some(engine) = signal_rig_host::engine::shared() {
+            engine.ensure_audio(&output_prefs(prefs))?;
+            return Self::open_in(&engine, tree);
+        }
         let engine = Engine::new(KEYS_PROJECT_NAME);
         let slots = single_tracks(&engine, tree)?;
         engine.start_audio(&output_prefs(prefs))?;
+        engine.play();
         Self::open_single(engine, slots, tree)
     }
 
@@ -1293,9 +1299,17 @@ impl KeysRig {
     // r[impl keys.rig.lane-tracks]
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open_lanes(prefs: &AudioIoPrefs, program: &LaneProgram) -> eyre::Result<Self> {
+        if let Some(engine) = signal_rig_host::engine::shared() {
+            engine.ensure_audio(&output_prefs(prefs))?;
+            if let Some(st) = engine.stats() {
+                set_engine_stats(st);
+            }
+            return Self::open_lanes_in(&engine, program);
+        }
         let engine = Engine::new(KEYS_PROJECT_NAME);
         let (rig, lanes) = lane_rig(&engine, program)?;
         engine.start_audio(&output_prefs(prefs))?;
+        engine.play();
         if let Some(st) = engine.stats() {
             set_engine_stats(st);
         }

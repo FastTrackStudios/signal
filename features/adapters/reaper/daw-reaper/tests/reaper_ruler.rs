@@ -13,9 +13,9 @@
 //!
 //! Run with: `just reaper integration-test reaper_ruler`
 
-use studio::test::reaper_test;
 use daw_proto::marker::MarkerEvent;
 use daw_proto::region::RegionEvent;
+use studio::test::reaper_test;
 
 /// How long to wait for the 30 Hz poller.
 const PATIENCE: std::time::Duration = std::time::Duration::from_secs(5);

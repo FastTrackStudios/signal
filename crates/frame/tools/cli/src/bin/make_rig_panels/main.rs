@@ -410,8 +410,8 @@ impl Doc {
             controls: &mut self.controls,
             theme: &self.theme,
         };
-        let node =
-            frame::surface::kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
+        let node = frame::surface::kit::place(&mut b, self.root, id, p)
+            .unwrap_or_else(|e| panic!("{id}: {e}"));
         self.scene.node_mut(node).expect("placed").transform =
             Transform::translate(x - ORIGIN.0, y - ORIGIN.1);
         node
@@ -651,7 +651,8 @@ mod tests {
         let text = frame::document::text::print(&scene);
         let back = frame::document::text::parse(&text, scene.assets.clone()).expect("parses");
         assert_eq!(back, scene);
-        let issues = frame::design::lint::lint(&scene, &catalog(), &frame::design::lint::Config::default());
+        let issues =
+            frame::design::lint::lint(&scene, &catalog(), &frame::design::lint::Config::default());
         let errors: Vec<String> = issues
             .iter()
             .filter(|i| i.severity == frame::design::lint::Severity::Error)
@@ -668,7 +669,8 @@ mod tests {
             .expect("run make_rig_panels");
         let json = std::fs::read_to_string(dir().join("rig-panels.catalog.json")).unwrap();
         let catalog: Catalog = serde_json::from_str(&json).unwrap();
-        let surface = Surface::from_scene(frame::document::text::parse(&text, BTreeMap::new()).unwrap());
+        let surface =
+            Surface::from_scene(frame::document::text::parse(&text, BTreeMap::new()).unwrap());
         assert_eq!(
             surface.controls.len(),
             super::surface().controls.len(),

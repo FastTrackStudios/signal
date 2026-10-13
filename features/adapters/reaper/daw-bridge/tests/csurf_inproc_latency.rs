@@ -21,8 +21,8 @@
 //! Run with:
 //!   cargo xtask reaper-test -- csurf_inproc_latency
 
-use studio::test::{DawInstanceConfig, run_multi_reaper_test};
 use eyre::Result;
+use studio::test::{DawInstanceConfig, run_multi_reaper_test};
 
 /// In-process hub publish→receive ceiling. broadcast::send +
 /// try_recv on the same thread should land in single-digit µs;

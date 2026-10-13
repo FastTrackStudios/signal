@@ -120,7 +120,7 @@ pub struct MeterPump {
     /// Drain-style subscription to the shared process-wide MIDI hub. The
     /// rig no longer opens its own 23 OS clients; the hub opens each port
     /// once for the whole app and this pump drains its share.
-    midi: Option<signal_rig_host::midi_hub::MidiDrain>,
+    midi: Option<midi::hub::MidiDrain>,
     tick: u64,
     /// Footswitch tap/hold/edge state (the shared gesture engine).
     switches: FootswitchEngine,
@@ -916,7 +916,7 @@ impl GuitarRigBackend {
             // to call `rescan_stream`, which reopened all 23 ports whenever
             // the ordered port list differed — an unstable enumeration order
             // alone was enough to trigger it.
-            let hub = signal_rig_host::midi_hub::hub();
+            let hub = midi::hub::hub();
             if pump.midi.is_none() {
                 pump.midi = Some(hub.subscribe_drain("guitar", None));
             }
@@ -1253,7 +1253,7 @@ impl GuitarRigBackend {
                 bytes.extend_from_slice(&[0x80, note, 0]);
             }
         }
-        let reached = signal_rig_host::midi_hub::send_to(&device, &bytes);
+        let reached = midi::hub::send_to(&device, &bytes);
         if pump.leds.as_ref() != Some(&want) {
             tracing::info!(midi.leds = ?want, midi.device = %device, midi.reached = reached, "pedal LEDs");
         }

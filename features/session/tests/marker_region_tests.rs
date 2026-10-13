@@ -13,9 +13,9 @@
 //!   cargo xtask reaper-test -- marker_region
 
 use daw::rpc::Project;
-use studio::test::reaper_test;
 use session::{SongBuilder, stamp_demo_into_project};
 use std::time::Duration;
+use studio::test::reaper_test;
 
 /// Remove all markers and regions from a project so each test starts clean.
 async fn clear_project(project: &Project) -> eyre::Result<()> {
@@ -389,7 +389,9 @@ async fn songbuilder_reacts_to_region_rename(
 
 /// Add an extra region and verify SongBuilder includes it.
 #[reaper_test]
-async fn songbuilder_reacts_to_region_add(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn songbuilder_reacts_to_region_add(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     clear_project(&ctx.project).await?;
     stamp_demo_into_project(&ctx.project).await?;
     tokio::time::sleep(Duration::from_millis(200)).await;

@@ -12,9 +12,9 @@
 
 use std::collections::HashMap;
 
+use crate::tone3000::Tone3000Client;
 use base64::Engine as _;
 use dioxus::prelude::*;
-use crate::tone3000::Tone3000Client;
 
 /// The per-tree image memo: URL → `data:` URI.
 #[derive(Clone, Copy)]

@@ -423,12 +423,14 @@ fn level_frames(
         .iter()
         .filter(|s| !explicit.iter().any(|f| f.id == s.id))
         .filter_map(|s| match s.kind {
-            frame::surface::proto::StreamKind::Level { channels } => Some(frame::surface::proto::StreamFrame {
-                id: s.id.clone(),
-                values: (0..channels.max(1))
-                    .map(|c| if c == 0 { db } else { db - 4.0 })
-                    .collect(),
-            }),
+            frame::surface::proto::StreamKind::Level { channels } => {
+                Some(frame::surface::proto::StreamFrame {
+                    id: s.id.clone(),
+                    values: (0..channels.max(1))
+                        .map(|c| if c == 0 { db } else { db - 4.0 })
+                        .collect(),
+                })
+            }
             _ => None,
         })
         .collect()

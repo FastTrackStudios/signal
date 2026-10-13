@@ -6,7 +6,6 @@
 #[cfg(feature = "engine")]
 pub mod engine;
 
-
 use facet::Facet;
 
 /// One space (a built map) the engine knows about.

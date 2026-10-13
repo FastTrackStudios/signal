@@ -12,13 +12,13 @@
 
 use std::time::Duration;
 
-use studio::test::reaper_test;
 use signal::reaper_applier::ReaperPatchApplier;
 use signal::resolve::{
     LayerSource, ResolveTarget, ResolvedBlock, ResolvedEngine, ResolvedGraph, ResolvedLayer,
     ResolvedModule,
 };
 use signal::{Block, BlockType, DawPatchApplier, seed_id};
+use studio::test::reaper_test;
 
 /// REAPER's CLAP plugin identifier for `FabFilter` Pro-Q 4.
 const CLAP_PROQ4: &str = "CLAP: Pro-Q 4 (FabFilter)";

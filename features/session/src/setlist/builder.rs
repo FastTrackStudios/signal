@@ -4,11 +4,11 @@
 
 use crate::proto::Setlist;
 use crate::song::builder::SongBuilder;
-#[cfg(feature = "reaper")]
-use studio::reaper::Reaper;
 use daw::rpc::Daw;
 #[cfg(feature = "reaper")]
 use daw::service::{ProjectContext, Projects};
+#[cfg(feature = "reaper")]
+use studio::reaper::Reaper;
 use tracing::{debug, warn};
 
 /// Builder for assembling setlists from open DAW projects

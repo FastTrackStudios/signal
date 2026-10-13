@@ -8,14 +8,14 @@
 //! - Hold mode (reads hold flag from state)
 //! - Configurable color, style (Fill/Curve/Bars)
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use dsp_core::meter::spectrum::SpectrumState;
+use nice_plug_dioxus::prelude::SceneOverlay;
+use nice_plug_dioxus::prelude::vello::Scene;
 use nice_plug_dioxus::prelude::vello::kurbo::{Affine, BezPath, Line, Rect, Stroke};
 use nice_plug_dioxus::prelude::vello::peniko::{Color, Fill};
-use nice_plug_dioxus::prelude::vello::Scene;
-use nice_plug_dioxus::prelude::SceneOverlay;
 use parking_lot::RwLock;
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -268,11 +268,7 @@ fn build_path(cols: &[f64], cfg: &SpectrumConfig, w: f64, h: f64) -> Option<BezP
         }
     }
 
-    if started {
-        Some(path)
-    } else {
-        None
-    }
+    if started { Some(path) } else { None }
 }
 
 impl SceneOverlay for SpectrumPainter {

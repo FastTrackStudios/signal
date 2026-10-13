@@ -17,10 +17,10 @@
 //! pointed at it:
 //!   cargo run -p session-extension-xtask
 
-use studio::test::daw_test;
 use session::SetlistServiceClient;
 use session::ruler_lanes::CoreLane;
 use session::services::setlist_service::SetlistServiceStreamClient;
+use studio::test::daw_test;
 
 /// Open the SetlistService lanes over the rig's DAW socket, the same way
 /// `reaper_engine::connect_to` does for a real `session-desktop` process.

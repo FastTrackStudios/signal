@@ -6,11 +6,11 @@
 //! pattern steps).
 
 use dioxus::prelude::*;
-use plugin_core::editor::prelude::*;
 use nice_plug::editor::ResizeHint;
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{SharedState, use_param_context};
+use plugin_core::editor::prelude::*;
 
 use crate::ui::params::{FILTERS, MICS, MicUiState, PATTERNS, SOLOS, SOURCES};
 

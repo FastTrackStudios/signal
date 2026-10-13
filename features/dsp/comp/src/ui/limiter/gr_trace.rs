@@ -4,8 +4,8 @@
 //! [`crate::ui::limiter::gr_trace_svg`]'s geometry. Display only — the limiter has nothing
 //! to drag here, unlike the compressor's transfer curve.
 
-use plugin_core::editor::prelude::*;
 use nice_plug_dioxus::SharedState;
+use plugin_core::editor::prelude::*;
 use plugin_core::prelude::*;
 use std::sync::atomic::Ordering;
 

@@ -12,8 +12,8 @@
 //! Run with:
 //!   cargo xtask reaper-test -- subscription
 
-use studio::test::reaper_test;
 use std::time::Duration;
+use studio::test::reaper_test;
 
 /// Verify stop event is received via subscription.
 #[reaper_test]
@@ -56,7 +56,9 @@ async fn subscription_a_stop_event(ctx: &studio::test::ReaperTestContext) -> eyr
 
 /// Subscribe to transport state and verify updates arrive during playback.
 #[reaper_test]
-async fn subscription_b_receives_updates(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn subscription_b_receives_updates(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let transport = ctx.project.transport();
     transport.stop().await?;
     transport.set_position(0.0).await?;

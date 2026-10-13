@@ -14,9 +14,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use studio::test::reaper_test;
 use signal::sidecar::{self, PresetKind, SignalSidecar};
 use signal::{ModuleRepo, ModuleRepoLive};
+use studio::test::reaper_test;
 
 /// Sleep to let REAPER process FX changes.
 async fn settle() {

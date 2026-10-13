@@ -103,7 +103,9 @@ async fn wait_for_active_section(
 }
 
 #[daw_test]
-async fn rockstars_album_opens_all_ten_songs(ctx: &studio::test::DawTestContext) -> eyre::Result<()> {
+async fn rockstars_album_opens_all_ten_songs(
+    ctx: &studio::test::DawTestContext,
+) -> eyre::Result<()> {
     for (folder, file) in SONGS {
         let path = format!("{ALBUM_ROOT}/{folder}/{file}");
         if !std::path::Path::new(&path).exists() {

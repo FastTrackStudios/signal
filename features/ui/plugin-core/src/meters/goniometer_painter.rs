@@ -9,10 +9,10 @@
 use std::sync::Arc;
 
 use dsp_core::meter::phase::PhaseState;
+use nice_plug_dioxus::prelude::SceneOverlay;
+use nice_plug_dioxus::prelude::vello::Scene;
 use nice_plug_dioxus::prelude::vello::kurbo::{Affine, Circle, Line, Stroke};
 use nice_plug_dioxus::prelude::vello::peniko::{Color, Fill};
-use nice_plug_dioxus::prelude::vello::Scene;
-use nice_plug_dioxus::prelude::SceneOverlay;
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 

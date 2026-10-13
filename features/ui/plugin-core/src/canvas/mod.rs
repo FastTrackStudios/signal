@@ -25,10 +25,10 @@ pub mod viz;
 /// Prelude — import this for all audio GUI building blocks.
 pub mod prelude {
     pub use crate::canvas::controls::*;
-    pub use crate::canvas::drag::{begin_drag, DragProvider, DragState, TextEditState};
+    pub use crate::canvas::drag::{DragProvider, DragState, TextEditState, begin_drag};
     pub use crate::canvas::layout::*;
     pub use crate::canvas::meters::*;
     pub use crate::canvas::theme;
-    pub use crate::canvas::theme::{use_init_theme, use_theme, Theme, ThemeProvider, ThemeVariant};
+    pub use crate::canvas::theme::{Theme, ThemeProvider, ThemeVariant, use_init_theme, use_theme};
     pub use crate::canvas::viz::*;
 }

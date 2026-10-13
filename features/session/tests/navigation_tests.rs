@@ -9,9 +9,9 @@
 //! Run with:
 //!   cargo xtask reaper-test -- navigation
 
-use studio::test::reaper_test;
 use session::{SongBuilder, stamp_demo_into_project};
 use std::time::Duration;
+use studio::test::reaper_test;
 
 /// Helper: stamp demo data, build songs, return the song and its sections.
 async fn setup_song(project: &daw::rpc::Project) -> eyre::Result<session::Song> {
@@ -239,7 +239,9 @@ async fn previous_section_smart_rewind(ctx: &studio::test::ReaperTestContext) ->
 /// Verify that playing through a section boundary naturally advances to the next section.
 /// Starts playback near the end of one section and confirms position enters the next.
 #[reaper_test]
-async fn playback_crosses_section_boundary(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn playback_crosses_section_boundary(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let song = setup_song(&ctx.project).await?;
     let transport = ctx.project.transport();
 

@@ -13,8 +13,8 @@
 //!
 //! Run with: `cargo run -p daw-reaper-xtask -- reaper_track_mirror`
 
-use studio::test::reaper_test;
 use daw_proto::track::{GroupFamily, GroupRole, TrackEvent};
+use studio::test::reaper_test;
 
 /// How long to wait for the 30 Hz poller to notice.
 ///
@@ -368,7 +368,9 @@ async fn height_depth_and_lanes_reach_a_subscriber(
 /// numbers. Before this the indicator was drawn from a hard-coded
 /// false, so a session full of sends showed none.
 #[reaper_test(isolated)]
-async fn a_send_changes_the_route_counts(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
+async fn a_send_changes_the_route_counts(
+    ctx: &studio::test::ReaperTestContext,
+) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
     let source = tracks.add("Route Source", None).await?;

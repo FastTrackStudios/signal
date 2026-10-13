@@ -3,7 +3,7 @@
 //! Warm panel with subtle depth and transport indicators.
 
 use crate::canvas::controls::segment::SegmentButton;
-use crate::canvas::theme::{use_theme, Theme, ThemeVariant};
+use crate::canvas::theme::{Theme, ThemeVariant, use_theme};
 use nice_plug_dioxus::prelude::*;
 
 /// Header bar with plugin title + theme selector + transport info.

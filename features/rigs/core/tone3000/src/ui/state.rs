@@ -9,9 +9,9 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use dioxus::prelude::*;
 use crate::tone3000::{Tone3000Client, Tone3000StreamClient};
 use crate::{DownloadProgress, SignInStatus};
+use dioxus::prelude::*;
 
 /// How this shell opens a URL in the user's own browser.
 ///

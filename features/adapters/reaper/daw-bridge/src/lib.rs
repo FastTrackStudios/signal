@@ -693,7 +693,8 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
     if std::env::var("FTS_CSURF_DISABLED").as_deref() != Ok("1") {
         use reaper_high::MiddlewareControlSurface;
         let mode = studio::reaper::CsurfMode::from_env();
-        let csurf = MiddlewareControlSurface::new(studio::reaper::DawControlSurface::with_mode(mode));
+        let csurf =
+            MiddlewareControlSurface::new(studio::reaper::DawControlSurface::with_mode(mode));
         match session.plugin_register_add_csurf_inst(Box::new(csurf)) {
             Ok(_handle) => {
                 info!("daw control surface registered (mode={mode:?})");
@@ -773,8 +774,8 @@ fn register_fts_extension_action(name: &'static str, description: &'static str, 
 }
 
 fn register_window_geometry_actions() {
-    use studio::reaper::window_geometry as wg;
     use daw_proto::WindowTarget;
+    use studio::reaper::window_geometry as wg;
 
     const NUDGE_STEP: i32 = 10;
     const GROW_STEP: i32 = 50;
