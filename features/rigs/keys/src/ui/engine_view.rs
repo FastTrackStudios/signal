@@ -17,12 +17,12 @@ pub fn EngineView(engine: KeysEngineModel, zoom: Signal<Zoom>) -> Element {
     let live = engine.layers.iter().filter(|l| l.live && !l.muted).count();
     // Level 3: this zoom's crumb. "Mixer" is the way back up — there is no
     // Back button anywhere in the app any more, only the trail.
-    let level = fts_chrome::use_chrome_level(3);
+    let level = fts_audio_ui::chrome::use_chrome_level(3);
     level.crumbs(vec![
-        fts_chrome::Crumb::new("Mixer", Callback::new(move |()| zoom.set(Zoom::Mixer))),
-        fts_chrome::Crumb::here(engine.name.clone()),
+        fts_audio_ui::chrome::Crumb::new("Mixer", Callback::new(move |()| zoom.set(Zoom::Mixer))),
+        fts_audio_ui::chrome::Crumb::here(engine.name.clone()),
     ]);
-    level.status(vec![fts_chrome::StatusItem::text(format!(
+    level.status(vec![fts_audio_ui::chrome::StatusItem::text(format!(
         "{live} of {} lanes live",
         engine.layers.len()
     ))]);

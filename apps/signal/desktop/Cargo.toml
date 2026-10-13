@@ -60,7 +60,7 @@ cli = [
     "dep:builtin", "dep:clap", "dep:guitar", "dep:serde_json", "dep:signal-account",
     "dep:signal-analyzer", "dep:signal-import", "dep:signal-nam", "dep:signal-plugin-host",
     "dep:signal-tone3000", "dep:signal-tone3000-proto", "dep:tokio",
-    "tokio?/macros", "tokio?/rt-multi-thread", "tokio?/time",
+    "tokio?/macros", "tokio?/rt-multi-thread", "tokio?/time"
 ]
 # Render the desktop window with WebKit/WRY instead of Blitz.
 #
@@ -165,7 +165,7 @@ guitar = { workspace = true, optional = true, features = ["ui"] }
 # the browser remote gets the same page the desktop app does.
 signal-tone3000-proto = { workspace = true, optional = true }
 signal-tone3000-ui = { workspace = true, optional = true }
-fts-chrome.workspace = true
+fts-audio-ui = { workspace = true }
 drums = { workspace = true, optional = true, features = ["ui"] }
 keys = { workspace = true, optional = true, features = ["ui"] }
 # MidiEvent — the in-tab keys backend (web_keys_backend.rs) decodes the raw

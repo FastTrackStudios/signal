@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/ui/fts-audio-ui",
     "features/editing",
     "features/ui/plugin-core",
     "features/ui/dock",
@@ -106,7 +107,6 @@ members = [
     "crates/daw/transport-sync",
     "crates/daw/macros",
     "xtask/devtools",
-    "features/ui/fts-chrome",
     "crates/daw/utils",
     "vendor/dioxus-test",
     "vendor/world",
@@ -131,7 +131,6 @@ members = [
     "apps/plugins/eq-standalone",
     "features/dsp/multiband",
     "features/dsp/stack",
-    "features/ui/fts-audio-ui",
     "features/ui/kit-sheet",
     # ── signal ──
     "apps/signal/desktop",
@@ -196,6 +195,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+fts-audio-ui = { path = "features/ui/fts-audio-ui" }
 editing = { path = "features/editing" }
 plugin-core = { path = "features/ui/plugin-core" }
 dock = { path = "features/ui/dock" }
@@ -241,12 +241,10 @@ tune = { path = "features/dsp/tune" }
 # it. Dependency-free and shared by the expression editor and the
 # arrangement, so the two cannot disagree about what an area is.
 # ── Internal — every moved crate, path declared ONCE here ─────────────
-fts-chrome = { path = "features/ui/fts-chrome" }
 # These two moved from `daw` to `processor` on the September 2026 FX
 # split and have diverged since — `../daw` still carries an older copy,
 # and taking that one puts two different `fts-audio-ui v0.1.0` in one
 # lockfile, which cargo refuses outright.
-fts-audio-ui = { path = "features/ui/fts-audio-ui" }
 # nice-plug lives in its own fork repo (upstream RustAudio/nice-plug's
 # baseview-03 branch + the FTS delta: nice-plug-dioxus, embedded editors,
 # rich track-info, param rescan). The ONE sanctioned exception to

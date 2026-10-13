@@ -432,7 +432,7 @@ pub fn LeftSidebar(
                                                 // lands after a reset.
                                                 if is_default {
                                                     span { style: "display: flex; flex-shrink: 0; color: {FAINT};", title: "Stack default",
-                                                        fts_chrome::Glyph { icon: fts_chrome::Icon::Star, size: 11 }
+                                                        fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Star, size: 11 }
                                                     }
                                                 }
                                                 if !overrides.is_empty() {
@@ -593,7 +593,7 @@ pub fn LevellingChip() -> Element {
                             color: #71717a; cursor: pointer; padding: 0;",
                     title: "Dismiss",
                     onclick: move |_| dismissed.set(Some(stamp)),
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Close, size: 10 }
                 }
             }
         }

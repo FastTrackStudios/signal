@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 
-use crate::icon::{Glyph, Icon};
-use crate::{use_chrome, RailItem, StatusItem};
+use crate::chrome::icon::{Glyph, Icon};
+use crate::chrome::{use_chrome, RailItem, StatusItem};
 
 /// Chrome metrics, in one place — the rails and the bar are the app's only
 /// fixed furniture, so their sizes are a contract, not a per-view choice.
@@ -317,7 +317,7 @@ pub fn PanelHost(id: String, children: Element) -> Element {
 
 /// The crumb trail — where you are, and the way back; a crumb with a menu
 /// opens its siblings. Part of [`TopBar`], and usable on its own in a view
-/// that claims the bar ([`crate::use_bar_claim`]).
+/// that claims the bar ([`crate::chrome::use_bar_claim`]).
 #[component]
 pub fn Crumbs(
     /// Only the deepest crumb (with its sibling menu) — for a view whose own
@@ -409,11 +409,11 @@ pub fn Crumbs(
 }
 
 /// The bar's slack: press to move the window, double-click to maximise —
-/// the [`crate::WindowActions`] the shell provided. Grows to fill the bar;
+/// the [`crate::chrome::WindowActions`] the shell provided. Grows to fill the bar;
 /// inert (but still a spacer) where there is no shell.
 #[component]
 pub fn DragSpace() -> Element {
-    let actions = try_use_context::<crate::WindowActions>();
+    let actions = try_use_context::<crate::chrome::WindowActions>();
     rsx! {
         div {
             style: "flex: 1; align-self: stretch; min-width: 12px;",
@@ -434,7 +434,7 @@ const LIGHTS_CSS: &str = ".fts-lights .fts-light-glyph{opacity:0}\
 /// macOS (the controls sit in [`WindowCluster`] there) or without a shell.
 #[component]
 pub fn TrafficLights() -> Element {
-    let actions = try_use_context::<crate::WindowActions>();
+    let actions = try_use_context::<crate::chrome::WindowActions>();
     let Some(actions) = actions.filter(|_| cfg!(target_os = "macos")) else {
         return rsx! {};
     };
@@ -475,10 +475,10 @@ pub fn TrafficLights() -> Element {
 /// The app cluster at the bar's right end: the settings gear (when the shell
 /// has a settings flyout) and — off macOS, where they live in
 /// [`TrafficLights`] instead — minimise / maximise / close. Nothing where no
-/// shell provided [`crate::WindowActions`].
+/// shell provided [`crate::chrome::WindowActions`].
 #[component]
 pub fn WindowCluster() -> Element {
-    let Some(actions) = try_use_context::<crate::WindowActions>() else {
+    let Some(actions) = try_use_context::<crate::chrome::WindowActions>() else {
         return rsx! {};
     };
     let buttons = !cfg!(target_os = "macos");

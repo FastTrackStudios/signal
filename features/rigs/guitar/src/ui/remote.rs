@@ -91,7 +91,7 @@ pub fn GuitarRigRemote() -> Element {
     let mut audio_open = crate::ui::settings::AUDIO_SETTINGS_OPEN.signal();
     // One bar: this header replaces the app's (crumbs and window controls
     // included) instead of stacking under it. No-op outside the app.
-    fts_chrome::use_bar_claim();
+    fts_audio_ui::chrome::use_bar_claim();
     let mut left_open = use_signal(|| true);
     // Each sidebar is minimal or full (a phone's width); the bar's toggles
     // step closed → minimal → full. The left opens minimal (the names and
@@ -451,7 +451,7 @@ pub fn GuitarRigRemote() -> Element {
 
                 // macOS: close / minimise / zoom in the corner, as the
                 // window's own title bar would put them.
-                fts_chrome::TrafficLights {}
+                fts_audio_ui::chrome::TrafficLights {}
 
                 // Sidebar toggles bookend the bar (not in Play, whose panes
                 // are the sidebars).
@@ -476,14 +476,14 @@ pub fn GuitarRigRemote() -> Element {
                         (true, false) => left_full.set(true),
                         (true, true) => left_open.set(false),
                     },
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::RailLeft, size: 15 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::RailLeft, size: 15 }
                 }
                 }
 
                 // Where you are, and the way back (Signal ▾ ▸ Rigs ▸ Guitar ▾).
                 // Never squeezed under the mode buttons: the bar's slack gives.
                 div { style: "flex-shrink: 0; display: flex; align-items: center;",
-                    fts_chrome::Crumbs { current_only: true }
+                    fts_audio_ui::chrome::Crumbs { current_only: true }
                 }
                 BarRule {}
 
@@ -492,9 +492,9 @@ pub fn GuitarRigRemote() -> Element {
                 // edits the presets themselves, each up on the bench.
                 div { class: "flex items-center gap-0.5",
                     for (pm, label, icon) in [
-                        (0u32, "Presets", fts_chrome::Icon::Preset),
-                        (1, "Profile", fts_chrome::Icon::Profile),
-                        (2, "Setlist", fts_chrome::Icon::Setlist),
+                        (0u32, "Presets", fts_audio_ui::chrome::Icon::Preset),
+                        (1, "Profile", fts_audio_ui::chrome::Icon::Profile),
+                        (2, "Setlist", fts_audio_ui::chrome::Icon::Setlist),
                     ] {
                         button {
                             key: "{label}",
@@ -521,7 +521,7 @@ pub fn GuitarRigRemote() -> Element {
                                     }
                                 }
                             },
-                            fts_chrome::Glyph { icon, size: 13 }
+                            fts_audio_ui::chrome::Glyph { icon, size: 13 }
                             "{label}"
                         }
                     }
@@ -540,20 +540,20 @@ pub fn GuitarRigRemote() -> Element {
                         let at = crate::ui::library::Kind::for_perform_mode(perf_now.perform_mode);
                         move |_| library_open.set(if library_open().is_some() { None } else { Some(at) })
                     },
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Browser, size: 13 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Browser, size: 13 }
                     "Library"
                 }
                 // The bar's slack moves the window (and double-click maximises).
-                fts_chrome::DragSpace {}
+                fts_audio_ui::chrome::DragSpace {}
 
                 // Work views, on the right (see `view`): Play and Control
                 // always, Routing and Tones in Preset mode.
                 div { class: "flex items-center gap-0.5",
                     for (m, label, icon) in [
-                        (Mode::Play, "Play", fts_chrome::Icon::Perform),
-                        (Mode::Control, "Control", fts_chrome::Icon::Control),
-                        (Mode::Routing, "Routing", fts_chrome::Icon::Routing),
-                        (Mode::Tones, "Tones", fts_chrome::Icon::Tones),
+                        (Mode::Play, "Play", fts_audio_ui::chrome::Icon::Perform),
+                        (Mode::Control, "Control", fts_audio_ui::chrome::Icon::Control),
+                        (Mode::Routing, "Routing", fts_audio_ui::chrome::Icon::Routing),
+                        (Mode::Tones, "Tones", fts_audio_ui::chrome::Icon::Tones),
                     ]
                     .into_iter()
                     .filter(|(m, ..)| perf_now.perform_mode == 0 || matches!(m, Mode::Play | Mode::Control))
@@ -568,7 +568,7 @@ pub fn GuitarRigRemote() -> Element {
                                 "px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
                             },
                             onclick: move |_| mode.set(m),
-                            fts_chrome::Glyph { icon, size: 13 }
+                            fts_audio_ui::chrome::Glyph { icon, size: 13 }
                             "{label}"
                         }
                     }
@@ -627,7 +627,7 @@ pub fn GuitarRigRemote() -> Element {
                 if view != Mode::Play {
                 BarRule {}
                 SwitchesToggle { mode: switches,
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Perform, size: 13 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Perform, size: 13 }
                 }
                 }
 
@@ -664,7 +664,7 @@ pub fn GuitarRigRemote() -> Element {
                         let mut palette_open = palette_open;
                         move |_| palette_open.toggle()
                     },
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Command, size: 13 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Command, size: 13 }
                 }
 
                 BarRule {}
@@ -797,13 +797,13 @@ pub fn GuitarRigRemote() -> Element {
                                 (true, false) => right_full.set(true),
                                 (true, true) => sel.set(None),
                             },
-                            fts_chrome::Glyph { icon: fts_chrome::Icon::RailRight, size: 15 }
+                            fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::RailRight, size: 15 }
                         }
                     }
                 }
                 }
                 // Settings + minimise / maximise / close.
-                fts_chrome::WindowCluster {}
+                fts_audio_ui::chrome::WindowCluster {}
             }
 
             // Body: [presets] [rig] [songs]

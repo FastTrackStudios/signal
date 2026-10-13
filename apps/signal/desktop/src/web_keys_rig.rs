@@ -1160,7 +1160,7 @@ pub fn KeysWebRig() -> Element {
 
     // The remote UI publishes its readouts/panels into the app chrome —
     // provide one shared Chrome so its PanelHosts and our PanelRail agree.
-    fts_chrome::provide_chrome();
+    fts_audio_ui::chrome::provide_chrome();
 
     use_hook(|| {
         install_hook();
@@ -1236,19 +1236,19 @@ pub fn KeysWebRig() -> Element {
     });
 
     let boot_running = matches!(boot(), Boot::Running);
-    let rail_items = vec![fts_chrome::RailItem::new(
+    let rail_items = vec![fts_audio_ui::chrome::RailItem::new(
         "keys",
         "Keys",
-        fts_chrome::Icon::Keys,
+        fts_audio_ui::chrome::Icon::Keys,
         true,
         Callback::new(|_| {}),
     )];
 
     rsx! {
         document::Style { {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;overflow:hidden;}*{box-sizing:border-box;}"} }
-        fts_chrome::AppFrame {
+        fts_audio_ui::chrome::AppFrame {
             top: rsx! {
-                fts_chrome::TopBar {
+                fts_audio_ui::chrome::TopBar {
                     leading: rsx! {
                         span {
                             style: "font-weight: 700; letter-spacing: 1px; font-size: 12px; \
@@ -1259,20 +1259,20 @@ pub fn KeysWebRig() -> Element {
                 }
             },
             rail: rsx! {
-                fts_chrome::IconRail { items: rail_items }
+                fts_audio_ui::chrome::IconRail { items: rail_items }
             },
             // The page's flyouts, exactly like the desktop app's
             // engines/settings: content rendered by PanelHost, opened from
             // the right rail.
             panel: rsx! {
-                fts_chrome::PanelHost { id: "web.ssm".to_string(),
+                fts_audio_ui::chrome::PanelHost { id: "web.ssm".to_string(),
                     SoundsourceManager { packs, worklet, lanes, midi_inputs, midi_status, demo, boot_running }
                 }
-                fts_chrome::PanelHost { id: "web.audio".to_string(),
+                fts_audio_ui::chrome::PanelHost { id: "web.audio".to_string(),
                     AudioPanel { astats, restart, boot_running }
                 }
             },
-            right: rsx! { fts_chrome::PanelRail {} },
+            right: rsx! { fts_audio_ui::chrome::PanelRail {} },
             // Publishes the page's crumbs / status / panels into the chrome
             // from a LEAF component, so the 10 Hz master-meter tick
             // re-renders only this (and the TopBar) — never the whole page.
@@ -1387,34 +1387,34 @@ fn KeysChrome(packs: Signal<Vec<PackRow>>, master: Signal<f32>, profile: String)
     let streaming = pack_count > ready_count;
     let resolution = resolution_pct(&packs.read());
 
-    let level = fts_chrome::use_chrome_level(1);
+    let level = fts_audio_ui::chrome::use_chrome_level(1);
     level.crumbs(vec![
-        fts_chrome::Crumb::here("Keys"),
-        fts_chrome::Crumb::here(profile),
+        fts_audio_ui::chrome::Crumb::here("Keys"),
+        fts_audio_ui::chrome::Crumb::here(profile),
     ]);
     let mut status = Vec::new();
     if pack_count > 0 {
         // Rig-wide Resolution — PROMINENT: a player in the first minute
         // must see the sound is not final yet.
         let pill = if resolution < 100 {
-            fts_chrome::StatusItem::pill(format!("RESOLUTION {resolution}%"), "#fbbf24", "#292312")
+            fts_audio_ui::chrome::StatusItem::pill(format!("RESOLUTION {resolution}%"), "#fbbf24", "#292312")
         } else {
-            fts_chrome::StatusItem::pill("FULL RESOLUTION", "#22c55e", "#0f2417")
+            fts_audio_ui::chrome::StatusItem::pill("FULL RESOLUTION", "#22c55e", "#0f2417")
         };
-        status.push(fts_chrome::StatusItem::tagged("rig-resolution", pill));
+        status.push(fts_audio_ui::chrome::StatusItem::tagged("rig-resolution", pill));
         if streaming {
-            status.push(fts_chrome::StatusItem::text(format!(
+            status.push(fts_audio_ui::chrome::StatusItem::text(format!(
                 "{ready_count}/{pack_count} soundsources"
             )));
         }
     }
-    status.push(fts_chrome::StatusItem::meter(master(), "#22c55e"));
+    status.push(fts_audio_ui::chrome::StatusItem::meter(master(), "#22c55e"));
     level.status(status);
     level.panels(vec![
-        fts_chrome::PanelSpec::new("web.ssm", "Soundsources", fts_chrome::Icon::Browser)
+        fts_audio_ui::chrome::PanelSpec::new("web.ssm", "Soundsources", fts_audio_ui::chrome::Icon::Browser)
             .width(400)
             .testid("ssm-button"),
-        fts_chrome::PanelSpec::new("web.audio", "Audio", fts_chrome::Icon::Engine)
+        fts_audio_ui::chrome::PanelSpec::new("web.audio", "Audio", fts_audio_ui::chrome::Icon::Engine)
             .width(320)
             .testid("audio-button"),
     ]);

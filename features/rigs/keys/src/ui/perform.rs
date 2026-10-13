@@ -79,7 +79,7 @@ pub fn PerformStrip(perform: KeysPerform) -> Element {
             // the song), a pedal being learned, the tempo.
             div { style: "display: flex; align-items: center; gap: 6px;",
                 SwitchesToggle { mode: switches,
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Perform, size: 13 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Perform, size: 13 }
                 }
                 for (m, label) in [(0u32, "Preset"), (1, "Profile"), (2, "Setlist")] {
                     button {

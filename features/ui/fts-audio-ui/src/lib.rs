@@ -14,6 +14,9 @@
 //! use fts_audio_ui::prelude::*;
 //! ```
 
+pub mod chrome;
+
+
 /// Whether painted visualisers should move (the host says; see [`animate::Animate`]).
 pub mod animate;
 pub mod axis;

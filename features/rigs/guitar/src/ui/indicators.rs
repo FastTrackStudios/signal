@@ -188,7 +188,7 @@ pub fn Indicator(
                                     if enabled {
                                         span { style: "width: 12px; flex-shrink: 0; display: flex; color: {LIVE};",
                                             if item.checked {
-                                                fts_chrome::Glyph { icon: fts_chrome::Icon::Check, size: 12 }
+                                                fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Check, size: 12 }
                                             }
                                         }
                                     }

@@ -306,7 +306,7 @@ pub fn ZoomPanel(
                         style: if on { "color: #4ade80;" } else { "color: #52525b;" },
                         title: if on { "Bypass" } else { "Engage" },
                         onclick: move |_| cb.call(()),
-                        fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
+                        fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Power, size: 12 }
                     }
                 }
             }
@@ -318,14 +318,14 @@ pub fn ZoomPanel(
                         style: if on { "color: #4ade80;" } else { "color: #52525b;" },
                         title: if on { "Bypass all" } else { "Engage" },
                         onclick: move |_| cb.call(()),
-                        fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
+                        fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Power, size: 12 }
                     }
                 }
                 button {
                     class: "text-muted-foreground/60 hover:text-foreground text-sm leading-none",
                     title: "{title}",
                     onclick: move |_| zoomed.set(true),
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Expand, size: 12 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Expand, size: 12 }
                 }
             }
         }
@@ -334,7 +334,7 @@ pub fn ZoomPanel(
                 button {
                     class: "absolute top-3 right-4 z-10 text-muted-foreground hover:text-foreground text-xl",
                     onclick: move |_| zoomed.set(false),
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 16 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Close, size: 16 }
                 }
                 div { class: "relative flex-1 min-h-0",
                     div { class: "h-full", style: "{dim}", {zoomed_view.unwrap_or(children)} }
@@ -959,7 +959,7 @@ fn AlgoPicker(
                 "{current}"
             }
             span { class: "text-muted-foreground",
-                fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: 10 }
+                fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::ChevronDown, size: 10 }
             }
         }
         if open() && host.is_none() {
@@ -1283,7 +1283,7 @@ pub(crate) fn DelayPanel(
                                             }
                                         }
                                     },
-                                    fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
+                                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Power, size: 12 }
                                 }
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{di + 1}" }
                                 if dim {
@@ -1536,7 +1536,7 @@ pub(crate) fn ReverbPanel(
                                             }
                                         }
                                     },
-                                    fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
+                                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Power, size: 12 }
                                 }
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{vi + 1}" }
                                 if dim {
@@ -1842,7 +1842,7 @@ pub(crate) fn ModGroupPanel(
                             });
                         }
                     },
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Power, size: 12 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Power, size: 12 }
                 }
                 span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "{title}" }
                 }

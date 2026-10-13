@@ -171,7 +171,7 @@ pub fn SignalWorkspace() -> Element {
     let mut selected = use_signal(crate::rigs::load_last);
     // Level 1 of the chrome: which rig. Switching rigs is rare, so it lives
     // in the top bar only — the "Guitar ▾" crumb's menu — not in a rail.
-    let level = fts_chrome::use_chrome_level(1);
+    let level = fts_audio_ui::chrome::use_chrome_level(1);
 
     let pick = use_callback(move |rig: Option<Rig>| {
         selected.set(rig);
@@ -179,7 +179,7 @@ pub fn SignalWorkspace() -> Element {
     });
 
     let Some(kind) = selected() else {
-        level.crumbs(vec![fts_chrome::Crumb::here("Rigs")]);
+        level.crumbs(vec![fts_audio_ui::chrome::Crumb::here("Rigs")]);
         return rsx! {
             RigMenu { phone: false, on_pick: move |rig| pick.call(Some(rig)) }
         };
@@ -187,8 +187,8 @@ pub fn SignalWorkspace() -> Element {
 
     // The rig crumb picks any sibling rig, and "Rigs" goes back to the picker.
     level.crumbs(vec![
-        fts_chrome::Crumb::new("Rigs", Callback::new(move |()| pick.call(None))),
-        fts_chrome::Crumb::here(kind.label()).with_menu(
+        fts_audio_ui::chrome::Crumb::new("Rigs", Callback::new(move |()| pick.call(None))),
+        fts_audio_ui::chrome::Crumb::here(kind.label()).with_menu(
             Rig::ALL
                 .iter()
                 .copied()

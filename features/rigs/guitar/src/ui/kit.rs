@@ -56,7 +56,7 @@ pub fn pane_w(full: bool) -> &'static str {
 /// A square icon button.
 #[component]
 pub fn IconButton(
-    icon: fts_chrome::Icon,
+    icon: fts_audio_ui::chrome::Icon,
     title: String,
     #[props(default)] disabled: bool,
     #[props(default)] danger: bool,
@@ -101,7 +101,7 @@ pub fn IconButton(
                     onclick.call(());
                 }
             },
-            span { style: "display: flex; {rotate}", fts_chrome::Glyph { icon, size: glyph } }
+            span { style: "display: flex; {rotate}", fts_audio_ui::chrome::Glyph { icon, size: glyph } }
         }
     }
 }
@@ -495,7 +495,7 @@ pub fn PresetBar(
                                 toggle(&e);
                             }
                         },
-                        fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: 10 }
+                        fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::ChevronDown, size: 10 }
                     }
                     if let Some(s) = on_step {
                         button { style: "{btn} color: {MUTED}; border-left: 1px solid {LINE};", title: "Previous",
@@ -567,7 +567,7 @@ pub fn PresetBar(
                             toggle(&e);
                         }
                     },
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::ChevronDown, size: if compact { 10 } else { 12 } }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::ChevronDown, size: if compact { 10 } else { 12 } }
                 }
             }
             // The name: what plays, and whether it is edited.

@@ -70,7 +70,7 @@ cli = [
     "tokio?/macros",
     "tokio?/net",
     "tokio?/rt-multi-thread",
-    "tokio?/time",
+    "tokio?/time"
 ]
 # The app on Blitz (dioxus-native): the panels-and-views shell with our own
 # title bar — see docs/app-on-blitz.md. Desktop only for now (iOS follows);
@@ -142,7 +142,7 @@ tts = ["session/tts"]
 futures-timer = "3"
 utils.workspace = true
 tracing.workspace = true
-fts-chrome.workspace = true
+fts-audio-ui = { workspace = true }
 
 # Session domain, wire surface — the SetlistService types + generated
 # clients (session-proto) compile everywhere, including the wasm remote.

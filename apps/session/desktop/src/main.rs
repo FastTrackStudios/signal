@@ -401,8 +401,8 @@ impl Workspace {
 
     /// The rail glyph. The rail is icon-only, so this is how a workspace is
     /// recognised — labels are tooltips.
-    fn icon(self) -> fts_chrome::Icon {
-        use fts_chrome::Icon;
+    fn icon(self) -> fts_audio_ui::chrome::Icon {
+        use fts_audio_ui::chrome::Icon;
         match self {
             Self::Home => Icon::Home,
             #[cfg(feature = "session")]
@@ -504,8 +504,8 @@ fn App() -> Element {
     // The app owns the chrome: one bar, the workspace rail, and the panel
     // rail every level publishes into (fts_chrome). Level 0 is the app's own
     // contribution — the workspace crumb and the engines/settings panels.
-    let _chrome = fts_chrome::provide_chrome();
-    let level = fts_chrome::use_chrome_level(0);
+    let _chrome = fts_audio_ui::chrome::provide_chrome();
+    let level = fts_audio_ui::chrome::use_chrome_level(0);
     let chrome = level.chrome();
 
     let go = use_callback(move |w: Workspace| {
@@ -517,7 +517,7 @@ fn App() -> Element {
     // The workspace crumb carries every other workspace as its menu, so the
     // rail's icons are never the only way to change place.
     level.crumbs(vec![
-        fts_chrome::Crumb::here(here.label()).with_menu(
+        fts_audio_ui::chrome::Crumb::here(here.label()).with_menu(
             Workspace::all()
                 .into_iter()
                 .map(|(w, label)| {
@@ -531,14 +531,14 @@ fn App() -> Element {
         ),
     ]);
     level.panels(vec![
-        fts_chrome::PanelSpec::new("engines", "Engines", fts_chrome::Icon::Engine).width(300),
-        fts_chrome::PanelSpec::new("settings", "Settings", fts_chrome::Icon::Settings).width(300),
+        fts_audio_ui::chrome::PanelSpec::new("engines", "Engines", fts_audio_ui::chrome::Icon::Engine).width(300),
+        fts_audio_ui::chrome::PanelSpec::new("settings", "Settings", fts_audio_ui::chrome::Icon::Settings).width(300),
     ]);
 
-    let rail_items: Vec<fts_chrome::RailItem> = Workspace::all()
+    let rail_items: Vec<fts_audio_ui::chrome::RailItem> = Workspace::all()
         .into_iter()
         .map(|(w, label)| {
-            fts_chrome::RailItem::new(
+            fts_audio_ui::chrome::RailItem::new(
                 label,
                 label,
                 w.icon(),
@@ -556,12 +556,12 @@ fn App() -> Element {
         document::Style { {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;overflow:hidden;}*{box-sizing:border-box;}"} }
         SessionChrome {}
         ResizeHandles {}
-        // ONE bar over two rails (fts_chrome::AppFrame). The bar is also the
+        // ONE bar over two rails (fts_audio_ui::chrome::AppFrame). The bar is also the
         // title bar — the native decorations are off on desktop, so its slack
         // is the drag surface and the window controls sit at its right end.
-        fts_chrome::AppFrame {
+        fts_audio_ui::chrome::AppFrame {
             top: rsx! {
-                fts_chrome::TopBar {
+                fts_audio_ui::chrome::TopBar {
                     leading: rsx! {
                         span {
                             style: "font-weight: 700; letter-spacing: 1px; font-size: 12px; \
@@ -577,16 +577,16 @@ fn App() -> Element {
                 }
             },
             rail: rsx! {
-                fts_chrome::IconRail { items: rail_items, sub: sub_rail }
+                fts_audio_ui::chrome::IconRail { items: rail_items, sub: sub_rail }
             },
             // App-level flyouts. Views render their own inside their layout.
             panel: rsx! {
-                fts_chrome::PanelHost { id: "engines".to_string(),
+                fts_audio_ui::chrome::PanelHost { id: "engines".to_string(),
                     div { style: "padding: 12px;", EnginesArea {} }
                 }
-                fts_chrome::PanelHost { id: "settings".to_string(), SettingsPanel {} }
+                fts_audio_ui::chrome::PanelHost { id: "settings".to_string(), SettingsPanel {} }
             },
-            right: rsx! { fts_chrome::PanelRail {} },
+            right: rsx! { fts_audio_ui::chrome::PanelRail {} },
             main { style: "flex: 1; min-height: 0; min-width: 0; display: flex;",
                 match current() {
                     Some(Workspace::Home) | None => rsx! {
@@ -649,7 +649,7 @@ fn toggle_maximize() {
 #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 #[component]
 fn WindowControls() -> Element {
-    use fts_chrome::{Icon, WindowButton};
+    use fts_audio_ui::chrome::{Icon, WindowButton};
     rsx! {
         div { style: "display: flex; align-items: center; gap: 2px; margin-left: 2px;",
             WindowButton {

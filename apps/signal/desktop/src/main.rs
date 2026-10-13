@@ -668,8 +668,8 @@ fn App() -> Element {
     // The app owns the chrome: one bar, the workspace rail, and the panel
     // rail every level publishes into (fts_chrome). Level 0 is the app's own
     // contribution — the workspace crumb and the engines/settings panels.
-    let _chrome = fts_chrome::provide_chrome();
-    let level = fts_chrome::use_chrome_level(0);
+    let _chrome = fts_audio_ui::chrome::provide_chrome();
+    let level = fts_audio_ui::chrome::use_chrome_level(0);
     let chrome = level.chrome();
 
     let go = use_callback(move |w: Workspace| {
@@ -683,7 +683,7 @@ fn App() -> Element {
     level.crumbs(
         here.map(|here| {
             vec![
-                fts_chrome::Crumb::here(here.label()).with_menu(
+                fts_audio_ui::chrome::Crumb::here(here.label()).with_menu(
                     Workspace::all()
                         .into_iter()
                         .map(|(w, label)| {
@@ -704,15 +704,15 @@ fn App() -> Element {
     // one app-level flyout, Settings (engine status included), opens from
     // the gear beside the window controls.
     level.panels(vec![
-        fts_chrome::PanelSpec::new("settings", "Settings", fts_chrome::Icon::Settings).width(300),
+        fts_audio_ui::chrome::PanelSpec::new("settings", "Settings", fts_audio_ui::chrome::Icon::Settings).width(300),
     ]);
 
     // The window's own controls, for whichever bar is showing: the app's, or
-    // the one a view draws when it claims the bar (fts_chrome::use_bar_claim
+    // the one a view draws when it claims the bar (fts_audio_ui::chrome::use_bar_claim
     // — the guitar rig does, so there is one bar, not the app's over the
     // rig's). Desktop only; the browser and phone draw their own chrome.
     #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
-    fts_chrome::provide_window_actions(fts_chrome::WindowActions {
+    fts_audio_ui::chrome::provide_window_actions(fts_audio_ui::chrome::WindowActions {
         drag: Callback::new(move |()| drag_window()),
         expand: Callback::new(move |()| toggle_maximize()),
         minimize: Callback::new(move |()| chrome::minimize()),
@@ -737,13 +737,13 @@ fn App() -> Element {
         document::Style { {"@layer base{:where(button.flex,button.inline-flex){justify-content:flex-start;}}"} }
         ResizeHandles {}
         PlatformMenu {}
-        // ONE bar over two rails (fts_chrome::AppFrame). The bar is also the
+        // ONE bar over two rails (fts_audio_ui::chrome::AppFrame). The bar is also the
         // title bar — the native decorations are off on desktop, so its slack
         // is the drag surface and the window controls sit at its right end.
-        fts_chrome::AppFrame {
+        fts_audio_ui::chrome::AppFrame {
             top: rsx! {
                 if !bar_claimed {
-                fts_chrome::TopBar {
+                fts_audio_ui::chrome::TopBar {
                     leading: rsx! {
                         span {
                             style: "font-weight: 700; letter-spacing: 1px; font-size: 12px; \
@@ -757,13 +757,13 @@ fn App() -> Element {
                         // No window shell there, so no WindowCluster — but
                         // settings still needs a way in.
                         if cfg!(any(target_arch = "wasm32", target_os = "ios")) {
-                            fts_chrome::WindowButton {
-                                icon: fts_chrome::Icon::Settings,
+                            fts_audio_ui::chrome::WindowButton {
+                                icon: fts_audio_ui::chrome::Icon::Settings,
                                 title: "Settings".to_string(),
                                 on_click: move |()| chrome.toggle_panel("settings"),
                             }
                         }
-                        fts_chrome::WindowCluster {}
+                        fts_audio_ui::chrome::WindowCluster {}
                     },
                     on_drag: move |()| drag_window(),
                     on_expand: move |()| toggle_maximize(),
@@ -773,7 +773,7 @@ fn App() -> Element {
             rail: rsx! {},
             // App-level flyouts. Views render their own inside their layout.
             panel: rsx! {
-                fts_chrome::PanelHost { id: "settings".to_string(), SettingsPanel {} }
+                fts_audio_ui::chrome::PanelHost { id: "settings".to_string(), SettingsPanel {} }
             },
             main { style: "flex: 1; min-width: 0; min-height: 0; display: flex;",
                 match here {
@@ -886,7 +886,7 @@ fn toggle_maximize() {
 fn PlatformMenu() -> Element {
     #[cfg(all(target_os = "macos", feature = "signal-guitar"))]
     {
-        let chrome = fts_chrome::use_chrome();
+        let chrome = fts_audio_ui::chrome::use_chrome();
         rsx! {
             mac_menu::MacMenuBar { on_settings: move |()| chrome.toggle_panel("settings") }
         }

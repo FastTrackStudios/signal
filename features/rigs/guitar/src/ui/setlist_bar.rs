@@ -506,13 +506,13 @@ fn PartMarks(part: crate::proto::PerfPart) -> Element {
         if !part.repeat_of.is_empty() {
             span { style: "flex-shrink: 0; display: flex; align-items: center; gap: 3px; font-size: 11px; color: {MUTED}; white-space: nowrap;",
                 title: "Repeats {part.repeat_of} — the same sound; editing one edits both",
-                fts_chrome::Glyph { icon: fts_chrome::Icon::Refresh, size: 10 }
+                fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Refresh, size: 10 }
                 "{part.repeat_of}"
             }
         }
         if part.profile_switches {
             span { style: "flex-shrink: 0; display: flex; color: {FAINT};", title: "Plays the profile's switches",
-                fts_chrome::Glyph { icon: fts_chrome::Icon::Profile, size: 10 }
+                fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Profile, size: 10 }
             }
         }
         if part.switch_count > 0 {
@@ -520,7 +520,7 @@ fn PartMarks(part: crate::proto::PerfPart) -> Element {
             span { style: "flex-shrink: 0; display: flex; align-items: center; gap: 2px; font-size: 11px; \
                            font-family: monospace; color: {FAINT};",
                 title: "Tunes {part.switch_count} switches",
-                fts_chrome::Glyph { icon: fts_chrome::Icon::Perform, size: 10 }
+                fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Perform, size: 10 }
                 "{part.switch_count}"
             }
         }
@@ -545,7 +545,7 @@ fn FootButton(label: String, onclick: EventHandler<()>) -> Element {
 /// A small icon button — the kit's.
 #[component]
 fn Tool(
-    icon: fts_chrome::Icon,
+    icon: fts_audio_ui::chrome::Icon,
     title: String,
     #[props(default = false)] flip: bool,
     #[props(default = false)] disabled: bool,
@@ -799,25 +799,25 @@ fn SongEntryEditor(
                     on_enter: { let save = save.clone(); move |()| save() },
                     on_escape: move |()| on_done.call(()),
                 }
-                Tool { icon: fts_chrome::Icon::Check, title: "Save", onclick: { let save = save.clone(); move |()| save() } }
+                Tool { icon: fts_audio_ui::chrome::Icon::Check, title: "Save", onclick: { let save = save.clone(); move |()| save() } }
             }
             div { style: "display: flex; gap: 6px; align-items: center;",
                 Tool {
-                    icon: fts_chrome::Icon::ChevronDown,
+                    icon: fts_audio_ui::chrome::Icon::ChevronDown,
                     title: "Earlier in the set",
                     flip: true,
                     disabled: index == 0,
                     onclick: { let rig = rig.clone(); move |()| send(&rig, move |r| async move { let _ = r.move_song(i, i - 1).await; }) },
                 }
                 Tool {
-                    icon: fts_chrome::Icon::ChevronDown,
+                    icon: fts_audio_ui::chrome::Icon::ChevronDown,
                     title: "Later in the set",
                     disabled: index + 1 >= count,
                     onclick: { let rig = rig.clone(); move |()| send(&rig, move |r| async move { let _ = r.move_song(i, i + 1).await; }) },
                 }
                 div { style: "flex: 1;" }
                 Tool {
-                    icon: fts_chrome::Icon::Close,
+                    icon: fts_audio_ui::chrome::Icon::Close,
                     title: "Take it out of this set",
                     danger: true,
                     onclick: {
@@ -920,7 +920,7 @@ fn PartEditor(
                 }
                 if !patch.is_empty() {
                     Tool {
-                        icon: fts_chrome::Icon::Close,
+                        icon: fts_audio_ui::chrome::Icon::Close,
                         title: "Recall nothing — a label only",
                         onclick: {
                             let (rig, part) = (rig.clone(), name.clone());
@@ -982,21 +982,21 @@ fn PartEditor(
             }
             div { style: "display: flex; gap: 6px; align-items: center;",
                 Tool {
-                    icon: fts_chrome::Icon::ChevronDown,
+                    icon: fts_audio_ui::chrome::Icon::ChevronDown,
                     title: "Earlier in the song",
                     flip: true,
                     disabled: index == 0,
                     onclick: { let rig = rig.clone(); move |()| send(&rig, move |r| async move { let _ = r.move_part(i, i - 1).await; }) },
                 }
                 Tool {
-                    icon: fts_chrome::Icon::ChevronDown,
+                    icon: fts_audio_ui::chrome::Icon::ChevronDown,
                     title: "Later in the song",
                     disabled: index + 1 >= count,
                     onclick: { let rig = rig.clone(); move |()| send(&rig, move |r| async move { let _ = r.move_part(i, i + 1).await; }) },
                 }
                 div { style: "flex: 1;" }
                 Tool {
-                    icon: fts_chrome::Icon::Close,
+                    icon: fts_audio_ui::chrome::Icon::Close,
                     title: "Remove this part",
                     danger: true,
                     onclick: {
@@ -1039,7 +1039,7 @@ fn NewPart(on_done: EventHandler<()>) -> Element {
                 },
                 on_escape: move |()| on_done.call(()),
             }
-            Tool { icon: fts_chrome::Icon::Close, title: "Done", onclick: move |()| on_done.call(()) }
+            Tool { icon: fts_audio_ui::chrome::Icon::Close, title: "Done", onclick: move |()| on_done.call(()) }
         }
     }
 }

@@ -47,8 +47,8 @@ pub const fn available(rig: Rig) -> bool {
 
 /// The rail glyph. `fts_chrome` has no vocal glyph yet, so Vocals borrows the
 /// perform icon until one lands in that repo.
-pub const fn icon(rig: Rig) -> fts_chrome::Icon {
-    use fts_chrome::Icon;
+pub const fn icon(rig: Rig) -> fts_audio_ui::chrome::Icon {
+    use fts_audio_ui::chrome::Icon;
     match rig {
         Rig::Guitar => Icon::Guitar,
         Rig::Keys => Icon::Keys,

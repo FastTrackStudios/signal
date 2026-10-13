@@ -170,22 +170,22 @@ impl Kind {
         }
     }
 
-    pub(crate) const fn icon(self) -> fts_chrome::Icon {
+    pub(crate) const fn icon(self) -> fts_audio_ui::chrome::Icon {
         match self {
-            Self::All => fts_chrome::Icon::Browser,
-            Self::Setlists => fts_chrome::Icon::Setlist,
-            Self::Songs => fts_chrome::Icon::Note,
-            Self::Profiles => fts_chrome::Icon::Profile,
-            Self::Patches => fts_chrome::Icon::Perform,
-            Self::Presets => fts_chrome::Icon::Star,
-            Self::Drives => fts_chrome::Icon::Tones,
-            Self::Compositions => fts_chrome::Icon::Preset,
-            Self::AmpModules => fts_chrome::Icon::Guitar,
-            Self::DriveModules => fts_chrome::Icon::Power,
-            Self::TimeModules => fts_chrome::Icon::Refresh,
-            Self::DelayModules => fts_chrome::Icon::Refresh,
-            Self::ReverbModules => fts_chrome::Icon::Refresh,
-            Self::BlockPresets => fts_chrome::Icon::Control,
+            Self::All => fts_audio_ui::chrome::Icon::Browser,
+            Self::Setlists => fts_audio_ui::chrome::Icon::Setlist,
+            Self::Songs => fts_audio_ui::chrome::Icon::Note,
+            Self::Profiles => fts_audio_ui::chrome::Icon::Profile,
+            Self::Patches => fts_audio_ui::chrome::Icon::Perform,
+            Self::Presets => fts_audio_ui::chrome::Icon::Star,
+            Self::Drives => fts_audio_ui::chrome::Icon::Tones,
+            Self::Compositions => fts_audio_ui::chrome::Icon::Preset,
+            Self::AmpModules => fts_audio_ui::chrome::Icon::Guitar,
+            Self::DriveModules => fts_audio_ui::chrome::Icon::Power,
+            Self::TimeModules => fts_audio_ui::chrome::Icon::Refresh,
+            Self::DelayModules => fts_audio_ui::chrome::Icon::Refresh,
+            Self::ReverbModules => fts_audio_ui::chrome::Icon::Refresh,
+            Self::BlockPresets => fts_audio_ui::chrome::Icon::Control,
         }
     }
 
@@ -663,7 +663,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                     style: "display: flex; align-items: center; gap: 14px; padding: 0 16px; \
                             height: 56px; flex-shrink: 0; border-bottom: 1px solid {LINE};",
                     div { style: "display: flex; align-items: center; gap: 8px; color: {MUTED}; flex-shrink: 0;",
-                        fts_chrome::Glyph { icon: fts_chrome::Icon::Browser, size: 16 }
+                        fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Browser, size: 16 }
                         span { style: "font-size: 14px; font-weight: 700; color: {TEXT};", "Library" }
                     }
                     div {
@@ -686,9 +686,9 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                     creating.set(false);
                                     refocus();
                                 },
-                                fts_chrome::Glyph { icon: kind.icon(), size: 11 }
+                                fts_audio_ui::chrome::Glyph { icon: kind.icon(), size: 11 }
                                 "{kind.label()}"
-                                fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 10 }
+                                fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Close, size: 10 }
                             }
                         }
                         input {
@@ -739,7 +739,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                 cursor: pointer;",
                         title: "Close (Esc)",
                         onclick: move |_| close(),
-                        fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 14 }
+                        fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Close, size: 14 }
                     }
                 }
 
@@ -780,7 +780,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                     creating.set(false);
                                     refocus();
                                 },
-                                fts_chrome::Glyph { icon: k.icon(), size: 14 }
+                                fts_audio_ui::chrome::Glyph { icon: k.icon(), size: 14 }
                                 span { style: "flex: 1; min-width: 0; font-size: 12px; font-weight: 600;", "{k.label()}" }
                                 span { style: "font-size: 10px; color: {FAINT};", "{hits}" }
                             }
@@ -909,7 +909,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                                                 span {
                                                     style: "display: flex; align-items: center; gap: 4px; flex-shrink: 0; \
                                                             font-size: 10px; color: {FAINT};",
-                                                    fts_chrome::Glyph { icon: row.kind.icon(), size: 11 }
+                                                    fts_audio_ui::chrome::Glyph { icon: row.kind.icon(), size: 11 }
                                                     "{row.kind.one()}"
                                                 }
                                             }
@@ -1089,7 +1089,7 @@ fn Detail(
         div { style: "display: flex; flex-direction: column; gap: 6px; padding: 18px 18px 14px; \
                       border-bottom: 1px solid {LINE}; flex-shrink: 0;",
             div { style: "display: flex; align-items: center; gap: 8px; color: {FAINT};",
-                fts_chrome::Glyph { icon: kind.icon(), size: 12 }
+                fts_audio_ui::chrome::Glyph { icon: kind.icon(), size: 12 }
                 span { style: "font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;",
                     "{kind.one()}"
                 }
@@ -1209,7 +1209,7 @@ fn NameLine(name: String, on_commit: Option<Callback<String>>) -> Element {
                         text.set(name.clone());
                         editing.set(true);
                     },
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Pencil, size: 13 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Pencil, size: 13 }
                 }
             }
         }
@@ -1274,7 +1274,7 @@ fn LinkRow(
             }
             if let Some(mv) = on_move {
                 crate::ui::kit::IconButton {
-                    icon: fts_chrome::Icon::ChevronDown,
+                    icon: fts_audio_ui::chrome::Icon::ChevronDown,
                     title: "Move up",
                     flip: true,
                     disabled: first,
@@ -1282,7 +1282,7 @@ fn LinkRow(
                     onclick: move |()| mv.call(-1),
                 }
                 crate::ui::kit::IconButton {
-                    icon: fts_chrome::Icon::ChevronDown,
+                    icon: fts_audio_ui::chrome::Icon::ChevronDown,
                     title: "Move down",
                     disabled: last,
                     size: 24,
@@ -1296,7 +1296,7 @@ fn LinkRow(
                             background: transparent; color: {FAINT}; cursor: pointer;",
                     title: "Remove",
                     onclick: move |_| remove.call(()),
-                    fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 12 }
+                    fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Close, size: 12 }
                 }
             }
         }
@@ -1346,7 +1346,7 @@ fn SetlistDetail(
             }
             Act { label: "Duplicate", onclick: move |()| duplicating.set(true) }
             crate::ui::kit::IconButton {
-                icon: fts_chrome::Icon::ChevronDown,
+                icon: fts_audio_ui::chrome::Icon::ChevronDown,
                 title: "Move this set up the list",
                 flip: true,
                 disabled: index == 0,
@@ -1357,7 +1357,7 @@ fn SetlistDetail(
                 },
             }
             crate::ui::kit::IconButton {
-                icon: fts_chrome::Icon::ChevronDown,
+                icon: fts_audio_ui::chrome::Icon::ChevronDown,
                 title: "Move this set down the list",
                 disabled: index as usize + 1 >= lib.setlists.len(),
                 size: 30,
