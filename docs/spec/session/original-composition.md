@@ -360,7 +360,7 @@ guitar profile. The track is then named for the stack that loads:
      (`signal:features/rigs/guitar/ui/src/tablet/browser.rs`); the spec
      is `docs/spec/signal/browser.md`.
   2. **A guitar rig as track FX.** signal-fx hosts only `FTS Bass Rig`
-     and `FTS Kit Mic` (`features/dsp/builtin/signal-fx/src/lib.rs:30-32`).
+     and `FTS Kit Mic` (`features/rigs/fx/src/lib.rs:30-32`).
      `apps/session/daw/src/rig.rs` only draws (`rig.rs:153-167`). On the
      signal side:
      - `RigHome` lets a guitar rig and a bass rig coexist
@@ -379,10 +379,10 @@ guitar profile. The track is then named for the stack that loads:
   and Worship is the default profile (`library.rs:556-558`).
 - **Build:**
   - **(M7)** An `FTS Signal Rig` `PluginInstance` in
-    `features/dsp/builtin/signal-fx/src/`, with state
+    `features/rigs/fx/src/`, with state
     `{instrument, profile, stack, patch}`. It owns the hosted rig's audio
     half and has a stepped Scene parameter, as `FTS Bass Rig` does
-    (`features/dsp/builtin/signal-fx/src/rig.rs:18`).
+    (`features/rigs/fx/src/rig.rs:18`).
   - **(M7)** `RIG_LOAD {track, instrument?, profile, stack?}` puts the rig
     first in the track's chain, or replaces the rig already there. The
     instrument comes from the track's group when it is not given.
@@ -672,7 +672,7 @@ kit.
     (`signal:features/rigs/drums/src/backend.rs:25-27`, `:1517-1540`).
     The library is overridden by `SIGNAL_DRUM_LIBRARY`.
   - `FTS Kit Mic` plays a `.signalpreset` from a track's own MIDI
-    (`features/dsp/builtin/signal-fx/src/kit.rs:1-58`).
+    (`features/rigs/fx/src/kit.rs:1-58`).
   - The only action that puts it on the kit is `DRUMS_SAMPLES
     {preset?, dry_run?}` (`actions.rs:2205-2283`, default Heavy Thwacky
     at `:2233`). That action writes notes from recorded hit markers,
@@ -680,11 +680,11 @@ kit.
 - **Build (M9):**
   - A `Worship.signalpreset` in the kit library. It is a preset over an
     existing pack, so it is data, not code. The test uses a tiny fixture
-    pack under `features/dsp/builtin/signal-fx/fixtures/kit/` via
+    pack under `features/rigs/fx/fixtures/kit/` via
     `SIGNAL_DRUM_LIBRARY`.
   - `KIT_LOAD {preset}`: `FTS Kit Mic` on each piece's Sample track,
     with the overheads and rooms in `split` mode
-    (`features/dsp/builtin/signal-fx/src/kit.rs:21-24`). Each Kit Mic is fed by MIDI
+    (`features/rigs/fx/src/kit.rs:21-24`). Each Kit Mic is fed by MIDI
     sends from `Drums/MIDI`.
   - The browser's drum section lists the kits and runs `KIT_LOAD`.
 - **Asserts:**
@@ -783,7 +783,7 @@ bass profile.
     Otherwise it is the profile's default patch (`bass_rig.rs:107-121`).
   - The profile is read from Session's own copy at
     `~/.config/fts/bass-rig`, redirected by `FTS_BASS_RIG_DIR`
-    (`features/dsp/builtin/signal-fx/src/profile.rs:53-85`).
+    (`features/rigs/fx/src/profile.rs:53-85`).
   - The worship bass profile has the stacks Clean (Amp, DI), Crunch,
     Drive (Drive), Synth, Fuzz and Ambient
     (`signal:features/rigs/guitar/default-config-bass/profiles/worship.styx:3-9`).
@@ -895,7 +895,7 @@ calls "add layer", which makes `Main` and `DBL`.
   - The two channels are panned hard left and right.
   - The folder's rig takes the folder's stereo sum. The profile rig
     already processes the input in stereo
-    (`features/dsp/builtin/signal-fx/src/profile.rs:220-260`).
+    (`features/rigs/fx/src/profile.rs:220-260`).
 - **Test:** `SESSION_SELECT_TRACK {track: "Guitar Clean"}` (`actions.rs:1827`),
   then `TRACK_DOUBLE {}`.
 - **Asserts (with Q1 resolved as L/R; swap the names if Q1 picks
@@ -1137,9 +1137,9 @@ remaining step of the demo test in the memory notes.
 | M4 | Recording: capture + `finish_recording` into take lanes in daw-standalone, a test input source, `TRACK_ARM`, the record action working (`arrange_edit.rs:1446`) | M2 | `daw:features/standalone/daw-standalone/src/transport.rs`, `audio_engine/render`, `actions.rs` | 3.2, 4.1, 5.2, 7.1, 8.3, 10.2, 11.3, 12.1, 13.2 |
 | M5 | `TAKE_RATE` on any track + ratings in `TRACK_ITEMS`; comp ranges in bars; swipe comping in Record mode | M4 | `take_rating.rs`, `comp.rs`, `record_view.rs`, `actions.rs` | 4.2, 5.2, 5.3 |
 | M6 | Routing presets per audio device, applied on create and arm; `ROUTING_PRESET` | M2, M4 | new `routing_presets.rs`, signal's `RigManager` | 3.4, 10.2 |
-| M7 | `FTS Signal Rig` (the hosted guitar rig as track FX, signal S1–S3), `RIG_LOAD {instrument, profile, stack}`, naming a track after the loaded stack | M2 | `features/dsp/builtin/signal-fx`, `signal:features/rigs/guitar/src/session.rs` | 3.3, 8.1, 9.1, 11.2 |
+| M7 | `FTS Signal Rig` (the hosted guitar rig as track FX, signal S1–S3), `RIG_LOAD {instrument, profile, stack}`, naming a track after the loaded stack | M2 | `features/rigs/fx`, `signal:features/rigs/guitar/src/session.rs` | 3.3, 8.1, 9.1, 11.2 |
 | M8 | The browser panel on B (follows the selection; click = `TONE_SET`/`RIG_LOAD`, Shift-click = `TONE_INSERT`) | M7 | new `browser.rs`, `keys.rs`, signal-guitar-ui exports | 3.3, 8.1, 8.2, 9.1 |
-| M9 | A worship kit preset + `KIT_LOAD`, MIDI sends from `Drums/MIDI`, `MIDI_NOTES_ADD` | M2, M8 | kit library data, `features/dsp/builtin/signal-fx/src/kit.rs`, `actions.rs` | 6.1–6.3 |
+| M9 | A worship kit preset + `KIT_LOAD`, MIDI sends from `Drums/MIDI`, `MIDI_NOTES_ADD` | M2, M8 | kit library data, `features/rigs/fx/src/kit.rs`, `actions.rs` | 6.1–6.3 |
 | M10 | Grow actions on Session's list (`TRACK_DOUBLE`, `TRACK_ADD_ARRANGEMENT {name}`, `TRACK_ADD_LAYER {name, mirror}`), lanes and comps moving with their items, the chain moving to its level, L/R panning into the folder's rig, `Harmony` as a layer | M2, M7 | new `apps/session/daw/src/grow.rs`, `features/session/session/src/guitar_grow.rs`, `metadata_patterns.rs` | 10.1, 11.1, 12.1, 13.1, 13.2 |
 | M11 | `TRACK_SPLIT_BY_TONE` | M7, M10 | new action | 15 |
 | H | Test harness: a headless window pump and a mode readback | — | `apps/session/daw/src/` | 0.2 |
@@ -1282,7 +1282,7 @@ straight onto `C1` when nothing is comped over its range yet?
   uses Tone Hammer captures, and the kit needs a sample pack. Neither is
   on CI.
 - **Proposal:** small fixture profiles and packs under
-  `features/dsp/builtin/signal-fx/fixtures/`, selected by `FTS_BASS_RIG_DIR`,
+  `features/rigs/fx/fixtures/`, selected by `FTS_BASS_RIG_DIR`,
   `SIGNAL_RIG_DIR` and `SIGNAL_DRUM_LIBRARY`.
 - Only state, structure and automation are asserted on CI. Audio
   checks run under `FTS_COMPOSE_RENDER=1`.

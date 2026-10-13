@@ -46,7 +46,7 @@ members = [
     "features/ui/view-gestures",
     "vendor/anyrender_vello",
     "vendor/anyrender_vello_hybrid",
-    "features/dsp/builtin/signal-fx",
+    "features/rigs/fx",
     "features/expression-editor/expression-editor-audio",
     "features/expression-editor/expression-editor-core",
     "features/expression-editor/expression-editor-corpus",
@@ -204,13 +204,13 @@ members = [
     "features/rigs/orchestra",
     "features/rigs/synth",
     "features/rigs/synth/proto",
-    "features/rigs/synth/rig",
+    "features/rigs/synth-rig",
     "features/rigs/synth/ui",
     "features/rigs/wurli/openwurli-dsp",
     "features/rigs/sampler/pack-library",
     "features/rigs/sampler/packs-proto",
     "features/rigs/sampler/signal-sampler",
-    "features/rigs/sampler/signal-sampler-clap",
+    "apps/plugins/sampler",
     # ── patchbay ──
     "features/patchbay/patchbay",
     "features/patchbay/proto",
@@ -516,7 +516,7 @@ tune-plugin = { path = "apps/plugins/tune", default-features = false }
 unison-plugin = { path = "apps/plugins/unison", default-features = false }
 mic-plugin = { path = "apps/plugins/mic", default-features = false }
 # signal's rigs in the session engine: the bass rig, the kit's voices.
-signal-fx = { path = "features/dsp/builtin/signal-fx" }
+signal-fx = { path = "features/rigs/fx" }
 # signal's in-process rig engine (NAM, convolver, the sampler), from the
 # sibling checkout as daw is: both resolve daw to ../daw, so its
 # processors are the session engine's `PluginInstance`s.
@@ -1067,7 +1067,7 @@ signal-orchestra = { path = "features/rigs/orchestra" }
 signal-synth = { path = "features/rigs/synth" }
 signal-synth-proto = { path = "features/rigs/synth/proto" }
 signal-synth-ui = { path = "features/rigs/synth/ui" }
-signal-synth-rig = { path = "features/rigs/synth/rig" }
+signal-synth-rig = { path = "features/rigs/synth-rig" }
 signal-analyzer = { path = "features/dsp/analyzer/signal-analyzer" }
 signal-separator = { path = "features/dsp/separator/signal-separator" }
 
