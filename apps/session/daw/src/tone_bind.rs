@@ -162,7 +162,7 @@ fn reverb(tone: &Tone) -> Vec<(u32, f64)> {
 
 fn delay(tone: &Tone) -> Vec<(u32, f64)> {
     let echo = &tone.delay;
-    let space = delay_profiles::PROFILES
+    let space = delay::profiles::PROFILES
         .iter()
         .find(|p| p.style == echo.style)
         .map(|p| p.name);

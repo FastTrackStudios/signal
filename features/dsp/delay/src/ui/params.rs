@@ -32,7 +32,7 @@ pub struct DelayUiState {
 #[derive(Params)]
 pub struct DelayParams {
     /// Which of the seven families' profiles is active, as an index into
-    /// [`delay_profiles::PROFILES`]. A parameter because the space is worth
+    /// [`crate::profiles::PROFILES`]. A parameter because the space is worth
     /// automating; see [`Self::profile_id`] for what a session actually saves.
     #[id = "profile"]
     pub profile: IntParam,
@@ -119,14 +119,14 @@ impl Default for DelayParams {
         Self {
             profile: IntParam::new(
                 "Space",
-                delay_profiles::profile_index("digital").unwrap_or(0) as i32,
+                crate::profiles::profile_index("digital").unwrap_or(0) as i32,
                 IntRange::Linear {
                     min: 0,
-                    max: (delay_profiles::PROFILES.len() - 1) as i32,
+                    max: (crate::profiles::PROFILES.len() - 1) as i32,
                 },
             )
             .with_value_to_string(Arc::new(|v| {
-                delay_profiles::PROFILES
+                crate::profiles::PROFILES
                     .get(v.max(0) as usize)
                     .map_or_else(|| "—".to_string(), |p| p.name.to_string())
             })),
@@ -287,19 +287,19 @@ impl DelayParams {
     /// index, which is what a pre-id session has.
     pub fn resolved_profile_index(&self) -> usize {
         let id = self.profile_id.read();
-        delay_profiles::profile_index(&id).unwrap_or_else(|| {
-            (self.profile.value().max(0) as usize).min(delay_profiles::PROFILES.len() - 1)
+        crate::profiles::profile_index(&id).unwrap_or_else(|| {
+            (self.profile.value().max(0) as usize).min(crate::profiles::PROFILES.len() - 1)
         })
     }
 
     /// The active profile.
-    pub fn resolved_profile(&self) -> &'static delay_profiles::Profile {
-        &delay_profiles::PROFILES[self.resolved_profile_index()]
+    pub fn resolved_profile(&self) -> &'static crate::profiles::Profile {
+        &crate::profiles::PROFILES[self.resolved_profile_index()]
     }
 
     /// Record the id for `index` — call wherever the profile changes.
     pub fn store_profile_id(&self, index: usize) {
-        let id = delay_profiles::PROFILES
+        let id = crate::profiles::PROFILES
             .get(index)
             .map_or("digital", |p| p.id);
         *self.profile_id.write() = id.to_string();
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn a_session_restores_from_the_id_and_not_the_number() {
         let params = DelayParams::default();
-        params.store_profile_id(delay_profiles::profile_index("oilcan").unwrap());
+        params.store_profile_id(crate::profiles::profile_index("oilcan").unwrap());
         assert_eq!(params.resolved_profile().id, "oilcan");
 
         // A profile this build does not have — a project from a newer

@@ -244,7 +244,7 @@ pub static SPECIAL: EchoDesign = EchoDesign {
 /// silkscreened and its accent shifted so the variants are still distinct.
 #[must_use]
 pub fn design_for(profile_id: &str) -> &'static EchoDesign {
-    match delay_profiles::category_of(profile_id).map(|(c, _)| delay_profiles::CATEGORIES[c].id) {
+    match crate::profiles::category_of(profile_id).map(|(c, _)| crate::profiles::CATEGORIES[c].id) {
         Some("digital") => &DIGITAL,
         Some("tape") => &TAPE,
         Some("analog") => &ANALOG,
@@ -257,7 +257,7 @@ pub fn design_for(profile_id: &str) -> &'static EchoDesign {
 /// How lit the centrepiece is for a variant inside its family.
 #[must_use]
 pub fn variant_lift(profile_id: &str) -> f64 {
-    match delay_profiles::category_of(profile_id) {
+    match crate::profiles::category_of(profile_id) {
         Some((_, index)) => (index as f64).mul_add(0.22, 1.0),
         None => 1.0,
     }
@@ -369,7 +369,7 @@ pub fn EchoFace(
     let _ = frame;
     let design = design_for(&profile_id);
     let profile =
-        delay_profiles::profile_by_id(&profile_id).unwrap_or(&delay_profiles::PROFILES[0]);
+        crate::profiles::profile_by_id(&profile_id).unwrap_or(&crate::profiles::PROFILES[0]);
     let scale = fts_audio_ui::hardware::panel::panel_scale(W, H, fts_audio_ui::shell::RAIL_W);
 
     let value = |name: &str| handles.get(name).map_or(0.5, |h| f64::from(h.normalized()));
@@ -380,7 +380,7 @@ pub fn EchoFace(
     // which put the small knobs' numbers ~20 px lower than the large ones — a
     // ragged row that, on the saturator, dropped SAG/HEAT/TILT straight onto
     // the rule under the curve display.
-    let category_label = delay_profiles::CATEGORIES
+    let category_label = crate::profiles::CATEGORIES
         .iter()
         .find(|c| c.profiles.contains(&profile.id))
         .map_or("Delay", |c| c.label);
@@ -824,7 +824,7 @@ mod tests {
 
     #[test]
     fn every_profile_names_its_engine_controls() {
-        for profile in delay_profiles::PROFILES {
+        for profile in crate::profiles::PROFILES {
             let (a, b) = character_legends(profile.id);
             assert_ne!(
                 (a, b),
@@ -837,7 +837,7 @@ mod tests {
 
     #[test]
     fn every_family_has_a_panel_and_every_panel_a_family() {
-        for category in delay_profiles::CATEGORIES {
+        for category in crate::profiles::CATEGORIES {
             for id in category.profiles {
                 assert_eq!(
                     design_for(id).family,

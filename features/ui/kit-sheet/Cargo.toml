@@ -23,12 +23,11 @@ dioxus = { workspace = true }
 dioxus-test = { workspace = true }
 fts-audio-ui = { workspace = true }
 comp-ui = { workspace = true, features = ["native"] }
-delay-ui = { workspace = true, features = ["native"] }
+delay = { workspace = true, features = ["native", "profiles", "ui"] }
 eq-ui = { workspace = true, features = ["native"] }
 reverb-ui = { workspace = true, features = ["native"] }
 saturate-ui = { workspace = true, features = ["native"] }
 comp-profiles = { path = "../../dsp/comp/comp-profiles" }
-delay-profiles = { workspace = true }
 reverb-profiles = { workspace = true }
 saturate-profiles = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

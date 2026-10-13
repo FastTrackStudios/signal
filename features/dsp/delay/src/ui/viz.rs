@@ -42,11 +42,11 @@ use lane::faded;
 
 /// Which machine is making the repeats.
 ///
-/// Re-exported rather than redefined: [`delay_dsp::engine::Family`] already
+/// Re-exported rather than redefined: [`crate::engine::Family`] already
 /// says a delay's family "is not a preset — it is a different machine, and
 /// anything that draws one should say which before it says anything else".
 /// This is the drawing half of that sentence.
-pub use delay_dsp::engine::Family;
+pub use crate::engine::Family;
 
 /// The family of the style at `index` in the editor's algorithm list.
 ///
@@ -54,7 +54,7 @@ pub use delay_dsp::engine::Family;
 /// effect that owns the table owns the mapping.
 #[must_use]
 pub fn family_of_style(index: u32) -> Family {
-    delay_dsp::engine::DelayStyle::from_index(index as usize).family()
+    crate::engine::DelayStyle::from_index(index as usize).family()
 }
 
 /// The family, as the shader's `u.style.x`. The order is the shader's

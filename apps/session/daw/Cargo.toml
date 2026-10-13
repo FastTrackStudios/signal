@@ -106,13 +106,11 @@ eq-ui = { workspace = true }
 saturate-dsp = { workspace = true, features = ["analysis"] }
 # The delay's style families and the reverb's rendered impulse — the
 # Depth panels draw the machine, not a picture of its knob.
-delay-dsp = { workspace = true }
+delay = { workspace = true, features = ["profiles", "ui"] }
 reverb-dsp = { workspace = true }
 reverb-profiles = { workspace = true }
-delay-profiles = { workspace = true }
 # Their painted pictures, for the FX view's devices.
 reverb-ui = { workspace = true }
-delay-ui = { workspace = true }
 modulation-ui = { workspace = true }
 saturate-ui = { workspace = true }
 frame-live = { workspace = true }

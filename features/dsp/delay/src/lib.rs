@@ -13,6 +13,13 @@
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
 
+#[cfg(feature = "profiles")]
+pub mod profiles;
+#[cfg(feature = "ui")]
+pub mod ui;
+pub use crate as dsp;
+
+
 pub mod bbd_core;
 pub mod bbd_delay;
 pub mod chain;

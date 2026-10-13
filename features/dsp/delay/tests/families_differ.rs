@@ -1,6 +1,6 @@
 //! Two machines must not draw the same picture. See the reverb's note.
 
-use delay_ui::viz::{DelayUniforms, DelayView, Family, SHADER, Tap};
+use delay::ui::viz::{DelayUniforms, DelayView, Family, SHADER, Tap};
 
 const W: u32 = 480;
 const H: u32 = 140;

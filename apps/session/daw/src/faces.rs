@@ -20,7 +20,7 @@ use crate::tone::{Panel, Tone, Which};
 #[derive(Clone)]
 pub enum Picture {
     Reverb(reverb_ui::viz::ReverbView),
-    Delay(delay_ui::viz::DelayView),
+    Delay(delay::ui::viz::DelayView),
     Mod(modulation_ui::viz::ModView),
     Sat(saturate_ui::viz::SatView),
     /// A face designed in frame, running live: its controls are its own.
@@ -586,7 +586,7 @@ pub fn paint_mod_in(scene: &mut Scene, tone: &Tone, at: Panel) {
 
 /// The repeats `tone`'s delay makes: every tap until it has faded under
 /// a fiftieth, alternating sides as wide as the delay is.
-fn taps(tone: &Tone) -> Vec<delay_ui::viz::Tap> {
+fn taps(tone: &Tone) -> Vec<delay::ui::viz::Tap> {
     let echo = &tone.delay;
     let gap = (echo.time / 1000.0).max(0.001);
     let pan = echo.width.clamp(0.0, 1.0) * 0.8;
@@ -594,7 +594,7 @@ fn taps(tone: &Tone) -> Vec<delay_ui::viz::Tap> {
         let next = level * echo.feedback.clamp(0.0, 0.95);
         (next > 0.02 && *n < 32.0).then_some((n + 1.0, next))
     })
-    .map(|(n, level)| delay_ui::viz::Tap {
+    .map(|(n, level)| delay::ui::viz::Tap {
         at: gap * n,
         level,
         pan: if n % 2.0 < 1.0 { pan } else { -pan },
@@ -682,7 +682,7 @@ pub fn of(which: Which, tone: &Tone) -> Option<Face> {
                 .map_or(1.0, |last| last.at + tone.delay.time / 1000.0);
             Some(Face {
                 name: format!("{family:?}"),
-                picture: Picture::Delay(delay_ui::viz::DelayView {
+                picture: Picture::Delay(delay::ui::viz::DelayView {
                     taps,
                     window,
                     mix: 1.0,
@@ -801,8 +801,8 @@ pub struct Painters {
     delays: std::collections::HashMap<
         String,
         (
-            delay_ui::viz::Shared<delay_ui::viz::DelayView>,
-            delay_ui::viz::DelayWidget,
+            delay::ui::viz::Shared<delay::ui::viz::DelayView>,
+            delay::ui::viz::DelayWidget,
         ),
     >,
     frames: std::collections::HashMap<String, Live>,
@@ -1169,7 +1169,7 @@ impl Painters {
             let (w, h) = (f64::from(width), f64::from(height));
             match picture {
                 Picture::Reverb(view) => reverb_ui::viz::paint_reverb(&mut scene, view, w, h),
-                Picture::Delay(view) => delay_ui::viz::paint_delay(&mut scene, view, w, h),
+                Picture::Delay(view) => delay::ui::viz::paint_delay(&mut scene, view, w, h),
                 Picture::Mod(view) => modulation_ui::viz::paint_mod(&mut scene, view, w, h),
                 Picture::Sat(view) => saturate_ui::viz::paint_sat(&mut scene, view, w, h),
                 Picture::Frame(_) => {}
@@ -1190,7 +1190,7 @@ impl Painters {
             Picture::Delay(view) => {
                 let (shared, widget) = self.delays.entry(key.to_owned()).or_insert_with(|| {
                     let shared = std::rc::Rc::new(std::cell::RefCell::new(view.clone()));
-                    let mut widget = delay_ui::viz::DelayWidget::new(std::rc::Rc::clone(&shared));
+                    let mut widget = delay::ui::viz::DelayWidget::new(std::rc::Rc::clone(&shared));
                     widget.create_surfaces(ctx);
                     (shared, widget)
                 });

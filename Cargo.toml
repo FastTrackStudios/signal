@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/delay",
     "features/dsp/mic",
     "features/dsp/trigger",
     "features/dsp/stretch",
@@ -169,10 +170,6 @@ members = [
     "features/dsp/comp/comp-profiles",
     "features/dsp/comp/comp-ui",
     "features/dsp/comp/limiter-ui",
-    "features/dsp/delay/delay",
-    "features/dsp/delay/delay-dsp",
-    "features/dsp/delay/delay-profiles",
-    "features/dsp/delay/delay-ui",
     "features/dsp/core/dsp-core",
     "features/dsp/core/dsp-golden",
     "features/dsp/eq/apps/eq-standalone",
@@ -336,6 +333,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+delay = { path = "features/dsp/delay" }
 mic = { path = "features/dsp/mic" }
 trigger = { path = "features/dsp/trigger" }
 stretch = { path = "features/dsp/stretch" }
@@ -564,15 +562,12 @@ saturate-dsp = { path = "features/dsp/saturate/saturate-dsp", default-features =
 # family decides how a repeat is drawn, and the reverb's envelope is
 # the algorithm's actual impulse response, rendered by `reverb-dsp`'s
 # analysis probe rather than an exponential drawn from the decay knob.
-delay-dsp = { path = "features/dsp/delay/delay-dsp" }
 reverb-dsp = { path = "features/dsp/reverb/reverb-dsp" }
 reverb-profiles = { path = "features/dsp/reverb/reverb-profiles" }
-delay-profiles = { path = "features/dsp/delay/delay-profiles" }
 # The effects' own painted pictures — every reverb family, every delay
 # family, and the six modulation engines — which the FX view's devices
 # draw (`paint_reverb`, `paint_delay`, `paint_mod`, behind `viz`).
 reverb-ui = { path = "features/dsp/reverb/reverb-ui", default-features = false, features = ["viz"] }
-delay-ui = { path = "features/dsp/delay/delay-ui", default-features = false, features = ["viz"] }
 modulation-ui = { path = "features/dsp/modulation/modulation-ui", default-features = false, features = ["viz"] }
 saturate-ui = { path = "features/dsp/saturate/saturate-ui", default-features = false, features = ["viz"] }
 # The saturator's five circuits and their profiles — what its selector
@@ -1124,7 +1119,6 @@ spectrum-analyzer-ui = { path = "features/dsp/eq/spectrum-analyzer/spectrum-anal
 comp = { path = "features/dsp/comp/comp" }
 limiter-ui = { path = "features/dsp/comp/limiter-ui" }
 reverb = { path = "features/dsp/reverb/reverb" }
-delay = { path = "features/dsp/delay/delay" }
 modulation = { path = "features/dsp/modulation/modulation" }
 eq-dsp = { path = "features/dsp/eq/eq-dsp" }
 comp-dsp = { path = "features/dsp/comp/comp-dsp" }

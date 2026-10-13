@@ -7,7 +7,7 @@
 //! family that is awkward to reach is exactly the one that ships unlooked-at,
 //! so this reaches all six without a window.
 
-use delay_ui::viz::{DelayUniforms, DelayView, Family, Tap};
+use delay::ui::viz::{DelayUniforms, DelayView, Family, Tap};
 
 const W: u32 = 760;
 const H: u32 = 190;
@@ -50,7 +50,7 @@ fn main() {
         eprintln!("no GPU available — nothing to render");
         std::process::exit(2);
     };
-    let source = delay_ui::viz::SHADER;
+    let source = delay::ui::viz::SHADER;
 
     for family in [
         Family::Digital,

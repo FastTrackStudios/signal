@@ -404,7 +404,7 @@ fn delay(tone: &mut Tone, fx: &EngineFx, bpm: f64) {
         }
     }
     if let Some(profile) = fx.text("Space").and_then(|space| {
-        delay_profiles::PROFILES
+        delay::profiles::PROFILES
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(space.trim()))
     }) {

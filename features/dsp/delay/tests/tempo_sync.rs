@@ -8,7 +8,7 @@
 
 #![cfg(feature = "native")]
 
-use delay_ui::params::{DelayParams, MAX_TIME_MS};
+use delay::ui::params::{DelayParams, MAX_TIME_MS};
 use musical_time::{Flavour, MusicalTime, NoteValue};
 use nice_plug::prelude::Param;
 

@@ -126,10 +126,10 @@ fn saturate_faces() -> Vec<Face> {
 }
 
 fn delay_faces() -> Vec<Face> {
-    delay_profiles::PROFILES
+    delay::profiles::PROFILES
         .iter()
         .map(|p| {
-            let d = delay_ui::faces::design_for(p.id);
+            let d = delay::ui::faces::design_for(p.id);
             Face {
                 plugin: "Delay",
                 name: p.name.to_string(),

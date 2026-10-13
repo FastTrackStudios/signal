@@ -17,8 +17,8 @@
 //! it; fed an impulse-like hit, each repeat is separately visible in the
 //! output, so a reference vector that changes tells you *which* repeat moved.
 
-use delay_dsp::chain::{DelayChain, StereoMode};
-use delay_dsp::engine::{DelayEngine, DelayStyle};
+use delay::chain::{DelayChain, StereoMode};
+use delay::engine::{DelayEngine, DelayStyle};
 use dsp_golden::{Golden, golden, signal};
 
 use audiocore_dsp::{AudioConfig, Processor};

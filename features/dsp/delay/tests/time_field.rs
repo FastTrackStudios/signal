@@ -20,7 +20,7 @@ use std::sync::Arc;
 #[path = "support/mod.rs"]
 mod support;
 
-use delay_ui::params::{DelayParams, DelayUiState};
+use delay::ui::params::{DelayParams, DelayUiState};
 use musical_time::{Flavour, MusicalTime, NoteValue};
 use nice_plug::prelude::Param;
 use support::{Fixture, mount_with, mount_with_state};

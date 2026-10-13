@@ -22,7 +22,7 @@ const PROBES: [f32; 7] = [0.0, 0.004, 0.25, 0.5, 0.75, 0.996, 1.0];
 
 #[test]
 fn every_parameter_parses_the_string_it_prints() {
-    let params = delay_ui::params::DelayParams::default();
+    let params = delay::ui::params::DelayParams::default();
     let mut broken: Vec<String> = Vec::new();
 
     for (id, ptr, _group) in params.param_map() {

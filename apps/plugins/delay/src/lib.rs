@@ -14,7 +14,7 @@
 use audiocore_core::prelude::*;
 use std::sync::Arc;
 
-use delay_ui::params::{DelayParams, DelayUiState};
+use delay::ui::params::{DelayParams, DelayUiState};
 
 use audiocore_dsp::{AudioConfig, Processor};
 use delay::DelayChain;
@@ -38,14 +38,14 @@ impl Default for FtsDelay {
         Self {
             params: Arc::new(DelayParams::default()),
             ui_state: Arc::new(DelayUiState::default()),
-            // The editor sizes itself — see delay_ui::control_view.
+            // The editor sizes itself — see delay::ui::control_view.
             editor_state: DioxusState::new(|| {
                 (
-                    delay_ui::control_view::EDITOR_W,
-                    delay_ui::control_view::EDITOR_H,
+                    delay::ui::control_view::EDITOR_W,
+                    delay::ui::control_view::EDITOR_H,
                 )
             })
-            .with_resize_hint(delay_ui::control_view::resize_hint()),
+            .with_resize_hint(delay::ui::control_view::resize_hint()),
             chain: DelayChain::new(),
             sample_rate: 48_000.0,
             max_buffer_size: 512,
@@ -133,11 +133,11 @@ impl Plugin for FtsDelay {
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
-            Arc::new(delay_ui::control_view::DelayUi {
+            Arc::new(delay::ui::control_view::DelayUi {
                 params: self.params.clone(),
                 state: self.ui_state.clone(),
             }),
-            delay_ui::control_view::App,
+            delay::ui::control_view::App,
         )
     }
 

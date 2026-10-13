@@ -1,6 +1,6 @@
 //! Shared fixture for the delay editor's headless tests.
 //!
-//! Mounts `delay_ui::control_view::App` — the exact Dioxus surface the
+//! Mounts `delay::ui::control_view::App` — the exact Dioxus surface the
 //! CLAP/VST3 plugin embeds — on the vendored dioxus-test harness, with a
 //! recording host stub standing in for the DAW. Used by the behavioural tests
 //! (`gui_editor.rs`) and by the screenshot harness (`screenshots.rs`).
@@ -15,8 +15,8 @@ use std::sync::{Arc, Mutex};
 
 use dioxus_test::{DocumentTester, by_testid, render};
 
-use delay_ui::control_view::{App, DelayUi};
-use delay_ui::params::{DelayParams, DelayUiState};
+use delay::ui::control_view::{App, DelayUi};
+use delay::ui::params::{DelayParams, DelayUiState};
 
 use nice_plug_dioxus::{ParamContext, SharedState};
 
@@ -115,8 +115,8 @@ pub struct Fixture {
 /// - `DelayUi`, the params + meters the editor consumes.
 pub fn mount() -> Fixture {
     mount_sized(
-        delay_ui::control_view::EDITOR_W,
-        delay_ui::control_view::EDITOR_H,
+        delay::ui::control_view::EDITOR_W,
+        delay::ui::control_view::EDITOR_H,
     )
 }
 

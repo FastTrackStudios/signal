@@ -17,9 +17,9 @@ use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::prelude::Param;
 use nice_plug_dioxus::prelude::use_param_context;
 
-use crate::faces::EchoFace;
-use crate::param_adapter::param_handle;
-use crate::params::{DelayParams, DelayUiState};
+use crate::ui::faces::EchoFace;
+use crate::ui::param_adapter::param_handle;
+use crate::ui::params::{DelayParams, DelayUiState};
 
 pub use fts_audio_ui::shell::RAIL_W;
 
@@ -95,7 +95,7 @@ pub fn App() -> Element {
 
     let profile_index = params.resolved_profile_index();
     let profile = params.resolved_profile();
-    let design = crate::faces::design_for(profile.id);
+    let design = crate::ui::faces::design_for(profile.id);
     let form = params.resolved_editor_form();
 
     // Profile or form change → ask the host to resize. A plain Cell rather
@@ -109,7 +109,7 @@ pub fn App() -> Element {
         // Keep the automatable index in step with the persisted id.
         if params.profile.value().max(0) as usize != profile_index {
             let ptr = params.profile.as_ptr();
-            let count = delay_profiles::PROFILES.len();
+            let count = crate::profiles::PROFILES.len();
             let normalized = if count > 1 {
                 profile_index as f32 / (count - 1) as f32
             } else {
@@ -160,8 +160,8 @@ pub fn App() -> Element {
     .collect();
 
     // One rail entry per family, badged with the space that is active in it.
-    let active_category = delay_profiles::category_of(profile.id).map_or(0, |(c, _)| c);
-    let items: Vec<ShellItem> = delay_profiles::CATEGORIES
+    let active_category = crate::profiles::category_of(profile.id).map_or(0, |(c, _)| c);
+    let items: Vec<ShellItem> = crate::profiles::CATEGORIES
         .iter()
         .enumerate()
         .map(|(index, category)| {
@@ -174,7 +174,7 @@ pub fn App() -> Element {
             // which one is showing — clicking cycles them, and nothing else
             // on the rail admits that.
             let at = if index == active_category {
-                delay_profiles::category_of(profile.id).map_or(0, |(_, v)| v)
+                crate::profiles::category_of(profile.id).map_or(0, |(_, v)| v)
             } else {
                 0
             };
@@ -187,7 +187,7 @@ pub fn App() -> Element {
     let profile_handle = param_handle(params.profile.as_ptr(), ctx);
     let params_for_id = ui.params.clone();
     let params_for_form = ui.params.clone();
-    let profile_count = delay_profiles::PROFILES.len();
+    let profile_count = crate::profiles::PROFILES.len();
     let accent = design.accent.to_string();
     let accent_for_form = accent.clone();
 
@@ -204,7 +204,7 @@ pub fn App() -> Element {
                 selected: active_category,
                 accent: accent,
                 on_select: move |category: usize| {
-                    let index = delay_profiles::rail_click_target(profile_index, category);
+                    let index = crate::profiles::rail_click_target(profile_index, category);
                     let normalized = if profile_count > 1 {
                         index as f32 / (profile_count - 1) as f32
                     } else {
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn every_profile_has_a_badge_that_fits_the_rail() {
-        for profile in delay_profiles::PROFILES {
+        for profile in crate::profiles::PROFILES {
             let badge = profile_badge(profile.id);
             assert!(
                 !badge.is_empty() && badge.len() <= 4,
@@ -300,9 +300,9 @@ mod tests {
 
     #[test]
     fn every_family_has_a_panel() {
-        for category in delay_profiles::CATEGORIES {
+        for category in crate::profiles::CATEGORIES {
             for id in category.profiles {
-                let design = crate::faces::design_for(id);
+                let design = crate::ui::faces::design_for(id);
                 assert_eq!(
                     design.family, category.id,
                     "{id} draws the {} panel",

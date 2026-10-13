@@ -23,7 +23,7 @@
 //! Pure data — no GUI, no framework deps — like `reverb-profiles` and
 //! `comp-profiles`.
 
-use delay_dsp::DelayStyle;
+use crate::DelayStyle;
 
 /// One selectable delay: a name, the engine behind it, and its family.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

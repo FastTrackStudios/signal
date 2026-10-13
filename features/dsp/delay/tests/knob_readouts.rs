@@ -13,7 +13,7 @@ use std::sync::Arc;
 #[path = "support/mod.rs"]
 mod support;
 
-use delay_ui::params::DelayParams;
+use delay::ui::params::DelayParams;
 use support::mount_with;
 
 /// The text a knob's readout is showing, with the wrapper markup stripped.

@@ -2608,7 +2608,7 @@ fn delay_lane(
     let color = crate::fx_viz::rgb(color);
     // The style index is `DELAY_ALGOS`'s, which is the DSP's own order; the
     // effect owns the table that turns it into a machine.
-    let family = delay_ui::viz::family_of_style(style);
+    let family = delay::ui::viz::family_of_style(style);
     rsx! { crate::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division, family, color } }
 }
 

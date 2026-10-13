@@ -35,7 +35,7 @@
 //! whose processing was rendered offline still animates.
 
 use anyrender::{PaintScene, Scene};
-use delay_dsp::engine::{DelayStyle, Family as DelayFamily};
+use delay::engine::{DelayStyle, Family as DelayFamily};
 use eq_ui::eq_graph_interaction::{self as interaction, GraphMapper, Mods};
 use eq_ui::eq_graph_model::{EqBand, EqBandShape, StereoMode};
 use eq_ui::eq_graph_response::calculate_combined_response;
@@ -13340,13 +13340,13 @@ mod face_tests {
         );
         assert!(Grip::Choose(Which::Delay, 1).is_switch());
         tone.delay.choose_family(1);
-        assert_eq!(tone.delay.family(), delay_dsp::engine::Family::Tape);
+        assert_eq!(tone.delay.family(), delay::engine::Family::Tape);
         // Rhythmic has three machines: clicking again walks them.
         tone.delay.choose_family(4);
         let first = tone.delay.style;
         tone.delay.choose_family(4);
         assert_ne!(tone.delay.style, first);
-        assert_eq!(tone.delay.family(), delay_dsp::engine::Family::Rhythmic);
+        assert_eq!(tone.delay.family(), delay::engine::Family::Rhythmic);
         // Past the chips is the bypass, not a chip.
         assert_eq!(
             grip(strip.x + strip.width - 2.0, strip.y + 4.0, &tone),
