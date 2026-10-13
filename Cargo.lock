@@ -6079,15 +6079,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "drum-hits"
-version = "0.1.0"
-dependencies = [
- "hound",
- "num-traits",
- "rayon",
-]
-
-[[package]]
 name = "dsp-core"
 version = "0.1.0"
 
@@ -9263,13 +9254,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "hit-detect-dsp"
+name = "hits"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "approx",
  "eq",
  "fts-sample",
+ "hound",
+ "num-traits",
+ "rayon",
  "trigger",
 ]
 
@@ -17929,7 +17923,6 @@ dependencies = [
  "dioxus-native",
  "dioxus-native-dom",
  "dirs",
- "drum-hits",
  "dynamic-template",
  "editor-crdt",
  "editor-keyflow-lang",
@@ -17950,6 +17943,7 @@ dependencies = [
  "futures-timer",
  "futures-util",
  "gloo-timers",
+ "hits",
  "image",
  "input",
  "input-config-proto",

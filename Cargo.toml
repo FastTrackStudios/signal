@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/hits",
     "features/dsp/eq",
     "features/dsp/modulation",
     "features/dsp/comp",
@@ -30,7 +31,6 @@ members = [
     "vendor/anyrender_vello",
     "vendor/anyrender_vello_hybrid",
     "features/dsp/builtin/builtin-fx",
-    "features/dsp/hits/drum-hits",
     "features/dsp/builtin/signal-fx",
     "features/expression-editor/expression-editor-audio",
     "features/expression-editor/expression-editor-core",
@@ -173,7 +173,6 @@ members = [
     "features/dsp/core/dsp-core",
     "features/dsp/core/dsp-golden",
     "apps/plugins/eq-standalone",
-    "features/dsp/hits/hit-detect/hit-detect-dsp",
     "features/dsp/multiband",
     "features/dsp/core/musical-time/musical-time",
     "features/dsp/core/musical-time/musical-time-ui",
@@ -311,6 +310,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+hits = { path = "features/dsp/hits" }
 eq = { path = "features/dsp/eq" }
 modulation = { path = "features/dsp/modulation" }
 comp = { path = "features/dsp/comp" }
@@ -705,7 +705,6 @@ totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
 
 # ── Dynamic session templates (subtree-imported into the tree) ────────
 dynamic-template = { path = "features/dynamic-template/dynamic-template", default-features = false }
-drum-hits = { path = "features/dsp/hits/drum-hits" }
 patch-list = { path = "features/patch-list" }
 dynamic-template-proto = { path = "features/dynamic-template/dynamic-template-proto" }
 chord-tool = { path = "features/chords/chord-tool" }
@@ -1083,7 +1082,6 @@ tone3000 = "0.1"
 signal-nam = { path = "features/rigs/nam" }
 dsp-golden = { path = "features/dsp/core/dsp-golden" }
 dsp-core = { path = "features/dsp/core/dsp-core" }
-hit-detect-dsp = { path = "features/dsp/hits/hit-detect/hit-detect-dsp" }
 gate = { path = "features/dsp/gate" }
 multiband-dsp = { path = "features/dsp/multiband" }
 fx-stack = { path = "features/dsp/stack" }

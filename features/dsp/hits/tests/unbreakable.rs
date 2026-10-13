@@ -18,8 +18,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use drum_hits::calibrate::TOLERANCE;
-use drum_hits::{Health, Method, Piece, Settings, Trust, agree, detect_kit, samples, spikes};
+use hits::calibrate::TOLERANCE;
+use hits::{Health, Method, Piece, Settings, Trust, agree, detect_kit, samples, spikes};
 use rayon::prelude::*;
 
 /// Each piece's close mic and trigger, by file prefix.
@@ -74,7 +74,7 @@ fn load(dir: &Path, prefix: &str, take: &str) -> Option<(Vec<f32>, f64)> {
 /// Each piece's line: what it found, and how that compares with its
 /// trigger. For a fused piece, also where its attacks sit against the
 /// trigger — asserted to be within 3 ms.
-fn report(piece: &str, f: &drum_hits::Found, truth: &[usize], rate: f64) {
+fn report(piece: &str, f: &hits::Found, truth: &[usize], rate: f64) {
     let hits: Vec<usize> = f.hits.iter().map(|h| h.at).collect();
     let score = agree(&hits, truth, samples(TOLERANCE, rate));
     let calibration = f.calibration.map_or_else(String::new, |c| {
@@ -85,7 +85,7 @@ fn report(piece: &str, f: &drum_hits::Found, truth: &[usize], rate: f64) {
             c.agreement.f1()
         )
     });
-    let count = |keep: fn(&drum_hits::Hit) -> bool| f.hits.iter().filter(|h| keep(h)).count();
+    let count = |keep: fn(&hits::Hit) -> bool| f.hits.iter().filter(|h| keep(h)).count();
     println!(
         "{piece:<6} {:?} {:>5} hits (both {:>4}, trigger only {:>3}, mic only {:>3}, ghosts {:>3}, flams {:>3})  vs trigger F {:.3}  {calibration}  {:?}",
         f.method,
@@ -113,7 +113,7 @@ fn report(piece: &str, f: &drum_hits::Found, truth: &[usize], rate: f64) {
                 .min_by_key(|t| t.abs_diff(h.at))
                 .map(|&t| (h.at, t))
         })
-        .map(|(a, t)| (drum_hits::seconds(a, rate) - drum_hits::seconds(t, rate)) * 1e3)
+        .map(|(a, t)| (hits::seconds(a, rate) - hits::seconds(t, rate)) * 1e3)
         .collect();
     offsets.sort_by(f64::total_cmp);
     let at = |q: usize| {
@@ -154,7 +154,7 @@ fn against_the_triggers() {
     let rate = loaded[0].1;
     println!(
         "take {take}, {rate} Hz, {:.0} s: {} files read in {:.2} s",
-        drum_hits::seconds(loaded[0].0.len(), rate),
+        hits::seconds(loaded[0].0.len(), rate),
         files.len(),
         started.elapsed().as_secs_f64()
     );

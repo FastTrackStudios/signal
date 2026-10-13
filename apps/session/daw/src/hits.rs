@@ -5,7 +5,7 @@
 //!
 //! A detection run takes every recorded take of the kit — each piece's
 //! close mics and trigger, recorded together — decodes each recording
-//! whole at its own rate, and runs `drum_hits::detect_kit` on it: the
+//! whole at its own rate, and runs `hits::detect_kit` on it: the
 //! triggers calibrate the mics, a dead trigger is caught and its piece
 //! read from its mic alone. What it finds is written as take markers
 //! (`daw_proto::HitMark`) on every recording of the piece — its mics and
@@ -112,21 +112,21 @@ impl HitSettings {
         }
     }
 
-    fn detector(&self) -> drum_hits::Settings {
+    fn detector(&self) -> hits::Settings {
         let retrig_secs = self.retrig_ms / 1_000.0;
-        drum_hits::Settings {
+        hits::Settings {
             retrig_secs,
             trigger_under_db: self.trigger_under_db,
-            gate: self.threshold_db.map(|threshold_db| drum_hits::Gate {
+            gate: self.threshold_db.map(|threshold_db| hits::Gate {
                 threshold_db,
                 crest_db: self.crest_db,
                 retrig_secs,
             }),
             crest_db: self.crest_db,
             trust: match self.trust {
-                Trust::Auto => drum_hits::Trust::Auto,
-                Trust::Trigger => drum_hits::Trust::Trigger,
-                Trust::Mic => drum_hits::Trust::Mic,
+                Trust::Auto => hits::Trust::Auto,
+                Trust::Trigger => hits::Trust::Trigger,
+                Trust::Mic => hits::Trust::Mic,
             },
         }
     }
@@ -538,7 +538,7 @@ struct Found {
 
 /// What detecting one take gave: its rate, and each piece in it (by
 /// index into the kit) with what was found.
-type TakeFound = (f64, Vec<(usize, drum_hits::Found)>);
+type TakeFound = (f64, Vec<(usize, hits::Found)>);
 
 /// Read one take's recordings whole and detect on them. `Ok(None)` when
 /// nothing of the kit is in it.
@@ -579,13 +579,13 @@ fn detect_take(
         ));
     }
     let signal = |r: &Recording| read.get(&r.path).map(|(s, _)| s.as_slice());
-    let present: Vec<(usize, drum_hits::Piece<'_>)> = pieces
+    let present: Vec<(usize, hits::Piece<'_>)> = pieces
         .iter()
         .enumerate()
         .filter_map(|(i, p)| {
             Some((
                 i,
-                drum_hits::Piece {
+                hits::Piece {
                     mic: signal(primary(p)?)?,
                     trigger: take.by_track.get(&p.trigger).and_then(signal),
                 },
@@ -599,8 +599,8 @@ fn detect_take(
         .iter()
         .filter_map(|e| take.by_track.get(e).and_then(signal))
         .collect();
-    let kit_in: Vec<drum_hits::Piece<'_>> = present.iter().map(|(_, p)| *p).collect();
-    let found = drum_hits::detect_kit(&kit_in, &extra, rate, &settings.detector());
+    let kit_in: Vec<hits::Piece<'_>> = present.iter().map(|(_, p)| *p).collect();
+    let found = hits::detect_kit(&kit_in, &extra, rate, &settings.detector());
     Ok(Some((
         rate,
         present.into_iter().map(|(i, _)| i).zip(found).collect(),
@@ -611,7 +611,7 @@ fn detect_take(
 /// (seconds into the take's recordings).
 fn take_hits(
     piece: &str,
-    f: &drum_hits::Found,
+    f: &hits::Found,
     (rate, origin): (f64, f64),
     run: &str,
     span: (f64, f64),
@@ -625,17 +625,17 @@ fn take_hits(
         .zip(&ids)
         .map(|(h, id)| Found {
             id: at_take(id),
-            at: drum_hits::seconds(h.at, rate),
+            at: hits::seconds(h.at, rate),
             mark: HitMark {
                 piece: piece.to_owned(),
                 origin: MarkOrigin::Auto,
                 run: run.to_owned(),
-                peak_db: drum_hits::db(f64::from(h.peak)),
+                peak_db: hits::db(f64::from(h.peak)),
                 confidence: h.confidence,
                 from_trigger: h.from_trigger,
                 from_mic: h.from_mic,
                 ghost: h.ghost,
-                bleed: f.method == drum_hits::Method::MicAlone && h.confidence < UNSURE,
+                bleed: f.method == hits::Method::MicAlone && h.confidence < UNSURE,
                 flam_with: h.flam_with.and_then(|n| ids.get(n)).map(|o| at_take(o)),
                 note: String::new(),
             },
@@ -655,18 +655,18 @@ struct Seen {
 }
 
 /// Fold one take's result for a piece into its report.
-fn note_take(line: &mut PieceReport, seen: &mut Seen, f: &drum_hits::Found, origin: f64) {
+fn note_take(line: &mut PieceReport, seen: &mut Seen, f: &hits::Found, origin: f64) {
     let method = match f.method {
-        drum_hits::Method::Fused => "trigger+mic",
-        drum_hits::Method::MicAlone => "mic alone",
+        hits::Method::Fused => "trigger+mic",
+        hits::Method::MicAlone => "mic alone",
     };
     let n = seen.methods.entry(method.to_owned()).or_default();
     *n = n.saturating_add(1);
     match &f.trigger {
-        Some(drum_hits::Health::Dead(why)) => {
+        Some(hits::Health::Dead(why)) => {
             line.trigger = format!("dead in the take at {origin:.2} s: {why}");
         }
-        Some(drum_hits::Health::MicSilent(why)) => {
+        Some(hits::Health::MicSilent(why)) => {
             line.trigger = format!("mic silent in the take at {origin:.2} s: {why}");
         }
         _ => {}
@@ -1231,8 +1231,8 @@ pub fn add_hit(
         && let Some(mic) = p.mics.iter().find_map(|m| take.by_track.get(m))
         && let Some((samples, rate)) = decode(&mic.path)
     {
-        let found = drum_hits::attack_start(&samples, rate, drum_hits::samples(at, rate));
-        at = drum_hits::seconds(found, rate);
+        let found = hits::attack_start(&samples, rate, hits::samples(at, rate));
+        at = hits::seconds(found, rate);
     }
     let id = format!(
         "m.{}",
@@ -1321,14 +1321,14 @@ fn peaks(samples: &[f32], rate: f64, from: f64, (step, points): (f64, usize)) ->
     (0..points)
         .map(|k| {
             let a = step.mul_add(num_traits::ToPrimitive::to_f64(&k).unwrap_or(0.0), from);
-            let lo = drum_hits::samples(a, rate).min(samples.len());
-            let hi = drum_hits::samples(a + step, rate)
+            let lo = hits::samples(a, rate).min(samples.len());
+            let hi = hits::samples(a + step, rate)
                 .max(lo.saturating_add(1))
                 .min(samples.len());
             let peak = samples
                 .get(lo..hi)
                 .map_or(0.0, |s| s.iter().fold(0.0_f32, |m, x| m.max(x.abs())));
-            (drum_hits::db(f64::from(peak)) * 10.0).round() / 10.0
+            (hits::db(f64::from(peak)) * 10.0).round() / 10.0
         })
         .collect()
 }
@@ -1412,14 +1412,14 @@ pub fn explain(
         .find_map(|m| take.by_track.get(m))
         .and_then(|r| read.get(&r.path))
         .map(|(samples, rate)| {
-            let at = drum_hits::attack_start(
+            let at = hits::attack_start(
                 samples,
                 *rate,
-                drum_hits::samples(time - take.origin, *rate),
+                hits::samples(time - take.origin, *rate),
             );
             (
-                take.origin + drum_hits::seconds(at, *rate),
-                drum_hits::db(f64::from(drum_hits::attack_peak(samples, *rate, at))),
+                take.origin + hits::seconds(at, *rate),
+                hits::db(f64::from(hits::attack_peak(samples, *rate, at))),
             )
         });
     let hits = hits(daw, project, std::slice::from_ref(&p.name))

@@ -32,7 +32,7 @@
 //! crate has no business knowing about. The caller owns the grid.
 //!
 //! ```
-//! use hit_detect_dsp::{analyze, Config};
+//! use crate::detect::{analyze, Config};
 //! let samples: Vec<f32> = vec![0.0; 48_000];
 //! let analysis = analyze(&samples, &Config::for_rate(48_000.0));
 //! for hit in analysis.hits.iter().filter(|h| h.strength > 0.6) {
