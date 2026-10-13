@@ -44,13 +44,13 @@ pub mod studio;
 // The WALTER-driven top-level panels that used to live beside them were
 // deleted 2026-08-19 — see `panels/mod.rs` for the tombstone; the native
 // `components::*` family above is the one UI. ──
-pub mod core;
+pub use audio_controls::core;
 /// The native transport bar (require the `web`/dioxus feature). The rest
 /// of this module is a tombstone — see its docs.
 #[cfg(feature = "web")]
 pub mod panels;
 pub mod theming;
-pub mod widgets;
+pub use audio_controls::widgets;
 
 #[cfg(feature = "reaper-test-panels")]
 pub mod test_panels;

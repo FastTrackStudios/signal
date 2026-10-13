@@ -8,6 +8,8 @@ license.workspace = true
 [dependencies]
 # UI framework
 dioxus = { workspace = true, optional = true }
+dioxus-native = { workspace = true, optional = true }
+daw-proto = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
@@ -16,6 +18,9 @@ web-sys = { version = "0.3", features = ["Window", "Document", "MouseEvent", "Ev
 [features]
 default = ["web"]
 web = ["dep:dioxus"]
+# The full mixer (Mixer, MixerStrip): the folder hierarchy of strips.
+hierarchy = ["dep:daw-proto", "web"]
+native = ["dep:dioxus-native"]
 
 [lints]
 workspace = true

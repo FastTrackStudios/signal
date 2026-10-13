@@ -10,8 +10,8 @@ workspace = true
 
 [features]
 default = ["render", "web"]
-hierarchy = ["web"]
-native = ["dep:dioxus-native"]
+hierarchy = ["web", "audio-controls/hierarchy"]
+native = ["dep:dioxus-native", "audio-controls/native"]
 playground = ["dioxus/launch", "dioxus/web", "reaper-theme", "web"]
 reaper-test-panels = ["dep:architect-ui", "dep:daw-module", "dep:daw-reaper-dioxus", "web"]
 reaper-theme = ["dep:image", "dep:thiserror"]
@@ -20,6 +20,9 @@ studio = ["web"]
 web = ["dep:input", "dep:tracing", "dock/ui", "dock/web"]
 
 [dependencies]
+# The widgets, layout core and theme model (re-exported as daw_ui::{core,
+# widgets, theming}).
+audio-controls = { workspace = true }
 architect = { workspace = true }
 architect-ui = { workspace = true, optional = true }
 daw-control = { workspace = true }

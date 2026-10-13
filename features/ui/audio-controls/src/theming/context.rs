@@ -5,12 +5,15 @@
 use crate::prelude::*;
 
 use super::style::{DefaultStyleSheet, KnobStyle, SliderStyle, StyleSheet, XYPadStyle};
+use super::theme::Theme;
 
 /// Theme context data.
 #[derive(Clone)]
 pub struct ThemeContext {
     /// The active style sheet.
     sheet: StyleSheetWrapper,
+    /// The active token-based theme (panels/new components read this).
+    pub theme: Theme,
     /// Whether animations are enabled.
     pub animations_enabled: bool,
     /// Whether haptic feedback is enabled (for touch devices).
@@ -40,6 +43,7 @@ impl PartialEq for StyleSheetWrapper {
 impl PartialEq for ThemeContext {
     fn eq(&self, other: &Self) -> bool {
         self.sheet == other.sheet
+            && self.theme == other.theme
             && self.animations_enabled == other.animations_enabled
             && self.haptics_enabled == other.haptics_enabled
             && (self.scale_factor - other.scale_factor).abs() < f32::EPSILON
@@ -53,6 +57,7 @@ impl ThemeContext {
         static DEFAULT: DefaultStyleSheet = DefaultStyleSheet;
         Self {
             sheet: StyleSheetWrapper { inner: &DEFAULT },
+            theme: Theme::dark(),
             animations_enabled: true,
             haptics_enabled: true,
             scale_factor: 1.0,
@@ -67,6 +72,7 @@ impl ThemeContext {
     pub fn with_stylesheet(sheet: &'static dyn StyleSheet) -> Self {
         Self {
             sheet: StyleSheetWrapper { inner: sheet },
+            theme: Theme::dark(),
             animations_enabled: true,
             haptics_enabled: true,
             scale_factor: 1.0,
@@ -91,6 +97,13 @@ impl ThemeContext {
     #[must_use]
     pub fn with_scale(mut self, scale: f32) -> Self {
         self.scale_factor = scale.max(0.1);
+        self
+    }
+
+    /// Set the active token-based [`Theme`].
+    #[must_use]
+    pub fn with_theme(mut self, theme: Theme) -> Self {
+        self.theme = theme;
         self
     }
 
@@ -160,7 +173,21 @@ impl std::fmt::Debug for ThemeContext {
 /// ```
 #[must_use]
 pub fn use_theme() -> ThemeContext {
+    // Prefer the reactive handle: reading it here subscribes the calling
+    // component, so a runtime theme swap (`set`) re-renders every consumer.
+    if let Some(sig) = try_use_context::<Signal<ThemeContext>>() {
+        return sig();
+    }
     try_use_context::<ThemeContext>().unwrap_or_default()
+}
+
+/// The reactive theme handle for the nearest [`ThemeProvider`], for UIs that
+/// need to *change* the theme at runtime (a theme picker). Returns `None` when
+/// rendered outside a provider. `set` it to swap themes live — every component
+/// that reads [`use_theme`] re-renders.
+#[must_use]
+pub fn use_theme_signal() -> Option<Signal<ThemeContext>> {
+    try_use_context::<Signal<ThemeContext>>()
 }
 
 /// Theme provider component.
@@ -186,7 +213,15 @@ pub fn use_theme() -> ThemeContext {
 /// ```
 #[component]
 pub fn ThemeProvider(theme: ThemeContext, children: Element) -> Element {
-    use_context_provider(|| theme);
+    // Provide the theme as a reactive `Signal` so descendants can swap it at
+    // runtime (see `use_theme_signal`). The closure runs once; if the `theme`
+    // prop later changes (e.g. a parent re-resolves it), sync it through.
+    let mut sig = use_context_provider(|| Signal::new(theme.clone()));
+    use_effect(use_reactive(&theme, move |theme| {
+        if *sig.peek() != theme {
+            sig.set(theme);
+        }
+    }));
     children
 }
 

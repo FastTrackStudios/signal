@@ -9,14 +9,24 @@
 //! - [`CompressorGraph`] - Compressor transfer curve with interactive controls
 //! - [`GateGraph`] - Noise gate transfer curve with Pro-G style controls
 //! - [`BlockView`] - Adaptive block rendering with LOD support
+//! - [`trace`] - Recorded metering, so a graph moves without live DSP
 //! - [`Pedalboard`] - Pedalboard container for arranging pedals
 //! - [`Rack`] - Rack container for arranging rack units
 
 pub mod block_view;
+pub mod chorus_graph;
 pub mod compressor_graph;
+pub mod deesser_graph;
+pub mod delay_graph;
+pub mod flanger_graph;
 pub mod gate_graph;
 pub mod hslider;
 pub mod knob;
+pub mod mixer;
+pub mod reverb_graph;
+pub mod saturator_graph;
+pub mod trace;
+pub mod tuner_graph;
 pub mod vslider;
 pub mod xy_pad;
 
@@ -28,5 +38,8 @@ pub use compressor_graph::{
 pub use gate_graph::{GateDbRange, GateGraph, GateMetering, GateMode, GateParams};
 pub use hslider::{HSlider, SliderVariant};
 pub use knob::{Knob, KnobVariant};
+pub use mixer::{ChannelFader, ChannelStrip, MixerFolder, MuteButton, RoutingButton, SoloButton};
+#[cfg(feature = "hierarchy")]
+pub use mixer::{Mixer, MixerStrip};
 pub use vslider::VSlider;
 pub use xy_pad::XYPad;

@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use crate::widgets::trace::Metering;
 
 // =============================================================================
 // Data Types
@@ -161,8 +162,24 @@ pub struct DeEsserGraphProps {
     /// Current de-esser parameters.
     pub params: Signal<DeEsserParams>,
     /// Real-time metering data.
+    ///
+    /// The direct path, for a processor that is running right now. When
+    /// `source` says otherwise it wins — see that field.
     #[props(default)]
     pub metering: DeEsserMetering,
+    /// Where the metering comes from, when it is not simply live.
+    ///
+    /// A de-esser is the clearest case for this: it can be a plugin on
+    /// the track, or it can be a render already written to the item. The
+    /// graph is the same graph either way, so it asks a
+    /// [`Metering`] for a frame rather than assuming DSP exists —
+    /// which is what lets a frozen track still show its de-essing, and
+    /// what keeps a two-thousand-track session drawable.
+    ///
+    /// Defaults to [`Metering::Idle`], in which case `metering` is used
+    /// directly.
+    #[props(default)]
+    pub source: Metering<DeEsserMetering>,
     /// Graph width in pixels.
     #[props(default = 280)]
     pub width: u32,
@@ -187,6 +204,14 @@ pub struct DeEsserGraphProps {
 pub fn DeEsserGraph(props: DeEsserGraphProps) -> Element {
     let params = props.params.read();
     let layout = GraphLayout::new(props.width, props.height);
+
+    // One frame, however it was produced. Everything below reads this
+    // and never `props.metering`, so live and recorded draw identically.
+    let metering = if props.source.has_data() {
+        props.source.sample()
+    } else {
+        props.metering.clone()
+    };
 
     let mut dragging = use_signal(|| false);
 
@@ -220,7 +245,7 @@ pub fn DeEsserGraph(props: DeEsserGraphProps) -> Element {
     // GR meter dimensions (right side)
     let gr_meter_width = 12.0;
     let gr_meter_x = layout.padding + layout.graph_width + 8.0;
-    let gr_normalized = (props.metering.gain_reduction.abs() / 24.0).clamp(0.0, 1.0);
+    let gr_normalized = (metering.gain_reduction.abs() / 24.0).clamp(0.0, 1.0);
     let gr_height = layout.graph_height * gr_normalized as f64;
 
     // Frequency grid markers (logarithmic)
@@ -407,7 +432,7 @@ pub fn DeEsserGraph(props: DeEsserGraphProps) -> Element {
                     fill: "{text_color}",
                     font_size: "9",
                     font_family: "system-ui, -apple-system, sans-serif",
-                    "{props.metering.gain_reduction:.1}"
+                    "{metering.gain_reduction:.1}"
                 }
             }
 
@@ -478,6 +503,9 @@ pub struct DeEsserWidgetProps {
     /// Real-time metering data.
     #[props(default)]
     pub metering: DeEsserMetering,
+    /// Where the metering comes from; see [`DeEsserGraphProps::source`].
+    #[props(default)]
+    pub source: Metering<DeEsserMetering>,
     /// Size of the graph in pixels.
     #[props(default = 280)]
     pub graph_width: u32,
@@ -609,6 +637,7 @@ pub fn DeEsserWidget(props: DeEsserWidgetProps) -> Element {
                 DeEsserGraph {
                     params: current_params_sig,
                     metering: props.metering.clone(),
+                    source: props.source.clone(),
                     width: props.graph_width,
                     height: props.graph_height,
                     show_grid: props.show_grid,
