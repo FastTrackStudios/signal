@@ -521,6 +521,3 @@ mod tests {
 
 #[cfg(feature = "params")]
 pub mod params;
-
-#[cfg(feature = "time-ui")]
-pub mod ui;

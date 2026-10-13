@@ -9,9 +9,9 @@ description = "The compressors (VCA, FET, opto, tube, look-ahead) and the limite
 workspace = true
 
 [features]
-native = ["dep:architect-ui", "dep:atomic_float", "dep:plugin-core", "dep:eq", "dep:fts-plug-ui", "dsp-core/time-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "eq/native", "dsp-core/params"]
+native = ["dep:architect-ui", "dep:fts-audio-ui", "dep:atomic_float", "dep:plugin-core", "dep:eq", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "eq/native", "dsp-core/params"]
 profiles = ["dep:eq"]
-ui = ["dep:atomic_float", "dep:plugin-core", "dep:dioxus", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:web-time", "profiles", "dsp-core/params", "dsp-core/time-ui"]
+ui = ["dep:atomic_float", "dep:plugin-core", "dep:dioxus", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:web-time", "profiles", "dsp-core/params"]
 viz = ["dep:anyrender", "dep:blitz-dom", "dep:bytemuck", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
 
 [dependencies]

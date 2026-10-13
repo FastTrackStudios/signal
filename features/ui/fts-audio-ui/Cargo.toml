@@ -7,6 +7,8 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+# Musical time (time.rs puts it on screen).
+dsp-core = { workspace = true, default-features = false }
 dioxus = { workspace = true }
 architect-ui = { workspace = true }
 tracing = { workspace = true }

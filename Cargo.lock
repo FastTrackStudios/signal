@@ -5850,10 +5850,8 @@ name = "dsp-core"
 version = "0.1.0"
 dependencies = [
  "atomic_float",
- "dioxus",
  "dsp-core",
  "ebur128",
- "fts-audio-ui",
  "nice-plug",
  "parking_lot",
  "realfft",
@@ -7396,6 +7394,7 @@ dependencies = [
  "dioxus",
  "dioxus-native-dom",
  "dioxus-test",
+ "dsp-core",
  "gloo-timers",
  "kurbo 0.13.1",
  "peniko 0.6.1",

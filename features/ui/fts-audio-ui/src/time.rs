@@ -17,9 +17,9 @@
 //! Inline styles only, per the repo's UI rules: Blitz does not load external
 //! stylesheets, and these components are embedded in plugin editors.
 
-use crate::time::{Flavour, MusicalTime, NoteValue};
+use crate::ParamHandle;
 use dioxus::prelude::*;
-use fts_audio_ui::ParamHandle;
+use dsp_core::time::{Flavour, MusicalTime, NoteValue};
 
 /// Read the note value a division parameter is currently on.
 fn current(handle: &ParamHandle) -> MusicalTime {
@@ -42,7 +42,7 @@ fn set(handle: &ParamHandle, value: MusicalTime) {
 /// The note-value picker: `‹ 1/8 ›` with a `D` and a `T`.
 ///
 /// `handle` is the division parameter built by
-/// [`crate::time::params::division_param`].
+/// [`dsp_core::time::params::division_param`].
 #[component]
 pub fn NotePicker(
     handle: ParamHandle,
@@ -204,7 +204,7 @@ pub fn NotePicker(
 /// control that does nothing.
 #[component]
 pub fn TimeModeSwitch(
-    /// The mode parameter — [`crate::time::params::sync_param`].
+    /// The mode parameter — [`dsp_core::time::params::sync_param`].
     sync: ParamHandle,
     /// The host's tempo, if it has one. `None` greys NOTE out: a note value
     /// is not a duration without a tempo behind it, and a switch that flips

@@ -12,10 +12,10 @@
 //! are the repeats you will hear.
 
 use dioxus::prelude::*;
-use dsp_core::time::ui::{NotePicker, TimeModeSwitch};
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
+use fts_audio_ui::time::{NotePicker, TimeModeSwitch};
 
 /// Panel drawing size — 2U, like the compressor's faces.
 pub const W: f64 = 960.0;
@@ -525,8 +525,8 @@ pub fn EchoFace(
                                 // the face states a delay time the delay is
                                 // not using. Show what it IS using.
                                 text: match spec.param {
-                                    "time_l" if synced => dsp_core::time::ui::format_ms(resolved_ms),
-                                    "time_r" if synced => dsp_core::time::ui::format_ms(resolved_r_ms),
+                                    "time_l" if synced => fts_audio_ui::time::format_ms(resolved_ms),
+                                    "time_r" if synced => fts_audio_ui::time::format_ms(resolved_r_ms),
                                     _ => handle.display_value(),
                                 },
                                 size: 9.0,

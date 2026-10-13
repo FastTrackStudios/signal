@@ -36,6 +36,9 @@ pub mod scene_canvas;
 pub mod shader;
 pub mod shell;
 pub mod theme;
+/// Time parameters on screen: the note picker and the ms/note switch for
+/// `dsp_core::time`'s musical time.
+pub mod time;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod widget;
 

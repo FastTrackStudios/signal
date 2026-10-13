@@ -128,7 +128,7 @@ pub fn SyncableTimeKnob(
                     "data-testid": "knob-{testid}",
                     style: "display:flex; align-items:center; justify-content:center; \
                             min-height:44px;",
-                    dsp_core::time::ui::NotePicker {
+                    fts_audio_ui::time::NotePicker {
                         handle: division,
                         testid: "{testid}-note",
                         ink: skin.text.to_string(),
@@ -142,7 +142,7 @@ pub fn SyncableTimeKnob(
                 }
             }
 
-            dsp_core::time::ui::TimeModeSwitch {
+            fts_audio_ui::time::TimeModeSwitch {
                 sync,
                 tempo,
                 testid: "{testid}-mode",
@@ -157,7 +157,7 @@ pub fn SyncableTimeKnob(
                      font-variant-numeric:tabular-nums;",
                     skin.text
                 ),
-                "{dsp_core::time::ui::format_ms(resolved_ms)}"
+                "{fts_audio_ui::time::format_ms(resolved_ms)}"
             }
         }
     }
