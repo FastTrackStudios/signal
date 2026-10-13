@@ -9,9 +9,9 @@
 //! No network: `wiremock` binds a loopback port and `SIGNAL_T3K_BASE_URL`'s
 //! config equivalent points the client at it.
 
-use signal_tone3000::{Config, Tone3000Backend};
-use signal_tone3000_proto::tone3000::Tone3000 as _;
-use signal_tone3000_proto::{ToneQuery, ToneShelf};
+use signal_tone3000::client::{Config, Tone3000Backend};
+use signal_tone3000::tone3000::Tone3000 as _;
+use signal_tone3000::{ToneQuery, ToneShelf};
 use wiremock::matchers::{bearer_token, body_string_contains, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -141,8 +141,8 @@ async fn a_linked_account_authorizes_the_catalog_with_no_local_session() {
         &auth_client::StoredSession::new("fts-token"),
     )
     .unwrap();
-    let account = std::sync::Arc::new(signal_account::Account::new(
-        signal_account::AccountConfig {
+    let account = std::sync::Arc::new(signal_tone3000::account::Account::new(
+        signal_tone3000::account::AccountConfig {
             issuer: issuer.uri(),
             client_id: "signal".into(),
             redirect_uri: "http://localhost:4040/account/callback".into(),
@@ -195,8 +195,8 @@ async fn a_local_session_wins_over_a_linked_account() {
         &auth_client::StoredSession::new("fts-token"),
     )
     .unwrap();
-    let backend = backend.with_account(std::sync::Arc::new(signal_account::Account::new(
-        signal_account::AccountConfig {
+    let backend = backend.with_account(std::sync::Arc::new(signal_tone3000::account::Account::new(
+        signal_tone3000::account::AccountConfig {
             issuer: issuer.uri(),
             client_id: "signal".into(),
             redirect_uri: "http://localhost:4040/account/callback".into(),

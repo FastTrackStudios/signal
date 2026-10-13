@@ -5,13 +5,13 @@
 //! the editor is deliberately not a faceplate with two knobs: it is the tone
 //! browser, with the current model named above it.
 //!
-//! Everything below the header is [`signal_tone3000_ui::ToneBrowser`], the
+//! Everything below the header is [`signal_tone3000::ui::ToneBrowser`], the
 //! same component the desktop app and the browser remote mount. It renders
 //! from the vox clients in context, which here come from the in-process
 //! engine ([`crate::engine`]).
 
 use plugin_core::prelude::*;
-use signal_tone3000_ui::{ToneBrowser, ToneImport, UrlOpener};
+use signal_tone3000::ui::{ToneBrowser, ToneImport, UrlOpener};
 
 use crate::state::NamUi;
 

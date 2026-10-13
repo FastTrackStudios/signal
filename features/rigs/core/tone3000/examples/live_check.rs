@@ -23,9 +23,9 @@ use std::io::{BufRead as _, BufReader, Write as _};
 use std::net::TcpListener;
 use std::time::Duration;
 
-use signal_tone3000::{Config, Tone3000Backend};
-use signal_tone3000_proto::tone3000::Tone3000 as _;
-use signal_tone3000_proto::{ToneQuery, ToneShelf};
+use signal_tone3000::client::{Config, Tone3000Backend};
+use signal_tone3000::tone3000::Tone3000 as _;
+use signal_tone3000::{ToneQuery, ToneShelf};
 
 /// How long to wait for the user to finish in the browser.
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(180);

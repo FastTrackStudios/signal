@@ -1,6 +1,6 @@
 //! `signal tone3000 …` — the catalog, and the way captures reach the library.
 //!
-//! Every verb here drives [`signal_tone3000::Tone3000Backend`] directly. The
+//! Every verb here drives [`signal_tone3000::client::Tone3000Backend`] directly. The
 //! backend is the engine's own, so the session, the image cache and the NAM
 //! library are the ones the app uses; nothing is duplicated and nothing has
 //! to be re-authorized.
@@ -11,9 +11,9 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::Subcommand;
-use signal_tone3000::{Config, Tone3000Backend};
-use signal_tone3000_proto::tone3000::Tone3000 as _;
-use signal_tone3000_proto::{ToneQuery, ToneShelf};
+use signal_tone3000::client::{Config, Tone3000Backend};
+use signal_tone3000::tone3000::Tone3000 as _;
+use signal_tone3000::{ToneQuery, ToneShelf};
 
 /// How long a browser sign-in may take before we stop waiting.
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(180);
@@ -83,8 +83,8 @@ pub async fn run(command: Command) -> ExitCode {
 
     // The same broker the engine builds: a linked FastTrackStudio account
     // authorizes downloads on a machine that never signed in here itself.
-    let account = std::sync::Arc::new(signal_account::Account::new(
-        signal_account::AccountConfig::from_env(&config_dir),
+    let account = std::sync::Arc::new(signal_tone3000::account::Account::new(
+        signal_tone3000::account::AccountConfig::from_env(&config_dir),
     ));
     let backend = Tone3000Backend::new(cfg).with_account(account.clone());
 
@@ -196,7 +196,7 @@ async fn shelf(backend: &Tone3000Backend, which: &str) -> ExitCode {
 
 /// One listing row: the id first, because the id is what the next command
 /// takes.
-fn print_row(tone: &signal_tone3000_proto::ToneSummary) {
+fn print_row(tone: &signal_tone3000::ToneSummary) {
     println!(
         "{:>8}  {:>7}↓  {}",
         tone.id,
@@ -287,7 +287,7 @@ async fn login(backend: &Tone3000Backend, redirect: &str) -> ExitCode {
 }
 
 /// Sign in to the FastTrackStudio account, serving its callback ourselves.
-async fn account_login(account: &signal_account::Account) -> ExitCode {
+async fn account_login(account: &signal_tone3000::account::Account) -> ExitCode {
     if account.status().signed_in {
         println!("already signed in as {}", account.status().email);
         return ExitCode::SUCCESS;

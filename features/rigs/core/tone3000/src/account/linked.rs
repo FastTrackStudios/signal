@@ -6,7 +6,7 @@
 //! itself, which is the whole reason this is worth asking for rather than
 //! holding a session per machine.
 
-use crate::session::{Account, AccountError};
+use crate::account::session::{Account, AccountError};
 
 /// A third-party token the issuer holds on the account's behalf.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
@@ -102,7 +102,7 @@ fn describe(status: u16, body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::AccountConfig;
+    use crate::account::session::AccountConfig;
     use auth_client::{FileTokenStore, StoredSession, TokenStore as _};
     use wiremock::matchers::{bearer_token, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};

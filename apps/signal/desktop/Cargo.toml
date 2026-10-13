@@ -57,10 +57,20 @@ workspace = true
 default = ["signal"]
 # The command-line tools (src/bin/): native only.
 cli = [
-    "dep:builtin", "dep:clap", "dep:guitar", "dep:serde_json", "dep:signal-account",
-    "dep:signal-analyzer", "dep:signal-import", "dep:signal-nam", "dep:signal-plugin-host",
-    "dep:signal-tone3000", "dep:signal-tone3000-proto", "dep:tokio",
-    "tokio?/macros", "tokio?/rt-multi-thread", "tokio?/time"
+    "dep:builtin",
+    "dep:clap",
+    "dep:guitar",
+    "dep:serde_json",
+    "dep:signal-tone3000",
+    "signal-tone3000?/client",
+    "dep:signal-analyzer",
+    "dep:signal-import",
+    "dep:signal-nam",
+    "dep:signal-plugin-host",
+    "dep:tokio",
+    "tokio?/macros",
+    "tokio?/rt-multi-thread",
+    "tokio?/time"
 ]
 # Render the desktop window with WebKit/WRY instead of Blitz.
 #
@@ -76,7 +86,7 @@ webview = []
 # engine (rig_engine.rs) + the mobile shell (mobile_view.rs). Kept separate
 # from `signal` because the drums/keys/synth rig UIs pull signal-ui's
 # Vello/baseview surfaces, which don't build for iOS.
-signal-guitar = ["dep:guitar", "guitar?/ui", "dep:signal-tone3000-proto", "dep:signal-tone3000-ui", "dep:sampler", "dep:session", "session?/ui", "dep:vox-core", "dep:vox-websocket", "dep:architect", "architect/iroh", "architect/local", "dep:tokio", "dep:vox", "dep:facet-json", "dep:futures-util", "dep:futures-channel", "dep:sha2", "dep:reqwest", "dep:facet", "dep:eyre"]
+signal-guitar = ["dep:guitar", "guitar?/ui", "dep:signal-tone3000", "signal-tone3000?/ui", "dep:sampler", "dep:session", "session?/ui", "dep:vox-core", "dep:vox-websocket", "dep:architect", "architect/iroh", "architect/local", "dep:tokio", "dep:vox", "dep:facet-json", "dep:futures-util", "dep:futures-channel", "dep:sha2", "dep:reqwest", "dep:facet", "dep:eyre"]
 # The keys rig on the phone: the in-process sampler engine (signal-keys →
 # signal-sampler over CoreAudio, MIDI via midir/CoreMIDI) + the wire types
 # for the mobile keys view + pack downloads. iOS-clean by construction: the
@@ -89,7 +99,7 @@ signal = ["signal-guitar", "dep:drums", "dep:keys", "dep:midi", "dep:synth", "sy
 # TONE3000 and the FastTrackStudio account in the app itself (the iPad's
 # embedded engine): search, download and import captures, signing in
 # through the account. Part of `signal`; the iOS build adds it on its own.
-tone3000 = ["dep:signal-tone3000-proto", "dep:signal-tone3000-ui", "dep:signal-tone3000", "dep:signal-account", "dep:signal-account-proto", "dep:signal-nam", "dep:url", "dep:axum", "dep:tower-http"]
+tone3000 = ["dep:signal-tone3000", "signal-tone3000?/ui", "signal-tone3000?/client", "dep:signal-nam", "dep:url", "dep:axum", "dep:tower-http"]
 # Embed the staged web bundle (`web-dist/`, copied from the dx web build
 # by `just rig-install`) into the native binary — engine mode then serves
 # the browser remote from memory, ONE deployable artifact. Off by default
@@ -163,8 +173,7 @@ tracing.workspace = true
 guitar = { workspace = true, optional = true, features = ["ui"] }
 # TONE3000: the wire contract and the tone browser. Both wasm-clean, so
 # the browser remote gets the same page the desktop app does.
-signal-tone3000-proto = { workspace = true, optional = true }
-signal-tone3000-ui = { workspace = true, optional = true }
+signal-tone3000 = { workspace = true, optional = true, features = ["ui"] }
 fts-audio-ui = { workspace = true }
 drums = { workspace = true, optional = true, features = ["ui"] }
 keys = { workspace = true, optional = true, features = ["ui"] }
@@ -279,9 +288,7 @@ signal-synth-rig = { workspace = true, optional = true }
 sampler = { workspace = true, optional = true, features = ["library"] }
 signal-space = { workspace = true, optional = true }
 ekit = { workspace = true, optional = true }
-signal-tone3000 = { workspace = true, optional = true }
-signal-account = { workspace = true, optional = true }
-signal-account-proto = { workspace = true, optional = true }
+signal-tone3000 = { workspace = true, optional = true, features = ["client"] }
 signal-nam = { workspace = true, optional = true }
 url = { version = "2", optional = true }
 axum = { workspace = true, optional = true }

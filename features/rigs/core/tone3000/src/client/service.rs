@@ -20,17 +20,17 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use futures_util::StreamExt as _;
-use signal_tone3000_proto::tone3000::{Tone3000, Tone3000StreamSource};
-use signal_tone3000_proto::{
+use crate::tone3000::{Tone3000, Tone3000StreamSource};
+use crate::{
     AuthRequest, DownloadProgress, ImageData, PickedTone, SignInStatus, TonePage, ToneQuery,
     ToneShelf,
 };
 use tone3000 as api;
 
-use crate::config::Config;
-use crate::map;
-use crate::session::{AuthStart, Session, SessionError};
-use crate::store::{TokenStore, Tokens};
+use crate::client::config::Config;
+use crate::client::map;
+use crate::client::session::{AuthStart, Session, SessionError};
+use crate::client::store::{TokenStore, Tokens};
 
 /// Rows a browse screen asks for when it does not say.
 const DEFAULT_PAGE_SIZE: u32 = 24;
@@ -84,7 +84,7 @@ struct Inner {
     /// that account can download captures without its own authorization.
     /// A local session stays the fallback — for someone with no
     /// FastTrackStudio account, and for when the issuer is unreachable.
-    account: Option<Arc<signal_account::Account>>,
+    account: Option<Arc<crate::account::Account>>,
     downloads: PubSub<DownloadProgress>,
     http: reqwest::Client,
 }
@@ -123,7 +123,7 @@ impl Tone3000Backend {
     /// Read the account's linked TONE3000 token instead of holding a
     /// local session, when one is available.
     #[must_use]
-    pub fn with_account(mut self, account: Arc<signal_account::Account>) -> Self {
+    pub fn with_account(mut self, account: Arc<crate::account::Account>) -> Self {
         // `Arc::get_mut` is sound here: this is a builder, called before
         // the backend has been cloned into a router.
         if let Some(inner) = Arc::get_mut(&mut self.inner) {
@@ -210,7 +210,7 @@ impl Tone3000Backend {
     async fn brokered_token(&self) -> Option<String> {
         let account = self.inner.account.as_ref()?;
         match account
-            .linked_token(signal_account::TONE3000_PROVIDER)
+            .linked_token(crate::account::TONE3000_PROVIDER)
             .await
         {
             Ok(linked) => {
@@ -656,7 +656,7 @@ impl Tone3000 for Tone3000Backend {
         // Otherwise the account, if it has TONE3000 linked.
         if let Some(account) = self.inner.account.as_ref() {
             if let Ok(linked) = account
-                .linked_token(signal_account::TONE3000_PROVIDER)
+                .linked_token(crate::account::TONE3000_PROVIDER)
                 .await
             {
                 return SignInStatus {
@@ -989,8 +989,8 @@ impl Tone3000StreamSource for Tone3000Backend {
 impl Services for Tone3000Backend {
     fn layers() -> impl Layer<Self> {
         layers![
-            signal_tone3000_proto::tone3000::Service,
-            signal_tone3000_proto::tone3000::StreamService
+            crate::tone3000::Service,
+            crate::tone3000::StreamService
         ]
     }
 }
@@ -1167,7 +1167,7 @@ mod tests {
     fn cfg(dir: &std::path::Path) -> Config {
         Config {
             publishable_key: "t3k_pub_test".into(),
-            redirect_uri: crate::config::DEFAULT_REDIRECT_URI.into(),
+            redirect_uri: crate::client::config::DEFAULT_REDIRECT_URI.into(),
             base_url: None,
             library_root: dir.join("nam"),
             catalog_path: dir.join("nam/catalog.json"),
@@ -1220,7 +1220,7 @@ mod tests {
         assert_eq!(q.get("prompt").map(String::as_str), Some("select_tone"));
         assert_eq!(
             q.get("redirect_uri").map(String::as_str),
-            Some(crate::config::DEFAULT_REDIRECT_URI)
+            Some(crate::client::config::DEFAULT_REDIRECT_URI)
         );
         assert!(q.contains_key("state"));
         assert!(q.contains_key("code_challenge"));

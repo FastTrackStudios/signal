@@ -25,7 +25,7 @@ use axum::Router;
 use axum::extract::{Query, State};
 use axum::response::Html;
 use axum::routing::get;
-use signal_tone3000::Tone3000Backend;
+use signal_tone3000::client::Tone3000Backend;
 
 /// Mount the FastTrackStudio account's callback route.
 ///
@@ -34,7 +34,7 @@ use signal_tone3000::Tone3000Backend;
 /// whichever GUI started the flow picks the session up from `status()`.
 pub fn extend_account(
     host: EngineHost,
-    account: std::sync::Arc<signal_account::Account>,
+    account: std::sync::Arc<signal_tone3000::account::Account>,
 ) -> EngineHost {
     let path = callback_path(&account.config().redirect_uri);
     tracing::info!(
@@ -50,7 +50,7 @@ pub fn extend_account(
 }
 
 pub(crate) async fn account_callback(
-    State(account): State<std::sync::Arc<signal_account::Account>>,
+    State(account): State<std::sync::Arc<signal_tone3000::account::Account>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Html<String> {
     let query = params
@@ -82,7 +82,7 @@ pub(crate) async fn account_callback(
 /// The host:port an account's redirect URI names, for binding a listener —
 /// `127.0.0.1:4040` when the URI is not a parseable `http(s)` URL (a custom
 /// scheme, say) or names no explicit port.
-pub(crate) fn callback_listen_addr(account: &signal_account::Account) -> String {
+pub(crate) fn callback_listen_addr(account: &signal_tone3000::account::Account) -> String {
     url::Url::parse(&account.config().redirect_uri)
         .ok()
         .and_then(|u| {
@@ -100,7 +100,7 @@ pub(crate) fn callback_listen_addr(account: &signal_account::Account) -> String 
 /// two routes: sign-in works the same way whichever engine mode is picked,
 /// without embedded mode gaining the network surface Supervised mode is for.
 pub(crate) fn standalone_callback_router(
-    account: std::sync::Arc<signal_account::Account>,
+    account: std::sync::Arc<signal_tone3000::account::Account>,
     tone3000: Tone3000Backend,
 ) -> Router {
     let account_path = callback_path(&account.config().redirect_uri);
@@ -136,7 +136,7 @@ pub(crate) fn callback_path(redirect_uri: &str) -> String {
         .ok()
         .map(|u| u.path().to_string())
         .filter(|p| p.starts_with('/') && p.len() > 1)
-        .unwrap_or_else(|| signal_tone3000::config::CALLBACK_PATH.to_string())
+        .unwrap_or_else(|| signal_tone3000::client::config::CALLBACK_PATH.to_string())
 }
 
 pub(crate) async fn callback(
@@ -235,11 +235,11 @@ mod tests {
     fn a_redirect_without_a_usable_path_falls_back() {
         assert_eq!(
             callback_path("fasttrackstudio://t3k"),
-            signal_tone3000::config::CALLBACK_PATH
+            signal_tone3000::client::config::CALLBACK_PATH
         );
         assert_eq!(
             callback_path("not a url"),
-            signal_tone3000::config::CALLBACK_PATH
+            signal_tone3000::client::config::CALLBACK_PATH
         );
     }
 

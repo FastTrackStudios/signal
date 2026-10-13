@@ -18,7 +18,7 @@ use guitar::proto::rig::{RigClient, RigStreamClient};
 use guitar::ui::GuitarRigRemote;
 use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
 use keys::ui::KeysRigRemote;
-use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
+use signal_tone3000::tone3000::{Tone3000Client, Tone3000StreamClient};
 use synth::proto::synth::{SynthRigClient, SynthRigStreamClient};
 use synth::ui::SynthRigRemote;
 
@@ -443,7 +443,7 @@ fn GuitarRigView(instrument: &'static str) -> Element {
                     }
                     // Signing in means handing a page to a real browser —
                     // this shell's way of doing that.
-                    let _ = provide_context(signal_tone3000_ui::UrlOpener::new(open_externally));
+                    let _ = provide_context(signal_tone3000::ui::UrlOpener::new(open_externally));
                     rsx! { GuitarRigRemote { key: "{generation}" } }
                 }
                 None => rsx! {

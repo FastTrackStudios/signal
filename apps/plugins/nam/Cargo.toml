@@ -24,9 +24,7 @@ nice-plug.workspace = true
 plugin-core = { workspace = true }
 # The tone browser — the same component the app and the browser remote
 # mount — and the engine half it drives.
-signal-tone3000-ui.workspace = true
-signal-tone3000.workspace = true
-signal-tone3000-proto.workspace = true
+signal-tone3000 = { workspace = true, features = ["client", "ui"] }
 # Where downloads land, and the config dir the session file sits in.
 signal-nam.workspace = true
 sampler = { workspace = true }

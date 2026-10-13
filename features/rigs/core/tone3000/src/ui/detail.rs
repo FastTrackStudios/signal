@@ -6,13 +6,13 @@
 //! the download is also just the honest place for it.
 
 use dioxus::prelude::*;
-use signal_tone3000_proto::tone3000::Tone3000Client;
-use signal_tone3000_proto::{PickedTone, ToneModel};
+use crate::tone3000::Tone3000Client;
+use crate::{PickedTone, ToneModel};
 
-use crate::ToneImport;
-use crate::art::ToneArt;
-use crate::state::{Tone3000State, UrlOpener};
-use crate::style;
+use crate::ui::ToneImport;
+use crate::ui::art::ToneArt;
+use crate::ui::state::{Tone3000State, UrlOpener};
+use crate::ui::style;
 
 /// The detail panel. `on_loaded` fires with a [`ToneImport`] when a model has
 /// finished downloading and the user asked for it in the rig.
@@ -124,7 +124,7 @@ pub fn ToneDetail(
                                 // What the rig needs to route the capture,
                                 // carried from the tone the row belongs to.
                                 gear: tone.gear.clone(),
-                                group: crate::grouping_key(&tone),
+                                group: crate::ui::grouping_key(&tone),
                                 model: model.clone(),
                                 on_loaded,
                             }

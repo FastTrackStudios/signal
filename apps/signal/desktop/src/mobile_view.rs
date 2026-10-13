@@ -164,7 +164,7 @@ pub fn MobileApp() -> Element {
                         if let Some(a) = engine.account.clone() {
                             let _ = provide_context(a);
                         }
-                        let _ = provide_context(signal_tone3000_ui::UrlOpener::new(|url| {
+                        let _ = provide_context(signal_tone3000::ui::UrlOpener::new(|url| {
                             #[cfg(target_os = "ios")]
                             crate::ios_safari::open(&url);
                             #[cfg(not(target_os = "ios"))]

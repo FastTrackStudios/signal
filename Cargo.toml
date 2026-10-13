@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/rigs/core/tone3000",
     "features/ui/fts-audio-ui",
     "features/editing",
     "features/ui/plugin-core",
@@ -155,11 +156,6 @@ members = [
     "features/rigs/core/space/engine",
     "features/rigs/core/space/proto",
     "features/rigs/core/storage",
-    "features/rigs/core/tone3000/account",
-    "features/rigs/core/tone3000/account-proto",
-    "features/rigs/core/tone3000/client",
-    "features/rigs/core/tone3000/proto",
-    "features/rigs/core/tone3000/ui",
     "features/rigs/core/widgets",
     "features/dsp/analyzer/signal-analyzer",
     "features/dsp/separator/signal-separator",
@@ -193,6 +189,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+signal-tone3000 = { path = "features/rigs/core/tone3000" }
 fts-audio-ui = { path = "features/ui/fts-audio-ui" }
 editing = { path = "features/editing" }
 plugin-core = { path = "features/ui/plugin-core" }
@@ -924,11 +921,6 @@ fx-stack = { path = "features/dsp/stack" }
 web-time = "1"
 
 # ── from signal's workspace (joined into studio) ──
-signal-account = { path = "features/rigs/core/tone3000/account" }
-signal-tone3000 = { path = "features/rigs/core/tone3000/client" }
-signal-account-proto = { path = "features/rigs/core/tone3000/account-proto" }
-signal-tone3000-proto = { path = "features/rigs/core/tone3000/proto" }
-signal-tone3000-ui = { path = "features/rigs/core/tone3000/ui" }
 signal = { path = "features/rigs/core/signal" }
 signal-proto = { path = "features/rigs/core/proto" }
 signal-browser = { path = "features/rigs/core/browser", default-features = false }

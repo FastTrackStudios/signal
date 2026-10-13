@@ -20,9 +20,9 @@ use guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 #[cfg(feature = "signal-keys-rig")]
 use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
 #[cfg(feature = "tone3000")]
-use signal_account_proto::account::AccountAuthClient;
+use signal_tone3000::account_proto::account::AccountAuthClient;
 #[cfg(feature = "tone3000")]
-use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
+use signal_tone3000::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// The embedded rig: the backend + the established in-process clients.
 #[derive(Clone)]
@@ -106,16 +106,16 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             // The FastTrackStudio account — same reasoning as engine_main.rs:
             // linking TONE3000 to it once means every machine signed in to the
             // account can download without its own authorization.
-            let account = std::sync::Arc::new(signal_account::Account::new(
-                signal_account::AccountConfig::from_env(&config_dir),
+            let account = std::sync::Arc::new(signal_tone3000::account::Account::new(
+                signal_tone3000::account::AccountConfig::from_env(&config_dir),
             ));
-            let tone3000 = signal_tone3000::Tone3000Backend::new(signal_tone3000::Config::from_env(
+            let tone3000 = signal_tone3000::client::Tone3000Backend::new(signal_tone3000::client::Config::from_env(
                 &config_dir,
                 signal_nam::nam_root_from_env(&config_dir.join("nam")),
             ))
             .with_account(account.clone());
             let router = router.merge_router(tone3000.router());
-            let account_rpc = signal_account::AccountBackend::new(account.clone());
+            let account_rpc = signal_tone3000::account::AccountBackend::new(account.clone());
             let router = router.merge_router(account_rpc.router());
             (router, account, tone3000)
         };

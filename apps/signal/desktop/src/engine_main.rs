@@ -207,10 +207,10 @@ async fn async_main() {
     // machine signed in to that account can download captures without its
     // own authorization — the issuer holds the refresh token and rotates it
     // in one place.
-    let account = std::sync::Arc::new(signal_account::Account::new(
-        signal_account::AccountConfig::from_env(&config_dir_t3k),
+    let account = std::sync::Arc::new(signal_tone3000::account::Account::new(
+        signal_tone3000::account::AccountConfig::from_env(&config_dir_t3k),
     ));
-    let tone3000 = signal_tone3000::Tone3000Backend::new(signal_tone3000::Config::from_env(
+    let tone3000 = signal_tone3000::client::Tone3000Backend::new(signal_tone3000::client::Config::from_env(
         &config_dir_t3k,
         signal_nam::nam_root_from_env(&config_dir_t3k.join("nam")),
     ))
@@ -222,7 +222,7 @@ async fn async_main() {
     // SAME `Arc<Account>` the callback route below redeems into, so a
     // sign-in finished in the browser is visible on the next `status()`
     // call with nothing else to keep in step.
-    let account_rpc = signal_account::AccountBackend::new(account.clone());
+    let account_rpc = signal_tone3000::account::AccountBackend::new(account.clone());
     let router = router.merge_router(account_rpc.router());
 
     // ── Sample space (similarity maps over the sample libraries, #77) ────

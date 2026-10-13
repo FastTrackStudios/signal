@@ -1,0 +1,57 @@
+[package]
+name = "signal-tone3000"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "TONE3000, the online tone library: its wire types and the account's (always), the client and sign-in (client), and the browsing UI (ui)"
+
+[lints]
+workspace = true
+
+[features]
+default = ["account_proto-vox", "vox"]
+account_proto-vox = ["architect/vox", "dep:vox"]
+client = ["architect/platform", "dep:auth-client", "dep:futures-util", "dep:rand", "dep:reqwest", "dep:serde", "dep:serde_json", "dep:sha2", "dep:signal-nam", "dep:thiserror", "dep:tokio", "dep:tone3000", "dep:tracing", "dep:url", "reqwest/stream", "tokio/sync", "vox"]
+ui = ["architect/atom", "architect/platform", "architect/vox", "dep:base64", "dep:dioxus", "vox"]
+vox = ["architect/vox", "dep:vox"]
+
+[dependencies]
+architect = { workspace = true }
+auth-client = { workspace = true, optional = true }
+base64 = { version = "0.22", optional = true }
+dioxus = { workspace = true, optional = true }
+facet = { workspace = true }
+futures-util = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+sha2 = { version = "0.10", optional = true }
+signal-nam = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tone3000 = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+url = { version = "2", optional = true }
+vox = { workspace = true, optional = true }
+
+[dev-dependencies]
+auth-client = { workspace = true }
+serde_json = { workspace = true }
+signal-nam = { workspace = true }
+tempfile = { version = "3" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tracing-subscriber = { workspace = true }
+url = { version = "2" }
+wiremock = { version = "0.6" }
+
+[[test]]
+name = "against_a_mock_catalog"
+path = "tests/against_a_mock_catalog.rs"
+required-features = ["client"]
+
+[[example]]
+name = "live_check"
+path = "examples/live_check.rs"
+required-features = ["client"]

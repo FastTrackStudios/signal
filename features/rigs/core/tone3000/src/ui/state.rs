@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
-use signal_tone3000_proto::{DownloadProgress, SignInStatus};
+use crate::tone3000::{Tone3000Client, Tone3000StreamClient};
+use crate::{DownloadProgress, SignInStatus};
 
 /// How this shell opens a URL in the user's own browser.
 ///

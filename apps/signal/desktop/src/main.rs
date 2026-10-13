@@ -1075,8 +1075,8 @@ fn SettingsPanel() -> Element {
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 #[component]
 fn AccountSettings() -> Element {
-    use signal_account_proto::AccountStatus;
-    use signal_account_proto::account::AccountAuthClient;
+    use signal_tone3000::account_proto::AccountStatus;
+    use signal_tone3000::account_proto::account::AccountAuthClient;
 
     let client = use_resource(connect_account);
     let mut status = use_signal(AccountStatus::default);
@@ -1204,7 +1204,7 @@ fn AccountSettings() -> Element {
 /// engine is not yet up; the sign-in button says so rather than doing
 /// nothing.
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
-async fn connect_account() -> Option<signal_account_proto::account::AccountAuthClient> {
+async fn connect_account() -> Option<signal_tone3000::account_proto::account::AccountAuthClient> {
     match rig_view::EngineMode::current() {
         rig_view::EngineMode::Embedded => {
             if rig_engine::engine().is_none() {
