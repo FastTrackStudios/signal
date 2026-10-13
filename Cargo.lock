@@ -4089,15 +4089,11 @@ dependencies = [
  "daw-standalone",
  "daw-test-macro",
  "daw-ui",
- "dawfile-aaf",
- "dawfile-ableton",
- "dawfile-dawproject",
- "dawfile-logic",
- "dawfile-protools",
  "dawfile-reaper",
  "eyre",
  "facet",
  "facet-json",
+ "formats",
  "libc",
  "reaper-launcher",
  "serde_json",
@@ -4156,12 +4152,9 @@ dependencies = [
  "daw-proto",
  "daw-reaper-dioxus",
  "daw-synchronization",
- "dawfile-aaf",
- "dawfile-ableton",
- "dawfile-dawproject",
- "dawfile-protools",
  "dawfile-reaper",
  "eyre",
+ "formats",
  "fragile",
  "reaper-high",
  "reaper-low",
@@ -4289,10 +4282,6 @@ dependencies = [
  "daw-control",
  "daw-proto",
  "daw-transport-sync",
- "dawfile-aaf",
- "dawfile-ableton",
- "dawfile-dawproject",
- "dawfile-protools",
  "dawfile-reaper",
  "display-info",
  "enumflags2",
@@ -4300,6 +4289,7 @@ dependencies = [
  "expression-editor-tools",
  "eyre",
  "facet-json",
+ "formats",
  "libloading 0.8.9",
  "reaper-high",
  "reaper-low",
@@ -4415,8 +4405,8 @@ dependencies = [
  "daw-standalone",
  "daw-transport-sync",
  "dawfile-reaper",
- "dawfile-standalone",
  "eyre",
+ "formats",
  "fts-sample",
  "futures",
  "gloo-timers",
@@ -4497,53 +4487,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dawfile-aaf"
-version = "0.1.0"
-dependencies = [
- "cfb 0.10.0",
- "daw-proto",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "dawfile-ableton"
-version = "0.1.0"
-dependencies = [
- "daw-proto",
- "flate2",
- "quick-xml 0.37.5",
- "roxmltree 0.20.0",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "dawfile-dawproject"
-version = "0.1.0"
-dependencies = [
- "daw-proto",
- "roxmltree 0.20.0",
- "thiserror 2.0.20",
- "zip 2.4.2",
-]
-
-[[package]]
-name = "dawfile-logic"
-version = "0.1.0"
-dependencies = [
- "daw-proto",
- "plist",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "dawfile-protools"
-version = "0.1.0"
-dependencies = [
- "daw-proto",
- "thiserror 2.0.20",
-]
-
-[[package]]
 name = "dawfile-reaper"
 version = "0.1.0"
 dependencies = [
@@ -4557,36 +4500,6 @@ dependencies = [
  "serde",
  "thiserror 2.0.20",
  "tracing",
-]
-
-[[package]]
-name = "dawfile-standalone"
-version = "0.1.0"
-dependencies = [
- "daw-proto",
- "dawfile-dawproject",
- "dawfile-reaper",
- "facet",
- "facet-styx",
- "loro",
- "sha2 0.10.9",
- "styx-format",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "dawfile-store"
-version = "0.1.0"
-dependencies = [
- "dawfile-standalone",
- "loro",
- "pollster",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.20",
- "turso",
- "zstd",
 ]
 
 [[package]]
@@ -6684,13 +6597,13 @@ dependencies = [
  "daw",
  "daw-proto",
  "dawfile-reaper",
- "dawfile-standalone",
  "expression-editor-audio",
  "expression-editor-core",
  "expression-editor-corpus",
  "expression-editor-daw",
  "expression-editor-guitarpro",
  "expression-editor-tools",
+ "formats",
  "hound",
  "midly",
 ]
@@ -6757,7 +6670,6 @@ dependencies = [
  "daw-control",
  "daw-ui",
  "dawfile-reaper",
- "dawfile-standalone",
  "dioxus",
  "dioxus-mcp-probe",
  "dioxus-native",
@@ -6769,6 +6681,7 @@ dependencies = [
  "expression-editor-host",
  "expression-editor-ui",
  "eyre",
+ "formats",
  "futures-timer",
  "regex",
  "serde_json",
@@ -7628,6 +7541,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "formats"
+version = "0.1.0"
+dependencies = [
+ "cfb 0.10.0",
+ "daw-proto",
+ "dawfile-reaper",
+ "facet",
+ "facet-styx",
+ "flate2",
+ "loro",
+ "plist",
+ "pollster",
+ "quick-xml 0.37.5",
+ "roxmltree 0.20.0",
+ "sha2 0.10.9",
+ "styx-format",
+ "tempfile",
+ "thiserror 2.0.20",
+ "turso",
+ "uuid",
+ "zip 2.4.2",
+ "zstd",
 ]
 
 [[package]]
@@ -17785,7 +17723,6 @@ dependencies = [
  "daw-transport-sync",
  "daw-ui",
  "dawfile-reaper",
- "dawfile-store",
  "delay",
  "dioxus",
  "dioxus-native",
@@ -17805,6 +17742,7 @@ dependencies = [
  "eyre",
  "facet",
  "facet-json",
+ "formats",
  "frame-live",
  "fts-audio-ui",
  "fts-sample",
@@ -18038,9 +17976,9 @@ dependencies = [
  "daw-proto",
  "daw-standalone",
  "daw-transport-sync",
- "dawfile-store",
  "eyre",
  "facet",
+ "formats",
  "futures",
  "loro",
  "num-traits",

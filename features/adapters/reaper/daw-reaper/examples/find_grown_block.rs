@@ -1,7 +1,7 @@
 //! For two PTX files, find each pair of blocks of the same CT where
 //! the size differs. Reports the position and delta.
 
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 
 fn flatten(blocks: &[RawBlock], out: &mut Vec<(u16, usize, u32, usize)>) {
     fn walk(blocks: &[RawBlock], depth: usize, out: &mut Vec<(u16, usize, u32, usize)>) {
@@ -14,8 +14,8 @@ fn flatten(blocks: &[RawBlock], out: &mut Vec<(u16, usize, u32, usize)>) {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let a = dawfile_protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
-    let b = dawfile_protools::parse_raw(std::fs::read(std::env::args().nth(2).unwrap())?)?;
+    let a = formats::protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
+    let b = formats::protools::parse_raw(std::fs::read(std::env::args().nth(2).unwrap())?)?;
     let ct: u16 = u16::from_str_radix(
         std::env::args()
             .nth(3)

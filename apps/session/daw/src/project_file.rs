@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use daw::standalone::Standalone;
-use dawfile_store::{MAIN, Store};
+use formats::store::{MAIN, Store};
 use session::sync::engine::{Blobs, Direct, MediaRoot};
 use session::sync::{Bridge, SessionDoc};
 
@@ -46,7 +46,7 @@ impl StoreBlobs {
 
 impl Blobs for StoreBlobs {
     fn put(&self, bytes: &[u8]) -> String {
-        let name = dawfile_store::hash_of(bytes);
+        let name = formats::store::hash_of(bytes);
         let mut stored = self
             .stored
             .lock()
@@ -546,7 +546,7 @@ pub fn fork(
     name: &str,
 ) -> Result<PathBuf, String> {
     let name = name.trim();
-    if name.is_empty() || name.contains(['/', '\\']) || name == dawfile_store::MAIN {
+    if name.is_empty() || name.contains(['/', '\\']) || name == formats::store::MAIN {
         return Err(format!("{name:?} is not a name an alternative can have"));
     }
     let (file, branch) = save_target(path);
@@ -573,7 +573,7 @@ pub fn fork(
 /// # Errors
 ///
 /// The file would not open.
-pub fn branches(path: &Path) -> Result<Vec<dawfile_store::Branch>, String> {
+pub fn branches(path: &Path) -> Result<Vec<formats::store::Branch>, String> {
     Store::open(path)
         .and_then(|store| store.branches())
         .map_err(|e| e.to_string())

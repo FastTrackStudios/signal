@@ -100,7 +100,7 @@ pub fn main_of(base: &Path) -> Option<PathBuf> {
 pub fn alternative_name(path: &Path) -> Option<String> {
     #[cfg(feature = "native")]
     if let Some((_, branch)) = crate::project_file::file_and_branch(path) {
-        return (branch != dawfile_store::MAIN).then_some(branch);
+        return (branch != formats::store::MAIN).then_some(branch);
     }
     let _ = path;
     None
@@ -119,7 +119,7 @@ pub fn alternatives(base: &Path) -> Vec<Alternative> {
                 crate::project_file::branches(&file)
                     .unwrap_or_default()
                     .into_iter()
-                    .filter(|b| b.name != dawfile_store::MAIN)
+                    .filter(|b| b.name != formats::store::MAIN)
                     .map(|b| Alternative {
                         path: file.join(&b.name),
                         name: b.name,
@@ -302,7 +302,7 @@ mod tests {
         let base = tmp.path().join("Unbreakable");
         assert_eq!(base_of(&base.with_extension("RPP")), Some(base.clone()));
         let file = base.with_extension("session");
-        dawfile_store::Store::open(&file).expect("a project file");
+        formats::store::Store::open(&file).expect("a project file");
         assert_eq!(base_of(&file), Some(base.clone()));
         let organized = file.join("Organized");
         assert_eq!(base_of(&organized), Some(base));
@@ -324,11 +324,11 @@ mod tests {
         std::fs::write(base.with_extension("RPP"), "<REAPER_PROJECT\n>\n").expect("an rpp");
         assert_eq!(main_of(&base), Some(base.with_extension("RPP")));
         let file = base.with_extension("session");
-        let store = dawfile_store::Store::open(&file).expect("a project file");
+        let store = formats::store::Store::open(&file).expect("a project file");
         assert_eq!(main_of(&base), Some(file.clone()));
         let doc = session::sync::loro::LoroDoc::new();
         for name in ["Organized", "Mix A"] {
-            store.fork(name, dawfile_store::MAIN, &doc).expect("forked");
+            store.fork(name, formats::store::MAIN, &doc).expect("forked");
             std::thread::sleep(std::time::Duration::from_millis(1_100));
         }
         let found = alternatives(&base);

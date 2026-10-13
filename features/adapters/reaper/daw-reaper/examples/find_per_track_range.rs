@@ -4,7 +4,7 @@
 //! report its start..end range. Also find every 0x260d (track wrapper)
 //! and 0x1029 (mix settings) for cross-reference.
 
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 
 fn find_ct(blocks: &[RawBlock], ct: u16, out: &mut Vec<(usize, usize, u32)>) {
     for b in blocks {
@@ -17,7 +17,7 @@ fn find_ct(blocks: &[RawBlock], ct: u16, out: &mut Vec<(usize, usize, u32)>) {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args().nth(1).expect("ptx");
-    let s = dawfile_protools::parse_raw(std::fs::read(&path)?)?;
+    let s = formats::protools::parse_raw(std::fs::read(&path)?)?;
     let total = s.data.len();
     println!("file size: {} bytes", total);
     for ct in [0x261bu16, 0x260d, 0x1029, 0x102d, 0x2619, 0x200a] {

@@ -9,7 +9,7 @@ description = "The demo project the four #149 scenarios run against — assemble
 [dependencies]
 expression-editor-core = { workspace = true }
 expression-editor-guitarpro = { workspace = true }
-dawfile-standalone = { workspace = true }
+formats = { workspace = true, features = ["session"] }
 daw-proto = { workspace = true }
 
 [dev-dependencies]

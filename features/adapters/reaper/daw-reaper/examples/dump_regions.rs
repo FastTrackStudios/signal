@@ -1,4 +1,4 @@
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 fn collect(blocks: &[RawBlock], ct: u16, out: &mut Vec<(usize, usize)>) {
     for b in blocks {
         if b.content_type_raw == ct {
@@ -9,7 +9,7 @@ fn collect(blocks: &[RawBlock], ct: u16, out: &mut Vec<(usize, usize)>) {
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args().nth(1).unwrap();
-    let s = dawfile_protools::parse_raw(std::fs::read(&path)?)?;
+    let s = formats::protools::parse_raw(std::fs::read(&path)?)?;
     let mut regions = Vec::new();
     collect(&s.blocks, 0x2629, &mut regions);
     collect(&s.blocks, 0x1008, &mut regions);

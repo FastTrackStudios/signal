@@ -72,7 +72,7 @@ fn rpp_roundtrip_is_lossless() {
 fn conversion_preserves_track_state() {
     for name in SESSIONS {
         let path = format!("{FIXTURES}{name}");
-        let pt = dawfile_protools::read_session(&path, 0).unwrap();
+        let pt = formats::protools::read_session(&path, 0).unwrap();
         let proj = convert_and_parse(&path);
 
         // Index PT tracks by clean name (audio + MIDI).
@@ -138,7 +138,7 @@ fn conversion_preserves_track_state() {
 /// converter). Skipped when the converter binary isn't installed (CI/Linux).
 #[test]
 fn ptx_to_rpp_to_ptx_via_converter() {
-    if dawfile_protools::write::find_converter_binary().is_err() {
+    if formats::protools::write::find_converter_binary().is_err() {
         eprintln!("skip: PT Reaper Converter not installed");
         return;
     }
@@ -150,10 +150,10 @@ fn ptx_to_rpp_to_ptx_via_converter() {
     let rpp_path = tmp.join("roundtrip.rpp");
     let ptx_path = tmp.join("roundtrip.ptx");
     std::fs::write(&rpp_path, &rpp).unwrap();
-    dawfile_protools::write::rpp_to_ptx_via_converter(&rpp_path, &ptx_path)
+    formats::protools::write::rpp_to_ptx_via_converter(&rpp_path, &ptx_path)
         .expect("rpp→ptx via converter");
 
-    let session = dawfile_protools::read_session(ptx_path.to_str().unwrap(), 0).unwrap();
+    let session = formats::protools::read_session(ptx_path.to_str().unwrap(), 0).unwrap();
     let total = session.audio_tracks.len() + session.midi_tracks.len();
     let rpp_tracks = rpp
         .lines()

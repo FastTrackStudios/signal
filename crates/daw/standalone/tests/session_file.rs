@@ -1307,7 +1307,7 @@ fn the_organized_session_survives_save_and_load() {
 /// on the next open — and a plain save starts it fresh, as before.
 #[test]
 fn a_session_keeps_the_history_it_was_saved_with() {
-    use dawfile_standalone::loro::LoroDoc;
+    use formats::session::loro::LoroDoc;
     let (daw, _) = engine();
     let loaded = load_rpp_text(&daw, "Song", "", SONG_RPP).unwrap();
     let tmp = tempfile::tempdir().unwrap();

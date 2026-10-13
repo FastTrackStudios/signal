@@ -1,4 +1,4 @@
-use dawfile_standalone::{DawProject, EntityId};
+use formats::session::{DawProject, EntityId};
 
 #[test]
 fn added_items_and_takes_keep_file_and_opaque_sources() {

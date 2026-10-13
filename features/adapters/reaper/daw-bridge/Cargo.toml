@@ -46,10 +46,7 @@ crossbeam-channel.workspace = true
 fragile.workspace = true
 
 # Project file import (Ableton/ProTools/AAF/DAWproject → REAPER conversion)
-dawfile-ableton = { workspace = true }
-dawfile-protools = { workspace = true }
-dawfile-aaf = { workspace = true }
-dawfile-dawproject = { workspace = true }
+formats = { workspace = true, features = ["aaf", "ableton", "dawproject", "protools"] }
 dawfile-reaper = { workspace = true }
 
 # Observability

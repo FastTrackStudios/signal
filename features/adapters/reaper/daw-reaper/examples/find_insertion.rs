@@ -8,8 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let a_raw = std::fs::read(&a_path)?;
     let b_raw = std::fs::read(&b_path)?;
-    let a = dawfile_protools::parse_raw(a_raw)?;
-    let b = dawfile_protools::parse_raw(b_raw)?;
+    let a = formats::protools::parse_raw(a_raw)?;
+    let b = formats::protools::parse_raw(b_raw)?;
     let ad = a.cursor().data();
     let bd = b.cursor().data();
 

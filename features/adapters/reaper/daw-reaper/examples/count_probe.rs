@@ -2,7 +2,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "/tmp/cloned_track.ptx".into());
-    let s = dawfile_protools::parse_raw(std::fs::read(&path)?)?;
+    let s = formats::protools::parse_raw(std::fs::read(&path)?)?;
     let needle = b"\x0a\x00\x00\x00ProbeTrack";
     let n = s
         .data

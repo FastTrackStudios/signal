@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         16,
     )?;
 
-    let s = dawfile_protools::parse_raw(std::fs::read(&path)?)?;
+    let s = formats::protools::parse_raw(std::fs::read(&path)?)?;
     let data = &s.data;
     let alen = a_end - a_start;
     let blen = b_end - b_start;

@@ -5,7 +5,7 @@
 //!
 //! Usage: ptx_plaintext_diff <baseline.ptx> <other.ptx>
 
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 use std::collections::BTreeMap;
 
 fn walk<'a>(blocks: &'a [RawBlock], out: &mut Vec<&'a RawBlock>) {
@@ -21,8 +21,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let a_raw = std::fs::read(&a_path)?;
     let b_raw = std::fs::read(&b_path)?;
-    let a = dawfile_protools::parse_raw(a_raw)?;
-    let b = dawfile_protools::parse_raw(b_raw)?;
+    let a = formats::protools::parse_raw(a_raw)?;
+    let b = formats::protools::parse_raw(b_raw)?;
     let a_data = a.cursor().data().to_vec();
     let b_data = b.cursor().data().to_vec();
 

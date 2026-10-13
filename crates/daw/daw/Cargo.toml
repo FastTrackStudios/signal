@@ -49,11 +49,7 @@ control-surfaces = { workspace = true, optional = true }
 # Opt into only the formats you need; none of these pull in REAPER. The
 # reaper-based file→RPP `convert()` path lives under the `convert` feature.
 # Each depends only on `daw-proto`, so there is no facade cycle.
-dawfile-protools = { workspace = true, optional = true }
-dawfile-ableton = { workspace = true, optional = true }
-dawfile-logic = { workspace = true, optional = true }
-dawfile-aaf = { workspace = true, optional = true }
-dawfile-dawproject = { workspace = true, optional = true }
+formats = { workspace = true, optional = true, features = ["aaf", "ableton", "dawproject", "logic", "protools"] }
 
 # Integration-test harness deps — only pulled in by the `test-harness`
 # feature (folded-in former `reaper-test` crate). None of these dep on
@@ -159,11 +155,11 @@ csi = ["dep:control-surfaces"]
 
 # Source-format parsers, exposed under daw::<format>. Each is independent
 # of REAPER and of each other — opt into only what you read.
-protools = ["dep:dawfile-protools"]
-ableton = ["dep:dawfile-ableton"]
-logic = ["dep:dawfile-logic"]
-aaf = ["dep:dawfile-aaf"]
-dawproject = ["dep:dawfile-dawproject"]
+protools = ["dep:formats", "formats?/protools"]
+ableton = ["dep:formats", "formats?/ableton"]
+logic = ["dep:formats", "formats?/logic"]
+aaf = ["dep:formats", "formats?/aaf"]
+dawproject = ["dep:formats", "formats?/dawproject"]
 # All source-format parsers at once.
 formats = ["protools", "ableton", "logic", "aaf", "dawproject"]
 # Integration-test harness (former `reaper-test` crate). Drives daw-reaper
@@ -188,7 +184,7 @@ path = "src/bin/daw.rs"
 required-features = ["cli"]
 
 [dev-dependencies]
-dawfile-ableton = { workspace = true }
+formats = { workspace = true, features = ["ableton"] }
 # CLI integration tests (former daw-cli tests; gated `#![cfg(feature = "cli")]`):
 # in-process standalone backend over a real vox memory link + local wire probes.
 daw-standalone = { workspace = true, features = ["bootstrap", "audio"] }

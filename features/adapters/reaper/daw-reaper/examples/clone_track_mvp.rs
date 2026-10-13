@@ -2,8 +2,8 @@
 //! splice it in after the original, re-encrypt, and report whether
 //! the result parses as 2 tracks.
 
-use dawfile_protools::raw_block::RawBlock;
-use dawfile_protools::write::splice::splice;
+use formats::protools::raw_block::RawBlock;
+use formats::protools::write::splice::splice;
 
 fn find_first(blocks: &[RawBlock], ct: u16) -> Option<&RawBlock> {
     for b in blocks {
@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "/tmp/one_aaa.ptx".into());
-    let mut s = dawfile_protools::parse_raw(std::fs::read(&path)?)?;
+    let mut s = formats::protools::parse_raw(std::fs::read(&path)?)?;
     let (start, end) = {
         let b = find_first(&s.blocks, 0x261c).expect("0x261c not found");
         (b.start, b.end)
@@ -62,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Re-parse from disk via full read_session
-    match dawfile_protools::read_session(out_path, 48000) {
+    match formats::protools::read_session(out_path, 48000) {
         Ok(sess) => {
             let names: Vec<String> = sess.all_tracks().map(|t| t.name.clone()).collect();
             println!("parsed OK; tracks: {names:?}");

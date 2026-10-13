@@ -88,10 +88,10 @@ use dawfile_reaper::types::track::{
     ShowInMixerSettings, Track as RppTrack, TrackHeightSettings, TrackSoloState,
     VolPanSettings as TrackVolPan, comp_area_from_proto, lane_settings,
 };
-use dawfile_standalone::project::{DAW_EXTENSION, DawProject, SESSION_EXTENSION};
+use formats::session::project::{DAW_EXTENSION, DawProject, SESSION_EXTENSION};
 /// For reading a `.session` directory that is not on a disk: which file
 /// is its manifest, and where its objects are.
-pub use dawfile_standalone::{OBJECTS_DIR, choose_manifest};
+pub use formats::session::{OBJECTS_DIR, choose_manifest};
 
 use crate::plugin::FxFactory;
 use crate::project_loader::{self as loader, LoadedProject};
@@ -134,7 +134,7 @@ pub fn save_session_with_history(
     daw: &Standalone,
     project_guid: &str,
     dir: &Path,
-    history: Option<&dawfile_standalone::loro::LoroDoc>,
+    history: Option<&formats::session::loro::LoroDoc>,
 ) -> Result<PathBuf, String> {
     // Media inside the folder this save is opened from — the session
     // folder's own folder, as an open anchors it — is written relative to
@@ -179,7 +179,7 @@ pub fn save_session_with_history(
 /// The CRDT history a `.session` was saved with, if it is still the
 /// history of what the manifest says (a hand edit since discards it).
 #[must_use]
-pub fn load_session_history(dir: &Path) -> Option<dawfile_standalone::loro::LoroDoc> {
+pub fn load_session_history(dir: &Path) -> Option<formats::session::loro::LoroDoc> {
     DawProject::load(dir).ok()?.history().cloned()
 }
 
@@ -213,7 +213,7 @@ pub fn session_rpp_text_from_parts(
     origin: &str,
     objects: impl IntoIterator<Item = (String, Vec<u8>)>,
 ) -> Result<String, String> {
-    let objects = dawfile_standalone::ObjectStore::from_named(objects)
+    let objects = formats::session::ObjectStore::from_named(objects)
         .map_err(|e| format!("opening session {origin}: {e}"))?;
     DawProject::from_parts(manifest, origin, objects)
         .map_err(|e| format!("opening session {origin}: {e}"))?

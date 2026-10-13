@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(0);
 
     let raw = std::fs::read(&input)?;
-    let session = dawfile_protools::parse_raw(raw).map_err(|e| format!("{e:?}"))?;
+    let session = formats::protools::parse_raw(raw).map_err(|e| format!("{e:?}"))?;
     let data = session.cursor().data();
 
     let xml = extract_omni_xml(data, instance).ok_or("no Omnisphere <SynthMaster> state found")?;

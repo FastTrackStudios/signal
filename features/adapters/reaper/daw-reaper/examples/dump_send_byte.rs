@@ -1,12 +1,12 @@
-use dawfile_protools::raw_block::{RawBlock, RawSession};
+use formats::protools::raw_block::{RawBlock, RawSession};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()
         .nth(1)
         .expect("usage: dump_send_byte <ptx>");
     let raw = std::fs::read(&path)?;
-    let session: RawSession = dawfile_protools::parse_raw(raw)?;
-    let parsed = dawfile_protools::read_session(&path, 48000)?;
+    let session: RawSession = formats::protools::parse_raw(raw)?;
+    let parsed = formats::protools::read_session(&path, 48000)?;
 
     fn collect<'a>(blocks: &'a [RawBlock], ct: u16, out: &mut Vec<&'a RawBlock>) {
         for b in blocks {

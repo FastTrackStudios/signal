@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/formats",
     "features/ui/daw-ui",
     "features/dynamic-template",
     "features/audio",
@@ -101,14 +102,7 @@ members = [
     "features/ui/audio-controls",
     "crates/daw/allocator",
     "crates/daw/audio-graph",
-    "features/formats/dawfile-aaf",
-    "features/formats/dawfile-ableton",
-    "features/formats/dawfile-dawproject",
-    "features/formats/dawfile-logic",
-    "features/formats/dawfile-protools",
     "features/formats/dawfile-reaper",
-    "features/formats/dawfile-standalone",
-    "features/formats/dawfile-store",
     "features/adapters/reaper/daw-bridge",
     "features/adapters/reaper/daw-extension-runtime",
     "features/adapters/reaper/daw-perf-test",
@@ -282,6 +276,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+formats = { path = "features/formats" }
 daw-ui = { path = "features/ui/daw-ui" }
 dynamic-template = { path = "features/dynamic-template" }
 audio = { path = "features/audio" }
@@ -390,14 +385,7 @@ daw-link = { path = "features/sync/daw-link" }
 daw-network = { path = "features/sync/daw-network" }
 daw-audio-sync = { path = "features/sync/daw-audio-sync" }
 daw-transport-sync = { path = "features/sync/daw-transport-sync" }
-dawfile-aaf = { path = "features/formats/dawfile-aaf" }
-dawfile-ableton = { path = "features/formats/dawfile-ableton" }
-dawfile-dawproject = { path = "features/formats/dawfile-dawproject" }
-dawfile-logic = { path = "features/formats/dawfile-logic" }
-dawfile-protools = { path = "features/formats/dawfile-protools" }
 dawfile-reaper = { path = "features/formats/dawfile-reaper" }
-dawfile-standalone = { path = "features/formats/dawfile-standalone" }
-dawfile-store = { path = "features/formats/dawfile-store" }
 # default = all-formats; the daw facade opts into formats individually,
 # so the root entry keeps defaults OFF and consumers that want every
 # importer set `default-features = true`.

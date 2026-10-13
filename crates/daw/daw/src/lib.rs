@@ -364,31 +364,31 @@ pub mod file {
 /// Pro Tools session parser (`.ptx` / `.ptf` / `.pts`).
 #[cfg(feature = "protools")]
 pub mod protools {
-    pub use dawfile_protools::*;
+    pub use formats::protools::*;
 }
 
 /// Ableton Live Set parser (`.als`).
 #[cfg(feature = "ableton")]
 pub mod ableton {
-    pub use dawfile_ableton::*;
+    pub use formats::ableton::*;
 }
 
 /// Logic Pro session parser (`.logicx`).
 #[cfg(feature = "logic")]
 pub mod logic {
-    pub use dawfile_logic::*;
+    pub use formats::logic::*;
 }
 
 /// Advanced Authoring Format parser (`.aaf`).
 #[cfg(feature = "aaf")]
 pub mod aaf {
-    pub use dawfile_aaf::*;
+    pub use formats::aaf::*;
 }
 
 /// DAWproject parser (`.dawproject`).
 #[cfg(feature = "dawproject")]
 pub mod dawproject {
-    pub use dawfile_dawproject::*;
+    pub use formats::dawproject::*;
 }
 
 // ── Extension runtime: in-process REAPER extension hosting ──────────────────

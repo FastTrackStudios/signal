@@ -12,7 +12,7 @@
 //! `/tmp/probe_<name>.ptx`, then dumps the block counts. Compare against
 //! `baseline` to see which block types appear/grow per feature.
 
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 use dawfile_reaper::RppSerialize;
 use std::collections::BTreeMap;
 use std::process::Command;
@@ -444,7 +444,7 @@ fn run_converter(rpp_path: &str, ptx_path: &str) -> Result<(), Box<dyn std::erro
 
 fn block_summary(ptx_path: &str) -> Result<BTreeMap<u16, usize>, Box<dyn std::error::Error>> {
     let raw = std::fs::read(ptx_path)?;
-    let session = dawfile_protools::parse_raw(raw)?;
+    let session = formats::protools::parse_raw(raw)?;
     let mut counts: BTreeMap<u16, usize> = BTreeMap::new();
     fn walk(blocks: &[RawBlock], counts: &mut BTreeMap<u16, usize>) {
         for b in blocks {

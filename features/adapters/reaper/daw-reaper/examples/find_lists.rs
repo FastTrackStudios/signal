@@ -1,4 +1,4 @@
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 fn flatten(blocks: &[RawBlock], depth: usize, out: &mut Vec<(u16, usize, usize, usize)>) {
     for b in blocks {
         out.push((b.content_type_raw, b.start, b.end, depth));
@@ -6,7 +6,7 @@ fn flatten(blocks: &[RawBlock], depth: usize, out: &mut Vec<(u16, usize, usize, 
     }
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let s = dawfile_protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
+    let s = formats::protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
     let mut v = Vec::new();
     flatten(&s.blocks, 0, &mut v);
     v.retain(|x| {

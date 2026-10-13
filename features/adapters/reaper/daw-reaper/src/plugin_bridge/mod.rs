@@ -13,7 +13,7 @@
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as B64;
-use dawfile_protools::types::{PluginInstanceState, PluginStateKind};
+use formats::protools::types::{PluginInstanceState, PluginStateKind};
 
 /// A captured Reaper VST3-chunk template for a plugin whose state is a
 /// self-contained, portable blob. The chunk is three base64 segments; only the

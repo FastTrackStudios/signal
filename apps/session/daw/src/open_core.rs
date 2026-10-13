@@ -341,7 +341,7 @@ fn load_project_file(
     daw.media_bay().set_file_resolver(Box::new(
         daw::standalone::media_bay::ProjectRelativeResolver::new(media_dir.clone()),
     ));
-    let name = if branch == dawfile_store::MAIN {
+    let name = if branch == formats::store::MAIN {
         file.file_stem()
             .map_or_else(String::new, |s| s.to_string_lossy().into_owned())
     } else {

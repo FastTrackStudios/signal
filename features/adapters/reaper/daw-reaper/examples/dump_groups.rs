@@ -1,5 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let s = dawfile_protools::read_session(std::env::args().nth(1).unwrap().as_str(), 48000)?;
+    let s = formats::protools::read_session(std::env::args().nth(1).unwrap().as_str(), 48000)?;
     println!("=== {} edit groups ===", s.edit_groups.len());
     for (i, g) in s.edit_groups.iter().enumerate().take(20) {
         println!("  [{i:>3}] color={:>5?} name={:?}", g.color, g.name);

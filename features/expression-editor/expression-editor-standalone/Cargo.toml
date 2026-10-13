@@ -78,7 +78,7 @@ required-features = ["webview"]
 
 [dev-dependencies]
 blitz-traits.workspace = true
-dawfile-standalone.workspace = true
+formats = { workspace = true, features = ["session"] }
 sha2.workspace = true
 # The window. A dev-dependency rather than a dependency: the library
 # half is the *loading*, which is portable and testable, and pulling

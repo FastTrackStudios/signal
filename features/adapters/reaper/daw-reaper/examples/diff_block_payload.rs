@@ -2,7 +2,7 @@
 //! two PTX files. Useful for isolating envelope encoding when blocks
 //! differ in size.
 
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 
 fn first_block_of_ct(blocks: &[RawBlock], ct: u16) -> Option<&RawBlock> {
     for b in blocks {
@@ -27,8 +27,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         16,
     )?;
 
-    let a = dawfile_protools::parse_raw(std::fs::read(&a_path)?)?;
-    let b = dawfile_protools::parse_raw(std::fs::read(&b_path)?)?;
+    let a = formats::protools::parse_raw(std::fs::read(&a_path)?)?;
+    let b = formats::protools::parse_raw(std::fs::read(&b_path)?)?;
     let ad = a.cursor().data();
     let bd = b.cursor().data();
 

@@ -25,8 +25,8 @@ async fn run() -> eyre::Result<()> {
     let path = std::env::args()
         .nth(1)
         .ok_or_else(|| eyre::eyre!("a project file"))?;
-    let store = dawfile_store::Store::open(std::path::Path::new(&path))?;
-    let loaded = store.load(dawfile_store::MAIN)?;
+    let store = formats::store::Store::open(std::path::Path::new(&path))?;
+    let loaded = store.load(formats::store::MAIN)?;
     let standalone = Standalone::new();
     standalone.seed_project(ProjectInfo {
         guid: "song".into(),

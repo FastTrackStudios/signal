@@ -1,5 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let s = dawfile_protools::read_session(std::env::args().nth(1).unwrap().as_str(), 48000)?;
+    let s = formats::protools::read_session(std::env::args().nth(1).unwrap().as_str(), 48000)?;
     let mut groups: std::collections::BTreeMap<Option<[u8; 6]>, Vec<&str>> = Default::default();
     for r in &s.audio_regions {
         groups

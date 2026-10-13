@@ -1,4 +1,4 @@
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 use std::io::BufRead;
 fn find(blocks: &[RawBlock], target: usize) -> Option<(u16, usize, usize)> {
     // Returns innermost block containing target
@@ -16,7 +16,7 @@ fn find(blocks: &[RawBlock], target: usize) -> Option<(u16, usize, usize)> {
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args().nth(1).unwrap();
-    let s = dawfile_protools::parse_raw(std::fs::read(&path)?)?;
+    let s = formats::protools::parse_raw(std::fs::read(&path)?)?;
     let stdin = std::io::stdin();
     for line in stdin.lock().lines() {
         let line = line?;

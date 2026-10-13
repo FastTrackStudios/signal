@@ -1,4 +1,4 @@
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 fn find(blocks: &[RawBlock], ct: u16, out: &mut Vec<(usize, usize)>) {
     for b in blocks {
         if b.content_type_raw == ct {
@@ -8,7 +8,7 @@ fn find(blocks: &[RawBlock], ct: u16, out: &mut Vec<(usize, usize)>) {
     }
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let s = dawfile_protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
+    let s = formats::protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
     // Find each 0x260d wrapper, then its 0x260a[1] child.
     let mut wraps = Vec::new();
     find(&s.blocks, 0x260d, &mut wraps);
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Find first wrapper, then 2nd 0x260a child.
         // We need access to children — re-walk blocks tree to find this wrapper as a RawBlock ref.
         // Use parse_raw_blocks_pub on the data directly.
-        let blocks = dawfile_protools::raw_block::parse_raw_blocks_pub(&s.data, s.is_bigendian);
+        let blocks = formats::protools::raw_block::parse_raw_blocks_pub(&s.data, s.is_bigendian);
         fn find_wrapper(blocks: &[RawBlock], start: usize) -> Option<&RawBlock> {
             for b in blocks {
                 if b.start == start {

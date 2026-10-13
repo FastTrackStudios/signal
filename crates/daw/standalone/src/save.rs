@@ -15,9 +15,9 @@
 
 use std::path::{Path, PathBuf};
 
-use dawfile_standalone::document::{ItemNode, SourceRef, TakeNode};
-use dawfile_standalone::id::EntityId;
-use dawfile_standalone::project::DawProject;
+use formats::session::document::{ItemNode, SourceRef, TakeNode};
+use formats::session::id::EntityId;
+use formats::session::project::DawProject;
 
 use crate::sync::{ProjectState, Standalone};
 

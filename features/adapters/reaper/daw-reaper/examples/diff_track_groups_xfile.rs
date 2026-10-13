@@ -6,10 +6,10 @@ fn parse_hex(s: &str) -> Result<usize, std::num::ParseIntError> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
-    let a = dawfile_protools::parse_raw(std::fs::read(&args[1])?)?;
+    let a = formats::protools::parse_raw(std::fs::read(&args[1])?)?;
     let a_start = parse_hex(&args[2])?;
     let a_end = parse_hex(&args[3])?;
-    let b = dawfile_protools::parse_raw(std::fs::read(&args[4])?)?;
+    let b = formats::protools::parse_raw(std::fs::read(&args[4])?)?;
     let b_start = parse_hex(&args[5])?;
     let b_end = parse_hex(&args[6])?;
     let ad = &a.data[a_start..a_end];

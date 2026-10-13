@@ -263,7 +263,7 @@ fn slot_128_name_reads_back() {
 /// a group made in the session was dropped on every save.
 #[test]
 fn group_flags_survive_the_real_file_round_trip() {
-    use dawfile_standalone::project::DawProject;
+    use formats::session::project::DawProject;
 
     // The grouping to save, built through the facade's own setter.
     let (daw, ctx) = seeded();
@@ -382,7 +382,7 @@ fn slots_above_64_are_reported_as_unwritable() {
 #[cfg(all(feature = "rpp-save", feature = "rpp-loader"))]
 #[test]
 fn an_unedited_grouped_track_is_not_rewritten() {
-    use dawfile_standalone::project::DawProject;
+    use formats::session::project::DawProject;
 
     // The line order REAPER itself writes (verified against a 7.66
     // session), lanes and groups both present.

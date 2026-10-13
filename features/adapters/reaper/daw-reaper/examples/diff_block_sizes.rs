@@ -1,7 +1,7 @@
 //! For two PTX files, report all block-type counts AND sum of total
 //! payload sizes per type. Find which block grew between probes.
 
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 use std::collections::BTreeMap;
 
 fn walk(blocks: &[RawBlock], counts: &mut BTreeMap<u16, (usize, usize)>) {
@@ -14,8 +14,8 @@ fn walk(blocks: &[RawBlock], counts: &mut BTreeMap<u16, (usize, usize)>) {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let a = dawfile_protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
-    let b = dawfile_protools::parse_raw(std::fs::read(std::env::args().nth(2).unwrap())?)?;
+    let a = formats::protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
+    let b = formats::protools::parse_raw(std::fs::read(std::env::args().nth(2).unwrap())?)?;
 
     let mut ac = BTreeMap::new();
     let mut bc = BTreeMap::new();

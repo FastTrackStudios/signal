@@ -1,5 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let s = dawfile_protools::read_session(std::env::args().nth(1).unwrap().as_str(), 48000)?;
+    let s = formats::protools::read_session(std::env::args().nth(1).unwrap().as_str(), 48000)?;
     let total = s.routing_entries.len();
     let active: Vec<_> = s.routing_entries.iter().filter(|e| e.active).collect();
     println!("routing entries: {} total, {} active", total, active.len());

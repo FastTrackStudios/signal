@@ -1,7 +1,7 @@
 //! Diff the block-type counts between two PTX files.
 //! Reports which CTs grew, shrank, or are new.
 
-use dawfile_protools::raw_block::RawBlock;
+use formats::protools::raw_block::RawBlock;
 use std::collections::BTreeMap;
 
 fn count(blocks: &[RawBlock], out: &mut BTreeMap<u16, usize>) {
@@ -14,8 +14,8 @@ fn count(blocks: &[RawBlock], out: &mut BTreeMap<u16, usize>) {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let a_path = std::env::args().nth(1).expect("a.ptx");
     let b_path = std::env::args().nth(2).expect("b.ptx");
-    let a = dawfile_protools::parse_raw(std::fs::read(&a_path)?)?;
-    let b = dawfile_protools::parse_raw(std::fs::read(&b_path)?)?;
+    let a = formats::protools::parse_raw(std::fs::read(&a_path)?)?;
+    let b = formats::protools::parse_raw(std::fs::read(&b_path)?)?;
 
     let mut ac = BTreeMap::new();
     let mut bc = BTreeMap::new();

@@ -42,7 +42,7 @@ daw = { workspace = true }
 daw-standalone = { workspace = true, features = ["bootstrap", "decode", "rpp-project", "session-file"] }
 zstd = "0.13"
 # doc_edit: a song opened from its project file.
-dawfile-store = { workspace = true }
+formats = { workspace = true, features = ["store"] }
 daw-control = { workspace = true }
 daw-proto = { workspace = true }
 eyre = { workspace = true }

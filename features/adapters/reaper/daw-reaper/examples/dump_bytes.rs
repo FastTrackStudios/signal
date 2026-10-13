@@ -1,5 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let s = dawfile_protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
+    let s = formats::protools::parse_raw(std::fs::read(std::env::args().nth(1).unwrap())?)?;
     let start = usize::from_str_radix(
         std::env::args().nth(2).unwrap().trim_start_matches("0x"),
         16,

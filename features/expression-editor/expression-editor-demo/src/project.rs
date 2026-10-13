@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use daw_proto::item::{Item, Take};
 use daw_proto::track::Track;
-use dawfile_standalone::document::{DawDocument, ItemNode, SourceRef, TakeNode, TrackNode};
-use dawfile_standalone::id::EntityId;
+use formats::session::document::{DawDocument, ItemNode, SourceRef, TakeNode, TrackNode};
+use formats::session::id::EntityId;
 
 use crate::Material;
 

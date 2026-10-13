@@ -1,5 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let s = dawfile_protools::read_session(std::env::args().nth(1).unwrap().as_str(), 48000)?;
+    let s = formats::protools::read_session(std::env::args().nth(1).unwrap().as_str(), 48000)?;
     println!("audio files: {}", s.audio_files.len());
     for f in &s.audio_files {
         let uid_s = f
