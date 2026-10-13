@@ -25,7 +25,7 @@ use dioxus::prelude::*;
 use crate::ui::graphs::{Adsr, ModuleCurve};
 
 use crate::ui::selection::Selection;
-use signal_ui::components::Piano;
+use signal_widgets::Piano;
 
 use crate::ui::fader::{EdgeFader, Fader, fmt_db};
 use crate::ui::meter::{EdgeMeter, peak_of};

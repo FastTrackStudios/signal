@@ -3795,10 +3795,9 @@ impl KeysRigBackend {
         let sink = move |ev: midi::TimedEvent| {
             // A learned pedal is a switch's, not a note to play: learn it,
             // or fire its switch off this thread, and drop it either way.
-            if let (Some(raw), Some(inner)) = (
-                midi::RawShortMessage::from_event(&ev.event),
-                weak.upgrade(),
-            ) {
+            if let (Some(raw), Some(inner)) =
+                (midi::RawShortMessage::from_event(&ev.event), weak.upgrade())
+            {
                 let [status, d1, d2] = raw.bytes();
                 let outcome = inner
                     .learn

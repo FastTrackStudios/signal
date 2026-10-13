@@ -92,9 +92,9 @@ pub use signal_flow_grid_view::{
     SignalFlowGridView,
 };
 
-// Piano keyboard + waterfall
-pub mod piano;
+// Piano keyboard + waterfall — signal-widgets' (the rigs share it)
 pub use piano::{MiniKeyboard, Piano, WaterfallNote, WaterfallState};
+pub use signal_widgets::piano;
 
 // Re-exports: node graph
 pub use node_graph::{

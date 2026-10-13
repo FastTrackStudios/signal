@@ -14,6 +14,9 @@ pub mod arc;
 pub mod drag_bus;
 pub mod kit;
 pub mod knob;
+/// Piano keyboard + waterfall (feature `piano`): the rigs' shared keyboard.
+#[cfg(feature = "piano")]
+pub mod piano;
 pub mod picker;
 pub mod popup;
 pub mod preset_tree;
@@ -24,6 +27,8 @@ pub mod touch;
 
 pub use drag_bus::{DragBus, DragEvent};
 pub use knob::{FmtFn, Knob, KnobSize};
+#[cfg(feature = "piano")]
+pub use piano::{MiniKeyboard, Piano, WaterfallNote, WaterfallState};
 pub use picker::{Picker, PickerSize};
 pub use popup::{PopupHost, PopupLayer};
 pub use touch::{LongPress, Touch, TouchMenuButton, is_touch, reveal, use_long_press, use_touch};

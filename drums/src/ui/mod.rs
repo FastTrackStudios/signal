@@ -13,7 +13,7 @@ use crate::proto::{
 use dioxus::prelude::*;
 use midi::proto::MidiEvent;
 use midi::ui::MidiMonitorPanel;
-use signal_ui::components::Piano;
+use signal_widgets::Piano;
 
 /// Live drum-rig view-state: seeded once, then folded from the event stream.
 #[derive(Clone, Copy)]

@@ -15,6 +15,15 @@ dioxus.workspace = true
 # `platform::sleep` — the switches' hold timer, native and wasm alike.
 architect = { workspace = true, features = ["platform"] }
 
+# The piano's native paint (Vello through baseview); on wasm it draws without.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+audiocore-gui = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+
+[features]
+# The piano keyboard + waterfall the rigs share (signal_widgets::piano).
+piano = ["dep:audiocore-gui", "dep:nice-plug-dioxus"]
+
 [dev-dependencies]
 # Headless Blitz: presses hit-tested and delivered as the app gets them.
 dioxus-test.workspace = true
