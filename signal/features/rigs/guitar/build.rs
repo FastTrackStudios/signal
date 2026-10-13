@@ -3,6 +3,8 @@
 //! every profile in `default-config/profiles/` (and the same for the bass's
 //! `default-config-bass/`) — so what
 //! `default-config/ship-library.sh` puts there ships, with no list to keep.
+//! The `models/` directories are links into the rig-models repo (`just
+//! assets`); a release build refuses to run without them.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -46,6 +48,17 @@ fn tables(src: &mut String, root: &Path, prefix: &str) {
 
 fn main() {
     let here = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // The captures live in the rig-models repo, linked in by `just assets`.
+    // A debug build without them is fine (a rig with no captures, tests
+    // that need them fail); a release would ship that rig to people.
+    if std::env::var("PROFILE").as_deref() == Ok("release") {
+        for dir in ["default-config/models", "default-config-bass/models"] {
+            assert!(
+                !files(&here.join(dir), &["nam", "wav"]).is_empty(),
+                "{dir} is empty: run `just assets` before a release build — the rig's captures are in the rig-models repo",
+            );
+        }
+    }
     let mut src = String::new();
     // The guitar's (`DEFAULT_*`, as they always were) and the bass's.
     tables(&mut src, &here.join("default-config"), "DEFAULT");

@@ -1879,19 +1879,24 @@ web-daw SESSION="../sessions/Always On Time" RPP="Always On Time.RPP" CHART="Alw
 web-daw-serve:
     cd apps/session-daw-web/dist && python3 -m http.server 8765
 
-# Fetch the large binaries kept out of this repo (FastTrackStudios/studio-assets,
-# private: test fixtures and research captures) into .assets/ and link each one
-# into place, as assets.txt lists. Re-run to update.
+# Fetch the large binaries kept out of this repository (assets.txt: the
+# private studio-assets and rig-models repos) into .assets/<repo>, and link
+# each listed file or directory into place. Re-run to update.
 assets:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [[ -d .assets/.git ]]; then git -C .assets pull --ff-only --quiet
-    else git clone --quiet git@github.com:FastTrackStudios/studio-assets.git .assets; fi
     n=0
-    while read -r f; do
-        [[ -z $f || $f == \#* ]] && continue
-        mkdir -p "$(dirname "$f")"
-        ln -sfn "$PWD/.assets/$f" "$f"
+    declare -A fetched=()
+    while read -r repo from to; do
+        [[ -z $repo || $repo == \#* ]] && continue
+        to=${to:-$from}
+        if [[ -z ${fetched[$repo]:-} ]]; then
+            if [[ -d .assets/$repo/.git ]]; then git -C ".assets/$repo" pull --ff-only --quiet
+            else git clone --quiet "git@github.com:FastTrackStudios/$repo.git" ".assets/$repo"; fi
+            fetched[$repo]=1
+        fi
+        mkdir -p "$(dirname "$to")"
+        ln -sfn "$PWD/.assets/$repo/$from" "$to"
         n=$((n+1))
     done < assets.txt
-    echo "linked $n assets"
+    echo "linked $n assets from ${#fetched[@]} repos"

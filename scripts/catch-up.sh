@@ -9,7 +9,7 @@
 #
 # Not carried: each repo's own root Cargo.toml / Cargo.lock (folded into
 # studio's root manifest by hand — the diff is printed instead), and the
-# files assets.txt keeps in studio-assets.
+# files assets.txt keeps in the asset repos.
 #
 #   FTS=/run/media/Development/fts scripts/catch-up.sh [repo...]
 set -euo pipefail
@@ -20,9 +20,9 @@ if [[ -n $(git status --porcelain --untracked-files=no) ]]; then
 fi
 want=("$@")
 excludes=()
-while read -r f; do
-    [[ -z $f || $f == \#* ]] && continue
-    excludes+=("$f")
+while read -r _repo from to; do
+    [[ -z $_repo || $_repo == \#* ]] && continue
+    excludes+=("${to:-$from}")
 done < assets.txt
 while read -r repo dir branch from; do
     [[ -z $repo || $repo == \#* ]] && continue

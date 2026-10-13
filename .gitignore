@@ -60,8 +60,10 @@ apps/web/.tailwind-src/
 # committed — the project text beside it is the fixture.
 features/dynamic-template/fixtures/golden/media/
 
-# Large binaries kept in studio-assets, linked in by `just assets` (see assets.txt)
+# Large binaries linked in by `just assets` (see assets.txt)
 /.assets/
+/signal/features/rigs/guitar/default-config/models
+/signal/features/rigs/guitar/default-config-bass/models
 /daw/features/dawfile/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/000/ProjectData
 /daw/features/dawfile/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/001/ProjectData
 /daw/features/dawfile/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/002/ProjectData
