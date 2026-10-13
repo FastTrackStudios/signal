@@ -24,7 +24,7 @@
 //! [`crate::ui::sections`].
 
 use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use fts_audio_ui::prelude::*;
 use nice_plug::editor::ResizeHint;
 use nice_plug::editor::dpi::LogicalSize;

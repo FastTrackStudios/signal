@@ -18,7 +18,7 @@
 //! reaches the DSP — which is also why the editor's shape is the engine's own
 //! movement rather than a drawing of one.
 
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -124,7 +124,7 @@ impl Plugin for FtsModulation {
         ..AudioIOLayout::const_default()
     }];
 
-    type Editor = audio::nice_plug_dioxus::editor::DioxusEditor;
+    type Editor = plugin_core::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -282,7 +282,7 @@ nice_export_vst3!(FtsModulation);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use audio::nice_plug::params::InternalParamMut;
+    use plugin_core::nice_plug::params::InternalParamMut;
     use modulation::profiles::{Circuit, EngineType};
 
     /// The plugin runs whatever the rail says, with no table of its own.

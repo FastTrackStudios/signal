@@ -14,7 +14,7 @@ crate-type = ["cdylib", "lib"]
 workspace = true
 
 [dependencies]
-audio = { workspace = true }
+plugin-core = { workspace = true }
 # What each circuit IS, and the only place that knows how a knob reaches the
 # DSP — the shell deliberately carries no engine table of its own.
 modulation = { workspace = true, features = ["native", "profiles", "ui", "viz"] }

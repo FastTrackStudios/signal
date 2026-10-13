@@ -20,9 +20,9 @@
 //! family (there is no transfer curve that produces an alias, so quantisation
 //! and rate reduction cannot be a shaper).
 
-// `audio::prelude` re-exports nice-plug's, plus the Dioxus editor
+// `plugin_core::prelude` re-exports nice-plug's, plus the Dioxus editor
 // pieces — one import rather than two that overlap.
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -154,7 +154,7 @@ impl Plugin for FtsSaturate {
         ..AudioIOLayout::const_default()
     }];
 
-    type Editor = audio::nice_plug_dioxus::editor::DioxusEditor;
+    type Editor = plugin_core::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 

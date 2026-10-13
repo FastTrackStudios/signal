@@ -255,7 +255,7 @@ pub fn handle_for(
     let control = profile_control(profile, control_id)?;
     let slot = macro_slot_index(profile, control_id)
         .and_then(|i| params.stage(stage).macro_slot(i))
-        .map(audio::Param::as_ptr);
+        .map(plugin_core::Param::as_ptr);
     profile_control_handle(profile, control, params, stage, ctx, slot)
 }
 

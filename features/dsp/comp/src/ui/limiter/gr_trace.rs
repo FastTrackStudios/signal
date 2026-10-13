@@ -4,7 +4,7 @@
 //! [`crate::ui::limiter::gr_trace_svg`]'s geometry. Display only — the limiter has nothing
 //! to drag here, unlike the compressor's transfer curve.
 
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use fts_plug_ui::prelude::*;
 use nice_plug_dioxus::SharedState;
 use std::sync::atomic::Ordering;

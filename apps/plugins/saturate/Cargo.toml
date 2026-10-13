@@ -17,7 +17,7 @@ workspace = true
 # Plugin framework. Must be a direct dep — the export macros expand to
 # absolute `::nice_plug::…` paths.
 nice-plug = { workspace = true, features = ["vst3"] }
-audio = { workspace = true }
+plugin-core = { workspace = true }
 
 # The DSP facade (re-exports saturate-dsp). Never depend on saturate-dsp directly.
 saturate = { workspace = true, features = ["native", "profiles", "ui", "viz"] }

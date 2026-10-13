@@ -9,16 +9,16 @@ description = "The compressors (VCA, FET, opto, tube, look-ahead) and the limite
 workspace = true
 
 [features]
-native = ["dep:architect-ui", "dep:atomic_float", "dep:audio", "dep:eq", "dep:fts-plug-ui", "dsp-core/time-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "eq/native"]
+native = ["dep:architect-ui", "dep:atomic_float", "dep:plugin-core", "dep:eq", "dep:fts-plug-ui", "dsp-core/time-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dep:preset-browser", "eq/native"]
 profiles = ["dep:eq"]
-ui = ["dep:atomic_float", "dep:audio", "dep:dioxus", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:web-time", "profiles"]
+ui = ["dep:atomic_float", "dep:plugin-core", "dep:dioxus", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:web-time", "profiles"]
 viz = ["dep:anyrender", "dep:blitz-dom", "dep:bytemuck", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
 
 [dependencies]
 anyrender = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
-audio = { workspace = true, optional = true }
+plugin-core = { workspace = true, optional = true }
 dsp-core = { workspace = true, features = ["audio", "params", "time-ui"] }
 blitz-dom = { workspace = true, features = ["custom-widget"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }

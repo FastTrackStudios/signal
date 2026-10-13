@@ -10,8 +10,6 @@ description = "Audio devices, sample IO and the core audio types"
 workspace = true
 
 [features]
-default = ["gui"]
-gui = ["audiocore-gui", "nice-plug-dioxus"]
 io = ["dep:cpal", "dep:facet"]
 jack = ["cpal/jack"]
 monitor = ["dep:rtrb"]
@@ -20,11 +18,8 @@ pipewire = []
 [dependencies]
 anyhow = { workspace = true }
 atomic_float = { workspace = true }
-audiocore-gui = { workspace = true, optional = true }
 cpal = { version = "0.18", optional = true }
 facet = { workspace = true, optional = true }
-nice-plug = { workspace = true }
-nice-plug-dioxus = { workspace = true, optional = true }
 rtrb = { version = "0.3", optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

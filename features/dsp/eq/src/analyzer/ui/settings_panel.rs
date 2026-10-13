@@ -5,7 +5,7 @@
 //! into it via [`crate::analyzer::Analyzer::set_settings`].
 
 use architect_ui::prelude::{SegmentedControl, SegmentedControlSize, Switch};
-use audio::prelude::*;
+use plugin_core::prelude::*;
 
 use crate::analyzer::{AnalyzerSettings, Range, Resolution, Speed};
 

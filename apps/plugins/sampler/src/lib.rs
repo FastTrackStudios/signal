@@ -20,6 +20,6 @@ pub mod config;
 pub mod doc_watch;
 pub mod plugin;
 
-use audio::prelude::*;
+use plugin_core::prelude::*;
 
 nice_export_clap!(plugin::SignalSamplerClap);

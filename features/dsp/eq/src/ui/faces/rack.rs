@@ -9,7 +9,7 @@
 //! only thing worth watching on an equalizer is the curve, and that lives on
 //! the Main face.
 
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::button::{LedMeter, PanelButton};
 use fts_audio_ui::hardware::knob::HardwareKnob;

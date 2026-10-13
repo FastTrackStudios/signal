@@ -1,0 +1,20 @@
+[package]
+name = "plugin-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "What every FTS plugin is built on: nice-plug's prelude, the editor state, and the shared plugin UI"
+
+[lints]
+workspace = true
+
+[features]
+default = ["gui"]
+gui = ["dep:audiocore-gui", "dep:nice-plug-dioxus"]
+
+[dependencies]
+audiocore-gui = { workspace = true, optional = true }
+nice-plug = { workspace = true }
+nice-plug-dioxus = { workspace = true, optional = true }

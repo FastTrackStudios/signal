@@ -41,7 +41,7 @@ use eq::ui::control_view::App;
 use eq::ui::eq_graph_interaction::GraphMapper;
 use eq::ui::params::{EqUiState, FtsEqParams};
 
-use audio::prelude::Param;
+use plugin_core::prelude::Param;
 use fts_audio_ui::hardware::rack::FilterGlyph;
 use nice_plug_dioxus::{ParamContext, SharedState};
 

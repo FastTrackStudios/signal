@@ -17,6 +17,7 @@ members = [
     "features/ui/daw-ui",
     "features/dynamic-template",
     "features/audio",
+    "features/ui/plugin-core",
     "features/dsp/builtin",
     "features/dsp/core",
     "features/rigs/keys",
@@ -253,6 +254,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+plugin-core = { path = "features/ui/plugin-core" }
 expression-editor = { path = "features/expression-editor" }
 session = { path = "features/session" }
 synth = { path = "features/rigs/synth" }

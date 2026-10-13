@@ -7,7 +7,7 @@
 //! so existing host sessions keep loading.
 
 use atomic_float::AtomicF32;
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 

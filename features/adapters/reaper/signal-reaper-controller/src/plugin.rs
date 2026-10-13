@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, AtomicU8, AtomicU32, Ordering};
 
 use atomic_float::AtomicF32;
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::param_queue::{self, ParamQueueConsumer, ParamQueueProducer};

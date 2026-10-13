@@ -7,7 +7,7 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use fts_audio_ui::prelude::*;
 
 /// Samples kept in a history ring — one per processed block, so ~2.7 s at

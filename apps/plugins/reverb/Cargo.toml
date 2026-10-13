@@ -27,7 +27,7 @@ dsp-core = { workspace = true, features = ["audio"] }
 
 # The Blitz/nice-plug editor: the seven families and their panels. `native`
 # pulls nice-plug-dioxus.
-audio = { workspace = true }
+plugin-core = { workspace = true }
 # The IR hand-off channel: the editor's worker sends, the chain receives.
 crossbeam-channel = { workspace = true }
 

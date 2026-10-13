@@ -29,7 +29,7 @@
 
 use std::sync::atomic::Ordering;
 
-use audio::prelude::*;
+use plugin_core::prelude::*;
 
 use crate::ui::comp_graph_svg::{
     RANGE_DB, db_to_y, scale_gr_wave, scale_input_wave, smooth_path, transfer_ball,

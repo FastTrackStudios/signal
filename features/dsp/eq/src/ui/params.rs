@@ -4,7 +4,7 @@
 //! can render against the param tree without forcing a circular dep.
 
 use atomic_float::AtomicF32;
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use parking_lot::Mutex;
 use crate::analyzer::{Analyzer, AudioFeed};
 use std::sync::Arc;

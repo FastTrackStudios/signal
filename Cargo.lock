@@ -1455,13 +1455,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "atomic_float",
- "audiocore-gui",
  "cpal",
  "facet",
  "libc",
  "libspa",
- "nice-plug",
- "nice-plug-dioxus",
  "objc2 0.6.4",
  "pipewire",
  "rtrb",
@@ -2996,7 +2993,6 @@ dependencies = [
  "anyrender 0.11.1",
  "architect-ui",
  "atomic_float",
- "audio",
  "blitz-dom",
  "bytemuck",
  "dioxus",
@@ -3010,6 +3006,7 @@ dependencies = [
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
+ "plugin-core",
  "png 0.18.1",
  "preset-browser",
  "tokio",
@@ -3021,10 +3018,10 @@ dependencies = [
 name = "comp-plugin"
 version = "0.1.0"
 dependencies = [
- "audio",
  "comp",
  "fx-stack",
  "nice-plug",
+ "plugin-core",
 ]
 
 [[package]]
@@ -4598,10 +4595,10 @@ dependencies = [
 name = "delay-plugin"
 version = "0.1.0"
 dependencies = [
- "audio",
  "delay",
  "dsp-core",
  "nice-plug",
+ "plugin-core",
 ]
 
 [[package]]
@@ -6384,7 +6381,6 @@ dependencies = [
  "anyrender 0.11.1",
  "architect-ui",
  "atomic_float",
- "audio",
  "blitz-dom",
  "blitz-traits",
  "bytemuck",
@@ -6403,6 +6399,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "peniko 0.6.1",
+ "plugin-core",
  "pollster",
  "preset-browser",
  "realfft",
@@ -6418,10 +6415,10 @@ dependencies = [
 name = "eq-plugin"
 version = "0.1.0"
 dependencies = [
- "audio",
  "dsp-core",
  "eq",
  "nice-plug",
+ "plugin-core",
 ]
 
 [[package]]
@@ -6430,7 +6427,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "atomic_float",
- "audio",
  "blitz-shell",
  "cpal",
  "dioxus-core 0.8.0-alpha.0",
@@ -6441,6 +6437,7 @@ dependencies = [
  "nice-plug",
  "nice-plug-dioxus",
  "pipewire",
+ "plugin-core",
  "winit 0.30.13",
 ]
 
@@ -7705,11 +7702,11 @@ version = "0.1.0"
 dependencies = [
  "architect-ui",
  "atomic_float",
- "audio",
  "dioxus",
  "fts-audio-ui",
  "nice-plug",
  "nice-plug-dioxus",
+ "plugin-core",
 ]
 
 [[package]]
@@ -12029,10 +12026,10 @@ name = "modulation-plugin"
 version = "0.1.0"
 dependencies = [
  "atomic_float",
- "audio",
  "dsp-core",
  "modulation",
  "nice-plug",
+ "plugin-core",
 ]
 
 [[package]]
@@ -12293,9 +12290,9 @@ name = "nam-plugin"
 version = "0.1.0"
 dependencies = [
  "architect",
- "audio",
  "neural-amp-modeler",
  "nice-plug",
+ "plugin-core",
  "sampler",
  "signal-nam",
  "signal-tone3000",
@@ -14863,6 +14860,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "plugin-core"
+version = "0.1.0"
+dependencies = [
+ "audiocore-gui",
+ "nice-plug",
+ "nice-plug-dioxus",
+]
+
+[[package]]
 name = "plugin-faces"
 version = "0.1.0"
 dependencies = [
@@ -16512,10 +16518,10 @@ dependencies = [
 name = "reverb-plugin"
 version = "0.1.0"
 dependencies = [
- "audio",
  "crossbeam-channel",
  "dsp-core",
  "nice-plug",
+ "plugin-core",
  "reverb",
 ]
 
@@ -17010,8 +17016,8 @@ name = "saturate-plugin"
 version = "0.1.0"
 dependencies = [
  "atomic_float",
- "audio",
  "nice-plug",
+ "plugin-core",
  "saturate",
 ]
 
@@ -18480,12 +18486,12 @@ name = "signal-reaper-controller"
 version = "0.1.0"
 dependencies = [
  "atomic_float",
- "audio",
  "crossbeam-channel",
  "daw",
  "daw-extension-runtime",
  "eyre",
  "nice-plug",
+ "plugin-core",
  "serde",
  "serde_json",
  "signal-proto",
@@ -18523,12 +18529,12 @@ name = "signal-sampler-clap"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
- "audio",
  "eyre",
  "facet",
  "facet-styx",
  "hound",
  "nice-plug",
+ "plugin-core",
  "sampler",
  "serde",
  "serde_json",
@@ -21592,7 +21598,6 @@ dependencies = [
  "approx",
  "architect-ui",
  "atomic_float",
- "audio",
  "dioxus",
  "dioxus-test",
  "dsp-core",
@@ -21601,6 +21606,7 @@ dependencies = [
  "fts-plug-ui",
  "nice-plug",
  "nice-plug-dioxus",
+ "plugin-core",
  "rustfft",
  "symphonia",
  "tokio",

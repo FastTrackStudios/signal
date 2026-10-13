@@ -30,7 +30,7 @@ use comp::ui::limiter::control_view::App;
 use comp::ui::limiter::gr_trace_svg::{GR_RANGE_DB, TRACE_H, TRACE_W, gr_area_path, gr_to_y};
 use comp::ui::limiter::params::{LimiterParams, LimiterUiState};
 
-use audio::prelude::Param;
+use plugin_core::prelude::Param;
 use nice_plug_dioxus::{ParamContext, SharedState};
 
 mod support {

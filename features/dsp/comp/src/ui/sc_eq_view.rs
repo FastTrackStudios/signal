@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use audio::prelude::*;
+use plugin_core::prelude::*;
 use eq::ui::eq_graph::{EqGraph, OverlayChoice};
 use eq::ui::eq_graph_model::{EqBand, EqBandShape};
 

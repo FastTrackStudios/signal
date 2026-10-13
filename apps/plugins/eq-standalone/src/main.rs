@@ -22,7 +22,7 @@ use std::sync::atomic::Ordering;
 
 mod pipewire_capture;
 
-use audio::prelude::Param;
+use plugin_core::prelude::Param;
 use dioxus_native::launch_cfg;
 use dioxus_native::prelude::{document, rsx};
 use eq::ui::params::{EqUiState, FtsEqParams, NUM_BANDS, SPECTRUM_BINS};

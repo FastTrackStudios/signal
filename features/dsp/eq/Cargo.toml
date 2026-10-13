@@ -14,8 +14,8 @@ analyzer-ui = ["dep:anyrender", "dep:dioxus", "dep:kurbo", "dep:peniko"]
 gpu-tests = []
 graph = ["analyzer", "analyzer-ui", "dep:architect-ui", "dep:atomic_float", "dep:blitz-traits", "dep:bytemuck", "dep:dioxus-native", "dep:futures-timer", "fts-audio-ui/shader", "graph-paint"]
 graph-paint = ["analyzer", "analyzer-ui", "dep:anyrender", "dep:kurbo", "dep:peniko"]
-native = ["analyzer", "analyzer-ui", "dep:audio", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:preset-browser", "graph", "panel", "profiles"]
-panel = ["dep:architect-ui", "dep:audio", "dep:fts-audio-ui", "dep:nice-plug-dioxus"]
+native = ["analyzer", "analyzer-ui", "dep:plugin-core", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:preset-browser", "graph", "panel", "profiles"]
+panel = ["dep:architect-ui", "dep:plugin-core", "dep:fts-audio-ui", "dep:nice-plug-dioxus"]
 profiles = []
 ui = ["dep:blitz-dom", "dep:dioxus", "dep:fts-audio-ui", "dep:parking_lot", "dep:web-time", "profiles", "analyzer"]
 
@@ -23,7 +23,7 @@ ui = ["dep:blitz-dom", "dep:dioxus", "dep:fts-audio-ui", "dep:parking_lot", "dep
 anyrender = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
-audio = { workspace = true, optional = true }
+plugin-core = { workspace = true, optional = true }
 dsp-core = { workspace = true, features = ["audio"] }
 blitz-dom = { workspace = true, features = ["autofocus"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
