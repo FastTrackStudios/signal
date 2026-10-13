@@ -173,7 +173,7 @@ members = [
     "features/dsp/comp/limiter-ui",
     "features/dsp/core/dsp-core",
     "features/dsp/core/dsp-golden",
-    "features/dsp/eq/apps/eq-standalone",
+    "apps/plugins/eq-standalone",
     "features/dsp/eq/eq",
     "features/dsp/eq/eq-dsp",
     "features/dsp/eq/eq-profiles",
