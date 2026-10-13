@@ -19,10 +19,13 @@
 //!
 //! `no_std` + `alloc`; allocation happens in [`DrumGate::new`] only.
 
-#![no_std]
 #![deny(clippy::disallowed_methods)]
 
+
+#![no_std]
 extern crate alloc;
+
+pub use crate as dsp;
 
 pub mod engine;
 pub mod filter;

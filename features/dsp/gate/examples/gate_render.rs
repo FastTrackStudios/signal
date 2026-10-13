@@ -2,7 +2,7 @@
 //! against the reference.
 //!
 //! ```text
-//! cargo run --release -p gate-dsp --example gate_render -- <in.wav> <out.wav> \
+//! cargo run --release -p gate --example gate_render -- <in.wav> <out.wav> \
 //!     mode=kick threshold=-30 reduction=-80 length=300 debleed=0 ghost=0 output=0 [key=<sidechain.wav>]
 //! ```
 //!
@@ -16,7 +16,7 @@
     reason = "offline render tool: per-sample loops over buffers sized by construction"
 )]
 
-use gate_dsp::{DrumGate, Mode, Settings};
+use gate::{DrumGate, Mode, Settings};
 
 /// Channels of samples, and the sample rate.
 type Wav = (Vec<Vec<f64>>, u32);

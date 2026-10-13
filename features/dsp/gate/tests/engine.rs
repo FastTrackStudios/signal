@@ -1,7 +1,7 @@
 //! The measured laws, checked on synthetic signals.
 
 use dsp_core::num;
-use gate_dsp::{DrumGate, Mode, Settings, db_to_gain, debleed_exponent, output_gain};
+use gate::{DrumGate, Mode, Settings, db_to_gain, debleed_exponent, output_gain};
 
 const SR: f64 = 48_000.0;
 

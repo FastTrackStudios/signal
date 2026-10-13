@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/gate",
     # ── session ──
     "vendor/dioxus-native-dom",
     "vendor/dioxus-native",
@@ -188,8 +189,6 @@ members = [
     "features/dsp/modulation/pattern-ui",
     "features/dsp/modulation/trem-dsp",
     "features/dsp/modulation/wah-dsp",
-    "features/dsp/gate/gate",
-    "features/dsp/gate/gate-dsp",
     "features/dsp/mic/mic-dsp",
     "features/dsp/mic/mic-ui",
     "features/dsp/multiband",
@@ -1139,8 +1138,7 @@ level = { path = "features/dsp/level/level" }
 modulation = { path = "features/dsp/modulation/modulation" }
 eq-dsp = { path = "features/dsp/eq/eq-dsp" }
 comp-dsp = { path = "features/dsp/comp/comp-dsp" }
-gate = { path = "features/dsp/gate/gate" }
-gate-dsp = { path = "features/dsp/gate/gate-dsp" }
+gate = { path = "features/dsp/gate" }
 mic-dsp = { path = "features/dsp/mic/mic-dsp" }
 mic-ui = { path = "features/dsp/mic/mic-ui" }
 stretch = { path = "features/dsp/stretch/stretch" }

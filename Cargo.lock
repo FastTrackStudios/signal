@@ -8306,13 +8306,6 @@ dependencies = [
 name = "gate"
 version = "0.1.0"
 dependencies = [
- "gate-dsp",
-]
-
-[[package]]
-name = "gate-dsp"
-version = "0.1.0"
-dependencies = [
  "dsp-core",
  "hound",
  "libm",

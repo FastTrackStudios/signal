@@ -1,0 +1,17 @@
+[package]
+name = "gate"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "The drum gate with source modes, look-ahead, a shaped release and an HF de-bleed expander on a subtractive crossover; matched by null test against a reference drum gate."
+
+[lints]
+workspace = true
+
+[dependencies]
+dsp-core = { workspace = true }
+libm = { version = "0.2", default-features = false }
+
+[dev-dependencies]
+hound = { version = "3.5" }
