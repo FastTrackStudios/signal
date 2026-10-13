@@ -8,7 +8,7 @@ use std::fmt::Write;
 use std::fs;
 use std::path::PathBuf;
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 const NDSP_VST3_PLUGINS: &[&str] = &[
     "VST3: Archetype Cory Wong X (Neural DSP)",

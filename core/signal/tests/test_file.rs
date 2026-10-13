@@ -1,4 +1,4 @@
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 #[reaper_test()]
 async fn reaper_test(ctx: &ReaperTestContext) -> Result<()> {

@@ -21,8 +21,8 @@ use signal::daw_compat::TrackHandleCompat;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use daw::file::RppSerialize;
-use daw::test::reaper_test;
+use studio::file::RppSerialize;
+use studio::test::reaper_test;
 use signal::ops::rig_importer::{ImportBlock, ImportChain, ImportModule};
 use signal_proto::ModuleBlockSource;
 use signal_proto::plugin_block::{FxRole, TrackRole};
@@ -33,7 +33,7 @@ async fn settle() {
 }
 
 /// Ensure REAPER's audio engine is running.
-async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
+async fn ensure_audio(ctx: &studio::test::ReaperTestContext) {
     if !ctx.daw.audio_engine().is_running().await.unwrap_or(false) {
         let _ = ctx.daw.audio_engine().init().await;
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -41,9 +41,9 @@ async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
 }
 
 /// Parse a `raw_block` byte slice back into an `FxChainNode`.
-fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<daw::file::types::FxChainNode> {
+fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<studio::file::types::FxChainNode> {
     let source_str = std::str::from_utf8(source_bytes).ok()?;
-    let source_chain = daw::file::FxChain::parse(&format!(
+    let source_chain = studio::file::FxChain::parse(&format!(
         "<FXCHAIN\nSHOW 0\nLASTSEL 0\nDOCKED 0\n{source_str}\n>\n"
     ))
     .ok()?;
@@ -51,12 +51,12 @@ fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<daw::file::types::FxChai
 }
 
 /// Flatten `FxChainNodes` to `raw_block` strings in document order (depth-first).
-fn flatten_to_raw_blocks(nodes: &[daw::file::types::FxChainNode]) -> Vec<&str> {
+fn flatten_to_raw_blocks(nodes: &[studio::file::types::FxChainNode]) -> Vec<&str> {
     let mut out = Vec::new();
     for node in nodes {
         match node {
-            daw::file::types::FxChainNode::Plugin(p) => out.push(p.raw_block.as_str()),
-            daw::file::types::FxChainNode::Container(c) => {
+            studio::file::types::FxChainNode::Plugin(p) => out.push(p.raw_block.as_str()),
+            studio::file::types::FxChainNode::Container(c) => {
                 out.extend(flatten_to_raw_blocks(&c.children));
             }
         }
@@ -135,9 +135,9 @@ async fn save_variation(
     )>,
 > {
     let chunk_str = track.get_chunk().await?;
-    let fxchain_text = daw::file::chunk_ops::extract_fxchain_block(&chunk_str)
+    let fxchain_text = studio::file::chunk_ops::extract_fxchain_block(&chunk_str)
         .ok_or_else(|| eyre::eyre!("No FXCHAIN in track chunk"))?;
-    let parsed = daw::file::FxChain::parse(fxchain_text)
+    let parsed = studio::file::FxChain::parse(fxchain_text)
         .map_err(|e| eyre::eyre!("Failed to parse FXCHAIN: {e}"))?;
 
     let raw_blocks = flatten_to_raw_blocks(&parsed.nodes);
@@ -201,26 +201,26 @@ async fn apply_variation(
 
     // Parse the current FXCHAIN, replace raw_blocks in flat order.
     let chunk_str = track.get_chunk().await?;
-    let fxchain_text = daw::file::chunk_ops::extract_fxchain_block(&chunk_str)
+    let fxchain_text = studio::file::chunk_ops::extract_fxchain_block(&chunk_str)
         .ok_or_else(|| eyre::eyre!("No FXCHAIN in track chunk"))?;
-    let mut parsed = daw::file::FxChain::parse(fxchain_text)
+    let mut parsed = studio::file::FxChain::parse(fxchain_text)
         .map_err(|e| eyre::eyre!("Failed to parse FXCHAIN: {e}"))?;
 
     // Walk plugins in flat order, replacing raw_blocks.
     fn replace_raw_blocks(
-        nodes: &mut [daw::file::types::FxChainNode],
+        nodes: &mut [studio::file::types::FxChainNode],
         data_iter: &mut std::slice::Iter<'_, Vec<u8>>,
         count: &mut usize,
     ) {
         for node in nodes {
             match node {
-                daw::file::types::FxChainNode::Plugin(p) => {
+                studio::file::types::FxChainNode::Plugin(p) => {
                     if let Some(data) = data_iter.next() {
                         p.raw_block = String::from_utf8_lossy(data).into_owned();
                         *count += 1;
                     }
                 }
-                daw::file::types::FxChainNode::Container(c) => {
+                studio::file::types::FxChainNode::Container(c) => {
                     replace_raw_blocks(&mut c.children, data_iter, count);
                 }
             }
@@ -279,8 +279,8 @@ async fn fast_path_open(
                 children.push(node);
             }
         }
-        fxchain_nodes.push(daw::file::types::FxChainNode::Container(
-            daw::file::types::FxContainer {
+        fxchain_nodes.push(studio::file::types::FxChainNode::Container(
+            studio::file::types::FxContainer {
                 name: container_name.to_string(),
                 bypassed: false,
                 offline: false,
@@ -297,7 +297,7 @@ async fn fast_path_open(
         ));
     }
 
-    let fxchain = daw::file::FxChain {
+    let fxchain = studio::file::FxChain {
         window_rect: None,
         show: 0,
         last_sel: 0,
@@ -308,7 +308,7 @@ async fn fast_path_open(
 
     let chunk: String = layer_track.get_chunk().await?;
     let fxchain_text = fxchain.to_rpp_string();
-    let new_chunk = if let Some(existing) = daw::file::chunk_ops::extract_fxchain_block(&chunk) {
+    let new_chunk = if let Some(existing) = studio::file::chunk_ops::extract_fxchain_block(&chunk) {
         chunk.replace(existing, &fxchain_text)
     } else {
         let pos = chunk
@@ -357,9 +357,9 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
 
     // ── 2. Capture raw_block state from track chunk ──
     let chunk_str = source_track.get_chunk().await?;
-    let fxchain_text = daw::file::chunk_ops::extract_fxchain_block(&chunk_str)
+    let fxchain_text = studio::file::chunk_ops::extract_fxchain_block(&chunk_str)
         .ok_or_else(|| eyre::eyre!("No FXCHAIN in source track chunk"))?;
-    let parsed = daw::file::FxChain::parse(fxchain_text)
+    let parsed = studio::file::FxChain::parse(fxchain_text)
         .map_err(|e| eyre::eyre!("Failed to parse FXCHAIN: {e}"))?;
 
     let raw_blocks = flatten_to_raw_blocks(&parsed.nodes);
@@ -639,11 +639,11 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
 
     // Capture randomized state for later comparison.
     let randomized_chunk = layer_track.get_chunk().await?;
-    let randomized_fxc = daw::file::chunk_ops::extract_fxchain_block(&randomized_chunk)
+    let randomized_fxc = studio::file::chunk_ops::extract_fxchain_block(&randomized_chunk)
         .ok_or_else(|| eyre::eyre!("no FXCHAIN after randomization"))?;
     let randomized_raw_blocks: Vec<String> = {
         let parsed =
-            daw::file::FxChain::parse(randomized_fxc).map_err(|e| eyre::eyre!("parse: {e}"))?;
+            studio::file::FxChain::parse(randomized_fxc).map_err(|e| eyre::eyre!("parse: {e}"))?;
         flatten_to_raw_blocks(&parsed.nodes)
             .into_iter()
             .map(std::string::ToString::to_string)
@@ -688,10 +688,10 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
 
     // Applied state differs from original and matches randomized.
     let applied_chunk = layer_track.get_chunk().await?;
-    let applied_fxc = daw::file::chunk_ops::extract_fxchain_block(&applied_chunk)
+    let applied_fxc = studio::file::chunk_ops::extract_fxchain_block(&applied_chunk)
         .ok_or_else(|| eyre::eyre!("no FXCHAIN after apply"))?;
     let applied_parsed =
-        daw::file::FxChain::parse(applied_fxc).map_err(|e| eyre::eyre!("parse: {e}"))?;
+        studio::file::FxChain::parse(applied_fxc).map_err(|e| eyre::eyre!("parse: {e}"))?;
 
     let applied_raw_blocks: Vec<&str> = flatten_to_raw_blocks(&applied_parsed.nodes);
     assert_eq!(

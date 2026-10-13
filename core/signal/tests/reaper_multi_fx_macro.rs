@@ -16,7 +16,7 @@
 use signal::daw_compat::TrackHandleCompat;
 use std::time::{Duration, Instant};
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 const REACOMP: &str = "VST: ReaComp (Cockos)";
 const REAEQ: &str = "VST: ReaEQ (Cockos)";
@@ -115,7 +115,7 @@ fn find_param(params: &[daw::service::FxParameter], needle: &str) -> eyre::Resul
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn multi_fx_macro_drives_comp_and_eq(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn multi_fx_macro_drives_comp_and_eq(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== MULTI-FX MACRO TEST ===");

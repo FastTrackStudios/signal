@@ -11,14 +11,14 @@
 
 use std::time::Duration;
 
-use daw::test::reaper_test;
+use studio::test::reaper_test;
 
 // ---------------------------------------------------------------------------
 // Verify the bootstrap happened during REAPER startup
 // ---------------------------------------------------------------------------
 
 #[reaper_test]
-async fn bootstrap_log_shows_success(_ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn bootstrap_log_shows_success(_ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     println!("\n=== verify fts-macros REAPER bootstrap ===");
 
     // The bootstrap log is written by the plugin's own tracing subscriber
@@ -67,7 +67,7 @@ async fn bootstrap_log_shows_success(_ctx: &daw::test::ReaperTestContext) -> eyr
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn instantiate_fts_macros_plugin(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
+async fn instantiate_fts_macros_plugin(ctx: &studio::test::ReaperTestContext) -> eyre::Result<()> {
     println!("\n=== instantiate fts-macros CLAP plugin ===");
 
     let daw = &ctx.daw;
