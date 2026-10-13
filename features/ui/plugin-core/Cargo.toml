@@ -12,7 +12,7 @@ workspace = true
 
 [features]
 default = ["gui"]
-editor = ["dep:architect-ui", "dep:atomic_float", "dep:dioxus", "dep:fts-audio-ui", "dep:nice-plug-dioxus"]
+editor = ["gui", "dep:architect-ui", "dep:atomic_float", "dep:dioxus", "dep:fts-audio-ui", "dep:nice-plug-dioxus"]
 gui = ["dep:nice-plug-dioxus", "dep:parking_lot"]
 meters = ["dep:dsp-core", "dep:nice-plug-dioxus", "dep:parking_lot"]
 
