@@ -13,6 +13,11 @@
 //! (that would form a `sampler → synth → sampler` cycle), so any caller that
 //! wants the Omnisphere built-ins calls this after `PresetRegistry::with_builtins`.
 
+pub mod proto;
+#[cfg(feature = "ui")]
+pub mod ui;
+
+
 /// The Signal Engine.
 ///
 /// The canonical layer program every rig loads patches into

@@ -13,8 +13,8 @@ use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
 use signal_proto::tagging::{StructuredTag, TagCategory, TagSet};
-use signal_synth_proto::synth::{SynthEvent, SynthRigClient, SynthRigStreamClient};
-use signal_synth_proto::{
+use crate::proto::synth::{SynthEvent, SynthRigClient, SynthRigStreamClient};
+use crate::proto::{
     BrowseItem, SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer, SynthMapping, SynthNode,
     SynthPreset, SynthStatus, SynthZone,
 };

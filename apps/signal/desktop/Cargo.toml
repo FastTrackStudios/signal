@@ -65,7 +65,7 @@ signal-guitar = ["dep:guitar", "guitar?/ui", "dep:signal-tone3000-proto", "dep:s
 # iOS). Packs stream in via pack_client.rs and land in
 # Documents/FastTrackStudio/Packs/Keys.
 signal-keys-rig = ["signal-guitar", "dep:keys"]
-signal = ["signal-guitar", "dep:drums", "dep:keys", "dep:midicore-proto", "dep:signal-synth-proto", "dep:signal-synth-ui", "dep:launcher", "dep:signal-synth-rig", "dep:sampler", "sampler?/library", "dep:signal-space", "dep:signal-space-proto", "dep:ekit", "tone3000", "dep:axum", "dep:tower-http"]
+signal = ["signal-guitar", "dep:drums", "dep:keys", "dep:midicore-proto", "dep:synth", "synth?/ui", "dep:launcher", "dep:signal-synth-rig", "dep:sampler", "sampler?/library", "dep:signal-space", "dep:signal-space-proto", "dep:ekit", "tone3000", "dep:axum", "dep:tower-http"]
 # TONE3000 and the FastTrackStudio account in the app itself (the iPad's
 # embedded engine): search, download and import captures, signing in
 # through the account. Part of `signal`; the iOS build adds it on its own.
@@ -151,8 +151,7 @@ keys = { workspace = true, optional = true, features = ["ui"] }
 # MidiEvent — the in-tab keys backend (web_keys_backend.rs) decodes the raw
 # 3-byte messages it forwards into the monitor's wire events.
 midicore-proto = { workspace = true, optional = true }
-signal-synth-proto = { workspace = true, optional = true }
-signal-synth-ui = { workspace = true, optional = true }
+synth = { workspace = true, optional = true, features = ["ui"] }
 sampler = { workspace = true, optional = true }
 
 # Session domain, wire surface — the SetlistService types + generated

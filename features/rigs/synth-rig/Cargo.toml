@@ -19,7 +19,7 @@ pipewire = []
 signal-rigs-proto.workspace = true
 # The Omnisphere patch importer (`load_patch_file`, `SoundsourceIndex`) — the
 # rig's preset source.
-signal-synth.workspace = true
+synth = { workspace = true }
 # The shared, instrument-agnostic composition-tree audio host. The synth rig
 # plays its imported Container on the very same host the keys rig uses; only
 # the preset source + wire service differ.
@@ -33,7 +33,6 @@ signal-rig-host.workspace = true
 midicore = { workspace = true, features = ["vox", "midir"] }
 # The wire contract this crate's headless backend implements (SynthRig service)
 # + the architect Layer/Services/PubSub machinery to serve it as a vox remote.
-signal-synth-proto.workspace = true
 architect = { workspace = true, features = ["vox", "rig"] }
 tracing.workspace = true
 

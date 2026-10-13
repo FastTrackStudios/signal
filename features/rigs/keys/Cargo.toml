@@ -35,7 +35,7 @@ signal-proto = { workspace = true }
 signal-rig-host = { workspace = true }
 signal-rigs-proto = { workspace = true }
 sampler = { workspace = true }
-signal-synth = { workspace = true }
+synth = { workspace = true }
 signal-ui = { workspace = true, features = ["web"], optional = true }
 signal-widgets = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }

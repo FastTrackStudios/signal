@@ -18,8 +18,8 @@ use guitar::proto::rig::{RigClient, RigStreamClient};
 use guitar::ui::GuitarRigRemote;
 use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
 use keys::ui::KeysRigRemote;
-use signal_synth_proto::synth::{SynthRigClient, SynthRigStreamClient};
-use signal_synth_ui::SynthRigRemote;
+use synth::proto::synth::{SynthRigClient, SynthRigStreamClient};
+use synth::ui::SynthRigRemote;
 use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// Compiled Tailwind for the signal UI components (built by `just

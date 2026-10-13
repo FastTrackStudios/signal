@@ -10639,9 +10639,9 @@ dependencies = [
  "signal-proto",
  "signal-rig-host",
  "signal-rigs-proto",
- "signal-synth",
  "signal-ui",
  "signal-widgets",
+ "synth",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -18431,12 +18431,11 @@ dependencies = [
  "signal-rigs-proto",
  "signal-space",
  "signal-space-proto",
- "signal-synth-proto",
  "signal-synth-rig",
- "signal-synth-ui",
  "signal-tone3000",
  "signal-tone3000-proto",
  "signal-tone3000-ui",
+ "synth",
  "tokio",
  "tower-http",
  "tracing",
@@ -18817,32 +18816,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-synth"
-version = "0.1.0"
-dependencies = [
- "daw",
- "facet-styx",
- "flate2",
- "sampler",
- "signal-plugin-host",
- "signal-proto",
- "song",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "signal-synth-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "midicore-proto",
- "vox",
-]
-
-[[package]]
 name = "signal-synth-rig"
 version = "0.1.0"
 dependencies = [
@@ -18856,24 +18829,8 @@ dependencies = [
  "signal-plugin-host",
  "signal-rig-host",
  "signal-rigs-proto",
- "signal-synth",
- "signal-synth-proto",
+ "synth",
  "tracing",
-]
-
-[[package]]
-name = "signal-synth-ui"
-version = "0.1.0"
-dependencies = [
- "architect",
- "dioxus",
- "fts-chrome",
- "midicore-proto",
- "midicore-ui",
- "signal-proto",
- "signal-synth-proto",
- "signal-ui",
- "signal-widgets",
 ]
 
 [[package]]
@@ -20604,6 +20561,31 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "synth"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "daw",
+ "dioxus",
+ "facet",
+ "facet-styx",
+ "flate2",
+ "fts-chrome",
+ "midicore-proto",
+ "midicore-ui",
+ "sampler",
+ "signal-plugin-host",
+ "signal-proto",
+ "signal-ui",
+ "signal-widgets",
+ "song",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "vox",
 ]
 
 [[package]]

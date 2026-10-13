@@ -14,8 +14,8 @@ use daw::service::{Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEv
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use sampler::node_render::RenderNode;
 use sampler::rig_node::Container;
-use signal_synth::Source;
-use signal_synth::engine::{ModuleSettings, signal_layer_with};
+use synth::Source;
+use synth::engine::{ModuleSettings, signal_layer_with};
 
 const PACK: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/\
 Packs/LA Custom C7 Grand.signalpack";

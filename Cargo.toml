@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/rigs/synth",
     "features/rigs/sampler",
     "features/rigs/guitar",
     "features/formats",
@@ -203,10 +204,7 @@ members = [
     "features/audio/worklet/keys",
     "features/audio/worklet/guitar",
     "features/rigs/orchestra",
-    "features/rigs/synth",
-    "features/rigs/synth/proto",
     "features/rigs/synth-rig",
-    "features/rigs/synth/ui",
     "features/rigs/wurli/openwurli-dsp",
     "apps/plugins/sampler",
     # ── patchbay ──
@@ -271,6 +269,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+synth = { path = "features/rigs/synth" }
 sampler = { path = "features/rigs/sampler" }
 guitar = { path = "features/rigs/guitar" }
 formats = { path = "features/formats" }
@@ -1060,9 +1059,6 @@ signal-keys-worklet = { path = "features/audio/worklet/keys" }
 signal-guitar-worklet = { path = "features/audio/worklet/guitar" }
 openwurli-dsp = { path = "features/rigs/wurli/openwurli-dsp" }
 signal-orchestra = { path = "features/rigs/orchestra" }
-signal-synth = { path = "features/rigs/synth" }
-signal-synth-proto = { path = "features/rigs/synth/proto" }
-signal-synth-ui = { path = "features/rigs/synth/ui" }
 signal-synth-rig = { path = "features/rigs/synth-rig" }
 signal-analyzer = { path = "features/dsp/analyzer/signal-analyzer" }
 signal-separator = { path = "features/dsp/separator/signal-separator" }

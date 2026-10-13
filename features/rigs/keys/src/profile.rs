@@ -484,7 +484,7 @@ impl KeysProfile {
     /// every pack is downloaded.
     pub fn build_tree(&self, resolve: impl Fn(&str) -> Option<String>) -> Container {
         self.build_tree_with(resolve, |_, _| {
-            signal_synth::engine::ModuleSettings::default()
+            synth::engine::ModuleSettings::default()
         })
     }
 
@@ -531,7 +531,7 @@ impl KeysProfile {
     pub fn build_tree_with(
         &self,
         resolve: impl Fn(&str) -> Option<String>,
-        module_set: impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+        module_set: impl Fn(&str, usize) -> synth::engine::ModuleSettings,
     ) -> Container {
         let mut engines = Container::parallel("Engines");
         for engine in &self.engines {
@@ -564,7 +564,7 @@ impl KeysProfile {
     fn lane_container(
         layer: &LayerDef,
         resolve: &impl Fn(&str) -> Option<String>,
-        module_set: &impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+        module_set: &impl Fn(&str, usize) -> synth::engine::ModuleSettings,
     ) -> Container {
         // An authored Omnisphere patch (`.prt_omn` / `.mlt_omn`) is a whole
         // voice — oscillators or soundsources, filters, envelopes, Harmonia —
@@ -577,15 +577,15 @@ impl KeysProfile {
             }
             return lane;
         }
-        let sources: Vec<signal_synth::Source> = layer
+        let sources: Vec<synth::Source> = layer
             .module_patches()
             .into_iter()
             .map(|patch| {
                 let spec = (!patch.is_empty()).then(|| resolve(&patch)).flatten();
-                signal_synth::Source::sample(spec)
+                synth::Source::sample(spec)
             })
             .collect();
-        let settings: Vec<signal_synth::engine::ModuleSettings> = sources
+        let settings: Vec<synth::engine::ModuleSettings> = sources
             .iter()
             .enumerate()
             .map(|(i, source)| {
@@ -594,7 +594,7 @@ impl KeysProfile {
                 set
             })
             .collect();
-        let mut lane = signal_synth::engine::signal_layer_with(&layer.name, &settings);
+        let mut lane = synth::engine::signal_layer_with(&layer.name, &settings);
         if !layer.source_params.is_empty() {
             stamp_source_params(&mut lane, &layer.source_params);
         }
@@ -614,7 +614,7 @@ impl KeysProfile {
     fn omni_lane(
         layer: &LayerDef,
         resolve: &impl Fn(&str) -> Option<String>,
-        module_set: &impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+        module_set: &impl Fn(&str, usize) -> synth::engine::ModuleSettings,
     ) -> Option<Container> {
         let patch = layer
             .module_patches()
@@ -631,15 +631,15 @@ impl KeysProfile {
         }
         // The real index: a sample-mode patch's layers name soundsources,
         // and an empty index would leave them silent. Scanned once.
-        static INDEX: std::sync::OnceLock<signal_synth::omni_import::SoundsourceIndex> =
+        static INDEX: std::sync::OnceLock<synth::omni_import::SoundsourceIndex> =
             std::sync::OnceLock::new();
-        let index = INDEX.get_or_init(signal_synth::omni_import::SoundsourceIndex::scan_default);
-        match signal_synth::omni_import::load_patch_file_transposed(path, index, layer.transpose) {
+        let index = INDEX.get_or_init(synth::omni_import::SoundsourceIndex::scan_default);
+        match synth::omni_import::load_patch_file_transposed(path, index, layer.transpose) {
             Ok(mut tree) => {
                 // The lane's knobs (seeded from this patch, one module per
                 // patch layer) ride onto the tree, so a rebuild keeps them.
                 for i in 0..layer.module_patches().len().min(4) {
-                    signal_synth::engine::apply_settings_to_omni_layer(
+                    synth::engine::apply_settings_to_omni_layer(
                         &mut tree,
                         i,
                         &module_set(&layer.name, i),
@@ -648,8 +648,8 @@ impl KeysProfile {
                 // The part's LFOs (shared by its layers) from module A's knobs.
                 let part = module_set(&layer.name, 0);
                 let base = part.baseline.as_deref();
-                signal_synth::engine::apply_lfos_to_omni(&mut tree, &part.lfos, base.map(|b| &b.lfos));
-                signal_synth::engine::apply_lfo_fades_to_omni(
+                synth::engine::apply_lfos_to_omni(&mut tree, &part.lfos, base.map(|b| &b.lfos));
+                synth::engine::apply_lfo_fades_to_omni(
                     &mut tree,
                     &part.lfo_fade_ms,
                     base.map(|b| &b.lfo_fade_ms),
@@ -686,7 +686,7 @@ impl KeysProfile {
     pub fn build_lane_program(
         &self,
         resolve: impl Fn(&str) -> Option<String>,
-        module_set: impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+        module_set: impl Fn(&str, usize) -> synth::engine::ModuleSettings,
     ) -> sampler::keys_rig::LaneProgram {
         use sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
         LaneProgram {
@@ -1198,7 +1198,7 @@ mod tests {
     #[test]
     #[ignore = "needs the local sample library"]
     fn every_authored_patch_resolves_to_a_source() {
-        let idx = signal_synth::omni_import::SoundsourceIndex::scan_default();
+        let idx = synth::omni_import::SoundsourceIndex::scan_default();
         assert!(idx.len() > 100, "index looks empty: {}", idx.len());
 
         let mut missing = Vec::new();
