@@ -671,6 +671,9 @@ pub struct Standalone {
     pub(crate) meter_events: architect::PubSub<daw_proto::MeterFrame>,
     /// Whether the meter pump has been spawned (once per process).
     pub(crate) meter_pump_started: Arc<std::sync::atomic::AtomicBool>,
+    /// Whether an engine has installed a meter bank (`set_meters`): from
+    /// then on the bank grows with the track set.
+    pub(crate) meters_installed: Arc<std::sync::atomic::AtomicBool>,
     /// Stamped-position stream hub (`TransportSyncStreamSource`). A
     /// pump (spawned lazily by the first subscription) reads every
     /// project transport's per-buffer sync snapshot and publishes the
@@ -738,6 +741,7 @@ impl Standalone {
             block_profile: Arc::default(),
             meter_events: architect::PubSub::sliding(64),
             meter_pump_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            meters_installed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             sync_positions: architect::PubSub::sliding(64),
             sync_pump_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             #[cfg(feature = "audio")]
@@ -771,6 +775,8 @@ impl Standalone {
     /// service share the same cells.
     pub fn set_meters(&self, meters: Arc<crate::metering::Meters>) {
         *self.meters.lock().expect("meters poisoned") = meters;
+        self.meters_installed
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Spawn the ~30 Hz meter pump (once per process): reads the
@@ -964,7 +970,32 @@ impl Standalone {
         // Every mutable pass counts as a mutation — false positives
         // just refresh a cache, staleness would corrupt playback.
         project.revision = project.revision.wrapping_add(1);
+        let track_count = project.tracks.len();
+        drop(s);
+        self.meters_follow_tracks(track_count);
         Ok(r)
+    }
+
+    /// Grow the meter bank to cover `track_count` tracks, once an engine has
+    /// installed one: a track added while the engine runs — another rig's,
+    /// a new Session track — is metered like the ones it started with. The
+    /// bank only grows (cells are by track index; a removed track's cell
+    /// reads silence next block). Swapped whole; the renderer picks the new
+    /// bank up on its next block.
+    fn meters_follow_tracks(&self, track_count: usize) {
+        if !self
+            .meters_installed
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return;
+        }
+        let mut bank = self
+            .meters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if bank.len() < track_count {
+            *bank = crate::metering::Meters::new(track_count);
+        }
     }
 
     /// Run a closure with shared access to a project's state.
@@ -1393,6 +1424,9 @@ impl Standalone {
         let project = s.projects.get_mut(guid)?;
         let r = f(project);
         project.revision = project.revision.wrapping_add(1);
+        let track_count = project.tracks.len();
+        drop(s);
+        self.meters_follow_tracks(track_count);
         Some(r)
     }
 
