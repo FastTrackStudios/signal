@@ -12,7 +12,7 @@ use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{SharedState, use_param_context};
 
-use crate::params::{FILTERS, MICS, MicUiState, PATTERNS, SOLOS, SOURCES};
+use crate::ui::params::{FILTERS, MICS, MicUiState, PATTERNS, SOLOS, SOURCES};
 
 /// Editor size requested from the host on open.
 pub const EDITOR_W: u32 = 980;
@@ -115,7 +115,7 @@ fn Shared(proximity: ParamPtr, rear_trim: ParamPtr, swap: ParamPtr, source: Para
 #[component]
 pub fn App() -> Element {
     rsx! {
-        PluginApp { tailwind_css: include_str!("../assets/tailwind.css").to_string(), MicShell {} }
+        PluginApp { tailwind_css: include_str!("../../assets/tailwind.css").to_string(), MicShell {} }
     }
 }
 

@@ -1,0 +1,27 @@
+[package]
+name = "mic"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "FTS Mic: microphone modelling, and its editor"
+
+[lints]
+workspace = true
+
+[features]
+ui = ["dep:dioxus", "dep:fts-audio-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus"]
+
+[dependencies]
+dioxus = { workspace = true, optional = true }
+dsp-core = { workspace = true }
+fts-audio-ui = { workspace = true, optional = true }
+fts-plug-ui = { workspace = true, optional = true }
+nice-plug = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+realfft = { workspace = true }
+
+[dev-dependencies]
+dioxus-test = { workspace = true }
+hound = { version = "3.5" }
+tokio = { workspace = true, features = ["macros", "rt"] }

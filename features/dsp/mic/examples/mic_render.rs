@@ -7,13 +7,13 @@
 //!     pattern=4 axis=0 low_cut=0 proximity=0 output=0 phase=0 rear_trim=0 swap=0
 //! ```
 //!
-//! The output is delayed by [`mic_dsp::LATENCY`] relative to the input,
+//! The output is delayed by [`mic::LATENCY`] relative to the input,
 //! like the reference before host latency compensation; this tool removes
 //! it, so the two files line up sample for sample.
 
 use std::path::Path;
 
-use mic_dsp::{DualMic, DualSettings, MicChain, MicModel, Settings, Solo, latency};
+use mic::{DualMic, DualSettings, MicChain, MicModel, Settings, Solo, latency};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();

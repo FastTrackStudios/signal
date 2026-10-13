@@ -13,8 +13,8 @@ use std::sync::atomic::AtomicBool;
 
 use dioxus::prelude::*;
 use dioxus_test::{DocumentTester, by_testid, render};
-use mic_ui::params::{MicParams, MicUiState};
-use mic_ui::view::{App, EDITOR_H, EDITOR_W, MIN_EDITOR_H, MIN_EDITOR_W};
+use mic::ui::params::{MicParams, MicUiState};
+use mic::ui::view::{App, EDITOR_H, EDITOR_W, MIN_EDITOR_H, MIN_EDITOR_W};
 use nice_plug::context::gui::{GuiContext, GuiContextInner};
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{ParamContext, SharedState};

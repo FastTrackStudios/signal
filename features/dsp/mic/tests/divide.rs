@@ -1,7 +1,7 @@
 //! Dividing an impulse response by a section undoes running it through
 //! that section — what dual mode does to take a block out of a kernel.
 
-use mic_dsp::section::Biquad;
+use mic::section::Biquad;
 
 /// A decaying pseudo-random response.
 fn response(len: usize) -> Vec<f64> {

@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/mic",
     "features/dsp/trigger",
     "features/dsp/stretch",
     "features/dsp/pitch",
@@ -190,8 +191,6 @@ members = [
     "features/dsp/modulation/pattern-ui",
     "features/dsp/modulation/trem-dsp",
     "features/dsp/modulation/wah-dsp",
-    "features/dsp/mic/mic-dsp",
-    "features/dsp/mic/mic-ui",
     "features/dsp/multiband",
     "features/dsp/core/musical-time/musical-time",
     "features/dsp/core/musical-time/musical-time-ui",
@@ -337,6 +336,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+mic = { path = "features/dsp/mic" }
 trigger = { path = "features/dsp/trigger" }
 stretch = { path = "features/dsp/stretch" }
 pitch = { path = "features/dsp/pitch" }
@@ -1129,8 +1129,6 @@ modulation = { path = "features/dsp/modulation/modulation" }
 eq-dsp = { path = "features/dsp/eq/eq-dsp" }
 comp-dsp = { path = "features/dsp/comp/comp-dsp" }
 gate = { path = "features/dsp/gate" }
-mic-dsp = { path = "features/dsp/mic/mic-dsp" }
-mic-ui = { path = "features/dsp/mic/mic-ui" }
 chorus-dsp = { path = "features/dsp/modulation/chorus-dsp" }
 modulation-profiles = { path = "features/dsp/modulation/modulation-profiles" }
 multiband-dsp = { path = "features/dsp/multiband" }

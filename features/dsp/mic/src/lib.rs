@@ -13,6 +13,10 @@
 //! anchors, and whose low cut and proximity are exact first-order moves of
 //! a corner. See `signal-analyzer`'s `sphere_capture` for the measurement.
 
+
+#[cfg(feature = "ui")]
+pub mod ui;
+
 pub mod conv;
 pub mod engine;
 pub mod model;

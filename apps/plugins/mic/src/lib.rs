@@ -19,11 +19,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crossbeam_channel::{Receiver, Sender, bounded};
-use mic_dsp::{DualMic, DualSettings, MicChain, Settings, Solo, StereoMic, StereoSettings, latency};
+use mic::{DualMic, DualSettings, MicChain, Settings, Solo, StereoMic, StereoSettings, latency};
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{DioxusState, create_dioxus_editor_with_state};
-pub use mic_ui::params::MicParams;
-use mic_ui::params::MicUiState;
+pub use mic::ui::params::MicParams;
+use mic::ui::params::MicUiState;
 
 const PLUGIN_NAME: &str = "FTS Mic";
 
@@ -106,7 +106,7 @@ impl Default for FtsMic {
         Self {
             params: params.clone(),
             ui_state: Arc::new(MicUiState::new(params)),
-            editor_state: DioxusState::new(|| (mic_ui::view::EDITOR_W, mic_ui::view::EDITOR_H)).with_resize_hint(mic_ui::view::resize_hint()),
+            editor_state: DioxusState::new(|| (mic::ui::view::EDITOR_W, mic::ui::view::EDITOR_H)).with_resize_hint(mic::ui::view::resize_hint()),
             engine: None,
             have: None,
             asked: None,
@@ -237,7 +237,7 @@ impl Plugin for FtsMic {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
-        create_dioxus_editor_with_state(self.editor_state.clone(), self.ui_state.clone(), mic_ui::view::App)
+        create_dioxus_editor_with_state(self.editor_state.clone(), self.ui_state.clone(), mic::ui::view::App)
     }
 
     fn activate(&mut self, _layout: &AudioIOLayout, buffer_config: &BufferConfig, context: &mut impl ActivateContext<Self>) -> bool {

@@ -14,8 +14,7 @@ workspace = true
 
 [dependencies]
 nice-plug = { workspace = true, features = ["vst3"] }
-mic-dsp.workspace = true
-mic-ui.workspace = true
+mic = { workspace = true, features = ["ui"] }
 nice-plug-dioxus.workspace = true
 dsp-core.workspace = true
 crossbeam-channel = { workspace = true }

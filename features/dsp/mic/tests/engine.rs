@@ -5,8 +5,8 @@
 //! data small enough to write here — the real models are measurements of
 //! a commercial product and are not in the repository.
 
-use mic_dsp::model::{AXES, PATTERNS};
-use mic_dsp::{LATENCY, MicChain, MicModel, ModelError, Settings};
+use mic::model::{AXES, PATTERNS};
+use mic::{LATENCY, MicChain, MicModel, ModelError, Settings};
 
 const TAPS: usize = 128;
 
