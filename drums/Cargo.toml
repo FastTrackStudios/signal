@@ -21,7 +21,7 @@ control-surfaces = { workspace = true, features = ["kontrol"] }
 daw = { workspace = true }
 dioxus = { workspace = true, optional = true }
 facet = { workspace = true }
-fx-blocks = { workspace = true }
+builtin = { workspace = true }
 midicore = { workspace = true, features = ["vox", "midir", "native"] }
 midicore-proto = { workspace = true }
 midicore-ui = { workspace = true, optional = true }

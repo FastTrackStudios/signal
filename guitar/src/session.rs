@@ -1266,7 +1266,7 @@ impl GuitarRigBackend {
             .iter()
             .any(|b| b.block_type == BlockType::Compressor && !b.bypassed);
         if has_comp {
-            fx_blocks::comp_meter::gr_db().max(0.0)
+            builtin::comp_meter::gr_db().max(0.0)
         } else {
             0.0
         }
@@ -1353,7 +1353,7 @@ impl GuitarRigBackend {
             output_peak,
             active_patch,
             comp_gr_db: self.live_comp_gr(),
-            fx_activity: (0..fx_blocks::fx_meter::KINDS).map(fx_blocks::fx_meter::take).collect(),
+            fx_activity: (0..builtin::fx_meter::KINDS).map(builtin::fx_meter::take).collect(),
             input_peak_l: in_lr.0,
             input_peak_r: in_lr.1,
             output_peak_l: out_lr.0,
@@ -5541,10 +5541,10 @@ pub fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
     match bt {
         // The full FTS-EQ param surface — one source of truth with the
         // DSP (bands + slope + dynamics + masters, from eq_param_range).
-        BlockType::Eq => (0..fx_blocks::EQ_PARAM_COUNT)
+        BlockType::Eq => (0..builtin::EQ_PARAM_COUNT)
             .filter_map(|id| {
-                let name = fx_blocks::eq_param_name_of(id)?;
-                let (min, max, default) = fx_blocks::eq_param_range(id);
+                let name = builtin::eq_param_name_of(id)?;
+                let (min, max, default) = builtin::eq_param_range(id);
                 Some((name, min as f32, max as f32, default as f32))
             })
             .collect(),
@@ -6018,15 +6018,15 @@ impl RigBackend for GuitarRigBackend {
                 continue;
             }
             if bypassed {
-                fx_blocks::comp_meter::clear(ch);
+                builtin::comp_meter::clear(ch);
             }
-            let (input, gr) = fx_blocks::comp_meter::wave_snapshot_of(ch, 3);
+            let (input, gr) = builtin::comp_meter::wave_snapshot_of(ch, 3);
             self.events
                 .publish(RigEvent::CompWave(signal_guitar_proto::CompTrace {
                     block: name,
                     input,
                     gr,
-                    gr_db: fx_blocks::comp_meter::gr_db_of(ch),
+                    gr_db: builtin::comp_meter::gr_db_of(ch),
                 }));
         }
     }

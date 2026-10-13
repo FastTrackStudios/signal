@@ -8,7 +8,7 @@
 //! with a brick-wall ratio), Reverb, Transient (`NativeTransient` dual-envelope
 //! designer), Drive (→ `NativeSaturate` voiced by MM2's Soft/Tape/Hard mode).
 
-use fx_blocks::{NativeComp, NativeEq, NativeReverb, NativeSaturate, NativeTransient};
+use builtin::{NativeComp, NativeEq, NativeReverb, NativeSaturate, NativeTransient};
 use signal_plugin_host::{HostedPlugin, PluginInstance};
 
 use crate::cradle::{FxSlot, Mixer, Strip};

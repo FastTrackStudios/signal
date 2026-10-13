@@ -56,7 +56,7 @@ signal-plugin-host = { workspace = true }
 
 # Built-in FX — PluginInstance wrappers over the vendored FX DSP cores
 # (features/fx/). Backs `BlockImpl::Native` for EQ / Compressor / … blocks.
-fx-blocks = { workspace = true }
+builtin = { workspace = true }
 
 # Vendored physically-modeled Wurlitzer 200A (GPL, personal use). Backs the
 # "City Wurli" native voice on the Tonewheel block. See features/rigs/wurli/.

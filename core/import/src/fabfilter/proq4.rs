@@ -1,7 +1,7 @@
 //! Pro-Q 4 → FTS-EQ translation.
 //!
 //! Decodes the 600-float [`FFBS`](super::ffbs) parameter vector a Pro-Q 4
-//! instance writes into a project, and emits the equivalent `fx_blocks::NativeEq`
+//! instance writes into a project, and emits the equivalent `builtin::NativeEq`
 //! parameters by name.
 //!
 //! The translation is close to exact rather than approximate: `eq-dsp` carries

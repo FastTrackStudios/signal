@@ -5,7 +5,7 @@
 //! drops.
 
 use daw::plugin::{PluginEvents, PluginInstance};
-use fx_blocks::NativeGate;
+use builtin::NativeGate;
 
 const SR: f64 = 48_000.0;
 
