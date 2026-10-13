@@ -31,7 +31,7 @@
 use std::f64::consts::PI;
 use std::time::Instant;
 
-use audiocore_dsp::grain_pitch::GrainPitchShifter;
+use dsp_core::audio::grain_pitch::GrainPitchShifter;
 use pitch::allpass_shift::AllpassShifter;
 use pitch::granular::GranularShifter;
 use pitch::pog::{OctaveShift, PolyOctave};

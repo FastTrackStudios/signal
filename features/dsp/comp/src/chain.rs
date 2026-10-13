@@ -3,8 +3,8 @@
 use dsp_core::num;
 
 use crate::{Biquad, Detector, design_highpass_biquad, design_lowpass_biquad};
-use audiocore_dsp::AudioConfig;
-use audiocore_dsp::biquad::{Biquad as EqBiquad, FilterType as EqFilterType};
+use dsp_core::audio::AudioConfig;
+use dsp_core::audio::biquad::{Biquad as EqBiquad, FilterType as EqFilterType};
 
 /// Number of sidechain EQ bands.
 pub const SC_EQ_BANDS: usize = 6;

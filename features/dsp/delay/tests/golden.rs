@@ -19,11 +19,12 @@
 
 use delay::chain::{DelayChain, StereoMode};
 use delay::engine::{DelayEngine, DelayStyle};
-use dsp_golden::{Golden, golden, signal};
+use dsp_core::golden::{Golden, signal};
+use dsp_core::golden;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 
-dsp_golden::install_counting_allocator!();
+dsp_core::install_counting_allocator!();
 
 const SAMPLE_RATE: f64 = 48_000.0;
 const GENERATOR_RATE: f32 = 48_000.0;
@@ -80,7 +81,7 @@ fn every_delay_style_holds_its_reference() {
             .enumerate()
             .map(|(n, x)| engine.tick(*x, n % 2))
             .collect();
-        dsp_golden::assert_golden!(g, &format!("engine_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("engine_{name}"), &out);
     }
 }
 
@@ -106,7 +107,7 @@ fn every_style_holds_its_reference_under_modulation() {
             .enumerate()
             .map(|(n, x)| engine.tick(*x, n % 2))
             .collect();
-        dsp_golden::assert_golden!(g, &format!("modulated_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("modulated_{name}"), &out);
     }
 }
 
@@ -132,7 +133,7 @@ fn the_time_modulation_entry_point_holds_its_reference() {
                 // wobble keeps the read position genuinely moving, which is
                 // the thing this fixture exists to pin.
                 let base = 150.0_f64.clamp(min_ms, max_ms);
-                let seconds = f64::from(dsp_golden::num::count_to_f32(n)) / SAMPLE_RATE;
+                let seconds = f64::from(dsp_core::golden::num::count_to_f32(n)) / SAMPLE_RATE;
                 let wobble = (core::f64::consts::TAU * 2.0 * seconds).sin();
                 engine.tick_at(
                     *x,
@@ -141,7 +142,7 @@ fn the_time_modulation_entry_point_holds_its_reference() {
                 )
             })
             .collect();
-        dsp_golden::assert_golden!(g, &format!("tick_at_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("tick_at_{name}"), &out);
     }
 }
 
@@ -295,7 +296,7 @@ fn the_stereo_chain_holds_its_reference() {
             .zip(right)
             .flat_map(<[f64; 2]>::from)
             .collect();
-        dsp_golden::assert_golden!(g, &format!("chain_{name}"), &interleaved);
+        dsp_core::assert_golden!(g, &format!("chain_{name}"), &interleaved);
     }
 }
 
@@ -459,6 +460,6 @@ fn processing_allocates_nothing() {
     };
     // Warm up outside the guard: the first block may size buffers.
     run(&mut sink, &mut left, &mut right);
-    dsp_golden::assert_no_alloc(|| run(&mut sink, &mut left, &mut right));
+    dsp_core::golden::assert_no_alloc(|| run(&mut sink, &mut left, &mut right));
     assert!(sink.is_finite());
 }

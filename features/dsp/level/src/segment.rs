@@ -124,7 +124,7 @@ pub fn build_segments(
                 from,
                 to,
                 avg_rms: avg,
-                avg_rms_db: audiocore_dsp::db::linear_to_db(avg),
+                avg_rms_db: dsp_core::audio::db::linear_to_db(avg),
             }
         })
         .collect()
@@ -142,6 +142,6 @@ pub fn auto_target_db(segments: &[Segment]) -> Option<f64> {
     if count == 0 {
         None
     } else {
-        Some(audiocore_dsp::db::linear_to_db(sum / count as f64))
+        Some(dsp_core::audio::db::linear_to_db(sum / count as f64))
     }
 }

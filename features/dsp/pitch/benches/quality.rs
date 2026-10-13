@@ -19,7 +19,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::thread;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use pitch::chain::{Algorithm, PitchChain};
 use rustfft::{num_complex::Complex, FftPlanner};
 

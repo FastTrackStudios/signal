@@ -1,13 +1,13 @@
 //! Delay chain — composes delay engines, ducking, and diffusion
 //! into a full stereo processor.
 
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::envelope::EnvelopeFollower;
-use audiocore_dsp::note_sync::NoteValue;
-use audiocore_dsp::smoothing::ParamSmoother;
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::envelope::EnvelopeFollower;
+use dsp_core::audio::note_sync::NoteValue;
+use dsp_core::audio::smoothing::ParamSmoother;
+use dsp_core::audio::{AudioConfig, Processor};
 use dsp_core::num;
 
 use crate::engine::{DelayEngine, DelayStyle};
@@ -839,7 +839,7 @@ impl Processor for DelayChain {
 
             // Stereo width (mid-side)
             if (width - 1.0).abs() > 0.001 {
-                (wet_l, wet_r) = audiocore_dsp::stereo::width(wet_l, wet_r, width);
+                (wet_l, wet_r) = dsp_core::audio::stereo::width(wet_l, wet_r, width);
             }
 
             // --- Per-line pan (equal power). Defaults (-1, +1) are the

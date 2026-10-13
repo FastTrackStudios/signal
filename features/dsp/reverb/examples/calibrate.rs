@@ -15,7 +15,7 @@
 //! `cargo run --release -p reverb-dsp --example calibrate > src/calibration_tables.rs`
 //! Then check it: `cargo run --release -p reverb-dsp --example time_accuracy`.
 
-use audiocore_dsp::Processor as _;
+use dsp_core::audio::Processor as _;
 use reverb::AlgorithmType;
 use reverb::chain::ReverbChain;
 
@@ -58,7 +58,7 @@ fn rt60(algorithm: AlgorithmType, variant: usize, size: f64, decay: f64, burst: 
     c.predelay_ms = 0.0;
     c.params.size = size;
     c.params.modulation = 0.2;
-    c.update(audiocore_dsp::AudioConfig {
+    c.update(dsp_core::audio::AudioConfig {
         sample_rate: SR,
         max_buffer_size: BLOCK,
     });

@@ -24,12 +24,13 @@
 //! same audio. That is by design, and checked here so a future reader does
 //! not mistake it for a fixture that forgot to vary anything.
 
-use audiocore_dsp::{AudioConfig, Processor};
-use dsp_golden::{Golden, golden, signal};
+use dsp_core::audio::{AudioConfig, Processor};
+use dsp_core::golden::{Golden, signal};
+use dsp_core::golden;
 use reverb::AlgorithmType;
 use reverb::chain::ReverbChain;
 
-dsp_golden::install_counting_allocator!();
+dsp_core::install_counting_allocator!();
 
 const SR: f64 = 48_000.0;
 const GENERATOR_RATE: f32 = 48_000.0;
@@ -116,7 +117,7 @@ fn every_algorithm_holds_its_impulse_response() {
         for (tag, decay) in [("short", 0.2_f64), ("long", 0.85)] {
             let mut c = chain(algo, decay);
             let out = render(&mut c, &left, &right);
-            dsp_golden::assert_golden!(g, &format!("ir_{name}_{tag}"), &out);
+            dsp_core::assert_golden!(g, &format!("ir_{name}_{tag}"), &out);
         }
     }
 }
@@ -137,7 +138,7 @@ fn every_algorithm_holds_its_reference_on_programme() {
         c.duck_amount = 0.5;
         c.update(config());
         let out = render(&mut c, &left, &right);
-        dsp_golden::assert_golden!(g, &format!("prog_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("prog_{name}"), &out);
     }
 }
 
@@ -153,7 +154,7 @@ fn the_chain_controls_hold_their_references() {
         setup(&mut c);
         c.update(config());
         let out = render(&mut c, &left, &right);
-        dsp_golden::assert_golden!(g, &format!("chain_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("chain_{name}"), &out);
     }
 }
 
@@ -285,5 +286,5 @@ fn processing_allocates_nothing() {
     };
     // Warm up outside the guard: the first block may size buffers.
     run(&mut left, &mut right);
-    dsp_golden::assert_no_alloc(|| run(&mut left, &mut right));
+    dsp_core::golden::assert_no_alloc(|| run(&mut left, &mut right));
 }

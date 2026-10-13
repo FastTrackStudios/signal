@@ -6,9 +6,9 @@
 
 use std::f64::consts::PI;
 
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::envelope::EnvelopeFollower;
-use audiocore_dsp::prng::XorShift32;
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::envelope::EnvelopeFollower;
+use dsp_core::audio::prng::XorShift32;
 use dsp_core::num;
 
 /// Wobble/LFO waveform shapes for wow modulation.

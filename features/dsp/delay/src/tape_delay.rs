@@ -7,12 +7,12 @@
 //! the same delay buffer with shared wow/flutter modulation.
 
 use crate::tilt::DecayTilt;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::one_pole::OnePoleHp;
-use audiocore_dsp::prng::XorShift32;
-use audiocore_dsp::smoothing::ParamSmoother;
-use audiocore_dsp::soft_clip::sin_clip;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::one_pole::OnePoleHp;
+use dsp_core::audio::prng::XorShift32;
+use dsp_core::audio::smoothing::ParamSmoother;
+use dsp_core::audio::soft_clip::sin_clip;
 use dsp_core::num;
 
 use crate::modulation::{Flutter, WobbleShape, Wow};
@@ -199,7 +199,7 @@ pub struct TapeDelay {
     speed_smoother: ParamSmoother,
     /// Record-head bandwidth limit while the tape runs slower than the
     /// host rate (cutoff tracks 0.45 · speed · sr).
-    record_aa: audiocore_dsp::one_pole::OnePoleLp,
+    record_aa: dsp_core::audio::one_pole::OnePoleLp,
     /// Previous wobble offset — its per-sample derivative modulates the
     /// SPEED (position-offset wobble on a uniform tape wouldn't touch
     /// the write side; speed wobble is what real transports do).
@@ -279,7 +279,7 @@ impl TapeDelay {
             write_phase: 0.0,
             prev_write_in: 0.0,
             speed_smoother: ParamSmoother::new(0.0),
-            record_aa: audiocore_dsp::one_pole::OnePoleLp::new(20000.0, 48000.0),
+            record_aa: dsp_core::audio::one_pole::OnePoleLp::new(20000.0, 48000.0),
             prev_mod_offset: 0.0,
             wow: Wow::new(),
             flutter: Flutter::new(),

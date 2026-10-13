@@ -2,7 +2,7 @@ use comp::components::{Compressor, Envelope, HardKnee, PeakDetector, Transparent
 use comp::{CompressorConfig, Error, GenericControls, La2aControls, Model, ProcessSpec};
 use comp::{HermiteCubicSmoother, StateFuncHypothesis};
 use dsp_core::Channel;
-dsp_golden::install_counting_allocator!();
+dsp_core::install_counting_allocator!();
 
 #[test]
 fn smoother_settles_to_requested_amplitude_gain() {
@@ -131,7 +131,7 @@ fn built_in_callbacks_and_reset_allocate_nothing_from_the_first_block() {
             .processor();
         let mut left = [0.7; 512];
         let mut right = [0.2; 512];
-        dsp_golden::assert_no_alloc(|| {
+        dsp_core::golden::assert_no_alloc(|| {
             processor.process_stereo(&mut left, &mut right).unwrap();
             processor.reset();
             processor.process_stereo(&mut left, &mut right).unwrap();
@@ -156,7 +156,7 @@ fn prepared_updates_preserve_history_and_reject_topology_changes() {
             updated.process_frame([0.8; 2]);
             unchanged.process_frame([0.8; 2]);
         }
-        dsp_golden::assert_no_alloc(|| updated.apply(&prepared).unwrap());
+        dsp_core::golden::assert_no_alloc(|| updated.apply(&prepared).unwrap());
         for _ in 0..512 {
             assert_eq!(
                 updated.process_frame([0.2; 2]),
@@ -176,7 +176,7 @@ fn prepared_updates_preserve_history_and_reject_topology_changes() {
         let mut changed = CompressorConfig::new(model);
         changed.mix = 0.0;
         let next = changed.prepare(spec).unwrap();
-        dsp_golden::assert_no_alloc(|| updated.apply(&next).unwrap());
+        dsp_core::golden::assert_no_alloc(|| updated.apply(&next).unwrap());
         assert_eq!(updated.process_frame([0.8, 0.2]), [0.8, 0.2]);
     }
 }
@@ -185,7 +185,7 @@ fn prepared_updates_preserve_history_and_reject_topology_changes() {
 fn reserved_lookahead_edits_do_not_allocate() {
     let mut chain = comp::CompChain::new();
     chain.reserve_lookahead(20.0);
-    dsp_golden::assert_no_alloc(|| {
+    dsp_core::golden::assert_no_alloc(|| {
         for delay in [20.0, 0.0, 3.0, 20.0] {
             chain.set_lookahead(delay);
             let (mut l, mut r) = (0.5, 0.25);
@@ -206,7 +206,7 @@ fn the_host_chain_runs_the_selected_model_and_reports_its_reduction() {
         .unwrap();
     let mut direct = prepared.processor();
     let mut chain = comp::CompChain::new();
-    dsp_golden::assert_no_alloc(|| chain.set_model(&prepared));
+    dsp_core::golden::assert_no_alloc(|| chain.set_model(&prepared));
     chain.reset();
     for _ in 0..4800 {
         let (mut left, mut right) = (0.5, 0.2);
@@ -214,7 +214,7 @@ fn the_host_chain_runs_the_selected_model_and_reports_its_reduction() {
         assert_eq!([left, right], direct.process_frame([0.5, 0.2]));
     }
     assert_eq!(chain.gain_reduction_db(), direct.gain_reduction_db()[0]);
-    dsp_golden::assert_no_alloc(|| {
+    dsp_core::golden::assert_no_alloc(|| {
         chain.clear_model();
         for _ in 0..512 {
             let (mut left, mut right) = (0.5, 0.2);

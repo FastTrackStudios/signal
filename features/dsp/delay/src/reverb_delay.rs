@@ -12,9 +12,9 @@
 //! engine instance is one channel; the chain runs L/R instances.
 
 use crate::tilt::DecayTilt;
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::one_pole::OnePoleLp;
-use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::one_pole::OnePoleLp;
+use dsp_core::audio::smoothing::ParamSmoother;
 use dsp_core::num;
 
 /// Schroeder allpass over a fixed delay.

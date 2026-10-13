@@ -326,17 +326,17 @@ pub const MAX_RELEASE_MS: f64 = 3000.0;
 
 /// The note the attack locks to until someone picks another. A 1/32 — 62 ms
 /// at 120 BPM, which is the short end where an attack lives.
-pub const ATTACK_DEFAULT_DIV: musical_time::MusicalTime = musical_time::MusicalTime::new(
-    musical_time::NoteValue::ThirtySecond,
-    musical_time::Flavour::Straight,
+pub const ATTACK_DEFAULT_DIV: dsp_core::time::MusicalTime = dsp_core::time::MusicalTime::new(
+    dsp_core::time::NoteValue::ThirtySecond,
+    dsp_core::time::Flavour::Straight,
 );
 
 /// The note the release locks to until someone picks another. An eighth —
 /// 250 ms at 120 BPM, next to the 100 ms free default and squarely where a
 /// release that breathes with the track sits.
-pub const RELEASE_DEFAULT_DIV: musical_time::MusicalTime = musical_time::MusicalTime::new(
-    musical_time::NoteValue::Eighth,
-    musical_time::Flavour::Straight,
+pub const RELEASE_DEFAULT_DIV: dsp_core::time::MusicalTime = dsp_core::time::MusicalTime::new(
+    dsp_core::time::NoteValue::Eighth,
+    dsp_core::time::Flavour::Straight,
 );
 
 impl CompStageParams {
@@ -368,15 +368,15 @@ impl CompStageParams {
         .resolve_ms_clamped(tempo, MIN_RELEASE_MS, MAX_RELEASE_MS)
     }
 
-    fn synced(sync: bool, free_ms: f32, div: i32) -> musical_time::SyncedTime {
-        musical_time::SyncedTime {
+    fn synced(sync: bool, free_ms: f32, div: i32) -> dsp_core::time::SyncedTime {
+        dsp_core::time::SyncedTime {
             mode: if sync {
-                musical_time::TimeMode::Synced
+                dsp_core::time::TimeMode::Synced
             } else {
-                musical_time::TimeMode::Free
+                dsp_core::time::TimeMode::Free
             },
             free_ms: f64::from(free_ms),
-            division: musical_time::MusicalTime::from_param(div),
+            division: dsp_core::time::MusicalTime::from_param(div),
         }
     }
 }
@@ -727,10 +727,10 @@ impl CompStageParams {
             // Both off by default. A compressor that silently re-times itself
             // when it lands on a track is a surprise, and these are opt-in
             // even by the standards of a plugin with eight stages.
-            attack_sync: musical_time::params::sync_param("Attack Sync", false),
+            attack_sync: dsp_core::time::params::sync_param("Attack Sync", false),
             // A 1/32 — at 120 BPM, 62 ms. The short end is where an attack
             // lives, and the range only reaches 300 ms anyway.
-            attack_div: musical_time::params::division_param("Attack Div", ATTACK_DEFAULT_DIV),
+            attack_div: dsp_core::time::params::division_param("Attack Div", ATTACK_DEFAULT_DIV),
             release_ms: FloatParam::new(
                 "Release",
                 100.0,
@@ -742,10 +742,10 @@ impl CompStageParams {
             )
             .with_unit(" ms")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
-            release_sync: musical_time::params::sync_param("Release Sync", false),
+            release_sync: dsp_core::time::params::sync_param("Release Sync", false),
             // An eighth — at 120 BPM, 250 ms, near the 100 ms free default
             // and squarely where a release that breathes with the track sits.
-            release_div: musical_time::params::division_param("Release Div", RELEASE_DEFAULT_DIV),
+            release_div: dsp_core::time::params::division_param("Release Div", RELEASE_DEFAULT_DIV),
             knee_db: FloatParam::new(
                 "Knee",
                 6.0,

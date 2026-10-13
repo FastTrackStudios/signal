@@ -119,7 +119,7 @@ impl Biquad {
 
     #[inline]
     pub fn tick(&mut self, x: f64) -> f64 {
-        self.y = audiocore_dsp::denormal::flush(
+        self.y = dsp_core::audio::denormal::flush(
             self.a2.mul_add(
                 -self.y2,
                 self.a1.mul_add(

@@ -3,9 +3,9 @@
 
 use dsp_core::num;
 
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::{AudioConfig, Processor};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 use crate::algorithm::{
@@ -16,9 +16,9 @@ use crate::algorithm::{
 use crate::algorithms;
 use crate::ir::engine::{ProcessedIr, ReshapeJob};
 use crate::ir::prepared::PreparedIrPair;
-use audiocore_dsp::envelope::EnvelopeFollower;
-use audiocore_dsp::smoothing::ParamSmoother;
-use fts_modulation::{EnvFollower, Modulator, TransportInfo};
+use dsp_core::audio::envelope::EnvelopeFollower;
+use dsp_core::audio::smoothing::ParamSmoother;
+use dsp_core::modulation::{EnvFollower, Modulator, TransportInfo};
 
 use crate::primitives::saturation::Saturator;
 use crate::primitives::tilt_eq::TiltEq;
@@ -1527,7 +1527,7 @@ impl ReverbChain {
         } = block;
         // Width (mid-side)
         let (mut final_l, mut final_r) = if (width - 1.0).abs() > 0.001 {
-            audiocore_dsp::stereo::width(wet_l, wet_r, width)
+            dsp_core::audio::stereo::width(wet_l, wet_r, width)
         } else {
             (wet_l, wet_r)
         };
@@ -1537,7 +1537,7 @@ impl ReverbChain {
         // leaving decay audible on the far side).
         let pan = self.pan_smoother.tick();
         if pan.abs() > 1e-6 {
-            let (gl, gr) = audiocore_dsp::stereo::pan_equal_power(pan);
+            let (gl, gr) = dsp_core::audio::stereo::pan_equal_power(pan);
             final_l *= gl;
             final_r *= gr;
         }
@@ -1704,7 +1704,7 @@ impl ReverbChain {
         // every engine sits at the same output for the same decay, plus the
         // user's trim. Both are per-block, not per-sample — neither changes
         // inside a buffer.
-        let wet_gain = audiocore_dsp::db::db_to_linear(
+        let wet_gain = dsp_core::audio::db::db_to_linear(
             self.wet_gain_db.clamp(-36.0, 36.0) + self.algorithm_type.wet_calibration_db(),
         );
         // Magneto knob remap (manual): PRE-DELAY becomes the engine's
@@ -2674,7 +2674,7 @@ mod tests {
     #[test]
     fn infinite_mode_keeps_feeding_input() {
         let sr = 48000.0;
-        let cfg = audiocore_dsp::AudioConfig {
+        let cfg = dsp_core::audio::AudioConfig {
             sample_rate: sr,
             max_buffer_size: 256,
         };
@@ -2719,7 +2719,7 @@ mod tests {
     #[test]
     fn infinite_mode_off_disables_the_switch() {
         let sr = 48000.0;
-        let cfg = audiocore_dsp::AudioConfig {
+        let cfg = dsp_core::audio::AudioConfig {
             sample_rate: sr,
             max_buffer_size: 256,
         };

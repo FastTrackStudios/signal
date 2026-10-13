@@ -19,12 +19,11 @@ viz = ["dep:anyrender", "dep:blitz-dom", "dep:dioxus-native-dom", "dep:vello", "
 anyrender = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
-audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true }
 blitz-dom = { workspace = true, features = ["custom-widget"], optional = true }
 dioxus = { workspace = true, optional = true }
 dioxus-native-dom = { workspace = true, optional = true }
 fts-audio-ui = { workspace = true, optional = true }
-fts-modulation = { workspace = true }
 fts-plug-ui = { workspace = true, optional = true }
 nice-plug = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }

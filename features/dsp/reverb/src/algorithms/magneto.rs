@@ -9,7 +9,7 @@ use dsp_core::num;
 use crate::algorithm::{AlgorithmParams, MagnetoParams, MagnetoSpacing, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::delay_line::DelayLine;
 
 /// Maximum virtual tape heads (menu: 1 / 2 / 3 / 4 / 6).
 const NUM_HEADS: usize = 6;

@@ -3,7 +3,7 @@
 //! Framework-free (no Dioxus): everything here maps between the
 //! normalized pattern space (`x`, `y` ∈ 0..1, y = 1 at the TOP of the
 //! value range) and a pixel viewBox, and renders
-//! [`fts_modulation::Pattern`] curves as SVG path strings. The Dioxus
+//! [`dsp_core::modulation::Pattern`] curves as SVG path strings. The Dioxus
 //! component in `signal-ui` (and any future host: plugin editors, the
 //! web remote, story previews) wires pointer events to these helpers.
 //!
@@ -12,7 +12,7 @@
 
 use std::fmt::Write;
 
-use fts_modulation::{CurveType, Pattern, Point};
+use dsp_core::modulation::{CurveType, Pattern, Point};
 
 /// Maps normalized pattern coordinates to a pixel viewBox and back.
 ///

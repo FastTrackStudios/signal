@@ -11,7 +11,7 @@
 //! Detection has one block (~10 ms) of latency; the applied gain is slewed so
 //! ducking is inaudible. Alloc-free after construction.
 
-use audiocore_dsp::db::db_to_linear;
+use dsp_core::audio::db::db_to_linear;
 
 use crate::classify::{BlockClass, Classifier, ClassifyConfig};
 

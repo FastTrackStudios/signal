@@ -6,7 +6,7 @@
 //! or a gentle downward expander for bleed. Alloc-free; state clears on
 //! [`Gate::reset`].
 
-use audiocore_dsp::db::{db_to_linear, linear_to_db};
+use dsp_core::audio::db::{db_to_linear, linear_to_db};
 
 /// Gate tuning.
 #[derive(Clone, Copy, Debug)]

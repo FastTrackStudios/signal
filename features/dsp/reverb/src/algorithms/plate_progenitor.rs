@@ -20,8 +20,8 @@ use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::one_pole::Lp1;
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::delay_line::DelayLine;
 
 /// One Progenitor tank: four allpasses (two modulated) around two
 /// delays, with separate HF-damping and LF-shelf filters.

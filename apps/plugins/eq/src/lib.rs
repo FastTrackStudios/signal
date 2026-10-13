@@ -410,7 +410,7 @@ impl Plugin for FtsEqPlugin {
         self.publish_model_response(model);
 
         let output_gain =
-            audiocore_dsp::db::db_to_linear(f64::from(self.params.output_gain_db.value()));
+            dsp_core::audio::db::db_to_linear(f64::from(self.params.output_gain_db.value()));
         let n = buffer.samples();
 
         // Ensure scratch buffers are large enough

@@ -30,7 +30,7 @@ use dsp_core::num;
 use crate::algorithm::{AlgorithmParams, CLOUD_T60, CloudParams, ReverbAlgorithm, decay_to_t60};
 use crate::primitives::cloud_ring::{CloudRing, EARLY_TO_TAP, InputChain};
 use crate::primitives::one_pole::{Hp1, Lp1};
-use audiocore_dsp::biquad::{Biquad, FilterType};
+use dsp_core::audio::biquad::{Biquad, FilterType};
 
 /// Level of the input chain's own output (the early field), linear:
 /// BigSky's early pulse is 1.4× its first ring tap.

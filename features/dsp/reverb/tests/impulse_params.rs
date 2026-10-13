@@ -9,7 +9,7 @@ use reverb::algorithms::convolution::Convolution;
 use reverb::chain::ReverbChain;
 use reverb::ir::ImpulseReshaper;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use dsp_core::num;
 
 const SR: f64 = 48000.0;

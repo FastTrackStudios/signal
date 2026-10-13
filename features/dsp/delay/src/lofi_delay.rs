@@ -15,11 +15,11 @@
 //!   per the spec.
 
 use crate::tilt::DecayTilt;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::envelope::EnvelopeFollower;
-use audiocore_dsp::prng::XorShift32;
-use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::envelope::EnvelopeFollower;
+use dsp_core::audio::prng::XorShift32;
+use dsp_core::audio::smoothing::ParamSmoother;
 use dsp_core::num;
 
 /// Device voicings for the Lo-Fi output filter (`TimeLine` MX "Filter

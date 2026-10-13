@@ -20,9 +20,9 @@
 //! interval.
 
 use crate::tilt::DecayTilt;
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::smoothing::ParamSmoother;
 use dsp_core::num;
 use pitch::spectral::SpectralShifter;
 

@@ -223,7 +223,7 @@ impl ProC3Compressor {
             self.smooth_parameter(self.smoothed_input_gain_db, self.input_gain_db);
         let gain_db = self.smoothed_input_gain_db;
         if self.in_gain_memo.0.to_bits() != gain_db.to_bits() {
-            self.in_gain_memo = (gain_db, audiocore_dsp::db::db_to_linear(gain_db));
+            self.in_gain_memo = (gain_db, dsp_core::audio::db::db_to_linear(gain_db));
         }
         let input_linear = input * self.in_gain_memo.1;
         self.smoothed_detector_rms_mix =
@@ -281,18 +281,18 @@ impl ProC3Compressor {
         // 0 dB is exactly unity: skip the pow when a stage is idle.
         let upward_db = self.process_upward(level_db, channel);
         if upward_db != 0.0 {
-            output *= audiocore_dsp::db::db_to_linear(upward_db);
+            output *= dsp_core::audio::db::db_to_linear(upward_db);
         }
         let expander_db = self.process_expander(level_db, channel);
         if expander_db != 0.0 {
-            output *= audiocore_dsp::db::db_to_linear(expander_db);
+            output *= dsp_core::audio::db::db_to_linear(expander_db);
         }
 
         // Step 5: OUTPUT GAIN
         if self.gr_db_memo.0.to_bits() != gr_smoothed.to_bits() {
             self.gr_db_memo = (
                 gr_smoothed,
-                -audiocore_dsp::db::linear_to_db(gr_smoothed.max(1e-10)).min(0.0),
+                -dsp_core::audio::db::linear_to_db(gr_smoothed.max(1e-10)).min(0.0),
             );
         }
         let gr_db = self.gr_db_memo.1;
@@ -310,7 +310,7 @@ impl ProC3Compressor {
             self.smooth_parameter(self.smoothed_output_gain_db, self.output_gain_db);
         let gain_db = self.smoothed_output_gain_db + self.channels[channel].auto_makeup_db;
         if self.out_gain_memo.0.to_bits() != gain_db.to_bits() {
-            self.out_gain_memo = (gain_db, audiocore_dsp::db::db_to_linear(gain_db));
+            self.out_gain_memo = (gain_db, dsp_core::audio::db::db_to_linear(gain_db));
         }
         let output_gain = self.out_gain_memo.1;
         output *= output_gain;
@@ -569,7 +569,7 @@ impl ProC3Compressor {
             return;
         }
 
-        let amp = audiocore_dsp::db::db_to_linear(level_db).clamp(0.0, 16.0);
+        let amp = dsp_core::audio::db::db_to_linear(level_db).clamp(0.0, 16.0);
         let power = amp * amp;
         let coeff = self.crest_coeff;
         self.crest_peak_power = power.max(coeff * self.crest_peak_power + (1.0 - coeff) * power);
@@ -887,7 +887,7 @@ mod tests {
 
         comp.output_gain_db = 24.0;
         let first = comp.process(0.1, 0).abs();
-        let immediate = 0.1 * audiocore_dsp::db::db_to_linear(24.0);
+        let immediate = 0.1 * dsp_core::audio::db::db_to_linear(24.0);
 
         assert!(
             first < immediate * 0.25,

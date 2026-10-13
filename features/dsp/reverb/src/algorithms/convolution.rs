@@ -42,9 +42,9 @@ use std::sync::Arc;
 use realfft::num_complex::Complex;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::envelope::EnvelopeFollower;
-use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::envelope::EnvelopeFollower;
+use dsp_core::audio::smoothing::ParamSmoother;
 
 use crate::algorithm::{
     AlgorithmParams, ConvolutionModParams, ImpulseParams, IrSlot, ReverbAlgorithm,
@@ -1478,7 +1478,7 @@ impl ReverbAlgorithm for Convolution {
         let duck_depth = self.sm.duck_depth.value();
         if wet_depth.abs() > GATE_EPS || duck_depth > GATE_EPS {
             let lfo_gain = if wet_depth.abs() > GATE_EPS {
-                audiocore_dsp::db::db_to_linear(WET_MOD_DB * wet_depth * lfo)
+                dsp_core::audio::db::db_to_linear(WET_MOD_DB * wet_depth * lfo)
             } else {
                 1.0
             };

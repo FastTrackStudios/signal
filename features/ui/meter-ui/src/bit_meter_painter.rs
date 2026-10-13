@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use meter_dsp::bit_depth::BitDepthState;
+use dsp_core::meter::bit_depth::BitDepthState;
 use nice_plug_dioxus::prelude::vello::kurbo::{Affine, Rect};
 use nice_plug_dioxus::prelude::vello::peniko::{Color, Fill};
 use nice_plug_dioxus::prelude::vello::Scene;

@@ -288,9 +288,9 @@ pub const MAX_DECAY_S: f64 = 120.0;
 
 /// The note a synced tail lasts until someone picks another: a half note,
 /// gone before the next backbeat.
-pub const DECAY_DEFAULT_DIV: musical_time::MusicalTime = musical_time::MusicalTime::new(
-    musical_time::NoteValue::Half,
-    musical_time::Flavour::Straight,
+pub const DECAY_DEFAULT_DIV: dsp_core::time::MusicalTime = dsp_core::time::MusicalTime::new(
+    dsp_core::time::NoteValue::Half,
+    dsp_core::time::Flavour::Straight,
 );
 
 /// One Post EQ band (`fx.embed-eq.band-params`).
@@ -491,10 +491,10 @@ impl Default for ReverbParams {
             // Off by default. A pre-delay is usually set by ear against the
             // source, not against the grid — but when it IS set to the grid
             // it wants to be exact, which is what this is for.
-            predelay_sync: musical_time::params::sync_param("Pre-Delay Sync", false),
+            predelay_sync: dsp_core::time::params::sync_param("Pre-Delay Sync", false),
             // A sixteenth: the pre-delay that puts the reverb's onset on the
             // next subdivision rather than smearing across it.
-            predelay_div: musical_time::params::division_param(
+            predelay_div: dsp_core::time::params::division_param(
                 "Pre-Delay Div",
                 PREDELAY_DEFAULT_DIV,
             ),
@@ -640,7 +640,7 @@ impl Default for ReverbParams {
             )
             .with_unit(" s")
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
-            decay_div: musical_time::params::division_param("Decay Div", DECAY_DEFAULT_DIV),
+            decay_div: dsp_core::time::params::division_param("Decay Div", DECAY_DEFAULT_DIV),
         }
     }
 }
@@ -655,9 +655,9 @@ pub const MAX_PREDELAY_MS: f64 = crate::chain::MAX_PREDELAY_S * 1000.0;
 ///
 /// A sixteenth: the pre-delay that puts the reverb's onset on the next
 /// subdivision instead of smearing across it.
-pub const PREDELAY_DEFAULT_DIV: musical_time::MusicalTime = musical_time::MusicalTime::new(
-    musical_time::NoteValue::Sixteenth,
-    musical_time::Flavour::Straight,
+pub const PREDELAY_DEFAULT_DIV: dsp_core::time::MusicalTime = dsp_core::time::MusicalTime::new(
+    dsp_core::time::NoteValue::Sixteenth,
+    dsp_core::time::Flavour::Straight,
 );
 
 impl ReverbParams {
@@ -670,10 +670,10 @@ impl ReverbParams {
         match self.decay_mode.value() {
             1 => Some(free_s),
             2 => Some(
-                musical_time::SyncedTime {
-                    mode: musical_time::TimeMode::Synced,
+                dsp_core::time::SyncedTime {
+                    mode: dsp_core::time::TimeMode::Synced,
                     free_ms: free_s * 1000.0,
-                    division: musical_time::MusicalTime::from_param(self.decay_div.value()),
+                    division: dsp_core::time::MusicalTime::from_param(self.decay_div.value()),
                 }
                 .resolve_ms(tempo)
                     / 1000.0,
@@ -690,14 +690,14 @@ impl ReverbParams {
     /// user dialled rather than silence.
     #[must_use]
     pub fn predelay_ms(&self, tempo: Option<f64>) -> f64 {
-        musical_time::SyncedTime {
+        dsp_core::time::SyncedTime {
             mode: if self.predelay_sync.value() {
-                musical_time::TimeMode::Synced
+                dsp_core::time::TimeMode::Synced
             } else {
-                musical_time::TimeMode::Free
+                dsp_core::time::TimeMode::Free
             },
             free_ms: f64::from(self.predelay.value()),
-            division: musical_time::MusicalTime::from_param(self.predelay_div.value()),
+            division: dsp_core::time::MusicalTime::from_param(self.predelay_div.value()),
         }
         .resolve_ms_clamped(tempo, MIN_PREDELAY_MS, MAX_PREDELAY_MS)
     }

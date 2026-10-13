@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use pitch::chain::{Algorithm, PitchChain};
 
 const SAMPLE_RATE: f64 = 48000.0;

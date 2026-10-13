@@ -17,7 +17,7 @@ audiocore-core = { workspace = true }
 eq = { workspace = true, features = ["native", "profiles", "ui"] }
 # The full Dioxus plugin editor (control view, EQ graph, spectrum) —
 # `native` pulls nice-plug-dioxus/Blitz.
-audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true }
 nice-plug = { workspace = true, features = ["vst3"] }
 
 [features]

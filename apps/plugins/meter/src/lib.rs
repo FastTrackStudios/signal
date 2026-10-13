@@ -13,9 +13,9 @@ use nice_plug_dioxus::{DioxusState, create_dioxus_editor_with_state};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use meter_dsp::lufs::{LufsMeter, LufsState};
-use meter_dsp::phase::{PhaseCorrelation, PhaseState};
-use meter_dsp::spectrum::{SpectrumAnalyzer, SpectrumState};
+use dsp_core::meter::lufs::{LufsMeter, LufsState};
+use dsp_core::meter::phase::{PhaseCorrelation, PhaseState};
+use dsp_core::meter::spectrum::{SpectrumAnalyzer, SpectrumState};
 
 mod editor;
 

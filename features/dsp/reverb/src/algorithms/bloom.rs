@@ -16,8 +16,8 @@ use dsp_core::num;
 use crate::algorithm::{AlgorithmParams, BloomParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::delay_line::DelayLine;
 use pitch::pog::{OctaveShift, PolyOctave};
 
 /// Number of delay lines per channel.

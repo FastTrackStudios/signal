@@ -29,7 +29,7 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-use audiocore_dsp::db::linear_to_db;
+use dsp_core::audio::db::linear_to_db;
 use comp::ProC3Compressor;
 use std::fs::File;
 use std::io::Write;

@@ -33,7 +33,7 @@
 //! normalizes badly — which is what [`FeatureConfig::silence_level`] is
 //! for.
 
-use audiocore_dsp::biquad::{Biquad, FilterType};
+use dsp_core::audio::biquad::{Biquad, FilterType};
 
 /// One frame's alignable features.
 ///

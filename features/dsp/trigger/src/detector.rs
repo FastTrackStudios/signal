@@ -9,8 +9,8 @@
 //! This two-stage confirmation approach eliminates false triggers from
 //! transient spikes while also preventing premature release from brief dips.
 
-use audiocore_dsp::db::{db_to_linear, linear_to_db};
-use audiocore_dsp::envelope::EnvelopeFollower;
+use dsp_core::audio::db::{db_to_linear, linear_to_db};
+use dsp_core::audio::envelope::EnvelopeFollower;
 
 use crate::spectral_flux::{DEFAULT_FFT_SIZE, DEFAULT_HOP_SIZE, FluxMode, SpectralFluxDetector};
 

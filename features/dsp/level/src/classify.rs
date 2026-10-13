@@ -17,7 +17,7 @@
 //! tables are allocated once in [`Classifier::new`]; `analyze_block` performs no
 //! allocation, so the classifier is reusable on the realtime path.
 
-use audiocore_dsp::db::linear_to_db;
+use dsp_core::audio::db::linear_to_db;
 
 /// Feature-extraction configuration. Defaults mirror the reference macro.
 #[derive(Clone, Copy, Debug)]

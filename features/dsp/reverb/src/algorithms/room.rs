@@ -399,7 +399,7 @@ impl ReverbAlgorithm for Room {
         late_r = self.hf_damp_r.tick(late_r);
 
         // Stereo width control (mono-to-stereo blend on late reverb)
-        (late_l, late_r) = audiocore_dsp::stereo::width(late_l, late_r, self.width);
+        (late_l, late_r) = dsp_core::audio::stereo::width(late_l, late_r, self.width);
 
         // Tone filter
         late_l = self.tone_lp_l.tick(late_l) * self.late_level;

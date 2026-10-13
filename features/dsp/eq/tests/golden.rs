@@ -21,11 +21,13 @@
 //! ones that break in a rewrite are never the ones anybody thought to spot
 //! check.
 
-use dsp_golden::{Golden, golden, signal};
+use dsp_core::golden::{Golden, signal};
+
+use dsp_core::golden;
 use eq::engine::{BandConfig, BandDynamics, FtsEq};
 use eq::runtime::band::Placement;
 
-dsp_golden::install_counting_allocator!();
+dsp_core::install_counting_allocator!();
 
 const SR: f64 = 48_000.0;
 const GENERATOR_RATE: f32 = 48_000.0;
@@ -116,7 +118,7 @@ fn every_shape_holds_its_impulse_response() {
         let mut eq = prepared();
         eq.set_band(0, band(shape, 6.0, 2.0));
         let out = render(&mut eq, &left, &right);
-        dsp_golden::assert_golden!(g, &format!("impulse_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("impulse_{name}"), &out);
     }
 }
 
@@ -136,7 +138,7 @@ fn every_shape_holds_its_magnitude_curve() {
                 eq.static_magnitude_db(20.0 * 1000.0_f64.powf(t))
             })
             .collect();
-        dsp_golden::assert_golden!(g, &format!("magnitude_{name}"), &curve);
+        dsp_core::assert_golden!(g, &format!("magnitude_{name}"), &curve);
     }
 }
 
@@ -153,7 +155,7 @@ fn the_continuous_slope_ladder_holds_its_reference() {
         eq.set_band(0, band(3, 0.0, slope)); // low cut
         let out = render(&mut eq, &left, &right);
         let tag = (slope * 100.0).round();
-        dsp_golden::assert_golden!(g, &format!("slope_{tag:.0}"), &out);
+        dsp_core::assert_golden!(g, &format!("slope_{tag:.0}"), &out);
     }
 }
 
@@ -176,7 +178,7 @@ fn every_placement_holds_its_reference() {
         cfg.placement = placement;
         eq.set_band(0, cfg);
         let out = render(&mut eq, &left, &right);
-        dsp_golden::assert_golden!(g, &format!("placement_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("placement_{name}"), &out);
     }
 }
 
@@ -206,7 +208,7 @@ fn a_full_multiband_curve_holds_its_reference() {
         eq.set_band(i, cfg);
     }
     let out = render(&mut eq, &left, &right);
-    dsp_golden::assert_golden!(g, "multiband_eight", &out);
+    dsp_core::assert_golden!(g, "multiband_eight", &out);
 }
 
 #[test]
@@ -235,7 +237,7 @@ fn the_dynamic_bands_hold_their_reference() {
         };
         eq.set_band_dynamics(0, dyn_cfg);
         let out = render(&mut eq, &left, &right);
-        dsp_golden::assert_golden!(g, &format!("dynamics_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("dynamics_{name}"), &out);
     }
 }
 
@@ -392,5 +394,5 @@ fn processing_allocates_nothing() {
 
     // Warm up outside the guard: `prepare` and the first block may size buffers.
     eq.process(&mut left, &mut right);
-    dsp_golden::assert_no_alloc(|| eq.process(&mut left, &mut right));
+    dsp_core::golden::assert_no_alloc(|| eq.process(&mut left, &mut right));
 }

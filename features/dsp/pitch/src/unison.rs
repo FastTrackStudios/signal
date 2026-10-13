@@ -12,7 +12,7 @@
 //! doubler; more voices thicken toward ensemble.
 
 use crate::chain::{Algorithm, PitchChain};
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 
 pub const MAX_VOICES: usize = 8;
 /// Per-voice decorrelation delay ceiling (ms) — sized into the rings.

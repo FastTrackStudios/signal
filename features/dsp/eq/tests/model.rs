@@ -1,7 +1,7 @@
 use eq::hardware::hardware_eq::PultecEqp1aSettings;
 use eq::model::{Coloration, ColorationPlacement, PreparedModel};
 use eq::{Error, ProcessSpec};
-dsp_golden::install_counting_allocator!();
+dsp_core::install_counting_allocator!();
 
 #[test]
 fn pultec_prepares_interacting_controls_and_rejects_invalid_settings() {
@@ -41,7 +41,7 @@ fn pultec_prepares_interacting_controls_and_rejects_invalid_settings() {
     let mut unit = prepared.processor();
     let mut left = [0.25; 512];
     let mut right = [0.0; 512];
-    dsp_golden::assert_no_alloc(|| {
+    dsp_core::golden::assert_no_alloc(|| {
         unit.process_stereo(&mut left, &mut right).unwrap();
         unit.reset();
     });
@@ -196,7 +196,7 @@ fn hardware_host_matches_prepared_pultec_and_updates_without_allocation() {
     for (l, r) in left.into_iter().zip(right) {
         assert_eq!([l, r], direct.process_frame([0.5, 0.0]));
     }
-    dsp_golden::assert_no_alloc(|| {
+    dsp_core::golden::assert_no_alloc(|| {
         let next = PultecEqp1aSettings {
             low_boost_db: 12.0,
             trim_db: -3.0,
@@ -264,7 +264,7 @@ fn hardware_updates_preserve_valid_configuration_and_history() {
         let mut right = [-0.25; 512];
         let mut expected_left = left;
         let mut expected_right = right;
-        dsp_golden::assert_no_alloc(|| {
+        dsp_core::golden::assert_no_alloc(|| {
             host.set_settings(settings);
             host.process(&mut left, &mut right);
         });

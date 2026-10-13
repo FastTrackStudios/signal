@@ -13,7 +13,7 @@
 //! Latency: **0 samples** — output is produced immediately.
 //! Character: Classic hardware pitch shifter (Eventide H3000, Boss PS-series).
 
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::delay_line::DelayLine;
 use std::f64::consts::PI;
 
 const BUFFER_SIZE: usize = 8192;

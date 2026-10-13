@@ -13,7 +13,7 @@
     reason = "pending the DSP algorithm rewrite"
 )]
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use trigger::chain::TriggerChain;
 use trigger::detector::{DetectAlgorithm, DetectMode, TriggerDetector};
 use trigger::sampler::{MixMode, Sample, Sampler, VelocityLayer};

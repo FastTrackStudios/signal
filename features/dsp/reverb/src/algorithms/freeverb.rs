@@ -15,8 +15,8 @@
 use dsp_core::num;
 
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::denormal::flush;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::denormal::flush;
 
 const STEREO_SPREAD: usize = 23;
 

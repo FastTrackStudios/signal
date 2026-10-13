@@ -19,10 +19,10 @@
 use crate::bbd_core::{BbdCore, StageShaper};
 use crate::modulation::CompanderEnv;
 use crate::tilt::DecayTilt;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::denormal::flush;
-use audiocore_dsp::prng::XorShift32;
-use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::denormal::flush;
+use dsp_core::audio::prng::XorShift32;
+use dsp_core::audio::smoothing::ParamSmoother;
 use dsp_core::num;
 
 /// dBucket voice (`TimeLine` MX).
@@ -144,7 +144,7 @@ pub struct BbdDelay {
     thd_a: f64,
     thd_b: f64,
     /// DC blocker after the x² term of the THD polynomial.
-    thd_dc: audiocore_dsp::dc_blocker::DcBlocker,
+    thd_dc: dsp_core::audio::dc_blocker::DcBlocker,
 }
 
 impl Default for BbdDelay {
@@ -182,7 +182,7 @@ impl BbdDelay {
             exp_env: CompanderEnv::new(),
             thd_a: 0.125,
             thd_b: 1.0 / 18.0,
-            thd_dc: audiocore_dsp::dc_blocker::DcBlocker::new(),
+            thd_dc: dsp_core::audio::dc_blocker::DcBlocker::new(),
         }
     }
 

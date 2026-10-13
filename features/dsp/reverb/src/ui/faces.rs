@@ -17,7 +17,7 @@ use dioxus::prelude::*;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use musical_time_ui::{NotePicker, TimeModeSwitch};
+use dsp_core::time::ui::{NotePicker, TimeModeSwitch};
 
 /// Panel drawing size — 2U, like the compressor's faces.
 pub const W: f64 = 960.0;
@@ -600,7 +600,7 @@ pub fn SpaceFace(
                                 // number it still holds would state a time
                                 // the reverb is not using.
                                 text: if synced && spec.param == "predelay" {
-                                    musical_time_ui::format_ms(resolved_ms)
+                                    dsp_core::time::ui::format_ms(resolved_ms)
                                 } else {
                                     handle.display_value()
                                 },

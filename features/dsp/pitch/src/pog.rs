@@ -15,7 +15,7 @@
 
 use std::f64::consts::TAU;
 
-use audiocore_dsp::biquad::{Biquad, FilterType};
+use dsp_core::audio::biquad::{Biquad, FilterType};
 
 /// Number of bandpass filter bands.
 const NUM_BANDS: usize = 64;

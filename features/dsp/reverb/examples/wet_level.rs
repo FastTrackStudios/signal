@@ -7,7 +7,7 @@
 //! `cargo run --release -p reverb-dsp --example wet_level`, and copy the
 //! printed constants into `AlgorithmType::wet_calibration_db`.
 
-use audiocore_dsp::Processor as _;
+use dsp_core::audio::Processor as _;
 use reverb::AlgorithmType;
 use reverb::chain::ReverbChain;
 
@@ -15,7 +15,7 @@ const SR: f64 = 48_000.0;
 const REFERENCE_T60: f64 = 2.0;
 
 fn energy(algo: AlgorithmType) -> f64 {
-    let config = audiocore_dsp::AudioConfig {
+    let config = dsp_core::audio::AudioConfig {
         sample_rate: SR,
         max_buffer_size: 512,
     };

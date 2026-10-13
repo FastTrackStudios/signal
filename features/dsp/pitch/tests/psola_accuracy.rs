@@ -1,6 +1,6 @@
 //! PSOLA cents-accuracy regression (the 452→469 Hz recenter bug).
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 
 const SR: f64 = 48000.0;
 

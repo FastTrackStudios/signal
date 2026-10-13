@@ -29,9 +29,9 @@ use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, ShimmerFeedbackMode, Sh
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::one_pole::Lp1;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::one_pole::OnePoleHp;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::one_pole::OnePoleHp;
 use pitch::spectral::SpectralShifter;
 
 pub struct Shimmer {

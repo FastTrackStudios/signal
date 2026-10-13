@@ -353,7 +353,7 @@ impl ReverbAlgorithm for RoomStudio {
         late_r -= bass_r * 0.3;
 
         // Stereo width
-        (late_l, late_r) = audiocore_dsp::stereo::width(late_l, late_r, self.width);
+        (late_l, late_r) = dsp_core::audio::stereo::width(late_l, late_r, self.width);
 
         // Tone
         late_l = self.tone_lp_l.tick(late_l) * self.late_level;

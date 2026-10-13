@@ -5,10 +5,10 @@
 
 use dsp_core::num;
 
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::denormal::flush;
-use audiocore_dsp::prng::XorShift32;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::denormal::flush;
+use dsp_core::audio::prng::XorShift32;
 
 use super::householder;
 use super::one_pole::Lp1;
@@ -39,7 +39,7 @@ struct Line {
     shelf_g: f64,
     shelf_p: f64,
     shelf_state: f64,
-    decay_eq: [audiocore_dsp::biquad::Biquad; crate::algorithm::DECAY_BANDS],
+    decay_eq: [dsp_core::audio::biquad::Biquad; crate::algorithm::DECAY_BANDS],
     /// Length of this line's in-loop allpass, when one is fitted.
     loop_ap_len: usize,
     eq_low_lp: Lp1,
@@ -62,7 +62,7 @@ impl Line {
             shelf_g: 0.0,
             shelf_p: 0.0,
             shelf_state: 0.0,
-            decay_eq: core::array::from_fn(|_| audiocore_dsp::biquad::Biquad::new()),
+            decay_eq: core::array::from_fn(|_| dsp_core::audio::biquad::Biquad::new()),
             loop_ap_len: 0,
             eq_low_lp: Lp1::new(),
             eq_high_lp: Lp1::new(),
@@ -320,7 +320,7 @@ impl Fdn {
         sample_rate: f64,
     ) {
         const PROBE_POINTS: usize = 48;
-        use audiocore_dsp::biquad::FilterType;
+        use dsp_core::audio::biquad::FilterType;
         let any = bands.iter().any(crate::algorithm::DecayBand::is_active);
         self.active.decay_eq = any;
         if !any {

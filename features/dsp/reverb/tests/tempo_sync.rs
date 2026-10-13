@@ -7,7 +7,7 @@
 
 #![cfg(feature = "native")]
 
-use musical_time::{Flavour, MusicalTime, NoteValue};
+use dsp_core::time::{Flavour, MusicalTime, NoteValue};
 use nice_plug::prelude::Param;
 use reverb::ui::params::{MAX_PREDELAY_MS, ReverbParams};
 

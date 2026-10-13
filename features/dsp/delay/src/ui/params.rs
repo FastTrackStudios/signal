@@ -158,12 +158,12 @@ impl Default for DelayParams {
             // Off by default: a delay that silently re-times itself the
             // moment it is dropped on a track is a surprise, and the
             // free-running default below is already musical.
-            time_sync: musical_time::params::sync_param("Time Sync", false),
+            time_sync: dsp_core::time::params::sync_param("Time Sync", false),
             // 1/8D — which at 120 BPM is exactly the 375 ms default above,
             // so switching to Sync on a 120 BPM session changes nothing and
             // the control reads as the same delay in the other language.
-            div_l: musical_time::params::division_param("Time L Div", DEFAULT_DIV),
-            div_r: musical_time::params::division_param("Time R Div", DEFAULT_DIV),
+            div_l: dsp_core::time::params::division_param("Time L Div", DEFAULT_DIV),
+            div_r: dsp_core::time::params::division_param("Time R Div", DEFAULT_DIV),
 
             link: BoolParam::new("Link", true),
 
@@ -239,9 +239,9 @@ pub const MAX_TIME_MS: f64 = 4000.0;
 /// A dotted eighth: the delay behind most of the guitar parts anyone has
 /// wanted to copy, and at 120 BPM it is 375 ms — the same as the free-running
 /// default, so the two modes agree out of the box.
-pub const DEFAULT_DIV: musical_time::MusicalTime = musical_time::MusicalTime::new(
-    musical_time::NoteValue::Eighth,
-    musical_time::Flavour::Dotted,
+pub const DEFAULT_DIV: dsp_core::time::MusicalTime = dsp_core::time::MusicalTime::new(
+    dsp_core::time::NoteValue::Eighth,
+    dsp_core::time::Flavour::Dotted,
 );
 
 impl DelayParams {
@@ -269,15 +269,15 @@ impl DelayParams {
             .resolve_ms_clamped(tempo, MIN_TIME_MS, MAX_TIME_MS)
     }
 
-    fn synced_time(&self, free_ms: f32, div: i32) -> musical_time::SyncedTime {
-        musical_time::SyncedTime {
+    fn synced_time(&self, free_ms: f32, div: i32) -> dsp_core::time::SyncedTime {
+        dsp_core::time::SyncedTime {
             mode: if self.time_sync.value() {
-                musical_time::TimeMode::Synced
+                dsp_core::time::TimeMode::Synced
             } else {
-                musical_time::TimeMode::Free
+                dsp_core::time::TimeMode::Free
             },
             free_ms: f64::from(free_ms),
-            division: musical_time::MusicalTime::from_param(div),
+            division: dsp_core::time::MusicalTime::from_param(div),
         }
     }
 

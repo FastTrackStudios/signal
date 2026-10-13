@@ -13,7 +13,7 @@
 //! Uses 2nd-order Linkwitz-Riley crossover filters for flat summed
 //! response at crossover frequencies.
 
-use audiocore_dsp::AudioConfig;
+use dsp_core::audio::AudioConfig;
 use eq::{CutSlope, Filter, FilterProcessor};
 
 use crate::spectral_flux::{FluxMode, SpectralFluxDetector};

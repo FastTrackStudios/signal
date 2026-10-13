@@ -11,7 +11,7 @@
 //! against the time it is held to when the engine cannot reach it there.
 //! Arguments: `--size 0.5` for one size only, `--only room` for one engine.
 
-use audiocore_dsp::Processor as _;
+use dsp_core::audio::Processor as _;
 use reverb::chain::ReverbChain;
 use reverb::AlgorithmType;
 
@@ -40,7 +40,7 @@ fn measured(algorithm: AlgorithmType, variant: usize, size: f64, seconds: f64) -
             }
         }
     }
-    c.update(audiocore_dsp::AudioConfig {
+    c.update(dsp_core::audio::AudioConfig {
         sample_rate: SR,
         max_buffer_size: 512,
     });

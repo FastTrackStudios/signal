@@ -6,7 +6,7 @@
 //! smoothed per sample, so a knob turned while playing never steps the delay
 //! (a stepped delay is a click on anything with top end).
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 
 use crate::chorus::classic::Classic;
 use crate::chorus::dsp::Smooth;

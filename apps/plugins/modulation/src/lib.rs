@@ -22,7 +22,7 @@ use audiocore_core::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use modulation::chorus::chain::ChorusChain;
 use modulation::trem::chain::TremChain;
 use modulation::wah::chain::WahChain;

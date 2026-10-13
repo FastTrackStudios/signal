@@ -2,7 +2,7 @@
 //! style MSEG), cycled by tempo or free rate.
 //!
 //! The point list is a serde/Facet-friendly mirror of
-//! `fts_modulation::pattern::Point`; [`PatternConfig::build_pattern`]
+//! `dsp_core::modulation::pattern::Point`; [`PatternConfig::build_pattern`]
 //! converts it into the DSP engine's `Pattern` for evaluation.
 
 use facet::Facet;
@@ -12,7 +12,7 @@ use super::lfo::{RetriggerMode, TempoDiv};
 
 /// One breakpoint of a drawn pattern. `x`/`y` are normalized 0..1.
 ///
-/// `curve_type` indexes [`fts_modulation::CurveType`] (0 = Hold, 1 = Curve,
+/// `curve_type` indexes [`dsp_core::modulation::CurveType`] (0 = Hold, 1 = Curve,
 /// 2 = `SCurve`, 3 = `HalfSine`, 4 = Pulse, 5 = Wave, 6 = Triangle,
 /// 7 = Stairs, 8 = `SmoothStairs`); `tension` bends the segment leaving
 /// this point (−1..1).
@@ -94,15 +94,15 @@ impl Default for PatternConfig {
 impl PatternConfig {
     /// Convert the point list into the DSP engine's evaluator.
     #[must_use]
-    pub fn build_pattern(&self) -> fts_modulation::Pattern {
-        let mut pattern = fts_modulation::Pattern::new();
+    pub fn build_pattern(&self) -> dsp_core::modulation::Pattern {
+        let mut pattern = dsp_core::modulation::Pattern::new();
         pattern.set_points(
             self.points
                 .iter()
                 .map(|p| {
-                    let mut point = fts_modulation::Point::new(f64::from(p.x), f64::from(p.y));
+                    let mut point = dsp_core::modulation::Point::new(f64::from(p.x), f64::from(p.y));
                     point.tension = f64::from(p.tension);
-                    point.curve_type = fts_modulation::CurveType::from_u8(p.curve_type);
+                    point.curve_type = dsp_core::modulation::CurveType::from_u8(p.curve_type);
                     point.clear_tails = p.clear_tails;
                     point
                 })

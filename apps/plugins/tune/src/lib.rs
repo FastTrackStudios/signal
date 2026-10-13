@@ -21,7 +21,7 @@
 use nice_plug::prelude::*;
 use std::sync::Arc;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use tune::shifter::chain::{Algorithm, PitchChain};
 use tune::{Scale, YinConfig, YinDetector, hz_to_midi};
 

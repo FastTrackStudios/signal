@@ -4,8 +4,8 @@
 //! Signal flow: input + feedback → `ModulatedDelay` → [`AllpassDiffuser`]
 //! → [Biquad `LowShelf`] → [Biquad `HighShelf`] → [Lp1 Cutoff] → feedback buffer → output.
 
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::denormal::flush;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::denormal::flush;
 
 use super::allpass_diffuser::AllpassDiffuser;
 use super::biquad::{Biquad, FilterType};

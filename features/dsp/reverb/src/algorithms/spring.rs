@@ -27,8 +27,8 @@ use dsp_core::num;
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm, SpringDwell, SpringParams};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::delay_line::DelayLine;
 
 use std::f64::consts::PI;
 
@@ -43,7 +43,7 @@ struct SpringUnit {
     damp: Lp1,
     /// Chirp EQ: low-mid resonance (~183 Hz, BW ~146 Hz per the
     /// DAFx-11 measured model) emphasizing the chirp body.
-    chirp_eq: audiocore_dsp::biquad::Biquad,
+    chirp_eq: dsp_core::audio::biquad::Biquad,
     /// DC blocker to prevent DC buildup in feedback loop.
     dc_blocker: DcBlocker,
     /// Feedback loop gain.
@@ -82,9 +82,9 @@ impl SpringUnit {
 
         let mut damp = Lp1::new();
         damp.set_freq(damp_freq, sample_rate);
-        let mut chirp_eq = audiocore_dsp::biquad::Biquad::new();
+        let mut chirp_eq = dsp_core::audio::biquad::Biquad::new();
         chirp_eq.set(
-            audiocore_dsp::biquad::FilterType::Peak { gain_db: 4.5 },
+            dsp_core::audio::biquad::FilterType::Peak { gain_db: 4.5 },
             183.0,
             183.0 / 146.0, // Q from the measured bandwidth
             sample_rate,

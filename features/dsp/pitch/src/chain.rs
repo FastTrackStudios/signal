@@ -4,7 +4,7 @@
 //! with runtime algorithm switching. Pitch is controlled via a semitone
 //! slider (−24 to +24).
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use serde::{Deserialize, Serialize};
 
 use crate::allpass_shift::AllpassShifter;

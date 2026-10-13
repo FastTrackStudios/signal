@@ -21,8 +21,8 @@ use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::one_pole::Lp1;
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::delay_line::DelayLine;
 
 /// Lexicon 224-style plate.
 /// One recirculating loop: a nested modulated-allpass pair with a delay

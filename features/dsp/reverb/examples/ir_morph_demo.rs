@@ -10,7 +10,7 @@
 
 use std::process::ExitCode;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use dsp_core::num;
 use reverb::algorithm::{AlgorithmType, IrSlot};
 use reverb::chain::ReverbChain;

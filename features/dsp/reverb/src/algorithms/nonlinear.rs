@@ -8,7 +8,7 @@ use dsp_core::num;
 use crate::algorithm::{AlgorithmParams, NlShape, NonLinearParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::delay_line::DelayLine;
 
 /// How much of unity the regeneration loop is allowed to reach.
 ///

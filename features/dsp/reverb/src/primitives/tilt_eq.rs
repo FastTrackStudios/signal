@@ -1,11 +1,11 @@
 //! Tilt EQ — single control rotates spectrum around a pivot frequency.
 //!
 //! Implemented as complementary RBJ low/high shelves (Q = 0.707) from the
-//! shared `audiocore_dsp::Biquad`: negative tilt darkens (boost lows, cut
+//! shared `dsp_core::audio::Biquad`: negative tilt darkens (boost lows, cut
 //! highs), positive brightens. Each shelf carries half the tilt so the
 //! response pivots symmetrically around `pivot_hz`.
 
-use audiocore_dsp::biquad::{Biquad, FilterType};
+use dsp_core::audio::biquad::{Biquad, FilterType};
 
 const SHELF_Q: f64 = 0.707;
 

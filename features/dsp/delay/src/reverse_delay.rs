@@ -14,8 +14,8 @@
 
 use crate::modulation::Diffuser;
 use crate::tilt::DecayTilt;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::delay_line::DelayLine;
 use dsp_core::num;
 
 /// Reverse delay using onset-synced alternating reversed grains.

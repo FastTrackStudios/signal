@@ -20,7 +20,7 @@ daw-proto = { workspace = true }
 # signal-plugin-host turned on to re-export these types.
 daw = { workspace = true, features = ["standalone"] }
 pitch = { workspace = true }
-audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true }
 # FX facades (never the -dsp crates directly).
 eq = { workspace = true }
 comp = { workspace = true }

@@ -87,7 +87,7 @@ expression-editor-core = { workspace = true }
 expression-editor-paint = { workspace = true }
 expression-editor-daw = { workspace = true }
 # BS.1770 K-weighting: gain staging sets the drum kit by its short-term loudness.
-audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true }
 
 # The Tone rack's response math — the plugins' own, not a copy. See the
 # `signal` block in the root manifest for why these are core-only.

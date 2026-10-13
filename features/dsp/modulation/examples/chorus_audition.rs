@@ -15,7 +15,7 @@
     reason = "measurement tool"
 )]
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use modulation::chorus::chain::ChorusChain;
 use modulation::chorus::engine::{EffectType, EngineType};
 use std::io::{Read, Write};

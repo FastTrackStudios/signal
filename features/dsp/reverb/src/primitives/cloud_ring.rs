@@ -35,8 +35,8 @@
 use dsp_core::num;
 
 use super::one_pole::Lp1;
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::denormal::flush;
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::denormal::flush;
 
 /// The tank's allpass stages in series, `(delay ms, gain re Diffusion's)`
 /// each: A, B, C, B, B.

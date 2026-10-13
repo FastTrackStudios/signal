@@ -22,7 +22,7 @@
 //! Swept across the knobs that close feedback loops — decay, and the
 //! PRE-DELAY-as-feedback remap that Magneto and `NonLinear` share.
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use dsp_core::num;
 use reverb::AlgorithmType;
 use reverb::chain::ReverbChain;

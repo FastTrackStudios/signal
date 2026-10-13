@@ -228,13 +228,13 @@ impl CompressionBand {
             gr_instant,
             self.gain_curve.attack_coeff,
             self.gain_curve.release_coeff,
-            // `audiocore_dsp::Biquad::tick` still takes a raw index, so the
+            // `dsp_core::audio::Biquad::tick` still takes a raw index, so the
             // usize stays the boundary here and only our own state is typed.
             Channel::new(channel.min(crate::CHANNELS - 1)),
         );
 
         // Track for metering
-        self.last_gr_db = audiocore_dsp::db::linear_to_db(gr_smoothed).max(0.0);
+        self.last_gr_db = dsp_core::audio::db::linear_to_db(gr_smoothed).max(0.0);
 
         // Step 9: Apply compression to band-specific audio (returns compressed band)
         band_audio * gr_smoothed

@@ -10,7 +10,7 @@ description = "Levelling: gain riding and loudness"
 workspace = true
 
 [dependencies]
-audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true }
 
 [dev-dependencies]
 hound = { version = "3.5" }

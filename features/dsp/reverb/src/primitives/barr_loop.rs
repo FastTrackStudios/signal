@@ -15,7 +15,7 @@
 use dsp_core::num;
 
 use super::one_pole::Lp1;
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::delay_line::DelayLine;
 
 /// One section's lengths at 32768 Hz (the FV-1-era base rate),
 /// rescaled to the host rate. `SECTION_LEN_32K` and `AP_LEN_32K`, two

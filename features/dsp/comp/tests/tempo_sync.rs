@@ -9,7 +9,7 @@
 #![cfg(feature = "native")]
 
 use comp::ui::params::{CompParams, MAX_RELEASE_MS, MIN_ATTACK_MS};
-use musical_time::{Flavour, MusicalTime, NoteValue};
+use dsp_core::time::{Flavour, MusicalTime, NoteValue};
 use nice_plug::prelude::Param;
 
 /// A tolerance with a unit. A value dialled into a skewed range makes a round

@@ -27,7 +27,7 @@ audiocore-core = { workspace = true }
 # The shared DSP contract: `DelayChain` implements
 # `audiocore_dsp::Processor` and is driven via `AudioConfig`, and the
 # facade does not re-export those items — the trait must be in scope here.
-audiocore-dsp.workspace = true
+dsp-core = { workspace = true }
 
 [features]
 default = []

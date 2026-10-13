@@ -7,7 +7,7 @@
 //! intact while taming "ess"/"sh" energy — the standard split-band de-ess
 //! topology. Alloc-free; per-channel state.
 
-use audiocore_dsp::db::{db_to_linear, linear_to_db};
+use dsp_core::audio::db::{db_to_linear, linear_to_db};
 
 use crate::filter::Biquad;
 

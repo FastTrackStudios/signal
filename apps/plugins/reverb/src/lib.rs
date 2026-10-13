@@ -19,7 +19,7 @@ use audiocore_core::prelude::*;
 use reverb::ui::params::{ReverbParams, ReverbUiState};
 use std::sync::Arc;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use reverb::ReverbChain;
 
 const PLUGIN_NAME: &str = "FTS Reverb";

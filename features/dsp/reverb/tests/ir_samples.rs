@@ -13,7 +13,7 @@
 
 use std::path::PathBuf;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use dsp_core::num;
 use reverb::ir::asset::IrAsset;
 use reverb::ir::engine::IrEngine;

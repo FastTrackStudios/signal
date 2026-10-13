@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use delay::ui::params::{DelayParams, DelayUiState};
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use delay::DelayChain;
 
 const PLUGIN_NAME: &str = "FTS Delay";

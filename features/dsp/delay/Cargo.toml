@@ -10,26 +10,23 @@ description = "The delay: its machines, their profiles and its editor"
 workspace = true
 
 [features]
-native = ["dep:architect-ui", "dep:atomic_float", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "musical-time/params"]
+native = ["dep:architect-ui", "dep:atomic_float", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "dsp-core/params"]
 profiles = []
-ui = ["dep:crossbeam-channel", "dep:dioxus", "dep:fts-audio-ui", "dep:musical-time", "dep:musical-time-ui", "dep:web-time"]
+ui = ["dep:crossbeam-channel", "dep:dioxus", "dep:fts-audio-ui", "dsp-core/time-ui", "dep:web-time"]
 viz = ["dep:anyrender", "dep:blitz-dom", "dep:bytemuck", "dep:dioxus-native-dom", "dep:vello", "fts-audio-ui/shader"]
 
 [dependencies]
 anyrender = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
-audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true, features = ["time-ui"] }
 blitz-dom = { workspace = true, features = ["custom-widget"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 crossbeam-channel = { workspace = true, optional = true }
 dioxus = { workspace = true, optional = true }
 dioxus-native-dom = { workspace = true, optional = true }
-dsp-core = { workspace = true }
 fts-audio-ui = { workspace = true, optional = true }
 fts-plug-ui = { workspace = true, optional = true }
-musical-time = { workspace = true, optional = true }
-musical-time-ui = { workspace = true, optional = true }
 nice-plug = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
@@ -41,7 +38,7 @@ web-time = { workspace = true, optional = true }
 bytemuck = { version = "1", features = ["derive"] }
 dioxus = { workspace = true }
 dioxus-test = { workspace = true }
-dsp-golden = { workspace = true }
+dsp-core = { workspace = true, features = ["golden"] }
 fts-audio-ui = { workspace = true, features = ["probe"] }
 naga = { version = "29", features = ["wgsl-in"] }
 png = { version = "0.18" }

@@ -1,9 +1,9 @@
 //! Pattern-lane behavior on the reverb chain (fts-modulation lanes).
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use dsp_core::num;
-use fts_modulation::curves::CurveType;
-use fts_modulation::{Modulator, Point};
+use dsp_core::modulation::curves::CurveType;
+use dsp_core::modulation::{Modulator, Point};
 use reverb::{AlgorithmType, ReverbChain};
 
 const SR: f64 = 48000.0;

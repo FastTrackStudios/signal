@@ -9,10 +9,12 @@
 //!
 //! If one of these files changes, the audio changed. That is the whole point.
 
-use dsp_golden::{Golden, golden, signal};
+use dsp_core::golden::{Golden, signal};
+
+use dsp_core::golden;
 use saturate::{SaturationCurve, Saturator};
 
-dsp_golden::install_counting_allocator!();
+dsp_core::install_counting_allocator!();
 
 const SAMPLE_RATE: f32 = 48_000.0;
 const LEN: usize = 4096;
@@ -41,7 +43,7 @@ fn every_curve_holds_its_reference_across_the_drive_range() {
         for drive in [0.0_f32, 0.25, 0.5, 1.0] {
             let out = render(curve, drive, 1.0, 0.0, &sweep);
             let drive_tag = (drive * 100.0).round();
-            dsp_golden::assert_golden!(g, &format!("sweep_{name}_drive{drive_tag:.0}"), &out);
+            dsp_core::assert_golden!(g, &format!("sweep_{name}_drive{drive_tag:.0}"), &out);
         }
     }
 }
@@ -53,11 +55,11 @@ fn the_transfer_curve_itself_is_pinned() {
     // sampled directly, rather than its response to a signal. This is where a
     // tube curve's asymmetry lives.
     let steps: Vec<f32> = (0..LEN)
-        .map(|n| dsp_golden::num::count_to_f32(n).mul_add(4.0 / 4096.0, -2.0))
+        .map(|n| dsp_core::golden::num::count_to_f32(n).mul_add(4.0 / 4096.0, -2.0))
         .collect();
     for (name, curve) in CURVES {
         let out = render(curve, 0.75, 1.0, 0.0, &steps);
-        dsp_golden::assert_golden!(g, &format!("transfer_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("transfer_{name}"), &out);
     }
 }
 
@@ -69,7 +71,7 @@ fn mix_and_output_trim_hold_their_references() {
         for db in [-12.0_f32, 0.0, 6.0] {
             let out = render(SaturationCurve::Tube, 0.9, mix, db, &noise);
             let mix_tag = (mix * 100.0).round();
-            dsp_golden::assert_golden!(g, &format!("mix{mix_tag:.0}_out{db:+.0}db"), &out);
+            dsp_core::assert_golden!(g, &format!("mix{mix_tag:.0}_out{db:+.0}db"), &out);
         }
     }
 }
@@ -100,7 +102,7 @@ fn processing_allocates_nothing() {
         *dst = sat.process(*src);
     }
 
-    dsp_golden::assert_no_alloc(|| {
+    dsp_core::golden::assert_no_alloc(|| {
         for (dst, src) in output.iter_mut().zip(&input) {
             *dst = sat.process(*src);
         }
@@ -159,7 +161,7 @@ fn every_preamp_shaper_holds_its_reference_in_stereo() {
             out.push(pre.process(0, *left));
             out.push(pre.process(1, *right));
         }
-        dsp_golden::assert_golden!(g, &format!("preamp_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("preamp_{name}"), &out);
     }
 }
 
@@ -168,9 +170,9 @@ fn the_preamps_static_transfer_is_pinned_per_shaper() {
     let g: Golden = golden!();
     for (name, shaper) in SHAPERS {
         let out: Vec<f32> = (0..LEN)
-            .map(|n| shaper.shape(dsp_golden::num::count_to_f32(n).mul_add(8.0 / 4096.0, -4.0)))
+            .map(|n| shaper.shape(dsp_core::golden::num::count_to_f32(n).mul_add(8.0 / 4096.0, -4.0)))
             .collect();
-        dsp_golden::assert_golden!(g, &format!("shaper_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("shaper_{name}"), &out);
     }
 }
 
@@ -184,7 +186,7 @@ fn the_emphasis_pair_holds_its_reference_and_stays_invertible() {
         band.shape = EmphShape::from_index(u32::try_from(i % 3).unwrap_or(0));
         band.freq_hz = 80.0 * 2.0_f32.powi(i32::try_from(i).unwrap_or(0));
         band.gain_db = if i % 2 == 0 { 6.0 } else { -4.5 };
-        band.q = 0.3f32.mul_add(dsp_golden::num::count_to_f32(i), 0.7);
+        band.q = 0.3f32.mul_add(dsp_core::golden::num::count_to_f32(i), 0.7);
     }
 
     let mut eq = EmphasisEq::new(SAMPLE_RATE);
@@ -192,10 +194,10 @@ fn the_emphasis_pair_holds_its_reference_and_stays_invertible() {
     let input = signal::log_sweep(LEN, 20.0, 20_000.0, SAMPLE_RATE);
 
     let pre: Vec<f32> = input.iter().map(|x| eq.pre(*x)).collect();
-    dsp_golden::assert_golden!(g, "emphasis_pre", &pre);
+    dsp_core::assert_golden!(g, "emphasis_pre", &pre);
 
     let round_trip: Vec<f32> = pre.iter().map(|x| eq.post(*x)).collect();
-    dsp_golden::assert_golden!(g, "emphasis_round_trip", &round_trip);
+    dsp_core::assert_golden!(g, "emphasis_round_trip", &round_trip);
 
     // The pair is designed to be 1/H(z) of itself. That is an invariant of the
     // design, not of this implementation, so it is asserted rather than pinned
@@ -232,7 +234,7 @@ fn the_digital_stage_holds_its_reference_across_word_and_rate() {
             out.push(stage.process(0, *left));
             out.push(stage.process(1, *right));
         }
-        dsp_golden::assert_golden!(
+        dsp_core::assert_golden!(
             g,
             &format!("digital_b{bits:.1}_r{rate:.1}_d{dither:.1}"),
             &out
@@ -268,6 +270,6 @@ fn the_stateful_stages_allocate_nothing_either() {
         }
     };
     run(&mut sink); // warm up outside the guard
-    dsp_golden::assert_no_alloc(|| run(&mut sink));
+    dsp_core::golden::assert_no_alloc(|| run(&mut sink));
     assert!(sink.is_finite());
 }

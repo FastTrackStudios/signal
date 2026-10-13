@@ -20,7 +20,7 @@
 
 use std::time::Instant;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use daw::plugin::{PluginEvents, PluginInstance};
 use fx_blocks::{NativeDelay, NativeReverb};
 use pitch::chain::{Algorithm, PitchChain};

@@ -46,9 +46,9 @@ impl FtsEq {
         let pan_mid_side = self.output_pan_mid_side;
         let transient_mode = self.transient_mode;
         let split_solo = self.split_solo;
-        let tg = audiocore_dsp::db::db_to_linear(self.transient_gain_db);
-        let sg = audiocore_dsp::db::db_to_linear(self.steady_gain_db);
-        let out_gain = audiocore_dsp::db::db_to_linear(
+        let tg = dsp_core::audio::db::db_to_linear(self.transient_gain_db);
+        let sg = dsp_core::audio::db::db_to_linear(self.steady_gain_db);
+        let out_gain = dsp_core::audio::db::db_to_linear(
             self.output_gain_db + self.auto_gain_db + character_gain_db(self.character),
         );
         let scratch_left = &mut self.scratch_sl;

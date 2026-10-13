@@ -1,7 +1,7 @@
 //! Cloud engine character tests: the manual's Diffusion continuum and
 //! two-segment Mod law.
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use dsp_core::num;
 use reverb::{AlgorithmType, ReverbChain};
 

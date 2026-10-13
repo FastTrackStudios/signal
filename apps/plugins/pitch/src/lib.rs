@@ -13,7 +13,7 @@ use nice_plug::prelude::*;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use pitch::chain::{Algorithm, PitchChain};
 
 const PLUGIN_NAME: &str = "FTS Pitch";

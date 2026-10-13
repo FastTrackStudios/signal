@@ -6,8 +6,8 @@
 
 use dsp_core::num;
 
-use audiocore_dsp::db::db_to_linear;
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::db::db_to_linear;
+use dsp_core::audio::delay_line::DelayLine;
 
 use super::lcg_random::random_buffer_cross_seed;
 

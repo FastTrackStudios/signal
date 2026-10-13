@@ -24,9 +24,9 @@
 use dsp_core::num;
 
 use crate::tilt::DecayTilt;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::smoothing::ParamSmoother;
 
 pub const MAX_TAPS: usize = 8;
 

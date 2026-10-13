@@ -19,9 +19,10 @@ use comp::chain::CompChain;
 use comp::multiband::MultiBandCompressor;
 use comp::styles::CompressionStyle;
 use comp::{ProC3Compressor, gain_curve::GainCurve};
-use dsp_golden::{Golden, golden, signal};
+use dsp_core::golden::{Golden, signal};
+use dsp_core::golden;
 
-dsp_golden::install_counting_allocator!();
+dsp_core::install_counting_allocator!();
 
 const SAMPLE_RATE: f64 = 48_000.0;
 /// The same rate for the generators, which work in `f32`. Spelled out rather
@@ -77,7 +78,7 @@ fn every_style_holds_its_reference_on_program_material() {
             .enumerate()
             .map(|(n, x)| comp.process(*x, n % 2))
             .collect();
-        dsp_golden::assert_golden!(g, &format!("style_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("style_{name}"), &out);
     }
 }
 
@@ -95,7 +96,7 @@ fn the_gain_reduction_trajectory_is_pinned_not_just_the_output() {
         let _ = comp.process(*x, n % 2);
         trajectory.push(comp.gain_reduction_db());
     }
-    dsp_golden::assert_golden!(g, "gain_reduction_trajectory", &trajectory);
+    dsp_core::assert_golden!(g, "gain_reduction_trajectory", &trajectory);
 }
 
 #[test]
@@ -113,7 +114,7 @@ fn the_static_gain_curve_is_pinned_per_style() {
         let out: Vec<f64> = (0..1024)
             .map(|n| curve.compute_gr(f64::from(n).mul_add(72.0 / 1024.0, -60.0)))
             .collect();
-        dsp_golden::assert_golden!(g, &format!("curve_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("curve_{name}"), &out);
     }
 }
 
@@ -137,7 +138,7 @@ fn extreme_settings_hold_their_references() {
             .enumerate()
             .map(|(n, x)| comp.process(*x, n % 2))
             .collect();
-        dsp_golden::assert_golden!(g, &format!("extreme_{name}"), &out);
+        dsp_core::assert_golden!(g, &format!("extreme_{name}"), &out);
     }
 }
 
@@ -156,7 +157,7 @@ fn the_multiband_split_holds_its_reference() {
         .enumerate()
         .map(|(n, x)| multi.process(*x, n % 2))
         .collect();
-    dsp_golden::assert_golden!(g, "multiband", &out);
+    dsp_core::assert_golden!(g, "multiband", &out);
 }
 
 #[test]
@@ -177,7 +178,7 @@ fn the_full_chain_holds_its_reference_in_stereo() {
         out.push(left);
         out.push(right);
     }
-    dsp_golden::assert_golden!(g, "chain_stereo_lookahead", &out);
+    dsp_core::assert_golden!(g, "chain_stereo_lookahead", &out);
 }
 
 #[test]
@@ -230,6 +231,6 @@ fn processing_allocates_nothing() {
         }
     };
     run(&mut sink); // warm up outside the guard
-    dsp_golden::assert_no_alloc(|| run(&mut sink));
+    dsp_core::golden::assert_no_alloc(|| run(&mut sink));
     assert!(sink.is_finite());
 }

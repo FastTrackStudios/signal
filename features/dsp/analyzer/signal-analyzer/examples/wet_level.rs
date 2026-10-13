@@ -72,7 +72,7 @@ fn report(label: &str, ir: &[f32]) {
 /// has one. `algorithms_share_one_output_level` in reverb-dsp asserts against
 /// this same construction.
 fn render_chain_t60(algo: reverb::AlgorithmType, t60: f64, frames: usize) -> Vec<f64> {
-    use audiocore_dsp::{AudioConfig, Processor};
+    use dsp_core::audio::{AudioConfig, Processor};
     let cfg = AudioConfig {
         sample_rate: SR,
         max_buffer_size: 512,

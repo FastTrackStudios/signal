@@ -22,7 +22,7 @@ nice-plug = { workspace = true, features = ["vst3"] }
 tune.workspace = true
 
 # The `Processor` trait + `AudioConfig` used to drive the pitch-shift chain.
-audiocore-dsp.workspace = true
+dsp-core = { workspace = true }
 
 [features]
 default = []

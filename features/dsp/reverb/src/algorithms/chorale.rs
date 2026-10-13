@@ -10,10 +10,10 @@ use crate::algorithm::{AlgorithmParams, ChoirVoice, ChoraleParams, ChoraleVowel,
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::one_pole::Lp1;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::grain_pitch::GrainPitchShifter;
-use audiocore_dsp::one_pole::OnePoleHp;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::grain_pitch::GrainPitchShifter;
+use dsp_core::audio::one_pole::OnePoleHp;
 
 /// One measured formant of one vowel: centre frequency, amplitude in dB
 /// relative to F1, and bandwidth. Three parallel `[[f64; 5]; 4]` tables

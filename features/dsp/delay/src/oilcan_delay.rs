@@ -18,11 +18,11 @@
 //! constant saturation, allpass regen splatter.
 
 use crate::tilt::DecayTilt;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::prng::XorShift32;
-use audiocore_dsp::smoothing::ParamSmoother;
-use audiocore_dsp::soft_clip::sin_clip;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::prng::XorShift32;
+use dsp_core::audio::smoothing::ParamSmoother;
+use dsp_core::audio::soft_clip::sin_clip;
 use dsp_core::num;
 
 /// Which pickup heads are engaged.

@@ -12,7 +12,7 @@
 //! via [`set_named`](NativeReverb::set_named), which the native-block registry
 //! in `signal-sampler` calls when constructing the block.
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use daw::plugin::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
@@ -941,11 +941,11 @@ pub const SATURATE_EQ_BASE: u32 = 200;
 /// oversampled shaping (2x default, to 8x), pre/de-emphasis tilt,
 /// LF-protected drive, RMS-matched auto gain, delta listen, and the
 /// measured harmonic readback for the visualization.
-use audiocore_dsp::biquad::{Biquad as SatBiquad, FilterType as SatFilterType};
+use dsp_core::audio::biquad::{Biquad as SatBiquad, FilterType as SatFilterType};
 
 pub struct NativeSaturate {
     pre: [saturate::preamp::ClassAPreamp; 2],
-    os: audiocore_dsp::oversampling::Oversampler,
+    os: dsp_core::audio::oversampling::Oversampler,
     emph_lo: SatBiquad,
     emph_hi: SatBiquad,
     deemph_lo: SatBiquad,
@@ -984,12 +984,12 @@ pub struct NativeSaturate {
 impl NativeSaturate {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        use audiocore_dsp::oversampling::{OversampleQuality, OversampleRate};
+        use dsp_core::audio::oversampling::{OversampleQuality, OversampleRate};
         let sr = sample_rate.max(1.0);
         let mk = || saturate::preamp::ClassAPreamp::new(sr as f32);
         let mut sat = Self {
             pre: [mk(), mk()],
-            os: audiocore_dsp::oversampling::Oversampler::new(
+            os: dsp_core::audio::oversampling::Oversampler::new(
                 OversampleRate::X2,
                 OversampleQuality::Medium,
             ),
@@ -1089,7 +1089,7 @@ impl NativeSaturate {
     }
 
     fn set(&mut self, id: u32, v: f64) {
-        use audiocore_dsp::oversampling::OversampleRate;
+        use dsp_core::audio::oversampling::OversampleRate;
         match id {
             0 => {
                 let g = 10.0f32.powf((v.clamp(0.0, 36.0) as f32) / 20.0);
@@ -1135,7 +1135,7 @@ impl NativeSaturate {
             }
             7 => self.auto_gain = v >= 0.5,
             8 => self.mix = v.clamp(0.0, 1.0),
-            9 => self.output_gain = audiocore_dsp::db::db_to_linear(v.clamp(-24.0, 24.0)),
+            9 => self.output_gain = dsp_core::audio::db::db_to_linear(v.clamp(-24.0, 24.0)),
             10 => self.listen_delta = v >= 0.5,
             11 => self.apply_model(v as u32),
             12 => {
@@ -1733,8 +1733,8 @@ impl PluginInstance for NativeTune {
             tune::detect::YinDetector::new(self.sample_rate, tune::detect::YinConfig::default());
         self.history = vec![0.0; self.detector.window()];
         self.hist_fill = 0;
-        use audiocore_dsp::Processor;
-        self.chain.update(audiocore_dsp::AudioConfig {
+        use dsp_core::audio::Processor;
+        self.chain.update(dsp_core::audio::AudioConfig {
             sample_rate: self.sample_rate,
             max_buffer_size: block_size.max(1) as usize,
         });
@@ -1837,7 +1837,7 @@ impl PluginInstance for NativeTune {
             self.scratch_l[i] = f64::from(in_l[i]);
             self.scratch_r[i] = f64::from(in_r[i]);
         }
-        use audiocore_dsp::Processor;
+        use dsp_core::audio::Processor;
         self.chain
             .process(&mut self.scratch_l[..n], &mut self.scratch_r[..n]);
         for i in 0..n {

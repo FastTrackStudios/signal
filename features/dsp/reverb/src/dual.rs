@@ -18,7 +18,7 @@
 //! Scratch buffers are sized in `update()`; larger `process` calls are
 //! chunked — no allocation on the audio thread.
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 
 use crate::chain::ReverbChain;
 

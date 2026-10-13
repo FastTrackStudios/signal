@@ -2,7 +2,7 @@
 
 use dsp_core::{Channel, PerChannel};
 
-use audiocore_dsp::envelope::EnvelopeFollower;
+use dsp_core::audio::envelope::EnvelopeFollower;
 
 /// Exponential smoother for gain reduction.
 ///

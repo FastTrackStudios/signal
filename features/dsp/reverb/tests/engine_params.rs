@@ -7,7 +7,7 @@ use reverb::AlgorithmType;
 use reverb::algorithm::{MagnetoParams, NonLinearParams, ShimmerFeedbackMode, ShimmerParams};
 use reverb::chain::ReverbChain;
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use dsp_core::num;
 
 const SR: f64 = 48000.0;

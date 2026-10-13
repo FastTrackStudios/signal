@@ -5,7 +5,7 @@
 //! Passes all frequencies at unity gain but smears phase,
 //! creating the diffusion that gives reverb its density.
 
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::delay_line::DelayLine;
 
 pub struct Allpass {
     delay: DelayLine,

@@ -10,7 +10,7 @@
 //!
 //! Clean-room reimplementation of the reference macro's analysis + gain stages.
 
-use audiocore_dsp::db::db_to_linear;
+use dsp_core::audio::db::db_to_linear;
 
 use crate::classify::{
     adaptive_silence_db, smooth_tonal_mask, BlockClass, BlockFeatures, Classifier, ClassifyConfig,

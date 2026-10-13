@@ -1,6 +1,6 @@
 //! Butterworth crossover/sidechain filter designers.
 //!
-//! The filters themselves are `audiocore_dsp::biquad::Biquad` (TDF2,
+//! The filters themselves are `dsp_core::audio::biquad::Biquad` (TDF2,
 //! denormal-flushed); this module only keeps the comp-specific 2nd-order
 //! Butterworth bilinear-transform designers used for multiband crossover
 //! and sidechain EQ.
@@ -13,7 +13,7 @@
 
 use std::f64::consts::PI;
 
-pub use audiocore_dsp::biquad::Biquad;
+pub use dsp_core::audio::biquad::Biquad;
 
 /// Compute low-pass biquad filter coefficients from cutoff frequency.
 ///

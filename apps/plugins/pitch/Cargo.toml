@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 nice-plug = { workspace = true, features = ["vst3"] }
 pitch = { workspace = true }
-audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true }
 
 [features]
 default = []

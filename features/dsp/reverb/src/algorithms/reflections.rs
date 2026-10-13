@@ -104,7 +104,7 @@ impl Reflections {
         }
 
         // Second-order reflections (wall-to-wall bounces)
-        let mut rng = audiocore_dsp::prng::XorShift32::new(12345);
+        let mut rng = dsp_core::audio::prng::XorShift32::new(12345);
         for i in 0..MAX_REFLECTIONS.saturating_sub(base_delays.len()) {
             let r = f64::from(rng.next()) / f64::from(u32::MAX);
             let delay = 400.0 + r * 2000.0;

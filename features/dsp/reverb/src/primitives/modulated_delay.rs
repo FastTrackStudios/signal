@@ -10,7 +10,7 @@ use dsp_core::num;
 
 use std::f64::consts::PI;
 
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::delay_line::DelayLine;
 
 /// Default capacity: 2 seconds at 48kHz. Resized by `set_sample_rate`.
 const DEFAULT_SAMPLE_RATE: f64 = 48000.0;

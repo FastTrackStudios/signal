@@ -8,7 +8,7 @@
 //! Latency: `grain_size` samples (default 1024).
 //! Character: Natural, slight chorus-like artifacts at extreme shifts.
 
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::delay_line::DelayLine;
 
 /// Granular pitch shifter with dual crossfading grains.
 pub struct GranularShifter {

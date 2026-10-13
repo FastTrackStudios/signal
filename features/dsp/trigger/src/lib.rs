@@ -104,4 +104,4 @@ pub use velocity::{VelocityCurve, VelocityMapper};
 
 // Re-exported so shells can size buffers / report latency without a direct
 // audiocore-dsp dep.
-pub use audiocore_dsp::{AudioConfig, Processor};
+pub use dsp_core::audio::{AudioConfig, Processor};

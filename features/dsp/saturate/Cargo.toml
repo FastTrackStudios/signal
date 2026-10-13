@@ -39,7 +39,7 @@ anyrender_vello_cpu = { workspace = true }
 approx = { workspace = true }
 dioxus = { workspace = true }
 dioxus-test = { workspace = true }
-dsp-golden = { workspace = true }
+dsp-core = { workspace = true, features = ["golden"] }
 fx-stack = { workspace = true }
 png = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

@@ -24,7 +24,7 @@
               test/example code, where panicking on bad input is the point"
 )]
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use trigger::TriggerChain;
 use trigger::detector::{DetectMode, TriggerDetector};
 use trigger::sampler::{MixMode, Sample};

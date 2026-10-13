@@ -24,10 +24,10 @@
 //! // is FFT-based.
 
 use crate::tilt::DecayTilt;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::prng::XorShift32;
-use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::prng::XorShift32;
+use dsp_core::audio::smoothing::ParamSmoother;
 use dsp_core::num;
 
 // 16 voices: 1/32-of-repeat density with 2x-overlap windows plus

@@ -10,12 +10,12 @@
 //!       -> Tremolo (amplitude mod) -> Analog Style -> Width -> Mix -> Output
 //! ```
 
-use audiocore_dsp::{AudioConfig, Processor};
-use fts_modulation::curves::CurveType;
-use fts_modulation::modulator::Modulator;
-use fts_modulation::pattern::Point;
-use fts_modulation::tempo::TransportInfo;
-use fts_modulation::trigger::TriggerMode;
+use dsp_core::audio::{AudioConfig, Processor};
+use dsp_core::modulation::curves::CurveType;
+use dsp_core::modulation::modulator::Modulator;
+use dsp_core::modulation::pattern::Point;
+use dsp_core::modulation::tempo::TransportInfo;
+use dsp_core::modulation::trigger::TriggerMode;
 
 use crate::trem::dynamics::TremDynamics;
 use crate::trem::tremolo::{AnalogProcessor, TremMode, Tremolo};

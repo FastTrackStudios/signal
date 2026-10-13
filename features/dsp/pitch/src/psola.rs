@@ -8,7 +8,7 @@
 //! Latency: `grain_size` samples (default 1024).
 //! Character: Most natural for monophonic sources, preserves formants.
 
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::delay_line::DelayLine;
 
 pub struct PsolaShifter {
     pub speed: f64,

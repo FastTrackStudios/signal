@@ -14,7 +14,7 @@ analyzer-ui = ["dep:anyrender", "dep:dioxus", "dep:kurbo", "dep:peniko"]
 gpu-tests = []
 graph = ["analyzer", "analyzer-ui", "dep:architect-ui", "dep:atomic_float", "dep:blitz-traits", "dep:bytemuck", "dep:dioxus-native", "dep:futures-timer", "fts-audio-ui/shader", "graph-paint"]
 graph-paint = ["analyzer", "analyzer-ui", "dep:anyrender", "dep:kurbo", "dep:peniko"]
-native = ["analyzer", "analyzer-ui", "dep:audiocore-core", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:preset-browser", "dep:preset-browser", "graph", "panel", "profiles"]
+native = ["analyzer", "analyzer-ui", "dep:audiocore-core", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:preset-browser", "graph", "panel", "profiles"]
 panel = ["dep:architect-ui", "dep:audiocore-core", "dep:fts-audio-ui", "dep:nice-plug-dioxus"]
 profiles = []
 ui = ["dep:blitz-dom", "dep:dioxus", "dep:fts-audio-ui", "dep:parking_lot", "dep:web-time"]
@@ -24,11 +24,10 @@ anyrender = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 audiocore-core = { workspace = true, optional = true }
-audiocore-dsp = { workspace = true }
+dsp-core = { workspace = true }
 blitz-dom = { workspace = true, features = ["autofocus"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 dioxus = { workspace = true, optional = true }
-dsp-core = { workspace = true }
 fts-audio-ui = { workspace = true, optional = true }
 fts-plug-ui = { workspace = true, optional = true }
 futures-timer = { version = "3", optional = true }
@@ -49,7 +48,7 @@ blitz-traits = { workspace = true }
 dioxus = { workspace = true }
 dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false }
 dioxus-test = { workspace = true }
-dsp-golden = { workspace = true }
+dsp-core = { workspace = true, features = ["golden"] }
 naga = { version = "29", features = ["wgsl-in"] }
 pollster = { version = "0.4" }
 test-that = { version = "0.5.2", default-features = false, features = ["regex", "num-traits"] }

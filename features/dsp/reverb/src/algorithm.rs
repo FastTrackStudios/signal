@@ -1643,7 +1643,7 @@ mod decay_time_tests {
 
 #[cfg(test)]
 mod decay_eq_filter_probe {
-    use audiocore_dsp::biquad::{Biquad, FilterType};
+    use dsp_core::audio::biquad::{Biquad, FilterType};
 
     /// Magnitude of a biquad by running a sine through it.
     fn mag_at(mut bq: Biquad, f: f64, sr: f64) -> f64 {

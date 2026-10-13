@@ -21,7 +21,7 @@ use std::sync::Arc;
 mod support;
 
 use delay::ui::params::{DelayParams, DelayUiState};
-use musical_time::{Flavour, MusicalTime, NoteValue};
+use dsp_core::time::{Flavour, MusicalTime, NoteValue};
 use nice_plug::prelude::Param;
 use support::{Fixture, mount_with, mount_with_state};
 

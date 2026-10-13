@@ -55,9 +55,9 @@ pub use pitch_delay::{IceInterval, IceSlice};
 pub use spectral_delay::{DensityMode, GrainDirection, GrainShape};
 pub use tape_delay::{SaturationType, TapeSpeed, TapeVoice};
 
-/// Equal-power pan gains — see [`audiocore_dsp::stereo::pan_equal_power`]
+/// Equal-power pan gains — see [`dsp_core::audio::stereo::pan_equal_power`]
 /// (centered = unity both sides; hard pans full-power one side).
 #[inline]
 pub(crate) fn pan_gains(pan: f64) -> (f64, f64) {
-    audiocore_dsp::stereo::pan_equal_power(pan)
+    dsp_core::audio::stereo::pan_equal_power(pan)
 }

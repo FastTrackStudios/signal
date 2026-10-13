@@ -3,9 +3,9 @@
 //! Each engine produces a single modulated delay voice. The chain
 //! creates multiple voices per channel for the full chorus effect.
 
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::denormal::flush;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::denormal::flush;
 use std::f64::consts::PI;
 
 use crate::chorus::dsp::{ModLine, SvfLp, soft_sat};

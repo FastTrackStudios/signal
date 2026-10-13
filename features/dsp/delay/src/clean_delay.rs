@@ -20,9 +20,9 @@
 
 use crate::modulation::CompanderEnv;
 use crate::tilt::DecayTilt;
-use audiocore_dsp::biquad::{Biquad, FilterType};
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::audio::biquad::{Biquad, FilterType};
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::smoothing::ParamSmoother;
 use dsp_core::num;
 
 /// Digital machine voicing (`TimeLine` MX `Voice`).
@@ -200,7 +200,7 @@ pub struct CleanDelay {
     /// head, expand at the read head — envelope-modulated noise floor).
     comp_env: CompanderEnv,
     exp_env: CompanderEnv,
-    noise: audiocore_dsp::prng::XorShift32,
+    noise: dsp_core::audio::prng::XorShift32,
     adm: AdmCodec,
     feedback_sample: f64,
     sample_rate: f64,
@@ -241,7 +241,7 @@ impl CleanDelay {
             twelve_lp: Biquad::new(),
             comp_env: CompanderEnv::new(),
             exp_env: CompanderEnv::new(),
-            noise: audiocore_dsp::prng::XorShift32::new(0x0D16_17A1),
+            noise: dsp_core::audio::prng::XorShift32::new(0x0D16_17A1),
             adm: AdmCodec::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,

@@ -18,7 +18,7 @@ use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::multitap_delay::{MultitapDelay, Tap, sign_balance};
 use crate::primitives::one_pole::Lp1;
-use audiocore_dsp::biquad::{Biquad, FilterType};
+use dsp_core::audio::biquad::{Biquad, FilterType};
 
 const FDN_MOD_AP_COUNT: usize = 8;
 

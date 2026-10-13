@@ -1,7 +1,7 @@
 //! Decay-tilt EQ — the shared repeat-voicing filter in every machine's
 //! feedback path.
 
-use audiocore_dsp::biquad::{Biquad, FilterType};
+use dsp_core::audio::biquad::{Biquad, FilterType};
 
 /// Tilt EQ inside a delay's regeneration loop: negative tilt darkens the
 /// repeats (a lowpass walking down from 20 kHz), positive tilt thins them

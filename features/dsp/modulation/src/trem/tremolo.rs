@@ -3,7 +3,7 @@
 //! Supports harmonic tremolo (split into low/high bands, modulate
 //! out of phase) and standard tremolo.
 
-use audiocore_dsp::biquad::{Biquad, FilterType};
+use dsp_core::audio::biquad::{Biquad, FilterType};
 
 /// Tremolo shape applied to the raw modulator output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

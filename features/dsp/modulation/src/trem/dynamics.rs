@@ -3,7 +3,7 @@
 //!
 //! Two modes: `Env` (proportional) and `Gate` (on/off threshold).
 
-use audiocore_dsp::envelope::EnvelopeFollower;
+use dsp_core::audio::envelope::EnvelopeFollower;
 
 /// Dynamics mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/core",
     "features/rigs/keys",
     "features/rigs/ekit",
     "features/rigs/drums",
@@ -83,12 +84,9 @@ members = [
     "features/song",
     # ── daw ──
     "features/audio/audiocore-core",
-    "features/dsp/core/audiocore-dsp",
     "features/ui/audiocore-gui",
-    "features/dsp/core/modulation",
     "features/audio/sample",
     "features/ui/themes",
-    "features/dsp/core/meter-dsp",
     "features/ui/meter-ui",
     "crates/daw/actions",
     "crates/daw/control",
@@ -167,12 +165,8 @@ members = [
     "apps/plugins/tune",
     "apps/plugins/unison",
     "xtask/plugins",
-    "features/dsp/core/dsp-core",
-    "features/dsp/core/dsp-golden",
     "apps/plugins/eq-standalone",
     "features/dsp/multiband",
-    "features/dsp/core/musical-time/musical-time",
-    "features/dsp/core/musical-time/musical-time-ui",
     "features/dsp/builtin/fx-blocks",
     "features/dsp/stack",
     "features/ui/fts-audio-ui",
@@ -296,6 +290,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+dsp-core = { path = "features/dsp/core" }
 keys = { path = "features/rigs/keys" }
 ekit = { path = "features/rigs/ekit" }
 drums = { path = "features/rigs/drums" }
@@ -347,15 +342,12 @@ utils = { path = "crates/daw/utils" }
 adaptive-grid = { path = "features/ui/adaptive-grid" }
 neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-modeler-rs", tag = "v0.1.1" }
 audiocore-core = { path = "features/audio/audiocore-core" }
-audiocore-dsp = { path = "features/dsp/core/audiocore-dsp", default-features = false }
 audiocore-gui = { path = "features/ui/audiocore-gui" }
-fts-modulation = { path = "features/dsp/core/modulation" }
 # Defaults OFF at the root so lean consumers (probe-only scanners, the
 # iOS-clean session-guide) don't drag the pack engine in; each consumer
 # names the features it needs ("load" / "write" / "engine").
 fts-sample = { path = "features/audio/sample", default-features = false }
 fts-themes = { path = "features/ui/themes" }
-meter-dsp = { path = "features/dsp/core/meter-dsp" }
 meter-ui = { path = "features/ui/meter-ui" }
 # Canonical MIDI facade. Defaults OFF at the root: daw-proto re-exports
 # `midicore::MidiEvent` and must not drag midicore's `vox` service traits
@@ -1063,13 +1055,9 @@ midicore-wasm = { path = "features/midi/midicore-wasm" }
 # ── from processor's workspace (joined into studio) ──
 tone3000 = "0.1"
 signal-nam = { path = "features/rigs/nam" }
-dsp-golden = { path = "features/dsp/core/dsp-golden" }
-dsp-core = { path = "features/dsp/core/dsp-core" }
 gate = { path = "features/dsp/gate" }
 multiband-dsp = { path = "features/dsp/multiband" }
 fx-stack = { path = "features/dsp/stack" }
-musical-time = { path = "features/dsp/core/musical-time/musical-time" }
-musical-time-ui = { path = "features/dsp/core/musical-time/musical-time-ui" }
 fx-blocks = { path = "features/dsp/builtin/fx-blocks" }
 web-time = "1"
 

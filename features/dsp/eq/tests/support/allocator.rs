@@ -10,7 +10,7 @@ thread_local! {
     static FREES: Cell<usize> = const { Cell::new(0) };
 }
 pub struct Allocator;
-static INNER: dsp_golden::CountingAlloc<System> = dsp_golden::CountingAlloc::new(System);
+static INNER: dsp_core::golden::CountingAlloc<System> = dsp_core::golden::CountingAlloc::new(System);
 // SAFETY: all allocation operations forward their exact pointer/layout arguments.
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -39,7 +39,7 @@ pub fn assert_realtime<T>(body: impl FnOnce() -> T) -> T {
     FREES.set(0);
     ARMED.set(true);
     let guard = Guard;
-    let result = dsp_golden::assert_no_alloc(body);
+    let result = dsp_core::golden::assert_no_alloc(body);
     drop(guard);
     assert_eq!(FREES.get(), 0, "callback deallocated heap storage");
     result

@@ -23,8 +23,8 @@ use crate::algorithm::{
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::one_pole::Lp1;
-use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
+use dsp_core::audio::dc_blocker::DcBlocker;
+use dsp_core::audio::delay_line::DelayLine;
 
 /// Dattorro plate reverb — complete published topology.
 /// Steel-plate dispersion: a cascade of identical first-order

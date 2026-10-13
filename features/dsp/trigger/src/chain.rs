@@ -4,7 +4,7 @@
 //! - Audio path: Input → dry signal preserved → mix with sample playback
 //! - Sidechain path: Input → HPF/LPF → detector → velocity → sampler trigger
 
-use audiocore_dsp::{AudioConfig, Processor};
+use dsp_core::audio::{AudioConfig, Processor};
 use eq::{CutSlope, Filter, FilterProcessor};
 
 use crate::detector::{DetectMode, TriggerDetector};

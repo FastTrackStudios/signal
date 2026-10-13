@@ -10,7 +10,7 @@ use dsp_core::num;
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
-use audiocore_dsp::envelope::EnvelopeFollower;
+use dsp_core::audio::envelope::EnvelopeFollower;
 
 pub struct Swell {
     // Reverb core

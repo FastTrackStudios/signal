@@ -591,8 +591,8 @@ fn loudest_short_term(
     to: f64,
 ) -> Option<f64> {
     let mut filters = [
-        audiocore_dsp::loudness::KWeightingFilter::new(),
-        audiocore_dsp::loudness::KWeightingFilter::new(),
+        dsp_core::audio::loudness::KWeightingFilter::new(),
+        dsp_core::audio::loudness::KWeightingFilter::new(),
     ];
     for filter in &mut filters {
         filter.update(f64::from(RENDER_RATE));

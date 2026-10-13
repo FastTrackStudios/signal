@@ -9,7 +9,7 @@
 #![cfg(feature = "native")]
 
 use delay::ui::params::{DelayParams, MAX_TIME_MS};
-use musical_time::{Flavour, MusicalTime, NoteValue};
+use dsp_core::time::{Flavour, MusicalTime, NoteValue};
 use nice_plug::prelude::Param;
 
 /// How close two delay times have to be to count as the same, in

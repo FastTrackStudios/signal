@@ -7,10 +7,10 @@
 //! `trem_depth`/`trem_speed` gate the repeats with a synced tremolo.
 
 use crate::tilt::DecayTilt;
-use audiocore_dsp::delay_line::DelayLine;
-use audiocore_dsp::denormal::flush;
-use audiocore_dsp::prng::XorShift32;
-use audiocore_dsp::smoothing::ParamSmoother;
+use dsp_core::audio::delay_line::DelayLine;
+use dsp_core::audio::denormal::flush;
+use dsp_core::audio::prng::XorShift32;
+use dsp_core::audio::smoothing::ParamSmoother;
 use dsp_core::num;
 
 /// LFO waveform for the filter sweep. `+` shapes start at their peak,
@@ -194,7 +194,7 @@ pub struct FilterDelay {
     /// One-shot sweep phase (Down/Up shapes): 0→1 per attack, then holds.
     one_shot_phase: f64,
     /// Attack detector for one-shot sweeps.
-    attack_env: audiocore_dsp::envelope::EnvelopeFollower,
+    attack_env: dsp_core::audio::envelope::EnvelopeFollower,
     attack_gate: bool,
     rng: XorShift32,
     // SVF coefficients refresh at control-block rate while sweeping.
@@ -238,7 +238,7 @@ impl FilterDelay {
             trem_phase: 0.0,
             sh_value: 0.0,
             one_shot_phase: 1.0,
-            attack_env: audiocore_dsp::envelope::EnvelopeFollower::new(0.0),
+            attack_env: dsp_core::audio::envelope::EnvelopeFollower::new(0.0),
             attack_gate: false,
             rng: XorShift32::new(0x00F1_17E4),
             ctrl_countdown: 0,

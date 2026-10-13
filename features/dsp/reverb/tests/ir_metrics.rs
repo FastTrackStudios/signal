@@ -151,7 +151,7 @@ fn rt60(left: &[f64], right: &[f64]) -> (f64, bool) {
 
 /// 4th-order bandpass via two biquad passes, then Schroeder RT60.
 fn band_rt60(left: &[f64], right: &[f64], fc: f64) -> f64 {
-    use audiocore_dsp::biquad::{Biquad, FilterType};
+    use dsp_core::audio::biquad::{Biquad, FilterType};
     let filt = |x: &[f64]| {
         let mut b1 = Biquad::new();
         b1.set(FilterType::Bandpass, fc, 1.4, SR);

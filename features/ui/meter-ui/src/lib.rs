@@ -5,7 +5,7 @@
 //!
 //! # Usage
 //!
-//! 1. Create the DSP struct (e.g. [`meter_dsp::spectrum::SpectrumAnalyzer`]).
+//! 1. Create the DSP struct (e.g. [`dsp_core::meter::spectrum::SpectrumAnalyzer`]).
 //! 2. Clone its `.state` arc for the painter.
 //! 3. Pass the painter to the Dioxus `SceneOverlay` hook in your plugin editor.
 //!

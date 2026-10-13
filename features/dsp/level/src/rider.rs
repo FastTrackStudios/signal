@@ -11,7 +11,7 @@
 //! which is inaudible for level moves. The rider allocates only in
 //! [`VocalRider::new`]; `process` is alloc-free.
 
-use audiocore_dsp::db::{db_to_linear, linear_to_db};
+use dsp_core::audio::db::{db_to_linear, linear_to_db};
 
 use crate::classify::{BlockClass, Classifier, ClassifyConfig};
 
