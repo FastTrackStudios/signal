@@ -12,12 +12,12 @@ workspace = true
 [features]
 default = ["vox"]
 jack = ["audio/io", "audio/jack", "cpal/jack", "signal-rig-host/jack"]
-library = ["dep:architect-telemetry", "dep:facet-json", "dep:tokio", "dep:vox", "dep:walkdir"]
+library = ["dep:architect-telemetry", "dep:facet-json", "dep:tokio", "dep:vox", "dep:walkdir", "architect/vox"]
 pipewire = []
 vox = ["architect/vox", "dep:vox", "dep:vox-types"]
 
 [dependencies]
-architect = { workspace = true, features = ["vox"] }
+architect = { workspace = true }
 architect-telemetry = { workspace = true, optional = true }
 base64 = { version = "0.22" }
 builtin = { workspace = true }

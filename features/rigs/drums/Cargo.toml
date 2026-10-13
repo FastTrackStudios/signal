@@ -12,11 +12,11 @@ workspace = true
 [features]
 default = ["vox"]
 pipewire = []
-ui = ["dep:dioxus", "midi/ui", "dep:signal-ui"]
+ui = ["dep:dioxus", "midi/ui", "dep:signal-ui", "architect/atom", "architect/platform"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
-architect = { workspace = true, features = ["atom", "platform", "rig", "vox"] }
+architect = { workspace = true, features = ["rig", "vox"] }
 control-surfaces = { workspace = true, features = ["kontrol"] }
 daw = { workspace = true }
 dioxus = { workspace = true, optional = true }
