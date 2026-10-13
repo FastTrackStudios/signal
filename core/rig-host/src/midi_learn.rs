@@ -37,7 +37,9 @@ impl Trigger {
     pub fn label(&self) -> String {
         match *self {
             Self::Cc { channel, number } => format!("CC {number} · ch {}", channel + 1),
-            Self::Note { channel, number } => format!("{} · ch {}", note_name(number), channel + 1),
+            Self::Note { channel, number } => {
+                format!("{} · ch {}", midi::note_name(number), channel + 1)
+            }
         }
     }
 
@@ -71,17 +73,6 @@ impl Trigger {
             _ => None,
         }
     }
-}
-
-fn note_name(key: u8) -> String {
-    const NAMES: [&str; 12] = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
-    format!(
-        "{}{}",
-        NAMES[usize::from(key % 12)],
-        i32::from(key / 12) - 1
-    )
 }
 
 /// One binding: this trigger presses this target.

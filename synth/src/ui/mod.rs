@@ -155,7 +155,9 @@ pub fn SynthRigRemote() -> Element {
     // and meters are its readouts — the rig keeps only its volume control.
     let level = fts_audio_ui::chrome::use_chrome_level(2);
     level.status(vec![
-        fts_audio_ui::chrome::StatusItem::text(status.loaded_preset.clone().unwrap_or_else(|| "—".into())),
+        fts_audio_ui::chrome::StatusItem::text(
+            status.loaded_preset.clone().unwrap_or_else(|| "—".into()),
+        ),
         fts_audio_ui::chrome::StatusItem::meter(
             status.master_peak,
             if clipping { "#ef4444" } else { "#22c55e" },
@@ -171,7 +173,12 @@ pub fn SynthRigRemote() -> Element {
         .into_iter()
         .map(|(id, label, m)| {
             let mut pick = mode;
-            fts_audio_ui::chrome::ChromeTab::new(id, label, mode() == m, Callback::new(move |()| pick.set(m)))
+            fts_audio_ui::chrome::ChromeTab::new(
+                id,
+                label,
+                mode() == m,
+                Callback::new(move |()| pick.set(m)),
+            )
         })
         .collect(),
     );
@@ -1555,15 +1562,6 @@ struct RectDraw {
     dim: bool,
 }
 
-/// MIDI note number → scientific pitch name (60 = "C4").
-fn note_name(n: u8) -> String {
-    const NAMES: [&str; 12] = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
-    let oct = i32::from(n) / 12 - 1;
-    format!("{}{}", NAMES[(n % 12) as usize], oct)
-}
-
 /// Which string a zone is colored by: articulation, then mic, then group, then file.
 fn color_key(z: &SynthZone) -> String {
     if !z.articulation.is_empty() {
@@ -1719,9 +1717,13 @@ fn MappingView() -> Element {
             ("File", z.file.clone()),
             (
                 "Key range",
-                format!("{} – {}", note_name(z.key_min), note_name(z.key_max)),
+                format!(
+                    "{} – {}",
+                    midi::note_name(z.key_min),
+                    midi::note_name(z.key_max)
+                ),
             ),
-            ("Root", note_name(z.root_key)),
+            ("Root", midi::note_name(z.root_key)),
             ("Velocity", format!("{} – {}", z.vel_min, z.vel_max)),
             (
                 "Round-robin",

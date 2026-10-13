@@ -484,7 +484,7 @@ fn render_sections(f: &mut Frame, area: Rect, bands: &[Band]) {
                 Style::new().fg(Color::White).bold(),
             ),
             Span::styled(
-                format!("keys {}–{}", note_name(b.lo), note_name(b.hi)),
+                format!("keys {}–{}", midi::note_name(b.lo), midi::note_name(b.hi)),
                 Style::new().fg(Color::Gray),
             ),
         ]));
@@ -573,13 +573,6 @@ fn render_keyboard(f: &mut Frame, area: Rect, bands: &[Band], held: &HashSet<u8>
         Paragraph::new(body).block(Block::bordered().title("KEYBOARD — split zones + held notes")),
         area,
     );
-}
-
-fn note_name(n: u8) -> String {
-    const NAMES: [&str; 12] = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
-    format!("{}{}", NAMES[(n % 12) as usize], i32::from(n) / 12 - 1)
 }
 
 /// Send stray stderr (engine logs) to a file so they can't corrupt the TUI. (fn below)

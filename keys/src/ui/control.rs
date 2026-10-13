@@ -941,7 +941,11 @@ fn LayerStrip(layer: KeysLayerModel, accent: String) -> Element {
     let split = if layer.key_lo == 0 && layer.key_hi == 127 {
         String::new()
     } else {
-        format!("{}–{}", note_name(layer.key_lo), note_name(layer.key_hi))
+        format!(
+            "{}–{}",
+            midi::note_name(u8::try_from(layer.key_lo).unwrap_or(127)),
+            midi::note_name(u8::try_from(layer.key_hi).unwrap_or(127))
+        )
     };
     // "On" is "not muted": the rig has one audible/silent state per lane, and
     // the letter and the M button are two sizes of the same switch.
@@ -1147,13 +1151,4 @@ fn solo_style(on: bool) -> String {
         if on { "#3b2708" } else { "#131316" },
         if on { "#fde047" } else { "#52525b" },
     )
-}
-
-/// MIDI note → name, for key-split labels.
-fn note_name(note: u32) -> String {
-    const NAMES: [&str; 12] = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
-    let n = note as i32;
-    format!("{}{}", NAMES[(n % 12) as usize], n / 12 - 1)
 }

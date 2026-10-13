@@ -116,8 +116,14 @@ pub fn KeysRigRemote() -> Element {
     ]);
     // The old Routing and Session pages, as panels.
     level.panels(vec![
-        fts_audio_ui::chrome::PanelSpec::new("keys.routing", "Routing", fts_audio_ui::chrome::Icon::Routing).width(360),
-        fts_audio_ui::chrome::PanelSpec::new("keys.midi", "MIDI", fts_audio_ui::chrome::Icon::Midi).width(360),
+        fts_audio_ui::chrome::PanelSpec::new(
+            "keys.routing",
+            "Routing",
+            fts_audio_ui::chrome::Icon::Routing,
+        )
+        .width(360),
+        fts_audio_ui::chrome::PanelSpec::new("keys.midi", "MIDI", fts_audio_ui::chrome::Icon::Midi)
+            .width(360),
     ]);
     let held = held_notes(&midi);
     // Where the wheels and pedals are sitting, for the strip beside the keys.

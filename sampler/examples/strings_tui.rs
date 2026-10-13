@@ -237,7 +237,7 @@ fn fmt_midi(msg: &MidiEvent) -> String {
         } => format!(
             "ch{:<2} NoteOn  {:<10} v{}",
             channel.number(),
-            note_name(key.get()),
+            midi::note_name(key.get()),
             velocity.get()
         ),
         MidiEvent::NoteOff {
@@ -247,7 +247,7 @@ fn fmt_midi(msg: &MidiEvent) -> String {
         } => format!(
             "ch{:<2} NoteOff {:<10} v{}",
             channel.number(),
-            note_name(key.get()),
+            midi::note_name(key.get()),
             velocity.get()
         ),
         MidiEvent::ControlChange {
@@ -271,15 +271,6 @@ fn fmt_midi(msg: &MidiEvent) -> String {
         }
         other => format!("{other:?}"),
     }
-}
-
-/// MIDI note number → name like `C4` (convention C-1 = 0, so middle C = C4).
-fn note_name(note: u8) -> String {
-    const NAMES: [&str; 12] = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
-    let octave = i32::from(note) / 12 - 1;
-    format!("{}{}", NAMES[note as usize % 12], octave)
 }
 
 /// A cancelable background warm of `WARM_LO..=WARM_HI` for the rig's current
