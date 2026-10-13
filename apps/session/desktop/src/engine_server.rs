@@ -12,7 +12,8 @@
 //! REAPER. Recording Mode serves only `reaper_lan_proxy`'s setlist (that
 //! module's doc says why it is a proxy rather than a re-mounted router).
 //!
-//! Two transports, one router:
+//! Two transports, one router — architect's [`EngineHost`], the same host
+//! `signal-desktop --engine` serves on:
 //!
 //! - WebSocket `ws://0.0.0.0:<port>/vox` (default 4040) — binds every
 //!   interface, since the point is reachability from other devices.
@@ -28,11 +29,9 @@
 
 use std::path::PathBuf;
 
-use architect::axum_ws;
+use architect::host::EngineHost;
 use architect::iroh_link::{self, iroh};
 use axum::Router;
-use axum::extract::State;
-use axum::extract::ws::WebSocketUpgrade;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use daw::LayerRouter;
@@ -106,16 +105,6 @@ pub fn engine_router() -> Option<LayerRouter> {
     crate::reaper_lan_proxy::proxy().map(crate::reaper_lan_proxy::router)
 }
 
-#[derive(Clone)]
-struct EngineState {
-    router: LayerRouter,
-}
-
-async fn vox_handler(ws: WebSocketUpgrade, State(state): State<EngineState>) -> Response {
-    ws.on_upgrade(move |socket| axum_ws::serve_router(socket, state.router))
-        .into_response()
-}
-
 async fn index_handler() -> Response {
     // `web-dist/` (see the `web-stage` just recipe) isn't staged into this
     // build yet, or `embed-web` wasn't enabled — either way there's no
@@ -134,13 +123,17 @@ async fn index_handler() -> Response {
     .into_response()
 }
 
-/// Serve `router` over `/vox` (+ a placeholder `/`) on an already-bound
-/// listener, until the listener fails.
+/// The page at `/` while no browser UI is staged into the build.
+fn placeholder_page() -> Router {
+    Router::new().route("/", get(index_handler))
+}
+
+/// Serve `router` over `/vox` (+ `/health` and a placeholder `/`) on an
+/// already-bound listener, until the listener fails.
 pub async fn serve_ws(listener: tokio::net::TcpListener, router: LayerRouter) -> eyre::Result<()> {
-    let app = Router::new()
-        .route("/", get(index_handler))
-        .route("/vox", get(vox_handler))
-        .with_state(EngineState { router });
+    let app = EngineHost::new(router, String::new())
+        .plugin(placeholder_page())
+        .into_app();
     axum::serve(listener, app)
         .await
         .map_err(|e| eyre::eyre!("engine server: {e}"))
@@ -187,32 +180,28 @@ pub async fn run(args: &EngineArgs) -> eyre::Result<()> {
         eyre::eyre!("neither engine (Live Mode or Recording Mode) finished booting")
     })?;
     let serves_daw = crate::session_engine::engine().is_some();
-
     let port = args.port.unwrap_or(DEFAULT_PORT);
-    let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
-        .await
-        .map_err(|e| eyre::eyre!("binding 0.0.0.0:{port}: {e}"))?;
 
-    // The endpoint must outlive the server, which never returns.
-    let mut iroh_endpoint = None;
+    let mut host = EngineHost::new(router, format!("0.0.0.0:{port}")).plugin(placeholder_page());
+    // The connect string is the endpoint id, which the key alone settles —
+    // so it is known (and logged) before the host binds the endpoint.
     let mut connect = None;
     if !args.no_iroh {
-        let key_path = args.iroh_key.clone().or_else(default_iroh_key_path);
-        let bound = match key_path {
-            Some(path) => bind_iroh(&path).await,
-            None => Err(eyre::eyre!("no config dir for the iroh key (HOME unset)")),
-        };
-        match bound {
-            Ok(endpoint) => {
-                connect = Some(crate::remote::EngineAddr::connect_string(&endpoint.id()));
-                let serving = endpoint.clone();
-                let router = router.clone();
-                tokio::spawn(async move { serve_iroh(&serving, router).await });
-                iroh_endpoint = Some(endpoint);
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "--engine: iroh unavailable; serving WebSocket only")
-            }
+        match args.iroh_key.clone().or_else(default_iroh_key_path) {
+            Some(path) => match iroh_link::load_or_create_secret_key(&path) {
+                Ok(key) => {
+                    connect = Some(crate::remote::EngineAddr::connect_string(&key.public()));
+                    host = host.iroh(path, None);
+                }
+                Err(e) => tracing::warn!(
+                    error = %e,
+                    "--engine: iroh key {} unavailable; serving WebSocket only",
+                    path.display()
+                ),
+            },
+            None => tracing::warn!(
+                "--engine: no config dir for the iroh key (HOME unset); serving WebSocket only"
+            ),
         }
     }
 
@@ -224,10 +213,9 @@ pub async fn run(args: &EngineArgs) -> eyre::Result<()> {
         "session-desktop --engine: serving (open http://<lan addr> on another device; \
          dial the iroh connect string from a native Session)"
     );
-
-    let served = serve_ws(listener, router).await;
-    drop(iroh_endpoint);
-    served
+    host.serve()
+        .await
+        .map_err(|e| eyre::eyre!("engine server on 0.0.0.0:{port}: {e}"))
 }
 
 /// Every non-loopback IPv4 address this machine has, each paired with

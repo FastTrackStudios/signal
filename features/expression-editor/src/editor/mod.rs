@@ -1,7 +1,7 @@
 //! Editor state and initialization. Behavior is organized by responsibility below.
 use crate::{
     blob, camera, cc, chord, clipboard, doc, draft, edit, flam, handles, harmony, memagic, menu,
-    mode, mouse, razor, reference, rows, shape, tools, tracks, tuning, zoom,
+    mode, mouse, reference, rows, shape, tools, tracks, tuning, zoom,
 };
 use camera::{Bounds, Camera, Content, Viewport};
 use cc::CcDisplay;

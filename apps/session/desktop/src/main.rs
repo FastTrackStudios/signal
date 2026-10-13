@@ -531,8 +531,18 @@ fn App() -> Element {
         ),
     ]);
     level.panels(vec![
-        fts_audio_ui::chrome::PanelSpec::new("engines", "Engines", fts_audio_ui::chrome::Icon::Engine).width(300),
-        fts_audio_ui::chrome::PanelSpec::new("settings", "Settings", fts_audio_ui::chrome::Icon::Settings).width(300),
+        fts_audio_ui::chrome::PanelSpec::new(
+            "engines",
+            "Engines",
+            fts_audio_ui::chrome::Icon::Engine,
+        )
+        .width(300),
+        fts_audio_ui::chrome::PanelSpec::new(
+            "settings",
+            "Settings",
+            fts_audio_ui::chrome::Icon::Settings,
+        )
+        .width(300),
     ]);
 
     let rail_items: Vec<fts_audio_ui::chrome::RailItem> = Workspace::all()
