@@ -1,5 +1,0 @@
-// Tempo Mapping workflow.
-// Identity derived from filename: id = "tempo-mapping", name = "Tempo Mapping".
-
-keybind_overlays (tempo-map)
-mouse_overlays   (tempo-map)

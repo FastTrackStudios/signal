@@ -1,5 +1,0 @@
-// Write mode workflow. id = "mode-write", name = "Mode Write".
-// Skeleton — see mode-organize.styx for the override-block menu.
-
-name        "Write"
-description "Lyric / melody / idea capture."

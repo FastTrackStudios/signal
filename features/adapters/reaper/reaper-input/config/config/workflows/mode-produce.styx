@@ -1,5 +1,0 @@
-// Produce mode workflow. id = "mode-produce", name = "Mode Produce".
-// Skeleton — see mode-organize.styx for the override-block menu.
-
-name        "Produce"
-description "Arrangement, sound design, instrument selection."

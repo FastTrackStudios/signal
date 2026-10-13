@@ -1,4 +1,0 @@
-bindings (
-    {keys "<space>", action 40044, desc "Play / Stop"}
-    {keys r,         action 1013,  desc "Record"}
-)

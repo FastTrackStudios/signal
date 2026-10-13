@@ -1,5 +1,0 @@
-// Edit mode workflow. id = "mode-edit", name = "Mode Edit".
-// Skeleton — see mode-organize.styx for the override-block menu.
-
-name        "Edit"
-description "Comping, timing, cleanup."
