@@ -4,7 +4,7 @@
 in the pack. Facet-style syntax: `key value`, `( … )` lists, `{ … }` records,
 `@Variant` enum tokens, `"quoted"` strings.
 
-Structs: `features/sampler/signal-sampler/src/spec.rs` (`LibrarySpec`, `ZoneSpec`,
+Structs: `features/rigs/sampler/signal-sampler/src/spec.rs` (`LibrarySpec`, `ZoneSpec`,
 `ArticulationKind`, `MicSpec`, `SectionSpec`, `DynamicsSpec`).
 
 ## Header + declarations (both modes)

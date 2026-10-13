@@ -71,7 +71,7 @@ DEV upward edges:      1   (keyflow-proto dev-deps keyflow-text)
 Full paths in `docs/split/paths.tsv`. The parts that differ from a
 naive directory split:
 
-**`features/reaper/` splits three ways.** It is not one block:
+**`features/adapters/reaper/` splits three ways.** It is not one block:
 
 - `daw-*`, `reaper-*`, `fts-icons`, `fts-themer*` → **daw**
 - `session-extension` → **session**

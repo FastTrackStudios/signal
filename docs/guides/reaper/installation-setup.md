@@ -33,7 +33,7 @@ The status panel shows the live profile and mode; press a prefix and the which-k
 
 ## Where config lives
 
-Profiles, modes, and overlays are plain styx files under `features/reaper/reaper-input/config/config`:
+Profiles, modes, and overlays are plain styx files under `features/adapters/reaper/reaper-input/config/config`:
 
 - `fasttrackstudio/*.styx` — the base profile, one file per category (transport, navigation, editing, tracks…).
 - `workflows/*.styx` — the modes (Record, Mix, Organize…).

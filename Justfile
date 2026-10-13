@@ -629,13 +629,13 @@ docs-deploy:
 # `apps/extensions/reaper-fts-extensions` (the production cdylib this
 # module's recipes and `release-package` below build) never made it into
 # this repo's August 2026 split -- it's signal-domain and lives in the
-# signal repo now. `features/reaper/reaper.just` was never committed here
+# signal repo now. `features/adapters/reaper/reaper.just` was never committed here
 # either, so `mod reaper` broke every `just` invocation in this repo.
 # Disabled until this repo has its own extension to wire up (the
-# test-only `session-extension` crate at features/reaper/session-extension
+# test-only `session-extension` crate at features/adapters/reaper/session-extension
 # has no recipes of its own yet).
 #
-# mod reaper 'features/reaper/reaper.just'
+# mod reaper 'features/adapters/reaper/reaper.just'
 
 # The UI snapshot regression gate (ui-snapshot) moved to the architect
 # repo with architect-ui in the August 2026 split. Run it there:
@@ -759,7 +759,7 @@ css-ab *ARGS:
     cargo build -p fts-cli --bin fts
     # Score the binary we just BUILT. score.py defaults to ./target/debug/fts,
     # so under a CARGO_TARGET_DIR override it would silently score a stale one.
-    python3 features/sampler/signal-sampler/tests/css-ab/score.py \
+    python3 features/rigs/sampler/signal-sampler/tests/css-ab/score.py \
         --fts "${CARGO_TARGET_DIR:-target}/debug/fts" \
         --pack {{quote(css_pack)}} --json scratch/css-ab/score.json {{ARGS}}
 

@@ -1,0 +1,25 @@
+[package]
+name = "frame-library-server"
+description = "Serves a folder of surfaces as a live library: vox over WebSocket, plus HTTP downloads and previews."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "frame-library-server"
+path = "src/main.rs"
+
+[dependencies]
+library-fs = { path = "../../library/library-fs" }
+library-link = { path = "../../library/library-link" }
+document-io = { path = "../../document/document-io" }
+document-proto = { path = "../../document/document-proto", default-features = false }
+render = { path = "../../render/render", features = ["anyrender"] }
+architect = { workspace = true, features = ["vox"] }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+kurbo = { workspace = true }
+peniko = { workspace = true }
+image = { version = "0.25" }  # frame's own version (not the workspace's)
+[lints]
+workspace = true

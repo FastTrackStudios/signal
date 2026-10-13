@@ -124,7 +124,7 @@ ground and the thing that sets frame apart.
 ### Repo layout
 
 ```
-apps/frame/
+crates/frame/tools/
   desktop/        frame-desktop   editor (Blitz/vello)
   web/            frame-web       editor + remote surfaces (wasm)
   cli/            frame-cli       import, render, lint, export-text, mcp
@@ -220,7 +220,7 @@ my-surface.frame/          (or zipped)
 
 **Phase 0 — Move onto architect.** ✅ done on branch `architect-restructure` (2026-09-28)
 
-- Layout: `apps/frame/cli`, `crates/frame`, `features/{document,figma,render}`, `xtask/scripts`.
+- Layout: `crates/frame/tools/cli`, `crates/frame`, `features/{document,figma,render}`, `xtask/scripts`.
 - `frame-proto` became `features/figma/figma-model`. It is still the Figma-shaped model the
   renderer reads, and is transitional until `document-proto` replaces it in Phase 1.
 - `frame-import` became `figma-rest`. `frame-ui` became `features/render/render`, with no

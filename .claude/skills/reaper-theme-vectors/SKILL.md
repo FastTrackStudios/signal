@@ -23,7 +23,7 @@ PY
 
 # 3. Write the art and audit.
 cargo run -p fts-themer --bin fts-themer -- \
-    --theme features/reaper/fts-theme generate
+    --theme features/adapters/reaper/fts-theme generate
 cargo run -p daw-theme-art --example align       # geometry + mean colour
 cargo run -p daw-theme-art --example compare fx  # 6x tiles, source above ours
 

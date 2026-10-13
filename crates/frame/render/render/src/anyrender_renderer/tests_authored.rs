@@ -6,7 +6,7 @@ use super::*;
 use crate::offscreen::{Offscreen, Pixels};
 use document_proto::{self as doc, Node, NodeKind, Scene};
 
-const ROBOTO: &[u8] = include_bytes!("../../../../../../apps/frame/cli/assets/roboto/Roboto-Regular.ttf");
+const ROBOTO: &[u8] = include_bytes!("../../../../tools/cli/assets/roboto/Roboto-Regular.ttf");
 
 fn scene_of(nodes: Vec<(Option<usize>, Node)>) -> (Scene, doc::NodeId) {
     let mut scene = Scene::new("Page");

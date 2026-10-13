@@ -33,7 +33,7 @@ One file per instrument. Layout (little-endian):
 - The embedded styx is read back by `PlayerPatch::from_pack` → `parse_embedded_spec`.
   In convention-mode the map is built from the row `source` filenames
   (`SampleMap::from_paths`); in zone-mode from the styx `zones`.
-- Code: `features/sampler/signal-sampler/src/engine/cache.rs`
+- Code: `features/rigs/sampler/signal-sampler/src/engine/cache.rs`
   (`create_signal_pack`, `read_pack_header`, `extract_signal_pack`); constants
   `SIGNAL_PACK_MAGIC/VERSION/HEADER_LEN/KIND_FLAC_I24`.
 

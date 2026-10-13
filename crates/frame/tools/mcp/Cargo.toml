@@ -1,0 +1,28 @@
+[package]
+name = "frame-mcp"
+description = "MCP server: lets any MCP client (Claude, …) design frame control surfaces."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "frame-mcp"
+path = "src/main.rs"
+
+[dependencies]
+design-session = { path = "../../design/design-session" }
+document-proto = { path = "../../document/document-proto", default-features = false }
+document-io = { path = "../../document/document-io" }
+surface-memory = { path = "../../surface/surface-memory" }
+surface-proto = { path = "../../surface/surface-proto" }
+surface-runtime = { path = "../../surface/surface-runtime", features = ["remote"] }
+library-link = { path = "../../library/library-link" }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+library-fs = { path = "../../library/library-fs" }
+architect = { workspace = true, features = ["vox", "local"] }
+
+[lints]
+workspace = true

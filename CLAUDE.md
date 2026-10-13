@@ -210,7 +210,7 @@ everyone else's checks while it fails.
 Signal is the signal-chain / plugin-management domain: `crates/signal/*`
 (facade `signal` + proto/ui/live/storage/controller/import/browser/grid/
 grid-ui/daw-bridge), `features/{fx,rigs,sampler,nam,plugin-host}`,
-`features/reaper/signal-*`, the engine mode of `apps/fasttrackstudio`. The `signal`
+`features/adapters/reaper/signal-*`, the engine mode of `apps/fasttrackstudio`. The `signal`
 facade is the only public API surface: apps depend on `signal`,
 `signal-ui`, or `signal-sampler`, never on the internal domain crates.
 Docs: `crates/signal/docs/` (DESIGN.md, DOMAIN.md).
@@ -304,7 +304,7 @@ queue is refilled.)
 ### Dedup queue
 
 - keyflow-daw-analysis's daw types → daw-proto only
-- audio-controls (vendored) → fold into features/daw-ui or delete after
+- audio-controls (vendored) → fold into features/ui/daw-ui or delete after
   signal-ui migrates off it
 - signal-audio remnants, duplicate wav/resampler helpers → libs/utils
   or audiocore-dsp

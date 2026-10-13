@@ -219,7 +219,7 @@ Three pieces, using `track_manager` as the reference:
 methods via `.map_err(|e| e.to_string())` automatically. On the REAPER
 side, `daw-reaper`'s `impl ActionBackend for Reaper` already pops a
 message box on `Err` (`show_action_error` in
-`features/reaper/daw-reaper/src/action_registry.rs`) — this is universal
+`features/adapters/reaper/daw-reaper/src/action_registry.rs`) — this is universal
 infrastructure, not something your action module implements. Just return
 `DawResult<()>` (or any `Result<(), impl Display>`) and let a real `?`
 propagate; don't swallow errors into `tracing::error!` the way the old
@@ -242,7 +242,7 @@ propagate freely without skipping an end-block. Never call
 `begin_undo_block`/`end_undo_block` inside an action body, and don't
 build a "run with undo" wrapper method or an `ActionHistoryService` —
 that plumbing lives once, in `impl ActionBackend for Reaper`
-(`features/reaper/daw-reaper/src/action_registry.rs`).
+(`features/adapters/reaper/daw-reaper/src/action_registry.rs`).
 
 Leave `undo` off read-only actions so they don't add empty undo points.
 

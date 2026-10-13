@@ -43,7 +43,7 @@ Path shorthand used below:
   today** — `Projects::run_command` + `get/set_project_info(_string)`
   (`crates/daw/proto/src/project/service.rs:55,65-68`), implemented in
   daw-reaper over `GetSetProjectInfo_String`
-  (`features/reaper/daw-reaper/src/project.rs:563-600`) — and a legacy
+  (`features/adapters/reaper/daw-reaper/src/project.rs:563-600`) — and a legacy
   FTS driver already rendered this way (`legacy-offline.rs:167-225`). What is
   missing is a *typed* service so callers stop hand-packing bitfields.
 - **Standalone has an offline-capable renderer but no render-to-file.**
@@ -56,9 +56,9 @@ Path shorthand used below:
   ext-state without meaning (`sync/project.rs:412-431`).
 - **Presets are already typed as data.** `reaper-config::render_presets`
   parses and round-trips `reaper-render.ini`'s four entry kinds
-  (`features/reaper/reaper-config/src/render_presets/types.rs:5-201`);
+  (`features/adapters/reaper/reaper-config/src/render_presets/types.rs:5-201`);
   nothing consumes it yet (only `reaper-input` depends on the crate,
-  `features/reaper/reaper-input/Cargo.toml:44`). A `RenderPreset` in
+  `features/adapters/reaper/reaper-input/Cargo.toml:44`). A `RenderPreset` in
   daw-proto can be a Facet twin of those structs.
 - **One trap for the per-language loop:** standalone's renderer states that
   a VCA lead's *mute button does not mute followers* — only a lead mute
@@ -96,7 +96,7 @@ Signature at `SDK.h:3063`; the documented render keys are `SDK.h:3023-3045`:
 So **"stems per selected track"** is `RENDER_SETTINGS & 2` (stems only) or
 `& 1` (stems plus master mix) — REAPER's stem source is *the selected
 tracks*; the preset parser names the same value "3: Stems (selected
-tracks)" (`features/reaper/reaper-config/src/render_presets/types.rs:134`),
+tracks)" (`features/adapters/reaper/reaper-config/src/render_presets/types.rs:134`),
 and `&128` is the variant "selected tracks via master" (`SDK.h:3023`).
 `&8192` renders those stems pre-fader; `&16384` renders only the channels a
 stem sends to its parent (`SDK.h:3023`). **Tail** is two keys
@@ -131,7 +131,7 @@ removes that class of mistake.
 - `Main_OnCommand(int command, int flag)` — `SDK.h:4528-4533` ("See
   `Main_OnCommandEx`"). daw-reaper's `Projects::run_command` resolves
   numeric or named ids through `named_command_lookup`
-  (`features/reaper/daw-reaper/src/project.rs:497-511`).
+  (`features/adapters/reaper/daw-reaper/src/project.rs:497-511`).
 - Render actions, from REAPER's own export:
 
   | id | name | `ActionList.txt` |
@@ -168,7 +168,7 @@ removes that class of mistake.
   rendertrack)` (`SDK.h:1261-1266`) and `SetRegionRenderMatrix(proj,
   regionindex, track, flag)` with flag 2 = force mono, 4 = stereo, N = N/2
   channels (`SDK.h:6250-6255`). Not wrapped anywhere in `daw/` today (no
-  hits for `SetRegionRenderMatrix` under `features/reaper/daw-reaper/src`
+  hits for `SetRegionRenderMatrix` under `features/adapters/reaper/daw-reaper/src`
   or `crates/daw/standalone/src`); the region service doc
   only *mentions* "render matrix" (`crates/daw/proto/src/region/service.rs:9`).
 - `RenderFileSection(source, target, start_pct, end_pct, playrate)` renders
@@ -179,7 +179,7 @@ removes that class of mistake.
 - reaper-rs medium wraps only the string *setter*
   (`get_set_project_info_string_set`, `…/main/medium/src/reaper.rs:1621`);
   daw-reaper goes to the low API directly
-  (`features/reaper/daw-reaper/src/project.rs:574,591`;
+  (`features/adapters/reaper/daw-reaper/src/project.rs:574,591`;
   `safe_wrappers/audio.rs:17-24` for the numeric one).
 
 ### 1.4 How a render preset is stored
@@ -191,7 +191,7 @@ last-used settings live in `reaper.ini` as `rendercfg=<hex sink cfg>`,
 `reaper-render.ini` (none under `~/.config/REAPER/`), i.e. no saved presets.
 
 `reaper-config` already models the file
-(`features/reaper/reaper-config/src/render_presets/mod.rs:1-9`,
+(`features/adapters/reaper/reaper-config/src/render_presets/mod.rs:1-9`,
 workspace member `daw/Cargo.toml:79,212`; reachable here as a git dep
 `Cargo.toml:160` with a local patch `Cargo.toml:1100`). Four entry kinds
 (`types.rs:12-24`):
@@ -299,7 +299,7 @@ daw-control exposes them as `Project::run_command`
 `"RENDER_FILE"`, `"RENDER_PATTERN"` (`project.rs:497,509`) and
 `"RENDER_SETTINGS"` (`project.rs:522`) as the intended keys. daw-reaper
 implements them over `low.GetSetProjectInfo_String`
-(`features/reaper/daw-reaper/src/project.rs:563-600`) and
+(`features/adapters/reaper/daw-reaper/src/project.rs:563-600`) and
 `safe_wrappers::get_set_project_info` (`safe_wrappers/audio.rs:17-24`,
 used for `PROJECT_SRATE` at `audio_engine.rs:99-101`).
 
@@ -337,7 +337,7 @@ non-UI mentions matter conceptually: `mix_phases.rs:20-26` — offline mix
 steps "are not realtime plugins — they are renders, and the result is
 written back to the item" (the print-through idea, as mix state); and
 `features/session/proto/src/guide.rs:6` — the guide engine "renders count-in
-and section cues as audio". `features/reaper/session-extension` has zero
+and section cues as audio". `features/adapters/reaper/session-extension` has zero
 hits. `features/dynamic-template` hits are classification keywords
 ("export", "render", "rendered" → the Reference folder,
 `features/dynamic-template/dynamic-template/src/groups/reference/mod.rs:62-65`),
@@ -473,7 +473,7 @@ the named variants map to the bare 4-byte sink ids `RENDER_FORMAT` accepts
 map `RenderPreset`/`RenderPresetOutput`/`RenderPresetExt` triples by name
 into the daw-proto `RenderPreset`; `save_preset` serialises back
 (`serialize.rs:109`). daw-reaper would gain a dep on `reaper-config`
-(today only `reaper-input` has one, `features/reaper/reaper-input/Cargo.toml:44`).
+(today only `reaper-input` has one, `features/adapters/reaper/reaper-input/Cargo.toml:44`).
 
 ### 5.3 Standalone implementation (daw-standalone)
 
@@ -544,10 +544,10 @@ should be checked in a `#[reaper_test]` before choosing.
 | Standalone stems are solo-via-master only; per-track buses not exposed | `render/mod.rs:416-417,801` | add a per-track output mode to `render_block` |
 | Standalone has no project-length helper | grep under `standalone/` empty | derive from last item end |
 | Standalone `run_command` is a no-op; `RENDER_*` keys inert | `standalone/sync/project.rs:356-361,412-431` | the typed service makes this moot; keep the keys as passthrough |
-| Region render matrix not wrapped in daw | no `SetRegionRenderMatrix` under `features/reaper/daw-reaper/src`; legacy `set_render_track` gone (`legacy-offline.rs:198`) | needed only for `RenderSource::RegionMatrix`; defer |
+| Region render matrix not wrapped in daw | no `SetRegionRenderMatrix` under `features/adapters/reaper/daw-reaper/src`; legacy `set_render_track` gone (`legacy-offline.rs:198`) | needed only for `RenderSource::RegionMatrix`; defer |
 | `RENDER_SEEKPOS` completion poll is undocumented | `legacy-offline.rs:229-261`; 0 hits in `SDK.h` | use `EnumProjects(0x40000000)` (`SDK.h:1248`) |
 | `RENDER_FORMAT` set numerically in the legacy driver | `legacy-offline.rs:188` vs `SDK.h:3090` (string key) | the typed `RenderFormat` prevents it |
-| `reaper-config` render presets have no consumer; daw-reaper does not depend on it | `features/reaper/reaper-input/Cargo.toml:44` is the only dep | add the dep in daw-reaper for `presets()` |
+| `reaper-config` render presets have no consumer; daw-reaper does not depend on it | `features/adapters/reaper/reaper-input/Cargo.toml:44` is the only dep | add the dep in daw-reaper for `presets()` |
 | VCA-lead mute propagation differs (or may differ) between backends | `standalone/audio_engine/render/mod.rs:774-777` | decide (a)/(b) in §5.5; add a `#[reaper_test]` |
 | "Mastering handoff" undefined in the spec | only #16 / #44 | write the recipe as a `flow.*` rule once the service exists |
 | Print-through is a track operation, not a file render | `ActionList.txt:1470-1901`; `workflows.md:771-772` | separate `print` entry point, not part of `Render::render` |

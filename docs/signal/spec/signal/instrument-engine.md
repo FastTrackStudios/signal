@@ -5,7 +5,7 @@ Synths, Orchestral instruments, Percussion, and Cinematic sounds. They differ
 only in what *generates* the audio — the rest (layering, filtering, amp,
 envelopes, modulation, FX, multi-mic) is shared. This is the target API; see
 `crates/signal/docs/DESIGN.md` for background and
-`features/sampler/signal-sampler/docs/SOUNDSOURCE.md` for the generator design.
+`features/rigs/sampler/signal-sampler/docs/SOUNDSOURCE.md` for the generator design.
 
 Sibling of [domain-model.md](domain-model.md): that spec covers the FX/preset
 *hierarchy* (Block → … → Setlist); this one covers the *instrument that makes

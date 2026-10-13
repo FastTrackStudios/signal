@@ -231,7 +231,7 @@ crates/patchbay/src/devices/hub.rs      DeviceHub: supervision, events, calls, s
 crates/patchbay/src/devices/wire.rs     patchbay-device ↔ proto conversion
 crates/patchbay/src/plan/devices.rs     pure snapshot capture + restore planner
 app/src/cli_device.rs                   `patchbay device …`
-crates/ui/src/devices.rs                the Devices tab
+features/ui/src/devices.rs                the Devices tab
 ```
 
 - **Defaults.** With no `devices` section the hub starts four entries,

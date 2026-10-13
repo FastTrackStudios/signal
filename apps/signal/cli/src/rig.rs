@@ -688,7 +688,7 @@ fn reload(timeout: u64) -> ExitCode {
 }
 
 /// The NAM trainer script, written next to each freeze.
-const TRAIN_SCRIPT: &str = include_str!("../../../../features/guitar/scripts/nam_freeze_train.py");
+const TRAIN_SCRIPT: &str = include_str!("../../../../features/rigs/guitar/scripts/nam_freeze_train.py");
 
 fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_only: bool) -> ExitCode {
     use signal_guitar::freeze;

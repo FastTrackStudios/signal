@@ -85,7 +85,7 @@ A theme is a `.frame` bundle holding:
 - **One component per role.** For example `mcp.strip`, `mcp.master`,
   `tcp.row`, `tcp.folder`, `arrange.lane`, `arrange.item`, `arrange.ruler`,
   `arrange.marker`. The vocabulary comes from daw-ui's `ElementRole` plan
-  (`features/daw-ui/daw-ui/THEMING_PLAN.md`) and REAPER's WALTER layout names.
+  (`features/ui/daw-ui/daw-ui/THEMING_PLAN.md`) and REAPER's WALTER layout names.
 - **Variants** by size tier and state (narrow/wide strip, row density,
   selected, armed, folder depth), the way WALTER switches layouts on height
   and width.

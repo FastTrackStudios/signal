@@ -40,7 +40,7 @@ So there are really **two** styling regimes, not four:
 
 ## How the exporter path actually works today
 
-`features/daw-ui/daw-theme-art/src/render.rs` (on `worktree-reaper-theme`;
+`features/ui/daw-ui/daw-theme-art/src/render.rs` (on `worktree-reaper-theme`;
 the crate does not exist on `main` yet):
 
 - `render_svg(component, props)` = `VirtualDom::new_with_props` →
@@ -59,7 +59,7 @@ The HTML-composed `strip.rs::Mixer` is **never** rasterised — it is the
 web mixer and a visual reference only, per its own module doc.
 
 **Does anything but inline `style=` survive into the SVG?** Today,
-nothing needs to: `grep -c class: features/daw-ui/daw-theme-art/src/*.rs`
+nothing needs to: `grep -c class: features/ui/daw-ui/daw-theme-art/src/*.rs`
 returns **0 for every file**, and the components do not even use
 `style=` — they emit SVG *presentation attributes* directly
 (`fill:`, `fill_opacity:`, `rx:`, `view_box:`), e.g.
@@ -163,7 +163,7 @@ unreliable"* — the failure is total and deterministic, not flaky.
   0.12 — flex, grid, block, absolute.
 
 **This repo already does exactly this, in REAPER.**
-`features/daw-ui/daw-ui/src/test_panels.rs:35–58` `include_str!`s a full
+`features/ui/daw-ui/daw-ui/src/test_panels.rs:35–58` `include_str!`s a full
 64 KB Tailwind sheet plus the architect-ui theme sheet and mounts them with
 `document::Style { … }` inside a Blitz-rendered REAPER panel. Same
 pattern in `apps/fasttrackstudio/src/rig_view.rs:29`/`:384` and
@@ -322,7 +322,7 @@ fill duplication becomes a real maintenance cost.
    written it forbids a pattern (`document::Style` + `include_str!`) that
    three shipping crates already use, and does not mention the SVG
    boundary, which is the rule that actually matters.
-2. **Add `features/daw-ui/daw-theme-art/src/**/*.rs` to
+2. **Add `features/ui/daw-ui/daw-theme-art/src/**/*.rs` to
    `apps/fasttrackstudio/input.css`'s `@source` list** when the panels
    move to Tailwind, so `just tailwind-check` covers them.
 3. **usvg version skew.** The exporter pins resvg 0.45 → usvg 0.45.1;
@@ -345,12 +345,12 @@ fill duplication becomes a real maintenance cost.
 
 In-tree (branch `worktree-reaper-theme` for the `daw-theme-art` paths):
 
-- `features/daw-ui/daw-theme-art/src/render.rs` — SSR→usvg→resvg path, `options()`
-- `features/daw-ui/daw-theme-art/src/export.rs` — `cell_markup`, `composite_cells`, `render_control`, `states`
-- `features/daw-ui/daw-theme-art/src/vector_controls.rs` — presentation-attribute drawing
-- `features/daw-ui/daw-theme-art/src/strip.rs` — the HTML mixer, never rasterised
-- `features/daw-ui/daw-ui/src/test_panels.rs` — Tailwind under Blitz in REAPER, today
-- `features/daw-ui/daw-ui/src/panels/` — 117 inline `style:`, 2 `class:`
+- `features/ui/daw-ui/daw-theme-art/src/render.rs` — SSR→usvg→resvg path, `options()`
+- `features/ui/daw-ui/daw-theme-art/src/export.rs` — `cell_markup`, `composite_cells`, `render_control`, `states`
+- `features/ui/daw-ui/daw-theme-art/src/vector_controls.rs` — presentation-attribute drawing
+- `features/ui/daw-ui/daw-theme-art/src/strip.rs` — the HTML mixer, never rasterised
+- `features/ui/daw-ui/daw-ui/src/test_panels.rs` — Tailwind under Blitz in REAPER, today
+- `features/ui/daw-ui/daw-ui/src/panels/` — 117 inline `style:`, 2 `class:`
 - `apps/fasttrackstudio/src/rig_view.rs`, `mobile_view.rs`, `input.css`, `Justfile`
 - `libs/ui/docs/blitz-diagnosis.md`, `libs/ui/ui-snapshot/tests/pixel_probes.rs`
 - skill `reaper-theme-vectors` — exporter constraints (strokes, clip-path, `<defs>`, sprite cells, markers)

@@ -20,11 +20,11 @@ Nothing here needs REAPER's UI. Don't tell the user to "right-click the toolbar
 |---|---|
 | Service trait + types | `crates/daw/proto/src/toolbar/{service,types}.rs` |
 | Client handle | `crates/daw/control/src/toolbar.rs` |
-| REAPER implementation | `features/reaper/daw-reaper/src/toolbar.rs` |
+| REAPER implementation | `features/adapters/reaper/daw-reaper/src/toolbar.rs` |
 | CLI verbs | `crates/daw/daw/src/cli/{command,ops}.rs` (`Toolbar*`) |
-| Offline ini **reader** | `features/dawfile/dawfile-reaper/src/toolbar_config.rs` |
-| Offline ini **writer** | `features/reaper/fts-icons/src/menu.rs` (icon assignment only) |
-| Icon generator | `features/reaper/fts-icons/` (lib `fts_icons` + bin `fts-icons`) |
+| Offline ini **reader** | `features/formats/dawfile-reaper/src/toolbar_config.rs` |
+| Offline ini **writer** | `features/adapters/reaper/fts-icons/src/menu.rs` (icon assignment only) |
+| Icon generator | `features/adapters/reaper/fts-icons/` (lib `fts_icons` + bin `fts-icons`) |
 
 ## Format primer (get this wrong and REAPER silently shows nothing)
 
@@ -141,7 +141,7 @@ actually differs. Colors are `#rgb`/`#rrggbb`/`#rrggbbaa`, or `"none"` to clear
 an inherited value. Sizes (`icon_size`, `bg_size`, `border_width`,
 `corner_radius`) are px at 100% and scale automatically.
 
-Worked examples live in `features/reaper/fts-icons/examples/` —
+Worked examples live in `features/adapters/reaper/fts-icons/examples/` —
 `timesigs.toml` is the fullest one (a whole toolbar, square stacked-digit
 cells); `tracks.toml` colors per-instrument glyphs; `mix.toml` and
 `record1.toml` show `width = 60` wide text buttons (record1 mixes both widths).

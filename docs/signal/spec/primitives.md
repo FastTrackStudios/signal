@@ -147,9 +147,9 @@ map for implementers, not part of the contract.
 
 **midicore:**
 - Delete the orphaned duplicate `features/audio/daw-midi-io` (zero real consumers;
-  clones `crates/midicore/midicore-midir`).
+  clones `features/midi/midicore-midir`).
 - Add the unique-per-open client name (atomic) in `midicore-midir` (the shared
-  `const CLIENT = "midicore-midir"` at `crates/midicore/midicore-midir/src/lib.rs:28`
+  `const CLIENT = "midicore-midir"` at `features/midi/midicore-midir/src/lib.rs:28`
   is the merge-bug root; no unique-name fix currently exists in the primitive).
 - Add an attach/hot-plug helper; fold `sampler_rig.rs:1083`, `keys/src/lib.rs:260`,
   `keys/src/backend.rs:169`, `drums/src/backend.rs:410`, `guitar/src/session.rs:248`.

@@ -21,7 +21,7 @@ WALTER is authoritative on **structure**, never on numbers.
 
 **Mirror REAPER's breakpoints in the Dioxus panels. Keep `rtconfig.txt` a
 hand-maintained fork — but generate the thresholds into it, and nothing else.
-Keep `features/daw-ui/daw-ui/src/panels/`.**
+Keep `features/ui/daw-ui/daw-ui/src/panels/`.**
 
 Concretely, three things:
 
@@ -34,7 +34,7 @@ Concretely, three things:
    that the Dioxus panels also read. That is the *only* place the two sides can
    silently disagree about #128's question, and `fts_themer::rtconfig` already
    does exactly this kind of surgical splice
-   (`features/reaper/fts-themer/src/rtconfig.rs:70-129`). Everything else in the
+   (`features/adapters/reaper/fts-themer/src/rtconfig.rs:70-129`). Everything else in the
    3743-line file stays hand-edited.
 3. **Do not build the full layout compiler now.** Its payoff window is exactly
    the period when the two layouts agree — i.e. now — and during that window its
@@ -49,7 +49,7 @@ someone's machine, at some panel size we never sampled.
 
 ## 1. What `rtconfig.txt` actually expresses
 
-`features/reaper/fts-theme/FastTrackStudio/rtconfig.txt` — **3743 lines**, 2855
+`features/adapters/reaper/fts-theme/FastTrackStudio/rtconfig.txt` — **3743 lines**, 2855
 of them non-blank non-comment.
 
 | construct | count | what it is |
@@ -213,7 +213,7 @@ arithmetic is what generators are good at.
    size*; not reducible to WALTER's resize model in general (see below).
 3. **Nonlinear response to container size.** WALTER interpolates each edge
    linearly from the natural size via `ls ts rs bs`
-   (`features/daw-ui/daw-ui/src/theming/walter.rs:84-97`). Anything that clamps,
+   (`features/ui/daw-ui/daw-ui/src/theming/walter.rs:84-97`). Anything that clamps,
    wraps or hits a min/max between two of our samples has to become an *explicit
    conditional* the generator discovered. Miss one and the theme drifts at
    exactly the sizes we did not sample.
@@ -251,7 +251,7 @@ which it is least useful.**
 ### Nothing generates WALTER. Something *executes* it.
 
 The find that changes the shape of #130:
-`features/daw-ui/daw-theme-reaper/src/walter.rs` is a **938-line WALTER
+`features/ui/daw-ui/daw-theme-reaper/src/walter.rs` is a **938-line WALTER
 interpreter** — preprocessor (comments, `\` continuations, tokenizer), `macro`
 expansion with `##`, `def` substitution, prefix arithmetic, binary conditional
 chains, `{n}`, `@slot`, `Layout` scoping, `clear`, `custom`, `front`. Entry
@@ -260,7 +260,7 @@ REAPER scalars (`walter.rs:57-97`).
 
 It is corpus-tested against four real third-party themes — Anti-Theme,
 Reapertips, Neptune VI, Imperial
-(`features/daw-ui/daw-theme-reaper/tests/corpus.rs:8-13`,
+(`features/ui/daw-ui/daw-theme-reaper/tests/corpus.rs:8-13`,
 `tests/antitheme.rs`).
 
 Around it: `daw-theme-reaper/src/rtconfig.rs` (globals + `define_parameter`
@@ -269,7 +269,7 @@ including the magenta/yellow marker geometry).
 
 ### The panels consume it at runtime
 
-`features/daw-ui/daw-ui/src/theming/mcp.rs:394-434` defines `LayoutEngine` —
+`features/ui/daw-ui/daw-ui/src/theming/mcp.rs:394-434` defines `LayoutEngine` —
 `(ctx, layout, w, h, StripState) → McpLayout`, with the doc comment already
 stating the thesis of #128:
 
@@ -277,16 +277,16 @@ stating the thesis of #128:
 > `then`-macro chain) reorder, wrap, shrink and cull elements per the *actual*
 > panel size, which a one-shot anchor bake cannot reproduce.
 
-`features/daw-ui/daw-ui/src/panels/mcp_strip.rs:68-84` calls
+`features/ui/daw-ui/daw-ui/src/panels/mcp_strip.rs:68-84` calls
 `engine.layout_at(...)` with the strip's real px box, per frame. So the panels
 are **not** a hardcoded imitation of a REAPER layout — they are a WALTER host.
-`features/daw-ui/daw-ui/src/theming/walter.rs` (327 lines) carries the typed
+`features/ui/daw-ui/daw-ui/src/theming/walter.rs` (327 lines) carries the typed
 `Coord`/`Margin`/`FontSpec`/`ThemeParam` model and both resolvers
 (`resolve` → px rect, `css_position` → `calc()` absolute placement).
 
 ### The panels themselves
 
-`features/daw-ui/daw-ui/src/panels/` — 10 files, **3968 lines**:
+`features/ui/daw-ui/daw-ui/src/panels/` — 10 files, **3968 lines**:
 
 | file | lines | |
 |---|---|---|
@@ -305,18 +305,18 @@ Two consumers, and they are different in kind:
 
 - `apps/fasttrackstudio/src/mixer_view.rs:278` — `MixerControlPanel` in the app.
   This is the one the Dioxus rewrite replaces.
-- `features/reaper/fts-themer-ui/src/preview.rs:30-38` — `DawWorkspace` under a
+- `features/adapters/reaper/fts-themer-ui/src/preview.rs:30-38` — `DawWorkspace` under a
   theme rebuilt live from `.ReaperTheme` + `rtconfig.txt` *text*, with no
   filesystem, so a colour edit re-derives the preview on the same frame. **This
   is already the third-party theme viewer #130 asks whether to build.**
 
 ### The exporter and the only rtconfig tooling
 
-`features/daw-ui/daw-theme-art/src/export.rs` (1139 lines) is art-only — cells,
+`features/ui/daw-ui/daw-theme-art/src/export.rs` (1139 lines) is art-only — cells,
 markers, compositing. It has no concept of layout and never touches
 `rtconfig.txt`.
 
-`features/reaper/fts-themer/src/rtconfig.rs` (245 lines) does exactly one thing:
+`features/adapters/reaper/fts-themer/src/rtconfig.rs` (245 lines) does exactly one thing:
 splice `Layout "A_Fader_<Name>"` blocks into the three DPI tiers for a generated
 accent, preserving indentation and idempotent. Its module doc is the current
 policy, stated plainly:
@@ -324,7 +324,7 @@ policy, stated plainly:
 > `rtconfig.txt` is hand-written WALTER with meaningful comments and formatting,
 > and it is the file a themer edits most. Nothing here reformats it.
 
-`features/reaper/fts-themer/src/walter_colors.rs` retints the RGB literals
+`features/adapters/reaper/fts-themer/src/walter_colors.rs` retints the RGB literals
 *inside* WALTER without parsing it, deliberately: only assignments whose
 variable name contains `color`, only trailing 3-tuples, because `[x y w h …]`
 and `[r g b]` are syntactically identical and rewriting brackets blindly would
@@ -445,7 +445,7 @@ REAPER's element vocabulary can still express but whose geometry we no longer
 want to hand-solve.** If the decision is one REAPER cannot express at all, the
 generator would not have helped.
 
-`features/daw-ui/daw-ui/src/panels/` is **kept**, and the framing "or kept as a
+`features/ui/daw-ui/daw-ui/src/panels/` is **kept**, and the framing "or kept as a
 viewer for other people's themes" undersells what is there: it is already that
 viewer, wired and shipping in `fts-themer-ui`, and it is the only thing in the
 tree that executes WALTER. What should go is the *bitmap art path* inside the

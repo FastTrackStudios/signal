@@ -29,7 +29,7 @@ generate cues automatically?
    unusual amount of the plumbing already built: architect RPC + PubSub +
    CRDT doc-sync (multi-user and web remote *for free*), a headless-engine +
    detachable-GUI discipline that is exactly the console/node split real rigs
-   use, `crates/input` + `features/surfaces` for control surfaces, styx for
+   use, `features/input` + `features/control-surfaces` for control surfaces, styx for
    show config, and a wgpu/Blitz render pipeline. The genuinely new work is a
    lighting domain crate, a DMX/E1.31 I/O layer, and a 3D visualizer.
 4. **The differentiator is not "another console".** It is that FTS already holds
@@ -193,7 +193,7 @@ Legend: ● full · ◐ partial · ○ absent
 | Macros / scripting | ○ | ● (JS) | ● | ● (Lua) | |
 | **Playback** | | | | | |
 | Cue lists / sequences | ◐ | ● | ● | ● | |
-| Executors on faders/pages | ○ | ◐ (VC) | ● | ● | Maps onto `features/surfaces` |
+| Executors on faders/pages | ○ | ◐ (VC) | ● | ● | Maps onto `features/control-surfaces` |
 | Timeline / show mode | ● | ● | ◐ | ◐ | ASLS's bar-grid + BPM is *ahead* here |
 | Timecode chase (LTC/MTC) | ◐ (via WSC) | ◐ (MIDI) | ● | ● | **FTS doesn't need it — see §8** |
 | Grand master / blackout / park | ◐ | ● | ● | ● | |
@@ -351,7 +351,7 @@ Mapping onto existing idiom:
 - **Transport coupling**: `lumen-live` subscribes to the session playback /
   setlist streams in-process. **No LTC/MTC needed** when the console and the
   playback engine are the same binary — which is the whole point.
-- **Surfaces**: `crates/input` + `features/surfaces/daw-csi` already speak MCU
+- **Surfaces**: `features/input` + `features/control-surfaces/daw-csi` already speak MCU
   and MIDI; executors-on-faders is a new `zones.rs` mapping, not a new subsystem.
   The Kontrol S88 Light Guide work (raw USB bulk LEDs) proves the appetite for
   weird surface hardware.
@@ -498,4 +498,4 @@ and uniquely able to do something neither Eos nor MA can" is achievable.
 - [ETC community: GDTF + MVR feature requests](https://community.etcconnect.com/control_consoles/eos-family-consoles/i/feature-requests/gdtf-mvr)
 - Rust: [Mizer](https://github.com/maxjoehnk/Mizer) · [radiant](https://github.com/BaukeWestendorp/radiant) · [zeevonk](https://github.com/BaukeWestendorp/zeevonk) · [demex](https://github.com/matteolutz/demex) · [rigger](https://github.com/BaukeWestendorp/rigger) · [gdtf-rs](https://github.com/cpdt/gdtf-rs) · [RustLight/sacn](https://github.com/RustLight/sacn) · [artnet_protocol](https://github.com/Trangar/artnet_protocol) · [rust_dmx](https://crates.io/crates/rust_dmx) · [tiny-artnet](https://github.com/D1plo1d/tiny-artnet)
 - [Open Fixture Library](https://github.com/OpenLightingProject/open-fixture-library) (MIT)
-- Repo evidence: `features/session/proto/src/song.rs`, `features/song/src/model.rs`, `features/guide/`, `features/surfaces/daw-csi/`, root `CLAUDE.md` (signal domain rules, platform targets, licence).
+- Repo evidence: `features/session/proto/src/song.rs`, `features/song/src/model.rs`, `features/guide/`, `features/control-surfaces/daw-csi/`, root `CLAUDE.md` (signal domain rules, platform targets, licence).

@@ -428,7 +428,7 @@ theme's canonical control.
 Each view has a `Fit`:
 
 - **`Letterbox`** is the default for physical forms. Uniform scale, centred, never distorted.
-  This is what `apps/frame/desktop` `View::fit` does today.
+  This is what `crates/frame/tools/desktop` `View::fit` does today.
 - **`Reflow { min, max }`** is for screen forms (Full, Square, Wide):
   - Between `min` and `max` the root takes the host's size and auto layout re-solves: `wrap`,
     `grow`, and `LayoutChild` min/max, which already exist in `document-proto`.
@@ -897,7 +897,7 @@ graph); a board only draws them.
 - Authored Full and Square views for two faces.
 - Head templates, and Wide derivation from Full.
 
-**Phase F: boards.** Adds `features/board` and `apps/frame/desktop --board`.
+**Phase F: boards.** Adds `features/board` and `crates/frame/tools/desktop --board`.
 - Pedalboard row and board modes, and Rack, Chassis and Stage boards.
 - Address rebasing and cables.
 - Suite with a chrome surface.

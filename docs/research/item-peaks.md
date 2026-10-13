@@ -10,9 +10,9 @@ written `daw:` for brevity.
 
 ## Summary
 
-1. Both backends already serve waveform peaks over one RPC, `Peaks::take_peaks` (`daw:crates/daw/proto/src/peak/service.rs:17-23`), and `daw_control::Take::peaks` wraps it (`daw:crates/daw/control/src/items.rs:723-735`) — the session window simply never calls it: items are flat rectangles (`apps/session/daw/src/arrangement.rs:449-468`) and the studio's "waveforms stream in behind them" is a placeholder string with no module behind it (`features/daw-ui/daw-ui/src/studio/mod.rs:388-389`, `studio/project.rs:83-86`).
-2. Standalone is the mature side: mmap'd WAV / decoded PCM (`daw:features/standalone/daw-standalone/src/audio_engine/source.rs:24-30`), min/max per block in **take time** (`take_reader.rs:228-270`), a revision-keyed in-memory cache (`peak.rs:60-69`) and a REAPER-compatible `.reapeaks` sidecar mipmap at 160/2400/48000 samples-per-peak (`peak_store.rs`, `daw:features/dawfile/dawfile-reaper/src/reapeaks.rs:11-25`).
-3. REAPER's impl is a thin, buggy shim over `PCM_Source_GetPeaks`: it hardcodes 44.1 kHz and 2 channels, reads from source time 0 for the item length (ignoring `start_offset`/`play_rate`), and sizes the buffer for one block when the SDK writes two (max block, then min block) — so its layout does not match the `[min,max]`-pair layout the proto documents and standalone emits (`daw:features/reaper/daw-reaper/src/peak.rs:69-98` vs `reaper_plugin_functions.h:5416`).
+1. Both backends already serve waveform peaks over one RPC, `Peaks::take_peaks` (`daw:crates/daw/proto/src/peak/service.rs:17-23`), and `daw_control::Take::peaks` wraps it (`daw:crates/daw/control/src/items.rs:723-735`) — the session window simply never calls it: items are flat rectangles (`apps/session/daw/src/arrangement.rs:449-468`) and the studio's "waveforms stream in behind them" is a placeholder string with no module behind it (`features/ui/daw-ui/daw-ui/src/studio/mod.rs:388-389`, `studio/project.rs:83-86`).
+2. Standalone is the mature side: mmap'd WAV / decoded PCM (`daw:features/standalone/daw-standalone/src/audio_engine/source.rs:24-30`), min/max per block in **take time** (`take_reader.rs:228-270`), a revision-keyed in-memory cache (`peak.rs:60-69`) and a REAPER-compatible `.reapeaks` sidecar mipmap at 160/2400/48000 samples-per-peak (`peak_store.rs`, `daw:features/formats/dawfile-reaper/src/reapeaks.rs:11-25`).
+3. REAPER's impl is a thin, buggy shim over `PCM_Source_GetPeaks`: it hardcodes 44.1 kHz and 2 channels, reads from source time 0 for the item length (ignoring `start_offset`/`play_rate`), and sizes the buffer for one block when the SDK writes two (max block, then min block) — so its layout does not match the `[min,max]`-pair layout the proto documents and standalone emits (`daw:features/adapters/reaper/daw-reaper/src/peak.rs:69-98` vs `reaper_plugin_functions.h:5416`).
 4. A MIDI preview reads `Midi::notes` (`daw:crates/daw/proto/src/midi/service.rs:307`) — `MidiNote{pitch, velocity, start_ppq, length_ppq}` in quarter notes from the item start — and maps PPQ to seconds through the tempo map exactly as standalone's renderer does (`daw:features/standalone/daw-standalone/src/audio_engine/render/snapshot.rs:481-492`); REAPER can also render a MIDI take through the peak API itself (`PEAKTRANSFER_MIDI_NOTE_MODE`, `reaper_plugin.h:472-476`).
 5. Recommendation: one wire type, `ItemPeaks` — per-channel `(min,max)` pairs in linear −1..1, at a caller-chosen samples-per-peak, in take (item-local) time, quantised to i16 like `.reapeaks` — served by both backends from their existing paths; a folder item folds children per column with `min(min)`/`max(max)`, not a mean (the editor's mean is a drum-mic special case, `features/expression-editor/spec/drum-mode.md:101-107`).
 
@@ -25,9 +25,9 @@ anywhere in `apps/session/daw` (the only "simulated" signal in the app is
 the rack's meter/compressor feed in `apps/session/daw/src/simulate.rs:1-5`,
 not item waveforms). The Dioxus studio the app grew out of promises
 peaks that "stream in afterwards (`super::waveform`)"
-(`features/daw-ui/daw-ui/src/studio/project.rs:83-86`) and shows "waveforms
+(`features/ui/daw-ui/daw-ui/src/studio/project.rs:83-86`) and shows "waveforms
 stream in behind them…" while loading (`studio/mod.rs:388-389`), but
-`features/daw-ui/daw-ui/src/studio/` has no `waveform.rs`.
+`features/ui/daw-ui/daw-ui/src/studio/` has no `waveform.rs`.
 
 The project snapshot it builds from is `daw_proto::Item` grouped by
 track (`studio/project.rs:49-79`). `Item` carries `position`, `length`,
@@ -79,11 +79,11 @@ note preview.
 
 ### What daw-reaper exposes
 
-`impl Peaks for Reaper` (`daw:features/reaper/daw-reaper/src/peak.rs:17-102`),
+`impl Peaks for Reaper` (`daw:features/adapters/reaper/daw-reaper/src/peak.rs:17-102`),
 registered as `peak::Service` + `peak::StreamService`
-(`daw:features/reaper/daw-reaper/src/services.rs:79,90`). `take_peaks`
+(`daw:features/adapters/reaper/daw-reaper/src/services.rs:79,90`). `take_peaks`
 resolves item → take → `PCM_source`, then calls the safe wrapper
-`pcm_source_get_peaks` (`daw:features/reaper/daw-reaper/src/safe_wrappers/peak.rs:27-48`)
+`pcm_source_get_peaks` (`daw:features/adapters/reaper/daw-reaper/src/safe_wrappers/peak.rs:27-48`)
 once for the whole item.
 
 ### What is wrong or missing on the REAPER side
@@ -176,7 +176,7 @@ the REAPER side has to be brought up to it, not the other way round.
   `daw_control::MidiEditor::notes()` is the async client wrapper
   (`daw:crates/daw/control/src/midi_editor.rs:22-60`).
 - **REAPER backend** reads every note with `MIDI_GetNote`
-  (`daw:features/reaper/daw-reaper/src/midi.rs:136-157,269-275`).
+  (`daw:features/adapters/reaper/daw-reaper/src/midi.rs:136-157,269-275`).
 - **Standalone backend** answers from `Project::midi_notes[take_guid]`,
   decoded from the RPP at load (`daw:features/standalone/daw-standalone/src/midi.rs:161-172`,
   `project_loader.rs:467-476`).
