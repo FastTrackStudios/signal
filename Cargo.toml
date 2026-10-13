@@ -190,7 +190,6 @@ members = [
     # ── patchbay ──
     "features/patchbay/driver",
     "apps/patchbay",
-    "apps/patchbay/web",
     # ── frame ──
     "crates/frame/tools/cli",
     "crates/frame/tools/mcp",

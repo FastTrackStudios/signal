@@ -1939,3 +1939,92 @@ assets:
 # Deterministic: unchanged sources rewrite every file byte for byte.
 faces *ONLY:
     cargo run -q --release -p plugin-faces -- features/faces/generated {{ if ONLY != "" { "--only " + ONLY } else { "" } }}
+
+# ── Patchbay (apps/patchbay) ──────────────────────────────────────────
+# One crate, two platforms: the desktop app (default) and the browser
+# remote (`--platform web` turns on `web` and the defaults off).
+
+# Stage the browser remote for embedding: dx web build of fts-patchbay →
+# apps/patchbay/web-dist/, which `--features embed-web` compiles into the
+# binary via include_dir!. web-dist/ is gitignored. dx never cleans its
+# output (every past build's hashed wasm stays in public/assets and would
+# be embedded too), so it is removed first.
+patchbay-web-stage:
+    rm -rf target/dx/fts-patchbay/release/web/public
+    cd apps/patchbay && dx build --platform web --release
+    rm -rf apps/patchbay/web-dist
+    cp -r target/dx/fts-patchbay/release/web/public apps/patchbay/web-dist
+
+# Install Patchbay on this machine and (re)start it — the one command
+# after any change. macOS: build + sign + install Patchbay.app, relaunch
+# it, wait until it answers (apps/patchbay/packaging/macos/deploy.sh; the
+# running engine drops for a couple of seconds). Linux:
+# `patchbay-install-linux`.
+patchbay-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "$(uname -s)" in
+        Darwin) apps/patchbay/packaging/macos/deploy.sh ;;
+        *) {{just_executable()}} patchbay-install-linux ;;
+    esac
+
+# Linux: release binary (web bundle EMBEDDED) in ~/.local/lib/fts,
+# `patchbay` on PATH, launcher entry + icon. Does not restart a running
+# app.
+patchbay-install-linux: patchbay-web-stage
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p fts-patchbay --features embed-web
+    install -d ~/.local/lib/fts
+    install -m 755 target/release/fts-patchbay ~/.local/lib/fts/patchbay-app.new
+    mv -T ~/.local/lib/fts/patchbay-app.new ~/.local/lib/fts/patchbay-app
+    install -m 755 target/release/patchbay ~/.local/lib/fts/patchbay.new
+    mv -T ~/.local/lib/fts/patchbay.new ~/.local/lib/fts/patchbay
+    install -d ~/.local/bin
+    ln -sf ~/.local/lib/fts/patchbay ~/.local/bin/patchbay
+    install -d ~/.local/share/icons/hicolor/scalable/apps
+    install -m 644 apps/patchbay/assets/icon.svg \
+        ~/.local/share/icons/hicolor/scalable/apps/patchbay.svg
+    install -d ~/.local/share/applications
+    sed "s|@BIN@|$HOME/.local/lib/fts/patchbay-app|" \
+        apps/patchbay/assets/patchbay.desktop \
+        > ~/.local/share/applications/patchbay.desktop
+    update-desktop-database ~/.local/share/applications 2>/dev/null || true
+    gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
+    # KDE keeps its own per-environment menu cache; rebuild it in the
+    # session's env (a dev-shell kbuildsycoca updates the wrong cache).
+    systemd-run --user --collect kbuildsycoca6 2>/dev/null || kbuildsycoca6 2>/dev/null || true
+    echo "installed: Patchbay CLI ('patchbay health') and desktop app (launch from the app menu or run 'patchbay-app')"
+
+# Run the Patchbay app from source.
+patchbay:
+    cargo run -p fts-patchbay
+
+# Run Patchbay's agent CLI from source, e.g. `just patchbay-cli health --json`.
+patchbay-cli *args:
+    cargo run -p fts-patchbay --bin patchbay -- {{args}}
+
+# macOS: Patchbay.app. The engine runs inside Patchbay.app, which owns the
+# privacy grants (System Audio Recording for Core Audio taps, Microphone);
+# the `patchbay` CLI stays a plain RPC client.
+
+# Build target/macos/Patchbay.app (release, unsigned).
+patchbay-macos-app:
+    apps/patchbay/packaging/macos/build-app.sh
+
+# Build + sign (hardened runtime, Developer ID; PATCHBAY_SIGN_ID overrides) + verify.
+patchbay-macos-sign: patchbay-macos-app
+    apps/patchbay/packaging/macos/sign.sh
+
+# Build + sign + install to ~/Applications (PATCHBAY_APP_DIR overrides); CLI → ~/.local/bin/patchbay.
+# Quits a running Patchbay but does not relaunch it — `just patchbay-install` does.
+patchbay-macos-install: patchbay-macos-sign
+    apps/patchbay/packaging/macos/install.sh
+
+# Notarize + staple the signed app for other Macs (profile: PATCHBAY_NOTARY_PROFILE, default patchbay-notary).
+patchbay-macos-notarize:
+    apps/patchbay/packaging/macos/notarize.sh
+
+# Regenerate AppIcon.icns from apps/patchbay/assets/icon.svg (needs rsvg-convert).
+patchbay-macos-icon:
+    apps/patchbay/packaging/macos/make-icon.sh

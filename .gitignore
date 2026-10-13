@@ -9,8 +9,10 @@ node_modules/
 .direnv/
 .claude/worktrees/
 
-# Staged web bundle embedded into the native binary (just rig-install)
-apps/fasttrackstudio/web-dist/
+# Staged web bundles embedded into the native binaries (just web-stage,
+# just patchbay-web-stage)
+apps/session/desktop/web-dist/
+apps/signal/desktop/web-dist/
 apps/patchbay/web-dist/
 
 # graphify knowledge graph — regenerable via `just graph`, machine-local.
