@@ -7,7 +7,9 @@ use crate::protools::block::Block;
 use crate::protools::content_type::ContentType;
 use crate::protools::cursor::{self, Cursor};
 use crate::protools::parse::tempo::{TempoSegment, tick_to_sample};
-use crate::protools::types::{MidiEvent, MidiRegion, NO_REGION, Track, TrackKind, TrackRegion, ZERO_TICKS};
+use crate::protools::types::{
+    MidiEvent, MidiRegion, NO_REGION, Track, TrackKind, TrackRegion, ZERO_TICKS,
+};
 
 /// Magic marker that precedes MIDI event data within a 0x2000 block.
 const MIDI_MAGIC: &[u8] = b"MdNLB";

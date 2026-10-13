@@ -144,8 +144,20 @@ pub use document_proto::{StrokeAlign, StrokeCap, StrokeJoin};
 /// with a side of zero length (a horizontal or vertical line) widened to
 /// the stroke's width about the line, so the gradient still has an extent.
 #[must_use]
-pub fn stroke_gradient_box(s: &StrokeStyle, x: f64, y: f64, w: f64, h: f64) -> (f64, f64, f64, f64) {
-    let grow = |at: f64, len: f64| if len > 1e-9 { (at, len) } else { (at - s.width * 0.5, s.width.max(1e-6)) };
+pub fn stroke_gradient_box(
+    s: &StrokeStyle,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+) -> (f64, f64, f64, f64) {
+    let grow = |at: f64, len: f64| {
+        if len > 1e-9 {
+            (at, len)
+        } else {
+            (at - s.width * 0.5, s.width.max(1e-6))
+        }
+    };
     let ((x, w), (y, h)) = (grow(x, w), grow(y, h));
     (x, y, w, h)
 }

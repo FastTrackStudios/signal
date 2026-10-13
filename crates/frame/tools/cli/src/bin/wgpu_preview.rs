@@ -1,11 +1,11 @@
 #[cfg(feature = "anyrender")]
 use document_proto::{NodeId, Scene as Document};
 #[cfg(feature = "anyrender")]
-use render::build_scene_layout_boxes;
-#[cfg(feature = "anyrender")]
 use kurbo::{Affine, Point, Rect};
 #[cfg(feature = "anyrender")]
 use peniko::{Blob, Brush, BrushRef, Color, Fill, FontData, color::palette};
+#[cfg(feature = "anyrender")]
+use render::build_scene_layout_boxes;
 #[cfg(feature = "anyrender")]
 use skrifa::{
     MetadataProvider,
@@ -347,7 +347,15 @@ fn draw_overlay(
     let Some(snapshot) = stats.snapshot() else {
         return;
     };
-    snapshot.draw_layer(scene, text, width, height, stats.samples(), vsync, aa_config);
+    snapshot.draw_layer(
+        scene,
+        text,
+        width,
+        height,
+        stats.samples(),
+        vsync,
+        aa_config,
+    );
 }
 
 #[cfg(feature = "anyrender")]
@@ -632,11 +640,10 @@ impl ApplicationHandler for App {
                     )
                     .expect("failed to render to texture");
 
-                let surface_texture = surface
-                    .surface
-                    .get_current_texture();
+                let surface_texture = surface.surface.get_current_texture();
                 let surface_texture = match surface_texture {
-                    wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+                    wgpu::CurrentSurfaceTexture::Success(t)
+                    | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
                     other => panic!("failed to get surface texture: {other:?}"),
                 };
                 let mut encoder =

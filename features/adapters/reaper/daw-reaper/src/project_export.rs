@@ -22,9 +22,9 @@
 // PT domain types. `dawfile_protools` re-exports its `types` module at the
 // crate root (see the importer's use of `formats::protools::TrackRegion`), so
 // these resolve to the same structs documented in `dawfile-protools/src/types.rs`.
-use formats::protools::{Playlist, Track as PtTrack, TrackKind, TrackRegion};
 use dawfile_reaper::types::item::Item;
 use dawfile_reaper::types::track::Track as ReaperTrack;
+use formats::protools::{Playlist, Track as PtTrack, TrackKind, TrackRegion};
 
 /// The PT `TrackRegion` time unit is samples on the timeline; the forward path
 /// converts PT samples → REAPER seconds via the session sample rate. Reversing

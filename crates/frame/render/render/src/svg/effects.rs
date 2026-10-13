@@ -1,6 +1,6 @@
 use super::render::{
-    apply_corner_radii_rect, fmt_f64, push_node, svg_color_paint_values, svg_linecap,
-    svg_linejoin, svg_mix_blend_mode, to_u8,
+    apply_corner_radii_rect, fmt_f64, push_node, svg_color_paint_values, svg_linecap, svg_linejoin,
+    svg_mix_blend_mode, to_u8,
 };
 
 /// Format a shadow color component (0.0–1.0) with Figma-compatible precision.
@@ -59,14 +59,22 @@ fn build_effect_filter(
     if effect_suffix.is_empty() {
         effect_suffix.push('f');
     }
-    let filter_id = format!("filter{}_{}_{}", *effect_count, effect_suffix, root_id_suffix);
+    let filter_id = format!(
+        "filter{}_{}_{}",
+        *effect_count, effect_suffix, root_id_suffix
+    );
     *effect_count += 1;
 
     // Compute filter bounds.
     let (mut min_x, mut min_y, mut max_x, mut max_y) = if drop_shadows.is_empty() {
         (x, y, x + width, y + height)
     } else {
-        (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY)
+        (
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        )
     };
     for shadow in &drop_shadows {
         let radius = shadow.radius.max(0.0);
@@ -252,7 +260,11 @@ fn build_effect_filter(
                 svg::Node::assign(
                     &mut fe_morphology,
                     "operator",
-                    if shadow.spread > 0.0 { "erode" } else { "dilate" },
+                    if shadow.spread > 0.0 {
+                        "erode"
+                    } else {
+                        "dilate"
+                    },
                 );
                 svg::Node::assign(&mut fe_morphology, "in", "SourceAlpha");
                 svg::Node::assign(&mut fe_morphology, "result", this_result.clone());
@@ -549,16 +561,26 @@ mod tests {
     fn emission_glow_exports_as_a_gaussian_blur_filter() {
         let glow = NodeEffect {
             kind: EffectKind::Glow,
-            color: Rgba { r: 1.0, g: 0.4, b: 0.1, a: 0.8 },
+            color: Rgba {
+                r: 1.0,
+                g: 0.4,
+                b: 0.1,
+                a: 0.8,
+            },
             offset_x: 0.0,
             offset_y: 0.0,
             radius: 12.0,
             spread: 0.0,
         };
         let mut count = 0;
-        let (filter, _) = super::build_effect_filter("root", &mut count, &[glow], 10.0, 10.0, 20.0, 20.0).expect("a filter");
+        let (filter, _) =
+            super::build_effect_filter("root", &mut count, &[glow], 10.0, 10.0, 20.0, 20.0)
+                .expect("a filter");
         let svg = filter.to_string();
-        assert!(svg.contains("feGaussianBlur") && svg.contains("stdDeviation=\"6\""), "{svg}");
+        assert!(
+            svg.contains("feGaussianBlur") && svg.contains("stdDeviation=\"6\""),
+            "{svg}"
+        );
         assert!(!svg.contains("feOffset dx"), "no offset: {svg}");
     }
 }

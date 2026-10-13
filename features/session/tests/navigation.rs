@@ -13,23 +13,23 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use daw::service::ProjectContext;
 use daw::LayerRouter;
+use daw::service::ProjectContext;
 use daw_proto::ProjectInfo;
 use daw_standalone::bootstrap::build_in_process_daw;
 use daw_standalone::sync::Standalone;
 use dioxus::prelude::*;
-use dioxus_test::{by_testid, render, DocumentTester};
+use dioxus_test::{DocumentTester, by_testid, render};
 use session::services::setlist_service::{
-    setlist_service_stream_service_descriptor, stream_serve as setlist_service_stream_serve,
-    SetlistServiceStreamClient,
+    SetlistServiceStreamClient, setlist_service_stream_service_descriptor,
+    stream_serve as setlist_service_stream_serve,
 };
 use session::setlist::service::demo::{fixture_songs, stamp_song_native};
+use session::ui::{ACTIVE_INDICES, PerformanceSidebar, SETLIST_STRUCTURE};
 use session::{
-    serve_setlist_service, setlist_service_service_descriptor, SetlistServiceClient,
-    SetlistServiceImpl,
+    SetlistServiceClient, SetlistServiceImpl, serve_setlist_service,
+    setlist_service_service_descriptor,
 };
-use session::ui::{PerformanceSidebar, ACTIVE_INDICES, SETLIST_STRUCTURE};
 
 /// The stream client the test root's event-pump `use_future` reads from.
 /// `render()` takes a bare `fn() -> Element`, so this is how the

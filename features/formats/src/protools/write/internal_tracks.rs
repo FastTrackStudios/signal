@@ -135,10 +135,13 @@ fn find_name_offset(_payload_start: usize, _block_end: usize) -> usize {
 mod tests {
     use super::*;
 
-    const HEYLADY_PTX: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/HeyLady.ptx");
+    const HEYLADY_PTX: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/protools/HeyLady.ptx"
+    );
     const WORSHIP_PTX: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/worship-session.ptx"
+        "/tests/fixtures/protools/worship-session.ptx"
     );
 
     #[test]

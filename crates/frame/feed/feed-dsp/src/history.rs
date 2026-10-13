@@ -65,18 +65,41 @@ pub struct HistoryReader {
 /// `sample_rate`, folding with `agg`; points before any data read `rest`.
 /// Allocates here; the tap never does.
 #[must_use]
-pub fn history(capacity: usize, sample_rate: f64, rate_hz: f64, agg: Aggregate, rest: f64) -> (HistoryTap, HistoryReader) {
+pub fn history(
+    capacity: usize,
+    sample_rate: f64,
+    rate_hz: f64,
+    agg: Aggregate,
+    rest: f64,
+) -> (HistoryTap, HistoryReader) {
     let (w, r) = ring(capacity);
     let fpp = Arc::new(AtomicU32::new(frames_per_point(sample_rate, rate_hz)));
     let len = capacity.min(r.capacity());
     (
-        HistoryTap { ring: w, frames_per_point: fpp.clone(), agg, acc: 0.0, frames: 0 },
-        HistoryReader { ring: r, frames_per_point: fpp, sample_rate, rest, len, scratch: vec![0.0; len] },
+        HistoryTap {
+            ring: w,
+            frames_per_point: fpp.clone(),
+            agg,
+            acc: 0.0,
+            frames: 0,
+        },
+        HistoryReader {
+            ring: r,
+            frames_per_point: fpp,
+            sample_rate,
+            rest,
+            len,
+            scratch: vec![0.0; len],
+        },
     )
 }
 
 fn frames_per_point(sample_rate: f64, rate_hz: f64) -> u32 {
-    let r = if rate_hz.is_finite() && rate_hz > 0.0 { rate_hz } else { 30.0 };
+    let r = if rate_hz.is_finite() && rate_hz > 0.0 {
+        rate_hz
+    } else {
+        30.0
+    };
     (sample_rate / r).round().clamp(1.0, f64::from(u32::MAX)) as u32
 }
 
@@ -91,7 +114,9 @@ impl HistoryTap {
         let mut left = frames;
         while left > 0 {
             let take = left.min(fpp.saturating_sub(self.frames).max(1));
-            self.acc = self.agg.fold(self.acc, f64::from(self.frames), v, f64::from(take));
+            self.acc = self
+                .agg
+                .fold(self.acc, f64::from(self.frames), v, f64::from(take));
             self.frames += take;
             left -= take;
             if self.frames >= fpp {
@@ -118,7 +143,10 @@ impl HistoryReader {
     /// Change the point rate (takes effect from the audio thread's next
     /// point).
     pub fn set_rate(&self, rate_hz: f64) {
-        self.frames_per_point.store(frames_per_point(self.sample_rate, rate_hz), Ordering::Relaxed);
+        self.frames_per_point.store(
+            frames_per_point(self.sample_rate, rate_hz),
+            Ordering::Relaxed,
+        );
     }
 
     #[must_use]
@@ -174,7 +202,10 @@ mod tests {
         assert_eq!(out, [7.0, 8.0, 9.0, 10.0]);
         let mut long = [9.9; 12];
         r.snapshot(&mut long);
-        assert_eq!(long, [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
+        assert_eq!(
+            long,
+            [0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+        );
         // Wrapping keeps the order.
         for i in 11..=40 {
             tap.push_point(i as f32);

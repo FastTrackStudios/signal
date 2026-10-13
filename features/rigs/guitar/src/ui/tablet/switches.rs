@@ -10,9 +10,9 @@
 //! tile is the stack's colour, lit when it plays, dimmed toward the grid
 //! when not.
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{PerfStack, PerformanceModel};
+use dioxus::prelude::*;
 
 use super::tokens::*;
 
@@ -26,7 +26,9 @@ const WHITE: &str = "#fafafa";
 
 /// switches::dim — a colour darkened toward the grid's ground.
 fn dim(hex: &str, amount: f64) -> String {
-    let ch = |i: usize| f64::from(u8::from_str_radix(hex.get(1 + i..3 + i).unwrap_or("00"), 16).unwrap_or(0));
+    let ch = |i: usize| {
+        f64::from(u8::from_str_radix(hex.get(1 + i..3 + i).unwrap_or("00"), 16).unwrap_or(0))
+    };
     let base = [10.0, 10.0, 12.0];
     let c: Vec<String> = [0usize, 2, 4]
         .iter()
@@ -70,14 +72,26 @@ macro_rules! call {
 pub fn TouchSwitches(perf: PerformanceModel) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let stacks = perf.stacks.clone();
-    let song = perf.songs.get(perf.song_index as usize).map(|s| s.name.clone()).unwrap_or_else(|| "—".to_string());
+    let song = perf
+        .songs
+        .get(perf.song_index as usize)
+        .map(|s| s.name.clone())
+        .unwrap_or_else(|| "—".to_string());
     let fx = !perf.fx_bypass;
     let boost = perf.boost_db.abs() > 0.01;
     // Off: the level it switches on at, as the rig keeps it.
-    let boost_label = format!("{:+.0} dB", if boost { perf.boost_db } else { perf.boost_level });
+    let boost_label = format!(
+        "{:+.0} dB",
+        if boost {
+            perf.boost_db
+        } else {
+            perf.boost_level
+        }
+    );
     // Switch 5 a stack (the bass's fifth): its tile under the foot, and the
     // hold layer's first tile the sixth stack.
-    let five_is_stack = perf.switch_actions.get(4).is_some_and(|a| a == "stack") && stacks.len() > 4;
+    let five_is_stack =
+        perf.switch_actions.get(4).is_some_and(|a| a == "stack") && stacks.len() > 4;
     rsx! {
         div { style: "display: flex; flex-direction: column; background: #0a0a0c;",
             // One grid, two rows of five, the same columns: the hold layer
@@ -127,19 +141,32 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
     let (bg, _) = folder(&stack.name);
     let lit = stack.is_active;
     // The part a press plays: its patch, by its own name.
-    let showing = stack.patches.get(stack.position as usize).cloned().unwrap_or_else(|| stack.current_patch.clone());
-    let part = if showing.is_empty() { stack.name.clone() } else { showing };
+    let showing = stack
+        .patches
+        .get(stack.position as usize)
+        .cloned()
+        .unwrap_or_else(|| stack.current_patch.clone());
+    let part = if showing.is_empty() {
+        stack.name.clone()
+    } else {
+        showing
+    };
     let count = stack.patches.len().max(stack.patch_count as usize);
     let pos = stack.position as usize;
     let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.24) };
     // White on every stack's colour; muted while another plays.
-    let ink = if lit { WHITE.to_string() } else { dim(WHITE, 0.5) };
+    let ink = if lit {
+        WHITE.to_string()
+    } else {
+        dim(WHITE, 0.5)
+    };
     let dot = if compact { 5 } else { 6 };
     // A momentary switch plays while held: pressed on the way down,
     // released on the way up.
     let momentary = stack.momentary;
     let mut down = use_signal(|| false);
-    let (r_click, r_down, r_up, r_leave, r_cancel) = (rig.clone(), rig.clone(), rig.clone(), rig.clone(), rig);
+    let (r_click, r_down, r_up, r_leave, r_cancel) =
+        (rig.clone(), rig.clone(), rig.clone(), rig.clone(), rig);
     rsx! {
         button {
             "aria-pressed": "{lit}",
@@ -189,9 +216,21 @@ fn StackTile(no: u32, stack: PerfStack, index: usize, compact: bool) -> Element 
 
 /// A function switch: a title and what it is doing, lit in its colour.
 #[component]
-fn FnTile(no: u32, title: &'static str, subtitle: String, bg: &'static str, text: &'static str, lit: bool, onclick: EventHandler<MouseEvent>) -> Element {
+fn FnTile(
+    no: u32,
+    title: &'static str,
+    subtitle: String,
+    bg: &'static str,
+    text: &'static str,
+    lit: bool,
+    onclick: EventHandler<MouseEvent>,
+) -> Element {
     let tile_bg = if lit { bg.to_string() } else { dim(bg, 0.3) };
-    let ink = if lit { text.to_string() } else { dim(text, 0.45) };
+    let ink = if lit {
+        text.to_string()
+    } else {
+        dim(text, 0.45)
+    };
     rsx! {
         button {
             "aria-pressed": "{lit}",
@@ -276,10 +315,22 @@ fn TunerTile(muted: bool, onclick: EventHandler<MouseEvent>) -> Element {
     });
     let r = reading();
     let in_tune = r.active && r.cents.abs() <= 5.0;
-    let (bg, ink, needle) = if in_tune { ("#14532d", "#4ade80", "#4ade80") } else { (SHEET_2, INK, "#facc15") };
+    let (bg, ink, needle) = if in_tune {
+        ("#14532d", "#4ade80", "#4ade80")
+    } else {
+        (SHEET_2, INK, "#facc15")
+    };
     let at = 50.0 + r.cents.clamp(-50.0, 50.0);
-    let note = if r.active { r.note.clone() } else { "—".to_string() };
-    let cents = if r.active { format!("{:+.0}", r.cents) } else { String::new() };
+    let note = if r.active {
+        r.note.clone()
+    } else {
+        "—".to_string()
+    };
+    let cents = if r.active {
+        format!("{:+.0}", r.cents)
+    } else {
+        String::new()
+    };
     rsx! {
         button {
             style: "position: relative; min-width: 0; overflow: hidden; border: none; border-radius: 0; padding: 0 10px; display: flex; flex-direction: row; align-items: center; gap: 10px; background: {bg}; color: {ink}; font-family: {FONT}; cursor: pointer;",
@@ -314,7 +365,9 @@ fn SwitchNo(no: u32, ink: String) -> Element {
 /// Clean") — the tile has room for the one thing it loads.
 fn core_line(preset: &str) -> &str {
     match preset.find(" · ") {
-        Some(dot) => preset[dot..].find(" + ").map_or(preset, |plus| &preset[..dot + plus]),
+        Some(dot) => preset[dot..]
+            .find(" + ")
+            .map_or(preset, |plus| &preset[..dot + plus]),
         None => preset,
     }
 }

@@ -72,7 +72,11 @@ pub fn render(
     let mut done = 0;
     // At least one block, so the parameters always reach the plugin.
     while done < pre.max(1) {
-        let ev = PluginEvents { params: &opts.params, midi: &[], note_expressions: &[] };
+        let ev = PluginEvents {
+            params: &opts.params,
+            midi: &[],
+            note_expressions: &[],
+        };
         plugin.process_block(&zeros, &zeros, &mut sl, &mut sr, &ev)?;
         if opts.pump_run_loop {
             pump_main_run_loop(0.0005);
@@ -80,7 +84,11 @@ pub fn render(
         done += block;
     }
 
-    let latency = if opts.compensate_latency { plugin.latency() as usize } else { 0 };
+    let latency = if opts.compensate_latency {
+        plugin.latency() as usize
+    } else {
+        0
+    };
     let n_in = in_l.len().max(in_r.len());
     let total = n_in + (opts.tail_secs.max(0.0) * opts.sample_rate) as usize + latency;
     let (mut l, mut r) = (vec![0.0f32; total], vec![0.0f32; total]);
@@ -120,7 +128,10 @@ pub fn find_param<'a>(params: &'a [PluginParamInfo], name: &str) -> Option<&'a P
 /// selector's positions (an algorithm list, a mode switch) are
 /// discovered when the plugin reports it as continuous. Samples 256
 /// points; returns `None` when the texts look numeric (a real knob).
-pub fn param_positions(plugin: &mut dyn PluginInstance, info: &PluginParamInfo) -> Option<Vec<(String, f64)>> {
+pub fn param_positions(
+    plugin: &mut dyn PluginInstance,
+    info: &PluginParamInfo,
+) -> Option<Vec<(String, f64)>> {
     let mut out: Vec<(String, f64)> = Vec::new();
     for k in 0..=255u32 {
         let plain = info.min + (info.max - info.min) * f64::from(k) / 255.0;
@@ -134,7 +145,11 @@ pub fn param_positions(plugin: &mut dyn PluginInstance, info: &PluginParamInfo) 
     }
     let numeric = out
         .iter()
-        .filter(|(t, _)| t.chars().next().is_some_and(|c| c.is_ascii_digit() || c == '-' || c == '+'))
+        .filter(|(t, _)| {
+            t.chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_digit() || c == '-' || c == '+')
+        })
         .count();
     (numeric * 2 < out.len()).then_some(out)
 }
@@ -146,7 +161,11 @@ pub fn param_positions(plugin: &mut dyn PluginInstance, info: &PluginParamInfo) 
 ///   selector position's name;
 /// - `NAME:=plain` — a plain value in the parameter's own units;
 /// - `NAME~=norm`  — a normalized 0..1 position.
-pub fn resolve(plugin: &mut dyn PluginInstance, params: &[PluginParamInfo], spec: &str) -> Result<(u32, f64), String> {
+pub fn resolve(
+    plugin: &mut dyn PluginInstance,
+    params: &[PluginParamInfo],
+    spec: &str,
+) -> Result<(u32, f64), String> {
     let (name, op, value) = if let Some((n, v)) = spec.split_once(":=") {
         (n, ":=", v)
     } else if let Some((n, v)) = spec.split_once("~=") {
@@ -154,20 +173,38 @@ pub fn resolve(plugin: &mut dyn PluginInstance, params: &[PluginParamInfo], spec
     } else if let Some((n, v)) = spec.split_once('=') {
         (n, "=", v)
     } else {
-        return Err(format!("expected NAME=text, NAME:=plain or NAME~=normalized, got {spec:?}"));
+        return Err(format!(
+            "expected NAME=text, NAME:=plain or NAME~=normalized, got {spec:?}"
+        ));
     };
-    let info = find_param(params, name).ok_or_else(|| format!("no parameter named {:?}", name.trim()))?.clone();
+    let info = find_param(params, name)
+        .ok_or_else(|| format!("no parameter named {:?}", name.trim()))?
+        .clone();
     let value = value.trim();
-    let num = || value.parse::<f64>().map_err(|e| format!("{}: {value:?}: {e}", info.name));
+    let num = || {
+        value
+            .parse::<f64>()
+            .map_err(|e| format!("{}: {value:?}: {e}", info.name))
+    };
     let plain = match op {
         ":=" => num()?,
         "~=" => info.min + (info.max - info.min) * num()?.clamp(0.0, 1.0),
         _ => match plugin.text_to_value(info.id, value) {
             // Some plugins "parse" by returning the current value for text
             // they do not know; only trust a parse that formats back.
-            Some(v) if plugin.value_to_text(info.id, v).is_some_and(|t| same_text(&t, value)) => v,
+            Some(v)
+                if plugin
+                    .value_to_text(info.id, v)
+                    .is_some_and(|t| same_text(&t, value)) =>
+            {
+                v
+            }
             other => param_positions(plugin, &info)
-                .and_then(|pos| pos.into_iter().find(|(t, _)| same_text(t, value)).map(|(_, v)| v))
+                .and_then(|pos| {
+                    pos.into_iter()
+                        .find(|(t, _)| same_text(t, value))
+                        .map(|(_, v)| v)
+                })
                 .or(other)
                 .ok_or_else(|| format!("{}: plugin did not parse {value:?}", info.name))?,
         },
@@ -176,13 +213,21 @@ pub fn resolve(plugin: &mut dyn PluginInstance, params: &[PluginParamInfo], spec
 }
 
 /// Resolve every setting, in order.
-pub fn resolve_all(plugin: &mut dyn PluginInstance, specs: &[&str]) -> Result<Vec<(u32, f64)>, String> {
+pub fn resolve_all(
+    plugin: &mut dyn PluginInstance,
+    specs: &[&str],
+) -> Result<Vec<(u32, f64)>, String> {
     let params = plugin.params();
     specs.iter().map(|s| resolve(plugin, &params, s)).collect()
 }
 
 fn same_text(a: &str, b: &str) -> bool {
-    let norm = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_lowercase();
+    let norm = |s: &str| {
+        s.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_ascii_lowercase()
+    };
     norm(a) == norm(b)
 }
 

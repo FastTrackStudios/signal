@@ -101,8 +101,7 @@ fn open_headless_renders_from_external_pack_reader() {
     }));
 
     const PACK_KEY: &str = "test-tone-external.signalpack";
-    sampler::pack_registry::install_external(PACK_KEY, ID, len)
-        .expect("install external pack");
+    sampler::pack_registry::install_external(PACK_KEY, ID, len).expect("install external pack");
 
     let program = LaneProgram {
         name: "External Test".into(),

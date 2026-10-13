@@ -52,7 +52,11 @@ pub const SOURCE_DIR: &str = ".source-art";
 ///
 /// `dry_run` reports without writing — worth having, because this rewrites
 /// a few thousand files at once.
-pub fn restyle(theme: &ThemeDir, ramp: &daw_ui::theme::Ramp, dry_run: bool) -> Result<RestyleReport> {
+pub fn restyle(
+    theme: &ThemeDir,
+    ramp: &daw_ui::theme::Ramp,
+    dry_run: bool,
+) -> Result<RestyleReport> {
     let mut report = RestyleReport::default();
     let root = theme.images_dir();
     let source = root.join(SOURCE_DIR);

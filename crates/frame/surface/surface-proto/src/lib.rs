@@ -20,8 +20,8 @@ pub use feed_proto::curve;
 pub use feed_proto::{FeedFrame, FeedOptions, FeedRequest, Tap, Trigger, VoiceState};
 
 pub use control::*;
-pub use interact::*;
 pub use curve::{Curve, CurvePoint};
+pub use interact::*;
 pub use param::*;
 
 /// One parameter's current value (normalized 0..1).
@@ -87,7 +87,10 @@ pub mod engine {
     //! `SurfaceEngineService` / `surface_engine_serve`, plus the stream
     //! sibling (`SurfaceEngineStreamClient`, `SurfaceEngineStreamService`,
     //! the `SurfaceEngineStreamSource` backend contract).
-    use super::{Catalog, EditPhase, EntryId, FeedInfo, FeedRequest, ParamAddr, ParamValue, StreamFrame, SurfaceError, TextValue};
+    use super::{
+        Catalog, EditPhase, EntryId, FeedInfo, FeedRequest, ParamAddr, ParamValue, StreamFrame,
+        SurfaceError, TextValue,
+    };
 
     /// An engine, as a surface sees it. Backends implement it synchronously
     /// (like signal's rig services); remote callers get the async client.
@@ -98,7 +101,12 @@ pub mod engine {
         /// Every parameter's current value.
         fn values(&self) -> Vec<ParamValue>;
         /// Set a parameter (normalized). `phase` brackets a gesture.
-        fn set_param(&self, addr: ParamAddr, value: f64, phase: EditPhase) -> Result<(), SurfaceError>;
+        fn set_param(
+            &self,
+            addr: ParamAddr,
+            value: f64,
+            phase: EditPhase,
+        ) -> Result<(), SurfaceError>;
         /// Fire an action.
         fn invoke(&self, action: EntryId) -> Result<(), SurfaceError>;
         /// Select an item of a collection.
@@ -114,7 +122,12 @@ pub mod engine {
             let catalog = self.catalog();
             requests
                 .iter()
-                .map(|r| catalog.stream(&r.id).cloned().ok_or_else(|| SurfaceError::UnknownFeed(r.id.0.clone())))
+                .map(|r| {
+                    catalog
+                        .stream(&r.id)
+                        .cloned()
+                        .ok_or_else(|| SurfaceError::UnknownFeed(r.id.0.clone()))
+                })
                 .collect()
         }
         /// Every text parameter's current value. The default: none (an

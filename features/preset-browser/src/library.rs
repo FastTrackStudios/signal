@@ -377,7 +377,10 @@ mod tests {
             tags: Vec::new(),
             origin: Some("FTS-EQ".to_string()),
             description: Some("Dialing order: cymbals first, then the ring.".to_string()),
-            parameters: vec![("b1_freq".to_string(), 800.5), ("b1_gain".to_string(), -3.0)],
+            parameters: vec![
+                ("b1_freq".to_string(), 800.5),
+                ("b1_gain".to_string(), -3.0),
+            ],
             text_parameters: vec![
                 ("b1_name".to_string(), "Overheads honk".to_string()),
                 ("b1_notes".to_string(), "800 ring".to_string()),
@@ -465,7 +468,10 @@ mod tests {
         )
         .unwrap();
         let text = std::fs::read_to_string(dir.join("bare.json")).unwrap();
-        assert!(!text.contains("description"), "no text means no key: {text}");
+        assert!(
+            !text.contains("description"),
+            "no text means no key: {text}"
+        );
     }
 
     #[test]

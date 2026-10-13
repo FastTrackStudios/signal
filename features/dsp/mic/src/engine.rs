@@ -23,10 +23,9 @@
 
 use crate::conv::Convolver;
 use crate::model::{AXES, AXIS_STEP_DEG, MicModel, PATTERNS, ProximityLaw};
-use crate::model::{MAX_POLY, MAX_POST, PostSection};
 use crate::model::{LowEnd, LowSection, MAX_LOW, Move};
+use crate::model::{MAX_POLY, MAX_POST, PostSection};
 use crate::section::{Biquad, CornerShift};
-
 
 /// Samples of latency at 48 kHz, as the reference reports.
 pub const LATENCY: usize = 24;
@@ -119,9 +118,14 @@ impl Path {
         match self.weights {
             Some([a, b]) => {
                 let own = self.gradient_own.process(own);
-                let cross = self.gradient_cross.process(self.cross.iter_mut().fold(g, |x, sec| sec.process(x)));
+                let cross = self
+                    .gradient_cross
+                    .process(self.cross.iter_mut().fold(g, |x, sec| sec.process(x)));
                 let gradient = a.mul_add(own, b * cross);
-                a.mul_add(self.pressure_own.process(p), b * self.pressure_cross.process(p)) + gradient
+                a.mul_add(
+                    self.pressure_own.process(p),
+                    b * self.pressure_cross.process(p),
+                ) + gradient
             }
             None => p + own,
         }
@@ -148,7 +152,10 @@ struct LowChain {
 
 impl LowChain {
     const fn identity() -> Self {
-        Self { gain: 1.0, sections: [Biquad::identity(); MAX_LOW] }
+        Self {
+            gain: 1.0,
+            sections: [Biquad::identity(); MAX_LOW],
+        }
     }
 
     fn design(block: LowEnd, sample_rate: f64) -> Self {
@@ -158,11 +165,16 @@ impl LowChain {
                 Some(LowSection::HighPass(hz)) => Biquad::high_pass(hz, sample_rate),
                 Some(LowSection::HighPass2 { hz, q }) => Biquad::high_pass2(hz, q, sample_rate),
                 Some(LowSection::Shelf { zero, pole }) => Biquad::shelf(zero, pole, sample_rate),
-                Some(LowSection::Peak { hz, q, gain }) => Biquad::peak_analog(hz, q, gain, sample_rate),
+                Some(LowSection::Peak { hz, q, gain }) => {
+                    Biquad::peak_analog(hz, q, gain, sample_rate)
+                }
                 None => Biquad::identity(),
             };
         }
-        Self { gain: block.gain, sections }
+        Self {
+            gain: block.gain,
+            sections,
+        }
     }
 
     /// New coefficients, state kept.
@@ -175,7 +187,10 @@ impl LowChain {
 
     /// The inverse, a high-pass's zeros at DC leaked to `leak`.
     fn inverse(self, leak: f64) -> Self {
-        Self { gain: 1.0 / self.gain, sections: self.sections.map(|s| s.inverse(leak)) }
+        Self {
+            gain: 1.0 / self.gain,
+            sections: self.sections.map(|s| s.inverse(leak)),
+        }
     }
 
     /// Divide an impulse response by the block, in place.
@@ -190,7 +205,9 @@ impl LowChain {
     }
 
     fn process(&mut self, x: f64) -> f64 {
-        self.sections.iter_mut().fold(x * self.gain, |y, s| s.process(y))
+        self.sections
+            .iter_mut()
+            .fold(x * self.gain, |y, s| s.process(y))
     }
 
     fn reset(&mut self) {
@@ -287,7 +304,15 @@ pub struct DualAdjust {
 impl DualAdjust {
     #[must_use]
     pub const fn none(own_delay: f64) -> Self {
-        Self { own_delay, delay: own_delay, align: 0.0, cross: None, cross_low: None, cross_pressure: None, cross_gradient: None }
+        Self {
+            own_delay,
+            delay: own_delay,
+            align: 0.0,
+            cross: None,
+            cross_low: None,
+            cross_pressure: None,
+            cross_gradient: None,
+        }
     }
 }
 
@@ -327,8 +352,15 @@ fn shift(kernel: &mut [f64], scratch: &mut [f64], samples: f64) {
     let mut taps = [0.0f64; 2 * SHIFT_HALF + 1];
     for (j, tap) in taps.iter_mut().enumerate() {
         let t = dsp_core::count_to_f64(j) - dsp_core::count_to_f64(SHIFT_HALF) - frac;
-        let w = 0.08f64.mul_add((2.0 * PI * t / span).cos(), 0.5f64.mul_add((PI * t / span).cos(), 0.42));
-        let sinc = if t.abs() < 1e-12 { 1.0 } else { (PI * t).sin() / (PI * t) };
+        let w = 0.08f64.mul_add(
+            (2.0 * PI * t / span).cos(),
+            0.5f64.mul_add((PI * t / span).cos(), 0.42),
+        );
+        let sinc = if t.abs() < 1e-12 {
+            1.0
+        } else {
+            (PI * t).sin() / (PI * t)
+        };
         *tap = sinc * w;
     }
     for (n, out) in scratch.iter_mut().enumerate() {
@@ -352,7 +384,11 @@ impl MicChain {
     #[must_use]
     pub fn new(model: MicModel) -> Self {
         let taps = model.taps;
-        let has_curve = (0..crate::model::LOW_CUTS).any(|k| model.stage(k).is_some_and(|s| s.poly.iter().any(|&a| a != 0.0)));
+        let has_curve = (0..crate::model::LOW_CUTS).any(|k| {
+            model
+                .stage(k)
+                .is_some_and(|s| s.poly.iter().any(|&a| a != 0.0))
+        });
         let mut chain = Self {
             linear: Path::new(taps),
             inverse: [Biquad::identity(); MAX_POST],
@@ -419,7 +455,13 @@ impl MicChain {
         // In dual mode the kernels run without their proximity base, so this
         // is the mic's whole filter (its moves alone where a dual gradient
         // block runs beside them); otherwise the moves from the base.
-        let moves = pad(if self.dual.cross.is_some() && self.model.dual_gradient.is_none() { law.filter(s.proximity, s.pattern) } else { law.moves(s.proximity, s.pattern) });
+        let moves = pad(
+            if self.dual.cross.is_some() && self.model.dual_gradient.is_none() {
+                law.filter(s.proximity, s.pattern)
+            } else {
+                law.moves(s.proximity, s.pattern)
+            },
+        );
         let path = &mut self.linear;
         for (section, step) in path.proximity.iter_mut().zip(moves) {
             match step {
@@ -432,15 +474,26 @@ impl MicChain {
         // this mic's and the other's (the kernels run without theirs)
         let flat = LowChain::identity();
         let crossed = self.dual.cross.is_some();
-        let pick = |block: Option<LowEnd>| if crossed { block.map_or(flat, |b| LowChain::design(b, sr)) } else { flat };
-        path.pressure_own.retune(pick(Some(self.model.dual_pressure(s.pattern))));
+        let pick = |block: Option<LowEnd>| {
+            if crossed {
+                block.map_or(flat, |b| LowChain::design(b, sr))
+            } else {
+                flat
+            }
+        };
+        path.pressure_own
+            .retune(pick(Some(self.model.dual_pressure(s.pattern))));
         path.pressure_cross.retune(pick(self.dual.cross_pressure));
         path.gradient_own.retune(pick(self.model.dual_gradient));
         path.gradient_cross.retune(pick(self.dual.cross_gradient));
         if let Some((other, pattern, _)) = self.dual.cross {
             // the kernels run without their base: the other mic's whole
             // filter (its moves, where its gradient block runs alongside)
-            let steps = pad(if self.dual.cross_gradient.is_some() { other.moves(s.proximity, pattern) } else { other.filter(s.proximity, pattern) });
+            let steps = pad(if self.dual.cross_gradient.is_some() {
+                other.moves(s.proximity, pattern)
+            } else {
+                other.filter(s.proximity, pattern)
+            });
             for (section, step) in path.cross.iter_mut().zip(steps) {
                 match step {
                     Some((zero, pole)) => section.set(zero, pole, sr),
@@ -455,13 +508,15 @@ impl MicChain {
         if self.model.has_set(s.low_cut) {
             self.low_cut.make_identity();
         } else {
-            self.low_cut.set(off, cut.get(s.low_cut).copied().unwrap_or(off), sr);
+            self.low_cut
+                .set(off, cut.get(s.low_cut).copied().unwrap_or(off), sr);
         }
         let leak = core::f64::consts::TAU * LEAK_HZ / sr;
         // dual mode: this mic's low end and the other's, crossfaded after
         // the kernels (which run without theirs)
         if let Some(other) = self.dual.cross_low {
-            self.low_own.retune(LowChain::design(self.model.low_end(s.low_cut), sr));
+            self.low_own
+                .retune(LowChain::design(self.model.low_end(s.low_cut), sr));
             self.low_other.retune(LowChain::design(other, sr));
             let carried = LowChain::design(self.model.carried_low_end(s.low_cut), sr);
             self.carried.retune(carried);
@@ -472,7 +527,9 @@ impl MicChain {
         self.poly = stage.map_or([0.0; MAX_POLY], |st| st.poly);
         self.clamp = stage.map_or(f64::INFINITY, |st| st.clamp);
         for (i, (section, inverse)) in self.post.iter_mut().zip(&mut self.inverse).enumerate() {
-            *section = stage.and_then(|st| st.post.get(i)).map_or_else(Biquad::identity, |&p| design(p, sr));
+            *section = stage
+                .and_then(|st| st.post.get(i))
+                .map_or_else(Biquad::identity, |&p| design(p, sr));
             *inverse = section.inverse(leak);
         }
         let sign = if s.phase_invert { -1.0 } else { 1.0 };
@@ -482,12 +539,16 @@ impl MicChain {
 
     fn rebuild_kernels(&mut self) {
         let pattern = self.settings.pattern.min(PATTERNS.saturating_sub(1));
-        let pos = (self.settings.axis_deg.clamp(0.0, 180.0) / AXIS_STEP_DEG).clamp(0.0, dsp_core::count_to_f64(AXES.saturating_sub(1)));
+        let pos = (self.settings.axis_deg.clamp(0.0, 180.0) / AXIS_STEP_DEG)
+            .clamp(0.0, dsp_core::count_to_f64(AXES.saturating_sub(1)));
         let lo = dsp_core::f64_to_index(pos.floor()).min(AXES.saturating_sub(2));
         let t = pos - dsp_core::count_to_f64(lo);
         let hi = lo.saturating_add(1);
         let cut = self.settings.low_cut;
-        if let (Some((p0, g0)), Some((p1, g1))) = (self.model.anchor(cut, pattern, lo), self.model.anchor(cut, pattern, hi)) {
+        if let (Some((p0, g0)), Some((p1, g1))) = (
+            self.model.anchor(cut, pattern, lo),
+            self.model.anchor(cut, pattern, hi),
+        ) {
             for ((k, a), b) in self.kernel_p.iter_mut().zip(p0).zip(p1) {
                 *k = (f64::from(*b) - f64::from(*a)).mul_add(t, f64::from(*a));
             }
@@ -513,11 +574,20 @@ impl MicChain {
             // with weights in the paths
             let base = match (self.model.dual_gradient, self.model.proximity) {
                 (Some(block), _) => Some(LowChain::design(block, sr)),
-                (None, ProximityLaw::Corner { .. }) => Some(LowChain::design(LowEnd::high_pass(self.model.proximity.f0(pattern)), sr)),
+                (None, ProximityLaw::Corner { .. }) => Some(LowChain::design(
+                    LowEnd::high_pass(self.model.proximity.f0(pattern)),
+                    sr,
+                )),
                 (None, ProximityLaw::Shelf { k, .. }) => {
                     let f0 = self.model.proximity.f0(pattern);
                     let zero = k.get(pattern).copied().unwrap_or(1.0) * f0;
-                    Some(LowChain::design(LowEnd { gain: 1.0, sections: [Some(LowSection::Shelf { zero, pole: f0 }), None, None] }, sr))
+                    Some(LowChain::design(
+                        LowEnd {
+                            gain: 1.0,
+                            sections: [Some(LowSection::Shelf { zero, pole: f0 }), None, None],
+                        },
+                        sr,
+                    ))
                 }
                 (None, ProximityLaw::Dynamic { .. }) => None,
             };
@@ -551,7 +621,11 @@ impl MicChain {
     fn process_uncut(&mut self, front: f64, rear: f64) -> f64 {
         // Rear trim belongs to the input's rear channel, before the swap.
         let rear = rear * self.rear_gain;
-        let (fr, rr) = if self.settings.swap { (rear, front) } else { (front, rear) };
+        let (fr, rr) = if self.settings.swap {
+            (rear, front)
+        } else {
+            (front, rear)
+        };
         let mut y = self.linear.process(fr + rr, fr - rr);
         if self.has_curve {
             // The curve sees the response with the sections after it undone
@@ -562,18 +636,29 @@ impl MicChain {
             // back for the level, and take it out of the terms.
             let divided = self.dual.cross_low.is_some();
             let full = if divided { self.carried.process(y) } else { y };
-            let level = self.inverse.iter_mut().fold(full, |x, sec| sec.process(x)).clamp(-self.clamp, self.clamp);
+            let level = self
+                .inverse
+                .iter_mut()
+                .fold(full, |x, sec| sec.process(x))
+                .clamp(-self.clamp, self.clamp);
             // a₂s² + a₃s³ + … by Horner, through the high-passes after
             // the curve.
-            let higher = self.poly.iter().rev().fold(0.0_f64, |acc, &a| acc.mul_add(level, a));
+            let higher = self
+                .poly
+                .iter()
+                .rev()
+                .fold(0.0_f64, |acc, &a| acc.mul_add(level, a));
             let terms = level * level * higher;
             let terms = self.post.iter_mut().fold(terms, |x, sec| sec.process(x));
-            y += if divided { self.carried_inv.process(terms) } else { terms };
+            y += if divided {
+                self.carried_inv.process(terms)
+            } else {
+                terms
+            };
         }
         y
     }
 }
-
 
 /// Two modelled mics, mixed — the reference's dual mode.
 pub struct DualMic {
@@ -604,8 +689,17 @@ pub struct DualSettings {
 impl DualMic {
     #[must_use]
     pub fn new(mic1: MicChain, mic2: MicChain) -> Self {
-        let mut dual = Self { mic1, mic2, mix: 0.0, solo: Solo::Off };
-        dual.set(DualSettings { mix: 0.0, align_cm: 0.0, solo: Solo::Off });
+        let mut dual = Self {
+            mic1,
+            mic2,
+            mix: 0.0,
+            solo: Solo::Off,
+        };
+        dual.set(DualSettings {
+            mix: 0.0,
+            align_cm: 0.0,
+            solo: Solo::Off,
+        });
         dual
     }
 
@@ -625,23 +719,65 @@ impl DualMic {
             let (law1, law2) = (self.mic1.model().proximity, self.mic2.model().proximity);
             // the proximity filters crossfade weighted by each model's own
             // weight; the cores and low ends crossfade plainly
-            let g1 = (1.0 - m) * self.mic1.model().dual_weight.get(p1).copied().unwrap_or(1.0);
-            let g2 = m * self.mic2.model().dual_weight.get(p2).copied().unwrap_or(1.0);
+            let g1 = (1.0 - m)
+                * self
+                    .mic1
+                    .model()
+                    .dual_weight
+                    .get(p1)
+                    .copied()
+                    .unwrap_or(1.0);
+            let g2 = m * self
+                .mic2
+                .model()
+                .dual_weight
+                .get(p2)
+                .copied()
+                .unwrap_or(1.0);
             let total = g1 + g2;
-            let [b1, b2] = if total > 0.0 { [g1 / total, g2 / total] } else { [1.0 - m, m] };
+            let [b1, b2] = if total > 0.0 {
+                [g1 / total, g2 / total]
+            } else {
+                [1.0 - m, m]
+            };
             // identical blocks crossfade to themselves (the law and step fix
             // the gradient block; the pressure blocks can still differ)
             let (m1, m2) = (self.mic1.model(), self.mic2.model());
-            let same = law1 == law2 && p1 == p2 && m1.dual_pressure(p1) == m2.dual_pressure(p1) && m1.dual_gradient == m2.dual_gradient;
+            let same = law1 == law2
+                && p1 == p2
+                && m1.dual_pressure(p1) == m2.dual_pressure(p1)
+                && m1.dual_gradient == m2.dual_gradient;
             let cross1 = (!same).then_some((law2, p2, [b1, b2]));
             let cross2 = (!same).then_some((law1, p1, [b2, b1]));
-            let (pr1, pr2) = (self.mic1.model().dual_pressure(p1), self.mic2.model().dual_pressure(p2));
-            let (gr1, gr2) = (self.mic1.model().dual_gradient, self.mic2.model().dual_gradient);
+            let (pr1, pr2) = (
+                self.mic1.model().dual_pressure(p1),
+                self.mic2.model().dual_pressure(p2),
+            );
+            let (gr1, gr2) = (
+                self.mic1.model().dual_gradient,
+                self.mic2.model().dual_gradient,
+            );
             let end_1 = self.mic1.model().low_end(self.mic1.settings().low_cut);
             let end_2 = self.mic2.model().low_end(self.mic2.settings().low_cut);
             let align = s.align_cm / 100.0 / 340.0 * sr;
-            self.mic1.set_dual(DualAdjust { delay, align: (-align).max(0.0), cross: cross1, cross_low: Some(end_2), cross_pressure: (!same).then_some(pr2), cross_gradient: gr2.filter(|_| !same), ..DualAdjust::none(d1) });
-            self.mic2.set_dual(DualAdjust { delay, align: align.max(0.0), cross: cross2, cross_low: Some(end_1), cross_pressure: (!same).then_some(pr1), cross_gradient: gr1.filter(|_| !same), ..DualAdjust::none(d2) });
+            self.mic1.set_dual(DualAdjust {
+                delay,
+                align: (-align).max(0.0),
+                cross: cross1,
+                cross_low: Some(end_2),
+                cross_pressure: (!same).then_some(pr2),
+                cross_gradient: gr2.filter(|_| !same),
+                ..DualAdjust::none(d1)
+            });
+            self.mic2.set_dual(DualAdjust {
+                delay,
+                align: align.max(0.0),
+                cross: cross2,
+                cross_low: Some(end_1),
+                cross_pressure: (!same).then_some(pr1),
+                cross_gradient: gr1.filter(|_| !same),
+                ..DualAdjust::none(d2)
+            });
         } else {
             self.mic1.set_dual(DualAdjust::none(d1));
             self.mic2.set_dual(DualAdjust::none(d2));
@@ -660,8 +796,14 @@ impl DualMic {
                 let w = self.mix;
                 let a = self.mic1.process_uncut(front, rear);
                 let b = self.mic2.process_uncut(front, rear);
-                let a = (1.0 - w).mul_add(self.mic1.low_own.process(a), w * self.mic1.low_other.process(a));
-                let b = w.mul_add(self.mic2.low_own.process(b), (1.0 - w) * self.mic2.low_other.process(b));
+                let a = (1.0 - w).mul_add(
+                    self.mic1.low_own.process(a),
+                    w * self.mic1.low_other.process(a),
+                );
+                let b = w.mul_add(
+                    self.mic2.low_own.process(b),
+                    (1.0 - w) * self.mic2.low_other.process(b),
+                );
                 (1.0 - w).mul_add(a, w * b) * self.mic1.out_gain
             }
         }
@@ -695,8 +837,16 @@ pub struct StereoSettings {
 impl StereoMic {
     #[must_use]
     pub fn new(forward: MicChain, backward: MicChain) -> Self {
-        let mut s = Self { forward, backward, gains: [1.0; 2], mix: [1.0, 0.0] };
-        s.set(StereoSettings { pan: 0.0, width: 1.0 });
+        let mut s = Self {
+            forward,
+            backward,
+            gains: [1.0; 2],
+            mix: [1.0, 0.0],
+        };
+        s.set(StereoSettings {
+            pan: 0.0,
+            width: 1.0,
+        });
         s
     }
 
@@ -705,7 +855,10 @@ impl StereoMic {
     pub fn set(&mut self, s: StereoSettings) {
         let own = self.backward.model().delay;
         let (front, back) = (self.forward.model(), self.backward.model());
-        let (p1, p2) = (self.forward.settings().pattern, self.backward.settings().pattern);
+        let (p1, p2) = (
+            self.forward.settings().pattern,
+            self.backward.settings().pattern,
+        );
         // The backward mic's gradient block is a fixed blend of its own and
         // mic 1's — (1 − v)·F₁ + v·F₂, no model weights — with v per backward
         // model and pattern step (≈ ½ at figure-8, its file's dual weights);
@@ -725,7 +878,11 @@ impl StereoMic {
         // by −55 dB at −80 %).
         self.gains = [(1.0 - p).min(1.0), (1.0 + p).min(1.0)];
         let w = s.width.clamp(0.0, 2.0);
-        self.mix = if w <= 1.0 { [f64::midpoint(1.0, w), w.mul_add(-w, 1.0) / 2.0] } else { [1.0, -(w - 1.0) / 2.0] };
+        self.mix = if w <= 1.0 {
+            [f64::midpoint(1.0, w), w.mul_add(-w, 1.0) / 2.0]
+        } else {
+            [1.0, -(w - 1.0) / 2.0]
+        };
     }
 
     /// One capsule-pair sample in, `(left, right)` out.

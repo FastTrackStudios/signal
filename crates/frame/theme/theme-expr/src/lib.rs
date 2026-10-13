@@ -123,7 +123,13 @@ impl Expr {
     pub fn visit<'a>(&'a self, f: &mut impl FnMut(&'a Expr)) {
         f(self);
         match self {
-            Expr::Lit(_) | Expr::W | Expr::H | Expr::PW | Expr::PH | Expr::Token(_) | Expr::Field(_) => {}
+            Expr::Lit(_)
+            | Expr::W
+            | Expr::H
+            | Expr::PW
+            | Expr::PH
+            | Expr::Token(_)
+            | Expr::Field(_) => {}
             Expr::Unary(_, a) => a.visit(f),
             Expr::Binary(_, a, b) => {
                 a.visit(f);
@@ -141,7 +147,13 @@ impl Expr {
     fn visit_mut(&mut self, f: &mut impl FnMut(&mut Expr)) {
         f(self);
         match self {
-            Expr::Lit(_) | Expr::W | Expr::H | Expr::PW | Expr::PH | Expr::Token(_) | Expr::Field(_) => {}
+            Expr::Lit(_)
+            | Expr::W
+            | Expr::H
+            | Expr::PW
+            | Expr::PH
+            | Expr::Token(_)
+            | Expr::Field(_) => {}
             Expr::Unary(_, a) => a.visit_mut(f),
             Expr::Binary(_, a, b) => {
                 a.visit_mut(f);
@@ -182,7 +194,10 @@ impl Expr {
     ///
     /// # Errors
     /// The name of an undefined token.
-    pub fn inline_tokens(&mut self, value: &mut impl FnMut(&str) -> Option<Value>) -> Result<(), String> {
+    pub fn inline_tokens(
+        &mut self,
+        value: &mut impl FnMut(&str) -> Option<Value>,
+    ) -> Result<(), String> {
         let mut missing = None;
         self.visit_mut(&mut |e| {
             if let Expr::Token(name) = e {
@@ -203,7 +218,10 @@ impl Expr {
     ///
     /// # Errors
     /// The name of a field the host does not have.
-    pub fn resolve_fields(&mut self, slot: &mut impl FnMut(&str) -> Option<u32>) -> Result<(), String> {
+    pub fn resolve_fields(
+        &mut self,
+        slot: &mut impl FnMut(&str) -> Option<u32>,
+    ) -> Result<(), String> {
         let mut missing = None;
         self.visit_mut(&mut |e| {
             if let Expr::Field(f @ Field::Name(_)) = e {
@@ -233,7 +251,13 @@ impl Expr {
                     *self = by;
                 }
             }
-            Expr::Lit(_) | Expr::W | Expr::H | Expr::PW | Expr::PH | Expr::Token(_) | Expr::Field(_) => {}
+            Expr::Lit(_)
+            | Expr::W
+            | Expr::H
+            | Expr::PW
+            | Expr::PH
+            | Expr::Token(_)
+            | Expr::Field(_) => {}
             Expr::Unary(_, a) => a.substitute_fields(with),
             Expr::Binary(_, a, b) => {
                 a.substitute_fields(with);

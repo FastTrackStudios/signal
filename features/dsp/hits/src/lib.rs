@@ -27,7 +27,6 @@
 //! rate. The caller maps a sample to source or project time; nothing
 //! here knows what an item is.
 
-
 pub mod detect;
 
 pub mod attack;

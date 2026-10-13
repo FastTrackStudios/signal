@@ -42,7 +42,6 @@
 //! set yet), no FX-parameter pages (FX param events aren't streamed),
 //! no timecode display, no hold/double-press gestures yet.
 
-
 #[cfg(feature = "kontrol")]
 pub mod kontrol;
 

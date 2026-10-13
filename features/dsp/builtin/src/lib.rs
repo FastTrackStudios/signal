@@ -12,14 +12,13 @@
 //! via [`set_named`](NativeReverb::set_named), which the native-block registry
 //! in `signal-sampler` calls when constructing the block.
 
-
 #[cfg(feature = "engine")]
 pub mod engine;
 
-use dsp_core::audio::{AudioConfig, Processor};
 use daw::plugin::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
+use dsp_core::audio::{AudioConfig, Processor};
 
 mod factory;
 pub use factory::NativeFxFactory;
@@ -2015,14 +2014,22 @@ pub mod fx_meter {
     /// The loudest added peak of `kind` since the last take, and clear it.
     #[must_use]
     pub fn take(kind: usize) -> f32 {
-        PEAKS.get(kind).map_or(0.0, |p| f32::from_bits(p.swap(0, Ordering::Relaxed)))
+        PEAKS
+            .get(kind)
+            .map_or(0.0, |p| f32::from_bits(p.swap(0, Ordering::Relaxed)))
     }
 
     /// The peak a block adds: its output less its input.
     #[must_use]
     pub fn added(in_l: &[f32], in_r: &[f32], out_l: &[f32], out_r: &[f32]) -> f32 {
-        let l = in_l.iter().zip(out_l).fold(0.0f32, |m, (a, b)| m.max((b - a).abs()));
-        let r = in_r.iter().zip(out_r).fold(0.0f32, |m, (a, b)| m.max((b - a).abs()));
+        let l = in_l
+            .iter()
+            .zip(out_l)
+            .fold(0.0f32, |m, (a, b)| m.max((b - a).abs()));
+        let r = in_r
+            .iter()
+            .zip(out_r)
+            .fold(0.0f32, |m, (a, b)| m.max((b - a).abs()));
         l.max(r)
     }
 }
@@ -3503,8 +3510,13 @@ impl NativeReverb {
         // last write, in the order those were made.
         if self.b_log.len() > 1024 {
             let mut seen = std::collections::HashSet::new();
-            let mut kept: Vec<(u32, f64)> =
-                self.b_log.iter().rev().filter(|(i, _)| seen.insert(*i)).copied().collect();
+            let mut kept: Vec<(u32, f64)> = self
+                .b_log
+                .iter()
+                .rev()
+                .filter(|(i, _)| seen.insert(*i))
+                .copied()
+                .collect();
             kept.reverse();
             self.b_log = kept;
         }
@@ -3515,7 +3527,9 @@ impl NativeReverb {
     /// r2_algorithm / r2_decay / r2_mix / r2_pan) or `r2_*` (id − 100).
     fn apply_b(b: &mut reverb::ReverbChain, id: u32, v: f64) {
         match id {
-            4 => b.set_algorithm(reverb::AlgorithmType::from_index(v.round().max(0.0) as usize)),
+            4 => b.set_algorithm(reverb::AlgorithmType::from_index(
+                v.round().max(0.0) as usize
+            )),
             5 => {
                 b.params.decay = v;
                 b.update_params();
@@ -5183,7 +5197,10 @@ impl PluginInstance for NativeMod {
             out_r,
             |l, r| ch.process(l, r),
         );
-        fx_meter::publish(fx_meter::MODULATION, fx_meter::added(in_l, in_r, out_l, out_r));
+        fx_meter::publish(
+            fx_meter::MODULATION,
+            fx_meter::added(in_l, in_r, out_l, out_r),
+        );
         Ok(())
     }
     fn deactivate(&mut self) {
@@ -5714,10 +5731,19 @@ impl PluginInstance for NativePitch {
             .process(&mut self.wet_r[..n], &mut self.discard[..n]);
         // out = (1 − mix) · dry · x + mix · (a · A + b · B) — `mix` keeps
         // its dry↔wet meaning, `dry` trims the dry side of it.
-        let (mix, a, b, dry) = (self.mix, self.a_level, if b_on { self.b_level } else { 0.0 }, self.dry);
+        let (mix, a, b, dry) = (
+            self.mix,
+            self.a_level,
+            if b_on { self.b_level } else { 0.0 },
+            self.dry,
+        );
         for i in 0..n {
             let (dl, dr) = (f64::from(in_l[i]), f64::from(in_r[i]));
-            let (bl, br) = if b_on { (self.b_l[i], self.b_r[i]) } else { (0.0, 0.0) };
+            let (bl, br) = if b_on {
+                (self.b_l[i], self.b_r[i])
+            } else {
+                (0.0, 0.0)
+            };
             out_l[i] = (dl * dry).mul_add(1.0 - mix, mix * a.mul_add(self.wet_l[i], b * bl)) as f32;
             out_r[i] = (dr * dry).mul_add(1.0 - mix, mix * a.mul_add(self.wet_r[i], b * br)) as f32;
         }
@@ -6067,9 +6093,13 @@ mod boost_tests {
             b.prepare(48_000.0, 256).unwrap();
             let x = vec![0.1f32; 256];
             let (mut l, mut r) = (vec![0.0f32; 256], vec![0.0f32; 256]);
-            b.process_block(&x, &x, &mut l, &mut r, &PluginEvents::default()).unwrap();
+            b.process_block(&x, &x, &mut l, &mut r, &PluginEvents::default())
+                .unwrap();
             let got = 20.0 * (f64::from(l[255]) / 0.1).log10();
-            assert!((got - db).abs() < 0.05, "drive {drive}: {got} dB, want {db}");
+            assert!(
+                (got - db).abs() < 0.05,
+                "drive {drive}: {got} dB, want {db}"
+            );
         }
     }
 }
@@ -6752,7 +6782,10 @@ mod param_table_tests {
         assert!((r.rev.b().unwrap().mix - 0.77).abs() < 1e-9);
 
         r.set_named("r2_algorithm", 6.0); // Shimmer
-        assert_eq!(r.rev.b().unwrap().algorithm_type(), reverb::AlgorithmType::Shimmer);
+        assert_eq!(
+            r.rev.b().unwrap().algorithm_type(),
+            reverb::AlgorithmType::Shimmer
+        );
         assert_ne!(r.rev.a.algorithm_type(), reverb::AlgorithmType::Shimmer);
 
         // The advertised param list contains the mirrors exactly once.

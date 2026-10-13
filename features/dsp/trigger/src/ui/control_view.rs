@@ -10,8 +10,8 @@
 //! [`fts_audio_ui`]; theme + layout primitives from [`architect_ui`].
 
 use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
-use plugin_core::prelude::*;
 use fts_audio_ui::prelude::*;
+use plugin_core::prelude::*;
 
 use crate::ui::param_adapter::param_handle;
 use crate::ui::params::TriggerUiState;

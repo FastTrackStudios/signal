@@ -48,31 +48,120 @@ fn swatch_material(id: &str, p: &Place) -> Material {
                 "blonde" => (Grain::Bronco, "#d9c7a0"),
                 _ => (Grain::Levant, "#1c1b1a"),
             };
-            Material::Tolex { grain: g, color: c(d), scale }
+            Material::Tolex {
+                grain: g,
+                color: c(d),
+                scale,
+            }
         }
-        "material.leather" => Material::Leather { color: c(match v { "black" => "#1f1b19", "tan" => "#a8744a", _ => "#6e4128" }) },
-        "material.croc" => Material::Croc { color: c(match v { "brown" => "#4a2e1f", "red" => "#5e1a1a", _ => "#2a2522" }), scale },
-        "material.powder" => Material::Powder { color: c(match v { "grey" => "#a9abae", "blue" => "#3f63a8", "coarse" => "#2e3033", _ => "#c9464a" }), coarse: v == "coarse" },
-        "material.hammertone" => Material::Hammertone { color: c(match v { "blue" => "#4f6f8f", "green" => "#56715c", "copper" => "#8a5a3a", _ => "#7c8488" }), scale },
-        "material.brushed" => Material::Brushed { color: c(match v { "black" => "#3a3b3e", "gold" => "#c8b07a", _ => "#b9bbbd" }), dir: if v == "vertical" { Dir::Vertical } else { Dir::Horizontal } },
-        "material.spun" => Material::Spun { color: c(if v == "gold" { "#c9ad6e" } else { "#c3c5c7" }) },
-        "material.wood" => Material::Wood {
-            color: c(match v { "maple" | "maple_vertical" => "#c89a5c", "rosewood" => "#4a2618", _ => "#6b3f22" }),
-            dir: if v.ends_with("vertical") { Dir::Vertical } else { Dir::Horizontal },
+        "material.leather" => Material::Leather {
+            color: c(match v {
+                "black" => "#1f1b19",
+                "tan" => "#a8744a",
+                _ => "#6e4128",
+            }),
         },
-        "material.grille_cloth" => Material::GrilleCloth { cloth: paint::cloth(v) },
-        "material.perforated" => Material::Perforated { color: c(if v == "black" { "#35373a" } else { "#b9bcbf" }), pitch: 7.0 * scale },
-        "material.expanded" => Material::Expanded { color: c(if v == "black" { "#3c3e41" } else { "#8d9196" }), pitch: 16.0 * scale },
-        "material.grille_diamond" => Material::DiamondGrille { cloth: c("#1a1717"), stripes: vec!["#b8324a".into(), "#e6e2d6".into(), "#5f9e86".into()], pitch: 90.0 * scale },
-        "material.grille_chevron" => Material::ChevronGrille { bars: c(if v == "black" { "#2a2b2d" } else { "#e8e2d2" }), pitch: 18.0 * scale },
-        "material.chrome" => if v == "nickel" { Material::Nickel } else { Material::Chrome },
-        "material.plastic" => Material::Plastic { color: c(match v { "white" => "#eeece6", "red" => "#b3261e", "cream" => "#e8dcc0", _ => "#141414" }), gloss: 1.0 },
-        _ => Material::Rubber { color: c("#1a1a1b") },
+        "material.croc" => Material::Croc {
+            color: c(match v {
+                "brown" => "#4a2e1f",
+                "red" => "#5e1a1a",
+                _ => "#2a2522",
+            }),
+            scale,
+        },
+        "material.powder" => Material::Powder {
+            color: c(match v {
+                "grey" => "#a9abae",
+                "blue" => "#3f63a8",
+                "coarse" => "#2e3033",
+                _ => "#c9464a",
+            }),
+            coarse: v == "coarse",
+        },
+        "material.hammertone" => Material::Hammertone {
+            color: c(match v {
+                "blue" => "#4f6f8f",
+                "green" => "#56715c",
+                "copper" => "#8a5a3a",
+                _ => "#7c8488",
+            }),
+            scale,
+        },
+        "material.brushed" => Material::Brushed {
+            color: c(match v {
+                "black" => "#3a3b3e",
+                "gold" => "#c8b07a",
+                _ => "#b9bbbd",
+            }),
+            dir: if v == "vertical" {
+                Dir::Vertical
+            } else {
+                Dir::Horizontal
+            },
+        },
+        "material.spun" => Material::Spun {
+            color: c(if v == "gold" { "#c9ad6e" } else { "#c3c5c7" }),
+        },
+        "material.wood" => Material::Wood {
+            color: c(match v {
+                "maple" | "maple_vertical" => "#c89a5c",
+                "rosewood" => "#4a2618",
+                _ => "#6b3f22",
+            }),
+            dir: if v.ends_with("vertical") {
+                Dir::Vertical
+            } else {
+                Dir::Horizontal
+            },
+        },
+        "material.grille_cloth" => Material::GrilleCloth {
+            cloth: paint::cloth(v),
+        },
+        "material.perforated" => Material::Perforated {
+            color: c(if v == "black" { "#35373a" } else { "#b9bcbf" }),
+            pitch: 7.0 * scale,
+        },
+        "material.expanded" => Material::Expanded {
+            color: c(if v == "black" { "#3c3e41" } else { "#8d9196" }),
+            pitch: 16.0 * scale,
+        },
+        "material.grille_diamond" => Material::DiamondGrille {
+            cloth: c("#1a1717"),
+            stripes: vec!["#b8324a".into(), "#e6e2d6".into(), "#5f9e86".into()],
+            pitch: 90.0 * scale,
+        },
+        "material.grille_chevron" => Material::ChevronGrille {
+            bars: c(if v == "black" { "#2a2b2d" } else { "#e8e2d2" }),
+            pitch: 18.0 * scale,
+        },
+        "material.chrome" => {
+            if v == "nickel" {
+                Material::Nickel
+            } else {
+                Material::Chrome
+            }
+        }
+        "material.plastic" => Material::Plastic {
+            color: c(match v {
+                "white" => "#eeece6",
+                "red" => "#b3261e",
+                "cream" => "#e8dcc0",
+                _ => "#141414",
+            }),
+            gloss: 1.0,
+        },
+        _ => Material::Rubber {
+            color: c("#1a1a1b"),
+        },
     }
 }
 
 fn swatch(b: &mut Builder<'_>, parent: NodeId, p: &Place, id: &str) -> NodeId {
-    let w = p.opt("w").and_then(|v| v.parse().ok()).or(p.size).unwrap_or(220.0);
+    let w = p
+        .opt("w")
+        .and_then(|v| v.parse().ok())
+        .or(p.size)
+        .unwrap_or(220.0);
     let h = p.opt("h").and_then(|v| v.parse().ok()).unwrap_or(w * 0.64);
     let radius = p.opt("radius").and_then(|v| v.parse().ok()).unwrap_or(6.0);
     let root = b.add(parent, crate::draw::frame(&p.name, 0.0, 0.0, w, h));

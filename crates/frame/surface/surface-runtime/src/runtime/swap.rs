@@ -20,17 +20,30 @@ impl Runtime {
     /// ([`Runtime::set_boxes`]).
     pub fn swap_surface(&mut self, surface: Surface) {
         let mut next = Runtime::new(surface, self.catalog.clone());
-        let same = |id: &NodeId| match (self.surface.controls.get(id), next.surface.controls.get(id)) {
-            (Some(a), Some(b)) => a.kind == b.kind,
-            _ => false,
-        };
-        let kept: HashSet<NodeId> = next.surface.controls.keys().copied().filter(|id| same(id)).collect();
+        let same =
+            |id: &NodeId| match (self.surface.controls.get(id), next.surface.controls.get(id)) {
+                (Some(a), Some(b)) => a.kind == b.kind,
+                _ => false,
+            };
+        let kept: HashSet<NodeId> = next
+            .surface
+            .controls
+            .keys()
+            .copied()
+            .filter(|id| same(id))
+            .collect();
         next.values = take(&mut self.values);
         next.streams = take(&mut self.streams);
         next.coalescer = take(&mut self.coalescer);
         next.meter_scale = self.meter_scale.clone();
-        next.meters = take(&mut self.meters).into_iter().filter(|((id, _, _), _)| kept.contains(id)).collect();
-        next.local_positions = take(&mut self.local_positions).into_iter().filter(|(id, _)| kept.contains(id)).collect();
+        next.meters = take(&mut self.meters)
+            .into_iter()
+            .filter(|((id, _, _), _)| kept.contains(id))
+            .collect();
+        next.local_positions = take(&mut self.local_positions)
+            .into_iter()
+            .filter(|(id, _)| kept.contains(id))
+            .collect();
         for (id, g) in take(&mut self.gestures) {
             if kept.contains(&id) {
                 next.gestures.insert(id, g);
@@ -59,7 +72,10 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use document_proto::{Node, NodeKind, Op, Scene, Size};
-    use surface_proto::{Binding, Catalog, Control, ControlKind, EntryId, ParamAddr, ParamInfo, ParamValue, Range, StreamFrame, StreamInfo, StreamKind};
+    use surface_proto::{
+        Binding, Catalog, Control, ControlKind, EntryId, ParamAddr, ParamInfo, ParamValue, Range,
+        StreamFrame, StreamInfo, StreamKind,
+    };
 
     use super::*;
     use crate::{Bounds, EngineCall, Input, Modifiers};
@@ -68,8 +84,16 @@ mod tests {
         Catalog {
             id: "t".into(),
             version: 1,
-            params: vec![ParamInfo::new("gain", "Gain", Range::default()), ParamInfo::new("mix", "Mix", Range::default())],
-            streams: vec![StreamInfo { id: EntryId::new("out"), name: "Out".into(), kind: StreamKind::Level { channels: 1 }, rate_hz: 30.0 }],
+            params: vec![
+                ParamInfo::new("gain", "Gain", Range::default()),
+                ParamInfo::new("mix", "Mix", Range::default()),
+            ],
+            streams: vec![StreamInfo {
+                id: EntryId::new("out"),
+                name: "Out".into(),
+                kind: StreamKind::Level { channels: 1 },
+                rate_hz: 30.0,
+            }],
             ..Catalog::default()
         }
     }
@@ -86,16 +110,51 @@ mod tests {
             } else {
                 ids.push(n.id);
             }
-            n.size = Size { width: 40.0, height: 40.0 };
+            n.size = Size {
+                width: 40.0,
+                height: 40.0,
+            };
             n.transform.tx = x;
             n.control = Some(control);
-            scene.apply(Op::Insert { node: n, parent: page, index: u32::MAX }).unwrap();
+            scene
+                .apply(Op::Insert {
+                    node: n,
+                    parent: page,
+                    index: u32::MAX,
+                })
+                .unwrap();
         };
-        let with = |kind: ControlKind, b: Binding| Control { binding: Some(b), ..Control::new(kind) };
-        add(&mut scene, 0, "knob", knob_x, with(ControlKind::knob(), Binding::param("gain")));
-        add(&mut scene, 1, "meter", 100.0, with(ControlKind::Meter { orientation: surface_proto::Orientation::Vertical }, Binding::stream("out")));
+        let with = |kind: ControlKind, b: Binding| Control {
+            binding: Some(b),
+            ..Control::new(kind)
+        };
+        add(
+            &mut scene,
+            0,
+            "knob",
+            knob_x,
+            with(ControlKind::knob(), Binding::param("gain")),
+        );
+        add(
+            &mut scene,
+            1,
+            "meter",
+            100.0,
+            with(
+                ControlKind::Meter {
+                    orientation: surface_proto::Orientation::Vertical,
+                },
+                Binding::stream("out"),
+            ),
+        );
         if extra {
-            add(&mut scene, 2, "mix", 200.0, with(ControlKind::knob(), Binding::param("mix")));
+            add(
+                &mut scene,
+                2,
+                "mix",
+                200.0,
+                with(ControlKind::knob(), Binding::param("mix")),
+            );
         }
         Surface::from_scene(scene)
     }
@@ -106,7 +165,17 @@ mod tests {
             .scene
             .nodes
             .values()
-            .map(|n| (n.id, Bounds { x: n.transform.tx, y: 0.0, width: n.size.width, height: n.size.height }))
+            .map(|n| {
+                (
+                    n.id,
+                    Bounds {
+                        x: n.transform.tx,
+                        y: 0.0,
+                        width: n.size.width,
+                        height: n.size.height,
+                    },
+                )
+            })
             .collect();
         rt.set_boxes(b);
     }
@@ -116,16 +185,52 @@ mod tests {
         let mut ids = Vec::new();
         let mut rt = Runtime::new(design(0.0, true, &mut ids), catalog());
         boxes(&mut rt);
-        rt.apply_values([ParamValue { addr: ParamAddr::new("gain"), value: 0.25 }, ParamValue { addr: ParamAddr::new("mix"), value: 0.75 }]);
-        rt.apply_frame(StreamFrame { id: EntryId::new("out"), values: vec![-6.0] }, 0.0);
+        rt.apply_values([
+            ParamValue {
+                addr: ParamAddr::new("gain"),
+                value: 0.25,
+            },
+            ParamValue {
+                addr: ParamAddr::new("mix"),
+                value: 0.75,
+            },
+        ]);
+        rt.apply_frame(
+            StreamFrame {
+                id: EntryId::new("out"),
+                values: vec![-6.0],
+            },
+            0.0,
+        );
         let meter = ids[1];
         let reading = rt.state(meter, &rt.surface().controls[&meter].clone(), 50.0);
 
         // Grab the knob and start dragging…
         let m = Modifiers::default();
-        rt.pointer(Input::Down { x: 20.0, y: 20.0, t: 0.0, mods: m }, 0.0);
-        rt.pointer(Input::Move { x: 20.0, y: 10.0, t: 16.0, mods: m }, 16.0);
-        let mid = rt.values().into_iter().find(|v| v.addr.0 == "gain").unwrap().value;
+        rt.pointer(
+            Input::Down {
+                x: 20.0,
+                y: 20.0,
+                t: 0.0,
+                mods: m,
+            },
+            0.0,
+        );
+        rt.pointer(
+            Input::Move {
+                x: 20.0,
+                y: 10.0,
+                t: 16.0,
+                mods: m,
+            },
+            16.0,
+        );
+        let mid = rt
+            .values()
+            .into_iter()
+            .find(|v| v.addr.0 == "gain")
+            .unwrap()
+            .value;
         assert!(mid > 0.25, "dragging up raised it: {mid}");
 
         // …the document changes under the hand: the knob moved, `mix` is gone.
@@ -136,16 +241,47 @@ mod tests {
         assert!(rt.animating(), "the drag is still captured");
         let after = rt.state(meter, &rt.surface().controls[&meter].clone(), 50.0);
         assert_eq!(after, reading, "meter ballistics carried over");
-        assert!(rt.values().iter().any(|v| v.addr.0 == "mix" && v.value == 0.75), "engine values stay");
+        assert!(
+            rt.values()
+                .iter()
+                .any(|v| v.addr.0 == "mix" && v.value == 0.75),
+            "engine values stay"
+        );
 
         // The same drag continues from where it was, then ends.
-        let mut calls = rt.pointer(Input::Move { x: 30.0, y: 0.0, t: 32.0, mods: m }, 32.0);
-        calls.extend(rt.pointer(Input::Up { x: 30.0, y: 0.0, t: 48.0 }, 48.0));
+        let mut calls = rt.pointer(
+            Input::Move {
+                x: 30.0,
+                y: 0.0,
+                t: 32.0,
+                mods: m,
+            },
+            32.0,
+        );
+        calls.extend(rt.pointer(
+            Input::Up {
+                x: 30.0,
+                y: 0.0,
+                t: 48.0,
+            },
+            48.0,
+        ));
         calls.extend(rt.poll(200.0));
-        let end = rt.values().into_iter().find(|v| v.addr.0 == "gain").unwrap().value;
+        let end = rt
+            .values()
+            .into_iter()
+            .find(|v| v.addr.0 == "gain")
+            .unwrap()
+            .value;
         assert!(end > mid, "{mid} → {end}");
         assert!(
-            calls.iter().any(|c| matches!(c, EngineCall::SetParam { phase: surface_proto::EditPhase::End, .. })),
+            calls.iter().any(|c| matches!(
+                c,
+                EngineCall::SetParam {
+                    phase: surface_proto::EditPhase::End,
+                    ..
+                }
+            )),
             "the gesture ends properly: {calls:?}"
         );
         assert!(!rt.surface().controls.contains_key(&ids[2]));
@@ -156,10 +292,31 @@ mod tests {
         let mut ids = Vec::new();
         let mut rt = Runtime::new(design(0.0, false, &mut ids), catalog());
         boxes(&mut rt);
-        rt.pointer(Input::Down { x: 20.0, y: 20.0, t: 0.0, mods: Modifiers::default() }, 0.0);
+        rt.pointer(
+            Input::Down {
+                x: 20.0,
+                y: 20.0,
+                t: 0.0,
+                mods: Modifiers::default(),
+            },
+            0.0,
+        );
         let mut s = design(0.0, false, &mut ids);
-        s.controls.get_mut(&ids[0]).unwrap().kind = ControlKind::Fader { orientation: surface_proto::Orientation::Vertical };
+        s.controls.get_mut(&ids[0]).unwrap().kind = ControlKind::Fader {
+            orientation: surface_proto::Orientation::Vertical,
+        };
         rt.swap_surface(s);
-        assert!(rt.pointer(Input::Move { x: 20.0, y: 0.0, t: 16.0, mods: Modifiers::default() }, 16.0).is_empty());
+        assert!(
+            rt.pointer(
+                Input::Move {
+                    x: 20.0,
+                    y: 0.0,
+                    t: 16.0,
+                    mods: Modifiers::default()
+                },
+                16.0
+            )
+            .is_empty()
+        );
     }
 }

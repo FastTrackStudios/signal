@@ -23,7 +23,9 @@ fn main() {
             "--catalog-out" => catalog_out = args.next(),
             "--set" => {
                 let kv = args.next().unwrap_or_default();
-                set = kv.split_once('=').and_then(|(k, v)| Some((k.to_string(), v.parse().ok()?)));
+                set = kv
+                    .split_once('=')
+                    .and_then(|(k, v)| Some((k.to_string(), v.parse().ok()?)));
             }
             other => {
                 eprintln!("engine_probe: unknown argument {other}");
@@ -35,14 +37,27 @@ fn main() {
     let result = rt.block_on(async {
         let engine = connect_ws(&url, rig.as_deref()).await?;
         let catalog = Engine::catalog(&engine).await?;
-        println!("engine `{}` v{}: {} params, {} actions, {} streams, {} collections", catalog.id, catalog.version, catalog.params.len(), catalog.actions.len(), catalog.streams.len(), catalog.collections.len());
+        println!(
+            "engine `{}` v{}: {} params, {} actions, {} streams, {} collections",
+            catalog.id,
+            catalog.version,
+            catalog.params.len(),
+            catalog.actions.len(),
+            catalog.streams.len(),
+            catalog.collections.len()
+        );
         for (group, params) in catalog.groups() {
-            let names: Vec<String> = params.iter().map(|p| p.addr.0.rsplit('/').next().unwrap_or_default().to_string()).collect();
+            let names: Vec<String> = params
+                .iter()
+                .map(|p| p.addr.0.rsplit('/').next().unwrap_or_default().to_string())
+                .collect();
             println!("  [{}] {}", group.unwrap_or("-"), names.join(", "));
         }
         if let Some(path) = &catalog_out {
-            let json = serde_json::to_string_pretty(&catalog).map_err(|e| surface_runtime::sync::EngineError(e.to_string()))?;
-            std::fs::write(path, json).map_err(|e| surface_runtime::sync::EngineError(format!("{path}: {e}")))?;
+            let json = serde_json::to_string_pretty(&catalog)
+                .map_err(|e| surface_runtime::sync::EngineError(e.to_string()))?;
+            std::fs::write(path, json)
+                .map_err(|e| surface_runtime::sync::EngineError(format!("{path}: {e}")))?;
             println!("wrote catalog to {path}");
         }
         let values = Engine::values(&engine).await?;
@@ -50,14 +65,30 @@ fn main() {
         if let Some((addr, value)) = set {
             let addr = ParamAddr::new(addr);
             let before = values.iter().find(|v| v.addr == addr).map(|v| v.value);
-            Engine::call(&engine, EngineCall::SetParam { addr: addr.clone(), value, phase: EditPhase::End }).await?;
+            Engine::call(
+                &engine,
+                EngineCall::SetParam {
+                    addr: addr.clone(),
+                    value,
+                    phase: EditPhase::End,
+                },
+            )
+            .await?;
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-            let after = Engine::values(&engine).await?.into_iter().find(|v| v.addr == addr).map(|v| v.value);
+            let after = Engine::values(&engine)
+                .await?
+                .into_iter()
+                .find(|v| v.addr == addr)
+                .map(|v| v.value);
             let info = catalog.param(&addr);
             println!(
                 "set {addr} = {value}: before {} → after {}",
-                before.zip(info).map_or("?".into(), |(v, p)| format!("{v:.4} ({})", p.display(v))),
-                after.zip(info).map_or("?".into(), |(v, p)| format!("{v:.4} ({})", p.display(v))),
+                before
+                    .zip(info)
+                    .map_or("?".into(), |(v, p)| format!("{v:.4} ({})", p.display(v))),
+                after
+                    .zip(info)
+                    .map_or("?".into(), |(v, p)| format!("{v:.4} ({})", p.display(v))),
             );
         }
         Ok::<_, surface_runtime::sync::EngineError>(())

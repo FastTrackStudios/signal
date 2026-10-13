@@ -493,8 +493,10 @@ fn MacroCell(
     };
     let at_rest = (knob.value - knob.rest).abs() < 0.005;
     let menu_items = {
-        let mut snap =
-            crate::ui::kit::MenuItem::run("positions_snapshot", "Save positions to preset snapshot");
+        let mut snap = crate::ui::kit::MenuItem::run(
+            "positions_snapshot",
+            "Save positions to preset snapshot",
+        );
         if knob.snapshot.is_empty() {
             snap.disabled = Some(
                 "This patch plays no preset snapshot — its positions stay with the patch".into(),
@@ -524,10 +526,14 @@ fn MacroCell(
                 EventHandler::new(move |p: crate::ui::kit::Picked| match p.id {
                     "tune" => tuning.set(true),
                     "positions_patch" => {
-                        wire.run(&id, |r| async move { r.save_macro_positions("patch".into()).await });
+                        wire.run(&id, |r| async move {
+                            r.save_macro_positions("patch".into()).await
+                        });
                     }
                     "positions_snapshot" => {
-                        wire.run(&id, |r| async move { r.save_macro_positions("snapshot".into()).await });
+                        wire.run(&id, |r| async move {
+                            r.save_macro_positions("snapshot".into()).await
+                        });
                     }
                     _ => {}
                 }),

@@ -56,7 +56,13 @@ const KNOB_LOOK: &[&str] = &[
 
 /// A pedal knob `s` with its shaft at `at`, inside the lid's printed ring of
 /// 21 fine dots; no legend (the caller cuts it).
-pub(super) fn place(b: &mut surface_widgets::Builder<'_>, p: document_proto::NodeId, s: &KnobStyle<'_>, addr: &str, (cx, cy): (f64, f64)) -> document_proto::NodeId {
+pub(super) fn place(
+    b: &mut surface_widgets::Builder<'_>,
+    p: document_proto::NodeId,
+    s: &KnobStyle<'_>,
+    addr: &str,
+    (cx, cy): (f64, f64),
+) -> document_proto::NodeId {
     let r = s.d / 2.0 * 1.34;
     let dot = (s.d * 0.022).max(0.55);
     let n = 21;
@@ -67,9 +73,32 @@ pub(super) fn place(b: &mut surface_widgets::Builder<'_>, p: document_proto::Nod
             format!("M {:.3} {y:.3} A {dot:.3} {dot:.3} 0 1 1 {:.3} {y:.3} A {dot:.3} {dot:.3} 0 1 1 {:.3} {y:.3} Z ", x - dot, x + dot, x - dot)
         })
         .collect();
-    let (w, h) = b.scene.node(p).map_or((cx * 2.0, cy * 2.0), |n| (n.size.width, n.size.height));
-    b.add(p, surface_kit::draw::path("scale dots", 0.0, 0.0, w, h, d, surface_kit::draw::solid(s.ink)));
-    rk::knob(b, p, s, addr, "", (cx, cy), 0.0, crate::delay::parts::Ink::new(6.0, s.ink))
+    let (w, h) = b
+        .scene
+        .node(p)
+        .map_or((cx * 2.0, cy * 2.0), |n| (n.size.width, n.size.height));
+    b.add(
+        p,
+        surface_kit::draw::path(
+            "scale dots",
+            0.0,
+            0.0,
+            w,
+            h,
+            d,
+            surface_kit::draw::solid(s.ink),
+        ),
+    );
+    rk::knob(
+        b,
+        p,
+        s,
+        addr,
+        "",
+        (cx, cy),
+        0.0,
+        crate::delay::parts::Ink::new(6.0, s.ink),
+    )
 }
 
 /// A legend's lettering: bold, small, as the lids print it.
@@ -78,12 +107,33 @@ pub(super) fn leg(color: &str) -> Letter<'_> {
 }
 
 /// The shared lid and printing; `ink` is the silkscreen colour.
-pub(super) fn lid<'a>(b: &mut surface_widgets::Builder<'_>, root: document_proto::NodeId, color: &'a str, ink: &'a str, title: &str, bypass: &str) -> document_proto::NodeId {
-    let e = Enclosure::new("standard", color, "satin").base("#1f2022").radius(9.0);
+pub(super) fn lid<'a>(
+    b: &mut surface_widgets::Builder<'_>,
+    root: document_proto::NodeId,
+    color: &'a str,
+    ink: &'a str,
+    title: &str,
+    bypass: &str,
+) -> document_proto::NodeId {
+    let e = Enclosure::new("standard", color, "satin")
+        .base("#1f2022")
+        .radius(9.0);
     let p = rk::pedal_body(b, root, &e);
     let (w, h) = e.size();
-    common::brushing(b, p, (8.0, 3.0, w - 16.0, 268.0), color.len() as u64 * 7919 + title.len() as u64);
-    rk::letter_fit(b, p, title, (w / 2.0, 176.0), 128.0f64.min(title.chars().count() as f64 * 13.6), Letter::new(18.0, 380.0, ink).track(0.0));
+    common::brushing(
+        b,
+        p,
+        (8.0, 3.0, w - 16.0, 268.0),
+        color.len() as u64 * 7919 + title.len() as u64,
+    );
+    rk::letter_fit(
+        b,
+        p,
+        title,
+        (w / 2.0, 176.0),
+        128.0f64.min(title.chars().count() as f64 * 13.6),
+        Letter::new(18.0, 380.0, ink).track(0.0),
+    );
     common::arrows(b, p, (w, h), 210.0, 13.0, ink);
     common::vdc(b, p, (w, h), (w - 21.0, 246.0), ink);
     common::band(b, p, w, bypass);
@@ -92,14 +142,28 @@ pub(super) fn lid<'a>(b: &mut surface_widgets::Builder<'_>, root: document_proto
 
 /// A knob with its legend above (`above`) or below it.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn dial(b: &mut surface_widgets::Builder<'_>, p: document_proto::NodeId, ink: &'static str, addr: &str, name: &str, at: (f64, f64), above: bool) {
+pub(super) fn dial(
+    b: &mut surface_widgets::Builder<'_>,
+    p: document_proto::NodeId,
+    ink: &'static str,
+    addr: &str,
+    name: &str,
+    at: (f64, f64),
+    above: bool,
+) {
     let k = place(b, p, &knob(ink), addr, at);
     let ly = if above { at.1 - 34.5 } else { at.1 + 29.0 };
     legend(b, k, name, (at.0, ly), leg(ink));
 }
 
 /// A mini bat toggle whose nut sits at (`cx`, `cy`).
-pub(super) fn toggle(b: &mut surface_widgets::Builder<'_>, p: document_proto::NodeId, name: &str, addr: &str, (cx, cy): (f64, f64)) -> document_proto::NodeId {
+pub(super) fn toggle(
+    b: &mut surface_widgets::Builder<'_>,
+    p: document_proto::NodeId,
+    name: &str,
+    addr: &str,
+    (cx, cy): (f64, f64),
+) -> document_proto::NodeId {
     // The kit's toggle keeps a caption strip over it: its nut sits 6 px
     // under its box's centre.
     rk::mini_toggle(b, p, name, addr, (cx, cy - 6.0), 11.0, "chrome")
@@ -127,7 +191,13 @@ fn compressor() -> Face {
         rk::toggle(&a("attack"), "Attack Snappy", false),
         rk::toggle(&a("on"), "Bypass", true).featured(),
     ];
-    Face { file: "01-pre-standard-compressor", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "01-pre-standard-compressor",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }
 
 // ── 02 · Overdrive 1 ─────────────────────────────────────────────────────
@@ -144,7 +214,13 @@ fn overdrive_1() -> Face {
         dial(b, p, INK, &a("level"), "LEVEL", (XR, Y1), true);
         dial(b, p, INK, &a("tone"), "TONE", (78.0, 106.0), false);
         toggle(b, p, "Clip", &a("clip"), (78.0, 61.5));
-        rk::line(b, p, &[(71.0, 48.0), (75.0, 48.0), (79.5, 43.0), (85.0, 43.0)], 1.0, INK);
+        rk::line(
+            b,
+            p,
+            &[(71.0, 48.0), (75.0, 48.0), (79.5, 43.0), (85.0, 43.0)],
+            1.0,
+            INK,
+        );
         rk::line(b, p, &[(72.0, 83.0), (84.0, 83.0)], 1.2, INK);
     });
     let params = vec![
@@ -154,7 +230,13 @@ fn overdrive_1() -> Face {
         rk::toggle(&a("clip"), "Soft Clip", true),
         rk::toggle(&a("on"), "Bypass", true).featured(),
     ];
-    Face { file: "02-pre-standard-overdrive-one", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "02-pre-standard-overdrive-one",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }
 
 // ── 03 · Delay 1 ─────────────────────────────────────────────────────────
@@ -167,7 +249,15 @@ fn delay_1() -> Face {
     const INK: &str = "#f6f3fa";
     let scene = canvas("Delay 1", |b, root| {
         let p = lid(b, root, "#7a58a3", INK, "DELAY- 1", &a("on"));
-        common::lcd(b, p, "Time readout", &a("time"), (53.0, 9.0, 50.0, 18.0), 9.5, None);
+        common::lcd(
+            b,
+            p,
+            "Time readout",
+            &a("time"),
+            (53.0, 9.0, 50.0, 18.0),
+            9.5,
+            None,
+        );
         dial(b, p, INK, &a("mix"), "MIX", (XL, Y1), true);
         dial(b, p, INK, &a("feedback"), "FBK", (XR, Y1), true);
         dial(b, p, INK, &a("time"), "TIME", (XL, 97.0), false);
@@ -184,7 +274,13 @@ fn delay_1() -> Face {
         rk::toggle(&a("sync"), "Note Sync", false),
         rk::toggle(&a("on"), "Bypass", true).featured(),
     ];
-    Face { file: "03-pre-standard-delay-one", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "03-pre-standard-delay-one",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }
 
 // ── 04 · Overdrive 2 ─────────────────────────────────────────────────────
@@ -208,5 +304,11 @@ fn overdrive_2() -> Face {
         rk::db(&a("treble"), "Treble", -12.0, 12.0, 0.0),
         rk::toggle(&a("on"), "Bypass", true).featured(),
     ];
-    Face { file: "04-pre-standard-overdrive-two", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "04-pre-standard-overdrive-two",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }

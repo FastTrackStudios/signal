@@ -34,12 +34,31 @@ impl<S: anyrender::PaintScene> PaintTarget for AnyRender011<'_, S> {
         {
             let mut opaque = image.clone();
             opaque.sampler.alpha = 1.0;
-            self.0.push_layer(BlendMode::default(), image.sampler.alpha, transform, shape, None, None);
-            self.0.fill(style, transform, anyrender::PaintRef::Image(opaque), brush_transform, shape);
+            self.0.push_layer(
+                BlendMode::default(),
+                image.sampler.alpha,
+                transform,
+                shape,
+                None,
+                None,
+            );
+            self.0.fill(
+                style,
+                transform,
+                anyrender::PaintRef::Image(opaque),
+                brush_transform,
+                shape,
+            );
             self.0.pop_layer();
             return;
         }
-        self.0.fill(style, transform, anyrender::PaintRef::from(brush), brush_transform, shape);
+        self.0.fill(
+            style,
+            transform,
+            anyrender::PaintRef::from(brush),
+            brush_transform,
+            shape,
+        );
     }
 
     fn stroke<'b>(
@@ -51,10 +70,23 @@ impl<S: anyrender::PaintScene> PaintTarget for AnyRender011<'_, S> {
         shape: &impl Shape,
     ) {
         let brush: BrushRef<'b> = brush.into();
-        self.0.stroke(style, transform, anyrender::PaintRef::from(brush), brush_transform, shape);
+        self.0.stroke(
+            style,
+            transform,
+            anyrender::PaintRef::from(brush),
+            brush_transform,
+            shape,
+        );
     }
 
-    fn push_layer(&mut self, _clip_style: Fill, blend: impl Into<BlendMode>, alpha: f32, transform: Affine, clip: &impl Shape) {
+    fn push_layer(
+        &mut self,
+        _clip_style: Fill,
+        blend: impl Into<BlendMode>,
+        alpha: f32,
+        transform: Affine,
+        clip: &impl Shape,
+    ) {
         self.0.push_layer(blend, alpha, transform, clip, None, None);
     }
 
@@ -62,21 +94,40 @@ impl<S: anyrender::PaintScene> PaintTarget for AnyRender011<'_, S> {
         self.0.push_clip_layer(transform, clip);
     }
 
-    fn push_luminance_mask_layer(&mut self, _clip_style: Fill, alpha: f32, transform: Affine, clip: &impl Shape) {
+    fn push_luminance_mask_layer(
+        &mut self,
+        _clip_style: Fill,
+        alpha: f32,
+        transform: Affine,
+        clip: &impl Shape,
+    ) {
         // No luminance masks here: the mask's content draws unmasked.
-        self.0.push_layer(BlendMode::default(), alpha, transform, clip, None, None);
+        self.0
+            .push_layer(BlendMode::default(), alpha, transform, clip, None, None);
     }
 
     fn pop_layer(&mut self) {
         self.0.pop_layer();
     }
 
-    fn draw_blurred_rounded_rect(&mut self, transform: Affine, rect: Rect, brush: Color, radius: f64, std_dev: f64) {
-        self.0.draw_box_shadow(transform, rect, brush, radius, std_dev);
+    fn draw_blurred_rounded_rect(
+        &mut self,
+        transform: Affine,
+        rect: Rect,
+        brush: Color,
+        radius: f64,
+        std_dev: f64,
+    ) {
+        self.0
+            .draw_box_shadow(transform, rect, brush, radius, std_dev);
     }
 
     fn draw_glyph_run(&mut self, run: &GlyphRun<'_>) {
-        let glyphs = run.glyphs.iter().map(|g| anyrender::Glyph { id: g.id, x: g.x, y: g.y });
+        let glyphs = run.glyphs.iter().map(|g| anyrender::Glyph {
+            id: g.id,
+            x: g.x,
+            y: g.y,
+        });
         self.0.draw_glyphs(
             run.font,
             run.font_size,
@@ -93,7 +144,12 @@ impl<S: anyrender::PaintScene> PaintTarget for AnyRender011<'_, S> {
     }
 
     fn draw_image(&mut self, image: &peniko::ImageBrush, transform: Affine) {
-        let size = Rect::new(0.0, 0.0, f64::from(image.image.width), f64::from(image.image.height));
+        let size = Rect::new(
+            0.0,
+            0.0,
+            f64::from(image.image.width),
+            f64::from(image.image.height),
+        );
         PaintTarget::fill(self, Fill::NonZero, transform, image, None, &size);
     }
 

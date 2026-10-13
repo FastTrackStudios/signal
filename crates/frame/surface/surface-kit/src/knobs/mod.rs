@@ -24,27 +24,31 @@
 //! rotation-invariant (centred on the shaft) with the directional light laid
 //! over it from the fixed overlay above.
 
+pub(crate) mod amp;
+pub(crate) mod amp_pointer;
 pub(crate) mod chrome_skirt;
 pub(crate) mod concentric;
 pub(crate) mod knurled_cap;
-pub(crate) mod studio;
-pub(crate) mod valve;
 pub(crate) mod outboard;
 pub(crate) mod pedal;
-pub(crate) mod amp;
 pub(crate) mod pedal_tall;
-pub(crate) mod amp_pointer;
 pub mod spec;
+pub(crate) mod studio;
+pub(crate) mod valve;
 
 use document_proto::{
-    Color, Effect, Node, NodeId, NodeKind, Paint, Size, Stroke, StrokeAlign, TextAlign, TextCase, TextData, Transform,
+    Color, Effect, Node, NodeId, NodeKind, Paint, Size, Stroke, StrokeAlign, TextAlign, TextCase,
+    TextData, Transform,
 };
 use surface_proto::{ControlKind, SlotRole};
 use surface_widgets::Builder;
 
 use crate::draw;
 use crate::registry::{ComponentDef, Family, Place};
-use spec::{BODY_R, Edge, Finish, Flutes, Grad, Index, KnobSpec, RingKind, SpecFill, Specular, Tier, TierPaint};
+use spec::{
+    BODY_R, Edge, Finish, Flutes, Grad, Index, KnobSpec, RingKind, SpecFill, Specular, Tier,
+    TierPaint,
+};
 
 /// Scale-ring ink: silkscreen on a dark panel.
 const INK: &str = "#d6d9dd";
@@ -118,8 +122,16 @@ knobs! {
 /// A source colour literal: `#hex` or `rgba(r, g, b, a)`.
 fn css(s: &str) -> Color {
     if let Some(body) = s.strip_prefix("rgba(").and_then(|r| r.strip_suffix(')')) {
-        let v: Vec<f64> = body.split(',').map(|x| x.trim().parse().unwrap_or(0.0)).collect();
-        return Color { r: v[0] / 255.0, g: v[1] / 255.0, b: v[2] / 255.0, a: v.get(3).copied().unwrap_or(1.0) };
+        let v: Vec<f64> = body
+            .split(',')
+            .map(|x| x.trim().parse().unwrap_or(0.0))
+            .collect();
+        return Color {
+            r: v[0] / 255.0,
+            g: v[1] / 255.0,
+            b: v[2] / 255.0,
+            a: v.get(3).copied().unwrap_or(1.0),
+        };
     }
     draw::hex(s)
 }
@@ -129,8 +141,18 @@ fn hex_of(c: Color) -> String {
     format!("#{:02x}{:02x}{:02x}{:02x}", q(c.r), q(c.g), q(c.b), q(c.a))
 }
 
-const WHITE: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
-const BLACK: Color = Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
+const WHITE: Color = Color {
+    r: 1.0,
+    g: 1.0,
+    b: 1.0,
+    a: 1.0,
+};
+const BLACK: Color = Color {
+    r: 0.0,
+    g: 0.0,
+    b: 0.0,
+    a: 1.0,
+};
 
 fn luminance(c: Color) -> f64 {
     0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
@@ -151,7 +173,10 @@ fn linear(angle: f64, s: &[(f64, Color)]) -> Paint {
 
 /// CSS `radial-gradient(circle at x y, …)` (farthest-corner) on a circle.
 fn radial_css(x: f64, y: f64, s: &[(f64, Color)]) -> Paint {
-    let far = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)].iter().map(|(cx, cy)| (cx - x).hypot(cy - y)).fold(0.0, f64::max);
+    let far = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+        .iter()
+        .map(|(cx, cy)| (cx - x).hypot(cy - y))
+        .fold(0.0, f64::max);
     let o: Vec<(f64, String)> = s.iter().map(|(p, c)| (*p, hex_of(*c))).collect();
     draw::radial_at(x, y, far, &refs(&o))
 }
@@ -173,7 +198,14 @@ fn brushed(metal: [(f64, Color); 3]) -> Vec<Paint> {
     vec![
         linear(162.0, &metal),
         draw::conic(208.0, &refs(&conic)),
-        radial_css(0.34, 0.26, &colors(&[(0.0, "rgba(255,255,255,0.26)"), (0.58, "rgba(255,255,255,0.0)")])),
+        radial_css(
+            0.34,
+            0.26,
+            &colors(&[
+                (0.0, "rgba(255,255,255,0.26)"),
+                (0.58, "rgba(255,255,255,0.0)"),
+            ]),
+        ),
     ]
 }
 
@@ -182,10 +214,29 @@ fn tinted(finish: Finish, c: Color) -> Vec<Paint> {
     let lift = |t: f64| draw::mix(c, WHITE, t);
     let sink = |t: f64| draw::mix(c, BLACK, t);
     match finish {
-        Finish::Moulded => vec![radial_css(0.36, 0.24, &[(0.0, lift(0.28)), (0.42, c), (1.0, sink(0.38))])],
-        Finish::FlatTop => vec![linear(162.0, &[(0.0, lift(0.24)), (0.44, c), (1.0, sink(0.28))])],
-        Finish::Matte => vec![linear(160.0, &[(0.0, lift(0.12)), (0.38, c), (1.0, sink(0.18))])],
-        Finish::SoftTouch => vec![radial_css(0.5, 0.5, &[(0.0, c), (0.62 * 0.707, c), (0.88 * 0.707, lift(0.10)), (0.707, sink(0.22))])],
+        Finish::Moulded => vec![radial_css(
+            0.36,
+            0.24,
+            &[(0.0, lift(0.28)), (0.42, c), (1.0, sink(0.38))],
+        )],
+        Finish::FlatTop => vec![linear(
+            162.0,
+            &[(0.0, lift(0.24)), (0.44, c), (1.0, sink(0.28))],
+        )],
+        Finish::Matte => vec![linear(
+            160.0,
+            &[(0.0, lift(0.12)), (0.38, c), (1.0, sink(0.18))],
+        )],
+        Finish::SoftTouch => vec![radial_css(
+            0.5,
+            0.5,
+            &[
+                (0.0, c),
+                (0.62 * 0.707, c),
+                (0.88 * 0.707, lift(0.10)),
+                (0.707, sink(0.22)),
+            ],
+        )],
         Finish::Brushed => brushed([(0.0, lift(0.14)), (0.46, c), (1.0, sink(0.16))]),
     }
 }
@@ -198,7 +249,11 @@ fn grad_paints(g: Grad) -> Vec<Paint> {
             // the box's incircle, so stops keep their CSS meaning.
             vec![radial_css(x, y, &colors(s))]
         }
-        Grad::Brushed => brushed([(0.0, css("#cdcdc8")), (0.46, css("#b4b4af")), (1.0, css("#96968f"))]),
+        Grad::Brushed => brushed([
+            (0.0, css("#cdcdc8")),
+            (0.46, css("#b4b4af")),
+            (1.0, css("#96968f")),
+        ]),
     }
 }
 
@@ -316,7 +371,10 @@ fn flute_count(asked: u32, band_px: f64) -> u32 {
 fn vector(name: &str, x: f64, y: f64, w: f64, h: f64, d: String, fills: Vec<Paint>) -> Node {
     let mut n = Node::new(NodeKind::Vector, name);
     n.transform = Transform::translate(x, y);
-    n.size = Size { width: w, height: h };
+    n.size = Size {
+        width: w,
+        height: h,
+    };
     n.fill_geometry = vec![d];
     n.fills = fills;
     n
@@ -325,7 +383,11 @@ fn vector(name: &str, x: f64, y: f64, w: f64, h: f64, d: String, fills: Vec<Pain
 /// A second colour on a vector: filled stroke geometry drawn over its fill.
 fn with_stroke_geometry(mut n: Node, d: String, color: Color) -> Node {
     n.stroke_geometry = vec![d];
-    n.stroke = Stroke { paints: vec![Paint::solid(color)], weight: 1.0, ..Stroke::default() };
+    n.stroke = Stroke {
+        paints: vec![Paint::solid(color)],
+        weight: 1.0,
+        ..Stroke::default()
+    };
     n
 }
 
@@ -336,7 +398,12 @@ fn ellipse(name: &str, cx: f64, cy: f64, r: f64, fills: Vec<Paint>) -> Node {
 }
 
 fn outline(mut n: Node, color: Color, weight: f64, align: StrokeAlign) -> Node {
-    n.stroke = Stroke { paints: vec![Paint::solid(color)], weight, align, ..Stroke::default() };
+    n.stroke = Stroke {
+        paints: vec![Paint::solid(color)],
+        weight,
+        align,
+        ..Stroke::default()
+    };
     n
 }
 
@@ -362,7 +429,10 @@ fn legend(text: &str, y: f64, w: f64, size: f64, ink: &str, case: TextCase) -> N
         "legend",
     );
     n.transform = Transform::translate(0.0, y);
-    n.size = Size { width: w, height: (size * 1.35).ceil() };
+    n.size = Size {
+        width: w,
+        height: (size * 1.35).ceil(),
+    };
     n.fills = vec![draw::solid(ink)];
     n
 }
@@ -379,10 +449,21 @@ fn positions(n: usize) -> Vec<f64> {
 }
 
 /// Place a knob of `spec` under `parent`.
-pub(crate) fn build(b: &mut Builder<'_>, parent: NodeId, p: &Place, spec: &KnobSpec, title: &str, default_size: f64) -> NodeId {
+pub(crate) fn build(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    p: &Place,
+    spec: &KnobSpec,
+    title: &str,
+    default_size: f64,
+) -> NodeId {
     let d = p.size.unwrap_or(default_size).max(12.0);
     let k = d / (2.0 * BODY_R);
-    let which = p.variant.as_deref().and_then(|v| spec.variants.iter().position(|n| *n == v)).unwrap_or(0);
+    let which = p
+        .variant
+        .as_deref()
+        .and_then(|v| spec.variants.iter().position(|n| *n == v))
+        .unwrap_or(0);
     let tint: Option<Color> = spec.tints.get(which).copied().flatten().map(css);
     // A stepped knob (options given) prints its positions and turns through
     // exactly its detents; an authored scale or sweep wins.
@@ -392,7 +473,9 @@ pub(crate) fn build(b: &mut Builder<'_>, parent: NodeId, p: &Place, spec: &KnobS
         .clone()
         .or_else(|| stepped.cloned())
         .unwrap_or_else(|| spec.scale.iter().map(ToString::to_string).collect());
-    let sweep = p.sweep.unwrap_or_else(|| stepped.map_or(spec.sweep, |o| crate::registry::detent_sweep(o.len())));
+    let sweep = p
+        .sweep
+        .unwrap_or_else(|| stepped.map_or(spec.sweep, |o| crate::registry::detent_sweep(o.len())));
     let spec = &KnobSpec { sweep, ..*spec };
     let ink = p.ink_color(INK);
     let (ring_r, label_r) = {
@@ -405,49 +488,109 @@ pub(crate) fn build(b: &mut Builder<'_>, parent: NodeId, p: &Place, spec: &KnobS
     // case, like its legend; an authored scale as written.
     let words = stepped.is_some() && p.scale.is_none();
     let case = if words { p.case() } else { TextCase::Original };
-    let print = Print { clear: clearance(spec.ring, ring_r, label_r) * k, size: (7.0 * k).max(draw::SCALE_TYPE_MIN), case };
-    let shown = |s: &str| if case == TextCase::Upper { s.to_uppercase() } else { s.to_string() };
+    let print = Print {
+        clear: clearance(spec.ring, ring_r, label_r) * k,
+        size: (7.0 * k).max(draw::SCALE_TYPE_MIN),
+        case,
+    };
+    let shown = |s: &str| {
+        if case == TextCase::Upper {
+            s.to_uppercase()
+        } else {
+            s.to_string()
+        }
+    };
     let angle = |t: f64| (t - 0.5) * spec.sweep;
     let extents: Vec<(f64, f64, f64, f64)> = if spec.ring == RingKind::OnKnob {
         Vec::new()
     } else {
-        labels.iter().zip(positions(labels.len())).filter(|(s, _)| !s.is_empty()).map(|(s, t)| draw::radial_extent(&shown(s), print.clear, angle(t), print.size)).collect()
+        labels
+            .iter()
+            .zip(positions(labels.len()))
+            .filter(|(s, _)| !s.is_empty())
+            .map(|(s, t)| draw::radial_extent(&shown(s), print.clear, angle(t), print.size))
+            .collect()
     };
-    let reach = extents.iter().map(|e| e.0.abs().max(e.1.abs()).max(e.2.abs()).max(e.3.abs())).fold(0.0, f64::max);
+    let reach = extents
+        .iter()
+        .map(|e| e.0.abs().max(e.1.abs()).max(e.2.abs()).max(e.3.abs()))
+        .fold(0.0, f64::max);
     let bottom = extents.iter().map(|e| e.3).fold(f64::MIN, f64::max);
     // Half the frame, in units: the labels plus a margin, or the widest
     // overhang when the scale is on the knob.
-    let half = if spec.ring == RingKind::OnKnob { 44.0 } else { (label_r + 6.0).max(44.0).max(reach / k + 3.0) };
+    let half = if spec.ring == RingKind::OnKnob {
+        44.0
+    } else {
+        (label_r + 6.0).max(44.0).max(reach / k + 3.0)
+    };
     let g = Geo { k, c: half * k };
     let side = g.size();
 
     let legend_size = (9.5 * k).max(8.0);
     // The legend sits under whatever is printed lowest: the knob, the ends
     // of its ring, its lowest label.
-    let ring_bottom = if labels.is_empty() || spec.ring == RingKind::OnKnob { 0.0 } else { -(ring_r + 5.0) * (spec.sweep / 2.0).to_radians().cos() };
+    let ring_bottom = if labels.is_empty() || spec.ring == RingKind::OnKnob {
+        0.0
+    } else {
+        -(ring_r + 5.0) * (spec.sweep / 2.0).to_radians().cos()
+    };
     let body_r = BODY_R * spec.tiers.first().map_or(1.0, |t| t.r).max(1.0);
     let legend_y = if spec.ring == RingKind::OnKnob {
         g.c + (0.866 * label_r + 5.0) * k
     } else {
-        g.c + ((body_r + 6.0) * k).max((ring_bottom + 4.0) * k).max(bottom + 4.0)
+        g.c + ((body_r + 6.0) * k)
+            .max((ring_bottom + 4.0) * k)
+            .max(bottom + 4.0)
     };
     let height = side.max(legend_y + (legend_size * 1.35).ceil());
-    let name = if p.name.is_empty() { title } else { p.name.as_str() };
+    let name = if p.name.is_empty() {
+        title
+    } else {
+        p.name.as_str()
+    };
     let root = b.add(parent, draw::frame(name, 0.0, 0.0, side, height));
     let knob = b.add(root, draw::frame("knob", 0.0, 0.0, side, side));
 
     // ── fixed: the panel, the shadows, the round (lit) tiers ──
-    printed_scale(b, knob, g, spec, &labels, ring_r, print, &ink, stepped.is_some() && p.scale.is_none());
+    printed_scale(
+        b,
+        knob,
+        g,
+        spec,
+        &labels,
+        ring_r,
+        print,
+        &ink,
+        stepped.is_some() && p.scale.is_none(),
+    );
     let outer = spec.tiers.first().map_or(1.0, |t| t.r);
     let (sx, sy) = g.p(0.0, 1.5);
-    b.add(knob, ellipse("body shadow", sx, sy, BODY_R * outer * k, vec![Paint::solid(css("rgba(0,0,0,0.35)"))]));
+    b.add(
+        knob,
+        ellipse(
+            "body shadow",
+            sx,
+            sy,
+            BODY_R * outer * k,
+            vec![Paint::solid(css("rgba(0,0,0,0.35)"))],
+        ),
+    );
     for (i, tier) in spec.tiers.iter().enumerate() {
         add_tier(b, knob, g, tier, tint, i);
     }
     if let Index::Beak { .. } = spec.index {
         // The lobe is centred on the shaft: its cast shadow never moves.
         let (x, y) = g.p(0.9, 1.8);
-        b.add(knob, ellipse("moulding shadow", x, y, BODY_R * BEAK_LOBE * k, vec![Paint::solid(css("rgba(0,0,0,0.45)"))]));
+        b.add(
+            knob,
+            ellipse(
+                "moulding shadow",
+                x,
+                y,
+                BODY_R * BEAK_LOBE * k,
+                vec![Paint::solid(css("rgba(0,0,0,0.45)"))],
+            ),
+        );
     }
 
     // ── turning: the body ──
@@ -467,30 +610,89 @@ pub(crate) fn build(b: &mut Builder<'_>, parent: NodeId, p: &Place, spec: &KnobS
         if let Edge::Toothed { depth, .. } = tier.edge {
             let r = BODY_R * tier.r * k;
             let depth = BODY_R * depth * k;
-            let ring = circle_path(g.c, g.c, r - depth * 0.3) + &circle_path_ccw(g.c, g.c, r - depth);
-            b.add(knob, vector(&format!("tier {i} light"), 0.0, 0.0, side, side, ring, vec![room_light(0.16, 0.26)]));
+            let ring =
+                circle_path(g.c, g.c, r - depth * 0.3) + &circle_path_ccw(g.c, g.c, r - depth);
+            b.add(
+                knob,
+                vector(
+                    &format!("tier {i} light"),
+                    0.0,
+                    0.0,
+                    side,
+                    side,
+                    ring,
+                    vec![room_light(0.16, 0.26)],
+                ),
+            );
         }
     }
     if let Index::Beak { .. } = spec.index {
         let lobe = circle_path(g.c, g.c, BODY_R * BEAK_LOBE * k * 0.98);
-        b.add(knob, vector("moulding light", 0.0, 0.0, side, side, lobe, vec![room_light(0.24, 0.20)]));
+        b.add(
+            knob,
+            vector(
+                "moulding light",
+                0.0,
+                0.0,
+                side,
+                side,
+                lobe,
+                vec![room_light(0.24, 0.20)],
+            ),
+        );
     }
     if let Some(lit) = spec.specular {
         add_light(b, knob, g, d, &lit);
     }
     if let Some(hub) = spec.hub {
-        b.add(knob, ellipse("hub", g.c, g.c, 2.6 * k, vec![Paint::solid(css(hub))]));
+        b.add(
+            knob,
+            ellipse("hub", g.c, g.c, 2.6 * k, vec![Paint::solid(css(hub))]),
+        );
     }
     if spec.ring == RingKind::OnKnob {
         // The panel's fixed index the turning numerals are read against.
-        let pts = [g.p(0.0, -(BODY_R + 6.0)), g.p(-3.2, -(BODY_R + 12.0)), g.p(3.2, -(BODY_R + 12.0))];
-        let index_ink = p.ink.as_ref().map_or_else(|| "#e8eaec".to_string(), |_| ink.clone());
-        b.add(knob, vector("panel index", 0.0, 0.0, side, side, fmt_pts(&pts), vec![draw::solid(&index_ink)]));
+        let pts = [
+            g.p(0.0, -(BODY_R + 6.0)),
+            g.p(-3.2, -(BODY_R + 12.0)),
+            g.p(3.2, -(BODY_R + 12.0)),
+        ];
+        let index_ink = p
+            .ink
+            .as_ref()
+            .map_or_else(|| "#e8eaec".to_string(), |_| ink.clone());
+        b.add(
+            knob,
+            vector(
+                "panel index",
+                0.0,
+                0.0,
+                side,
+                side,
+                fmt_pts(&pts),
+                vec![draw::solid(&index_ink)],
+            ),
+        );
     }
 
-    let legend_node = b.add(root, legend(p.legend.as_deref().unwrap_or(""), legend_y, side, legend_size, &ink, p.case()));
+    let legend_node = b.add(
+        root,
+        legend(
+            p.legend.as_deref().unwrap_or(""),
+            legend_y,
+            side,
+            legend_size,
+            &ink,
+            p.case(),
+        ),
+    );
 
-    let c = p.control(ControlKind::Knob { sweep_degrees: spec.sweep }).slot(SlotRole::Needle, body.0).slot(SlotRole::Label, legend_node.0);
+    let c = p
+        .control(ControlKind::Knob {
+            sweep_degrees: spec.sweep,
+        })
+        .slot(SlotRole::Needle, body.0)
+        .slot(SlotRole::Label, legend_node.0);
     b.controls.insert(root, c);
     if let Some(touch) = p.touch {
         crate::registry::tighten(b, root, (g.c, g.c), d, touch);
@@ -552,7 +754,17 @@ fn clearance(ring: RingKind, ring_r: f64, label_r: f64) -> f64 {
 /// The scale printed on the panel around the knob (the source's `Ring`).
 /// An empty scale prints nothing — no ring either.
 #[allow(clippy::too_many_arguments)]
-fn printed_scale(b: &mut Builder<'_>, knob: NodeId, g: Geo, spec: &KnobSpec, labels: &[String], ring_r: f64, print: Print, ink: &str, stepped: bool) {
+fn printed_scale(
+    b: &mut Builder<'_>,
+    knob: NodeId,
+    g: Geo,
+    spec: &KnobSpec,
+    labels: &[String],
+    ring_r: f64,
+    print: Print,
+    ink: &str,
+    stepped: bool,
+) {
     if labels.is_empty() {
         return;
     }
@@ -561,22 +773,84 @@ fn printed_scale(b: &mut Builder<'_>, knob: NodeId, g: Geo, spec: &KnobSpec, lab
     let angle = |n: f64| (n - 0.5) * spec.sweep;
     match spec.ring {
         RingKind::Ticks => {
-            let arc = draw::sector(g.c, g.c, (ring_r - 0.3) * g.k, (ring_r + 0.3) * g.k, angle(0.0), angle(1.0));
-            b.add(knob, draw::with_opacity(vector("scale arc", 0.0, 0.0, side, side, arc, vec![draw::solid(ink)]), 0.35));
-            let tick = |n: f64, len: f64, w: f64| seg(g.polar(ring_r - 1.0, angle(n)), g.polar(ring_r + len, angle(n)), w * g.k);
+            let arc = draw::sector(
+                g.c,
+                g.c,
+                (ring_r - 0.3) * g.k,
+                (ring_r + 0.3) * g.k,
+                angle(0.0),
+                angle(1.0),
+            );
+            b.add(
+                knob,
+                draw::with_opacity(
+                    vector(
+                        "scale arc",
+                        0.0,
+                        0.0,
+                        side,
+                        side,
+                        arc,
+                        vec![draw::solid(ink)],
+                    ),
+                    0.35,
+                ),
+            );
+            let tick = |n: f64, len: f64, w: f64| {
+                seg(
+                    g.polar(ring_r - 1.0, angle(n)),
+                    g.polar(ring_r + len, angle(n)),
+                    w * g.k,
+                )
+            };
             let majors: String = at.iter().map(|n| tick(*n, 5.0, 1.4)).collect();
-            let minors: String = at.windows(2).map(|w| tick((w[0] + w[1]) / 2.0, 3.0, 0.8)).collect();
+            let minors: String = at
+                .windows(2)
+                .map(|w| tick((w[0] + w[1]) / 2.0, 3.0, 0.8))
+                .collect();
             if !majors.is_empty() {
-                b.add(knob, draw::with_opacity(vector("scale majors", 0.0, 0.0, side, side, majors, vec![draw::solid(ink)]), 0.9));
+                b.add(
+                    knob,
+                    draw::with_opacity(
+                        vector(
+                            "scale majors",
+                            0.0,
+                            0.0,
+                            side,
+                            side,
+                            majors,
+                            vec![draw::solid(ink)],
+                        ),
+                        0.9,
+                    ),
+                );
             }
             if !minors.is_empty() {
-                b.add(knob, draw::with_opacity(vector("scale minors", 0.0, 0.0, side, side, minors, vec![draw::solid(ink)]), 0.55));
+                b.add(
+                    knob,
+                    draw::with_opacity(
+                        vector(
+                            "scale minors",
+                            0.0,
+                            0.0,
+                            side,
+                            side,
+                            minors,
+                            vec![draw::solid(ink)],
+                        ),
+                        0.55,
+                    ),
+                );
             }
         }
         RingKind::Dots => {
             // 21 is the 1073's: an arc from across the room, countable up
             // close. A stepped knob has a dot per detent.
-            let n = if stepped { labels.len() } else { labels.len().max(21) };
+            let n = if stepped {
+                labels.len()
+            } else {
+                labels.len().max(21)
+            };
             let dots: String = positions(n)
                 .iter()
                 .map(|t| {
@@ -584,15 +858,41 @@ fn printed_scale(b: &mut Builder<'_>, knob: NodeId, g: Geo, spec: &KnobSpec, lab
                     circle_path(x, y, 1.35 * g.k)
                 })
                 .collect();
-            b.add(knob, draw::with_opacity(vector("scale dots", 0.0, 0.0, side, side, dots, vec![draw::solid(ink)]), 0.92));
+            b.add(
+                knob,
+                draw::with_opacity(
+                    vector(
+                        "scale dots",
+                        0.0,
+                        0.0,
+                        side,
+                        side,
+                        dots,
+                        vec![draw::solid(ink)],
+                    ),
+                    0.92,
+                ),
+            );
         }
         RingKind::Numerals | RingKind::OnKnob => {}
     }
     if spec.ring != RingKind::OnKnob {
         for (s, n) in labels.iter().zip(&at) {
             if !s.is_empty() {
-                let est = if print.case == TextCase::Upper { s.to_uppercase() } else { s.clone() };
-                let mut t = draw::radial_label("numeral", &est, (g.c, g.c), print.clear, angle(*n), print.size, ink);
+                let est = if print.case == TextCase::Upper {
+                    s.to_uppercase()
+                } else {
+                    s.clone()
+                };
+                let mut t = draw::radial_label(
+                    "numeral",
+                    &est,
+                    (g.c, g.c),
+                    print.clear,
+                    angle(*n),
+                    print.size,
+                    ink,
+                );
                 if let NodeKind::Text(t) = &mut t.kind {
                     t.characters.clone_from(s);
                     t.font_weight = Some(700.0);
@@ -607,7 +907,11 @@ fn printed_scale(b: &mut Builder<'_>, knob: NodeId, g: Geo, spec: &KnobSpec, lab
 /// The paints a tier's surface takes (empty for a groove).
 fn tier_fills(tier: &Tier, tint: Option<Color>) -> Vec<Paint> {
     match tier.paint {
-        TierPaint::Surface { grad, finish, tint: tintable } => match (tintable, tint) {
+        TierPaint::Surface {
+            grad,
+            finish,
+            tint: tintable,
+        } => match (tintable, tint) {
             (true, Some(c)) => tinted(finish, c),
             _ => grad_paints(grad),
         },
@@ -620,8 +924,20 @@ fn tier_fills(tier: &Tier, tint: Option<Color>) -> Vec<Paint> {
 fn tier_color(tier: &Tier, tint: Option<Color>) -> Color {
     match (tier.paint, tint) {
         (TierPaint::Surface { tint: true, .. }, Some(t)) => t,
-        (TierPaint::Surface { grad: Grad::Linear(_, s) | Grad::Radial(_, _, s), .. }, _) => css(s[s.len() / 2].1),
-        (TierPaint::Surface { grad: Grad::Brushed, .. }, _) => css("#b4b4af"),
+        (
+            TierPaint::Surface {
+                grad: Grad::Linear(_, s) | Grad::Radial(_, _, s),
+                ..
+            },
+            _,
+        ) => css(s[s.len() / 2].1),
+        (
+            TierPaint::Surface {
+                grad: Grad::Brushed,
+                ..
+            },
+            _,
+        ) => css("#b4b4af"),
         (TierPaint::Flat(c) | TierPaint::Groove { color: c, .. }, _) => css(c),
     }
 }
@@ -637,11 +953,22 @@ fn add_tier(b: &mut Builder<'_>, knob: NodeId, g: Geo, tier: &Tier, tint: Option
         Edge::Round => {
             if tier.shadow > 0.0 {
                 let (x, y) = g.p(0.0, BODY_R * tier.shadow);
-                b.add(knob, ellipse(&format!("{name} shadow"), x, y, r, vec![Paint::solid(css("rgba(0,0,0,0.45)"))]));
+                b.add(
+                    knob,
+                    ellipse(
+                        &format!("{name} shadow"),
+                        x,
+                        y,
+                        r,
+                        vec![Paint::solid(css("rgba(0,0,0,0.45)"))],
+                    ),
+                );
             }
             let mut n = ellipse(&name, g.c, g.c, r, fills);
             match tier.paint {
-                TierPaint::Groove { color, width } => n = outline(n, css(color), (width * k).max(0.5), StrokeAlign::Center),
+                TierPaint::Groove { color, width } => {
+                    n = outline(n, css(color), (width * k).max(0.5), StrokeAlign::Center)
+                }
                 TierPaint::Surface { finish, .. } => {
                     // The relief a lit div carries: contact shadows under it,
                     // a dark under-edge and a light lip — at the finish's own
@@ -651,10 +978,20 @@ fn add_tier(b: &mut Builder<'_>, knob: NodeId, g: Geo, tier: &Tier, tint: Option
                     n.effects = vec![
                         draw::drop_shadow("#00000073", 0.0, px * 0.020, px * 0.045),
                         draw::drop_shadow("#00000042", 0.0, px * 0.055, px * 0.130),
-                        shadow_alpha(draw::inner_shadow("#000000", 0.0, -px * 0.10, px * 0.16), under),
-                        shadow_alpha(draw::inner_shadow("#ffffff", 0.0, px * 0.05, px * 0.10), lip),
+                        shadow_alpha(
+                            draw::inner_shadow("#000000", 0.0, -px * 0.10, px * 0.16),
+                            under,
+                        ),
+                        shadow_alpha(
+                            draw::inner_shadow("#ffffff", 0.0, px * 0.05, px * 0.10),
+                            lip,
+                        ),
                     ];
-                    let (c, w) = tier.stroke.map_or((css("rgba(0,0,0,0.45)"), 0.6_f64.max(0.5 * k)), |(c, w)| (css(c), (w * k).max(0.5)));
+                    let (c, w) = tier
+                        .stroke
+                        .map_or((css("rgba(0,0,0,0.45)"), 0.6_f64.max(0.5 * k)), |(c, w)| {
+                            (css(c), (w * k).max(0.5))
+                        });
                     n = outline(n, c, w, StrokeAlign::Inside);
                 }
                 TierPaint::Flat(_) => {
@@ -670,7 +1007,16 @@ fn add_tier(b: &mut Builder<'_>, knob: NodeId, g: Geo, tier: &Tier, tint: Option
             if tier.shadow > 0.0 {
                 // Round, so the teeth turning over it don't drag it along.
                 let (x, y) = g.p(0.0, BODY_R * tier.shadow);
-                b.add(knob, ellipse(&format!("{name} shadow"), x, y, r - depth * 0.45, vec![Paint::solid(css("rgba(0,0,0,0.45)"))]));
+                b.add(
+                    knob,
+                    ellipse(
+                        &format!("{name} shadow"),
+                        x,
+                        y,
+                        r - depth * 0.45,
+                        vec![Paint::solid(css("rgba(0,0,0,0.45)"))],
+                    ),
+                );
             }
             // The disc inside the teeth, lit like a round tier; the teeth
             // turn over its edge.
@@ -681,20 +1027,48 @@ fn add_tier(b: &mut Builder<'_>, knob: NodeId, g: Geo, tier: &Tier, tint: Option
 
 /// A toothed tier's teeth: a band from the tooth roots out, shaded about
 /// the shaft only (so it can turn), with the tier's outline.
-fn add_teeth(b: &mut Builder<'_>, body: NodeId, g: Geo, tier: &Tier, (teeth, depth): (u32, f64), tint: Option<Color>, i: usize) {
+fn add_teeth(
+    b: &mut Builder<'_>,
+    body: NodeId,
+    g: Geo,
+    tier: &Tier,
+    (teeth, depth): (u32, f64),
+    tint: Option<Color>,
+    i: usize,
+) {
     let r = BODY_R * tier.r * g.k;
     let depth = BODY_R * depth * g.k;
     let (x0, side) = (g.c - r - 2.0, 2.0 * r + 4.0);
     let local = side / 2.0;
     let pts = scallop(local, local, r, teeth, depth);
-    let band = format!("{} {}", fmt_pts(&pts), circle_path_ccw(local, local, r - depth));
+    let band = format!(
+        "{} {}",
+        fmt_pts(&pts),
+        circle_path_ccw(local, local, r - depth)
+    );
     let c = tier_color(tier, tint);
     let root = (r - depth) / local;
-    let stops = [(0.0, hex_of(c)), (root, hex_of(c)), (1.0, hex_of(draw::mix(c, BLACK, 0.35)))];
+    let stops = [
+        (0.0, hex_of(c)),
+        (root, hex_of(c)),
+        (1.0, hex_of(draw::mix(c, BLACK, 0.35))),
+    ];
     let fill = draw::radial_at(0.5, 0.5, 0.5, &refs(&stops));
-    let mut n = vector(&format!("tier {i} teeth"), x0, x0, side, side, band, vec![fill]);
+    let mut n = vector(
+        &format!("tier {i} teeth"),
+        x0,
+        x0,
+        side,
+        side,
+        band,
+        vec![fill],
+    );
     if let Some((sc, w)) = tier.stroke {
-        n = with_stroke_geometry(n, outline_band(local, local, &pts, (w * g.k).max(0.5)), css(sc));
+        n = with_stroke_geometry(
+            n,
+            outline_band(local, local, &pts, (w * g.k).max(0.5)),
+            css(sc),
+        );
     }
     b.add(body, n);
 }
@@ -718,14 +1092,28 @@ fn add_light(b: &mut Builder<'_>, knob: NodeId, g: Geo, d: f64, lit: &Specular) 
     };
     let mut blob = Node::new(NodeKind::Ellipse, "light");
     blob.transform = Transform::translate(cx - w / 2.0, cy - h / 2.0);
-    blob.size = Size { width: w, height: h };
+    blob.size = Size {
+        width: w,
+        height: h,
+    };
     blob.fills = vec![fill];
     b.add(knob, draw::rotated(blob, lit.rotate));
     if let Some(rim) = lit.rim {
         // On the lit tier's own edge, upper left to upper right.
         let rr = BODY_R * lit.r * 0.965;
         let arc = draw::sector(g.c, g.c, (rr - 0.5) * g.k, (rr + 0.5) * g.k, -51.2, 25.5);
-        b.add(knob, vector("rim light", 0.0, 0.0, g.size(), g.size(), arc, vec![Paint::solid(css(rim))]));
+        b.add(
+            knob,
+            vector(
+                "rim light",
+                0.0,
+                0.0,
+                g.size(),
+                g.size(),
+                arc,
+                vec![Paint::solid(css(rim))],
+            ),
+        );
     }
 }
 
@@ -735,9 +1123,19 @@ fn add_flutes(b: &mut Builder<'_>, body: NodeId, g: Geo, d: f64, fl: &Flutes) {
     let ridge = |a: f64| seg(g.polar(inner, a), g.polar(outer, a), fl.width * g.k);
     let step = 360.0 / f64::from(n);
     let lit: String = (0..n).map(|i| ridge(f64::from(i) * step)).collect();
-    let mut node = vector("knurl", 0.0, 0.0, g.size(), g.size(), lit, vec![Paint::solid(css(fl.stroke))]);
+    let mut node = vector(
+        "knurl",
+        0.0,
+        0.0,
+        g.size(),
+        g.size(),
+        lit,
+        vec![Paint::solid(css(fl.stroke))],
+    );
     if let Some(dark) = fl.shadow {
-        let shade: String = (0..n).map(|i| ridge(f64::from(i) * step + step / 2.0)).collect();
+        let shade: String = (0..n)
+            .map(|i| ridge(f64::from(i) * step + step / 2.0))
+            .collect();
         node = with_stroke_geometry(node, shade, css(dark));
     }
     b.add(body, node);
@@ -768,7 +1166,10 @@ fn bar(g: Geo, from: f64, to: f64, width: f64) -> (String, String) {
     let (w, h) = (width * g.k, BODY_R * (to - from) * g.k);
     let r = (width / 2.4).min(1.6) * g.k;
     let o = 0.275 * g.k;
-    (rrect(x - o, y - o, w + 2.0 * o, h + 2.0 * o, r + o), rrect(x, y, w, h, r))
+    (
+        rrect(x - o, y - o, w + 2.0 * o, h + 2.0 * o, r + o),
+        rrect(x, y, w, h, r),
+    )
 }
 
 /// A part's soft contact shadow: its outline `d` in black, blurred — no
@@ -778,9 +1179,25 @@ fn bar(g: Geo, from: f64, to: f64, width: f64) -> (String, String) {
 /// one vector — the outline itself, hidden under the part — with a
 /// zero-offset drop shadow the renderer draws round its real outline,
 /// reaching about `blur` units out.
-fn contact(b: &mut Builder<'_>, body: NodeId, g: Geo, name: &str, shape: &dyn Fn(f64) -> String, alpha: f64, blur: f64) {
+fn contact(
+    b: &mut Builder<'_>,
+    body: NodeId,
+    g: Geo,
+    name: &str,
+    shape: &dyn Fn(f64) -> String,
+    alpha: f64,
+    blur: f64,
+) {
     let shade = Color { a: alpha, ..BLACK };
-    let mut n = vector(name, 0.0, 0.0, g.size(), g.size(), shape(0.0), vec![Paint::solid(shade)]);
+    let mut n = vector(
+        name,
+        0.0,
+        0.0,
+        g.size(),
+        g.size(),
+        shape(0.0),
+        vec![Paint::solid(shade)],
+    );
     n.effects = vec![Effect {
         kind: document_proto::EffectKind::DropShadow,
         visible: true,
@@ -796,55 +1213,140 @@ fn contact(b: &mut Builder<'_>, body: NodeId, g: Geo, name: &str, shape: &dyn Fn
 /// The index: every part that reads the value, drawn pointing up into the
 /// turning `body`.
 #[allow(clippy::too_many_lines)]
-fn add_index(b: &mut Builder<'_>, body: NodeId, g: Geo, spec: &KnobSpec, tint: Option<Color>, labels: &[String]) {
+fn add_index(
+    b: &mut Builder<'_>,
+    body: NodeId,
+    g: Geo,
+    spec: &KnobSpec,
+    tint: Option<Color>,
+    labels: &[String],
+) {
     let side = g.size();
     let pts = |p: &[(f64, f64)]| fmt_pts(&p.iter().map(|(u, v)| g.p(*u, *v)).collect::<Vec<_>>());
-    let node = |name: &str, d: String, fills: Vec<Paint>| vector(name, 0.0, 0.0, side, side, d, fills);
+    let node =
+        |name: &str, d: String, fills: Vec<Paint>| vector(name, 0.0, 0.0, side, side, d, fills);
     // What the cap's tier is tinted — the colour an index has to read on.
     let face = tint.filter(|_| !matches!(spec.index, Index::Wing { .. }));
     match spec.index {
-        Index::Bar { from, to, width, color } => {
+        Index::Bar {
+            from,
+            to,
+            width,
+            color,
+        } => {
             let (edge, line) = bar(g, from, to, width);
             let (fill, fill_color) = match spec.collar_index {
                 // The 1073: the ring's slim dark index under the cap's white one.
-                Some(Index::Bar { from: cf, to: ct, width: cw, color: cc }) => (bar(g, cf, ct, cw).1 + &edge, css(cc)),
+                Some(Index::Bar {
+                    from: cf,
+                    to: ct,
+                    width: cw,
+                    color: cc,
+                }) => (bar(g, cf, ct, cw).1 + &edge, css(cc)),
                 _ => (edge, css("rgba(0,0,0,0.38)")),
             };
-            b.add(body, with_stroke_geometry(node("index", fill, vec![Paint::solid(fill_color)]), line, legible(color, face)));
+            b.add(
+                body,
+                with_stroke_geometry(
+                    node("index", fill, vec![Paint::solid(fill_color)]),
+                    line,
+                    legible(color, face),
+                ),
+            );
         }
-        Index::Blade { to, half_width, color } => {
+        Index::Blade {
+            to,
+            half_width,
+            color,
+        } => {
             let (l, hw) = (BODY_R * to, BODY_R * half_width);
-            let blade = |o: f64| pts(&[(-hw - o, o), (hw + o, o), (hw * 0.35 + o, -l - o), (-hw * 0.35 - o, -l - o)]);
+            let blade = |o: f64| {
+                pts(&[
+                    (-hw - o, o),
+                    (hw + o, o),
+                    (hw * 0.35 + o, -l - o),
+                    (-hw * 0.35 - o, -l - o),
+                ])
+            };
             contact(b, body, g, "index shadow", &blade, 0.35, 1.2);
-            b.add(body, node("index", blade(0.0), vec![Paint::solid(legible(color, face))]));
+            b.add(
+                body,
+                node(
+                    "index",
+                    blade(0.0),
+                    vec![Paint::solid(legible(color, face))],
+                ),
+            );
         }
-        Index::Taper { from, to, hub_half, tip_half, color } => {
+        Index::Taper {
+            from,
+            to,
+            hub_half,
+            tip_half,
+            color,
+        } => {
             let (f, t) = (BODY_R * from, BODY_R * to);
             let shape = |dx: f64, dy: f64| {
-                pts(&[(-hub_half + dx, -f + dy), (hub_half + dx, -f + dy), (tip_half + dx, -t + dy), (-tip_half + dx, -t + dy)])
+                pts(&[
+                    (-hub_half + dx, -f + dy),
+                    (hub_half + dx, -f + dy),
+                    (tip_half + dx, -t + dy),
+                    (-tip_half + dx, -t + dy),
+                ])
             };
-            let shadow = node("index", shape(0.7, 1.0), vec![Paint::solid(css("rgba(0,0,0,0.34)"))]);
-            b.add(body, with_stroke_geometry(shadow, shape(0.0, 0.0), legible(color, face)));
+            let shadow = node(
+                "index",
+                shape(0.7, 1.0),
+                vec![Paint::solid(css("rgba(0,0,0,0.34)"))],
+            );
+            b.add(
+                body,
+                with_stroke_geometry(shadow, shape(0.0, 0.0), legible(color, face)),
+            );
         }
         Index::Nose { color } => {
             let w = BODY_R * 0.30;
             let (base, tip) = (BODY_R * 0.84, BODY_R + 9.0);
-            let nose = |o: f64| pts(&[(-w - o, -base + o), (w + o, -base + o), (w * 0.34 + o, -tip - o), (-w * 0.34 - o, -tip - o)]);
+            let nose = |o: f64| {
+                pts(&[
+                    (-w - o, -base + o),
+                    (w + o, -base + o),
+                    (w * 0.34 + o, -tip - o),
+                    (-w * 0.34 - o, -tip - o),
+                ])
+            };
             let tone = face.map_or_else(|| css("#232327"), |t| draw::mix(t, BLACK, 0.2));
             contact(b, body, g, "nose shadow", &nose, 0.5, 2.0);
             b.add(body, node("nose", nose(0.0), vec![Paint::solid(tone)]));
             let (x, y) = g.p(-1.2, -(BODY_R + 7.0));
             let line = rrect(x, y, 2.4 * g.k, BODY_R * 0.55 * g.k, g.k);
-            b.add(body, node("index", line, vec![Paint::solid(legible(color, face))]));
+            b.add(
+                body,
+                node("index", line, vec![Paint::solid(legible(color, face))]),
+            );
         }
         Index::Wing { color, body: disc } => {
             let w = BODY_R * disc * 0.46;
             let (tail, reach) = (BODY_R * WING_TAIL, BODY_R * WING_REACH);
-            let wing = |o: f64| pts(&[(-w - o, tail + o), (w + o, tail + o), (w * 0.64 + o, -reach - o), (-w * 0.64 - o, -reach - o)]);
+            let wing = |o: f64| {
+                pts(&[
+                    (-w - o, tail + o),
+                    (w + o, tail + o),
+                    (w * 0.64 + o, -reach - o),
+                    (-w * 0.64 - o, -reach - o),
+                ])
+            };
             // The moulding's dark parting line, and the shadow it throws on
             // the disc under it.
             contact(b, body, g, "wing shadow", &|o| wing(0.7 + o), 0.55, 2.6);
-            b.add(body, node("wing edge", wing(0.7), vec![Paint::solid(css("rgba(0,0,0,0.72)"))]));
+            b.add(
+                body,
+                node(
+                    "wing edge",
+                    wing(0.7),
+                    vec![Paint::solid(css("rgba(0,0,0,0.72)"))],
+                ),
+            );
             let paint = tint.unwrap_or_else(|| css("#3a3a40"));
             // The lit flank down the left side, so the wing reads as a raised
             // bar rather than a painted stripe; the right flank falls away.
@@ -863,7 +1365,14 @@ fn add_index(b: &mut Builder<'_>, body: NodeId, g: Geo, spec: &KnobSpec, tint: O
             b.add(body, node("wing", wing(0.0), vec![fill]));
             let (lx, ly) = g.p(-1.3, -(reach - 3.0));
             let line = rrect(lx, ly, 2.6 * g.k, (reach - 3.0) * g.k, g.k);
-            b.add(body, node("index", line, vec![Paint::solid(legible(color, Some(paint)))]));
+            b.add(
+                body,
+                node(
+                    "index",
+                    line,
+                    vec![Paint::solid(legible(color, Some(paint)))],
+                ),
+            );
         }
         Index::Beak { color, .. } => {
             // `o` px of outline all round.
@@ -880,8 +1389,23 @@ fn add_index(b: &mut Builder<'_>, body: NodeId, g: Geo, spec: &KnobSpec, tint: O
                 )
             };
             // The moulding's edge and the shadow of its beak turn with it.
-            contact(b, body, g, "moulding shadow", &|o| beak((0.8 + o) * g.k), 0.5, 2.4);
-            b.add(body, node("moulding edge", beak(0.8 * g.k), vec![Paint::solid(css("rgba(0,0,0,0.6)"))]));
+            contact(
+                b,
+                body,
+                g,
+                "moulding shadow",
+                &|o| beak((0.8 + o) * g.k),
+                0.5,
+                2.4,
+            );
+            b.add(
+                body,
+                node(
+                    "moulding edge",
+                    beak(0.8 * g.k),
+                    vec![Paint::solid(css("rgba(0,0,0,0.6)"))],
+                ),
+            );
             let moulding = tint.unwrap_or_else(|| css("#e8e2d4"));
             // Shaded about the shaft only; the fixed light over the lobe
             // does the rest.
@@ -891,10 +1415,30 @@ fn add_index(b: &mut Builder<'_>, body: NodeId, g: Geo, spec: &KnobSpec, tint: O
                 (lobe * 1.8, hex_of(moulding)),
                 (1.0, hex_of(draw::mix(moulding, BLACK, 0.30))),
             ];
-            b.add(body, node("moulding", beak(0.0), vec![draw::radial_at(0.5, 0.5, 0.5, &refs(&stops))]));
+            b.add(
+                body,
+                node(
+                    "moulding",
+                    beak(0.0),
+                    vec![draw::radial_at(0.5, 0.5, 0.5, &refs(&stops))],
+                ),
+            );
             let (x, y) = g.p(-1.4, -(BODY_R * (BEAK_REACH - 0.14)));
-            let line = rrect(x, y, 2.8 * g.k, BODY_R * (BEAK_REACH - 0.30) * g.k, 1.4 * g.k);
-            b.add(body, node("index", line, vec![Paint::solid(legible(color, Some(moulding)))]));
+            let line = rrect(
+                x,
+                y,
+                2.8 * g.k,
+                BODY_R * (BEAK_REACH - 0.30) * g.k,
+                1.4 * g.k,
+            );
+            b.add(
+                body,
+                node(
+                    "index",
+                    line,
+                    vec![Paint::solid(legible(color, Some(moulding)))],
+                ),
+            );
         }
         Index::None => {
             // The Distressor: numerals printed on the skirt, standing on the
@@ -910,7 +1454,13 @@ fn add_index(b: &mut Builder<'_>, body: NodeId, g: Geo, spec: &KnobSpec, tint: O
                 let a = -(n - 0.5) * spec.sweep;
                 let mut t = label("numeral", s, g.polar(r, a), size, "#15171a");
                 let (w, h) = (t.size.width, t.size.height);
-                let holder = b.add(body, draw::rotated(draw::frame("numeral", t.transform.tx, t.transform.ty, w, h), a));
+                let holder = b.add(
+                    body,
+                    draw::rotated(
+                        draw::frame("numeral", t.transform.tx, t.transform.ty, w, h),
+                        a,
+                    ),
+                );
                 t.transform = Transform::IDENTITY;
                 b.add(holder, t);
             }

@@ -28,9 +28,25 @@ use crate::controls::parts::PANEL_INK;
 use crate::draw;
 use crate::registry::{ComponentDef, Family, Place};
 
-fn caption(s: &str, cx: f64, cy: f64, size: f64, ink: &str, case: TextCase) -> document_proto::Node {
+fn caption(
+    s: &str,
+    cx: f64,
+    cy: f64,
+    size: f64,
+    ink: &str,
+    case: TextCase,
+) -> document_proto::Node {
     let w = crate::controls::parts::text_w(s, size) * 1.25 + size * 2.0;
-    let mut n = draw::text("legend", s, cx - w / 2.0, cy - size * 0.68, w, size, ink, TextAlign::Center);
+    let mut n = draw::text(
+        "legend",
+        s,
+        cx - w / 2.0,
+        cy - size * 0.68,
+        w,
+        size,
+        ink,
+        TextAlign::Center,
+    );
     if let NodeKind::Text(t) = &mut n.kind {
         t.font_weight = Some(700.0);
         t.text_case = case;
@@ -43,7 +59,15 @@ fn seg(a: (f64, f64), b: (f64, f64), w: f64) -> String {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let len = dx.hypot(dy).max(1e-6);
     let (nx, ny) = (-dy / len * w / 2.0, dx / len * w / 2.0);
-    format!("{} ", draw::polygon(&[(a.0 + nx, a.1 + ny), (b.0 + nx, b.1 + ny), (b.0 - nx, b.1 - ny), (a.0 - nx, a.1 - ny)]))
+    format!(
+        "{} ",
+        draw::polygon(&[
+            (a.0 + nx, a.1 + ny),
+            (b.0 + nx, b.1 + ny),
+            (b.0 - nx, b.1 - ny),
+            (a.0 - nx, a.1 - ny)
+        ])
+    )
 }
 
 fn dot_ring(cx: f64, cy: f64, r: f64, n: usize, sweep: f64, dot: f64) -> String {
@@ -77,7 +101,14 @@ struct Frame {
 
 /// The shared scaffold: root and a square `knob` frame with room for the
 /// printed dots and the legend above (or below).
-fn scaffold(b: &mut Builder<'_>, parent: NodeId, p: &Place, d: f64, dots: usize, fallback: &str) -> Frame {
+fn scaffold(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    p: &Place,
+    d: f64,
+    dots: usize,
+    fallback: &str,
+) -> Frame {
     let r = d / 2.0;
     let k = d / 48.0;
     let ink = p.ink_color(PANEL_INK);
@@ -90,25 +121,71 @@ fn scaffold(b: &mut Builder<'_>, parent: NodeId, p: &Place, d: f64, dots: usize,
     let legend_size = (9.0 * k).max(8.0);
     let below = p.flag("legend_below");
     let has_legend = p.legend.as_deref().is_some_and(|l| !l.is_empty());
-    let top = if has_legend && !below { legend_size * 1.8 } else { 0.0 };
-    let extra = if has_legend && below { legend_size * 1.8 } else { 0.0 };
-    let name = if p.name.is_empty() { fallback } else { p.name.as_str() };
-    let root = b.add(parent, draw::frame(name, 0.0, 0.0, side, side + top + extra));
+    let top = if has_legend && !below {
+        legend_size * 1.8
+    } else {
+        0.0
+    };
+    let extra = if has_legend && below {
+        legend_size * 1.8
+    } else {
+        0.0
+    };
+    let name = if p.name.is_empty() {
+        fallback
+    } else {
+        p.name.as_str()
+    };
+    let root = b.add(
+        parent,
+        draw::frame(name, 0.0, 0.0, side, side + top + extra),
+    );
     let knob = b.add(root, draw::frame("knob", 0.0, top, side, side));
     let c = half;
     if dots > 0 {
         let d = dot_ring(c, c, ring, dots, sweep, (0.9 * k).max(0.6));
-        b.add(knob, draw::path("scale dots", 0.0, 0.0, side, side, d, draw::solid(&ink)));
+        b.add(
+            knob,
+            draw::path("scale dots", 0.0, 0.0, side, side, d, draw::solid(&ink)),
+        );
     }
-    Frame { root, knob, c, side, top, k, ink, sweep }
+    Frame {
+        root,
+        knob,
+        c,
+        side,
+        top,
+        k,
+        ink,
+        sweep,
+    }
 }
 
 fn finish(b: &mut Builder<'_>, p: &Place, f: &Frame, body: NodeId, d: f64) -> NodeId {
     let legend_size = (9.0 * f.k).max(8.0);
     let below = p.flag("legend_below");
-    let cy = if below { f.top + f.side + legend_size * 0.9 } else { legend_size * 0.8 };
-    let legend = b.add(f.root, caption(p.legend.as_deref().unwrap_or(""), f.c, cy, legend_size, &f.ink, p.case()));
-    let ctl = p.control(ControlKind::Knob { sweep_degrees: f.sweep }).slot(SlotRole::Needle, body.0).slot(SlotRole::Label, legend.0);
+    let cy = if below {
+        f.top + f.side + legend_size * 0.9
+    } else {
+        legend_size * 0.8
+    };
+    let legend = b.add(
+        f.root,
+        caption(
+            p.legend.as_deref().unwrap_or(""),
+            f.c,
+            cy,
+            legend_size,
+            &f.ink,
+            p.case(),
+        ),
+    );
+    let ctl = p
+        .control(ControlKind::Knob {
+            sweep_degrees: f.sweep,
+        })
+        .slot(SlotRole::Needle, body.0)
+        .slot(SlotRole::Label, legend.0);
     b.controls.insert(f.root, ctl);
     if let Some(touch) = p.touch {
         crate::registry::tighten(b, f.root, (f.c, f.c + f.top), d, touch);
@@ -133,34 +210,154 @@ fn pedal_lobed(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let (c, k, side) = (f.c, f.k, f.side);
     let r = d / 2.0;
     let [rim, body_c, top_edge, top_mid] = lobed_paint(p.variant.as_deref());
-    let light = p.variant.as_deref().is_some_and(|v| v == "cream" || v == "white");
+    let light = p
+        .variant
+        .as_deref()
+        .is_some_and(|v| v == "cream" || v == "white");
 
     // Fixed: the shadow it throws on the enclosure.
-    b.add(f.knob, draw::circle("shadow", c + 1.2 * k, c + 3.2 * k, r * 0.98, draw::radial(&[(0.0, "#000000b0"), (0.75, "#00000070"), (1.0, "#00000000")])));
+    b.add(
+        f.knob,
+        draw::circle(
+            "shadow",
+            c + 1.2 * k,
+            c + 3.2 * k,
+            r * 0.98,
+            draw::radial(&[(0.0, "#000000b0"), (0.75, "#00000070"), (1.0, "#00000000")]),
+        ),
+    );
 
     // Fixed: the moulding's side, seen past the lobes' lower edge.
-    b.add(f.knob, draw::circle("side", c, c + 2.2 * k, r * 0.94, draw::solid(if light { "#6f6a5c" } else { "#000000" })));
+    b.add(
+        f.knob,
+        draw::circle(
+            "side",
+            c,
+            c + 2.2 * k,
+            r * 0.94,
+            draw::solid(if light { "#6f6a5c" } else { "#000000" }),
+        ),
+    );
     // Turning: the lobed skirt and the domed top with the index.
     let body = b.add(f.knob, draw::frame("body", 0.0, 0.0, side, side));
     let lobes = draw::lobed(c, c, r, 7, r * 0.13);
-    let skirt = draw::path("lobes", 0.0, 0.0, side, side, lobes, draw::radial_at(0.5, 0.5, 0.5, &[(0.0, body_c), (0.78, body_c), (1.0, rim)]));
-    b.add(body, draw::with_effects(draw::stroked(skirt, "#000000", (0.6 * k).max(0.5)), vec![draw::drop_shadow("#00000099", 0.0, 0.0, 2.0 * k)]));
+    let skirt = draw::path(
+        "lobes",
+        0.0,
+        0.0,
+        side,
+        side,
+        lobes,
+        draw::radial_at(0.5, 0.5, 0.5, &[(0.0, body_c), (0.78, body_c), (1.0, rim)]),
+    );
+    b.add(
+        body,
+        draw::with_effects(
+            draw::stroked(skirt, "#000000", (0.6 * k).max(0.5)),
+            vec![draw::drop_shadow("#00000099", 0.0, 0.0, 2.0 * k)],
+        ),
+    );
     let rt = r * 0.66;
-    b.add(body, draw::circle("top", c, c, rt, draw::radial_at(0.5, 0.5, 0.5, &[(0.0, top_mid), (0.85, top_mid), (1.0, top_edge)])));
+    b.add(
+        body,
+        draw::circle(
+            "top",
+            c,
+            c,
+            rt,
+            draw::radial_at(
+                0.5,
+                0.5,
+                0.5,
+                &[(0.0, top_mid), (0.85, top_mid), (1.0, top_edge)],
+            ),
+        ),
+    );
     let lw = (2.4 * k).max(1.3);
     let line_c = if light { "#1b1b1d" } else { "#f4f4f2" };
-    b.add(body, draw::rounded(draw::rect("index", c - lw / 2.0, c - r * 0.9, lw, r * 0.72, draw::solid(line_c)), lw / 2.0));
+    b.add(
+        body,
+        draw::rounded(
+            draw::rect(
+                "index",
+                c - lw / 2.0,
+                c - r * 0.9,
+                lw,
+                r * 0.72,
+                draw::solid(line_c),
+            ),
+            lw / 2.0,
+        ),
+    );
 
     // Fixed: the room's light on the lobes and the gloss on the dome — a
     // bright crescent on the upper-left lobes, a softer one on the right,
     // the dome's specular spot.
     let rim_light = draw::sector(c, c, r * 0.7, r * 0.93, -95.0, 5.0);
-    b.add(f.knob, draw::path("rim light", 0.0, 0.0, side, side, rim_light, draw::radial_at(0.3, 0.2, 0.7, &[(0.0, if light { "#ffffff88" } else { "#ffffff66" }), (1.0, "#ffffff00")])));
+    b.add(
+        f.knob,
+        draw::path(
+            "rim light",
+            0.0,
+            0.0,
+            side,
+            side,
+            rim_light,
+            draw::radial_at(
+                0.3,
+                0.2,
+                0.7,
+                &[
+                    (0.0, if light { "#ffffff88" } else { "#ffffff66" }),
+                    (1.0, "#ffffff00"),
+                ],
+            ),
+        ),
+    );
     let rim_right = draw::sector(c, c, r * 0.72, r * 0.9, 20.0, 80.0);
-    b.add(f.knob, draw::path("rim light", 0.0, 0.0, side, side, rim_right, draw::solid(if light { "#ffffff33" } else { "#ffffff17" })));
-    b.add(f.knob, draw::circle("gloss", c - rt * 0.2, c - rt * 0.3, rt * 0.75, draw::radial(&[(0.0, if light { "#ffffff66" } else { "#ffffff30" }), (1.0, "#ffffff00")])));
-    b.add(f.knob, draw::circle("spec", c - rt * 0.34, c - rt * 0.45, rt * 0.2, draw::radial(&[(0.0, "#ffffffa0"), (1.0, "#ffffff00")])));
-    b.add(f.knob, draw::stroked(draw::circle("top edge", c, c, rt, draw::solid("#00000000")), "#00000066", (0.9 * k).max(0.5)));
+    b.add(
+        f.knob,
+        draw::path(
+            "rim light",
+            0.0,
+            0.0,
+            side,
+            side,
+            rim_right,
+            draw::solid(if light { "#ffffff33" } else { "#ffffff17" }),
+        ),
+    );
+    b.add(
+        f.knob,
+        draw::circle(
+            "gloss",
+            c - rt * 0.2,
+            c - rt * 0.3,
+            rt * 0.75,
+            draw::radial(&[
+                (0.0, if light { "#ffffff66" } else { "#ffffff30" }),
+                (1.0, "#ffffff00"),
+            ]),
+        ),
+    );
+    b.add(
+        f.knob,
+        draw::circle(
+            "spec",
+            c - rt * 0.34,
+            c - rt * 0.45,
+            rt * 0.2,
+            draw::radial(&[(0.0, "#ffffffa0"), (1.0, "#ffffff00")]),
+        ),
+    );
+    b.add(
+        f.knob,
+        draw::stroked(
+            draw::circle("top edge", c, c, rt, draw::solid("#00000000")),
+            "#00000066",
+            (0.9 * k).max(0.5),
+        ),
+    );
     finish(b, p, &f, body, d)
 }
 
@@ -181,9 +378,25 @@ fn pedal_grip(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let r = d / 2.0;
     let [knurl, cap_edge, cap_mid] = grip_paint(p.variant.as_deref());
 
-    b.add(f.knob, draw::circle("shadow", c + 1.5 * k, c + 4.0 * k, r, draw::radial(&[(0.0, "#000000a8"), (0.7, "#00000066"), (1.0, "#00000000")])));
+    b.add(
+        f.knob,
+        draw::circle(
+            "shadow",
+            c + 1.5 * k,
+            c + 4.0 * k,
+            r,
+            draw::radial(&[(0.0, "#000000a8"), (0.7, "#00000066"), (1.0, "#00000000")]),
+        ),
+    );
     // Fixed: the grip's side, a dark ring (the camera sees it past the cap).
-    b.add(f.knob, draw::stroked(draw::circle("grip", c, c, r, draw::solid(knurl)), "#000000", (0.7 * k).max(0.5)));
+    b.add(
+        f.knob,
+        draw::stroked(
+            draw::circle("grip", c, c, r, draw::solid(knurl)),
+            "#000000",
+            (0.7 * k).max(0.5),
+        ),
+    );
 
     // Turning: the knurl's ribs, the cap and the dot.
     let body = b.add(f.knob, draw::frame("body", 0.0, 0.0, side, side));
@@ -192,18 +405,75 @@ fn pedal_grip(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let ridge: String = (0..ribs)
         .map(|i| {
             let a = 360.0 * f64::from(i) / f64::from(ribs);
-            seg(draw::polar(c, c, rc + 0.6 * k, a), draw::polar(c, c, r - 0.8 * k, a), 1.3 * k)
+            seg(
+                draw::polar(c, c, rc + 0.6 * k, a),
+                draw::polar(c, c, r - 0.8 * k, a),
+                1.3 * k,
+            )
         })
         .collect();
-    b.add(body, draw::path("knurl", 0.0, 0.0, side, side, ridge, draw::solid("#3b3c40")));
-    b.add(body, draw::circle("cap", c, c, rc, draw::radial_at(0.5, 0.5, 0.5, &[(0.0, cap_mid), (0.8, cap_mid), (1.0, cap_edge)])));
-    b.add(body, draw::circle("index", c, c - rc * 0.72, (1.9 * k).max(1.1), draw::solid("#f6f6f4")));
+    b.add(
+        body,
+        draw::path("knurl", 0.0, 0.0, side, side, ridge, draw::solid("#3b3c40")),
+    );
+    b.add(
+        body,
+        draw::circle(
+            "cap",
+            c,
+            c,
+            rc,
+            draw::radial_at(
+                0.5,
+                0.5,
+                0.5,
+                &[(0.0, cap_mid), (0.8, cap_mid), (1.0, cap_edge)],
+            ),
+        ),
+    );
+    b.add(
+        body,
+        draw::circle(
+            "index",
+            c,
+            c - rc * 0.72,
+            (1.9 * k).max(1.1),
+            draw::solid("#f6f6f4"),
+        ),
+    );
 
     // Fixed: light on the cap and the ribs.
     let rim_light = draw::sector(c, c, rc, r - 0.5 * k, -80.0, 10.0);
-    b.add(f.knob, draw::path("rim light", 0.0, 0.0, side, side, rim_light, draw::solid("#ffffff24")));
-    b.add(f.knob, draw::circle("cap light", c - rc * 0.25, c - rc * 0.3, rc * 0.7, draw::radial(&[(0.0, "#ffffff2e"), (1.0, "#ffffff00")])));
-    b.add(f.knob, draw::stroked(draw::circle("cap edge", c, c, rc, draw::solid("#00000000")), "#00000066", (0.8 * k).max(0.5)));
+    b.add(
+        f.knob,
+        draw::path(
+            "rim light",
+            0.0,
+            0.0,
+            side,
+            side,
+            rim_light,
+            draw::solid("#ffffff24"),
+        ),
+    );
+    b.add(
+        f.knob,
+        draw::circle(
+            "cap light",
+            c - rc * 0.25,
+            c - rc * 0.3,
+            rc * 0.7,
+            draw::radial(&[(0.0, "#ffffff2e"), (1.0, "#ffffff00")]),
+        ),
+    );
+    b.add(
+        f.knob,
+        draw::stroked(
+            draw::circle("cap edge", c, c, rc, draw::solid("#00000000")),
+            "#00000066",
+            (0.8 * k).max(0.5),
+        ),
+    );
     finish(b, p, &f, body, d)
 }
 

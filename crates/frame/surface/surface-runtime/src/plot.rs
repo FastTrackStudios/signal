@@ -104,7 +104,13 @@ pub fn line_path(points: &[(f64, f64)], w: f64, h: f64, style: PlotStyle, dot: f
             for p in pts.iter().filter(|p| p.1.is_finite()) {
                 let (x, y) = px(*p, w, h);
                 let r = dot;
-                let _ = write!(d, "M {:.2} {y:.2} a {r:.2} {r:.2} 0 1 0 {:.2} 0 a {r:.2} {r:.2} 0 1 0 {:.2} 0 Z ", x - r, 2.0 * r, -2.0 * r);
+                let _ = write!(
+                    d,
+                    "M {:.2} {y:.2} a {r:.2} {r:.2} 0 1 0 {:.2} 0 a {r:.2} {r:.2} 0 1 0 {:.2} 0 Z ",
+                    x - r,
+                    2.0 * r,
+                    -2.0 * r
+                );
             }
         }
         PlotStyle::Bars => bars(&mut d, &pts, w, h, 0.0),
@@ -178,7 +184,11 @@ fn bars(d: &mut String, pts: &[(f64, f64)], w: f64, h: f64, baseline: f64) {
         let x0 = (x - bw / 2.0).clamp(0.0, (w - bw).max(0.0));
         let (top, bottom) = if y < base { (y, base) } else { (base, y) };
         if bottom - top > 0.01 {
-            let _ = write!(d, "M {x0:.2} {top:.2} H {:.2} V {bottom:.2} H {x0:.2} Z ", x0 + bw);
+            let _ = write!(
+                d,
+                "M {x0:.2} {top:.2} H {:.2} V {bottom:.2} H {x0:.2} Z ",
+                x0 + bw
+            );
         }
     }
 }
@@ -187,7 +197,10 @@ fn bars(d: &mut String, pts: &[(f64, f64)], w: f64, h: f64, baseline: f64) {
 /// ends; `None` when it has no finite points).
 #[must_use]
 pub fn sample(points: &[(f64, f64)], x: f64) -> Option<f64> {
-    let finite: Vec<&(f64, f64)> = points.iter().filter(|p| p.0.is_finite() && p.1.is_finite()).collect();
+    let finite: Vec<&(f64, f64)> = points
+        .iter()
+        .filter(|p| p.0.is_finite() && p.1.is_finite())
+        .collect();
     let (first, last) = (finite.first()?, finite.last()?);
     if x <= first.0 {
         return Some(first.1);
@@ -198,7 +211,11 @@ pub fn sample(points: &[(f64, f64)], x: f64) -> Option<f64> {
     let i = finite.partition_point(|p| p.0 < x);
     let (a, b) = (finite[i - 1], finite[i]);
     let span = b.0 - a.0;
-    Some(if span <= 0.0 { b.1 } else { a.1 + (b.1 - a.1) * (x - a.0) / span })
+    Some(if span <= 0.0 {
+        b.1
+    } else {
+        a.1 + (b.1 - a.1) * (x - a.0) / span
+    })
 }
 
 #[cfg(test)]
@@ -207,13 +224,25 @@ mod tests {
 
     #[test]
     fn a_line_maps_unit_space_to_the_box_with_y_up() {
-        let d = line_path(&[(0.0, 0.0), (0.5, 1.0), (1.0, 0.5)], 100.0, 50.0, PlotStyle::Line, 2.0);
+        let d = line_path(
+            &[(0.0, 0.0), (0.5, 1.0), (1.0, 0.5)],
+            100.0,
+            50.0,
+            PlotStyle::Line,
+            2.0,
+        );
         assert_eq!(d, "M 0.00 50.00 L 50.00 0.00 L 100.00 25.00");
     }
 
     #[test]
     fn gaps_lift_the_pen_and_empty_draws_nothing() {
-        let d = line_path(&[(0.0, 0.2), (0.3, f64::NAN), (0.6, 0.4), (1.0, 0.4)], 10.0, 10.0, PlotStyle::Line, 1.0);
+        let d = line_path(
+            &[(0.0, 0.2), (0.3, f64::NAN), (0.6, 0.4), (1.0, 0.4)],
+            10.0,
+            10.0,
+            PlotStyle::Line,
+            1.0,
+        );
         assert_eq!(d.matches('M').count(), 2, "{d}");
         assert!(line_path(&[], 10.0, 10.0, PlotStyle::Line, 1.0).is_empty());
         assert!(area_path(&[(0.0, f64::NAN)], 10.0, 10.0, PlotStyle::Line, 0.0).is_empty());
@@ -221,26 +250,50 @@ mod tests {
 
     #[test]
     fn areas_close_to_their_baseline() {
-        let d = area_path(&[(0.0, 0.5), (1.0, 0.5)], 10.0, 10.0, PlotStyle::Area { baseline: 0.0 }, 1.0);
+        let d = area_path(
+            &[(0.0, 0.5), (1.0, 0.5)],
+            10.0,
+            10.0,
+            PlotStyle::Area { baseline: 0.0 },
+            1.0,
+        );
         assert_eq!(d, "M 0.00 0.00 L 0.00 5.00 L 10.00 5.00 L 10.00 0.00 Z");
     }
 
     #[test]
     fn decimation_keeps_peaks_and_bounds_the_work() {
-        let pts: Vec<(f64, f64)> = (0..4096).map(|i| (f64::from(i) / 4095.0, if i == 2000 { 1.0 } else { 0.1 })).collect();
+        let pts: Vec<(f64, f64)> = (0..4096)
+            .map(|i| (f64::from(i) / 4095.0, if i == 2000 { 1.0 } else { 0.1 }))
+            .collect();
         let d = decimate(&pts, 100);
         assert!(d.len() <= 200, "{}", d.len());
         assert!(d.iter().any(|p| p.1 == 1.0), "the peak survives");
-        assert_eq!(decimate(&pts[..50], 100).len(), 50, "short input is untouched");
+        assert_eq!(
+            decimate(&pts[..50], 100).len(),
+            50,
+            "short input is untouched"
+        );
     }
 
     #[test]
     fn steps_bars_and_dots() {
         let pts = [(0.0, 0.0), (0.5, 1.0), (1.0, 0.5)];
-        assert_eq!(line_path(&pts, 10.0, 10.0, PlotStyle::Steps, 1.0), "M 0.00 10.00 H 5.00 V 0.00 H 10.00 V 5.00");
+        assert_eq!(
+            line_path(&pts, 10.0, 10.0, PlotStyle::Steps, 1.0),
+            "M 0.00 10.00 H 5.00 V 0.00 H 10.00 V 5.00"
+        );
         let bars = line_path(&pts, 30.0, 10.0, PlotStyle::Bars, 1.0);
-        assert_eq!(bars.matches('Z').count(), 2, "a zero bar draws nothing: {bars}");
-        assert_eq!(line_path(&pts, 30.0, 10.0, PlotStyle::Dots, 1.0).matches('Z').count(), 3);
+        assert_eq!(
+            bars.matches('Z').count(),
+            2,
+            "a zero bar draws nothing: {bars}"
+        );
+        assert_eq!(
+            line_path(&pts, 30.0, 10.0, PlotStyle::Dots, 1.0)
+                .matches('Z')
+                .count(),
+            3
+        );
     }
 
     #[test]

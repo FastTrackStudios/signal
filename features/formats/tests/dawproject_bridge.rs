@@ -127,8 +127,7 @@ fn every_shipped_fixture_converts_without_panicking() {
     // The corpus `dawfile-dawproject` ships. The bar here is that the
     // bridge is total over real files, not that every field survives —
     // DAWproject models things we do not.
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/dawproject_fixtures");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/dawproject");
     if !dir.exists() {
         return;
     }

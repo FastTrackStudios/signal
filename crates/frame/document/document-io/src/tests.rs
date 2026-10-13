@@ -7,7 +7,8 @@ impl TempDir {
     fn new(tag: &str) -> Self {
         static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("document-io-{tag}-{}-{n}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("document-io-{tag}-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         Self(dir)
@@ -38,13 +39,21 @@ fn scene_with(png: &[u8]) -> Scene {
         blend: document_proto::BlendMode::Normal,
         visible: true,
     }];
-    scene.apply(Op::Insert { node: n, parent: page, index: u32::MAX }).unwrap();
+    scene
+        .apply(Op::Insert {
+            node: n,
+            parent: page,
+            index: u32::MAX,
+        })
+        .unwrap();
     scene
 }
 
 fn files(dir: &Path) -> Vec<String> {
-    let mut v: Vec<String> =
-        std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    let mut v: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
     v.sort();
     v
 }
@@ -57,10 +66,18 @@ fn markup_round_trips_with_its_assets() {
     save_surface(&path, &scene).unwrap();
 
     let text = std::fs::read_to_string(&path).unwrap();
-    assert_eq!(text, document_text::print(&scene), "the markup itself is unchanged: ids only, no bytes");
+    assert_eq!(
+        text,
+        document_text::print(&scene),
+        "the markup itself is unchanged: ids only, no bytes"
+    );
     let side = assets_dir(&path);
     assert_eq!(side, dir.0.join("s.frame.assets"));
-    let ids: Vec<String> = scene.assets.values().map(|a| format!("{}.{}", a.id, extension_for(&a.mime))).collect();
+    let ids: Vec<String> = scene
+        .assets
+        .values()
+        .map(|a| format!("{}.{}", a.id, extension_for(&a.mime)))
+        .collect();
     let mut want: Vec<String> = ids.into_iter().chain([MANIFEST.to_owned()]).collect();
     want.sort();
     assert_eq!(files(&side), want);
@@ -75,7 +92,11 @@ fn stale_assets_are_pruned_and_an_assetless_scene_drops_the_sidecar() {
     save_surface(&path, &scene_with(b"png one")).unwrap();
     let second = scene_with(b"png two");
     save_surface(&path, &second).unwrap();
-    assert_eq!(files(&assets_dir(&path)).len(), 3, "manifest, font, the new png only");
+    assert_eq!(
+        files(&assets_dir(&path)).len(),
+        3,
+        "manifest, font, the new png only"
+    );
     assert_eq!(load_surface(&path).unwrap(), second);
 
     // A stranger's file survives pruning (and so does the folder).
@@ -96,10 +117,17 @@ fn a_missing_or_tampered_asset_is_an_error() {
     let path = dir.0.join("s.frame");
     let scene = scene_with(b"png one");
     save_surface(&path, &scene).unwrap();
-    let png = scene.assets.values().find(|a| a.mime == "image/png").unwrap();
+    let png = scene
+        .assets
+        .values()
+        .find(|a| a.mime == "image/png")
+        .unwrap();
     let file = assets_dir(&path).join(format!("{}.png", png.id));
     std::fs::write(&file, b"flipped").unwrap();
-    assert!(matches!(load_surface(&path), Err(Error::CorruptAsset { .. })));
+    assert!(matches!(
+        load_surface(&path),
+        Err(Error::CorruptAsset { .. })
+    ));
     std::fs::remove_file(&file).unwrap();
     let err = load_surface(&path).unwrap_err();
     assert!(matches!(err, Error::MissingAsset { .. }), "{err}");
@@ -127,7 +155,10 @@ fn parse_errors_carry_path_line_and_col() {
     std::fs::write(&path, "<Document>\n  <Page>\n</Document>").unwrap();
     let err = load_surface(&path).unwrap_err().to_string();
     let rest = err.strip_prefix(&format!("{}:", path.display())).unwrap();
-    assert!(rest.split(':').next().unwrap().parse::<usize>().is_ok(), "{err}");
+    assert!(
+        rest.split(':').next().unwrap().parse::<usize>().is_ok(),
+        "{err}"
+    );
 }
 
 #[test]
@@ -138,10 +169,26 @@ fn fingerprint_follows_the_markup_and_its_assets() {
     let scene = scene_with(b"png one");
     save_surface(&path, &scene).unwrap();
     let before = fingerprint(&path).unwrap();
-    assert_eq!(fingerprint(&path), Some(before), "stable while nothing changes");
-    let png = scene.assets.values().find(|x| x.mime == "image/png").unwrap();
-    std::fs::write(assets_dir(&path).join(format!("{}.png", png.id)), b"png one, edited").unwrap();
-    assert_ne!(fingerprint(&path), Some(before), "an asset edit changes the fingerprint");
+    assert_eq!(
+        fingerprint(&path),
+        Some(before),
+        "stable while nothing changes"
+    );
+    let png = scene
+        .assets
+        .values()
+        .find(|x| x.mime == "image/png")
+        .unwrap();
+    std::fs::write(
+        assets_dir(&path).join(format!("{}.png", png.id)),
+        b"png one, edited",
+    )
+    .unwrap();
+    assert_ne!(
+        fingerprint(&path),
+        Some(before),
+        "an asset edit changes the fingerprint"
+    );
 }
 
 #[test]
@@ -149,17 +196,38 @@ fn bundles_load_and_save_through_the_same_api() {
     let dir = TempDir::new("bundle");
     let path = dir.0.join("s.frame");
     let scene = scene_with(b"png one");
-    assert_eq!(Format::of(&path), Some(Format::Markup), "a new .frame defaults to markup");
+    assert_eq!(
+        Format::of(&path),
+        Some(Format::Markup),
+        "a new .frame defaults to markup"
+    );
     save_surface_as(&path, &scene, Format::Bundle).unwrap();
-    assert_eq!(Format::of(&path), Some(Format::Bundle), "detected by content");
-    assert!(!assets_dir(&path).exists(), "a bundle carries its own assets");
+    assert_eq!(
+        Format::of(&path),
+        Some(Format::Bundle),
+        "detected by content"
+    );
+    assert!(
+        !assets_dir(&path).exists(),
+        "a bundle carries its own assets"
+    );
     assert_eq!(load_surface(&path).unwrap(), scene);
     let (first, _) = document_bundle::load(&path).unwrap();
     save_surface(&path, &scene).unwrap();
     let (again, _) = document_bundle::load(&path).unwrap();
-    assert_eq!(first.doc_id, again.doc_id, "a re-save keeps the document's identity");
-    assert_eq!(Format::of(&path), Some(Format::Bundle), "a plain re-save stays a bundle");
-    assert!(matches!(save_surface(dir.0.join("s.txt"), &scene), Err(Error::UnknownFormat { .. })));
+    assert_eq!(
+        first.doc_id, again.doc_id,
+        "a re-save keeps the document's identity"
+    );
+    assert_eq!(
+        Format::of(&path),
+        Some(Format::Bundle),
+        "a plain re-save stays a bundle"
+    );
+    assert!(matches!(
+        save_surface(dir.0.join("s.txt"), &scene),
+        Err(Error::UnknownFormat { .. })
+    ));
 }
 
 #[test]
@@ -177,7 +245,10 @@ fn remove_takes_the_sidecar_too() {
 fn assets_dirs_are_recognised() {
     assert!(is_assets_dir(Path::new("a/b.frame.assets")));
     assert!(!is_assets_dir(Path::new("a/assets")));
-    assert!(is_assets_dir(Path::new("a/b.fm.assets")), "the legacy name keeps working");
+    assert!(
+        is_assets_dir(Path::new("a/b.fm.assets")),
+        "the legacy name keeps working"
+    );
 }
 
 #[test]
@@ -203,7 +274,11 @@ fn a_frame_is_markup_or_a_bundle_by_content() {
     assert!(std::fs::read(&zip).unwrap().starts_with(b"PK\x03\x04"));
     assert_eq!(Format::of(&zip), Some(Format::Bundle));
     assert_eq!(load_surface(&zip).unwrap(), scene);
-    assert_eq!(Format::of(&dir.0.join("new.frame")), Some(Format::Markup), "a new .frame is markup");
+    assert_eq!(
+        Format::of(&dir.0.join("new.frame")),
+        Some(Format::Markup),
+        "a new .frame is markup"
+    );
     assert_eq!(Format::of(&dir.0.join("new.fm")), Some(Format::Markup));
     assert_eq!(Format::of(&dir.0.join("new.txt")), None);
 }

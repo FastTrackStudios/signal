@@ -4,8 +4,8 @@
 //!
 //! Run with sudo (bulk needs it):  sudo -E <bin>  (build first as your user)
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 

@@ -11,11 +11,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::ir::PreparedIrPair;
 use atomic_float::AtomicF32;
 use crossbeam_channel::Sender;
 use nice_plug::prelude::*;
 use parking_lot::Mutex;
-use crate::ir::PreparedIrPair;
 
 /// Live values the editor reads and the audio thread writes, plus the
 /// editor's side of IR loading.
@@ -742,10 +742,7 @@ mod tests {
     fn band_defaults_cover_every_band_of_either_eq() {
         // The two EQs have different band counts, and a default frequency has
         // to exist for each without either array running off a shared table.
-        for count in [
-            crate::chain::POST_EQ_BANDS,
-            crate::algorithm::DECAY_BANDS,
-        ] {
+        for count in [crate::chain::POST_EQ_BANDS, crate::algorithm::DECAY_BANDS] {
             let freqs: Vec<f32> = (0..count).map(|i| eq_default_freq(i, count)).collect();
             assert_eq!(freqs.len(), count);
             assert!((freqs[0] - 80.0).abs() < 0.01, "starts at 80 Hz");

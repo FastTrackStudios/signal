@@ -19,11 +19,13 @@
 pub mod faces;
 mod leds;
 mod limiter_vu;
-mod reduction;
 mod movements;
+mod reduction;
 pub mod scale;
 
-use document_proto::{Color, GradientStop, Node, NodeId, Paint, PaintKind, TextAlign, TextData, Transform};
+use document_proto::{
+    Color, GradientStop, Node, NodeId, Paint, PaintKind, TextAlign, TextData, Transform,
+};
 use surface_proto::{ControlKind, Curve, SlotRole, Source};
 use surface_widgets::Builder;
 
@@ -93,18 +95,71 @@ pub(crate) fn defs() -> Vec<ComponentDef> {
 
 /// Frame variants (card = the face's own), then the other card with each.
 const VU_VARIANTS: &[&str] = &[
-    "black_rack", "slim", "chrome", "brass", "satin_plate", "recessed", "lit_amber", "lit_blue", "lit_chrome", "open",
-    "db", "db-black_rack", "db-slim", "db-chrome", "db-brass", "db-satin_plate", "db-recessed", "db-lit_amber",
-    "db-lit_blue", "db-lit_chrome", "db-open",
+    "black_rack",
+    "slim",
+    "chrome",
+    "brass",
+    "satin_plate",
+    "recessed",
+    "lit_amber",
+    "lit_blue",
+    "lit_chrome",
+    "open",
+    "db",
+    "db-black_rack",
+    "db-slim",
+    "db-chrome",
+    "db-brass",
+    "db-satin_plate",
+    "db-recessed",
+    "db-lit_amber",
+    "db-lit_blue",
+    "db-lit_chrome",
+    "db-open",
 ];
 const DB_VARIANTS: &[&str] = &[
-    "black_rack", "slim", "chrome", "brass", "satin_plate", "recessed", "lit_amber", "lit_blue", "lit_chrome", "open",
-    "vu", "vu-black_rack", "vu-slim", "vu-chrome", "vu-brass", "vu-satin_plate", "vu-recessed", "vu-lit_amber",
-    "vu-lit_blue", "vu-lit_chrome", "vu-open",
+    "black_rack",
+    "slim",
+    "chrome",
+    "brass",
+    "satin_plate",
+    "recessed",
+    "lit_amber",
+    "lit_blue",
+    "lit_chrome",
+    "open",
+    "vu",
+    "vu-black_rack",
+    "vu-slim",
+    "vu-chrome",
+    "vu-brass",
+    "vu-satin_plate",
+    "vu-recessed",
+    "vu-lit_amber",
+    "vu-lit_blue",
+    "vu-lit_chrome",
+    "vu-open",
 ];
 const BACKLIT_VARIANTS: &[&str] = &[
-    "blue", "red", "green", "amber", "blue-open", "red-open", "green-open", "amber-open", "black_rack", "slim",
-    "chrome", "brass", "satin_plate", "recessed", "lit_amber", "lit_blue", "lit_chrome", "open", "db",
+    "blue",
+    "red",
+    "green",
+    "amber",
+    "blue-open",
+    "red-open",
+    "green-open",
+    "amber-open",
+    "black_rack",
+    "slim",
+    "chrome",
+    "brass",
+    "satin_plate",
+    "recessed",
+    "lit_amber",
+    "lit_blue",
+    "lit_chrome",
+    "open",
+    "db",
 ];
 
 fn build_amber(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
@@ -132,7 +187,11 @@ struct Choice {
 }
 
 fn choose(face: &Face, variant: Option<&str>) -> Choice {
-    let mut c = Choice { card: face.card, bezel: Some(face.bezel), tint: None };
+    let mut c = Choice {
+        card: face.card,
+        bezel: Some(face.bezel),
+        tint: None,
+    };
     for tok in variant.unwrap_or("").split('-').filter(|t| !t.is_empty()) {
         match tok {
             "vu" => c.card = Card::Vu,
@@ -157,8 +216,16 @@ fn choose(face: &Face, variant: Option<&str>) -> Choice {
 /// A CSS colour as the source wrote it: `#hex` or `rgba(r,g,b,a)`.
 fn css(s: &str) -> Color {
     if let Some(inner) = s.strip_prefix("rgba(").and_then(|r| r.strip_suffix(')')) {
-        let v: Vec<f64> = inner.split(',').map(|x| x.trim().parse().unwrap_or(0.0)).collect();
-        return Color { r: v[0] / 255.0, g: v[1] / 255.0, b: v[2] / 255.0, a: v.get(3).copied().unwrap_or(1.0) };
+        let v: Vec<f64> = inner
+            .split(',')
+            .map(|x| x.trim().parse().unwrap_or(0.0))
+            .collect();
+        return Color {
+            r: v[0] / 255.0,
+            g: v[1] / 255.0,
+            b: v[2] / 255.0,
+            a: v.get(3).copied().unwrap_or(1.0),
+        };
     }
     draw::hex(s)
 }
@@ -185,9 +252,28 @@ fn lin(l: &Lin) -> Paint {
 fn ellipse(x: f64, y: f64, stops: &[(f64, Color)]) -> Paint {
     let rx = std::f64::consts::SQRT_2 * x.max(1.0 - x);
     let ry = std::f64::consts::SQRT_2 * y.max(1.0 - y);
-    let t = Transform { a: 2.0 * rx, b: 0.0, tx: x - rx, c: 0.0, d: 2.0 * ry, ty: y - ry };
-    let stops = stops.iter().map(|(p, c)| GradientStop { position: *p, color: *c }).collect();
-    Paint { kind: PaintKind::RadialGradient { stops, transform: Some(t) }, ..Paint::solid(Color::rgba(0.0, 0.0, 0.0, 0.0)) }
+    let t = Transform {
+        a: 2.0 * rx,
+        b: 0.0,
+        tx: x - rx,
+        c: 0.0,
+        d: 2.0 * ry,
+        ty: y - ry,
+    };
+    let stops = stops
+        .iter()
+        .map(|(p, c)| GradientStop {
+            position: *p,
+            color: *c,
+        })
+        .collect();
+    Paint {
+        kind: PaintKind::RadialGradient {
+            stops,
+            transform: Some(t),
+        },
+        ..Paint::solid(Color::rgba(0.0, 0.0, 0.0, 0.0))
+    }
 }
 
 fn ellipse_css(e: &Ellipse) -> Paint {
@@ -197,11 +283,29 @@ fn ellipse_css(e: &Ellipse) -> Paint {
 
 /// A lamp's glow: `color` at the bulb fading to nothing at `reach`.
 fn glow(x: f64, y: f64, reach: f64, color: Color) -> Paint {
-    ellipse(x / 100.0, y / 100.0, &[(0.0, color), (reach / 100.0, Color { a: 0.0, ..color })])
+    ellipse(
+        x / 100.0,
+        y / 100.0,
+        &[(0.0, color), (reach / 100.0, Color { a: 0.0, ..color })],
+    )
 }
 
-fn effect(kind: document_proto::EffectKind, c: Color, dx: f64, dy: f64, radius: f64) -> document_proto::Effect {
-    document_proto::Effect { kind, visible: true, color: c, offset_x: dx, offset_y: dy, radius, spread: 0.0 }
+fn effect(
+    kind: document_proto::EffectKind,
+    c: Color,
+    dx: f64,
+    dy: f64,
+    radius: f64,
+) -> document_proto::Effect {
+    document_proto::Effect {
+        kind,
+        visible: true,
+        color: c,
+        offset_x: dx,
+        offset_y: dy,
+        radius,
+        spread: 0.0,
+    }
 }
 
 fn drop(c: Color, dx: f64, dy: f64, r: f64) -> document_proto::Effect {
@@ -212,10 +316,23 @@ fn inner(c: Color, dx: f64, dy: f64, r: f64) -> document_proto::Effect {
     effect(document_proto::EffectKind::InnerShadow, c, dx, dy, r)
 }
 
-fn print(name: &str, s: &str, (cx, cy): (f64, f64), size: f64, color: Color, (weight, spacing): (f64, f64)) -> Node {
+fn print(
+    name: &str,
+    s: &str,
+    (cx, cy): (f64, f64),
+    size: f64,
+    color: Color,
+    (weight, spacing): (f64, f64),
+) -> Node {
     let mut n = draw::label_at(name, s, cx, cy, size, "#000");
     n.fills = vec![solid(color)];
-    if let document_proto::NodeKind::Text(TextData { font_weight, letter_spacing, align, .. }) = &mut n.kind {
+    if let document_proto::NodeKind::Text(TextData {
+        font_weight,
+        letter_spacing,
+        align,
+        ..
+    }) = &mut n.kind
+    {
         *font_weight = Some(weight);
         *letter_spacing = spacing;
         *align = TextAlign::Center;
@@ -228,7 +345,12 @@ fn quad(a: (f64, f64), b: (f64, f64), w: f64) -> String {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let len = dx.hypot(dy).max(1e-9);
     let (nx, ny) = (-dy / len * w / 2.0, dx / len * w / 2.0);
-    draw::polygon(&[(a.0 + nx, a.1 + ny), (b.0 + nx, b.1 + ny), (b.0 - nx, b.1 - ny), (a.0 - nx, a.1 - ny)])
+    draw::polygon(&[
+        (a.0 + nx, a.1 + ny),
+        (b.0 + nx, b.1 + ny),
+        (b.0 - nx, b.1 - ny),
+        (a.0 - nx, a.1 - ny),
+    ])
 }
 
 // ── the meter ────────────────────────────────────────────────────────────
@@ -243,7 +365,11 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
     let (outer_w, outer_h, inset) = match bezel {
         Some(z) => {
             let vent = if z.vent.is_some() { 8.0 } else { 0.0 };
-            (CARD_W + 2.0 * z.depth + 10.0, 5.0 + card_h + 2.0 * z.depth + vent + 4.0, 5.0 + z.depth)
+            (
+                CARD_W + 2.0 * z.depth + 10.0,
+                5.0 + card_h + 2.0 * z.depth + vent + 4.0,
+                5.0 + z.depth,
+            )
         }
         None => (CARD_W, card_h, 0.0),
     };
@@ -272,20 +398,57 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
     if let Some(z) = bezel {
         // The chamfered opening: four mitred faces, lit from above (top in
         // shadow, bottom catching the light) so it reads as sunken.
-        let (ow, oh, d) = ((CARD_W + 2.0 * z.depth) * s, (card_h + 2.0 * z.depth) * s, z.depth * s);
+        let (ow, oh, d) = (
+            (CARD_W + 2.0 * z.depth) * s,
+            (card_h + 2.0 * z.depth) * s,
+            z.depth * s,
+        );
         let faces = [
-            ("chamfer top", z.top, vec![(0.0, 0.0), (ow, 0.0), (ow - d, d), (d, d)]),
-            ("chamfer left", z.left, vec![(0.0, 0.0), (d, d), (d, oh - d), (0.0, oh)]),
-            ("chamfer right", z.right, vec![(ow, 0.0), (ow, oh), (ow - d, oh - d), (ow - d, d)]),
-            ("chamfer bottom", z.bottom, vec![(0.0, oh), (d, oh - d), (ow - d, oh - d), (ow, oh)]),
+            (
+                "chamfer top",
+                z.top,
+                vec![(0.0, 0.0), (ow, 0.0), (ow - d, d), (d, d)],
+            ),
+            (
+                "chamfer left",
+                z.left,
+                vec![(0.0, 0.0), (d, d), (d, oh - d), (0.0, oh)],
+            ),
+            (
+                "chamfer right",
+                z.right,
+                vec![(ow, 0.0), (ow, oh), (ow - d, oh - d), (ow - d, d)],
+            ),
+            (
+                "chamfer bottom",
+                z.bottom,
+                vec![(0.0, oh), (d, oh - d), (ow - d, oh - d), (ow, oh)],
+            ),
         ];
         for (name, color, pts) in faces {
-            b.add(root, draw::path(name, 5.0 * s, 5.0 * s, ow, oh, draw::polygon(&pts), draw::solid(color)));
+            b.add(
+                root,
+                draw::path(
+                    name,
+                    5.0 * s,
+                    5.0 * s,
+                    ow,
+                    oh,
+                    draw::polygon(&pts),
+                    draw::solid(color),
+                ),
+            );
         }
         // The louvre under the glass.
         if let Some(v) = z.vent {
             let (vw, vh) = (CARD_W * 0.30 * s, 4.0 * s);
-            let mut vent = draw::frame("vent", (outer_w * s - vw) / 2.0, (5.0 + card_h + 2.0 * z.depth + 4.0) * s, vw, vh);
+            let mut vent = draw::frame(
+                "vent",
+                (outer_w * s - vw) / 2.0,
+                (5.0 + card_h + 2.0 * z.depth + 4.0) * s,
+                vw,
+                vh,
+            );
             vent.fills = vec![solid(css(v.dark))];
             vent.clips_content = true;
             let vent = b.add(root, draw::rounded(vent, 1.0 * s));
@@ -293,11 +456,19 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
             let mut d = String::new();
             let mut x = pitch / 2.0;
             while x < vw {
-                d.push_str(&draw::polygon(&[(x, 0.0), ((x + pitch / 2.0).min(vw), 0.0), ((x + pitch / 2.0).min(vw), vh), (x, vh)]));
+                d.push_str(&draw::polygon(&[
+                    (x, 0.0),
+                    ((x + pitch / 2.0).min(vw), 0.0),
+                    ((x + pitch / 2.0).min(vw), vh),
+                    (x, vh),
+                ]));
                 d.push(' ');
                 x += pitch;
             }
-            b.add(vent, draw::path("louvre", 0.0, 0.0, vw, vh, d, solid(css(v.light))));
+            b.add(
+                vent,
+                draw::path("louvre", 0.0, 0.0, vw, vh, d, solid(css(v.light))),
+            );
         }
     }
 
@@ -329,7 +500,11 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
     // The `glass` option: a glass post-effect over the window (GPU
     // renderers only — the card reads the same without it).
     if p.flag("glass") {
-        card_node.shader = Some(document_proto::ShaderFx { shader: "glass".into(), params: std::iter::once(("strength".to_string(), 0.4)).collect(), inputs: Vec::new() });
+        card_node.shader = Some(document_proto::ShaderFx {
+            shader: "glass".into(),
+            params: std::iter::once(("strength".to_string(), 0.4)).collect(),
+            inputs: Vec::new(),
+        });
     }
     let card_id = b.add(root, draw::rounded(card_node, 3.0 * s));
 
@@ -364,11 +539,43 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
     let (first, last) = (ticks[0].0, ticks[ticks.len() - 1].0);
     let r_arc = (NEEDLE_LEN - 6.0) * k;
     let arc = |from: f64, to: f64, w: f64| {
-        draw::sector(PIVOT_X * k, PIVOT_Y * k, r_arc - w * k / 2.0, r_arc + w * k / 2.0, card.angle(from), card.angle(to))
+        draw::sector(
+            PIVOT_X * k,
+            PIVOT_Y * k,
+            r_arc - w * k / 2.0,
+            r_arc + w * k / 2.0,
+            card.angle(from),
+            card.angle(to),
+        )
     };
-    b.add(card_id, draw::with_opacity(draw::path("scale arc", 0.0, 0.0, cw, ch, arc(first, last, 0.8), solid(ink)), 0.85));
+    b.add(
+        card_id,
+        draw::with_opacity(
+            draw::path(
+                "scale arc",
+                0.0,
+                0.0,
+                cw,
+                ch,
+                arc(first, last, 0.8),
+                solid(ink),
+            ),
+            0.85,
+        ),
+    );
     if let Some(from) = card.hot_from() {
-        b.add(card_id, draw::path("red stretch", 0.0, 0.0, cw, ch, arc(from, last, 1.6), solid(hot)));
+        b.add(
+            card_id,
+            draw::path(
+                "red stretch",
+                0.0,
+                0.0,
+                cw,
+                ch,
+                arc(from, last, 1.6),
+                solid(hot),
+            ),
+        );
     }
 
     // Ticks (majors longer and numbered) and numerals.
@@ -379,25 +586,58 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
         let a = px(scale::point(card, v, 6.0));
         let e = px(scale::point(card, v, if major { 13.0 } else { 10.0 }));
         let q = quad(a, e, if major { 1.1 } else { 0.6 } * k);
-        let dst = if is_hot(v) { &mut hot_ticks } else { &mut ink_ticks };
+        let dst = if is_hot(v) {
+            &mut hot_ticks
+        } else {
+            &mut ink_ticks
+        };
         dst.push_str(&q);
         dst.push(' ');
         if major {
             // An authored scale replaces the printed numbers, in order.
             let text = labels.next().map_or(label, String::as_str);
             let (lx, ly) = px(scale::point(card, v, 22.0));
-            b.add(card_id, print("numeral", text, (lx, ly + 0.1 * k), 6.0 * k, if is_hot(v) { hot } else { ink }, (600.0, 0.0)));
+            b.add(
+                card_id,
+                print(
+                    "numeral",
+                    text,
+                    (lx, ly + 0.1 * k),
+                    6.0 * k,
+                    if is_hot(v) { hot } else { ink },
+                    (600.0, 0.0),
+                ),
+            );
         }
     }
-    b.add(card_id, draw::path("ticks", 0.0, 0.0, cw, ch, ink_ticks, solid(ink)));
+    b.add(
+        card_id,
+        draw::path("ticks", 0.0, 0.0, cw, ch, ink_ticks, solid(ink)),
+    );
     if !hot_ticks.is_empty() {
-        b.add(card_id, draw::path("red ticks", 0.0, 0.0, cw, ch, hot_ticks, solid(hot)));
+        b.add(
+            card_id,
+            draw::path("red ticks", 0.0, 0.0, cw, ch, hot_ticks, solid(hot)),
+        );
     }
 
     // The legend: the instrument ("VU", "dB"), not what is being metered.
-    let legend = p.legend.clone().unwrap_or_else(|| card.legend().to_string());
+    let legend = p
+        .legend
+        .clone()
+        .unwrap_or_else(|| card.legend().to_string());
     if !legend.trim().is_empty() {
-        b.add(card_id, print("legend", &legend, (VU_W * 0.5 * k, (VU_H * 0.93 - 3.4) * k), 5.0 * k, ink, (400.0, 0.6 * k)));
+        b.add(
+            card_id,
+            print(
+                "legend",
+                &legend,
+                (VU_W * 0.5 * k, (VU_H * 0.93 - 3.4) * k),
+                5.0 * k,
+                ink,
+                (400.0, 0.6 * k),
+            ),
+        );
     }
 
     // The needle, in a square frame centred on the pivot so the `Needle`
@@ -406,11 +646,35 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
     // layered halo lines, widest and faintest first, under the needle itself.
     let w = face.needle.width * k;
     let len = NEEDLE_LEN * k;
-    let halo = face.needle.halo.map(|(c, spread)| (tint.map_or_else(|| css(c), |t| draw::with_alpha(t, 0.34)), spread));
+    let halo = face.needle.halo.map(|(c, spread)| {
+        (
+            tint.map_or_else(|| css(c), |t| draw::with_alpha(t, 0.34)),
+            spread,
+        )
+    });
     let r = len + w * halo.map_or(1.0, |(_, spread)| spread);
-    let pivot = b.add(card_id, draw::frame("needle pivot", PIVOT_X * k - r, PIVOT_Y * k - r, 2.0 * r, 2.0 * r));
+    let pivot = b.add(
+        card_id,
+        draw::frame(
+            "needle pivot",
+            PIVOT_X * k - r,
+            PIVOT_Y * k - r,
+            2.0 * r,
+            2.0 * r,
+        ),
+    );
     let line = |name: &str, lw: f64, color: Color| {
-        draw::rounded(draw::rect(name, r - lw / 2.0, r - len - lw / 2.0, lw, len + lw, solid(color)), lw / 2.0)
+        draw::rounded(
+            draw::rect(
+                name,
+                r - lw / 2.0,
+                r - len - lw / 2.0,
+                lw,
+                len + lw,
+                solid(color),
+            ),
+            lw / 2.0,
+        )
     };
     let needle_color = css(face.needle.color);
     let needle = match halo {
@@ -419,17 +683,39 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
             let group = b.add(pivot, draw::frame("needle", 0.0, 0.0, 2.0 * r, 2.0 * r));
             // Each layer's alpha is a share of the source's halo, so the
             // stack peaks at its colour along the needle and fades outward.
-            for (i, (f, a)) in [(1.0, 0.30), (0.62, 0.45), (0.34, 0.7)].into_iter().enumerate() {
+            for (i, (f, a)) in [(1.0, 0.30), (0.62, 0.45), (0.34, 0.7)]
+                .into_iter()
+                .enumerate()
+            {
                 let lw = w * (1.0 + (spread - 1.0) * f);
-                b.add(group, line(&format!("halo {i}"), lw, Color { a: color.a * a, ..color }));
+                b.add(
+                    group,
+                    line(
+                        &format!("halo {i}"),
+                        lw,
+                        Color {
+                            a: color.a * a,
+                            ..color
+                        },
+                    ),
+                );
             }
             let glow = tint.map_or(color, |t| draw::mix(t, draw::hex("#ffffff"), 0.4));
-            b.add(group, draw::emissive(line("needle core", w, needle_color), glow, 0.7, 4.0 * w));
+            b.add(
+                group,
+                draw::emissive(line("needle core", w, needle_color), glow, 0.7, 4.0 * w),
+            );
             group
         }
     };
     // The hub, on the card's bottom edge: only its top half shows.
-    let hub = draw::circle("hub", PIVOT_X * k, VU_H * k, face.needle.hub_r * k, solid(css(face.needle.color)));
+    let hub = draw::circle(
+        "hub",
+        PIVOT_X * k,
+        VU_H * k,
+        face.needle.hub_r * k,
+        solid(css(face.needle.color)),
+    );
     b.add(card_id, draw::with_opacity(hub, face.needle.hub_opacity));
 
     // The frame lip's shadow on the card (from the top and the left), then
@@ -437,17 +723,36 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
     if let Some(sh) = bezel.and_then(|z| z.shade) {
         let c = css(sh.color);
         let mut n = draw::rect("lip shadow", 0.0, 0.0, cw, ch, solid(Color { a: 0.0, ..c }));
-        n.effects = vec![inner(c, 0.0, sh.top * s, sh.top * 1.7 * s), inner(c, sh.side * s, 0.0, sh.side * 1.8 * s)];
+        n.effects = vec![
+            inner(c, 0.0, sh.top * s, sh.top * 1.7 * s),
+            inner(c, sh.side * s, 0.0, sh.side * 1.8 * s),
+        ];
         b.add(card_id, draw::rounded(n, 3.0 * s));
     }
     if let Some(g) = &face.glass {
-        b.add(card_id, draw::rounded(draw::rect("glass", 0.0, 0.0, cw, ch, lin(g)), 3.0 * s));
+        b.add(
+            card_id,
+            draw::rounded(draw::rect("glass", 0.0, 0.0, cw, ch, lin(g)), 3.0 * s),
+        );
     }
 
     // The room's reflection on the frame itself, over everything.
     if let Some(sheen) = bezel.and_then(|z| z.sheen) {
         let r = bezel.map_or(0.0, |z| z.radius) * s;
-        b.add(root, draw::rounded(draw::rect("frame sheen", 0.0, 0.0, outer_w * s, outer_h * s, lin(&sheen)), r));
+        b.add(
+            root,
+            draw::rounded(
+                draw::rect(
+                    "frame sheen",
+                    0.0,
+                    0.0,
+                    outer_w * s,
+                    outer_h * s,
+                    lin(&sheen),
+                ),
+                r,
+            ),
+        );
     }
 
     // A level stream reads through the card's law, so the needle lands on
@@ -460,11 +765,16 @@ fn build(face: &Face, b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId 
     });
     let (floor_db, ceiling_db) = card.range();
     // A switched meter (`Place::select`) reads through the same law.
-    let mut control = p.control(ControlKind::Gauge { sweep_degrees: 2.0 * SWEEP_DEG, floor_db, ceiling_db }).slot(SlotRole::Needle, needle.0);
+    let mut control = p
+        .control(ControlKind::Gauge {
+            sweep_degrees: 2.0 * SWEEP_DEG,
+            floor_db,
+            ceiling_db,
+        })
+        .slot(SlotRole::Needle, needle.0);
     control.binding = binding;
     // A VU is calibrated: 0 VU = −18 dBFS on a level stream.
     control.reference_dbfs = Some(surface_proto::VU_REFERENCE_DBFS);
     b.controls.insert(root, control);
     root
 }
-

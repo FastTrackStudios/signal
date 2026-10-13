@@ -36,31 +36,56 @@ fn latency_is_the_mode_lookahead() {
 #[test]
 fn open_gate_is_a_pure_delay() {
     for mode in Mode::ALL {
-        let settings = Settings { mode, threshold_db: -40.0, debleed: 100.0, ..Settings::default() };
+        let settings = Settings {
+            mode,
+            threshold_db: -40.0,
+            debleed: 100.0,
+            ..Settings::default()
+        };
         let mut gate = DrumGate::new(SR, 2, settings);
         let input: Vec<f64> = sine(24_000, 997.0, 0.5).collect();
         let out = run(&mut gate, &input);
         let lat = gate.latency();
-        let err = (12_000..24_000).map(|n| (out[n] - input[n - lat]).abs()).fold(0.0, f64::max);
-        assert!(err < 1e-12, "{mode:?}: open gate deviates from a delay by {err}");
+        let err = (12_000..24_000)
+            .map(|n| (out[n] - input[n - lat]).abs())
+            .fold(0.0, f64::max);
+        assert!(
+            err < 1e-12,
+            "{mode:?}: open gate deviates from a delay by {err}"
+        );
     }
 }
 
 #[test]
 fn closed_gate_low_band_sits_at_reduction() {
     // 40 Hz, well below threshold; Debleed −100 with a low threshold keeps the HF expander open.
-    let s = Settings { threshold_db: -70.0, reduction_db: -37.0, debleed: -100.0, ..Settings::default() };
+    let s = Settings {
+        threshold_db: -70.0,
+        reduction_db: -37.0,
+        debleed: -100.0,
+        ..Settings::default()
+    };
     let mut g = DrumGate::new(SR, 2, s);
     let x: Vec<f64> = sine(96_000, 40.0, db_to_gain(-71.0)).collect();
     let y = run(&mut g, &x);
     let peak = y[48_000..].iter().fold(0.0f64, |m, v| m.max(v.abs()));
-    assert!((db(peak) - (-71.0 - 37.0)).abs() < 0.05, "closed level {:.3} dB", db(peak));
+    assert!(
+        (db(peak) - (-71.0 - 37.0)).abs() < 0.05,
+        "closed level {:.3} dB",
+        db(peak)
+    );
 }
 
 #[test]
 fn release_follows_fifth_power_ramp_over_length() {
     let length = 400.0;
-    let s = Settings { threshold_db: -30.0, reduction_db: -80.0, length_ms: length, debleed: -100.0, ..Settings::default() };
+    let s = Settings {
+        threshold_db: -30.0,
+        reduction_db: -80.0,
+        length_ms: length,
+        debleed: -100.0,
+        ..Settings::default()
+    };
     let mut g = DrumGate::new(SR, 2, s);
     // One open frame (a full-scale click), then silence: ramp starts after the 50 ms hold
     // plus the detector's decay below threshold.
@@ -70,13 +95,24 @@ fn release_follows_fifth_power_ramp_over_length() {
         g.process_frame(&mut [v, v], None);
         gains.push(g.gain());
     }
-    let opened = gains.iter().position(|&v| v >= 1.0).expect("click opens the gate");
-    let start = opened + gains[opened..].iter().position(|&v| v < 1.0).expect("release starts");
+    let opened = gains
+        .iter()
+        .position(|&v| v >= 1.0)
+        .expect("click opens the gate");
+    let start = opened
+        + gains[opened..]
+            .iter()
+            .position(|&v| v < 1.0)
+            .expect("release starts");
     let floor = db_to_gain(-80.0);
     for frac in [0.1, 0.3, 0.5, 0.8] {
         let k = start + num::f64_to_index((frac * length * 0.001 * SR).round());
         let want = (1.0 - floor).mul_add((1.0 - frac).powi(5), floor);
-        assert!((gains[k] - want).abs() < 2e-4, "tau {frac}: {} vs {want}", gains[k]);
+        assert!(
+            (gains[k] - want).abs() < 2e-4,
+            "tau {frac}: {} vs {want}",
+            gains[k]
+        );
     }
     let end = start + num::f64_to_index(length * 0.001 * SR) + 2;
     assert!((gains[end] - floor).abs() < 1e-12);
@@ -86,7 +122,12 @@ fn release_follows_fifth_power_ramp_over_length() {
 fn ghost_lowers_the_threshold_by_20_db() {
     let tone: Vec<f64> = sine(9_600, 400.0, db_to_gain(-45.0)).collect();
     for (ghost, opens) in [(false, false), (true, true)] {
-        let s = Settings { threshold_db: -30.0, ghost, debleed: -100.0, ..Settings::default() };
+        let s = Settings {
+            threshold_db: -30.0,
+            ghost,
+            debleed: -100.0,
+            ..Settings::default()
+        };
         let mut g = DrumGate::new(SR, 2, s);
         run(&mut g, &tone);
         assert_eq!(g.gain() > 0.5, opens, "ghost {ghost}");
@@ -95,7 +136,11 @@ fn ghost_lowers_the_threshold_by_20_db() {
 
 #[test]
 fn detection_is_linked_on_the_louder_channel() {
-    let s = Settings { threshold_db: -30.0, debleed: -100.0, ..Settings::default() };
+    let s = Settings {
+        threshold_db: -30.0,
+        debleed: -100.0,
+        ..Settings::default()
+    };
     let mut g = DrumGate::new(SR, 2, s);
     for v in sine(4_800, 300.0, 0.3) {
         let mut fr = [v, 0.0];
@@ -127,19 +172,34 @@ fn hf_band_expands_2_to_1_below_the_debleed_threshold() {
     let thr = -30.0;
     let a = debleed_exponent(0.0);
     for peak in [-60.0, -50.0] {
-        let settings = Settings { threshold_db: thr, reduction_db: 0.0, debleed: 0.0, ..Settings::default() };
+        let settings = Settings {
+            threshold_db: thr,
+            reduction_db: 0.0,
+            debleed: 0.0,
+            ..Settings::default()
+        };
         let mut gate = DrumGate::new(SR, 2, settings);
         let input: Vec<f64> = sine(48_000, 10_000.0, db_to_gain(peak)).collect();
         let rendered = run(&mut gate, &input);
-        let out = rendered[24_000..].iter().fold(0.0f64, |m, v| m.max(v.abs()));
+        let out = rendered[24_000..]
+            .iter()
+            .fold(0.0f64, |m, v| m.max(v.abs()));
         let want = peak + (peak - a * thr);
-        assert!((db(out) - want).abs() < 0.1, "peak {peak}: {:.2} vs {want:.2}", db(out));
+        assert!(
+            (db(out) - want).abs() < 0.1,
+            "peak {peak}: {:.2} vs {want:.2}",
+            db(out)
+        );
     }
 }
 
 #[test]
 fn sidechain_key_replaces_the_input_for_detection() {
-    let settings = Settings { threshold_db: -30.0, debleed: -100.0, ..Settings::default() };
+    let settings = Settings {
+        threshold_db: -30.0,
+        debleed: -100.0,
+        ..Settings::default()
+    };
     // Loud input, silent key: stays closed.
     let mut gate = DrumGate::new(SR, 2, settings);
     for v in sine(4_800, 300.0, 0.5) {

@@ -1,7 +1,7 @@
 //! What a frame actually costs, at a real display size.
 use expression_editor::doc::{ExpressionDoc, Note, NoteId, TimeBase};
-use expression_editor::{Editor, Viewport};
 use expression_editor::ui::{canvas, paint, text};
+use expression_editor::{Editor, Viewport};
 use std::time::Instant;
 
 const PPQ: f64 = 960.0;

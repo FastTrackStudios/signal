@@ -40,7 +40,10 @@ fn android_main(app: dioxus_native::AndroidApp) {
 
 fn init_tracing() {
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,vox_core=warn".into()))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,vox_core=warn".into()),
+        )
         .try_init();
 }
 
@@ -48,27 +51,49 @@ fn launch() {
     use dioxus_native::{Config, LogicalSize, WindowAttributes, launch_cfg};
     // On a desktop, an iPhone 16 Pro held sideways (its points); on a phone
     // the screen is the window.
-    let window = WindowAttributes::default().with_title("Signal").with_surface_size(LogicalSize::new(874.0, 402.0));
-    launch_cfg(App, vec![], vec![Box::new(Config::new().with_window_attributes(window))]);
+    let window = WindowAttributes::default()
+        .with_title("Signal")
+        .with_surface_size(LogicalSize::new(874.0, 402.0));
+    launch_cfg(
+        App,
+        vec![],
+        vec![Box::new(Config::new().with_window_attributes(window))],
+    );
 }
 
 /// Where the engine is.
 fn engine_url() -> String {
     std::env::var("SIGNAL_ENGINE_URL").unwrap_or_else(|_| {
-        if cfg!(target_os = "android") { "ws://10.0.2.2:4040/vox" } else { "ws://127.0.0.1:4040/vox" }.to_string()
+        if cfg!(target_os = "android") {
+            "ws://10.0.2.2:4040/vox"
+        } else {
+            "ws://127.0.0.1:4040/vox"
+        }
+        .to_string()
     })
 }
 
 /// One typed client over its own link.
 async fn establish<C: vox_core::FromVoxLane>(url: &str) -> Option<C> {
-    let link = vox_websocket::WsLink::connect(url).await.map_err(|e| tracing::debug!("ws connect {url}: {e:?}")).ok()?;
-    vox_core::initiator_on(link).establish::<C>().await.map_err(|e| tracing::debug!("vox handshake: {e:?}")).ok()
+    let link = vox_websocket::WsLink::connect(url)
+        .await
+        .map_err(|e| tracing::debug!("ws connect {url}: {e:?}"))
+        .ok()?;
+    vox_core::initiator_on(link)
+        .establish::<C>()
+        .await
+        .map_err(|e| tracing::debug!("vox handshake: {e:?}"))
+        .ok()
 }
 
 type Clients = (RigClient, RigStreamClient, AudioSettingsClient);
 
 async fn connect(url: &str) -> Option<Clients> {
-    Some((establish(url).await?, establish(url).await?, establish(url).await?))
+    Some((
+        establish(url).await?,
+        establish(url).await?,
+        establish(url).await?,
+    ))
 }
 
 #[component]
@@ -121,7 +146,9 @@ fn App() -> Element {
         let mut fails = 0u32;
         loop {
             architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
-            let Some((g, (rig, _, _))) = clients.peek().as_ref().cloned() else { continue };
+            let Some((g, (rig, _, _))) = clients.peek().as_ref().cloned() else {
+                continue;
+            };
             if g != *generation.peek() {
                 continue;
             }
@@ -139,7 +166,11 @@ fn App() -> Element {
         }
     });
 
-    let state = clients.read().as_ref().filter(|(g, _)| *g == generation()).map(|(_, c)| c.clone());
+    let state = clients
+        .read()
+        .as_ref()
+        .filter(|(g, _)| *g == generation())
+        .map(|(_, c)| c.clone());
     rsx! {
         document::Style { {SIGNAL_TAILWIND} }
         // The viewport, a column; the remote fills it (as the desktop's rig

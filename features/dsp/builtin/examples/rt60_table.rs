@@ -15,8 +15,8 @@
 //! Swell, which an impulse never fills). `--verify` goes the other way:
 //! asks each engine for times through the tables and prints what it rang.
 
-use daw::plugin::{PluginEvents, PluginInstance};
 use builtin::NativeReverb;
+use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 512;
@@ -53,8 +53,13 @@ fn rt60(algorithm: usize, variant: usize, decay: f64, size: f64, burst: bool) ->
             }
         }
         let (mut l, mut rr) = (vec![0.0f32; BLOCK], vec![0.0f32; BLOCK]);
-        r.process_block(&x, &x, &mut l, &mut rr, &PluginEvents::EMPTY).ok()?;
-        energy.extend(l.iter().zip(&rr).map(|(a, b)| f64::from(*a).powi(2) + f64::from(*b).powi(2)));
+        r.process_block(&x, &x, &mut l, &mut rr, &PluginEvents::EMPTY)
+            .ok()?;
+        energy.extend(
+            l.iter()
+                .zip(&rr)
+                .map(|(a, b)| f64::from(*a).powi(2) + f64::from(*b).powi(2)),
+        );
     }
     // The decay after the excitation ends.
     let energy = energy.split_off(burst_len.min(energy.len()));
@@ -136,12 +141,17 @@ fn verify() {
     ];
     for &(a, v, burst) in pairs {
         let alg = reverb::AlgorithmType::from_index(a);
-        let Some((lo, hi)) = alg.t60_range(v) else { continue };
+        let Some((lo, hi)) = alg.t60_range(v) else {
+            continue;
+        };
         for frac in [0.15, 0.5, 0.85] {
             let want = lo * (hi / lo).powf(frac);
             let d = reverb::algorithm::t60_to_decay(want, lo, hi);
             let got = rt60(a, v, d, 0.7, burst).unwrap_or(f64::NAN);
-            println!("{a}\t{v}\t{want:.2}\t{got:.2}\t{:+.0}", (got / want - 1.0) * 100.0);
+            println!(
+                "{a}\t{v}\t{want:.2}\t{got:.2}\t{:+.0}",
+                (got / want - 1.0) * 100.0
+            );
         }
     }
 }

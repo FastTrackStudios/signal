@@ -25,9 +25,9 @@
 //! the dependency's writer is ever fixed.
 
 use expression_editor::doc::Dimension;
-use expression_editor::rows::RowSpace;
 use expression_editor::guitarpro::parse::Format;
 use expression_editor::guitarpro::{BendFidelity, import_bytes};
+use expression_editor::rows::RowSpace;
 use guitarpro::model::legacy::beat::{Beat, Voice};
 use guitarpro::model::legacy::effects::{BendEffect, BendPoint};
 use guitarpro::model::legacy::measure::Measure;

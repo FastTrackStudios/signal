@@ -74,17 +74,31 @@ fn run() -> Result<(), String> {
     let mut timeline: Vec<(f64, Change)> = Vec::new();
     let mut args = std::env::args().skip(1);
     let at = |kv: &str, what: &str| -> Result<(f64, String), String> {
-        let (t, rest) = kv.split_once(':').ok_or_else(|| format!("{what} needs SECONDS:…"))?;
-        Ok((t.parse::<f64>().map_err(|e| format!("{kv}: {e}"))?, rest.to_string()))
+        let (t, rest) = kv
+            .split_once(':')
+            .ok_or_else(|| format!("{what} needs SECONDS:…"))?;
+        Ok((
+            t.parse::<f64>().map_err(|e| format!("{kv}: {e}"))?,
+            rest.to_string(),
+        ))
     };
     let set = |kv: &str| -> Result<ParamValue, String> {
         let (k, v) = kv.split_once('=').ok_or("--set needs addr=value")?;
-        Ok(ParamValue { addr: ParamAddr::new(k), value: v.parse::<f64>().map_err(|e| format!("{kv}: {e}"))? })
+        Ok(ParamValue {
+            addr: ParamAddr::new(k),
+            value: v.parse::<f64>().map_err(|e| format!("{kv}: {e}"))?,
+        })
     };
     let stream = |kv: &str| -> Result<StreamFrame, String> {
         let (k, v) = kv.split_once('=').ok_or("--stream needs id=v[,v2…]")?;
-        let values = v.split(',').map(|x| x.trim().parse::<f64>().map_err(|e| format!("{kv}: {e}"))).collect::<Result<Vec<_>, _>>()?;
-        Ok(StreamFrame { id: EntryId::new(k), values })
+        let values = v
+            .split(',')
+            .map(|x| x.trim().parse::<f64>().map_err(|e| format!("{kv}: {e}")))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(StreamFrame {
+            id: EntryId::new(k),
+            values,
+        })
     };
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -101,32 +115,85 @@ fn run() -> Result<(), String> {
             "--text" => {
                 let kv = args.next().ok_or("--text needs addr=text")?;
                 let (k, v) = kv.split_once('=').ok_or("--text needs addr=text")?;
-                texts.push(TextValue { addr: ParamAddr::new(k), text: v.to_string() });
+                texts.push(TextValue {
+                    addr: ParamAddr::new(k),
+                    text: v.to_string(),
+                });
             }
             "--stream" => streams.push(stream(&args.next().ok_or("--stream needs id=v[,v2…]")?)?),
             "--stream-file" => {
                 let path = args.next().ok_or("--stream-file needs a file")?;
-                let text = std::fs::read_to_string(&path).map_err(|e| format!("reading {path}: {e}"))?;
-                for line in text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+                let text =
+                    std::fs::read_to_string(&path).map_err(|e| format!("reading {path}: {e}"))?;
+                for line in text
+                    .lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                {
                     streams.push(stream(line)?);
                 }
             }
             "--set-at" => {
-                let (t, kv) = at(&args.next().ok_or("--set-at needs SECONDS:addr=value")?, "--set-at")?;
+                let (t, kv) = at(
+                    &args.next().ok_or("--set-at needs SECONDS:addr=value")?,
+                    "--set-at",
+                )?;
                 timeline.push((t, Change::Set(set(&kv)?)));
             }
             "--stream-at" => {
-                let (t, kv) = at(&args.next().ok_or("--stream-at needs SECONDS:id=v[,v2…]")?, "--stream-at")?;
+                let (t, kv) = at(
+                    &args.next().ok_or("--stream-at needs SECONDS:id=v[,v2…]")?,
+                    "--stream-at",
+                )?;
                 timeline.push((t, Change::Stream(stream(&kv)?)));
             }
             "--demo-feeds" => demo_feeds = true,
-            "--level" => level = Some(args.next().ok_or("--level needs dB")?.parse::<f64>().map_err(|e| e.to_string())?),
+            "--level" => {
+                level = Some(
+                    args.next()
+                        .ok_or("--level needs dB")?
+                        .parse::<f64>()
+                        .map_err(|e| e.to_string())?,
+                )
+            }
             "--fx" => fx = args.next().ok_or("--fx needs gpu|fallback|off")?.parse()?,
-            "--time" => time_s = args.next().ok_or("--time needs seconds")?.parse::<f64>().map_err(|e| e.to_string())?,
-            "--scale" => scale = args.next().ok_or("--scale needs a factor")?.parse::<f64>().map_err(|e| e.to_string())?,
-            "--frames" => frames = args.next().ok_or("--frames needs a count")?.parse::<usize>().map_err(|e| e.to_string())?,
-            "--fps" => fps = args.next().ok_or("--fps needs a rate")?.parse::<f64>().map_err(|e| e.to_string())?.max(1.0),
-            "--columns" => columns = args.next().ok_or("--columns needs a count")?.parse::<usize>().map_err(|e| e.to_string())?.max(1),
+            "--time" => {
+                time_s = args
+                    .next()
+                    .ok_or("--time needs seconds")?
+                    .parse::<f64>()
+                    .map_err(|e| e.to_string())?
+            }
+            "--scale" => {
+                scale = args
+                    .next()
+                    .ok_or("--scale needs a factor")?
+                    .parse::<f64>()
+                    .map_err(|e| e.to_string())?
+            }
+            "--frames" => {
+                frames = args
+                    .next()
+                    .ok_or("--frames needs a count")?
+                    .parse::<usize>()
+                    .map_err(|e| e.to_string())?
+            }
+            "--fps" => {
+                fps = args
+                    .next()
+                    .ok_or("--fps needs a rate")?
+                    .parse::<f64>()
+                    .map_err(|e| e.to_string())?
+                    .max(1.0)
+            }
+            "--columns" => {
+                columns = args
+                    .next()
+                    .ok_or("--columns needs a count")?
+                    .parse::<usize>()
+                    .map_err(|e| e.to_string())?
+                    .max(1)
+            }
             "--gif" => gif = args.next(),
             "--frames-dir" => frames_dir = args.next(),
             other => return Err(format!("unknown arg: {other}")),
@@ -148,14 +215,23 @@ fn run() -> Result<(), String> {
             let scene = document_io::load_surface(path).map_err(|e| e.to_string())?;
             surface_runtime::Surface::from_scene(scene)
         }
-        None => surface_for_catalog(&catalog, &Options { theme: theme.clone(), ..Options::default() }),
+        None => surface_for_catalog(
+            &catalog,
+            &Options {
+                theme: theme.clone(),
+                ..Options::default()
+            },
+        ),
     };
     let mut rt = Runtime::new(surface, catalog);
     rt.apply_values(sets);
     rt.apply_texts(texts);
     for f in &streams {
         if rt.catalog().stream(&f.id).is_none() {
-            eprintln!("render_surface: warning: no stream `{}` in the catalog", f.id.0);
+            eprintln!(
+                "render_surface: warning: no stream `{}` in the catalog",
+                f.id.0
+            );
         }
     }
     // The feeds held at each instant: `--level`/`--stream` from the start,
@@ -163,12 +239,20 @@ fn run() -> Result<(), String> {
     // streams them.
     let levels = level_frames(rt.catalog(), level, &streams);
     let mut held: Vec<StreamFrame> = levels.into_iter().chain(streams).collect();
-    let named: Vec<EntryId> = held.iter().map(|f| f.id.clone()).chain(timeline.iter().filter_map(|(_, c)| match c {
-        Change::Stream(f) => Some(f.id.clone()),
-        Change::Set(_) => None,
-    })).collect();
+    let named: Vec<EntryId> = held
+        .iter()
+        .map(|f| f.id.clone())
+        .chain(timeline.iter().filter_map(|(_, c)| match c {
+            Change::Stream(f) => Some(f.id.clone()),
+            Change::Set(_) => None,
+        }))
+        .collect();
 
-    let times: Vec<f64> = if frames == 0 { vec![time_s] } else { (0..frames).map(|k| time_s + k as f64 / fps).collect() };
+    let times: Vec<f64> = if frames == 0 {
+        vec![time_s]
+    } else {
+        (0..frames).map(|k| time_s + k as f64 / fps).collect()
+    };
     let mut offscreen = render::offscreen::Offscreen::new()?;
     let mut shots = Vec::with_capacity(times.len());
     let mut next = 0;
@@ -199,17 +283,30 @@ fn run() -> Result<(), String> {
         let frame = rt.frame(ms);
 
         let page = frame.pages()[0];
-        let root = frame.node(page).and_then(|p| p.children.first().copied()).ok_or("empty surface")?;
+        let root = frame
+            .node(page)
+            .and_then(|p| p.children.first().copied())
+            .ok_or("empty surface")?;
         let size = frame.node(root).map(|n| n.size).ok_or("no root")?;
-        (w, h) = ((size.width * scale).ceil() as u32, (size.height * scale).ceil() as u32);
+        (w, h) = (
+            (size.width * scale).ceil() as u32,
+            (size.height * scale).ceil() as u32,
+        );
         let bg = frame
             .node(root)
-            .and_then(|n| n.fills.iter().find_map(|p| match &p.kind {
-                document_proto::PaintKind::Solid { color } => Some(*color),
-                _ => None,
-            }))
+            .and_then(|n| {
+                n.fills.iter().find_map(|p| match &p.kind {
+                    document_proto::PaintKind::Solid { color } => Some(*color),
+                    _ => None,
+                })
+            })
             .unwrap_or(theme.background);
-        let base = peniko::Color::from_rgba8((bg.r * 255.0) as u8, (bg.g * 255.0) as u8, (bg.b * 255.0) as u8, 255);
+        let base = peniko::Color::from_rgba8(
+            (bg.r * 255.0) as u8,
+            (bg.g * 255.0) as u8,
+            (bg.b * 255.0) as u8,
+            255,
+        );
         let values = control_positions(&rt);
         let inputs = rt.shader_inputs();
         let px = offscreen.render_with_effects(&render::fx::Frame {
@@ -222,13 +319,24 @@ fn run() -> Result<(), String> {
             inputs: Some(&inputs),
             ..render::fx::Frame::new(&frame, page, w, h)
         })?;
-        shots.push(image::RgbaImage::from_raw(px.width, px.height, px.rgba).ok_or("bad pixel buffer")?);
+        shots.push(
+            image::RgbaImage::from_raw(px.width, px.height, px.rgba).ok_or("bad pixel buffer")?,
+        );
     }
 
     if frames == 0 {
-        shots[0].save(&out).map_err(|e| format!("writing {out}: {e}"))?;
+        shots[0]
+            .save(&out)
+            .map_err(|e| format!("writing {out}: {e}"))?;
     } else {
-        save_animation(&shots, fps, columns, &out, gif.as_deref(), frames_dir.as_deref())?;
+        save_animation(
+            &shots,
+            fps,
+            columns,
+            &out,
+            gif.as_deref(),
+            frames_dir.as_deref(),
+        )?;
     }
     println!(
         "{{\"ok\":true,\"out\":\"{out}\",\"width\":{w},\"height\":{h},\"frames\":{},\"controls\":{},\"motions\":{}}}",
@@ -249,15 +357,34 @@ enum Change {
 /// The frames as a contact sheet (`columns` wide, left to right, top to
 /// bottom) at `out`, and optionally a looping GIF and one PNG per frame.
 #[cfg(feature = "anyrender")]
-fn save_animation(shots: &[image::RgbaImage], fps: f64, columns: usize, out: &str, gif: Option<&str>, dir: Option<&str>) -> Result<(), String> {
-    let (w, h) = shots.first().map(|s| (s.width(), s.height())).ok_or("no frames")?;
+fn save_animation(
+    shots: &[image::RgbaImage],
+    fps: f64,
+    columns: usize,
+    out: &str,
+    gif: Option<&str>,
+    dir: Option<&str>,
+) -> Result<(), String> {
+    let (w, h) = shots
+        .first()
+        .map(|s| (s.width(), s.height()))
+        .ok_or("no frames")?;
     let cols = columns.min(shots.len()).max(1);
     let rows = shots.len().div_ceil(cols);
     let gap = 4;
-    let mut sheet = image::RgbaImage::from_pixel(cols as u32 * (w + gap) - gap, rows as u32 * (h + gap) - gap, image::Rgba([0, 0, 0, 255]));
+    let mut sheet = image::RgbaImage::from_pixel(
+        cols as u32 * (w + gap) - gap,
+        rows as u32 * (h + gap) - gap,
+        image::Rgba([0, 0, 0, 255]),
+    );
     for (i, s) in shots.iter().enumerate() {
         let (c, r) = ((i % cols) as u32, (i / cols) as u32);
-        image::imageops::overlay(&mut sheet, s, i64::from(c * (w + gap)), i64::from(r * (h + gap)));
+        image::imageops::overlay(
+            &mut sheet,
+            s,
+            i64::from(c * (w + gap)),
+            i64::from(r * (h + gap)),
+        );
     }
     sheet.save(out).map_err(|e| format!("writing {out}: {e}"))?;
     if let Some(dir) = dir {
@@ -269,11 +396,14 @@ fn save_animation(shots: &[image::RgbaImage], fps: f64, columns: usize, out: &st
     }
     if let Some(path) = gif {
         let file = std::fs::File::create(path).map_err(|e| format!("{path}: {e}"))?;
-        let mut enc = image::codecs::gif::GifEncoder::new_with_speed(std::io::BufWriter::new(file), 10);
-        enc.set_repeat(image::codecs::gif::Repeat::Infinite).map_err(|e| e.to_string())?;
+        let mut enc =
+            image::codecs::gif::GifEncoder::new_with_speed(std::io::BufWriter::new(file), 10);
+        enc.set_repeat(image::codecs::gif::Repeat::Infinite)
+            .map_err(|e| e.to_string())?;
         let delay = image::Delay::from_numer_denom_ms(1000, fps.round().max(1.0) as u32);
         for s in shots {
-            enc.encode_frame(image::Frame::from_parts(s.clone(), 0, 0, delay)).map_err(|e| format!("{path}: {e}"))?;
+            enc.encode_frame(image::Frame::from_parts(s.clone(), 0, 0, delay))
+                .map_err(|e| format!("{path}: {e}"))?;
         }
     }
     Ok(())
@@ -282,7 +412,11 @@ fn save_animation(shots: &[image::RgbaImage], fps: f64, columns: usize, out: &st
 /// `--level`'s frames: `db` (and `db − 4` on further channels) on every
 /// level stream of the catalog that no explicit `--stream` names.
 #[cfg(feature = "anyrender")]
-fn level_frames(catalog: &surface_proto::Catalog, level: Option<f64>, explicit: &[surface_proto::StreamFrame]) -> Vec<surface_proto::StreamFrame> {
+fn level_frames(
+    catalog: &surface_proto::Catalog,
+    level: Option<f64>,
+    explicit: &[surface_proto::StreamFrame],
+) -> Vec<surface_proto::StreamFrame> {
     let Some(db) = level else { return Vec::new() };
     catalog
         .streams
@@ -291,7 +425,9 @@ fn level_frames(catalog: &surface_proto::Catalog, level: Option<f64>, explicit: 
         .filter_map(|s| match s.kind {
             surface_proto::StreamKind::Level { channels } => Some(surface_proto::StreamFrame {
                 id: s.id.clone(),
-                values: (0..channels.max(1)).map(|c| if c == 0 { db } else { db - 4.0 }).collect(),
+                values: (0..channels.max(1))
+                    .map(|c| if c == 0 { db } else { db - 4.0 })
+                    .collect(),
             }),
             _ => None,
         })
@@ -301,14 +437,24 @@ fn level_frames(catalog: &surface_proto::Catalog, level: Option<f64>, explicit: 
 /// `--demo-feeds`' frames: every feed of the catalog not in `skip`, from
 /// the demo generators at `t` seconds.
 #[cfg(feature = "anyrender")]
-fn demo_frames(catalog: &surface_proto::Catalog, t: f64, skip: &[&surface_proto::EntryId]) -> Vec<surface_proto::StreamFrame> {
+fn demo_frames(
+    catalog: &surface_proto::Catalog,
+    t: f64,
+    skip: &[&surface_proto::EntryId],
+) -> Vec<surface_proto::StreamFrame> {
     feed_memory::frames(catalog.streams.iter().filter(|s| !skip.contains(&&s.id)), t)
 }
 
 /// Every control's position, for effect shaders' `value`.
 #[cfg(feature = "anyrender")]
-fn control_positions(rt: &surface_runtime::Runtime) -> std::collections::HashMap<document_proto::NodeId, f64> {
-    rt.surface().controls.iter().map(|(id, c)| (*id, rt.position(*id, c))).collect()
+fn control_positions(
+    rt: &surface_runtime::Runtime,
+) -> std::collections::HashMap<document_proto::NodeId, f64> {
+    rt.surface()
+        .controls
+        .iter()
+        .map(|(id, c)| (*id, rt.position(*id, c)))
+        .collect()
 }
 
 #[cfg(all(test, feature = "anyrender"))]
@@ -316,7 +462,12 @@ mod tests {
     use surface_proto::{Catalog, EntryId, StreamFrame, StreamInfo, StreamKind};
 
     fn stream(id: &str, kind: StreamKind) -> StreamInfo {
-        StreamInfo { id: EntryId::new(id), name: id.into(), kind, rate_hz: 30.0 }
+        StreamInfo {
+            id: EntryId::new(id),
+            name: id.into(),
+            kind,
+            rate_hz: 30.0,
+        }
     }
 
     #[test]
@@ -329,25 +480,46 @@ mod tests {
             ],
             ..Catalog::default()
         };
-        let ids = |fs: &[StreamFrame]| fs.iter().map(|f| (f.id.0.clone(), f.values.clone())).collect::<Vec<_>>();
+        let ids = |fs: &[StreamFrame]| {
+            fs.iter()
+                .map(|f| (f.id.0.clone(), f.values.clone()))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(
             ids(&super::level_frames(&catalog, Some(-12.0), &[])),
-            [("plate/in".to_string(), vec![-12.0, -16.0]), ("plate/out".to_string(), vec![-12.0])]
+            [
+                ("plate/in".to_string(), vec![-12.0, -16.0]),
+                ("plate/out".to_string(), vec![-12.0])
+            ]
         );
-        let explicit = [StreamFrame { id: EntryId::new("plate/in"), values: vec![-3.0] }];
-        assert_eq!(ids(&super::level_frames(&catalog, Some(-12.0), &explicit)), [("plate/out".to_string(), vec![-12.0])]);
+        let explicit = [StreamFrame {
+            id: EntryId::new("plate/in"),
+            values: vec![-3.0],
+        }];
+        assert_eq!(
+            ids(&super::level_frames(&catalog, Some(-12.0), &explicit)),
+            [("plate/out".to_string(), vec![-12.0])]
+        );
         assert!(super::level_frames(&catalog, None, &[]).is_empty());
     }
 
     #[test]
     fn demo_feeds_fill_every_feed_not_named() {
-        let catalog = Catalog { streams: feed_memory::demo_feeds(), ..Catalog::default() };
+        let catalog = Catalog {
+            streams: feed_memory::demo_feeds(),
+            ..Catalog::default()
+        };
         let skip = EntryId::new("demo/gr");
         let frames = super::demo_frames(&catalog, 1.5, &[&skip]);
         assert_eq!(frames.len(), catalog.streams.len() - 1);
         assert!(frames.iter().all(|f| f.id != skip));
         for f in &frames {
-            assert_eq!(f.values.len(), catalog.stream(&f.id).unwrap().kind.frame_len(), "{}", f.id);
+            assert_eq!(
+                f.values.len(),
+                catalog.stream(&f.id).unwrap().kind.frame_len(),
+                "{}",
+                f.id
+            );
         }
     }
 }

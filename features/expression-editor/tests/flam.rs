@@ -1,9 +1,7 @@
 //! Flams and two-handed drum rows.
 
 use expression_editor::doc::{ExpressionDoc, Note, NoteId, TimeBase};
-use expression_editor::flam::{
-    DEFAULT_FLAM_MS, FlamError, FlamSide, FlamStep, flam, next_step,
-};
+use expression_editor::flam::{DEFAULT_FLAM_MS, FlamError, FlamSide, FlamStep, flam, next_step};
 use expression_editor::rows::{DrumMap, Hand, RowSpace};
 use expression_editor::{Editor, Mode, Viewport};
 

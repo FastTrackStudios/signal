@@ -94,13 +94,21 @@ impl EffectsPlan {
 /// `strength` is the depth (0..1), `speed` the jitter rate (Hz).
 #[must_use]
 pub fn flicker_level(time_s: f64, params: &BTreeMap<String, f64>) -> f64 {
-    let depth = params.get("strength").copied().unwrap_or(0.5).clamp(0.0, 1.0);
+    let depth = params
+        .get("strength")
+        .copied()
+        .unwrap_or(0.5)
+        .clamp(0.0, 1.0);
     let speed = params.get("speed").copied().unwrap_or(10.0).max(0.0);
     let hash = |x: f64| ((x * 12.9898).sin() * 43_758.545_3).rem_euclid(1.0);
     let x = time_s * speed;
     let (i, f) = (x.floor(), x - x.floor());
     let s = f * f * (3.0 - 2.0 * f);
     let noise = hash(i) * (1.0 - s) + hash(i + 1.0) * s;
-    let dropout = if hash((x * 0.37).floor() + 7.0) > 0.9 { 0.6 } else { 0.0 };
+    let dropout = if hash((x * 0.37).floor() + 7.0) > 0.9 {
+        0.6
+    } else {
+        0.0
+    };
     (1.0 - depth * (noise * 0.5 + dropout)).clamp(0.0, 1.0)
 }

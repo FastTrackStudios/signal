@@ -44,8 +44,7 @@ Letter text with real fonts: `fonts` lists the bundled families (Inter, Oswald, 
 Dancing Script, Pacifico, Caveat Brush, Knewave, Playfair Display, DSEG7/DSEG14 Classic, Doto, VT323, JetBrains Mono, \
 UnifrakturCook, Pirata One); set them with `font`, `weight`, `style` and `stretch` on <Text>.";
 
-const USAGE: &str =
-    "usage: frame-mcp [--file surface.frame] [--engine ws://HOST:PORT/vox [--rig NAME]] [--library ws://HOST:PORT/vox [--surface ID]]";
+const USAGE: &str = "usage: frame-mcp [--file surface.frame] [--engine ws://HOST:PORT/vox [--rig NAME]] [--library ws://HOST:PORT/vox [--surface ID]]";
 
 /// Where edits are published (`--library`).
 struct Publish {
@@ -64,7 +63,9 @@ impl Publish {
             author: std::env::var("USER").unwrap_or_default(),
             ..library_link::PublishMeta::default()
         };
-        let p = self.client.publish(&library_link::Content::markup(scene), &meta)?;
+        let p = self
+            .client
+            .publish(&library_link::Content::markup(scene), &meta)?;
         self.id = Some(p.id.clone());
         Ok(format!("{}@{}", p.id, p.version))
     }
@@ -92,8 +93,16 @@ struct LiveEngine {
 
 impl LiveEngine {
     fn new(url: String, rig: Option<String>) -> Result<Self, String> {
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| format!("tokio: {e}"))?;
-        Ok(Self { rt, url, rig, client: None })
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| format!("tokio: {e}"))?;
+        Ok(Self {
+            rt,
+            url,
+            rig,
+            client: None,
+        })
     }
 }
 
@@ -164,8 +173,16 @@ fn main() {
     let mut publish = match library.as_deref().map(library_link::Blocking::new) {
         None => None,
         Some(Ok(client)) => {
-            let id = surface.clone().or_else(|| file.as_ref().and_then(|f| f.file_stem()).map(|s| s.to_string_lossy().into_owned()));
-            eprintln!("frame-mcp: publishing every edit to {} as {}", client.url(), id.as_deref().unwrap_or("a new surface"));
+            let id = surface.clone().or_else(|| {
+                file.as_ref()
+                    .and_then(|f| f.file_stem())
+                    .map(|s| s.to_string_lossy().into_owned())
+            });
+            eprintln!(
+                "frame-mcp: publishing every edit to {} as {}",
+                client.url(),
+                id.as_deref().unwrap_or("a new surface")
+            );
             Some(Publish { client, id })
         }
         Some(Err(e)) => {
@@ -185,11 +202,19 @@ fn main() {
         None => surface_memory::demo_catalog(),
         Some(e) => match e.fetch() {
             Ok(c) => {
-                eprintln!("frame-mcp: catalog `{}` from {} ({} params)", c.id, e.describe(), c.params.len());
+                eprintln!(
+                    "frame-mcp: catalog `{}` from {} ({} params)",
+                    c.id,
+                    e.describe(),
+                    c.params.len()
+                );
                 c
             }
             Err(err) => {
-                eprintln!("frame-mcp: can't fetch the catalog from {}: {err}", e.describe());
+                eprintln!(
+                    "frame-mcp: can't fetch the catalog from {}: {err}",
+                    e.describe()
+                );
                 std::process::exit(1);
             }
         },
@@ -229,11 +254,16 @@ fn main() {
         let reply = match serde_json::from_str::<Value>(&line) {
             Ok(msg) => handle(
                 &mut session,
-                Sinks { file: file.as_ref(), library: publish.as_mut() },
+                Sinks {
+                    file: file.as_ref(),
+                    library: publish.as_mut(),
+                },
                 engine.as_mut().map(|e| e as &mut dyn CatalogSource),
                 &msg,
             ),
-            Err(e) => Some(json!({"jsonrpc": "2.0", "id": null, "error": {"code": -32700, "message": e.to_string()}})),
+            Err(e) => Some(
+                json!({"jsonrpc": "2.0", "id": null, "error": {"code": -32700, "message": e.to_string()}}),
+            ),
         };
         if let Some(r) = reply {
             let _ = writeln!(stdout, "{r}");
@@ -243,7 +273,10 @@ fn main() {
 }
 
 /// `refresh_catalog`: re-fetch and swap the session's catalog.
-fn refresh_catalog(session: &mut Session, engine: Option<&mut dyn CatalogSource>) -> (String, bool) {
+fn refresh_catalog(
+    session: &mut Session,
+    engine: Option<&mut dyn CatalogSource>,
+) -> (String, bool) {
     let Some(engine) = engine else {
         return ("no live engine: frame-mcp runs against the built-in demo catalog (start it with --engine ws://…)".into(), true);
     };
@@ -263,7 +296,13 @@ fn refresh_catalog(session: &mut Session, engine: Option<&mut dyn CatalogSource>
             let lint = session.call("lint", &json!({})).unwrap_or_else(|e| e.0);
             (format!("{text}\nlint against it: {lint}"), false)
         }
-        Err(e) => (format!("refreshing the catalog from {} failed (the old catalog stays): {e}", engine.describe()), true),
+        Err(e) => (
+            format!(
+                "refreshing the catalog from {} failed (the old catalog stays): {e}",
+                engine.describe()
+            ),
+            true,
+        ),
     }
 }
 
@@ -275,9 +314,17 @@ struct Sinks<'a> {
 }
 
 /// One JSON-RPC message → optional reply (notifications get none).
-fn handle(session: &mut Session, sinks: Sinks<'_>, engine: Option<&mut dyn CatalogSource>, msg: &Value) -> Option<Value> {
+fn handle(
+    session: &mut Session,
+    sinks: Sinks<'_>,
+    engine: Option<&mut dyn CatalogSource>,
+    msg: &Value,
+) -> Option<Value> {
     let id = msg.get("id").cloned()?; // notifications carry no id
-    let method = msg.get("method").and_then(Value::as_str).unwrap_or_default();
+    let method = msg
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let params = msg.get("params").cloned().unwrap_or(Value::Null);
     let result = match method {
         "initialize" => Ok(json!({
@@ -307,8 +354,14 @@ fn handle(session: &mut Session, sinks: Sinks<'_>, engine: Option<&mut dyn Catal
             Ok(json!({"tools": list}))
         }
         "tools/call" => {
-            let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
-            let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+            let name = params
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let args = params
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
             let (text, is_error) = if name == "reference" {
                 (REFERENCE.to_string(), false)
             } else if name == "refresh_catalog" {
@@ -317,7 +370,8 @@ fn handle(session: &mut Session, sinks: Sinks<'_>, engine: Option<&mut dyn Catal
                 match session.call(name, &args) {
                     Ok(mut text) => {
                         let mutates = tools().iter().any(|t| t.name == name && t.mutates);
-                        if mutates && let Some(path) = sinks.file
+                        if mutates
+                            && let Some(path) = sinks.file
                             && let Err(e) = session.save(path)
                         {
                             text += &format!("\n(warning: saving {} failed: {e})", path.display());
@@ -325,7 +379,11 @@ fn handle(session: &mut Session, sinks: Sinks<'_>, engine: Option<&mut dyn Catal
                         if mutates && let Some(library) = sinks.library {
                             match library.publish(session) {
                                 Ok(at) => text += &format!("\n(published {at})"),
-                                Err(e) => text += &format!("\n(warning: publishing to the library failed: {e})"),
+                                Err(e) => {
+                                    text += &format!(
+                                        "\n(warning: publishing to the library failed: {e})"
+                                    )
+                                }
                             }
                         }
                         (text, false)
@@ -348,15 +406,37 @@ mod tests {
     use super::*;
 
     fn rpc(s: &mut Session, method: &str, params: Value) -> Value {
-        handle(s, Sinks::default(), None, &json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})).unwrap()
+        handle(
+            s,
+            Sinks::default(),
+            None,
+            &json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
+        )
+        .unwrap()
     }
 
-    fn rpc_with(s: &mut Session, engine: &mut dyn CatalogSource, method: &str, params: Value) -> Value {
-        handle(s, Sinks::default(), Some(engine), &json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})).unwrap()
+    fn rpc_with(
+        s: &mut Session,
+        engine: &mut dyn CatalogSource,
+        method: &str,
+        params: Value,
+    ) -> Value {
+        handle(
+            s,
+            Sinks::default(),
+            Some(engine),
+            &json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
+        )
+        .unwrap()
     }
 
     fn tool_names(list: &Value) -> Vec<String> {
-        list["result"]["tools"].as_array().unwrap().iter().filter_map(|t| t["name"].as_str().map(String::from)).collect()
+        list["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["name"].as_str().map(String::from))
+            .collect()
     }
 
     /// An engine whose catalog changes between fetches.
@@ -378,26 +458,61 @@ mod tests {
         smaller.params.retain(|p| !p.addr.0.starts_with("delay/"));
         let mut engine = Scripted(vec![Ok(smaller), Err("connection refused".into())]);
         let mut s = Session::blank(surface_memory::demo_catalog());
-        assert!(tool_names(&rpc_with(&mut s, &mut engine, "tools/list", json!({}))).contains(&"refresh_catalog".into()));
-        rpc(&mut s, "tools/call", json!({"name": "generate", "arguments": {}}));
+        assert!(
+            tool_names(&rpc_with(&mut s, &mut engine, "tools/list", json!({})))
+                .contains(&"refresh_catalog".into())
+        );
+        rpc(
+            &mut s,
+            "tools/call",
+            json!({"name": "generate", "arguments": {}}),
+        );
 
-        let r = rpc_with(&mut s, &mut engine, "tools/call", json!({"name": "refresh_catalog", "arguments": {}}));
+        let r = rpc_with(
+            &mut s,
+            &mut engine,
+            "tools/call",
+            json!({"name": "refresh_catalog", "arguments": {}}),
+        );
         assert_eq!(r["result"]["isError"], false);
         let text = r["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("`live.guitar`") && text.contains("lint"), "{text}");
+        assert!(
+            text.contains("`live.guitar`") && text.contains("lint"),
+            "{text}"
+        );
         assert_eq!(s.catalog().id, "live.guitar");
 
-        let r = rpc_with(&mut s, &mut engine, "tools/call", json!({"name": "refresh_catalog", "arguments": {}}));
+        let r = rpc_with(
+            &mut s,
+            &mut engine,
+            "tools/call",
+            json!({"name": "refresh_catalog", "arguments": {}}),
+        );
         assert_eq!(r["result"]["isError"], true);
-        assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("connection refused"));
-        assert_eq!(s.catalog().id, "live.guitar", "a failed refresh keeps the old catalog");
+        assert!(
+            r["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("connection refused")
+        );
+        assert_eq!(
+            s.catalog().id,
+            "live.guitar",
+            "a failed refresh keeps the old catalog"
+        );
     }
 
     #[test]
     fn refresh_catalog_without_an_engine() {
         let mut s = Session::blank(surface_memory::demo_catalog());
-        assert!(!tool_names(&rpc(&mut s, "tools/list", json!({}))).contains(&"refresh_catalog".into()));
-        let r = rpc(&mut s, "tools/call", json!({"name": "refresh_catalog", "arguments": {}}));
+        assert!(
+            !tool_names(&rpc(&mut s, "tools/list", json!({}))).contains(&"refresh_catalog".into())
+        );
+        let r = rpc(
+            &mut s,
+            "tools/call",
+            json!({"name": "refresh_catalog", "arguments": {}}),
+        );
         assert_eq!(r["result"]["isError"], true);
         assert_eq!(s.catalog().id, "demo.guitar");
     }
@@ -408,18 +523,26 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let url = format!("ws://{}/vox", listener.local_addr().unwrap());
-        let router = LayerRouter::new().merge_router_scoped("guitar", surface_memory::Memory::demo().into_router());
+        let router = LayerRouter::new()
+            .merge_router_scoped("guitar", surface_memory::Memory::demo().into_router());
         // Serves until the test process exits.
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async move { sync::serve_ws(tokio::net::TcpListener::from_std(listener).unwrap(), router).await });
+            rt.block_on(async move {
+                sync::serve_ws(tokio::net::TcpListener::from_std(listener).unwrap(), router).await
+            });
         });
         let mut engine = LiveEngine::new(url, Some("guitar".into())).unwrap();
         assert_eq!(engine.fetch().unwrap().id, "demo.guitar");
         assert!(engine.client.is_some(), "link kept for the next refresh");
         assert_eq!(engine.fetch().unwrap().id, "demo.guitar", "reuses the link");
         let mut s = Session::blank(Catalog::default());
-        let r = rpc_with(&mut s, &mut engine, "tools/call", json!({"name": "refresh_catalog", "arguments": {}}));
+        let r = rpc_with(
+            &mut s,
+            &mut engine,
+            "tools/call",
+            json!({"name": "refresh_catalog", "arguments": {}}),
+        );
         assert_eq!(r["result"]["isError"], false, "{r}");
         assert_eq!(s.catalog().id, "demo.guitar");
     }
@@ -427,15 +550,42 @@ mod tests {
     #[test]
     fn mcp_handshake_list_and_call() {
         let mut s = Session::blank(surface_memory::demo_catalog());
-        let init = rpc(&mut s, "initialize", json!({"protocolVersion": "2025-06-18"}));
+        let init = rpc(
+            &mut s,
+            "initialize",
+            json!({"protocolVersion": "2025-06-18"}),
+        );
         assert_eq!(init["result"]["serverInfo"]["name"], "frame");
-        assert!(handle(&mut s, Sinks::default(), None, &json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).is_none());
+        assert!(
+            handle(
+                &mut s,
+                Sinks::default(),
+                None,
+                &json!({"jsonrpc": "2.0", "method": "notifications/initialized"})
+            )
+            .is_none()
+        );
         let list = rpc(&mut s, "tools/list", json!({}));
-        let names: Vec<&str> = list["result"]["tools"].as_array().unwrap().iter().filter_map(|t| t["name"].as_str()).collect();
-        assert!(names.contains(&"generate") && names.contains(&"reference") && names.contains(&"lint"));
-        let r = rpc(&mut s, "tools/call", json!({"name": "generate", "arguments": {}}));
+        let names: Vec<&str> = list["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["name"].as_str())
+            .collect();
+        assert!(
+            names.contains(&"generate") && names.contains(&"reference") && names.contains(&"lint")
+        );
+        let r = rpc(
+            &mut s,
+            "tools/call",
+            json!({"name": "generate", "arguments": {}}),
+        );
         assert_eq!(r["result"]["isError"], false);
-        let r = rpc(&mut s, "tools/call", json!({"name": "bind", "arguments": {"node": "nope"}}));
+        let r = rpc(
+            &mut s,
+            "tools/call",
+            json!({"name": "bind", "arguments": {"node": "nope"}}),
+        );
         assert_eq!(r["result"]["isError"], true);
         assert_eq!(rpc(&mut s, "bogus", json!({}))["error"]["code"], -32601);
     }
@@ -448,20 +598,48 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let lib = library_fs::FsLibrary::open(&dir).unwrap();
-        let served = library_link::Served::start(lib.clone().into_router(), std::net::TcpListener::bind("127.0.0.1:0").unwrap()).unwrap();
-        let mut publish = Publish { client: library_link::Blocking::new(&served.url).unwrap(), id: Some("agent/one".into()) };
+        let served = library_link::Served::start(
+            lib.clone().into_router(),
+            std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        )
+        .unwrap();
+        let mut publish = Publish {
+            client: library_link::Blocking::new(&served.url).unwrap(),
+            id: Some("agent/one".into()),
+        };
         let mut s = Session::blank(surface_memory::demo_catalog());
         let call = |s: &mut Session, p: &mut Publish, name: &str| {
             let msg = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": {}}});
-            handle(s, Sinks { file: None, library: Some(p) }, None, &msg).unwrap()
+            handle(
+                s,
+                Sinks {
+                    file: None,
+                    library: Some(p),
+                },
+                None,
+                &msg,
+            )
+            .unwrap()
         };
         let r = call(&mut s, &mut publish, "generate");
-        assert!(r["result"]["content"][0]["text"].as_str().unwrap().ends_with("(published agent/one@1)"), "{r}");
+        assert!(
+            r["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .ends_with("(published agent/one@1)"),
+            "{r}"
+        );
         let stored = lib.get("agent/one".into(), None).unwrap();
         assert_eq!(stored.content.decode().unwrap(), *s.scene());
         // Read-only tools don't publish.
         let r = call(&mut s, &mut publish, "lint");
-        assert!(!r["result"]["content"][0]["text"].as_str().unwrap().contains("published"), "{r}");
+        assert!(
+            !r["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("published"),
+            "{r}"
+        );
         assert_eq!(lib.get("agent/one".into(), None).unwrap().meta.version, 1);
         drop(served);
         let _ = std::fs::remove_dir_all(dir);
@@ -473,7 +651,15 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("s.frame");
         let mut s = Session::blank(surface_memory::demo_catalog());
-        handle(&mut s, Sinks { file: Some(&path), library: None }, None, &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "generate", "arguments": {}}}));
+        handle(
+            &mut s,
+            Sinks {
+                file: Some(&path),
+                library: None,
+            },
+            None,
+            &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "generate", "arguments": {}}}),
+        );
         assert_eq!(document_io::load_surface(&path).unwrap(), *s.scene());
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -482,16 +668,29 @@ mod tests {
     fn a_textured_file_keeps_its_textures_across_edits() {
         let dir = std::env::temp_dir().join(format!("frame-mcp-assets-{}", std::process::id()));
         let path = dir.join("tex.frame");
-        let mut scene = Session::blank(surface_memory::demo_catalog()).scene().clone();
+        let mut scene = Session::blank(surface_memory::demo_catalog())
+            .scene()
+            .clone();
         scene.add_asset("image/png", b"texture".to_vec());
         document_io::save_surface(&path, &scene).unwrap();
 
         let mut s = Session::open(&path, surface_memory::demo_catalog()).unwrap();
         let page = s.scene().pages()[0].to_string();
         let msg = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "write", "arguments": {"parent": page, "markup": "<Frame name=\"New\" w=10 h=10 />"}}});
-        handle(&mut s, Sinks { file: Some(&path), library: None }, None, &msg);
+        handle(
+            &mut s,
+            Sinks {
+                file: Some(&path),
+                library: None,
+            },
+            None,
+            &msg,
+        );
         let back = document_io::load_surface(&path).unwrap();
-        assert!(back.nodes.values().any(|n| n.name == "New"), "the edit was saved");
+        assert!(
+            back.nodes.values().any(|n| n.name == "New"),
+            "the edit was saved"
+        );
         assert_eq!(back.assets, scene.assets, "…with the textures");
         let _ = std::fs::remove_dir_all(dir);
     }

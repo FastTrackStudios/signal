@@ -14,10 +14,10 @@ fn main() {
 
 #[cfg(feature = "anyrender")]
 fn run() -> Result<(), String> {
-    use render::build_scene_layout_boxes;
     use image::RgbaImage;
     use kurbo::Affine;
     use peniko::Color;
+    use render::build_scene_layout_boxes;
     use vello::Scene;
 
     let mut args = std::env::args().skip(1);
@@ -57,7 +57,8 @@ fn run() -> Result<(), String> {
     let out_path = out_path.ok_or_else(|| "--out <output_png> is required".to_string())?;
     let bytes = std::fs::read(&input).map_err(|e| format!("failed reading {input}: {e}"))?;
     let export_bbox = extract_export_bbox(&bytes, root_figma_id.as_deref())?;
-    let base_color = extract_export_base_color(&bytes, root_figma_id.as_deref())?.unwrap_or(Color::WHITE);
+    let base_color =
+        extract_export_base_color(&bytes, root_figma_id.as_deref())?.unwrap_or(Color::WHITE);
     let doc = figma_import::import_bytes(&bytes)
         .map_err(|e| format!("failed importing source document from {input}: {e}"))?;
     let root = match root_figma_id {
@@ -119,12 +120,20 @@ fn run() -> Result<(), String> {
     let mut scene = Scene::new();
     let scene_transform = Affine::translate((-min_x, -min_y));
     // The bundled book: Inter (Figma's default) first, then frame's families.
-    render::paint_scene_into(&mut scene, &doc, root, scene_transform, Some(render::FontBook::bundled()));
+    render::paint_scene_into(
+        &mut scene,
+        &doc,
+        root,
+        scene_transform,
+        Some(render::FontBook::bundled()),
+    );
 
     // Offscreen renders like `Renderer::render_to_texture` (MSAA 8×), but
     // re-renders in bands instead of coming back blank when the scene
     // overflows vello's buffers.
-    let pixels = render::offscreen::Offscreen::new()?.render(&scene, width, height, base_color)?.rgba;
+    let pixels = render::offscreen::Offscreen::new()?
+        .render(&scene, width, height, base_color)?
+        .rgba;
 
     let image = RgbaImage::from_raw(width, height, pixels)
         .ok_or_else(|| "failed to build image buffer from render output".to_string())?;
@@ -158,7 +167,9 @@ fn extract_export_bbox(
     };
 
     let target = if let Some(root_id) = root_figma_id {
-        nodes.iter().find(|node| node.get("id").and_then(|v| v.as_str()) == Some(root_id))
+        nodes
+            .iter()
+            .find(|node| node.get("id").and_then(|v| v.as_str()) == Some(root_id))
     } else {
         nodes.first()
     }
@@ -204,7 +215,9 @@ fn extract_export_base_color(
     };
 
     let target = if let Some(root_id) = root_figma_id {
-        nodes.iter().find(|node| node.get("id").and_then(|v| v.as_str()) == Some(root_id))
+        nodes
+            .iter()
+            .find(|node| node.get("id").and_then(|v| v.as_str()) == Some(root_id))
     } else {
         nodes.first()
     }
@@ -214,7 +227,10 @@ fn extract_export_base_color(
         Some(fills) => fills,
         None => return Ok(None),
     };
-    let solid = match fills.iter().find(|fill| fill.get("type").and_then(|v| v.as_str()) == Some("SOLID")) {
+    let solid = match fills
+        .iter()
+        .find(|fill| fill.get("type").and_then(|v| v.as_str()) == Some("SOLID"))
+    {
         Some(fill) => fill,
         None => return Ok(None),
     };

@@ -20,7 +20,11 @@ fn lane<'a>(m: &'a KeysMixer, name: &str) -> &'a keys::proto::KeysLayerModel {
 }
 
 fn sources(m: &KeysMixer, name: &str) -> Vec<String> {
-    lane(m, name).modules.iter().map(|m| m.patch.clone()).collect()
+    lane(m, name)
+        .modules
+        .iter()
+        .map(|m| m.patch.clone())
+        .collect()
 }
 
 fn engine_lanes(m: &KeysMixer, engine: &str) -> Vec<String> {
@@ -68,7 +72,11 @@ fn saved_presets_load_into_other_slots_and_auditions_undo() {
     let pad_gain = lane(&before, "Pad").gain_db;
     rig.set_layer_patch("Pad".into(), 0, idx);
     let after = rig.mixer();
-    assert_eq!(sources(&after, "Pad"), keys_sound, "Pad plays the saved sound");
+    assert_eq!(
+        sources(&after, "Pad"),
+        keys_sound,
+        "Pad plays the saved sound"
+    );
     assert_eq!(lane(&after, "Pad").gain_db, pad_gain, "Pad keeps its fader");
     assert_eq!(lane(&after, "Pad").preset, "My Piano");
 
@@ -76,7 +84,11 @@ fn saved_presets_load_into_other_slots_and_auditions_undo() {
     let pad_sound = saved(&rig, "Pad Sound").expect("Pad's own sound saved");
     rig.audition_begin();
     rig.set_layer_patch("Pad".into(), 0, pad_sound);
-    assert_eq!(sources(&rig.mixer(), "Pad"), pad_before, "auditioning plays it");
+    assert_eq!(
+        sources(&rig.mixer(), "Pad"),
+        pad_before,
+        "auditioning plays it"
+    );
     rig.audition_end(false);
     assert_eq!(
         sources(&rig.mixer(), "Pad"),
@@ -93,10 +105,22 @@ fn saved_presets_load_into_other_slots_and_auditions_undo() {
     rig.load_engine_preset("Pad".into(), e);
     let m = rig.mixer();
     let now = engine_lanes(&m, "Pad");
-    assert_eq!(now.len(), keys_lanes.len(), "Pad holds the Keys engine's lanes");
+    assert_eq!(
+        now.len(),
+        keys_lanes.len(),
+        "Pad holds the Keys engine's lanes"
+    );
     assert_eq!(now[0], pad_lanes[0], "the first lane keeps Pad's lane name");
-    assert_eq!(engine_lanes(&m, "Keys"), keys_lanes, "Keys itself is untouched");
-    let all: Vec<String> = m.engines.iter().flat_map(|e| e.layers.iter().map(|l| l.name.clone())).collect();
+    assert_eq!(
+        engine_lanes(&m, "Keys"),
+        keys_lanes,
+        "Keys itself is untouched"
+    );
+    let all: Vec<String> = m
+        .engines
+        .iter()
+        .flat_map(|e| e.layers.iter().map(|l| l.name.clone()))
+        .collect();
     let mut unique = all.clone();
     unique.sort();
     unique.dedup();
@@ -105,7 +129,10 @@ fn saved_presets_load_into_other_slots_and_auditions_undo() {
     // ── Manage ──────────────────────────────────────────────────────────
     rig.duplicate_user_preset(idx, "My Piano 2".into());
     assert!(saved(&rig, "My Piano 2").is_some());
-    assert!(saved(&rig, "My Piano").is_some(), "duplicate keeps the original");
+    assert!(
+        saved(&rig, "My Piano").is_some(),
+        "duplicate keeps the original"
+    );
     rig.rename_user_preset(saved(&rig, "My Piano 2").unwrap(), "Felt".into());
     assert!(saved(&rig, "Felt").is_some() && saved(&rig, "My Piano 2").is_none());
     rig.delete_user_preset(saved(&rig, "Felt").unwrap());

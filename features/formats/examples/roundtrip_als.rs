@@ -1,7 +1,7 @@
 use formats::ableton::*;
 
 fn main() {
-    let path = "crates/dawfile-ableton/tests/fixtures/LucidDreaming.als";
+    let path = "crates/dawfile-ableton/tests/fixtures/ableton/LucidDreaming.als";
     println!("Reading: {path}");
     let set = read_live_set(path).expect("failed to parse");
     println!(

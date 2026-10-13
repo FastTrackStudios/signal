@@ -305,8 +305,10 @@ fn patch_receives(root: &mut RChunk, document: &DawDocument, report: &mut Export
         // schema does not model — a pan law of `-1:U`, a trailing `''` —
         // and re-emitting a line that already says the right thing would
         // silently normalise them away on every save.
-        let order_ids: Vec<crate::session::id::EntityId> =
-            order.iter().map(crate::session::id::EntityId::adopt).collect();
+        let order_ids: Vec<crate::session::id::EntityId> = order
+            .iter()
+            .map(crate::session::id::EntityId::adopt)
+            .collect();
         let decoded: Vec<crate::session::document::ReceiveNode> = existing
             .iter()
             .filter_map(|line| super::import::read_receive(line, &order_ids))

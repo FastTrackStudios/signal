@@ -12,10 +12,10 @@
 
 use std::sync::Arc;
 
-use signal_proto::block::BlockType;
 use sampler::{
     CommitStatus, GuitarRig, LiveWrite, ProfileRig, ReloadMode, RigBlock, RigPatch, RigProfile,
 };
+use signal_proto::block::BlockType;
 
 const SR: u32 = 48_000;
 

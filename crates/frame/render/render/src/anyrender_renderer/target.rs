@@ -52,15 +52,35 @@ pub trait PaintTarget {
         shape: &impl Shape,
     );
 
-    fn push_layer(&mut self, clip_style: Fill, blend: impl Into<BlendMode>, alpha: f32, transform: Affine, clip: &impl Shape);
+    fn push_layer(
+        &mut self,
+        clip_style: Fill,
+        blend: impl Into<BlendMode>,
+        alpha: f32,
+        transform: Affine,
+        clip: &impl Shape,
+    );
 
     fn push_clip_layer(&mut self, clip_style: Fill, transform: Affine, clip: &impl Shape);
 
-    fn push_luminance_mask_layer(&mut self, clip_style: Fill, alpha: f32, transform: Affine, clip: &impl Shape);
+    fn push_luminance_mask_layer(
+        &mut self,
+        clip_style: Fill,
+        alpha: f32,
+        transform: Affine,
+        clip: &impl Shape,
+    );
 
     fn pop_layer(&mut self);
 
-    fn draw_blurred_rounded_rect(&mut self, transform: Affine, rect: Rect, brush: Color, radius: f64, std_dev: f64);
+    fn draw_blurred_rounded_rect(
+        &mut self,
+        transform: Affine,
+        rect: Rect,
+        brush: Color,
+        radius: f64,
+        std_dev: f64,
+    );
 
     fn draw_glyph_run(&mut self, run: &GlyphRun<'_>);
 
@@ -99,7 +119,14 @@ impl PaintTarget for vello::Scene {
         vello::Scene::stroke(self, style, transform, brush, brush_transform, shape);
     }
 
-    fn push_layer(&mut self, clip_style: Fill, blend: impl Into<BlendMode>, alpha: f32, transform: Affine, clip: &impl Shape) {
+    fn push_layer(
+        &mut self,
+        clip_style: Fill,
+        blend: impl Into<BlendMode>,
+        alpha: f32,
+        transform: Affine,
+        clip: &impl Shape,
+    ) {
         vello::Scene::push_layer(self, clip_style, blend, alpha, transform, clip);
     }
 
@@ -107,7 +134,13 @@ impl PaintTarget for vello::Scene {
         vello::Scene::push_clip_layer(self, clip_style, transform, clip);
     }
 
-    fn push_luminance_mask_layer(&mut self, clip_style: Fill, alpha: f32, transform: Affine, clip: &impl Shape) {
+    fn push_luminance_mask_layer(
+        &mut self,
+        clip_style: Fill,
+        alpha: f32,
+        transform: Affine,
+        clip: &impl Shape,
+    ) {
         vello::Scene::push_luminance_mask_layer(self, clip_style, alpha, transform, clip);
     }
 
@@ -115,7 +148,14 @@ impl PaintTarget for vello::Scene {
         vello::Scene::pop_layer(self);
     }
 
-    fn draw_blurred_rounded_rect(&mut self, transform: Affine, rect: Rect, brush: Color, radius: f64, std_dev: f64) {
+    fn draw_blurred_rounded_rect(
+        &mut self,
+        transform: Affine,
+        rect: Rect,
+        brush: Color,
+        radius: f64,
+        std_dev: f64,
+    ) {
         vello::Scene::draw_blurred_rounded_rect(self, transform, rect, brush, radius, std_dev);
     }
 
@@ -130,7 +170,10 @@ impl PaintTarget for vello::Scene {
             .transform(run.transform)
             .glyph_transform(run.glyph_transform);
         if run.embolden != Vec2::ZERO {
-            draw = draw.font_embolden(vello::FontEmbolden::new(kurbo::Diagonal2::new(run.embolden.x, run.embolden.y)));
+            draw = draw.font_embolden(vello::FontEmbolden::new(kurbo::Diagonal2::new(
+                run.embolden.x,
+                run.embolden.y,
+            )));
         }
         draw.draw(Fill::NonZero, run.glyphs.iter().copied());
     }

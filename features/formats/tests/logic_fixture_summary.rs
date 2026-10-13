@@ -4,7 +4,7 @@
 use formats::logic::read_session;
 use std::path::PathBuf;
 
-const FIXTURE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/logic_fixtures");
+const FIXTURE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/logic");
 
 fn fixtures() -> Vec<PathBuf> {
     let mut v: Vec<_> = std::fs::read_dir(FIXTURE_DIR)

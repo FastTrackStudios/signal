@@ -26,20 +26,35 @@ fn every_parameter_parses_the_string_it_prints() {
             };
             let again = unsafe { ptr.normalized_value_to_string(parsed, true) };
             if again != shown {
-                broken.push(format!("{id} ({name}): {probe} printed {shown:?}, read back as {again:?}"));
+                broken.push(format!(
+                    "{id} ({name}): {probe} printed {shown:?}, read back as {again:?}"
+                ));
                 break;
             }
         }
     }
-    assert!(broken.is_empty(), "parameters that cannot read their own display:\n  {}", broken.join("\n  "));
+    assert!(
+        broken.is_empty(),
+        "parameters that cannot read their own display:\n  {}",
+        broken.join("\n  ")
+    );
 }
 
 #[test]
 fn choices_parse_by_name() {
     let params = GateParams::default();
     let map = params.param_map();
-    let find = |want: &str| map.iter().find(|(id, _, _)| id == want).map(|(_, p, _)| *p).expect(want);
-    for (id, text, norm) in [("style", "Drum", 1.0), ("mode", "Snare Top", 1.0 / 3.0), ("mode", "toms", 1.0)] {
+    let find = |want: &str| {
+        map.iter()
+            .find(|(id, _, _)| id == want)
+            .map(|(_, p, _)| *p)
+            .expect(want)
+    };
+    for (id, text, norm) in [
+        ("style", "Drum", 1.0),
+        ("mode", "Snare Top", 1.0 / 3.0),
+        ("mode", "toms", 1.0),
+    ] {
         let got = unsafe { find(id).string_to_normalized_value(text) }.expect(text);
         assert!((got - norm).abs() < 1e-6, "{id} {text:?} -> {got}");
     }

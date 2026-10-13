@@ -43,13 +43,7 @@ pub use interaction::Drag;
 /// `hollow` draws the amplitude handle as an empty circle, which is how
 /// the manual signals that a drag will hit only the sibilants rather
 /// than the whole note.
-pub fn handle_mark(
-    handle: crate::Handle,
-    cx: f64,
-    cy: f64,
-    r: f64,
-    hollow: bool,
-) -> String {
+pub fn handle_mark(handle: crate::Handle, cx: f64, cy: f64, r: f64, hollow: bool) -> String {
     use crate::Handle as H;
     match handle {
         H::LeftSlope => format!(

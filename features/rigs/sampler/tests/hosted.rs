@@ -9,8 +9,8 @@
 //! - the rig's input meter sees the host's input;
 //! - once hosted, the control side no longer renders the rig itself.
 
-use signal_proto::block::BlockType;
 use sampler::{GuitarRig, RigBlock};
+use signal_proto::block::BlockType;
 
 const SR: u32 = 48_000;
 /// Not a power of two, and not the rig's own block: a host's.
@@ -55,20 +55,38 @@ fn a_hosted_rig_plays_the_hosts_input_and_its_switches() {
     rig.set_active(Some(quiet));
     let (input, heard) = play(&audio, 0, 40);
     let ratio = rms(&heard) / rms(&input);
-    assert!((ratio - 0.251).abs() < 0.02, "the -12 dB chain plays the host's input: {ratio}");
-    assert!(rig.input_peak() > 0.2, "the input meter hears the host: {}", rig.input_peak());
+    assert!(
+        (ratio - 0.251).abs() < 0.02,
+        "the -12 dB chain plays the host's input: {ratio}"
+    );
+    assert!(
+        rig.input_peak() > 0.2,
+        "the input meter hears the host: {}",
+        rig.input_peak()
+    );
 
     // Switched from the control side: heard in the host's next blocks.
     rig.set_active(Some(unity));
     let (input, heard) = play(&audio, 40, 40);
     let ratio = rms(&heard) / rms(&input);
-    assert!((ratio - 1.0).abs() < 0.05, "the unity chain after the switch: {ratio}");
+    assert!(
+        (ratio - 1.0).abs() < 0.05,
+        "the unity chain after the switch: {ratio}"
+    );
 
     // Hosted, the control side does not render it: a capture armed and an
     // offline render asked for leave it unfilled until the host plays.
     rig.arm_heard_capture(1_000);
     rig.render_offline(1_000);
-    assert_eq!(rig.output_capture_remaining(), 1_000, "the host renders, not the control side");
+    assert_eq!(
+        rig.output_capture_remaining(),
+        1_000,
+        "the host renders, not the control side"
+    );
     let _ = play(&audio, 80, 4);
-    assert_eq!(rig.output_capture_remaining(), 0, "the host's blocks filled it");
+    assert_eq!(
+        rig.output_capture_remaining(),
+        0,
+        "the host's blocks filled it"
+    );
 }

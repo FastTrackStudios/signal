@@ -24,7 +24,11 @@ impl Content {
         let mut assets: Vec<Asset> = assets.into_iter().collect();
         assets.sort_by(|a, b| a.id.cmp(&b.id));
         assets.dedup_by(|a, b| a.id == b.id);
-        Self { format: Format::Markup, bytes: text.into().into_bytes(), assets }
+        Self {
+            format: Format::Markup,
+            bytes: text.into().into_bytes(),
+            assets,
+        }
     }
 
     /// `scene` as a `.frame` bundle titled `title`.
@@ -32,8 +36,13 @@ impl Content {
     /// # Errors
     /// When the bundle can't be written (an asset without bytes).
     pub fn frame(scene: &Scene, title: &str) -> Result<Self, String> {
-        let bytes = document_bundle::to_bytes(scene, &document_bundle::Manifest::new(title)).map_err(|e| e.to_string())?;
-        Ok(Self { format: Format::Frame, bytes, assets: Vec::new() })
+        let bytes = document_bundle::to_bytes(scene, &document_bundle::Manifest::new(title))
+            .map_err(|e| e.to_string())?;
+        Ok(Self {
+            format: Format::Frame,
+            bytes,
+            assets: Vec::new(),
+        })
     }
 
     /// Decode to a scene. Errors are one line; markup errors are
@@ -44,11 +53,18 @@ impl Content {
     pub fn decode(&self) -> Result<Scene, String> {
         match self.format {
             Format::Markup => {
-                let text = std::str::from_utf8(&self.bytes).map_err(|e| format!("not UTF-8: {e}"))?;
-                let assets = self.assets.iter().map(|a| (a.id.clone(), a.clone())).collect();
+                let text =
+                    std::str::from_utf8(&self.bytes).map_err(|e| format!("not UTF-8: {e}"))?;
+                let assets = self
+                    .assets
+                    .iter()
+                    .map(|a| (a.id.clone(), a.clone()))
+                    .collect();
                 document_text::parse(text, assets).map_err(|e| e.to_string())
             }
-            Format::Frame => document_bundle::from_bytes(&self.bytes).map(|(_, doc)| doc.scene()).map_err(|e| e.to_string()),
+            Format::Frame => document_bundle::from_bytes(&self.bytes)
+                .map(|(_, doc)| doc.scene())
+                .map_err(|e| e.to_string()),
         }
     }
 
@@ -56,7 +72,9 @@ impl Content {
     #[must_use]
     pub fn title(&self) -> Option<String> {
         match self.format {
-            Format::Frame => document_bundle::from_bytes(&self.bytes).ok().map(|(m, _)| m.title),
+            Format::Frame => document_bundle::from_bytes(&self.bytes)
+                .ok()
+                .map(|(m, _)| m.title),
             Format::Markup => None,
         }
     }
@@ -76,7 +94,8 @@ pub fn scene_name(scene: &Scene) -> Option<String> {
 mod tests {
     use super::*;
 
-    const SRC: &str = r##"<Document><Page><Frame name="Panel" w=100 h=50 fill="#101010" /></Page></Document>"##;
+    const SRC: &str =
+        r##"<Document><Page><Frame name="Panel" w=100 h=50 fill="#101010" /></Page></Document>"##;
 
     #[test]
     fn markup_and_bundle_round_trip() {
@@ -90,9 +109,24 @@ mod tests {
 
     #[test]
     fn broken_content_errors() {
-        let err = Content::markup_text("<Document>\n  <Page>\n</Document>").decode().unwrap_err();
-        assert!(err.split(':').next().is_some_and(|l| l.parse::<usize>().is_ok()), "{err}");
-        assert!(Content { format: Format::Frame, bytes: b"nope".to_vec(), assets: Vec::new() }.decode().is_err());
+        let err = Content::markup_text("<Document>\n  <Page>\n</Document>")
+            .decode()
+            .unwrap_err();
+        assert!(
+            err.split(':')
+                .next()
+                .is_some_and(|l| l.parse::<usize>().is_ok()),
+            "{err}"
+        );
+        assert!(
+            Content {
+                format: Format::Frame,
+                bytes: b"nope".to_vec(),
+                assets: Vec::new()
+            }
+            .decode()
+            .is_err()
+        );
     }
 
     #[test]
@@ -108,6 +142,11 @@ mod tests {
         assert_eq!(serde_json::from_str::<Content>(&json).unwrap(), content);
         // Content from before assets rode along still reads.
         let old = r#"{"format":"Markup","bytes":[60]}"#;
-        assert!(serde_json::from_str::<Content>(old).unwrap().assets.is_empty());
+        assert!(
+            serde_json::from_str::<Content>(old)
+                .unwrap()
+                .assets
+                .is_empty()
+        );
     }
 }

@@ -111,7 +111,10 @@ pub struct Place {
 impl Place {
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), ..Self::default() }
+        Self {
+            name: name.into(),
+            ..Self::default()
+        }
     }
 
     #[must_use]
@@ -165,20 +168,29 @@ impl Place {
     /// The ink to print in, for a component whose own light ink is `light`.
     #[must_use]
     pub fn ink_color(&self, light: &str) -> String {
-        self.ink.as_ref().map_or_else(|| light.to_string(), |i| i.color(light))
+        self.ink
+            .as_ref()
+            .map_or_else(|| light.to_string(), |i| i.color(light))
     }
 
     /// How legends are cased: capitals unless [`Self::keep_case`].
     #[must_use]
     pub fn case(&self) -> TextCase {
-        if self.keep_case { TextCase::Original } else { TextCase::Upper }
+        if self.keep_case {
+            TextCase::Original
+        } else {
+            TextCase::Upper
+        }
     }
 
     /// A `key=value` entry of `options` (`"floor=-40"`), for components
     /// configured that way (panels, LED meters).
     #[must_use]
     pub fn opt(&self, key: &str) -> Option<&str> {
-        self.options.iter().flatten().find_map(|o| o.strip_prefix(key).and_then(|r| r.strip_prefix('=')))
+        self.options
+            .iter()
+            .flatten()
+            .find_map(|o| o.strip_prefix(key).and_then(|r| r.strip_prefix('=')))
     }
 
     /// Whether `options` holds the bare flag `flag` (`"momentary"`).
@@ -193,8 +205,23 @@ impl Place {
     /// and footswitch LEDs take it over their variant's colour.
     #[must_use]
     pub fn lamp_color(&self, i: usize) -> Option<String> {
-        let list: Vec<&str> = self.opt("colors").map(|v| v.split(',').map(str::trim).filter(|c| c.starts_with('#')).collect()).unwrap_or_default();
-        list.get(i).or_else(|| list.last()).map(|c| (*c).to_string()).or_else(|| self.opt("color").filter(|c| c.starts_with('#')).map(ToString::to_string))
+        let list: Vec<&str> = self
+            .opt("colors")
+            .map(|v| {
+                v.split(',')
+                    .map(str::trim)
+                    .filter(|c| c.starts_with('#'))
+                    .collect()
+            })
+            .unwrap_or_default();
+        list.get(i)
+            .or_else(|| list.last())
+            .map(|c| (*c).to_string())
+            .or_else(|| {
+                self.opt("color")
+                    .filter(|c| c.starts_with('#'))
+                    .map(ToString::to_string)
+            })
     }
 
     /// The control carrying this place's binding and readout format.
@@ -268,7 +295,10 @@ pub struct ComponentDef {
 
 impl std::fmt::Debug for ComponentDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ComponentDef").field("id", &self.id).field("family", &self.family).finish_non_exhaustive()
+        f.debug_struct("ComponentDef")
+            .field("id", &self.id)
+            .field("family", &self.family)
+            .finish_non_exhaustive()
     }
 }
 
@@ -312,7 +342,11 @@ pub fn find(id: &str) -> Option<ComponentDef> {
 pub fn place(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place) -> Result<NodeId, String> {
     let all = components();
     let Some(def) = all.iter().find(|c| c.id == id) else {
-        let mut near: Vec<&str> = all.iter().map(|c| c.id).filter(|c| c.split('.').next() == id.split('.').next()).collect();
+        let mut near: Vec<&str> = all
+            .iter()
+            .map(|c| c.id)
+            .filter(|c| c.split('.').next() == id.split('.').next())
+            .collect();
         if near.is_empty() {
             near = all.iter().map(|c| c.id).collect();
         }
@@ -322,7 +356,10 @@ pub fn place(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place) -> Result
         && !def.variants.is_empty()
         && !def.variants.contains(&v.as_str())
     {
-        return Err(format!("`{id}` has no variant `{v}`; variants: {}", def.variants.join(", ")));
+        return Err(format!(
+            "`{id}` has no variant `{v}`; variants: {}",
+            def.variants.join(", ")
+        ));
     }
     Ok((def.build)(b, parent, p))
 }
@@ -334,15 +371,26 @@ pub fn place(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place) -> Result
 ///
 /// # Errors
 /// As [`place`].
-pub fn place_in_cell(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place) -> Result<NodeId, String> {
-    let holder = b.add(parent, crate::draw::frame(&format!("{} cell", p.name), 0.0, 0.0, 0.0, 0.0));
+pub fn place_in_cell(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    id: &str,
+    p: &Place,
+) -> Result<NodeId, String> {
+    let holder = b.add(
+        parent,
+        crate::draw::frame(&format!("{} cell", p.name), 0.0, 0.0, 0.0, 0.0),
+    );
     let root = place(b, holder, id, p)?;
     let (x, y, w, h) = drawn_bounds(b.scene, root);
     if let Some(n) = b.scene.node_mut(root) {
         n.transform = Transform::translate(-x, -y);
     }
     if let Some(n) = b.scene.node_mut(holder) {
-        n.size = document_proto::Size { width: w, height: h };
+        n.size = document_proto::Size {
+            width: w,
+            height: h,
+        };
     }
     Ok(root)
 }
@@ -352,7 +400,12 @@ pub fn place_in_cell(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place) -
 /// Offsets are summed (a turned node counts at its unturned box).
 #[must_use]
 pub fn drawn_bounds(scene: &document_proto::Scene, root: NodeId) -> (f64, f64, f64, f64) {
-    fn walk(scene: &document_proto::Scene, id: NodeId, (ox, oy): (f64, f64), acc: &mut (f64, f64, f64, f64)) {
+    fn walk(
+        scene: &document_proto::Scene,
+        id: NodeId,
+        (ox, oy): (f64, f64),
+        acc: &mut (f64, f64, f64, f64),
+    ) {
         let Some(n) = scene.node(id) else { return };
         if !n.visible {
             return;
@@ -372,7 +425,9 @@ pub fn drawn_bounds(scene: &document_proto::Scene, root: NodeId) -> (f64, f64, f
             walk(scene, *c, (x, y), acc);
         }
     }
-    let Some(n) = scene.node(root) else { return (0.0, 0.0, 0.0, 0.0) };
+    let Some(n) = scene.node(root) else {
+        return (0.0, 0.0, 0.0, 0.0);
+    };
     let mut acc = (0.0, 0.0, n.size.width, n.size.height);
     for c in &n.children {
         walk(scene, *c, (0.0, 0.0), &mut acc);
@@ -395,10 +450,20 @@ pub fn detent_sweep(n: usize) -> f64 {
 /// `body` px (at least `touch`) centred on the pivot at (`px`, `py`) in the
 /// root's space. Everything it prints stays where it was on the panel — the
 /// children shift by exactly the root's move — and simply hangs outside.
-pub(crate) fn tighten(b: &mut Builder<'_>, root: NodeId, (px, py): (f64, f64), body: f64, touch: f64) {
+pub(crate) fn tighten(
+    b: &mut Builder<'_>,
+    root: NodeId,
+    (px, py): (f64, f64),
+    body: f64,
+    touch: f64,
+) {
     let side = body.max(touch);
     let (dx, dy) = (side / 2.0 - px, side / 2.0 - py);
-    let kids = b.scene.node(root).map(|n| n.children.clone()).unwrap_or_default();
+    let kids = b
+        .scene
+        .node(root)
+        .map(|n| n.children.clone())
+        .unwrap_or_default();
     for k in kids {
         if let Some(n) = b.scene.node_mut(k) {
             n.transform.tx += dx;
@@ -406,6 +471,9 @@ pub(crate) fn tighten(b: &mut Builder<'_>, root: NodeId, (px, py): (f64, f64), b
         }
     }
     if let Some(n) = b.scene.node_mut(root) {
-        n.size = document_proto::Size { width: side, height: side };
+        n.size = document_proto::Size {
+            width: side,
+            height: side,
+        };
     }
 }

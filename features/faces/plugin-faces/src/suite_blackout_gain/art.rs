@@ -40,11 +40,20 @@ pub struct Put {
 impl Put {
     #[must_use]
     pub const fn new(x: f64, y: f64, s: f64, flip: bool) -> Self {
-        Self { x, y, s, flip, tall: 1.0 }
+        Self {
+            x,
+            y,
+            s,
+            flip,
+            tall: 1.0,
+        }
     }
     fn pt(&self, u: f64, v: f64) -> (f64, f64) {
         let u = if self.flip { 100.0 - u } else { u };
-        (self.x + u * self.s / 100.0, self.y + v * self.s * self.tall / 100.0)
+        (
+            self.x + u * self.s / 100.0,
+            self.y + v * self.s * self.tall / 100.0,
+        )
     }
 }
 
@@ -76,14 +85,50 @@ pub fn map_path(d: &str, p: &Put) -> String {
 }
 
 /// A filled motif path under `parent` (which spans `size`).
-pub fn fill(b: &mut Builder<'_>, parent: NodeId, name: &str, size: (f64, f64), d: &str, p: &Put, color: &str) -> NodeId {
-    b.add(parent, draw::path(name, 0.0, 0.0, size.0, size.1, map_path(d, p), draw::solid(color)))
+pub fn fill(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    size: (f64, f64),
+    d: &str,
+    p: &Put,
+    color: &str,
+) -> NodeId {
+    b.add(
+        parent,
+        draw::path(
+            name,
+            0.0,
+            0.0,
+            size.0,
+            size.1,
+            map_path(d, p),
+            draw::solid(color),
+        ),
+    )
 }
 
 /// A stroked motif path.
 #[allow(clippy::too_many_arguments)]
-pub fn stroke(b: &mut Builder<'_>, parent: NodeId, name: &str, size: (f64, f64), d: &str, p: &Put, weight: f64, color: &str) -> NodeId {
-    let mut n = draw::path(name, 0.0, 0.0, size.0, size.1, map_path(d, p), draw::solid(color));
+pub fn stroke(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    size: (f64, f64),
+    d: &str,
+    p: &Put,
+    weight: f64,
+    color: &str,
+) -> NodeId {
+    let mut n = draw::path(
+        name,
+        0.0,
+        0.0,
+        size.0,
+        size.1,
+        map_path(d, p),
+        draw::solid(color),
+    );
     n.fills = Vec::new();
     n.stroke = document_proto::Stroke {
         paints: vec![draw::solid(color)],
@@ -114,7 +159,10 @@ const HINGE: &str = "M 34 58 C 38 60 41 63 42 67 C 39 67 36 64 34 58 Z";
 /// A profile skull, grinning, facing right (or left if flipped).
 pub fn skull(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), p: &Put) {
     let k = p.s / 100.0;
-    let p = &Put { tall: p.tall * 0.9, ..*p };
+    let p = &Put {
+        tall: p.tall * 0.9,
+        ..*p
+    };
     let hair = (0.7 * k).max(0.45);
     fill(b, parent, "skull", size, CRANIUM, p, INK);
     fill(b, parent, "skull jaw", size, JAW, p, INK);
@@ -127,17 +175,36 @@ pub fn skull(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), p: &Put) {
         for j in 0..=10 {
             let a = (a0 + (a1 - a0) * f64::from(j) / 10.0).to_radians();
             let (u, v) = (50.0 + r * a.sin() * 1.02, 41.0 - r * a.cos());
-            hatch.push_str(&format!("{} {u:.1} {v:.1} ", if j == 0 { "M" } else { "L" }));
+            hatch.push_str(&format!(
+                "{} {u:.1} {v:.1} ",
+                if j == 0 { "M" } else { "L" }
+            ));
         }
     }
     for i in 0..5 {
         let v = 84.0 + f64::from(i) * 2.2;
         let fi = f64::from(i);
-        hatch.push_str(&format!("M {:.1} {v:.1} C 60 {:.1} 74 {:.1} {:.1} {:.1} ", 48.0 + fi * 2.0, v + 3.0, v + 3.0, 88.0 - fi * 2.0, v - 1.0));
+        hatch.push_str(&format!(
+            "M {:.1} {v:.1} C 60 {:.1} 74 {:.1} {:.1} {:.1} ",
+            48.0 + fi * 2.0,
+            v + 3.0,
+            v + 3.0,
+            88.0 - fi * 2.0,
+            v - 1.0
+        ));
     }
     stroke(b, parent, "skull hatching", size, &hatch, p, hair, SHADE);
     // Temple ridge, the suture, the cheek's hollow.
-    stroke(b, parent, "skull ridges", size, "M 30 20 C 46 12 66 13 82 22 M 44 8 C 46 16 42 22 46 30 C 50 36 46 42 50 46 M 40 60 C 46 56 52 56 58 60", p, hair * 1.2, SHADE);
+    stroke(
+        b,
+        parent,
+        "skull ridges",
+        size,
+        "M 30 20 C 46 12 66 13 82 22 M 44 8 C 46 16 42 22 46 30 C 50 36 46 42 50 46 M 40 60 C 46 56 52 56 58 60",
+        p,
+        hair * 1.2,
+        SHADE,
+    );
     fill(b, parent, "skull cheek", size, CHEEK, p, SHADE);
     fill(b, parent, "skull brow", size, BROW, p, SHADE);
     fill(b, parent, "skull eye", size, EYE, p, BLACK);
@@ -150,10 +217,30 @@ pub fn skull(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), p: &Put) {
     let mut lower = String::new();
     for i in 0..9 {
         let u = 51.0 + f64::from(i) * 4.6;
-        upper.push_str(&format!("M {u} 66.5 L {} 66.5 L {} 72.5 L {} 73.2 L {} 72.5 Z ", u + 3.9, u + 3.6, u + 1.95, u + 0.3));
-        lower.push_str(&format!("M {u} 80 L {} 80 L {} 75 L {} 74.4 L {} 75 Z ", u + 3.9, u + 3.6, u + 1.95, u + 0.3));
+        upper.push_str(&format!(
+            "M {u} 66.5 L {} 66.5 L {} 72.5 L {} 73.2 L {} 72.5 Z ",
+            u + 3.9,
+            u + 3.6,
+            u + 1.95,
+            u + 0.3
+        ));
+        lower.push_str(&format!(
+            "M {u} 80 L {} 80 L {} 75 L {} 74.4 L {} 75 Z ",
+            u + 3.9,
+            u + 3.6,
+            u + 1.95,
+            u + 0.3
+        ));
     }
-    fill(b, parent, "skull gap", size, "M 49 66 L 94 65 L 93 81 L 48 82 Z", p, BLACK);
+    fill(
+        b,
+        parent,
+        "skull gap",
+        size,
+        "M 49 66 L 94 65 L 93 81 L 48 82 Z",
+        p,
+        BLACK,
+    );
     fill(b, parent, "skull teeth", size, &upper, p, INK);
     fill(b, parent, "skull teeth", size, &lower, p, INK);
 }
@@ -161,19 +248,43 @@ pub fn skull(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), p: &Put) {
 /// Braided locks hanging from `top` down `len` px at `x`: a few twisting
 /// strands with the braid's cross ticks.
 #[allow(clippy::too_many_arguments)]
-pub fn locks(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (x, top): (f64, f64), len: f64, strands: usize, spread: f64, weight: f64) {
+pub fn locks(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    size: (f64, f64),
+    (x, top): (f64, f64),
+    len: f64,
+    strands: usize,
+    spread: f64,
+    weight: f64,
+) {
     for s in 0..strands {
         let x0 = x + (s as f64 - (strands as f64 - 1.0) / 2.0) * spread;
-        let pts: Vec<(f64, f64)> = (0..=12).map(|i| {
-            let t = f64::from(i) / 12.0;
-            (x0 + (t * 7.0 + s as f64).sin() * spread * 0.35, top + t * len)
-        }).collect();
+        let pts: Vec<(f64, f64)> = (0..=12)
+            .map(|i| {
+                let t = f64::from(i) / 12.0;
+                (
+                    x0 + (t * 7.0 + s as f64).sin() * spread * 0.35,
+                    top + t * len,
+                )
+            })
+            .collect();
         rk::curve(b, parent, "lock", size, &pts, weight, INK);
-        let ticks: Vec<Vec<(f64, f64)>> = pts.windows(2).map(|w| {
-            let (mx, my) = ((w[0].0 + w[1].0) / 2.0, (w[0].1 + w[1].1) / 2.0);
-            vec![(mx - spread * 0.3, my - 1.2), (mx + spread * 0.3, my + 1.2)]
-        }).collect();
-        let mut n = parts::stroke_path("braid", (0.0, 0.0, size.0, size.1), &ticks, weight * 0.7, BLACK, false);
+        let ticks: Vec<Vec<(f64, f64)>> = pts
+            .windows(2)
+            .map(|w| {
+                let (mx, my) = ((w[0].0 + w[1].0) / 2.0, (w[0].1 + w[1].1) / 2.0);
+                vec![(mx - spread * 0.3, my - 1.2), (mx + spread * 0.3, my + 1.2)]
+            })
+            .collect();
+        let mut n = parts::stroke_path(
+            "braid",
+            (0.0, 0.0, size.0, size.1),
+            &ticks,
+            weight * 0.7,
+            BLACK,
+            false,
+        );
         n.stroke.cap = document_proto::StrokeCap::None;
         b.add(parent, n);
     }
@@ -181,7 +292,14 @@ pub fn locks(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (x, top): (f
 
 /// A petal rosette (the gate's flower behind its knob): `n` white petals
 /// round (`cx`, `cy`), outlined, their hearts black.
-pub fn rosette(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (cx, cy): (f64, f64), r: f64, n: u32) {
+pub fn rosette(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    size: (f64, f64),
+    (cx, cy): (f64, f64),
+    r: f64,
+    n: u32,
+) {
     // A fan of round petals over the top half, each with a black keyhole
     // in it, and a white ring round the knob's seat.
     let step = 200.0 / f64::from(n.max(2) - 1);
@@ -192,7 +310,27 @@ pub fn rosette(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (cx, cy): 
         let k = 0.552_284_75 * r;
         format!(
             "M {:.2} {y:.2} C {:.2} {:.2} {:.2} {:.2} {x:.2} {:.2} C {:.2} {:.2} {:.2} {:.2} {:.2} {y:.2} C {:.2} {:.2} {:.2} {:.2} {x:.2} {:.2} C {:.2} {:.2} {:.2} {:.2} {:.2} {y:.2} Z ",
-            x + r, x + r, y + k, x + k, y + r, y + r, x - k, y + r, x - r, y + k, x - r, x - r, y - k, x - k, y - r, y - r, x + k, y - r, x + r, y - k, x + r
+            x + r,
+            x + r,
+            y + k,
+            x + k,
+            y + r,
+            y + r,
+            x - k,
+            y + r,
+            x - r,
+            y + k,
+            x - r,
+            x - r,
+            y - k,
+            x - k,
+            y - r,
+            y - r,
+            x + k,
+            y - r,
+            x + r,
+            y - k,
+            x + r
         )
     };
     for i in 0..n {
@@ -203,9 +341,26 @@ pub fn rosette(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (cx, cy): 
         holes.push_str(&circ(hx, hy, pr * 0.32));
     }
     white.push_str(&circ(cx, cy, r * 0.68));
-    b.add(parent, draw::path("rosette", 0.0, 0.0, size.0, size.1, white, draw::solid(INK)));
-    b.add(parent, draw::path("rosette holes", 0.0, 0.0, size.0, size.1, holes, draw::solid(BLACK)));
-    b.add(parent, draw::circle("rosette seat", cx, cy, r * 0.6, draw::solid(BLACK)));
+    b.add(
+        parent,
+        draw::path("rosette", 0.0, 0.0, size.0, size.1, white, draw::solid(INK)),
+    );
+    b.add(
+        parent,
+        draw::path(
+            "rosette holes",
+            0.0,
+            0.0,
+            size.0,
+            size.1,
+            holes,
+            draw::solid(BLACK),
+        ),
+    );
+    b.add(
+        parent,
+        draw::circle("rosette seat", cx, cy, r * 0.6, draw::solid(BLACK)),
+    );
 }
 
 /// A celtic knot tile: a four-lobed interlace woven through a ring, drawn
@@ -233,7 +388,14 @@ pub fn knot(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (cx, cy): (f6
     let k = 0.552_284_75 * rr;
     let ring = format!(
         "M 77 50 C 77 {:.2} {:.2} 23 50 23 C {:.2} 23 23 {:.2} 23 50 C 23 {:.2} {:.2} 77 50 77 C {:.2} 77 77 {:.2} 77 50 Z ",
-        50.0 - k, 50.0 + k, 50.0 - k, 50.0 - k, 50.0 + k, 50.0 - k, 50.0 + k, 50.0 + k
+        50.0 - k,
+        50.0 + k,
+        50.0 - k,
+        50.0 - k,
+        50.0 + k,
+        50.0 - k,
+        50.0 + k,
+        50.0 + k
     );
     let wide = (s * 0.075).max(1.2);
     let edge = wide + (s * 0.035).max(0.7);
@@ -241,7 +403,16 @@ pub fn knot(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (cx, cy): (f6
     for (name, d) in [("knot lobes", &lobes), ("knot ring", &ring)] {
         stroke(b, parent, &format!("{name} edge"), size, d, &p, edge, BLACK);
         stroke(b, parent, name, size, d, &p, wide, INK);
-        stroke(b, parent, &format!("{name} groove"), size, d, &p, groove, BLACK);
+        stroke(
+            b,
+            parent,
+            &format!("{name} groove"),
+            size,
+            d,
+            &p,
+            groove,
+            BLACK,
+        );
     }
     // Over-under: at alternate crossings the lobe passes over the ring —
     // a short piece of the lobe's ribbon laid back on top.
@@ -249,25 +420,63 @@ pub fn knot(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (cx, cy): (f6
         let a = 45.0 + 90.0 * f64::from(q) - 32.0;
         let (u, v) = draw::polar(50.0, 50.0, rr, a);
         let (dx, dy) = draw::polar(0.0, 0.0, 5.0, a - 40.0);
-        let piece = format!("M {:.2} {:.2} L {:.2} {:.2}", u - dx, v - dy, u + dx, v + dy);
+        let piece = format!(
+            "M {:.2} {:.2} L {:.2} {:.2}",
+            u - dx,
+            v - dy,
+            u + dx,
+            v + dy
+        );
         stroke(b, parent, "knot over edge", size, &piece, &p, edge, BLACK);
         stroke(b, parent, "knot over", size, &piece, &p, wide, INK);
-        stroke(b, parent, "knot over groove", size, &piece, &p, groove, BLACK);
+        stroke(
+            b,
+            parent,
+            "knot over groove",
+            size,
+            &piece,
+            &p,
+            groove,
+            BLACK,
+        );
     }
 }
 
 /// A scroll flourish (a curl pair) centred on (`cx`, `cy`), `w` wide.
-pub fn flourish(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (cx, cy): (f64, f64), w: f64, flip: bool) {
+pub fn flourish(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    size: (f64, f64),
+    (cx, cy): (f64, f64),
+    w: f64,
+    flip: bool,
+) {
     const CURL: &str = "M 0 50 C 20 50 30 30 45 30 C 60 30 62 48 52 52 C 44 55 40 46 46 42 M 45 30 C 60 20 80 40 100 40";
     let p = Put::new(cx - w / 2.0, cy - w / 2.0, w, flip);
-    stroke(b, parent, "flourish", size, CURL, &p, (w * 0.035).max(0.8), INK);
+    stroke(
+        b,
+        parent,
+        "flourish",
+        size,
+        CURL,
+        &p,
+        (w * 0.035).max(0.8),
+        INK,
+    );
 }
 
 // ── frame, badge, jacks ──────────────────────────────────────────────────
 
 /// The notched white border inset `m` px inside `w × h`, from `top` down to
 /// `bottom`, with the jack arrows and the supply legend over the top rule.
-pub fn border(b: &mut Builder<'_>, parent: NodeId, (w, h): (f64, f64), m: f64, (top, bottom): (f64, f64), supply: &str) {
+pub fn border(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    (w, h): (f64, f64),
+    m: f64,
+    (top, bottom): (f64, f64),
+    supply: &str,
+) {
     let n = 7.0;
     let (x0, x1, y0, y1) = (m, w - m, top, bottom);
     let d = format!(
@@ -283,28 +492,75 @@ pub fn border(b: &mut Builder<'_>, parent: NodeId, (w, h): (f64, f64), m: f64, (
     );
     let mut rim = draw::path("border", 0.0, 0.0, w, h, d, draw::solid(INK));
     rim.fills = Vec::new();
-    rim.stroke = document_proto::Stroke { paints: vec![draw::solid(INK)], weight: 1.6, join: document_proto::StrokeJoin::Miter, ..document_proto::Stroke::default() };
+    rim.stroke = document_proto::Stroke {
+        paints: vec![draw::solid(INK)],
+        weight: 1.6,
+        join: document_proto::StrokeJoin::Miter,
+        ..document_proto::Stroke::default()
+    };
     b.add(parent, rim);
     // A gap in the top rule for the arrows and the supply legend.
-    b.add(parent, draw::rect("border gap", w / 2.0 - 30.0, y0 - 2.0, 60.0, 4.0, draw::solid(BLACK)));
+    b.add(
+        parent,
+        draw::rect(
+            "border gap",
+            w / 2.0 - 30.0,
+            y0 - 2.0,
+            60.0,
+            4.0,
+            draw::solid(BLACK),
+        ),
+    );
     for (x, up) in [(w * 0.3, false), (w * 0.7, true)] {
-        let tri = if up { draw::polygon(&[(x - 3.2, y0 + 1.5), (x + 3.2, y0 + 1.5), (x, y0 - 4.0)]) } else { draw::polygon(&[(x - 3.2, y0 - 4.0), (x + 3.2, y0 - 4.0), (x, y0 + 1.5)]) };
-        b.add(parent, draw::path("jack arrow", 0.0, 0.0, w, h, tri, draw::solid(INK)));
+        let tri = if up {
+            draw::polygon(&[(x - 3.2, y0 + 1.5), (x + 3.2, y0 + 1.5), (x, y0 - 4.0)])
+        } else {
+            draw::polygon(&[(x - 3.2, y0 - 4.0), (x + 3.2, y0 - 4.0), (x, y0 + 1.5)])
+        };
+        b.add(
+            parent,
+            draw::path("jack arrow", 0.0, 0.0, w, h, tri, draw::solid(INK)),
+        );
     }
-    rk::silk(b, parent, supply, w / 2.0, y0 - 1.0, Ink::new(4.4, INK).weight(700.0).track(0.02));
+    rk::silk(
+        b,
+        parent,
+        supply,
+        w / 2.0,
+        y0 - 1.0,
+        Ink::new(4.4, INK).weight(700.0).track(0.02),
+    );
     // The barrel-jack glyph under it.
     let gy = y0 + 5.0;
-    b.add(parent, draw::stroked(draw::circle("dc glyph", w / 2.0, gy, 1.8, draw::solid(BLACK)), INK, 0.7));
+    b.add(
+        parent,
+        draw::stroked(
+            draw::circle("dc glyph", w / 2.0, gy, 1.8, draw::solid(BLACK)),
+            INK,
+            0.7,
+        ),
+    );
     parts::rule(b, parent, w / 2.0 - 7.0, w / 2.0 - 2.0, gy, 0.7, INK);
     parts::rule(b, parent, w / 2.0 + 2.0, w / 2.0 + 7.0, gy, 0.7, INK);
 }
 
 /// A hex bolt head, printed (the badge's ends).
 pub fn bolt(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (cx, cy): (f64, f64), r: f64) {
-    let mut hexn = draw::path("bolt", 0.0, 0.0, size.0, size.1, draw::regular(cx, cy, r, 6, 0.0), draw::solid(BLACK));
+    let mut hexn = draw::path(
+        "bolt",
+        0.0,
+        0.0,
+        size.0,
+        size.1,
+        draw::regular(cx, cy, r, 6, 0.0),
+        draw::solid(BLACK),
+    );
     hexn = draw::stroked(hexn, INK, (r * 0.22).max(0.6));
     b.add(parent, hexn);
-    b.add(parent, draw::circle("bolt dot", cx, cy, r * 0.38, draw::solid(INK)));
+    b.add(
+        parent,
+        draw::circle("bolt dot", cx, cy, r * 0.38, draw::solid(INK)),
+    );
 }
 
 /// The maker's badge centred on (`cx`, `cy`), `w` wide: a stretched
@@ -325,32 +581,87 @@ pub fn badge(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), (cx, cy): (f
         y1 - c,
         y0 + c
     );
-    let plate = draw::stroked(draw::path("badge", 0.0, 0.0, size.0, size.1, d, draw::solid(BLACK)), INK, (h * 0.07).max(0.9));
+    let plate = draw::stroked(
+        draw::path("badge", 0.0, 0.0, size.0, size.1, d, draw::solid(BLACK)),
+        INK,
+        (h * 0.07).max(0.9),
+    );
     b.add(parent, plate);
     let br = h * 0.24;
     bolt(b, parent, size, (x0 + c + br * 0.4, cy), br);
     bolt(b, parent, size, (x1 - c - br * 0.4, cy), br);
-    let (_, s) = rk::letter_fit(b, parent, "VANTOM", (cx, cy - h * 0.1), w * 0.6, Letter::new(10.0, 560.0, INK).stretch(1.25).track(0.08));
-    rk::letter_fit(b, parent, "AMPLIFICATION", (cx, cy + s * 0.62), w * 0.44, Letter::new(3.0, 500.0, INK).track(0.5));
+    let (_, s) = rk::letter_fit(
+        b,
+        parent,
+        "VANTOM",
+        (cx, cy - h * 0.1),
+        w * 0.6,
+        Letter::new(10.0, 560.0, INK).stretch(1.25).track(0.08),
+    );
+    rk::letter_fit(
+        b,
+        parent,
+        "AMPLIFICATION",
+        (cx, cy + s * 0.62),
+        w * 0.44,
+        Letter::new(3.0, 500.0, INK).track(0.5),
+    );
 }
 
 /// A white printed ring round a stomp switch, with a flourish either side.
 pub fn switch_ring(b: &mut Builder<'_>, parent: NodeId, (cx, cy): (f64, f64), r: f64) {
-    b.add(parent, draw::stroked(draw::circle("switch ring", cx, cy, r, draw::solid("#00000000")), INK, 2.2));
+    b.add(
+        parent,
+        draw::stroked(
+            draw::circle("switch ring", cx, cy, r, draw::solid("#00000000")),
+            INK,
+            2.2,
+        ),
+    );
 }
 
 /// The plain stomp switch, its button centred on (`cx`, `cy`), the LED
 /// (`dx`, `dy`) from it.
 #[allow(clippy::too_many_arguments)]
-pub fn stomp(b: &mut Builder<'_>, parent: NodeId, name: &str, addr: &str, (cx, cy): (f64, f64), d: f64, led: &str, (dx, dy): (f64, f64), led_size: f64, momentary: bool) -> NodeId {
-    let mut opts = vec![format!("color={led}"), format!("led_dx={dx}"), format!("led_dy={dy}"), format!("led_size={led_size}")];
+pub fn stomp(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    addr: &str,
+    (cx, cy): (f64, f64),
+    d: f64,
+    led: &str,
+    (dx, dy): (f64, f64),
+    led_size: f64,
+    momentary: bool,
+) -> NodeId {
+    let mut opts = vec![
+        format!("color={led}"),
+        format!("led_dx={dx}"),
+        format!("led_dy={dy}"),
+        format!("led_size={led_size}"),
+    ];
     if momentary {
         opts.push("momentary".into());
     }
-    let p = Place { options: Some(opts), ..Place::new(name).size(d).bind(rk::bind(addr)).touch(TOUCH_MIN) };
-    let root = surface_kit::place(b, parent, "switch.stomp_box", &p).unwrap_or_else(|e| panic!("{e}"));
+    let p = Place {
+        options: Some(opts),
+        ..Place::new(name)
+            .size(d)
+            .bind(rk::bind(addr))
+            .touch(TOUCH_MIN)
+    };
+    let root =
+        surface_kit::place(b, parent, "switch.stomp_box", &p).unwrap_or_else(|e| panic!("{e}"));
     let at = b.scene.node(root).and_then(|n| {
-        n.children.iter().find_map(|c| b.scene.node(*c).filter(|k| k.name == "washer").map(|k| (k.transform.tx + k.size.width / 2.0, k.transform.ty + k.size.height / 2.0)))
+        n.children.iter().find_map(|c| {
+            b.scene.node(*c).filter(|k| k.name == "washer").map(|k| {
+                (
+                    k.transform.tx + k.size.width / 2.0,
+                    k.transform.ty + k.size.height / 2.0,
+                )
+            })
+        })
     });
     let (ax, ay) = at.unwrap_or((0.0, 0.0));
     parts::move_to(b, root, cx - ax, cy - ay);
@@ -370,8 +681,17 @@ pub fn title(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f64, f64),
 }
 
 /// [`title`] with its own size cap.
-pub fn title_max(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f64, f64), w: f64, max: f64) -> f64 {
-    let l = Letter::new(20.0, 400.0, INK).family(family::PIRATA_ONE).track(0.04);
+pub fn title_max(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    (cx, cy): (f64, f64),
+    w: f64,
+    max: f64,
+) -> f64 {
+    let l = Letter::new(20.0, 400.0, INK)
+        .family(family::PIRATA_ONE)
+        .track(0.04);
     let probe = rk::lettering::set_width(s, &l.size(100.0));
     let size = (100.0 * w / probe).min(max);
     rk::letter(b, parent, s, (cx, cy), l.size(size));
@@ -380,12 +700,24 @@ pub fn title_max(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f64, f
 
 /// Model-name lettering cut hollow: the letters' outlines only, as the
 /// gate prints its name.
-pub fn hollow_title(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f64, f64), (w, h): (f64, f64), weight: f64) {
+pub fn hollow_title(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    (cx, cy): (f64, f64),
+    (w, h): (f64, f64),
+    weight: f64,
+) {
     use crate::rigkit::lettering::outline;
-    let l = Letter::new(100.0, 400.0, INK).family(family::PIRATA_ONE).track(0.08);
+    let l = Letter::new(100.0, 400.0, INK)
+        .family(family::PIRATA_ONE)
+        .track(0.08);
     // Cut at 100 px, then scale the outline's own box to `w` × `h`.
     let (d, _) = outline(s, &l);
-    let nums: Vec<f64> = d.split_whitespace().filter_map(|t| t.parse::<f64>().ok()).collect();
+    let nums: Vec<f64> = d
+        .split_whitespace()
+        .filter_map(|t| t.parse::<f64>().ok())
+        .collect();
     let (mut bx0, mut by0, mut bx1, mut by1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
     for xy in nums.chunks(2) {
         if let [x, y] = xy {
@@ -398,9 +730,22 @@ pub fn hollow_title(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f64
     let (sx, sy) = (w / (bx1 - bx0).max(1.0), h / (by1 - by0).max(1.0));
     let (x0, y0) = (cx - w / 2.0, cy - h / 2.0);
     let mapped = map_xy(&d, |x, y| (x0 + (x - bx0) * sx, y0 + (y - by0) * sy));
-    let mut n = draw::path(&format!("lettering {s}"), 0.0, 0.0, cx + w / 2.0, cy + h / 2.0, mapped, draw::solid(INK));
+    let mut n = draw::path(
+        &format!("lettering {s}"),
+        0.0,
+        0.0,
+        cx + w / 2.0,
+        cy + h / 2.0,
+        mapped,
+        draw::solid(INK),
+    );
     n.fills = Vec::new();
-    n.stroke = document_proto::Stroke { paints: vec![draw::solid(INK)], weight, join: document_proto::StrokeJoin::Miter, ..document_proto::Stroke::default() };
+    n.stroke = document_proto::Stroke {
+        paints: vec![draw::solid(INK)],
+        weight,
+        join: document_proto::StrokeJoin::Miter,
+        ..document_proto::Stroke::default()
+    };
     b.add(parent, n);
 }
 
@@ -434,12 +779,24 @@ pub fn map_xy(d: &str, f: impl Fn(f64, f64) -> (f64, f64)) -> String {
 /// A control's printed legend cut as display lettering, centred on panel
 /// (`cx`, `cy`), made the control's `Label` (so the word on the panel still
 /// names the control).
-pub fn label_letter(b: &mut Builder<'_>, control: NodeId, s: &str, (cx, cy): (f64, f64), l: Letter<'_>) -> NodeId {
-    let (tx, ty) = b.scene.node(control).map_or((0.0, 0.0), |n| (n.transform.tx, n.transform.ty));
+pub fn label_letter(
+    b: &mut Builder<'_>,
+    control: NodeId,
+    s: &str,
+    (cx, cy): (f64, f64),
+    l: Letter<'_>,
+) -> NodeId {
+    let (tx, ty) = b
+        .scene
+        .node(control)
+        .map_or((0.0, 0.0), |n| (n.transform.tx, n.transform.ty));
     let id = rk::letter(b, control, s, (cx - tx, cy - ty), l);
     if let Some(c) = b.controls.get_mut(&control) {
         c.slots.retain(|s| s.role != surface_proto::SlotRole::Label);
-        c.slots.push(surface_proto::Slot { role: surface_proto::SlotRole::Label, node: id.0 });
+        c.slots.push(surface_proto::Slot {
+            role: surface_proto::SlotRole::Label,
+            node: id.0,
+        });
     }
     id
 }
@@ -447,7 +804,9 @@ pub fn label_letter(b: &mut Builder<'_>, control: NodeId, s: &str, (cx, cy): (f6
 /// The family's knob legend: tall condensed heavy capitals.
 #[must_use]
 pub fn knob_letter(size: f64) -> Letter<'static> {
-    Letter::new(size * 1.12, 600.0, INK).family(family::OSWALD).track(0.03)
+    Letter::new(size * 1.12, 600.0, INK)
+        .family(family::OSWALD)
+        .track(0.03)
 }
 
 /// Black leather tolex over `(x, y, w, h)` (rounded `radius`): a near-black
@@ -455,14 +814,26 @@ pub fn knob_letter(size: f64) -> Letter<'static> {
 /// line — with the lighting shader on the grain (GPU renderers raise it
 /// into relief; without effects it still reads as leather). Returns the
 /// covering frame (clipped), a parent for anything on the covering.
-pub fn tolex(b: &mut Builder<'_>, parent: NodeId, name: &str, (x, y, w, h): (f64, f64, f64, f64), radius: f64, seed: u64) -> NodeId {
+pub fn tolex(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    (x, y, w, h): (f64, f64, f64, f64),
+    radius: f64,
+    seed: u64,
+) -> NodeId {
     let mut n = draw::frame(name, x, y, w, h);
-    n.fills = vec![draw::linear(180.0, &[(0.0, "#232323"), (0.5, "#1b1b1b"), (1.0, "#141414")])];
+    n.fills = vec![draw::linear(
+        180.0,
+        &[(0.0, "#232323"), (0.5, "#1b1b1b"), (1.0, "#141414")],
+    )];
     n.clips_content = true;
     let root = b.add(parent, draw::rounded(n, radius));
     let mut s = seed | 1;
     let mut rnd = move || {
-        s = s.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        s = s
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         (s >> 33) as f64 / f64::from(u32::MAX >> 1)
     };
     for (color, weight, per) in [("#080808", 0.6, 34.0), ("#383838", 0.5, 60.0)] {
@@ -474,29 +845,66 @@ pub fn tolex(b: &mut Builder<'_>, parent: NodeId, name: &str, (x, y, w, h): (f64
             let len = 1.4 + rnd() * 2.6;
             let bend = (rnd() - 0.5) * 2.4;
             let (qx, qy) = (px + a.cos() * len, py + a.sin() * len);
-            let (mx, my) = ((px + qx) / 2.0 - a.sin() * bend, (py + qy) / 2.0 + a.cos() * bend);
-            d.push_str(&format!("M{px:.1} {py:.1} Q{mx:.1} {my:.1} {qx:.1} {qy:.1} "));
+            let (mx, my) = (
+                (px + qx) / 2.0 - a.sin() * bend,
+                (py + qy) / 2.0 + a.cos() * bend,
+            );
+            d.push_str(&format!(
+                "M{px:.1} {py:.1} Q{mx:.1} {my:.1} {qx:.1} {qy:.1} "
+            ));
         }
         let mut g = draw::path("grain", 0.0, 0.0, w, h, d, draw::solid(color));
         g.fills = Vec::new();
-        g.stroke = document_proto::Stroke { paints: vec![draw::solid(color)], weight, cap: document_proto::StrokeCap::Round, ..document_proto::Stroke::default() };
+        g.stroke = document_proto::Stroke {
+            paints: vec![draw::solid(color)],
+            weight,
+            cap: document_proto::StrokeCap::Round,
+            ..document_proto::Stroke::default()
+        };
         let g = b.add(root, g);
         parts::shader(b, g, "lighting", &[("strength", 0.6), ("scale", 1.5)]);
     }
     // The room's light across it.
-    b.add(root, draw::rect("sheen", 0.0, 0.0, w, h, draw::linear(165.0, &[(0.0, "#ffffff10"), (0.4, "#ffffff00"), (1.0, "#00000030")])));
+    b.add(
+        root,
+        draw::rect(
+            "sheen",
+            0.0,
+            0.0,
+            w,
+            h,
+            draw::linear(
+                165.0,
+                &[(0.0, "#ffffff10"), (0.4, "#ffffff00"), (1.0, "#00000030")],
+            ),
+        ),
+    );
     root
 }
 
 /// A piping line (the welt) inset along a rounded rectangle.
-pub fn piping(b: &mut Builder<'_>, parent: NodeId, (x, y, w, h): (f64, f64, f64, f64), radius: f64) {
+pub fn piping(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    (x, y, w, h): (f64, f64, f64, f64),
+    radius: f64,
+) {
     let n = draw::rounded(draw::frame("piping", x, y, w, h), radius);
     let n = draw::stroked(n, "#0a0a0a", 2.0);
-    b.add(parent, draw::with_effects(n, vec![draw::drop_shadow("#ffffff14", 0.0, 1.0, 0.0)]));
+    b.add(
+        parent,
+        draw::with_effects(n, vec![draw::drop_shadow("#ffffff14", 0.0, 1.0, 0.0)]),
+    );
 }
 
 /// Left-aligned silkscreen helper re-exported for the units.
-pub fn silk_left(b: &mut Builder<'_>, parent: NodeId, s: &str, x: f64, cy: f64, ink: Ink<'_>) -> NodeId {
+pub fn silk_left(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    x: f64,
+    cy: f64,
+    ink: Ink<'_>,
+) -> NodeId {
     parts::silk_left(b, parent, s, x, cy, ink)
 }
-

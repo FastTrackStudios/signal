@@ -1,8 +1,10 @@
 //! Kit discovery, capture, analysis, and workspace assembly.
 use crate::host::audio_read::edit_item;
-use crate::host::{WorkspaceError, attach_timeline, blend, drum_host, read_take_mono, track_timeline};
-use daw::service::{ItemRef, Items, ProjectContext, Tracks};
+use crate::host::{
+    WorkspaceError, attach_timeline, blend, drum_host, read_take_mono, track_timeline,
+};
 use crate::{Editor, Mode, Viewport};
+use daw::service::{ItemRef, Items, ProjectContext, Tracks};
 /// A folded drum workspace: the view, the write half, and a label.
 pub struct DrumWorkspace<D: crate::audio::daw_bound::DrumDaw> {
     pub editor: Editor,
@@ -252,10 +254,8 @@ pub fn drum_workspace<D: crate::audio::daw_bound::DrumDaw>(
 
     let sample_rate = rows.first().map_or(0.0f64, |(_, _, rate, _)| *rate);
 
-    let mut signals: std::collections::HashMap<
-        crate::kit::LaneRole,
-        Vec<Vec<f64>>,
-    > = std::collections::HashMap::new();
+    let mut signals: std::collections::HashMap<crate::kit::LaneRole, Vec<Vec<f64>>> =
+        std::collections::HashMap::new();
     for role in crate::kit::LaneRole::ALL {
         let idx: Vec<usize> = rows
             .iter()

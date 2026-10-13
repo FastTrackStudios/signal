@@ -31,7 +31,9 @@ pub fn add(b: &mut Builder<'_>, id: NodeId, m: Motion) {
 /// set the travel with `.range(from, to)`.
 #[must_use]
 pub fn spring_follow(addr: &str) -> Motion {
-    Motion::new(Target::Rotate).input(format!("norm({addr})")).dynamics(Dynamics::spring(260.0, 20.0))
+    Motion::new(Target::Rotate)
+        .input(format!("norm({addr})"))
+        .dynamics(Dynamics::spring(260.0, 20.0))
 }
 
 /// Physics on a part a control already moves (a needle, a treadle, a
@@ -40,7 +42,11 @@ pub fn spring_follow(addr: &str) -> Motion {
 /// control's travel for a position of 1 (a 300° knob: `(0, 300)`).
 #[must_use]
 pub fn spring_lag(input: &str, target: Target, travel: f64) -> Motion {
-    Motion::new(target).input(input).dynamics(Dynamics::spring(220.0, 14.0)).range(0.0, travel).lag()
+    Motion::new(target)
+        .input(input)
+        .dynamics(Dynamics::spring(220.0, 14.0))
+        .range(0.0, travel)
+        .lag()
 }
 
 /// A struck resonator: at rest until the level feed rises, then it rings
@@ -63,21 +69,33 @@ pub fn ring_on(level_feed: &str, freq: impl Into<Num>, decay: impl Into<Num>) ->
 /// `"0.3 + 1.2*norm(tape/speed)"`), about the node's centre.
 #[must_use]
 pub fn spin(turns_per_second: &str) -> Motion {
-    Motion::new(Target::Rotate).input(turns_per_second).dynamics(Dynamics::Spin).range(0.0, 360.0)
+    Motion::new(Target::Rotate)
+        .input(turns_per_second)
+        .dynamics(Dynamics::Spin)
+        .range(0.0, 360.0)
 }
 
 /// A filament's flicker: the node's light (its emission) wavers by
 /// `amount` (0.1 = ±10 %) about its level, eight times a second.
 #[must_use]
 pub fn flicker(amount: impl Into<Num>) -> Motion {
-    Motion::new(Target::Emission).dynamics(Dynamics::Noise { rate: Num::Value(8.0), amount: amount.into() })
+    Motion::new(Target::Emission).dynamics(Dynamics::Noise {
+        rate: Num::Value(8.0),
+        amount: amount.into(),
+    })
 }
 
 /// A lamp pulsing with an LFO at `rate` Hz (a number or `"param(x/rate)"`),
 /// its opacity between `low` and 1.
 #[must_use]
 pub fn pulse(rate: impl Into<Num>, low: f64) -> Motion {
-    Motion::new(Target::Opacity).dynamics(Dynamics::Lfo { rate: rate.into(), shape: Wave::Sine, phase: 0.0 }).range(low, 1.0)
+    Motion::new(Target::Opacity)
+        .dynamics(Dynamics::Lfo {
+            rate: rate.into(),
+            shape: Wave::Sine,
+            phase: 0.0,
+        })
+        .range(low, 1.0)
 }
 
 #[cfg(test)]

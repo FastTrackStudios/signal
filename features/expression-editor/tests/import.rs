@@ -5,11 +5,11 @@
 //! space, and a bend becoming a per-note curve in semitones.
 
 use expression_editor::doc::Dimension;
-use expression_editor::rows::{RowSpace, StringTuning};
 use expression_editor::guitarpro::parse::Format;
 use expression_editor::guitarpro::{
     BendFidelity, BendPoint, GpNote, bend_curve, row_of, to_document,
 };
+use expression_editor::rows::{RowSpace, StringTuning};
 
 fn standard() -> StringTuning {
     StringTuning::guitar_standard()

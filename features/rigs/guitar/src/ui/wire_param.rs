@@ -36,11 +36,11 @@
 use crate::ui::param_writer::WriteParam;
 use std::sync::Arc;
 
+use crate::proto::rig::RigClient;
+use crate::proto::{BlockParam, LiveBlock};
 use dioxus::prelude::*;
 use dioxus::signals::SyncSignal;
 use fts_audio_ui::prelude::ParamHandle;
-use crate::proto::rig::RigClient;
-use crate::proto::{BlockParam, LiveBlock};
 
 /// One parameter write, queued for the wire: `(block id, param, real value)`.
 type Edit = (String, String, f32);

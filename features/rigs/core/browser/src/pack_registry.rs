@@ -12,8 +12,8 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
-use signal_proto::tagging::{StructuredTag, TagSet};
 use sampler::{LibrarySpec, read_pack_header};
+use signal_proto::tagging::{StructuredTag, TagSet};
 
 use crate::types::{ColumnItem, DetailData};
 

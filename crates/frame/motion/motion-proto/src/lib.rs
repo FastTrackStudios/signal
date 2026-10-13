@@ -92,7 +92,16 @@ impl Motion {
     /// A motion on `target` with no input, instant dynamics, output 0..1.
     #[must_use]
     pub fn new(target: Target) -> Self {
-        Self { name: None, target, input: String::new(), dynamics: Dynamics::Follow, from: 0.0, to: 1.0, lag: false, pivot: None }
+        Self {
+            name: None,
+            target,
+            input: String::new(),
+            dynamics: Dynamics::Follow,
+            from: 0.0,
+            to: 1.0,
+            lag: false,
+            pivot: None,
+        }
     }
 
     /// The same motion on another target.
@@ -196,16 +205,24 @@ impl Motion {
                 }
                 for c in colors {
                     if parse_hex(c).is_none() {
-                        out.push(format!("target: `{c}` is not a colour (#rrggbb or #rrggbbaa)"));
+                        out.push(format!(
+                            "target: `{c}` is not a colour (#rrggbb or #rrggbbaa)"
+                        ));
                     }
                 }
             }
-            Target::Morph { shapes } if shapes.len() < 2 => out.push("target: a morph needs at least two shapes".into()),
+            Target::Morph { shapes } if shapes.len() < 2 => {
+                out.push("target: a morph needs at least two shapes".into())
+            }
             _ => {}
         }
         if let Dynamics::Keyframes { times, values, .. } = &self.dynamics {
             if times.is_empty() || times.len() != values.len() {
-                out.push(format!("dynamics.keyframes: {} times but {} values", times.len(), values.len()));
+                out.push(format!(
+                    "dynamics.keyframes: {} times but {} values",
+                    times.len(),
+                    values.len()
+                ));
             }
             if times.windows(2).any(|w| w[1] < w[0]) {
                 out.push("dynamics.keyframes: times must not decrease".into());
@@ -433,15 +450,33 @@ impl Dynamics {
     /// A spring with the default stiffness and mass and `damping`.
     #[must_use]
     pub fn spring(stiffness: impl Into<Num>, damping: impl Into<Num>) -> Self {
-        Self::Spring { stiffness: stiffness.into(), damping: damping.into(), mass: Num::one() }
+        Self::Spring {
+            stiffness: stiffness.into(),
+            damping: damping.into(),
+            mass: Num::one(),
+        }
     }
 
     /// The bound numbers, by field name.
     #[must_use]
     pub fn nums(&self) -> Vec<(&'static str, &Num)> {
         match self {
-            Self::Spring { stiffness, damping, mass } => vec![("stiffness", stiffness), ("damping", damping), ("mass", mass)],
-            Self::Oscillator { freq, decay, damping, gain, .. } => {
+            Self::Spring {
+                stiffness,
+                damping,
+                mass,
+            } => vec![
+                ("stiffness", stiffness),
+                ("damping", damping),
+                ("mass", mass),
+            ],
+            Self::Oscillator {
+                freq,
+                decay,
+                damping,
+                gain,
+                ..
+            } => {
                 let mut v = vec![("freq", freq), ("gain", gain)];
                 if let Some(d) = decay {
                     v.push(("decay", d));
@@ -502,10 +537,18 @@ pub enum Easing {
 #[must_use]
 pub fn parse_hex(s: &str) -> Option<[f64; 4]> {
     let h = s.strip_prefix('#')?;
-    let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok().map(|b| f64::from(b) / 255.0);
+    let byte = |i: usize| {
+        u8::from_str_radix(h.get(i..i + 2)?, 16)
+            .ok()
+            .map(|b| f64::from(b) / 255.0)
+    };
     match h.len() {
         3 => {
-            let n = |i: usize| u8::from_str_radix(h.get(i..=i)?, 16).ok().map(|b| f64::from(b * 17) / 255.0);
+            let n = |i: usize| {
+                u8::from_str_radix(h.get(i..=i)?, 16)
+                    .ok()
+                    .map(|b| f64::from(b * 17) / 255.0)
+            };
             Some([n(0)?, n(1)?, n(2)?, 1.0])
         }
         6 => Some([byte(0)?, byte(2)?, byte(4)?, 1.0]),
@@ -532,37 +575,58 @@ mod tests {
         );
         assert_eq!(serde_json::from_str::<Motion>(&j).unwrap(), m);
         // Hand-written: defaults fill in.
-        let m: Motion = serde_json::from_str(r#"{"target":"opacity","dynamics":{"lfo":{"rate":2}}}"#).unwrap();
-        assert_eq!(m.dynamics, Dynamics::Lfo { rate: Num::Value(2.0), shape: Wave::Sine, phase: 0.0 });
+        let m: Motion =
+            serde_json::from_str(r#"{"target":"opacity","dynamics":{"lfo":{"rate":2}}}"#).unwrap();
+        assert_eq!(
+            m.dynamics,
+            Dynamics::Lfo {
+                rate: Num::Value(2.0),
+                shape: Wave::Sine,
+                phase: 0.0
+            }
+        );
         assert_eq!(m.input_expr(), "1");
         assert_eq!((m.from, m.to), (0.0, 1.0));
         let m: Motion = serde_json::from_str(r#"{"target":"x","dynamics":"spin"}"#).unwrap();
         assert_eq!(m.dynamics, Dynamics::Spin);
         let m: Motion = serde_json::from_str(r#"{"target":{"shape":{"provider":"reverb.room","part":"rays","inputs":{"size":"norm(room/size)","n":3}}}}"#).unwrap();
-        assert!(matches!(&m.target, Target::Shape { inputs, .. } if inputs["n"] == Num::Value(3.0)));
+        assert!(
+            matches!(&m.target, Target::Shape { inputs, .. } if inputs["n"] == Num::Value(3.0))
+        );
     }
 
     #[test]
     fn problems_name_the_bad_expression() {
-        let m = Motion::new(Target::Opacity).input("norm(a/b").dynamics(Dynamics::Oscillator {
-            freq: "2 +".into(),
-            decay: None,
-            damping: None,
-            excite: "level(x/in)".into(),
-            gain: Num::one(),
-        });
+        let m = Motion::new(Target::Opacity)
+            .input("norm(a/b")
+            .dynamics(Dynamics::Oscillator {
+                freq: "2 +".into(),
+                decay: None,
+                damping: None,
+                excite: "level(x/in)".into(),
+                gain: Num::one(),
+            });
         let p = m.problems();
         assert_eq!(p.len(), 2, "{p:?}");
         assert!(p[0].starts_with("input"), "{p:?}");
         assert!(p[1].starts_with("dynamics.freq"), "{p:?}");
-        assert!(Motion::new(Target::Fill { colors: vec!["#zz0000".into()] }).problems()[0].contains("not a colour"));
+        assert!(
+            Motion::new(Target::Fill {
+                colors: vec!["#zz0000".into()]
+            })
+            .problems()[0]
+                .contains("not a colour")
+        );
     }
 
     #[test]
     fn hex() {
         assert_eq!(parse_hex("#ff0000"), Some([1.0, 0.0, 0.0, 1.0]));
         assert_eq!(parse_hex("#fff"), Some([1.0, 1.0, 1.0, 1.0]));
-        assert_eq!(parse_hex("#00000080").map(|c| (c[3] * 255.0).round()), Some(128.0));
+        assert_eq!(
+            parse_hex("#00000080").map(|c| (c[3] * 255.0).round()),
+            Some(128.0)
+        );
         assert_eq!(parse_hex("red"), None);
     }
 }

@@ -31,7 +31,7 @@
 pub mod output;
 pub mod usb;
 
-pub use output::{output_ports, Encoding, MidiOut};
+pub use output::{Encoding, MidiOut, output_ports};
 pub use usb::KontrolUsb;
 
 /// LED brightness. The palette byte is `hue_base + intensity`.

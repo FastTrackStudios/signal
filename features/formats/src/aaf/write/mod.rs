@@ -618,12 +618,14 @@ fn build_pcm_descriptor(builder: &mut CfbBuilder, desc_dir: &Path, entry: &Sourc
     let has_locator = entry.source_file.is_some();
     let locator_count = if has_locator { 1u32 } else { 0u32 };
 
-    let info = entry.audio_info.unwrap_or(crate::aaf::types::AudioEssenceInfo {
-        sample_rate: entry.edit_rate.numerator as u32,
-        channels: 1,
-        quantization_bits: 24,
-        length_samples: entry.total_length,
-    });
+    let info = entry
+        .audio_info
+        .unwrap_or(crate::aaf::types::AudioEssenceInfo {
+            sample_rate: entry.edit_rate.numerator as u32,
+            channels: 1,
+            quantization_bits: 24,
+            length_samples: entry.total_length,
+        });
 
     let sample_rate = EditRate {
         numerator: info.sample_rate as i32,

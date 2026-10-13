@@ -17,6 +17,7 @@
 
 use std::collections::HashMap;
 
+use crate::art::geometry::tcp::ROW_W;
 use crate::components::tcp::{EnvcpRow, TrackRow};
 use crate::components::toolbars::{
     KeybindProfile, ModeDropdown, ModeOption, ProfilePicker, RightToolbar, ToolbarAction,
@@ -25,7 +26,6 @@ use crate::components::toolbars::{
 use crate::controls::{use_daw_tracks, use_track_store};
 use crate::prelude::*;
 use daw_proto::{Item, Track};
-use crate::art::geometry::tcp::ROW_W;
 use input::InputCommand;
 use input::dioxus::use_input_processor;
 
@@ -203,7 +203,8 @@ pub const ENVELOPE_LANE_MIN_H: f32 = 27.0;
 /// the working directory at launch is whatever the host app happened to
 /// start in, not this crate's source location.
 fn profiles_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../adapters/reaper/reaper-input/config/config")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../adapters/reaper/reaper-input/config/config")
 }
 
 /// Load one profile's keymap by slug — falls back to an empty (no

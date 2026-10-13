@@ -33,8 +33,8 @@ pub use node::{
 };
 pub use paint::*;
 pub use projection::{
-    classify_node_type, get_auto_layout_projection, project_node, RenderNodeClass,
-    RenderNodeProjection, RenderTextProjection,
+    RenderNodeClass, RenderNodeProjection, RenderTextProjection, classify_node_type,
+    get_auto_layout_projection, project_node,
 };
 pub use typography::*;
 pub use vector::*;

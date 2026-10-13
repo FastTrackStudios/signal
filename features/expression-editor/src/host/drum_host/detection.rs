@@ -98,9 +98,7 @@ impl<D: DrumDaw> DrumHost<D> {
     ) -> Vec<(f64, LaneRole)> {
         let mut hits: Vec<(f64, LaneRole)> = Vec::new();
         for (role, signal) in self.role_sums() {
-            for t in
-                crate::audio::hybrid::detect(signal.as_slice(), self.sample_rate, cfg)
-            {
+            for t in crate::audio::hybrid::detect(signal.as_slice(), self.sample_rate, cfg) {
                 hits.push((t.at, role));
             }
         }
@@ -172,10 +170,7 @@ impl<D: DrumDaw> DrumHost<D> {
     /// without a bar grid, and guessing one from a single bpm would put
     /// the spans in the wrong place on any song that changes meter.
     // r[impl drums.fills.detect]
-    pub fn fills(
-        &self,
-        cfg: &crate::fills::FillConfig,
-    ) -> Vec<crate::fills::Fill> {
+    pub fn fills(&self, cfg: &crate::fills::FillConfig) -> Vec<crate::fills::Fill> {
         let bars = crate::host::bar_grid(&self.daw, &self.ctx, self.take_secs);
         if bars.len() < 2 {
             return Vec::new();

@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use dynamic_template::apply::chunk::RChunkTarget;
 use dynamic_template::apply::{organize, UNSORTED_FOLDER};
+use dynamic_template::proto::{NodeKind, TemplateNode};
 use dynamic_template::{
     bus_nodes, default_config, golden_template, ItemMetadata, OrganizeIntoTracks,
 };
-use dynamic_template::proto::{NodeKind, TemplateNode};
 use monarchy::Parser;
 use std::env;
 

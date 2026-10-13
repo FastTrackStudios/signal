@@ -14,9 +14,7 @@
 
 use keyflow_orchestra::mirror::stage1_annotations as mirror_annotations;
 use keyflow_orchestra::{Config, MidiNote, detect_profile, process_part};
-use sampler::document::{
-    DocCc, DocNote, TrackDocument, stage1_annotations as doc_annotations,
-};
+use sampler::document::{DocCc, DocNote, TrackDocument, stage1_annotations as doc_annotations};
 
 fn corpus_files() -> Vec<std::path::PathBuf> {
     let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

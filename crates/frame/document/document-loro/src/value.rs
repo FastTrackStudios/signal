@@ -35,7 +35,9 @@ pub fn to_loro(value: &Value) -> LoroValue {
         }
         Value::String(s) => LoroValue::String(s.as_str().into()),
         Value::Array(items) => LoroValue::List(items.iter().map(to_loro).collect()),
-        Value::Object(map) => LoroValue::Map(map.iter().map(|(k, v)| (k.clone(), to_loro(v))).collect()),
+        Value::Object(map) => {
+            LoroValue::Map(map.iter().map(|(k, v)| (k.clone(), to_loro(v))).collect())
+        }
     }
 }
 
@@ -49,11 +51,15 @@ pub fn from_loro(value: &LoroValue) -> Value {
         LoroValue::Double(d) => Number::from_f64(*d).map_or(Value::Null, Value::Number),
         LoroValue::I64(i) => Value::Number((*i).into()),
         LoroValue::String(s) => Value::String(s.to_string()),
-        LoroValue::Binary(b) => Value::Array(b.iter().map(|x| Value::Number((*x).into())).collect()),
-        LoroValue::List(items) => Value::Array(items.iter().map(from_loro).collect()),
-        LoroValue::Map(map) => {
-            Value::Object(map.iter().map(|(k, v)| (k.clone(), from_loro(v))).collect::<Map<_, _>>())
+        LoroValue::Binary(b) => {
+            Value::Array(b.iter().map(|x| Value::Number((*x).into())).collect())
         }
+        LoroValue::List(items) => Value::Array(items.iter().map(from_loro).collect()),
+        LoroValue::Map(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), from_loro(v)))
+                .collect::<Map<_, _>>(),
+        ),
         LoroValue::Container(id) => Value::String(id.to_string()),
     }
 }
@@ -64,7 +70,16 @@ mod tests {
 
     #[test]
     fn floats_and_ints_round_trip_exactly() {
-        for f in [0.1_f64, 1.0 / 3.0, 10.0, -0.0, f64::MAX, f64::MIN_POSITIVE, 5e-324, 1e300] {
+        for f in [
+            0.1_f64,
+            1.0 / 3.0,
+            10.0,
+            -0.0,
+            f64::MAX,
+            f64::MIN_POSITIVE,
+            5e-324,
+            1e300,
+        ] {
             let json = serde_json::to_value(f).unwrap();
             let back = from_loro(&to_loro(&json));
             let g: f64 = serde_json::from_value(back).unwrap();

@@ -501,8 +501,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         eprintln!("    {variant}: no pack to respec");
                         continue;
                     }
-                    sampler::LibrarySpec::from_styx(&styx)
-                        .map_err(|e| format!("{}: generated spec does not parse: {e}", out.display()))?;
+                    sampler::LibrarySpec::from_styx(&styx).map_err(|e| {
+                        format!("{}: generated spec does not parse: {e}", out.display())
+                    })?;
                     sampler::pack_rewrite::rewrite_embedded_spec(&out, |_| styx.clone())
                         .map_err(|e| format!("{}: {e}", out.display()))?;
                     eprintln!("    {variant}: spec rewritten");

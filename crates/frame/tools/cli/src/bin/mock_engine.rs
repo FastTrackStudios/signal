@@ -23,7 +23,9 @@ fn main() {
             "--port" => port = args.next().and_then(|p| p.parse().ok()).unwrap_or(port),
             "--rig" => rig = args.next().filter(|r| r != "none"),
             other => {
-                eprintln!("mock_engine: unknown argument {other}\nusage: mock_engine [--port 4040] [--rig guitar|none]");
+                eprintln!(
+                    "mock_engine: unknown argument {other}\nusage: mock_engine [--port 4040] [--rig guitar|none]"
+                );
                 std::process::exit(2);
             }
         }
@@ -44,7 +46,8 @@ fn main() {
         };
         eprintln!(
             "mock_engine: serving the demo engine at ws://127.0.0.1:{port}/vox{}",
-            rig.as_ref().map_or(String::new(), |r| format!(" (rig {r})"))
+            rig.as_ref()
+                .map_or(String::new(), |r| format!(" (rig {r})"))
         );
         let start = Instant::now();
         let ticks = async {

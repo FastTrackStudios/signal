@@ -9,10 +9,10 @@
 
 use std::sync::Arc;
 
+use crate::proto::playback::{PlaybackActions, register_playback_actions};
 use architect::action::ActionBackend;
 use daw::service::ProjectContext;
 use daw::service::transport::service::Transport as TransportService;
-use crate::proto::playback::{PlaybackActions, register_playback_actions};
 
 /// Forwards to the same `Transport` calls
 /// `SetlistServiceImpl::toggle_playback_impl` / `toggle_song_loop_impl`

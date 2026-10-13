@@ -19,8 +19,8 @@
 
 use std::fmt::Write;
 
-use dioxus::prelude::*;
 use crate::proto::{KeysLayerDetail, KeysMacro};
+use dioxus::prelude::*;
 
 use crate::ui::fader::Fader;
 use crate::ui::graphs::{Adsr, EnvelopeGraph, FilterCurve};

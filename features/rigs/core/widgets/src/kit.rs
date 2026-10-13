@@ -22,8 +22,7 @@ use dioxus::prelude::*;
 use crate::PopupHost;
 use crate::theme::{
     DANGER, DANGER_INK, DANGER_LINE, DIM, EYEBROW, FAINT, FIELD, FOCUS_BG, FOCUS_FG, LINE,
-    LINE_STRONG, LIVE, MENU, MODIFIED, MUTED, PRIMARY, R_MD, R_SM, T_BODY, T_META,
-    T_SMALL, TEXT,
+    LINE_STRONG, LIVE, MENU, MODIFIED, MUTED, PRIMARY, R_MD, R_SM, T_BODY, T_META, T_SMALL, TEXT,
 };
 
 // ── Small pieces ───────────────────────────────────────────────────────────

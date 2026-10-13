@@ -103,7 +103,9 @@ pub fn midi_note_for_section(section_type: &SectionType) -> Option<u8> {
 // a buffer. Pure — no DAW types, no I/O — so it is testable without
 // REAPER, and so the host owns *where* the notes go.
 
-use crate::guide::engine::schedule::{CueEvent, CueSchedule, GuideSection, GuideSongTiming, ScheduleOptions};
+use crate::guide::engine::schedule::{
+    CueEvent, CueSchedule, GuideSection, GuideSongTiming, ScheduleOptions,
+};
 use crate::proto::{GuideTrackRole, SectionType};
 
 /// One note to stamp, on the track its role names.
@@ -600,7 +602,10 @@ pub fn trigger_for_midi_note(note: u8) -> Option<crate::guide::engine::GuideTrig
             // Section announcement: resolve the note to a section type and
             // ask for that section's guide sample by the bank's own key.
             let section = section_for_midi_note(note)?;
-            GuideTrigger::Guide(crate::guide::engine::get_guide_key(&section.full_name(), None))
+            GuideTrigger::Guide(crate::guide::engine::get_guide_key(
+                &section.full_name(),
+                None,
+            ))
         }
     })
 }

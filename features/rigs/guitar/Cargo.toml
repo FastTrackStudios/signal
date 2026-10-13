@@ -58,6 +58,9 @@ uuid = { workspace = true, features = ["v4"] }
 vox = { workspace = true, optional = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+guitar = { path = ".", features = ["ui"] }
 architect = { workspace = true, features = ["vox", "local"] }
 neural-amp-modeler = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

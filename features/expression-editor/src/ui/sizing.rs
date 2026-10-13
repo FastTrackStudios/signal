@@ -36,8 +36,8 @@
 //! subtracts its own chrome. That is a constant, and a constant is an
 //! approximation; see [`CHROME_HEIGHT`].
 
-use dioxus::prelude::*;
 use crate::{Editor, Viewport};
+use dioxus::prelude::*;
 
 use crate::ui::canvas;
 

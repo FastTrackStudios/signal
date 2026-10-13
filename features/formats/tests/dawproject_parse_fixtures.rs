@@ -14,7 +14,7 @@ use formats::dawproject::{
 };
 use std::path::{Path, PathBuf};
 
-const FIXTURE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/dawproject_fixtures");
+const FIXTURE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/dawproject");
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(FIXTURE_DIR).join(name)

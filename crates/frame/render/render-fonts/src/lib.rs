@@ -112,7 +112,10 @@ static NEXT_FACE: AtomicU64 = AtomicU64::new(1);
 
 fn axis(font: &FontRef<'_>, tag: &[u8; 4]) -> Option<AxisRange> {
     let tag = Tag::new(tag);
-    font.axes().iter().find(|a| a.tag() == tag).map(|a| (a.min_value(), a.default_value(), a.max_value()))
+    font.axes()
+        .iter()
+        .find(|a| a.tag() == tag)
+        .map(|a| (a.min_value(), a.default_value(), a.max_value()))
 }
 
 fn name(font: &FontRef<'_>, id: StringId) -> Option<String> {
@@ -127,16 +130,35 @@ impl Face {
         let font = font_ref(bytes.as_ref(), index)?;
         let family = match family {
             Some(f) => f.to_string(),
-            None => name(&font, StringId::TYPOGRAPHIC_FAMILY_NAME).or_else(|| name(&font, StringId::FAMILY_NAME))?,
+            None => name(&font, StringId::TYPOGRAPHIC_FAMILY_NAME)
+                .or_else(|| name(&font, StringId::FAMILY_NAME))?,
         };
         let attrs = Attributes::new(&font);
-        let (wght, wdth, slnt, ital) = (axis(&font, b"wght"), axis(&font, b"wdth"), axis(&font, b"slnt"), axis(&font, b"ital"));
+        let (wght, wdth, slnt, ital) = (
+            axis(&font, b"wght"),
+            axis(&font, b"wdth"),
+            axis(&font, b"slnt"),
+            axis(&font, b"ital"),
+        );
         let w = attrs.weight.value();
         let weight = wght.map_or((w, w), |(lo, _, hi)| (lo, hi));
         let s = attrs.stretch.percentage();
         let width = wdth.map_or((s, s), |(lo, _, hi)| (lo, hi));
-        let italic = !matches!(attrs.style, Style::Normal) || ital.is_some_and(|(_, d, _)| d >= 0.5);
-        Some(Self { family, bytes, index, weight, width, italic, wght, wdth, slnt, ital, id: NEXT_FACE.fetch_add(1, Ordering::Relaxed) })
+        let italic =
+            !matches!(attrs.style, Style::Normal) || ital.is_some_and(|(_, d, _)| d >= 0.5);
+        Some(Self {
+            family,
+            bytes,
+            index,
+            weight,
+            width,
+            italic,
+            wght,
+            wdth,
+            slnt,
+            ital,
+            id: NEXT_FACE.fetch_add(1, Ordering::Relaxed),
+        })
     }
 
     /// The font file's bytes.
@@ -196,14 +218,22 @@ pub struct FontQuery<'a> {
 
 impl Default for FontQuery<'_> {
     fn default() -> Self {
-        Self { family: None, weight: 400.0, italic: false, width: 100.0 }
+        Self {
+            family: None,
+            weight: 400.0,
+            italic: false,
+            width: 100.0,
+        }
     }
 }
 
 impl<'a> FontQuery<'a> {
     #[must_use]
     pub fn family(family: &'a str) -> Self {
-        Self { family: Some(family), ..Self::default() }
+        Self {
+            family: Some(family),
+            ..Self::default()
+        }
     }
 
     #[must_use]
@@ -245,11 +275,18 @@ impl FontSpec {
         let weight = self.weight.or(own.weight.map(f64::from)).or(base.weight);
         let width = self.width.or(own.width.map(f64::from)).or(base.width);
         let style = match (&self.style, &base.style) {
-            (Some(s), Some(b)) if !own.italic && parse_style(b).italic => Some(format!("{s} italic")),
+            (Some(s), Some(b)) if !own.italic && parse_style(b).italic => {
+                Some(format!("{s} italic"))
+            }
             (Some(s), _) => Some(s.clone()),
             (None, b) => b.clone(),
         };
-        FontSpec { family: self.family.clone().or_else(|| base.family.clone()), weight, style, width }
+        FontSpec {
+            family: self.family.clone().or_else(|| base.family.clone()),
+            weight,
+            style,
+            width,
+        }
     }
 
     /// The query this spec makes (unset: regular, upright, normal width).
@@ -258,9 +295,17 @@ impl FontSpec {
         let hints = self.style.as_deref().map(parse_style).unwrap_or_default();
         FontQuery {
             family: self.family.as_deref(),
-            weight: self.weight.map(|w| w as f32).or(hints.weight).unwrap_or(400.0),
+            weight: self
+                .weight
+                .map(|w| w as f32)
+                .or(hints.weight)
+                .unwrap_or(400.0),
             italic: hints.italic,
-            width: self.width.map(|w| w as f32).or(hints.width).unwrap_or(100.0),
+            width: self
+                .width
+                .map(|w| w as f32)
+                .or(hints.width)
+                .unwrap_or(100.0),
         }
     }
 }
@@ -277,7 +322,11 @@ pub struct StyleHints {
 /// `"condensed bold"` — into weight, italic and width.
 #[must_use]
 pub fn parse_style(style: &str) -> StyleHints {
-    let s: String = style.to_ascii_lowercase().chars().filter(char::is_ascii_alphanumeric).collect();
+    let s: String = style
+        .to_ascii_lowercase()
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .collect();
     const WIDTHS: &[(&str, f32)] = &[
         ("ultracondensed", 50.0),
         ("extracondensed", 62.5),
@@ -322,14 +371,24 @@ pub fn parse_style(style: &str) -> StyleHints {
             break;
         }
     }
-    let weight = WEIGHTS.iter().find(|(k, _)| rest.contains(k)).map(|(_, v)| *v);
-    StyleHints { weight, italic: s.contains("italic") || s.contains("oblique"), width }
+    let weight = WEIGHTS
+        .iter()
+        .find(|(k, _)| rest.contains(k))
+        .map(|(_, v)| *v);
+    StyleHints {
+        weight,
+        italic: s.contains("italic") || s.contains("oblique"),
+        width,
+    }
 }
 
 /// Fold a family name for matching: lower case, letters and digits only.
 #[must_use]
 pub fn fold(name: &str) -> String {
-    name.chars().filter(char::is_ascii_alphanumeric).map(|c| c.to_ascii_lowercase()).collect()
+    name.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
 }
 
 // ── the book ─────────────────────────────────────────────────────────────
@@ -471,8 +530,17 @@ impl FontBook {
     #[must_use]
     pub fn family_name(&self, name: &str) -> Option<&str> {
         let key = fold(name);
-        let key = self.aliases.iter().rev().find(|(a, _)| *a == key).map_or(key, |(_, f)| fold(f));
-        self.faces.iter().rev().find(|f| fold(&f.family) == key).map(|f| f.family.as_str())
+        let key = self
+            .aliases
+            .iter()
+            .rev()
+            .find(|(a, _)| *a == key)
+            .map_or(key, |(_, f)| fold(f));
+        self.faces
+            .iter()
+            .rev()
+            .find(|f| fold(&f.family) == key)
+            .map(|f| f.family.as_str())
     }
 
     #[must_use]
@@ -598,11 +666,23 @@ impl Resolved {
                 synthetic_italic = true;
             }
         }
-        let location = face.font().map_or_else(Location::default, |f| f.axes().location(settings.iter().copied()));
+        let location = face.font().map_or_else(Location::default, |f| {
+            f.axes().location(settings.iter().copied())
+        });
         let coords: Vec<i16> = location.coords().iter().map(|c| c.to_bits()).collect();
-        let coords = if coords.iter().all(|c| *c == 0) { Vec::new() } else { coords };
+        let coords = if coords.iter().all(|c| *c == 0) {
+            Vec::new()
+        } else {
+            coords
+        };
         let synthetic_bold = q.weight >= 600.0 && face.weight.1 + 200.0 <= q.weight;
-        Self { face, location, coords, synthetic_italic, synthetic_bold }
+        Self {
+            face,
+            location,
+            coords,
+            synthetic_italic,
+            synthetic_bold,
+        }
     }
 
     #[must_use]
@@ -624,13 +704,19 @@ impl Resolved {
     /// The synthetic-bold growth each side at `size`, px (0 without).
     #[must_use]
     pub fn embolden(&self, size: f64) -> f64 {
-        if self.synthetic_bold { SYNTHETIC_BOLD * size } else { 0.0 }
+        if self.synthetic_bold {
+            SYNTHETIC_BOLD * size
+        } else {
+            0.0
+        }
     }
 
     /// `gid`'s advance at `size` px (a synthetic bold is that much wider).
     #[must_use]
     pub fn advance(&self, gid: GlyphId, size: f64) -> f64 {
-        let Some(font) = self.font() else { return size * 0.6 };
+        let Some(font) = self.font() else {
+            return size * 0.6;
+        };
         let gm = font.glyph_metrics(Size::new(size.max(1.0) as f32), self.location());
         f64::from(gm.advance_width(gid).unwrap_or_default()) + 2.0 * self.embolden(size)
     }
@@ -638,19 +724,33 @@ impl Resolved {
     /// Ascent at `size`, px.
     #[must_use]
     pub fn ascent(&self, size: f64) -> f64 {
-        self.font().map_or(size * 0.8, |f| f64::from(f.metrics(Size::new(size.max(1.0) as f32), self.location()).ascent))
+        self.font().map_or(size * 0.8, |f| {
+            f64::from(
+                f.metrics(Size::new(size.max(1.0) as f32), self.location())
+                    .ascent,
+            )
+        })
     }
 
     /// Descent at `size`, px (negative: below the baseline).
     #[must_use]
     pub fn descent(&self, size: f64) -> f64 {
-        self.font().map_or(-size * 0.2, |f| f64::from(f.metrics(Size::new(size.max(1.0) as f32), self.location()).descent))
+        self.font().map_or(-size * 0.2, |f| {
+            f64::from(
+                f.metrics(Size::new(size.max(1.0) as f32), self.location())
+                    .descent,
+            )
+        })
     }
 
     /// The per-glyph transform a synthetic italic needs (y-down space).
     #[must_use]
     pub fn skew(&self) -> Affine {
-        if self.synthetic_italic { Affine::new([1.0, 0.0, -SYNTHETIC_SKEW, 1.0, 0.0, 0.0]) } else { Affine::IDENTITY }
+        if self.synthetic_italic {
+            Affine::new([1.0, 0.0, -SYNTHETIC_SKEW, 1.0, 0.0, 0.0])
+        } else {
+            Affine::IDENTITY
+        }
     }
 
     /// `gid`'s outline at `size` px, y down, pen at the origin on the
@@ -660,11 +760,22 @@ impl Resolved {
         let font = self.font()?;
         let glyph = font.outline_glyphs().get(gid)?;
         let mut pen = Pen(BezPath::new());
-        glyph.draw(DrawSettings::unhinted(Size::new(size.max(1.0) as f32), self.location()), &mut pen).ok()?;
+        glyph
+            .draw(
+                DrawSettings::unhinted(Size::new(size.max(1.0) as f32), self.location()),
+                &mut pen,
+            )
+            .ok()?;
         let mut path = pen.0;
         let grow = self.embolden(size);
         if grow > 0.0 {
-            path = kurbo::expand_path(&path, kurbo::Diagonal2::new(grow, grow * 0.5), kurbo::Join::Round, 4.0, 0.05);
+            path = kurbo::expand_path(
+                &path,
+                kurbo::Diagonal2::new(grow, grow * 0.5),
+                kurbo::Join::Round,
+                4.0,
+                0.05,
+            );
             path.apply_affine(Affine::translate((grow, 0.0)));
         }
         if self.synthetic_italic {
@@ -684,10 +795,17 @@ impl OutlinePen for Pen {
         self.0.line_to((f64::from(x), -f64::from(y)));
     }
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        self.0.quad_to((f64::from(cx0), -f64::from(cy0)), (f64::from(x), -f64::from(y)));
+        self.0.quad_to(
+            (f64::from(cx0), -f64::from(cy0)),
+            (f64::from(x), -f64::from(y)),
+        );
     }
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.0.curve_to((f64::from(cx0), -f64::from(cy0)), (f64::from(cx1), -f64::from(cy1)), (f64::from(x), -f64::from(y)));
+        self.0.curve_to(
+            (f64::from(cx0), -f64::from(cy0)),
+            (f64::from(cx1), -f64::from(cy1)),
+            (f64::from(x), -f64::from(y)),
+        );
     }
     fn close(&mut self) {
         self.0.close_path();
@@ -734,7 +852,9 @@ impl Chain {
         let mut out = BezPath::new();
         let mut x = 0.0;
         for c in text.chars().filter(|c| *c != '\n') {
-            let Some((face, gid)) = self.pick(c) else { continue };
+            let Some((face, gid)) = self.pick(c) else {
+                continue;
+            };
             if let Some(p) = face.outline(gid, size) {
                 out.extend((Affine::translate((x, 0.0)) * p).elements().iter().copied());
             }

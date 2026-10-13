@@ -1160,8 +1160,7 @@ mod tests {
             panic!("expected a volume edit");
         };
         let db = 20.0 * gain.log10();
-        let span =
-            daw_ui::art::paint::tcp::FADER_TOP_DB - daw_ui::art::paint::tcp::FADER_BOTTOM_DB;
+        let span = daw_ui::art::paint::tcp::FADER_TOP_DB - daw_ui::art::paint::tcp::FADER_BOTTOM_DB;
         assert!(
             (db + span * 0.25).abs() < 0.01,
             "a quarter of the travel should be a quarter of the scale: {db} dB"

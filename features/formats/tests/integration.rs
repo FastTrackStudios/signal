@@ -10,7 +10,7 @@ use std::path::Path;
 
 fn fixture(name: &str) -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/aaf_fixtures")
+        .join("tests/fixtures/aaf")
         .join(name)
 }
 
@@ -55,7 +55,7 @@ fn clips_with_positive_length(session: &formats::aaf::types::AafSession) -> usiz
 
 #[test]
 fn all_fixtures_parse_ok() {
-    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/aaf_fixtures");
+    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/aaf");
     let mut count = 0;
     for entry in std::fs::read_dir(&fixtures_dir).unwrap() {
         let path = entry.unwrap().path();

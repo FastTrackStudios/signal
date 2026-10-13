@@ -7,7 +7,6 @@
 //! drum-kit *definitions* (how to load and route a kit), the behaviour *spec*
 //! (`spec/`), and the kit-loading *tests* as they land.
 
-
 pub mod proto;
 #[cfg(feature = "ui")]
 pub mod ui;

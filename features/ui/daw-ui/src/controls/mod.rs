@@ -43,14 +43,14 @@ mod sync;
 mod toggles;
 mod track_store;
 
-pub use collapse::{
-    Bands, Collapse, PanAnchor, REAPER as REAPER_THRESHOLDS, REAPER_BANDS, Thresholds, VolumeWidget,
-};
-pub use combo::{Caret, record_input_name};
 /// Which of REAPER's two control families to draw — re-exported from the
 /// art layer, which owns the distinction because it is a fact about the
 /// images (different boxes, different measurements), not about the wrapper.
 pub use crate::art::dress::Panel;
+pub use collapse::{
+    Bands, Collapse, PanAnchor, REAPER as REAPER_THRESHOLDS, REAPER_BANDS, Thresholds, VolumeWidget,
+};
+pub use combo::{Caret, record_input_name};
 pub use drafts::{Drafts, Held};
 pub use fader::{VolumeFader, fader_position};
 pub use fx::FxButton;

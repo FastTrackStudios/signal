@@ -4,11 +4,11 @@
 //! (Gain / Release / Ceiling) beside the I/O + GR meters. Everything but the
 //! trace comes from [`fts_plug_ui`]'s shared chrome.
 
-use plugin_core::prelude::*;
 use fts_plug_ui::prelude::*;
 use nice_plug::editor::ResizeHint;
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug_dioxus::SharedState;
+use plugin_core::prelude::*;
 use std::sync::atomic::Ordering;
 
 use crate::ui::limiter::gr_trace::{GRAPH_H, GrTrace};

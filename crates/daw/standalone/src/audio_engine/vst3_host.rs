@@ -1065,7 +1065,12 @@ impl LoadedVst3Plugin {
             in_ptrs: [ptr::null_mut(); 2],
             out_ptrs: [ptr::null_mut(); 2],
             aux_bufs: (1..aux_count)
-                .map(|_| [vec![0.0; block_size as usize], vec![0.0; block_size as usize]])
+                .map(|_| {
+                    [
+                        vec![0.0; block_size as usize],
+                        vec![0.0; block_size as usize],
+                    ]
+                })
                 .collect(),
             aux_ptrs: vec![[ptr::null_mut(); 2]; aux_count.saturating_sub(1) as usize],
             processing_started: true,
@@ -1101,7 +1106,11 @@ impl LoadedVst3Plugin {
     /// The last block's samples on output bus `bus` (≥ 1), `frames` long.
     #[must_use]
     pub fn aux_output(&self, bus: usize, frames: usize) -> Option<(&[f32], &[f32])> {
-        let b = self.activation.as_ref()?.aux_bufs.get(bus.checked_sub(1)?)?;
+        let b = self
+            .activation
+            .as_ref()?
+            .aux_bufs
+            .get(bus.checked_sub(1)?)?;
         let n = frames.min(b[0].len());
         Some((&b[0][..n], &b[1][..n]))
     }

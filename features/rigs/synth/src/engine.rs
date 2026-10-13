@@ -17,9 +17,9 @@
 //! placeholders render as pass-throughs, so a lane sounds exactly like its
 //! source until the engine grows into the structure.
 
-use signal_proto::block::BlockType;
 use sampler::rig::RigBlock;
 use sampler::rig_node::Container;
+use signal_proto::block::BlockType;
 
 /// Send target for a layer's aux route — a rig that offers an Aux rack names
 /// its container this, and the send resolves; rigs without one drop it.
@@ -769,9 +769,8 @@ pub fn apply_settings_to_omni_layer(
     };
     let base = set.baseline.as_deref();
     // Whether a knob moved off the patch (always, with no baseline).
-    let moved = |f: &dyn Fn(&ModuleSettings) -> f32| {
-        base.is_none_or(|b| (f(b) - f(set)).abs() > 1e-6)
-    };
+    let moved =
+        |f: &dyn Fn(&ModuleSettings) -> f32| base.is_none_or(|b| (f(b) - f(set)).abs() > 1e-6);
     let secs = |ms: f32| format!("{:.4}", ms.max(0.0) / 1000.0);
     let depth = set.filter_env_depth.clamp(-1.0, 1.0);
     // The filter section's own envelope route is the first Filter Env →
@@ -805,7 +804,8 @@ pub fn apply_settings_to_omni_layer(
     // A sample-mode layer the patch gives no filter-envelope route takes the
     // knobs' as its voices' own filter (as a keys module does), and its
     // shared filter opens for it.
-    let voice_filter = is_sampler && !routed && set.voice_filter_on() && moved(&|s| s.filter_env_depth);
+    let voice_filter =
+        is_sampler && !routed && set.voice_filter_on() && moved(&|s| s.filter_env_depth);
     let voice_params = set.sampler_voice_params(RigBlock::of_type(BlockType::Sampler));
     let base_voice = base.map(|b| b.sampler_voice_params(RigBlock::of_type(BlockType::Sampler)));
     let amp = set.amp_block();
@@ -901,9 +901,7 @@ pub fn apply_settings_to_omni_layer(
                             "cutoff",
                             format!(
                                 "{:.4}",
-                                sampler::native::NativeFilter::norm_from_cutoff(
-                                    set.cutoff_hz
-                                )
+                                sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
                             ),
                         ),
                     }
@@ -1434,8 +1432,8 @@ mod tests {
     /// them, and the mod wheel brings in vibrato.
     #[test]
     fn synth_module_plays_bends_and_vibratos() {
-        use signal_plugin_host::{PluginEvents, PluginMidiEvent};
         use sampler::RenderNode;
+        use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 
         let note_on = |note: u8, vel: u8| {
             use sampler::midicore::{Channel, KeyNumber, MidiEvent, Velocity};

@@ -39,7 +39,19 @@ use surface_proto::{ParamInfo, Range, StreamInfo, Unit};
 use crate::face::Face;
 
 pub fn faces() -> Vec<Face> {
-    [ir::face(), hall::face(), plate::face(), room::face(), spring::face(), ambient::face(), random::face(), special::face()].into_iter().map(ui::formatted).collect()
+    [
+        ir::face(),
+        hall::face(),
+        plate::face(),
+        room::face(),
+        spring::face(),
+        ambient::face(),
+        random::face(),
+        special::face(),
+    ]
+    .into_iter()
+    .map(ui::formatted)
+    .collect()
 }
 
 /// Pre-delay as a dial prints it: evenly spaced marks, uneven ms.
@@ -52,7 +64,13 @@ pub(crate) fn decay(addr: &str, name: &str, min: f64, max: f64, default: f64) ->
 
 /// Pre-delay 0…250 ms on the printed scale.
 pub(crate) fn predelay(addr: &str, name: &str, default: f64) -> ParamInfo {
-    ui::param(addr, name, ui::printed(PREDELAY_MS, Unit::Milliseconds), default).featured()
+    ui::param(
+        addr,
+        name,
+        ui::printed(PREDELAY_MS, Unit::Milliseconds),
+        default,
+    )
+    .featured()
 }
 
 /// A 0–100 % amount.
@@ -62,12 +80,28 @@ pub(crate) fn pct(addr: &str, name: &str, default: f64) -> ParamInfo {
 
 /// Stereo width, 0 (mono) to 200 %.
 pub(crate) fn width(addr: &str) -> ParamInfo {
-    ui::param(addr, "Width", Range::linear(0.0, 200.0, Unit::Percent), 100.0)
+    ui::param(
+        addr,
+        "Width",
+        Range::linear(0.0, 200.0, Unit::Percent),
+        100.0,
+    )
 }
 
 /// The low band's decay as a multiple of the mid's.
 pub(crate) fn bass(addr: &str, name: &str) -> ParamInfo {
-    ui::param(addr, name, Range::linear(0.25, 2.0, Unit::Custom { suffix: "×".into() }), 1.0)
+    ui::param(
+        addr,
+        name,
+        Range::linear(
+            0.25,
+            2.0,
+            Unit::Custom {
+                suffix: "×".into()
+            },
+        ),
+        1.0,
+    )
 }
 
 /// Wet/dry.
@@ -77,7 +111,10 @@ pub(crate) fn mix(addr: &str, default: f64) -> ParamInfo {
 
 /// `<face>/in` and `<face>/out`, stereo.
 pub(crate) fn levels(face: &str) -> Vec<StreamInfo> {
-    vec![ui::level_stream(&format!("{face}/in"), "Input Level", 2), ui::level_stream(&format!("{face}/out"), "Output Level", 2)]
+    vec![
+        ui::level_stream(&format!("{face}/in"), "Input Level", 2),
+        ui::level_stream(&format!("{face}/out"), "Output Level", 2),
+    ]
 }
 
 /// A fixed pseudo-random value in 0..1 for `i` (the same every build, so a

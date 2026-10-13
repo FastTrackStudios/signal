@@ -387,7 +387,11 @@ type Content = daw::service::midi::MidiTakeContent;
 /// take with no samples.
 #[cfg(feature = "native")]
 #[must_use]
-pub fn analysis(item: &str, length: f64, volume: f64) -> Option<expression_editor::audio::Analysis> {
+pub fn analysis(
+    item: &str,
+    length: f64,
+    volume: f64,
+) -> Option<expression_editor::audio::Analysis> {
     session(item.to_owned(), length, volume).map(|s| s.analysis().clone())
 }
 

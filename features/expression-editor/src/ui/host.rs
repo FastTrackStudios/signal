@@ -1,9 +1,9 @@
 //! Dioxus adapter for the shared drum application services.
 //! No file loading, window creation, or backend-specific saving belongs here.
-use crate::ui::quantize_panel::{Bin, HitPreview, QuantizePanel};
-use dioxus::prelude::*;
-use crate::{Editor, drum::HitGesture, fills::FillConfig};
 use crate::host::{DrumDaw, SharedDrumHost};
+use crate::ui::quantize_panel::{Bin, HitPreview, QuantizePanel};
+use crate::{Editor, drum::HitGesture, fills::FillConfig};
+use dioxus::prelude::*;
 
 #[derive(Default)]
 pub struct HostCallbacks {

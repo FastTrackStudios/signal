@@ -4,7 +4,7 @@ use std::path::Path;
 
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/logic_fixtures/FileDecrypt.logicx"
+    "/tests/fixtures/logic/FileDecrypt.logicx"
 );
 
 #[test]
@@ -623,7 +623,10 @@ fn fire_comp_structures() {
     }
 }
 
-const FIRE_FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/logic_fixtures/Fire.logicx");
+const FIRE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/logic/Fire.logicx"
+);
 
 #[test]
 fn fire_envi_meta_dump() {

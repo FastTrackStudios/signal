@@ -49,6 +49,9 @@ vox-types = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+sampler = { path = ".", features = ["library"] }
 futures-util = { workspace = true }
 hound = { version = "3.5" }
 keyflow-orchestra = { workspace = true }

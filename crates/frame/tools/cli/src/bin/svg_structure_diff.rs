@@ -209,7 +209,11 @@ fn compare_node(
         });
     }
 
-    for (i, (a, e)) in actual_children.iter().zip(expected_children.iter()).enumerate() {
+    for (i, (a, e)) in actual_children
+        .iter()
+        .zip(expected_children.iter())
+        .enumerate()
+    {
         let child_path = format!("{node_path}/{}[{i}]", e.tag_name().name());
         if let Some(m) = compare_node(*a, *e, &child_path, abs_tol, rel_tol) {
             return Some(m);
@@ -257,7 +261,9 @@ fn compare_attr_values(
         return compare_numeric_text(actual, expected, abs_tol, rel_tol);
     }
     if actual != expected {
-        return Some(format!("value mismatch actual={actual:?} expected={expected:?}"));
+        return Some(format!(
+            "value mismatch actual={actual:?} expected={expected:?}"
+        ));
     }
     None
 }
@@ -265,8 +271,7 @@ fn compare_attr_values(
 fn is_numeric_attr(key: &str) -> bool {
     matches!(
         key,
-        "d"
-            | "viewBox"
+        "d" | "viewBox"
             | "x"
             | "y"
             | "width"
@@ -287,7 +292,12 @@ enum NumTok {
     Text(String),
 }
 
-fn compare_numeric_text(actual: &str, expected: &str, abs_tol: f64, rel_tol: f64) -> Option<String> {
+fn compare_numeric_text(
+    actual: &str,
+    expected: &str,
+    abs_tol: f64,
+    rel_tol: f64,
+) -> Option<String> {
     let at = tokenize_numeric_text(actual);
     let et = tokenize_numeric_text(expected);
     if at.len() != et.len() {
@@ -316,7 +326,9 @@ fn compare_numeric_text(actual: &str, expected: &str, abs_tol: f64, rel_tol: f64
                 }
             }
             _ => {
-                return Some(format!("token kind mismatch at {idx}: actual={a:?} expected={e:?}"));
+                return Some(format!(
+                    "token kind mismatch at {idx}: actual={a:?} expected={e:?}"
+                ));
             }
         }
     }

@@ -16,7 +16,11 @@ pub struct MeterScale {
 
 impl Default for MeterScale {
     fn default() -> Self {
-        Self { floor_db: -60.0, ceiling_db: 6.0, curve: Curve::Linear }
+        Self {
+            floor_db: -60.0,
+            ceiling_db: 6.0,
+            curve: Curve::Linear,
+        }
     }
 }
 
@@ -79,14 +83,27 @@ pub const SILENCE_DB: f64 = -120.0;
 impl Ballistics {
     #[must_use]
     pub fn new(release_db_per_s: f64, hold_ms: f64) -> Self {
-        Self { release_db_per_s, hold_ms, sense: Sense::Level, level_db: SILENCE_DB, level_t: 0.0, peak_db: SILENCE_DB, peak_t: 0.0 }
+        Self {
+            release_db_per_s,
+            hold_ms,
+            sense: Sense::Level,
+            level_db: SILENCE_DB,
+            level_t: 0.0,
+            peak_db: SILENCE_DB,
+            peak_t: 0.0,
+        }
     }
 
     /// Gain-reduction ballistics: rest at 0 dB, attack toward deeper
     /// reduction, recover at `release_db_per_s`.
     #[must_use]
     pub fn reduction(release_db_per_s: f64, hold_ms: f64) -> Self {
-        Self { sense: Sense::Reduction, level_db: 0.0, peak_db: 0.0, ..Self::new(release_db_per_s, hold_ms) }
+        Self {
+            sense: Sense::Reduction,
+            level_db: 0.0,
+            peak_db: 0.0,
+            ..Self::new(release_db_per_s, hold_ms)
+        }
     }
 
     /// Ballistics for a reading of `sense` (default rates).
@@ -124,7 +141,11 @@ impl Ballistics {
         };
         let current = self.fallen(self.level_db, t - self.level_t);
         // Instant attack, timed release.
-        self.level_db = if self.beyond(db, current) { db } else { current };
+        self.level_db = if self.beyond(db, current) {
+            db
+        } else {
+            current
+        };
         self.level_t = t;
         let held = self.peak_hold_db(t);
         if self.beyond(db, held) {
@@ -143,7 +164,11 @@ impl Ballistics {
     #[must_use]
     pub fn peak_hold_db(&self, t: f64) -> f64 {
         let since = t - self.peak_t;
-        if since <= self.hold_ms { self.peak_db } else { self.fallen(self.peak_db, since - self.hold_ms) }
+        if since <= self.hold_ms {
+            self.peak_db
+        } else {
+            self.fallen(self.peak_db, since - self.hold_ms)
+        }
     }
 }
 
@@ -156,7 +181,10 @@ mod tests {
         let mut b = Ballistics::new(24.0, 1000.0);
         b.push(-6.0, 0.0);
         assert_eq!(b.level_db(0.0), -6.0);
-        assert!((b.level_db(500.0) - -18.0).abs() < 1e-9, "24 dB/s for 0.5 s");
+        assert!(
+            (b.level_db(500.0) - -18.0).abs() < 1e-9,
+            "24 dB/s for 0.5 s"
+        );
         // A quieter reading doesn't pull the bar down faster than release.
         b.push(-40.0, 500.0);
         assert!((b.level_db(500.0) - -18.0).abs() < 1e-9);
@@ -181,17 +209,29 @@ mod tests {
         assert_eq!(b.level_db(0.0), -10.0, "attack is instant, downward");
         // Less reduction doesn't snap back: the needle recovers at the rate.
         b.push(-2.0, 250.0);
-        assert!((b.level_db(250.0) - -4.0).abs() < 1e-9, "{}", b.level_db(250.0));
+        assert!(
+            (b.level_db(250.0) - -4.0).abs() < 1e-9,
+            "{}",
+            b.level_db(250.0)
+        );
         assert_eq!(b.level_db(5000.0), 0.0, "recovers to 0, not past it");
         // Deeper reduction lands at once; a positive reading is reduction too.
         b.push(6.0, 5000.0);
         assert_eq!(b.level_db(5000.0), -6.0);
-        assert_eq!(b.peak_hold_db(5000.0), -6.0, "the old peak had fallen back to rest");
+        assert_eq!(
+            b.peak_hold_db(5000.0),
+            -6.0,
+            "the old peak had fallen back to rest"
+        );
     }
 
     #[test]
     fn a_reversed_span_reads_right_to_left() {
-        let s = MeterScale { floor_db: 0.0, ceiling_db: -20.0, curve: surface_proto::Curve::Linear };
+        let s = MeterScale {
+            floor_db: 0.0,
+            ceiling_db: -20.0,
+            curve: surface_proto::Curve::Linear,
+        };
         assert_eq!(s.position(0.0), 0.0);
         assert!((s.position(-5.0) - 0.25).abs() < 1e-12);
     }

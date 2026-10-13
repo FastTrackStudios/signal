@@ -4,8 +4,8 @@ use super::{HYDRATION_CONCURRENCY, SetlistServiceImpl};
 use crate::setlist::service::hydration::ProjectLoad;
 use daw::service::Projects;
 // `Semaphore` + `JoinSet` back the native-only background hydration pass below.
-use rustc_hash::{FxHashMap, FxHashSet};
 use crate::proto::{AdvanceMode, SessionServiceError, Setlist, Song};
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 #[cfg(not(target_arch = "wasm32"))]

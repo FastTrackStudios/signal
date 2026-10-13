@@ -152,7 +152,10 @@ impl Default for DemoArpSink {
 
 impl ArpSink for DemoArpSink {
     fn open(&self) -> Result<crate::ops::arp::ArpSession, String> {
-        Ok(crate::ops::arp::ArpSession::new(self.chords.clone(), Vec::new()))
+        Ok(crate::ops::arp::ArpSession::new(
+            self.chords.clone(),
+            Vec::new(),
+        ))
     }
 
     fn commit(&self, session: &crate::ops::arp::ArpSession) -> Result<usize, String> {

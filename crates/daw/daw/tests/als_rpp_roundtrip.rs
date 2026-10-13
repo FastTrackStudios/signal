@@ -6,11 +6,11 @@
 
 #![cfg(feature = "file")]
 
-use formats::ableton::*;
 use dawfile_reaper::RppSerialize;
 use dawfile_reaper::builder::*;
 use dawfile_reaper::types::item::{MidiEventType, MidiSourceEvent};
 use dawfile_reaper::types::track::FolderState;
+use formats::ableton::*;
 
 // ─── .als → .rpp ───────────────────────────────────────────────────────────
 
@@ -549,8 +549,8 @@ fn als_to_rpp_to_als_lucid_dreaming() {
 
 #[test]
 fn als_to_rpp_to_als_farmhouse() {
-    let original = read_live_set("tests/fixtures/Farmhouse.als")
-        .expect("failed to parse Farmhouse.als");
+    let original =
+        read_live_set("tests/fixtures/Farmhouse.als").expect("failed to parse Farmhouse.als");
 
     let rpp_project = ableton_to_rpp(&original);
     let rpp_text = rpp_project.to_rpp_string();
@@ -591,8 +591,7 @@ fn als_to_rpp_to_als_farmhouse() {
 
 #[test]
 fn rpp_output_is_valid_reaper_project() {
-    let set = read_live_set("tests/fixtures/LucidDreaming.als")
-        .expect("failed to parse");
+    let set = read_live_set("tests/fixtures/LucidDreaming.als").expect("failed to parse");
 
     let rpp = ableton_to_rpp(&set);
     let text = rpp.to_rpp_string();

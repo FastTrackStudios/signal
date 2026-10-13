@@ -24,10 +24,10 @@ use std::sync::atomic::Ordering;
 
 use dsp_core::audio::{AudioConfig, Processor};
 use modulation::chorus::chain::ChorusChain;
-use modulation::trem::chain::TremChain;
-use modulation::wah::chain::WahChain;
 use modulation::profiles::Chain;
+use modulation::trem::chain::TremChain;
 use modulation::ui::params::{ModParams, ModUiState};
+use modulation::wah::chain::WahChain;
 
 const PLUGIN_NAME: &str = "FTS Modulation";
 
@@ -282,8 +282,8 @@ nice_export_vst3!(FtsModulation);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use plugin_core::nice_plug::params::InternalParamMut;
     use modulation::profiles::{Circuit, EngineType};
+    use plugin_core::nice_plug::params::InternalParamMut;
 
     /// The plugin runs whatever the rail says, with no table of its own.
     ///

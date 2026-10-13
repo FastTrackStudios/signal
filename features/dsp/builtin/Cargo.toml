@@ -47,6 +47,9 @@ tune-plugin = { workspace = true, optional = true }
 unison-plugin = { workspace = true, optional = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+builtin = { path = ".", features = ["engine"] }
 daw = { workspace = true, features = ["standalone"] }
 daw-standalone = { workspace = true, features = ["rpp-project", "decode"] }
 midicore-proto = { workspace = true }

@@ -13,18 +13,18 @@
 
 use std::sync::{Mutex, OnceLock};
 
+use crate::Viewport;
+use crate::audio::{AudioSession, TakeConfig};
 use daw::module::{
     ActionDef, DawModule, DockPosition, ModuleContext, PanelComponent, PanelDef, PanelRenderer,
 };
 use daw::service::ProjectContext;
 use dioxus::prelude::*;
-use crate::audio::{AudioSession, TakeConfig};
-use crate::Viewport;
 // The MPE bend range a take is loaded with. Taken from the adapter
 // rather than restated here, so the range the editor reads at is the
 // same one the MPE fixture declares on the wire — a mismatch rescales
 // every pitch curve silently.
-use crate::daw::{Session, DEFAULT_BEND_RANGE};
+use crate::daw::{DEFAULT_BEND_RANGE, Session};
 use crate::ui::ExpressionEditor;
 
 pub const PANEL_ID: &str = "FTS_EXPRESSION_EDITOR";
@@ -622,8 +622,7 @@ pub fn EditorPanel() -> Element {
     let bins = use_signal(Vec::new);
     let previews = use_signal(Vec::new);
     let fills = use_signal(Vec::new);
-    let callbacks =
-        crate::ui::host::use_drum_callbacks(editor, host, bins, previews, fills);
+    let callbacks = crate::ui::host::use_drum_callbacks(editor, host, bins, previews, fills);
     let loaded = use_signal(|| session().lock().unwrap().is_some());
     let take_label = use_signal(loaded_label);
     let take_kind = use_signal(|| loaded_kind().unwrap_or(""));

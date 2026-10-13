@@ -146,13 +146,24 @@ const METAL_SHEEN: Lin = Lin {
     ],
 };
 
-const RACK_SHADE: Shade = Shade { color: "rgba(0,0,0,0.42)", top: 7.0, side: 4.0 };
-const LOUVRE: Vent = Vent { dark: "#000000", light: "#2a2c2e", pitch: 4.0 };
+const RACK_SHADE: Shade = Shade {
+    color: "rgba(0,0,0,0.42)",
+    top: 7.0,
+    side: 4.0,
+};
+const LOUVRE: Vent = Vent {
+    dark: "#000000",
+    light: "#2a2c2e",
+    pitch: 4.0,
+};
 
 /// Pressed steel, matte black, vented — the rack default.
 pub const BLACK_RACK: Bezel = Bezel {
     name: "black_rack",
-    frame: Lin { angle: 180.0, stops: &[(0.0, "#141517"), (1.0, "#0a0b0c")] },
+    frame: Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#141517"), (1.0, "#0a0b0c")],
+    },
     radius: 2.0,
     glow: None,
     top: "#050506",
@@ -168,7 +179,10 @@ pub const BLACK_RACK: Bezel = Bezel {
 /// A thin dark surround and nothing else.
 pub const SLIM: Bezel = Bezel {
     name: "slim",
-    frame: Lin { angle: 180.0, stops: &[(0.0, "#1b1c1f"), (1.0, "#101113")] },
+    frame: Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#1b1c1f"), (1.0, "#101113")],
+    },
     radius: 3.0,
     glow: None,
     top: "#0a0b0c",
@@ -178,11 +192,22 @@ pub const SLIM: Bezel = Bezel {
     depth: 4.0,
     sheen: Some(FRAME_SHEEN),
     vent: None,
-    shade: Some(Shade { color: "rgba(0,0,0,0.30)", top: 3.0, side: 2.0 }),
+    shade: Some(Shade {
+        color: "rgba(0,0,0,0.30)",
+        top: 3.0,
+        side: 2.0,
+    }),
 };
 
-const CHROME_FRAME: Lin =
-    Lin { angle: 180.0, stops: &[(0.0, "#f2f4f6"), (0.44, "#b9bec4"), (0.72, "#7e848b"), (1.0, "#d8dce0")] };
+const CHROME_FRAME: Lin = Lin {
+    angle: 180.0,
+    stops: &[
+        (0.0, "#f2f4f6"),
+        (0.44, "#b9bec4"),
+        (0.72, "#7e848b"),
+        (1.0, "#d8dce0"),
+    ],
+};
 
 /// A bright chromed ring, shallow, no vent.
 pub const CHROME: Bezel = Bezel {
@@ -197,13 +222,20 @@ pub const CHROME: Bezel = Bezel {
     depth: 7.0,
     sheen: Some(METAL_SHEEN),
     vent: None,
-    shade: Some(Shade { color: "rgba(0,0,0,0.34)", top: 5.0, side: 3.0 }),
+    shade: Some(Shade {
+        color: "rgba(0,0,0,0.34)",
+        top: 5.0,
+        side: 3.0,
+    }),
 };
 
 /// Warm brass, a little tarnished in the shadowed faces.
 pub const BRASS: Bezel = Bezel {
     name: "brass",
-    frame: Lin { angle: 180.0, stops: &[(0.0, "#d9b25f"), (0.46, "#a67f34"), (1.0, "#6d5220")] },
+    frame: Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#d9b25f"), (0.46, "#a67f34"), (1.0, "#6d5220")],
+    },
     radius: 3.0,
     glow: None,
     top: "#4a3714",
@@ -213,13 +245,25 @@ pub const BRASS: Bezel = Bezel {
     depth: 7.0,
     sheen: Some(METAL_SHEEN),
     vent: None,
-    shade: Some(Shade { color: "rgba(0,0,0,0.36)", top: 5.0, side: 3.0 }),
+    shade: Some(Shade {
+        color: "rgba(0,0,0,0.36)",
+        top: 5.0,
+        side: 3.0,
+    }),
 };
 
 /// Satin nickel, the Teletronix-era meter plate: lit broadly, not in a band.
 pub const SATIN_PLATE: Bezel = Bezel {
     name: "satin_plate",
-    frame: Lin { angle: 180.0, stops: &[(0.0, "#e6e7e4"), (0.42, "#cbccc8"), (0.78, "#aeafab"), (1.0, "#d6d7d3")] },
+    frame: Lin {
+        angle: 180.0,
+        stops: &[
+            (0.0, "#e6e7e4"),
+            (0.42, "#cbccc8"),
+            (0.78, "#aeafab"),
+            (1.0, "#d6d7d3"),
+        ],
+    },
     radius: 2.0,
     glow: None,
     top: "#7e807c",
@@ -229,13 +273,20 @@ pub const SATIN_PLATE: Bezel = Bezel {
     depth: 8.0,
     sheen: Some(METAL_SHEEN),
     vent: None,
-    shade: Some(Shade { color: "rgba(0,0,0,0.38)", top: 8.0, side: 5.0 }),
+    shade: Some(Shade {
+        color: "rgba(0,0,0,0.38)",
+        top: 8.0,
+        side: 5.0,
+    }),
 };
 
 /// A deep rectangular recess — the modern console look, no vent.
 pub const RECESSED: Bezel = Bezel {
     name: "recessed",
-    frame: Lin { angle: 180.0, stops: &[(0.0, "#212429"), (0.60, "#15181c"), (1.0, "#0d0f12")] },
+    frame: Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#212429"), (0.60, "#15181c"), (1.0, "#0d0f12")],
+    },
     radius: 3.0,
     glow: None,
     top: "#07080a",
@@ -245,47 +296,85 @@ pub const RECESSED: Bezel = Bezel {
     depth: 13.0,
     sheen: Some(FRAME_SHEEN),
     vent: None,
-    shade: Some(Shade { color: "rgba(0,0,0,0.52)", top: 10.0, side: 6.0 }),
+    shade: Some(Shade {
+        color: "rgba(0,0,0,0.52)",
+        top: 10.0,
+        side: 6.0,
+    }),
 };
 
 /// The rack frame with the bulb turned up — warm light around the opening.
 pub const LIT_AMBER: Bezel = Bezel {
     name: "lit_amber",
-    glow: Some(Glow { color: "rgba(255,186,86,0.42)", spread: 22.0, core: Some("rgba(255,214,140,0.34)") }),
+    glow: Some(Glow {
+        color: "rgba(255,186,86,0.42)",
+        spread: 22.0,
+        core: Some("rgba(255,214,140,0.34)"),
+    }),
     ..BLACK_RACK
 };
 
 /// The same, lit cold.
 pub const LIT_BLUE: Bezel = Bezel {
     name: "lit_blue",
-    glow: Some(Glow { color: "rgba(110,180,255,0.40)", spread: 22.0, core: Some("rgba(180,220,255,0.32)") }),
+    glow: Some(Glow {
+        color: "rgba(110,180,255,0.40)",
+        spread: 22.0,
+        core: Some("rgba(180,220,255,0.32)"),
+    }),
     ..BLACK_RACK
 };
 
 /// A chromed ring around a lit movement.
 pub const LIT_CHROME: Bezel = Bezel {
     name: "lit_chrome",
-    glow: Some(Glow { color: "rgba(255,244,214,0.38)", spread: 18.0, core: Some("rgba(255,255,255,0.30)") }),
+    glow: Some(Glow {
+        color: "rgba(255,244,214,0.38)",
+        spread: 18.0,
+        core: Some("rgba(255,255,255,0.30)"),
+    }),
     ..CHROME
 };
 
 /// Every frame, in the source's order.
-pub const BEZELS: [&Bezel; 9] =
-    [&BLACK_RACK, &SLIM, &CHROME, &BRASS, &SATIN_PLATE, &RECESSED, &LIT_AMBER, &LIT_BLUE, &LIT_CHROME];
+pub const BEZELS: [&Bezel; 9] = [
+    &BLACK_RACK,
+    &SLIM,
+    &CHROME,
+    &BRASS,
+    &SATIN_PLATE,
+    &RECESSED,
+    &LIT_AMBER,
+    &LIT_BLUE,
+    &LIT_CHROME,
+];
 
 // ── faces ────────────────────────────────────────────────────────────────
 
 /// The reflection on the glass over a card.
 const GLASS: Lin = Lin {
     angle: 160.0,
-    stops: &[(0.0, "rgba(255,255,255,0.22)"), (0.38, "rgba(255,255,255,0.04)"), (1.0, "rgba(0,0,0,0.10)")],
+    stops: &[
+        (0.0, "rgba(255,255,255,0.22)"),
+        (0.38, "rgba(255,255,255,0.04)"),
+        (1.0, "rgba(0,0,0,0.10)"),
+    ],
 };
 
-const DARK_NEEDLE: Needle = Needle { color: "#241a0c", width: 1.1, hub_r: 4.0, hub_opacity: 0.9, halo: None };
+const DARK_NEEDLE: Needle = Needle {
+    color: "#241a0c",
+    width: 1.1,
+    hub_r: 4.0,
+    hub_opacity: 0.9,
+    halo: None,
+};
 
 /// Warm ivory under a yellow lamp — the LA-2A's, and most tube gear's.
 pub static AMBER: Face = Face {
-    card_paint: CardPaint::Linear(Lin { angle: 180.0, stops: &[(0.0, "#f6d79a"), (0.62, "#e8b45f"), (1.0, "#d99a3c")] }),
+    card_paint: CardPaint::Linear(Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#f6d79a"), (0.62, "#e8b45f"), (1.0, "#d99a3c")],
+    }),
     ink: "#3a2a12",
     hot: "#8f2010",
     needle: DARK_NEEDLE,
@@ -306,10 +395,16 @@ pub static AMBER: Face = Face {
 
 /// Neutral ivory under a white lamp — the 1176's Modutec, an SSL's.
 pub static IVORY: Face = Face {
-    card_paint: CardPaint::Linear(Lin { angle: 180.0, stops: &[(0.0, "#f4f2ea"), (1.0, "#ddd9cd")] }),
+    card_paint: CardPaint::Linear(Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#f4f2ea"), (1.0, "#ddd9cd")],
+    }),
     ink: "#2a241c",
     hot: "#a8281c",
-    needle: Needle { color: "#1d1a15", ..DARK_NEEDLE },
+    needle: Needle {
+        color: "#1d1a15",
+        ..DARK_NEEDLE
+    },
     lamp: Some(Lamp {
         color: "rgba(255,246,224,0.28)",
         x: 50.0,
@@ -326,10 +421,16 @@ pub static IVORY: Face = Face {
 
 /// The dbx's: an amber card printed in blue — a decibel readout, not a VU.
 pub static AMBER_BLUE: Face = Face {
-    card_paint: CardPaint::Linear(Lin { angle: 180.0, stops: &[(0.0, "#f7cf86"), (0.58, "#eab259"), (1.0, "#d99b3f")] }),
+    card_paint: CardPaint::Linear(Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#f7cf86"), (0.58, "#eab259"), (1.0, "#d99b3f")],
+    }),
     ink: "#1c4f96",
     hot: "#1c4f96",
-    needle: Needle { color: "#14161a", ..DARK_NEEDLE },
+    needle: Needle {
+        color: "#14161a",
+        ..DARK_NEEDLE
+    },
     lamp: Some(Lamp {
         color: "rgba(255,216,126,0.50)",
         x: 50.0,
@@ -346,10 +447,16 @@ pub static AMBER_BLUE: Face = Face {
 
 /// A blue-lit card printed in white.
 pub static BLUE: Face = Face {
-    card_paint: CardPaint::Linear(Lin { angle: 180.0, stops: &[(0.0, "#2f5f8f"), (1.0, "#16324e")] }),
+    card_paint: CardPaint::Linear(Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#2f5f8f"), (1.0, "#16324e")],
+    }),
     ink: "#e8f2ff",
     hot: "#ff6a5c",
-    needle: Needle { color: "#f4f8ff", ..DARK_NEEDLE },
+    needle: Needle {
+        color: "#f4f8ff",
+        ..DARK_NEEDLE
+    },
     lamp: Some(Lamp {
         color: "rgba(150,205,255,0.32)",
         x: 50.0,
@@ -368,7 +475,11 @@ pub static BLUE: Face = Face {
 /// lamp behind the needle, so the light pools at the pivot and falls off
 /// upward; the scale printed white, no red stretch.
 pub static BACKLIT: Face = Face {
-    card_paint: CardPaint::Radial(Ellipse { x: 0.5, y: 1.04, stops: &[(0.0, "#12294a"), (0.62, "#05070a")] }),
+    card_paint: CardPaint::Radial(Ellipse {
+        x: 0.5,
+        y: 1.04,
+        stops: &[(0.0, "#12294a"), (0.62, "#05070a")],
+    }),
     ink: "#eef3f8",
     hot: "#eef3f8",
     needle: Needle {
@@ -379,7 +490,14 @@ pub static BACKLIT: Face = Face {
         halo: Some(("rgba(190,222,255,0.34)", 6.5)),
     },
     // The pool behind the needle is the one lamp you can see glowing.
-    lamp: Some(Lamp { color: "rgba(130,190,255,0.50)", x: 50.0, y: 102.0, reach: 60.0, core: None, light: (0.8, 0.0) }),
+    lamp: Some(Lamp {
+        color: "rgba(130,190,255,0.50)",
+        x: 50.0,
+        y: 102.0,
+        reach: 60.0,
+        core: None,
+        light: (0.8, 0.0),
+    }),
     glass: Some(Lin {
         angle: 146.0,
         stops: &[
@@ -396,4 +514,9 @@ pub static BACKLIT: Face = Face {
 };
 
 /// The lamp colours a backlit movement can be lit in (the source sheet's).
-pub const TINTS: [(&str, &str); 4] = [("blue", "#4a9eff"), ("red", "#c0392b"), ("green", "#39c07a"), ("amber", "#e8a33d")];
+pub const TINTS: [(&str, &str); 4] = [
+    ("blue", "#4a9eff"),
+    ("red", "#c0392b"),
+    ("green", "#39c07a"),
+    ("amber", "#e8a33d"),
+];

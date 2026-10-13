@@ -12,7 +12,11 @@ use guitar::proto::rig::Rig;
 use guitar::{GuitarRigBackend, RigHome};
 
 fn profile_names(rig: &GuitarRigBackend) -> Vec<String> {
-    Rig::library(rig).profiles.into_iter().map(|p| p.name).collect()
+    Rig::library(rig)
+        .profiles
+        .into_iter()
+        .map(|p| p.name)
+        .collect()
 }
 
 fn stacks(rig: &GuitarRigBackend) -> Vec<String> {
@@ -43,14 +47,22 @@ fn a_guitar_rig_and_a_bass_rig_run_side_by_side_each_in_its_own_home() {
     }
     let process_instrument = instrument::current();
     let process_dir = rig_dir();
-    assert_eq!(process_instrument, Instrument::Guitar, "the process starts as the guitar");
+    assert_eq!(
+        process_instrument,
+        Instrument::Guitar,
+        "the process starts as the guitar"
+    );
 
     // A switch there and back comes home, without touching the process.
     let a = root.join("guitar");
     let b = root.join("bass");
     let there = RigHome::new(Instrument::Guitar, &a).with_instrument(Instrument::Bass);
     assert_eq!(there.instrument(), Instrument::Bass);
-    assert_ne!(there.dir(), a.as_path(), "the bass never plays from the guitar's library");
+    assert_ne!(
+        there.dir(),
+        a.as_path(),
+        "the bass never plays from the guitar's library"
+    );
     assert_eq!(there.with_instrument(Instrument::Guitar).dir(), a.as_path());
     assert!(!RigHome::new(Instrument::Bass, &b).is_process_default());
 
@@ -63,7 +75,10 @@ fn a_guitar_rig_and_a_bass_rig_run_side_by_side_each_in_its_own_home() {
     // bass rig did not make the process the bass, nor move its library.
     assert_eq!(instrument::current(), process_instrument);
     assert_eq!(rig_dir(), process_dir);
-    assert!(!process_dir.join("profiles").exists(), "the process's own library was never seeded");
+    assert!(
+        !process_dir.join("profiles").exists(),
+        "the process's own library was never seeded"
+    );
 
     // Each is its own instrument.
     assert_eq!(Rig::perf(&guitar).instrument, "guitar");
@@ -73,29 +88,61 @@ fn a_guitar_rig_and_a_bass_rig_run_side_by_side_each_in_its_own_home() {
 
     // Each seeded from its own shipped defaults: the guitar's profiles and
     // captures in A, the bass's in B.
-    assert!(has(&a, "profiles/blues.styx"), "the guitar's Blues seeded in its home");
+    assert!(
+        has(&a, "profiles/blues.styx"),
+        "the guitar's Blues seeded in its home"
+    );
     assert!(!has(&b, "profiles/blues.styx"), "the bass ships no Blues");
-    assert!(has(&b, "profiles/metal.styx"), "the bass's Metal seeded in its home");
+    assert!(
+        has(&b, "profiles/metal.styx"),
+        "the bass's Metal seeded in its home"
+    );
     assert!(has(&b, "profiles/worship.styx"));
-    let metal = |dir: &Path| std::fs::read_to_string(dir.join("profiles/metal.styx")).unwrap_or_default();
+    let metal =
+        |dir: &Path| std::fs::read_to_string(dir.join("profiles/metal.styx")).unwrap_or_default();
     assert_ne!(metal(&a), metal(&b), "each Metal is its own instrument's");
-    assert!(has(&b, BASS_CAPTURE), "the bass's captures seeded in its home");
+    assert!(
+        has(&b, BASS_CAPTURE),
+        "the bass's captures seeded in its home"
+    );
     assert!(!has(&a, BASS_CAPTURE), "and not in the guitar's");
     let guitar_profiles = profile_names(&guitar);
     let bass_profiles = profile_names(&bass);
-    assert!(guitar_profiles.iter().any(|p| p == "Blues"), "{guitar_profiles:?}");
-    assert!(!bass_profiles.iter().any(|p| p == "Blues"), "{bass_profiles:?}");
-    assert!(bass_profiles.iter().any(|p| p == "Metal"), "{bass_profiles:?}");
-    assert!(stacks(&guitar).iter().any(|s| s == "Lead"), "the guitar's Worship: {:?}", stacks(&guitar));
-    assert_eq!(stacks(&bass), ["Clean", "Crunch", "Drive", "Synth", "Fuzz", "Ambient"]);
+    assert!(
+        guitar_profiles.iter().any(|p| p == "Blues"),
+        "{guitar_profiles:?}"
+    );
+    assert!(
+        !bass_profiles.iter().any(|p| p == "Blues"),
+        "{bass_profiles:?}"
+    );
+    assert!(
+        bass_profiles.iter().any(|p| p == "Metal"),
+        "{bass_profiles:?}"
+    );
+    assert!(
+        stacks(&guitar).iter().any(|s| s == "Lead"),
+        "the guitar's Worship: {:?}",
+        stacks(&guitar)
+    );
+    assert_eq!(
+        stacks(&bass),
+        ["Clean", "Crunch", "Drive", "Synth", "Fuzz", "Ambient"]
+    );
 
     // A profile saved through one is in its library only.
     Rig::add_profile(&guitar, "Guitar Only".into(), String::new());
     Rig::add_profile(&bass, "Bass Only".into(), String::new());
     assert!(has(&a, "profiles/guitar-only.styx"));
-    assert!(!has(&b, "profiles/guitar-only.styx"), "the guitar's save reached the bass's library");
+    assert!(
+        !has(&b, "profiles/guitar-only.styx"),
+        "the guitar's save reached the bass's library"
+    );
     assert!(has(&b, "profiles/bass-only.styx"));
-    assert!(!has(&a, "profiles/bass-only.styx"), "the bass's save reached the guitar's library");
+    assert!(
+        !has(&a, "profiles/bass-only.styx"),
+        "the bass's save reached the guitar's library"
+    );
     assert!(profile_names(&guitar).iter().any(|p| p == "Guitar Only"));
     assert!(!profile_names(&bass).iter().any(|p| p == "Guitar Only"));
     assert!(!profile_names(&guitar).iter().any(|p| p == "Bass Only"));
@@ -105,15 +152,26 @@ fn a_guitar_rig_and_a_bass_rig_run_side_by_side_each_in_its_own_home() {
     guitar.switch_instrument(Instrument::Bass);
     assert_eq!(Rig::perf(&guitar).instrument, "bass");
     assert_ne!(guitar.home().dir(), a.as_path());
-    assert_ne!(guitar.home().dir(), b.as_path(), "never the other rig's library");
-    assert_eq!(instrument::current(), process_instrument, "the process is still the guitar");
+    assert_ne!(
+        guitar.home().dir(),
+        b.as_path(),
+        "never the other rig's library"
+    );
+    assert_eq!(
+        instrument::current(),
+        process_instrument,
+        "the process is still the guitar"
+    );
     assert!(
         !root.join("xdg/signal/instrument").exists(),
         "a rig's own switch is not remembered as the process's"
     );
     guitar.switch_instrument(Instrument::Guitar);
     assert_eq!(guitar.home().dir(), a.as_path());
-    assert!(profile_names(&guitar).iter().any(|p| p == "Guitar Only"), "back in its own library");
+    assert!(
+        profile_names(&guitar).iter().any(|p| p == "Guitar Only"),
+        "back in its own library"
+    );
     // The bass rig never noticed.
     assert_eq!(Rig::perf(&bass).instrument, "bass");
     assert_eq!(bass.home().dir(), b.as_path());

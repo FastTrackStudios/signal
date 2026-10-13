@@ -30,7 +30,10 @@ const THEME: &str = r##"<Document>
 "##;
 
 fn schema() -> Schema {
-    Schema::new().field("track.mute").field("track.solo").live("ui.hover")
+    Schema::new()
+        .field("track.mute")
+        .field("track.solo")
+        .live("ui.hover")
 }
 
 fn theme(src: &str) -> Result<Theme, Vec<String>> {
@@ -46,10 +49,20 @@ fn fields(mute: bool, solo: bool, hover: &str) -> Vec<Value> {
 struct Fills(Vec<(String, Rect)>);
 
 impl Canvas for Fills {
-    fn fill(&mut self, transform: Affine, _: Fill, brush: &Brush, _: Option<Affine>, shape: &BezPath) {
+    fn fill(
+        &mut self,
+        transform: Affine,
+        _: Fill,
+        brush: &Brush,
+        _: Option<Affine>,
+        shape: &BezPath,
+    ) {
         if let Brush::Solid(c) = brush {
             let [r, g, b, _] = c.to_rgba8().to_u8_array();
-            self.0.push((format!("#{r:02x}{g:02x}{b:02x}"), (transform * shape.clone()).bounding_box()));
+            self.0.push((
+                format!("#{r:02x}{g:02x}{b:02x}"),
+                (transform * shape.clone()).bounding_box(),
+            ));
         }
     }
     fn stroke(&mut self, _: Affine, _: &Stroke, _: &Brush, _: &BezPath) {}
@@ -75,16 +88,37 @@ fn a_component_page_is_not_a_role() {
 #[test]
 fn each_instance_draws_its_component_with_its_own_arguments() {
     let t = theme(THEME).unwrap();
-    let at = |hex: &str, f: &Vec<Value>| drawn(&t, (40.0, 100.0), f).into_iter().filter(|(h, _)| h == hex).map(|(_, r)| r).collect::<Vec<_>>();
+    let at = |hex: &str, f: &Vec<Value>| {
+        drawn(&t, (40.0, 100.0), f)
+            .into_iter()
+            .filter(|(h, _)| h == hex)
+            .map(|(_, r)| r)
+            .collect::<Vec<_>>()
+    };
     // Nothing on: both buttons are the off face, where their instances put them.
     let off = at("#303030", &fields(false, false, ""));
-    assert_eq!(off, [Rect::new(10.0, 10.0, 30.0, 30.0), Rect::new(10.0, 34.0, 30.0, 54.0)]);
+    assert_eq!(
+        off,
+        [
+            Rect::new(10.0, 10.0, 30.0, 30.0),
+            Rect::new(10.0, 34.0, 30.0, 54.0)
+        ]
+    );
     // Muted: the argument passed down two levels lights the first only.
-    assert_eq!(at("#d04040", &fields(true, false, "")), [Rect::new(10.0, 10.0, 30.0, 30.0)]);
+    assert_eq!(
+        at("#d04040", &fields(true, false, "")),
+        [Rect::new(10.0, 10.0, 30.0, 30.0)]
+    );
     // Soloed: the second's own argument, its own colour.
-    assert_eq!(at("#d0c040", &fields(false, true, "")), [Rect::new(10.0, 34.0, 30.0, 54.0)]);
+    assert_eq!(
+        at("#d0c040", &fields(false, true, "")),
+        [Rect::new(10.0, 34.0, 30.0, 54.0)]
+    );
     // Hover is per control: each compares against its own name.
-    assert_eq!(at("#505050", &fields(false, false, "solo")), [Rect::new(10.0, 34.0, 30.0, 54.0)]);
+    assert_eq!(
+        at("#505050", &fields(false, false, "solo")),
+        [Rect::new(10.0, 34.0, 30.0, 54.0)]
+    );
 }
 
 #[test]
@@ -92,21 +126,45 @@ fn an_instance_keeps_its_name_and_its_own_bindings() {
     let t = theme(THEME).unwrap();
     let f = fields(false, false, "");
     // The instances' names are the hit targets.
-    assert_eq!(t.hit("mcp.strip", (40.0, 100.0), &f, Point::new(15.0, 15.0)).as_deref(), Some("mute"));
-    assert_eq!(t.hit("mcp.strip", (40.0, 100.0), &f, Point::new(15.0, 40.0)).as_deref(), Some("solo"));
+    assert_eq!(
+        t.hit("mcp.strip", (40.0, 100.0), &f, Point::new(15.0, 15.0))
+            .as_deref(),
+        Some("mute")
+    );
+    assert_eq!(
+        t.hit("mcp.strip", (40.0, 100.0), &f, Point::new(15.0, 40.0))
+            .as_deref(),
+        Some("solo")
+    );
     // The instance's own `bind:visible` hides the copy.
-    assert!(drawn(&t, (20.0, 100.0), &f).iter().all(|(h, _)| h != "#303030"));
+    assert!(
+        drawn(&t, (20.0, 100.0), &f)
+            .iter()
+            .all(|(h, _)| h != "#303030")
+    );
 }
 
 #[test]
 fn problems_with_components_are_reported() {
     let unknown = THEME.replace(r#"of="pair""#, r#"of="pear""#);
     let e = theme(&unknown).unwrap_err();
-    assert!(e.iter().any(|e| e.contains("no component `pear`") && e.contains("button, pair")), "{e:?}");
+    assert!(
+        e.iter()
+            .any(|e| e.contains("no component `pear`") && e.contains("button, pair")),
+        "{e:?}"
+    );
 
-    let extra = THEME.replace(r#"arg:muted="track.mute""#, r#"arg:muted="track.mute" arg:colour="$mute""#);
+    let extra = THEME.replace(
+        r#"arg:muted="track.mute""#,
+        r#"arg:muted="track.mute" arg:colour="$mute""#,
+    );
     let e = theme(&extra).unwrap_err();
-    assert!(e.iter().any(|e| e.contains("`pair` takes no argument `colour`") && e.contains("it takes: muted")), "{e:?}");
+    assert!(
+        e.iter()
+            .any(|e| e.contains("`pair` takes no argument `colour`")
+                && e.contains("it takes: muted")),
+        "{e:?}"
+    );
 
     let unread = THEME.replace("arg.lit", "arg.light");
     let e = theme(&unread).unwrap_err();
@@ -114,9 +172,19 @@ fn problems_with_components_are_reported() {
 
     let outside = THEME.replace(r#"bind:visible="w >= 30""#, r#"bind:visible="arg.muted""#);
     let e = theme(&outside).unwrap_err();
-    assert!(e.iter().any(|e| e.contains("`arg.muted` is read outside a component")), "{e:?}");
+    assert!(
+        e.iter()
+            .any(|e| e.contains("`arg.muted` is read outside a component")),
+        "{e:?}"
+    );
 
-    let recursive = THEME.replace(r#"<Instance name="@solo" of="button""#, r#"<Instance name="@solo" of="pair""#);
+    let recursive = THEME.replace(
+        r#"<Instance name="@solo" of="button""#,
+        r#"<Instance name="@solo" of="pair""#,
+    );
     let e = theme(&recursive).unwrap_err();
-    assert!(e.iter().any(|e| e.contains("does `pair` place itself?")), "{e:?}");
+    assert!(
+        e.iter().any(|e| e.contains("does `pair` place itself?")),
+        "{e:?}"
+    );
 }

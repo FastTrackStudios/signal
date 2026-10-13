@@ -25,7 +25,8 @@ fn controls_round_trip_through_loro_and_bundle() {
     let s = scene();
     let replica = document_loro::LoroScene::from_scene(&s);
     assert_eq!(replica.scene(), s);
-    let bytes = document_bundle::to_bytes(&replica, &document_bundle::Manifest::new("Demo rig")).unwrap();
+    let bytes =
+        document_bundle::to_bytes(&replica, &document_bundle::Manifest::new("Demo rig")).unwrap();
     let (manifest, loaded) = document_bundle::from_bytes(&bytes).unwrap();
     assert_eq!(manifest.title, "Demo rig");
     assert_eq!(loaded.scene(), s);

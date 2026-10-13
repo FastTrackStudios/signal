@@ -19,8 +19,8 @@ use dioxus_test::keyboard_types::Modifiers;
 use dioxus_test::{by_testid, render};
 use expression_editor::doc::{Marker, Region};
 use expression_editor::tracks::Track;
-use expression_editor::{Editor, ExpressionDoc, Mode, Note, NoteId, TimeBase, Viewport};
 use expression_editor::ui::{ExpressionEditor, stack};
+use expression_editor::{Editor, ExpressionDoc, Mode, Note, NoteId, TimeBase, Viewport};
 use std::cell::RefCell;
 
 const RATE: f64 = 100.0;

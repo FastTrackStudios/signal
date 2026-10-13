@@ -561,7 +561,11 @@ pub fn CompViz(
         let metrics = metrics.clone();
         let view = Rc::clone(&view);
         let fresh = fresh.clone();
-        move || dioxus_native_dom::CustomWidgetAttr::new(fts_audio_ui::widget::Rasterized::new(fts_audio_ui::widget::Freshened::new(CompWidget::new(view, metrics), fresh)))
+        move || {
+            dioxus_native_dom::CustomWidgetAttr::new(fts_audio_ui::widget::Rasterized::new(
+                fts_audio_ui::widget::Freshened::new(CompWidget::new(view, metrics), fresh),
+            ))
+        }
     });
 
     let (input, gr) = wave;

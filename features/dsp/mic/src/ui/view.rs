@@ -45,7 +45,14 @@ fn names(list: &[&str]) -> Vec<String> {
 /// A caption over the shared dropdown, which opens downward here: the mic
 /// sections sit at the top of the surface.
 #[component]
-fn Labeled(handle: ParamHandle, testid: String, label: String, options: Vec<String>, skin: Skin, #[props(default = 120.0)] width: f64) -> Element {
+fn Labeled(
+    handle: ParamHandle,
+    testid: String,
+    label: String,
+    options: Vec<String>,
+    skin: Skin,
+    #[props(default = 120.0)] width: f64,
+) -> Element {
     rsx! {
         div {
             style: "display:flex; flex-direction:column; gap:4px;",
@@ -76,7 +83,15 @@ fn Switch(handle: ParamHandle, testid: String, label: String, skin: Skin) -> Ele
 
 /// One mic's own controls.
 #[component]
-fn MicSection(label: String, n: u8, kind: ParamPtr, pattern: ParamPtr, filter: ParamPtr, axis: ParamPtr, skin: Skin) -> Element {
+fn MicSection(
+    label: String,
+    n: u8,
+    kind: ParamPtr,
+    pattern: ParamPtr,
+    filter: ParamPtr,
+    axis: ParamPtr,
+    skin: Skin,
+) -> Element {
     let ctx = use_param_context();
     rsx! {
         Section { label, skin,
@@ -93,7 +108,15 @@ fn MicSection(label: String, n: u8, kind: ParamPtr, pattern: ParamPtr, filter: P
 
 /// The controls both mics share: proximity, the capsules, the output.
 #[component]
-fn Shared(proximity: ParamPtr, rear_trim: ParamPtr, swap: ParamPtr, source: ParamPtr, output: ParamPtr, phase: ParamPtr, skin: Skin) -> Element {
+fn Shared(
+    proximity: ParamPtr,
+    rear_trim: ParamPtr,
+    swap: ParamPtr,
+    source: ParamPtr,
+    output: ParamPtr,
+    phase: ParamPtr,
+    skin: Skin,
+) -> Element {
     let ctx = use_param_context();
     rsx! {
         Section { label: "Proximity".to_string(), skin,
@@ -122,7 +145,9 @@ pub fn App() -> Element {
 #[component]
 fn MicShell() -> Element {
     let shared = use_context::<SharedState>();
-    let Some(ui) = shared.get::<MicUiState>() else { return rsx! {} };
+    let Some(ui) = shared.get::<MicUiState>() else {
+        return rsx! {};
+    };
     let ctx = use_param_context();
     let p = &ui.params;
     let skin = skin();

@@ -10,7 +10,8 @@ thread_local! {
     static FREES: Cell<usize> = const { Cell::new(0) };
 }
 pub struct Allocator;
-static INNER: dsp_core::golden::CountingAlloc<System> = dsp_core::golden::CountingAlloc::new(System);
+static INNER: dsp_core::golden::CountingAlloc<System> =
+    dsp_core::golden::CountingAlloc::new(System);
 // SAFETY: all allocation operations forward their exact pointer/layout arguments.
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {

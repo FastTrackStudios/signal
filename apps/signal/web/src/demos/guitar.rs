@@ -38,9 +38,7 @@
 use std::time::Duration;
 
 use dioxus::prelude::*;
-use guitar::ui::proto::{
-    BlockParam, LiveBlock, LiveNode, LivePreset, PerfStack, PerformanceModel,
-};
+use guitar::ui::proto::{BlockParam, LiveBlock, LiveNode, LivePreset, PerfStack, PerformanceModel};
 use guitar::ui::{ControlView, PerformGrid, RigViewState};
 use signal_proto::block::BlockType;
 

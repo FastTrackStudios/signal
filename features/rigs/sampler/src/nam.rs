@@ -405,12 +405,23 @@ mod tests {
             let end = (at + 64).min(N);
             let mut pr = vec![0.0f32; end - at];
             pieces
-                .process_block(&sig[at..end], &sig[at..end], &mut pl[at..end], &mut pr, &PluginEvents::default())
+                .process_block(
+                    &sig[at..end],
+                    &sig[at..end],
+                    &mut pl[at..end],
+                    &mut pr,
+                    &PluginEvents::default(),
+                )
                 .unwrap();
         }
         assert!(ll.iter().any(|x| x.abs() > 1e-6), "the model was heard");
         for i in 0..N {
-            assert!((ll[i] - pl[i]).abs() < 1e-6, "diverged at {i}: {} != {}", ll[i], pl[i]);
+            assert!(
+                (ll[i] - pl[i]).abs() < 1e-6,
+                "diverged at {i}: {} != {}",
+                ll[i],
+                pl[i]
+            );
         }
     }
 

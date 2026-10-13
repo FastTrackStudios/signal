@@ -488,13 +488,12 @@ pub fn editor(scene: Scene, viewport: Viewport) -> Editor {
             // The bend on the third note: up a tone, held, released —
             // the shape the two middle offsets exist to carry.
             if let Some(n) = doc.note_mut(NoteId(3)) {
-                *n.curve_mut(crate::Dimension::Pitch) =
-                    crate::Curve::from_points(vec![
-                        crate::Point::new(PPQ * 1.0, 0.0),
-                        crate::Point::new(PPQ * 1.4, 2.0),
-                        crate::Point::new(PPQ * 2.1, 2.0),
-                        crate::Point::new(PPQ * 2.5, 0.0),
-                    ]);
+                *n.curve_mut(crate::Dimension::Pitch) = crate::Curve::from_points(vec![
+                    crate::Point::new(PPQ * 1.0, 0.0),
+                    crate::Point::new(PPQ * 1.4, 2.0),
+                    crate::Point::new(PPQ * 2.1, 2.0),
+                    crate::Point::new(PPQ * 2.5, 0.0),
+                ]);
             }
             doc.row_space = RowSpace::Strings(tuning);
         }
@@ -841,7 +840,8 @@ impl Groove {
             if bar % 4 == 3 {
                 // A fill down the toms over the last beat.
                 for (i, tom) in g.toms.iter_mut().enumerate() {
-                    let at = crate::paint::num::coord(i).mul_add(beat / 3.0, 3.0f64.mul_add(beat, b0));
+                    let at =
+                        crate::paint::num::coord(i).mul_add(beat / 3.0, 3.0f64.mul_add(beat, b0));
                     tom.push((at, wobble().mul_add(0.1, 0.85)));
                     tom.push((at + beat / 6.0, wobble().mul_add(0.1, 0.6)));
                 }
@@ -924,13 +924,7 @@ impl Groove {
     }
 
     /// Every mic of the kit, with what it hears.
-    fn mics(
-        &self,
-    ) -> Vec<(
-        &'static str,
-        crate::kit::LaneRole,
-        ExpressionDoc,
-    )> {
+    fn mics(&self) -> Vec<(&'static str, crate::kit::LaneRole, ExpressionDoc)> {
         use crate::kit::LaneRole as R;
         let (k, s, h, c) = (&self.kick, &self.snare, &self.hat, &self.crash);
         let [t1, t2, t3] = [&self.toms[0], &self.toms[1], &self.toms[2]];

@@ -11,9 +11,9 @@
 //! e.g. `set_mode` from a remote client would touch REAPER from the
 //! wrong thread.
 
-use daw_proto::main_thread;
 use crate::proto::SessionServiceError;
 use crate::proto::services::SessionModeService;
+use daw_proto::main_thread;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::modes::{self as mode_actions, Mode};

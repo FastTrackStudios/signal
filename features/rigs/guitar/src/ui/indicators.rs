@@ -11,7 +11,9 @@
 
 use dioxus::prelude::*;
 
-use crate::ui::theme::{DIM, FAINT, LINE_STRONG, LIVE, MENU, MUTED, R_MD, R_SM, T_BODY, T_SMALL, TEXT};
+use crate::ui::theme::{
+    DIM, FAINT, LINE_STRONG, LIVE, MENU, MUTED, R_MD, R_SM, T_BODY, T_SMALL, TEXT,
+};
 
 /// The alarm red: an indicator that needs you. White on it is 4.8:1.
 const ALARM: &str = "#dc2626";
@@ -96,7 +98,11 @@ pub fn Indicator(
     });
     let on = !flash || lit();
     let dot_now = if on { dot.clone() } else { DIM.to_string() };
-    let label_color = if flash && on { dot.clone() } else { MUTED.to_string() };
+    let label_color = if flash && on {
+        dot.clone()
+    } else {
+        MUTED.to_string()
+    };
     let pill_dot = if on { "#ffffff" } else { ALARM };
     rsx! {
         div {

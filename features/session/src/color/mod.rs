@@ -31,8 +31,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use daw::service::{ExtState, ProjectContext, Projects, TrackEvent, TrackRef, Tracks};
 use crate::proto::color::{AutoColorActions, register_auto_color_actions};
+use daw::service::{ExtState, ProjectContext, Projects, TrackEvent, TrackRef, Tracks};
 use tokio::sync::broadcast::error::RecvError;
 
 static STATE: OnceLock<Arc<AutoColorState>> = OnceLock::new();

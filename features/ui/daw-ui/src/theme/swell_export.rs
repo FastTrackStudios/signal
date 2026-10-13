@@ -292,7 +292,9 @@ mod tests {
             "combo_bg",
         ] {
             let hex = setting(key);
-            let l = crate::theme::Color::hex(&hex).expect("valid hex").luminance();
+            let l = crate::theme::Color::hex(&hex)
+                .expect("valid hex")
+                .luminance();
             assert!(l < 0.25, "{key} = {hex} is too light for a dark theme");
         }
     }

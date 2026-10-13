@@ -22,6 +22,9 @@ nice-plug-dioxus = { workspace = true, optional = true }
 realfft = { workspace = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+mic = { path = ".", features = ["ui"] }
 dioxus-test = { workspace = true }
 hound = { version = "3.5" }
 tokio = { workspace = true, features = ["macros", "rt"] }

@@ -36,17 +36,16 @@ pub mod demo;
 pub mod guitarpro;
 #[cfg(feature = "host")]
 pub mod host;
+#[cfg(feature = "ops")]
+pub mod ops;
 #[cfg(feature = "paint")]
 pub mod paint;
 #[cfg(feature = "reaper")]
 pub mod reaper;
 #[cfg(feature = "standalone")]
 pub mod standalone;
-#[cfg(feature = "ops")]
-pub mod ops;
 #[cfg(feature = "ui")]
 pub mod ui;
-
 
 pub mod actions;
 pub mod blob;

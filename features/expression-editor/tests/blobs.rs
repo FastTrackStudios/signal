@@ -1,9 +1,9 @@
 //! Sung notes draw as amplitude blobs, not rectangles.
 
 use expression_editor::doc::{ExpressionDoc, Note, NoteId, TimeBase};
-use expression_editor::{Editor, Mode, Viewport};
 use expression_editor::ui::canvas;
 use expression_editor::ui::theme;
+use expression_editor::{Editor, Mode, Viewport};
 
 const PPQ: f64 = 960.0;
 

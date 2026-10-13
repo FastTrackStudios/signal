@@ -2,8 +2,8 @@
 //! a chorus should sit near unity (a pedal's level knob aside).
 //! `cargo run --release -p fx-blocks --example chorus_gain`
 
-use daw::plugin::{PluginEvents, PluginInstance};
 use builtin::NativeMod;
+use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 512;
@@ -32,14 +32,20 @@ fn main() {
                 "vibrato" => NativeMod::vibrato(SR),
                 _ => NativeMod::chorus(SR),
             };
-            for (n, v) in [("engine", f64::from(engine)), ("mix", mix), ("depth", 0.35), ("rate", 0.8)] {
+            for (n, v) in [
+                ("engine", f64::from(engine)),
+                ("mix", mix),
+                ("depth", 0.35),
+                ("rate", 0.8),
+            ] {
                 m.set_named(n, v);
             }
             m.prepare(SR, BLOCK as u32).unwrap();
             let mut out = Vec::new();
             for c in tone.chunks(BLOCK) {
                 let (mut l, mut r) = (vec![0.0f32; c.len()], vec![0.0f32; c.len()]);
-                m.process_block(c, c, &mut l, &mut r, &PluginEvents::EMPTY).unwrap();
+                m.process_block(c, c, &mut l, &mut r, &PluginEvents::EMPTY)
+                    .unwrap();
                 out.extend(l.iter().zip(&r).map(|(a, b)| (a + b) * 0.5));
             }
             let half = tone.len() / 2;

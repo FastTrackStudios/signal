@@ -133,7 +133,9 @@ fn write_wav(path: &PathBuf, sr: u32, l: &[f32], r: &[f32]) -> std::io::Result<(
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = || -> ! {
-        eprintln!("usage: plugin_render <bundle.vst3> <state|-> <out.wav> [--note N --vel V --ch C --bus N --realtime --hold S --tail S --sr HZ --preroll S --bpm B]");
+        eprintln!(
+            "usage: plugin_render <bundle.vst3> <state|-> <out.wav> [--note N --vel V --ch C --bus N --realtime --hold S --tail S --sr HZ --preroll S --bpm B]"
+        );
         std::process::exit(2)
     };
     if args.len() < 3 {
@@ -146,12 +148,25 @@ fn main() {
             .and_then(|v| v.parse().ok())
             .unwrap_or(d)
     };
-    let (note, vel, ch) = (opt("--note", 60.0) as u8, opt("--vel", 100.0) as u8, opt("--ch", 1.0) as u8);
-    let (hold, tail, sr, preroll) = (opt("--hold", 2.0), opt("--tail", 1.0), opt("--sr", 48000.0), opt("--preroll", 20.0));
+    let (note, vel, ch) = (
+        opt("--note", 60.0) as u8,
+        opt("--vel", 100.0) as u8,
+        opt("--ch", 1.0) as u8,
+    );
+    let (hold, tail, sr, preroll) = (
+        opt("--hold", 2.0),
+        opt("--tail", 1.0),
+        opt("--sr", 48000.0),
+        opt("--preroll", 20.0),
+    );
     let t0 = Instant::now();
     let host = Vst3Host::new();
     let mut plugin = host.load(&PathBuf::from(&args[0]), 0).expect("load plugin");
-    eprintln!("[{:>6.2?}] loaded {}", t0.elapsed(), plugin.descriptor().name);
+    eprintln!(
+        "[{:>6.2?}] loaded {}",
+        t0.elapsed(),
+        plugin.descriptor().name
+    );
     if args[1] != "-" {
         let state = std::fs::read(&args[1]).expect("read state");
         set_component_state(&mut plugin, &state);
@@ -180,15 +195,35 @@ fn main() {
     let (l, r) = render(&mut plugin, bus, realtime, total, |pos| {
         let mut ev = Vec::new();
         if pos == 0 {
-            ev.push(PluginMidiEvent { offset: 0, message: MidiEvent::NoteOn { channel: chan, key: KeyNumber::new(note), velocity: Velocity::new(vel) } });
+            ev.push(PluginMidiEvent {
+                offset: 0,
+                message: MidiEvent::NoteOn {
+                    channel: chan,
+                    key: KeyNumber::new(note),
+                    velocity: Velocity::new(vel),
+                },
+            });
         }
         if (pos..pos + BLOCK).contains(&hold_frames) {
-            ev.push(PluginMidiEvent { offset: (hold_frames - pos) as u32, message: MidiEvent::NoteOff { channel: chan, key: KeyNumber::new(note), velocity: Velocity::new(0) } });
+            ev.push(PluginMidiEvent {
+                offset: (hold_frames - pos) as u32,
+                message: MidiEvent::NoteOff {
+                    channel: chan,
+                    key: KeyNumber::new(note),
+                    velocity: Velocity::new(0),
+                },
+            });
         }
         ev
     });
     write_wav(&PathBuf::from(&args[2]), sr as u32, &l, &r).expect("write wav");
     let peak = l.iter().chain(&r).fold(0.0f32, |m, v| m.max(v.abs()));
-    eprintln!("[{:>6.2?}] wrote {} ({:.2} s, peak {:.3})", t0.elapsed(), args[2], total as f64 / sr, peak);
+    eprintln!(
+        "[{:>6.2?}] wrote {} ({:.2} s, peak {:.3})",
+        t0.elapsed(),
+        args[2],
+        total as f64 / sr,
+        peak
+    );
     plugin.deactivate();
 }

@@ -20,14 +20,14 @@
 //! - the page itself, its units laid out for the room — swipe in from its
 //!   right edge for the next page, from its left for the one before.
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{LiveBlock, PerformanceModel};
+use dioxus::prelude::*;
 use signal_proto::block::BlockType;
 
 use crate::ui::control::{
-    DelayPanel, LiveComp, LiveEq, ModGroupPanel, ReverbPanel, ZoomPanel, find_block, MOD_KINDS,
-    MOTION_KINDS,
+    DelayPanel, LiveComp, LiveEq, MOD_KINDS, MOTION_KINDS, ModGroupPanel, ReverbPanel, ZoomPanel,
+    find_block,
 };
 use crate::ui::rig_faces::PrePart;
 use crate::ui::state::RigViewState;
@@ -121,7 +121,12 @@ impl Page {
 
     fn home(self) -> Home {
         match self {
-            Self::Input | Self::Pedals | Self::Pitch | Self::Filter | Self::PreModTrem | Self::PreDelayVerb => Home::Front,
+            Self::Input
+            | Self::Pedals
+            | Self::Pitch
+            | Self::Filter
+            | Self::PreModTrem
+            | Self::PreDelayVerb => Home::Front,
             Self::PreComp | Self::Drives | Self::Amps | Self::Eq | Self::GatePostComp => Home::Core,
             Self::ModMotion => Home::Post,
             Self::Delays | Self::Reverbs => Home::Time,
@@ -153,7 +158,12 @@ impl Page {
             // An expression pedal, rocked.
             Self::Pedals => &["M4 20h16", "M6 20L9 6l10 3-3 11"],
             // A note, raised.
-            Self::Pitch => &["M9 18V6l6-2", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M18 14V4", "M15 7l3-3 3 3"],
+            Self::Pitch => &[
+                "M9 18V6l6-2",
+                "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
+                "M18 14V4",
+                "M15 7l3-3 3 3",
+            ],
             // A low-pass curve.
             Self::Filter => &["M3 8h8c4 0 5 10 10 10"],
             // One wave.
@@ -161,17 +171,32 @@ impl Page {
             // Repeats dying away.
             Self::PreDelayVerb => &["M4 6v12", "M10 9v6", "M15 10.5v3", "M19 11.5v1"],
             // Squeezed in from both sides.
-            Self::PreComp => &["M12 3v6", "M9 6l3 3 3-3", "M12 21v-6", "M9 18l3-3 3 3", "M4 12h16"],
+            Self::PreComp => &[
+                "M12 3v6",
+                "M9 6l3 3 3-3",
+                "M12 21v-6",
+                "M9 18l3-3 3 3",
+                "M4 12h16",
+            ],
             // A flame.
             Self::Drives => &["M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 1 1 2 2 3 4"],
             // A combo: its panel and its speaker.
-            Self::Amps => &["M4 5h16v14H4z", "M4 9h16", "M9 14a3 3 0 1 0 6 0 3 3 0 1 0-6 0"],
+            Self::Amps => &[
+                "M4 5h16v14H4z",
+                "M4 9h16",
+                "M9 14a3 3 0 1 0 6 0 3 3 0 1 0-6 0",
+            ],
             // Three bands.
-            Self::Eq => &["M6 4v16", "M12 4v16", "M18 4v16", "M4 14h4", "M10 8h4", "M16 16h4"],
+            Self::Eq => &[
+                "M6 4v16", "M12 4v16", "M18 4v16", "M4 14h4", "M10 8h4", "M16 16h4",
+            ],
             // A gate, open.
             Self::GatePostComp => &["M3 18h5V6h8v12h5"],
             // Two waves.
-            Self::ModMotion => &["M2 9c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-2 5-2", "M2 15c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-2 5-2"],
+            Self::ModMotion => &[
+                "M2 9c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-2 5-2",
+                "M2 15c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-2 5-2",
+            ],
             // Echoes, each smaller.
             Self::Delays => &[
                 "M3 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0",
@@ -180,7 +205,13 @@ impl Page {
                 "M21 12h.01",
             ],
             // A room ringing out.
-            Self::Reverbs => &["M12 12h.01", "M8.5 8.5a5 5 0 0 0 0 7", "M15.5 8.5a5 5 0 0 1 0 7", "M5.5 5.5a9 9 0 0 0 0 13", "M18.5 5.5a9 9 0 0 1 0 13"],
+            Self::Reverbs => &[
+                "M12 12h.01",
+                "M8.5 8.5a5 5 0 0 0 0 7",
+                "M15.5 8.5a5 5 0 0 1 0 7",
+                "M5.5 5.5a9 9 0 0 0 0 13",
+                "M18.5 5.5a9 9 0 0 1 0 13",
+            ],
         }
     }
 }
@@ -299,7 +330,11 @@ pub fn PhoneControl(
     let island_left = try_use_context::<IslandLeft>().is_some_and(|s| (s.0)());
     // The housing's clearance: the rail moves out from under it on the
     // left; on the right the view keeps clear of it itself.
-    let (lead, trail) = if island_left { (HOUSING, 0) } else { (0, HOUSING) };
+    let (lead, trail) = if island_left {
+        (HOUSING, 0)
+    } else {
+        (0, HOUSING)
+    };
     // What sits in the screen's rounded corners keeps clear of their curve
     // (the bars themselves run into them): how far in, for each corner's
     // content, from how close it comes to the other edge. Rounded up.
@@ -319,7 +354,10 @@ pub fn PhoneControl(
     // every page at once, an app each).
     let mut page = use_signal(|| {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(p) = std::env::var("FTS_PHONE_PAGE").ok().and_then(|s| Page::ALL.into_iter().find(|p| p.slug() == s)) {
+        if let Some(p) = std::env::var("FTS_PHONE_PAGE")
+            .ok()
+            .and_then(|s| Page::ALL.into_iter().find(|p| p.slug() == s))
+        {
             return p;
         }
         Page::Amps
@@ -338,7 +376,9 @@ pub fn PhoneControl(
     });
     // The Audio tab up, shared by the top bar (where the tabs are, in Audio)
     // and the page.
-    use_context_provider(|| crate::ui::phone_audio::AudioTab(Signal::new(crate::ui::phone_audio::AudioTab::initial())));
+    use_context_provider(|| {
+        crate::ui::phone_audio::AudioTab(Signal::new(crate::ui::phone_audio::AudioTab::initial()))
+    });
     // `FTS_PHONE_OPEN=audio|switch`: open on that mode, for the shot tool.
     #[cfg(not(target_arch = "wasm32"))]
     use_hook(|| match std::env::var("FTS_PHONE_OPEN").as_deref() {
@@ -384,7 +424,9 @@ pub fn PhoneControl(
                 (Some("setlists"), ..) => Some(BrowseTab::Setlists),
                 (Some("module"), Some(m), _) => BrowseTab::for_module(m),
                 (Some("block"), Some(n), Some(t)) => Some(BrowseTab::for_block(n, t)),
-                (Some("pedal"), Some(n), _) => Some(BrowseTab::Pedal { name: n.to_string() }),
+                (Some("pedal"), Some(n), _) => Some(BrowseTab::Pedal {
+                    name: n.to_string(),
+                }),
                 _ => None,
             };
         }
@@ -404,7 +446,9 @@ pub fn PhoneControl(
                 sig.set(None);
                 let tab = match asked {
                     Selection::Module(m) => crate::ui::phone_browser::BrowseTab::for_module(&m),
-                    Selection::Block { name, block_type } => Some(crate::ui::phone_browser::BrowseTab::for_block(&name, &block_type)),
+                    Selection::Block { name, block_type } => Some(
+                        crate::ui::phone_browser::BrowseTab::for_block(&name, &block_type),
+                    ),
                 };
                 if tab.is_some() {
                     browse.set(tab);
@@ -437,7 +481,12 @@ pub fn PhoneControl(
     // at each without touching the screen.
     #[cfg(not(target_arch = "wasm32"))]
     use_future(move || async move {
-        let Some(secs) = std::env::var("FTS_PHONE_TOUR").ok().and_then(|s| s.parse::<u64>().ok()) else { return };
+        let Some(secs) = std::env::var("FTS_PHONE_TOUR")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+        else {
+            return;
+        };
         for p in Page::ALL.iter().cycle() {
             page.set(*p);
             tracing::info!(page = ?p, "phone tour");
@@ -483,8 +532,12 @@ pub fn PhoneControl(
         .as_ref()
         .and_then(|l| l.iter().find(|p| p.active).map(|p| p.name.clone()))
         .unwrap_or_else(|| "—".to_string());
-    let face_presets = use_context_provider(|| crate::ui::face_chrome::FacePresets(Signal::new(Default::default())));
-    use_context_provider(|| crate::ui::face_chrome::VizMode(Signal::new(std::collections::HashSet::new())));
+    let face_presets = use_context_provider(|| {
+        crate::ui::face_chrome::FacePresets(Signal::new(Default::default()))
+    });
+    use_context_provider(|| {
+        crate::ui::face_chrome::VizMode(Signal::new(std::collections::HashSet::new()))
+    });
     use_effect(move || {
         if let Some(c) = compositions.read().as_ref() {
             let mut s = face_presets.0;
@@ -494,10 +547,12 @@ pub fn PhoneControl(
         }
     });
     let pick_of = |module: &str| {
-        compositions
-            .read()
-            .as_ref()
-            .and_then(|c| c.active_modules.iter().find(|m| m.module.eq_ignore_ascii_case(module)).cloned())
+        compositions.read().as_ref().and_then(|c| {
+            c.active_modules
+                .iter()
+                .find(|m| m.module.eq_ignore_ascii_case(module))
+                .cloned()
+        })
     };
     // The page's module presets, for the top line.
     let modules: Vec<&'static str> = match (mode(), page()) {
@@ -512,12 +567,24 @@ pub fn PhoneControl(
     // A module with edits on any block it owns (a pedal swapped into one of
     // its slots included): its name carries a `*`.
     let module_edited = |module: &str| {
-        pick_of(module).is_some_and(|p| p.blocks.iter().any(|b| blocks.iter().any(|x| x.overridden && x.name.eq_ignore_ascii_case(b))))
+        pick_of(module).is_some_and(|p| {
+            p.blocks.iter().any(|b| {
+                blocks
+                    .iter()
+                    .any(|x| x.overridden && x.name.eq_ignore_ascii_case(b))
+            })
+        })
     };
     // A module's preset as the status line names it.
     let name_of = |module: &str| {
-        let (preset, snapshot) = pick_of(module).map(|p| (p.preset, p.snapshot)).unwrap_or_default();
-        if snapshot.is_empty() { preset } else { format!("{preset} · {snapshot}") }
+        let (preset, snapshot) = pick_of(module)
+            .map(|p| (p.preset, p.snapshot))
+            .unwrap_or_default();
+        if snapshot.is_empty() {
+            preset
+        } else {
+            format!("{preset} · {snapshot}")
+        }
     };
 
     // Profile or Song: the perform mode, shared with every remote.
@@ -538,23 +605,36 @@ pub fn PhoneControl(
     let plays: &'static str = if song { "Setlist" } else { "Profile" };
     // What plays: the song in Song, else the profile.
     let playing = if song {
-        model.songs.get(model.song_index as usize).map_or_else(|| model.profile_name.clone(), |s| s.name.clone())
+        model
+            .songs
+            .get(model.song_index as usize)
+            .map_or_else(|| model.profile_name.clone(), |s| s.name.clone())
     } else {
         model.profile_name.clone()
     };
     // The page with the chain down: dimmed, its presses its parent's.
-    let page_veil = if chain_tall() { "opacity: 0.4; pointer-events: none;" } else { "" };
+    let page_veil = if chain_tall() {
+        "opacity: 0.4; pointer-events: none;"
+    } else {
+        ""
+    };
     // One chain segment: thin under the status line, a tall tile dropped down.
     let segment = move |target: Signal<Page>, p: Page, tall: bool| {
         let mut target = target;
         let on = target() == p;
         let color = p.color();
-        let look = if on { format!("background: {color}; color: #0a0b0d;") } else { format!("background: {RAISED}; color: {color};") };
+        let look = if on {
+            format!("background: {color}; color: #0a0b0d;")
+        } else {
+            format!("background: {RAISED}; color: {color};")
+        };
         // Raised, the names sit along the tiles' tops, level with each other.
         // Under it, the page's icon in the middle of the tile.
         let ink = if on { "#0a0b0d" } else { color };
         let size = if tall {
-            format!("flex: 1 0 {CHAIN_TILE_MIN}px; flex-direction: column; align-items: center; padding-top: 10px; border-radius: 6px; font-size: 13px;")
+            format!(
+                "flex: 1 0 {CHAIN_TILE_MIN}px; flex-direction: column; align-items: center; padding-top: 10px; border-radius: 6px; font-size: 13px;"
+            )
         } else {
             "flex: 1 1 0%; align-items: center; justify-content: center; border-radius: 3px; font-size: 11px;".to_string()
         };
@@ -581,7 +661,8 @@ pub fn PhoneControl(
 
     // Two pages at once in a window tall enough for both (not a phone's),
     // and the box each page is fitted to.
-    let (win_w, win_h) = try_use_context::<crate::ui::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
+    let (win_w, win_h) =
+        try_use_context::<crate::ui::control::WindowSize>().map_or((874.0, 381.0), |s| (s.0)());
     let two_panes = win_h >= TWO_PANES_MIN_H && !chain_tall();
     let pane_box = {
         let w = win_w - f64::from(RAIL_W + HOUSING) - f64::from(CORNER);
@@ -595,7 +676,11 @@ pub fn PhoneControl(
 
     // The bar's items: centred in the line, but stretched in Switch so the
     // macro bar's own height (taller than the line) is the bar's.
-    let bar_align = if matches!(mode(), Mode::Switch | Mode::Edit) { "stretch" } else { "center" };
+    let bar_align = if matches!(mode(), Mode::Switch | Mode::Edit) {
+        "stretch"
+    } else {
+        "center"
+    };
 
     rsx! {
         // The whole screen: the view runs under the camera housing on
@@ -855,14 +940,28 @@ fn desk_columns(g: crate::ui::control::Group) -> [Vec<(DeskPane, f64)>; 2] {
         // In signal order, a row each: the pre compressor and the gate,
         // the drives and the amp, the post compressor and the EQ.
         Group::Amp => [
-            vec![(DeskPane::Page(Page::PreComp), 1.0), (DeskPane::Page(Page::Drives), 1.0), (DeskPane::PostComp, 1.0)],
-            vec![(DeskPane::Gate, 1.0), (DeskPane::Page(Page::Amps), 1.0), (DeskPane::Page(Page::Eq), 1.0)],
+            vec![
+                (DeskPane::Page(Page::PreComp), 1.0),
+                (DeskPane::Page(Page::Drives), 1.0),
+                (DeskPane::PostComp, 1.0),
+            ],
+            vec![
+                (DeskPane::Gate, 1.0),
+                (DeskPane::Page(Page::Amps), 1.0),
+                (DeskPane::Page(Page::Eq), 1.0),
+            ],
         ],
         // Two rows: modulation over motion beside the Master module (its
         // EQ and the limiter); the delays beside the reverbs.
         Group::Post => [
-            vec![(DeskPane::Page(Page::ModMotion), 1.0), (DeskPane::Page(Page::Delays), 1.0)],
-            vec![(DeskPane::Master, 1.0), (DeskPane::Page(Page::Reverbs), 1.0)],
+            vec![
+                (DeskPane::Page(Page::ModMotion), 1.0),
+                (DeskPane::Page(Page::Delays), 1.0),
+            ],
+            vec![
+                (DeskPane::Master, 1.0),
+                (DeskPane::Page(Page::Reverbs), 1.0),
+            ],
         ],
     }
 }
@@ -899,7 +998,12 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
                         size.set(got);
                     }
                 }
-                architect::platform::sleep(std::time::Duration::from_millis(if known { 400 } else { 50 })).await;
+                architect::platform::sleep(std::time::Duration::from_millis(if known {
+                    400
+                } else {
+                    50
+                }))
+                .await;
             }
         });
     });
@@ -915,7 +1019,11 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
     let [left, right] = desk_columns(group);
     // Two columns — with the module sidebar open too; one only when even
     // half the width is too little for a pane.
-    let columns: Vec<Vec<(DeskPane, f64)>> = if w >= 2.0 * DESKTOP_PANE_MIN_W { vec![left, right] } else { vec![left] };
+    let columns: Vec<Vec<(DeskPane, f64)>> = if w >= 2.0 * DESKTOP_PANE_MIN_W {
+        vec![left, right]
+    } else {
+        vec![left]
+    };
     let col_w = w / columns.len() as f64 - GRID_GAP;
     rsx! {
         // Edge to edge: a hairline between the panes (the rule showing
@@ -952,7 +1060,13 @@ pub fn DesktopPages(blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32)
 
 /// One pane of the desktop's grid, drawn for its box (`pane`, points).
 #[component]
-fn DeskPaneView(pane_kind: DeskPane, blocks: Vec<LiveBlock>, state: RigViewState, tempo_bpm: u32, pane: (f64, f64)) -> Element {
+fn DeskPaneView(
+    pane_kind: DeskPane,
+    blocks: Vec<LiveBlock>,
+    state: RigViewState,
+    tempo_bpm: u32,
+    pane: (f64, f64),
+) -> Element {
     let faces = crate::ui::rig_faces::use_faces();
     let tier = crate::ui::control::use_tier();
     match pane_kind {
@@ -971,7 +1085,10 @@ fn DeskPaneView(pane_kind: DeskPane, blocks: Vec<LiveBlock>, state: RigViewState
             crate::ui::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes, fit: Some(pane) }
         },
         DeskPane::Gate => {
-            let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
+            let gate = blocks
+                .iter()
+                .find(|b| b.block_type == BlockType::Gate)
+                .cloned();
             let trim = find_block(&blocks, BlockType::Volume, "Patch Trim");
             // The patch's level and pan: a slim strip at the gate's right,
             // its face as tall as the pane.
@@ -1059,8 +1176,17 @@ const GRID_GAP: f64 = 1.0;
 /// A rail button: its icon, its name small under it; the one picked
 /// raised.
 #[component]
-fn RailButton(on: bool, label: &'static str, icon: &'static str, onclick: EventHandler<()>) -> Element {
-    let (fg, bg) = if on { (TEXT, RAISED) } else { (DIM, "transparent") };
+fn RailButton(
+    on: bool,
+    label: &'static str,
+    icon: &'static str,
+    onclick: EventHandler<()>,
+) -> Element {
+    let (fg, bg) = if on {
+        (TEXT, RAISED)
+    } else {
+        (DIM, "transparent")
+    };
     rsx! {
         div { style: "height: 48px; margin: 0 4px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: {bg}; cursor: pointer;",
             onclick: move |_| onclick.call(()),
@@ -1076,19 +1202,39 @@ fn RailButton(on: bool, label: &'static str, icon: &'static str, onclick: EventH
 fn RailIcon(name: &'static str, color: &'static str) -> Element {
     let paths: &[&str] = match name {
         // Faders.
-        "Control" => &["M6 4v16", "M12 4v16", "M18 4v16", "M4 9h4", "M10 15h4", "M16 7h4"],
+        "Control" => &[
+            "M6 4v16", "M12 4v16", "M18 4v16", "M4 9h4", "M10 15h4", "M16 7h4",
+        ],
         // The footswitches: two rows of three.
-        "Switch" => &["M3 6h5v5H3z", "M10 6h4v5h-4z", "M16 6h5v5h-5z", "M3 14h5v5H3z", "M10 14h4v5h-4z", "M16 14h5v5h-5z"],
+        "Switch" => &[
+            "M3 6h5v5H3z",
+            "M10 6h4v5h-4z",
+            "M16 6h5v5h-5z",
+            "M3 14h5v5H3z",
+            "M10 14h4v5h-4z",
+            "M16 14h5v5h-5z",
+        ],
         // A person.
-        "Profile" => &["M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M4 21c1-4 4-6 8-6s7 2 8 6"],
+        "Profile" => &[
+            "M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
+            "M4 21c1-4 4-6 8-6s7 2 8 6",
+        ],
         // Back to the instrument menu.
         "Rigs" => &["M14 6l-6 6 6 6"],
         "Edit" => &["M4 20h4L19 9l-4-4L4 16z", "M13.5 6.5l4 4"],
         // A speaker.
-        "Audio" => &["M4 9h3l4-3.5v13L7 15H4z", "M15 9.5a4 4 0 0 1 0 5", "M17.5 7a7.5 7.5 0 0 1 0 10"],
+        "Audio" => &[
+            "M4 9h3l4-3.5v13L7 15H4z",
+            "M15 9.5a4 4 0 0 1 0 5",
+            "M17.5 7a7.5 7.5 0 0 1 0 10",
+        ],
 
         // A note.
-        _ => &["M9 18V5l11-2v13", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z", "M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"],
+        _ => &[
+            "M9 18V5l11-2v13",
+            "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
+            "M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
+        ],
     };
     rsx! {
         svg { width: "20", height: "20", view_box: "0 0 24 24", fill: "none", stroke: color, stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round",
@@ -1115,7 +1261,11 @@ fn audio_state(running: bool, error: &str) -> (&'static str, &'static str, &'sta
 /// state as a dot, and whose name says Off or Error when it is not running.
 #[component]
 fn AudioRailButton(on: bool, running: bool, error: String, onclick: EventHandler<()>) -> Element {
-    let (fg, bg) = if on { (TEXT, RAISED) } else { (DIM, "transparent") };
+    let (fg, bg) = if on {
+        (TEXT, RAISED)
+    } else {
+        (DIM, "transparent")
+    };
     let (dot, label, warn) = audio_state(running, &error);
     let label_color = if warn.is_empty() { fg } else { warn };
     rsx! {
@@ -1146,12 +1296,14 @@ fn TopSlot(
     /// Changed from how it was saved: a `*` after the name.
     #[props(default)]
     modified: bool,
-    #[props(default)]
-    on_open: Option<EventHandler<()>>,
+    #[props(default)] on_open: Option<EventHandler<()>>,
 ) -> Element {
     let empty = name.is_empty();
-    let (bg, cursor, name_color, label_color) =
-        if empty { ("transparent", "default", DIM, "#4b5058") } else { (RAISED, "pointer", "#f4f4f5", DIM) };
+    let (bg, cursor, name_color, label_color) = if empty {
+        ("transparent", "default", DIM, "#4b5058")
+    } else {
+        (RAISED, "pointer", "#f4f4f5", DIM)
+    };
     let shown = if empty { "—".to_string() } else { name };
     rsx! {
         div { style: "flex: {grow} 1 0%; {SLOT} background: {bg}; border: 1px solid {RAISED}; cursor: {cursor};",
@@ -1190,15 +1342,23 @@ fn PageView(
 ) -> Element {
     let only = |kinds: &[&str]| kinds.iter().map(|k| (*k).to_string()).collect::<Vec<_>>();
     match page {
-        Page::Input => rsx! { crate::ui::rig_faces::InputRow { blocks, only: only(&["transpose", "doubler"]) } },
-        Page::Pedals => rsx! { crate::ui::rig_faces::InputRow { blocks, only: only(&["wah", "dive", "volume"]) } },
-        Page::Pitch => rsx! { crate::ui::rig_faces::InputRow { blocks, only: only(&["pitch", "harmony"]) } },
+        Page::Input => {
+            rsx! { crate::ui::rig_faces::InputRow { blocks, only: only(&["transpose", "doubler"]) } }
+        }
+        Page::Pedals => {
+            rsx! { crate::ui::rig_faces::InputRow { blocks, only: only(&["wah", "dive", "volume"]) } }
+        }
+        Page::Pitch => {
+            rsx! { crate::ui::rig_faces::InputRow { blocks, only: only(&["pitch", "harmony"]) } }
+        }
         Page::Filter => rsx! { crate::ui::rig_faces::InputRow { blocks, only: only(&["filter"]) } },
         Page::PreModTrem => {
             let desk = crate::ui::control::use_tier() >= crate::ui::control::Tier::Desktop;
             rsx! { crate::ui::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Units, fit: desk.then_some(pane) } }
         }
-        Page::PreDelayVerb => rsx! { crate::ui::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes } },
+        Page::PreDelayVerb => {
+            rsx! { crate::ui::rig_faces::PreFxRow { blocks, tempo_bpm, part: PrePart::Lanes } }
+        }
         Page::PreComp => {
             let comp = find_block(&blocks, BlockType::Compressor, "Pre Comp");
             let desk = crate::ui::control::use_tier() >= crate::ui::control::Tier::Desktop;
@@ -1264,7 +1424,10 @@ fn PageView(
             // nameplate off at a desktop pane's width.
             let tier = crate::ui::control::use_tier();
             let faces = crate::ui::rig_faces::use_faces();
-            let gate = blocks.iter().find(|b| b.block_type == BlockType::Gate).cloned();
+            let gate = blocks
+                .iter()
+                .find(|b| b.block_type == BlockType::Gate)
+                .cloned();
             let post = find_block(&blocks, BlockType::Compressor, "Post Comp");
             rsx! {
                 div { style: "display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;",

@@ -277,7 +277,7 @@ mod tests {
     fn from_samples_with_interval() {
         let gains: Vec<f64> = (0..48000).map(|i| -(i as f64) * 0.001).collect();
         let curve = GainCurve::from_samples(&gains, 48000.0, 5.0); // 5ms interval
-                                                                   // 48000 samples / (5ms * 48) = ~200 points, plus first/last
+        // 48000 samples / (5ms * 48) = ~200 points, plus first/last
         assert!(curve.len() < 300);
         assert!(curve.len() > 100);
     }

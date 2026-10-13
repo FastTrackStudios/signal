@@ -20,7 +20,11 @@ impl View {
     #[must_use]
     pub fn fit(content: Bounds, width: f64, height: f64) -> Self {
         if content.width <= 0.0 || content.height <= 0.0 || width <= 0.0 || height <= 0.0 {
-            return Self { scale: 1.0, tx: -content.x, ty: -content.y };
+            return Self {
+                scale: 1.0,
+                tx: -content.x,
+                ty: -content.y,
+            };
         }
         let scale = (width / content.width).min(height / content.height);
         Self {
@@ -63,9 +67,9 @@ impl Clicks {
     /// Record a press; true when it completes a double-click. A triple
     /// press is a double-click then a fresh first click.
     pub fn press(&mut self, x: f64, y: f64, t: f64) -> bool {
-        let double = self
-            .last
-            .is_some_and(|(lx, ly, lt)| t - lt <= DOUBLE_CLICK_MS && (x - lx).hypot(y - ly) <= DOUBLE_CLICK_PX);
+        let double = self.last.is_some_and(|(lx, ly, lt)| {
+            t - lt <= DOUBLE_CLICK_MS && (x - lx).hypot(y - ly) <= DOUBLE_CLICK_PX
+        });
         self.last = if double { None } else { Some((x, y, t)) };
         double
     }
@@ -74,7 +78,11 @@ impl Clicks {
 /// Shift = fine, Cmd/Ctrl = alternate (reset-on-click).
 #[must_use]
 pub fn modifiers(m: ModifiersState) -> Modifiers {
-    Modifiers { fine: m.shift_key(), alt: m.control_key() || m.super_key(), option: m.alt_key() }
+    Modifiers {
+        fine: m.shift_key(),
+        alt: m.control_key() || m.super_key(),
+        option: m.alt_key(),
+    }
 }
 
 #[must_use]
@@ -127,7 +135,12 @@ mod tests {
     use super::*;
     use winit::dpi::PhysicalPosition;
 
-    const CONTENT: Bounds = Bounds { x: 0.0, y: 0.0, width: 400.0, height: 200.0 };
+    const CONTENT: Bounds = Bounds {
+        x: 0.0,
+        y: 0.0,
+        width: 400.0,
+        height: 200.0,
+    };
 
     #[test]
     fn fit_letterboxes_and_centers() {
@@ -143,7 +156,15 @@ mod tests {
 
     #[test]
     fn fit_honors_content_origin() {
-        let v = View::fit(Bounds { x: 50.0, y: 10.0, ..CONTENT }, 400.0, 200.0);
+        let v = View::fit(
+            Bounds {
+                x: 50.0,
+                y: 10.0,
+                ..CONTENT
+            },
+            400.0,
+            200.0,
+        );
         assert_eq!(v.to_window(50.0, 10.0), (0.0, 0.0));
         assert_eq!(v.to_surface(400.0, 200.0), (450.0, 210.0));
     }
@@ -185,26 +206,59 @@ mod tests {
 
     #[test]
     fn modifiers_map_shift_to_fine_and_ctrl_or_cmd_to_alt() {
-        assert_eq!(modifiers(ModifiersState::SHIFT), Modifiers { fine: true, ..Modifiers::default() });
-        assert_eq!(modifiers(ModifiersState::CONTROL), Modifiers { alt: true, ..Modifiers::default() });
-        assert_eq!(modifiers(ModifiersState::SUPER), Modifiers { alt: true, ..Modifiers::default() });
+        assert_eq!(
+            modifiers(ModifiersState::SHIFT),
+            Modifiers {
+                fine: true,
+                ..Modifiers::default()
+            }
+        );
+        assert_eq!(
+            modifiers(ModifiersState::CONTROL),
+            Modifiers {
+                alt: true,
+                ..Modifiers::default()
+            }
+        );
+        assert_eq!(
+            modifiers(ModifiersState::SUPER),
+            Modifiers {
+                alt: true,
+                ..Modifiers::default()
+            }
+        );
         assert_eq!(modifiers(ModifiersState::empty()), Modifiers::default());
     }
 
     #[test]
     fn keys_map_to_control_keys() {
         assert_eq!(key(&WinitKey::Named(NamedKey::ArrowUp)), Some(Key::Up));
-        assert_eq!(key(&WinitKey::Named(NamedKey::PageDown)), Some(Key::PageDown));
+        assert_eq!(
+            key(&WinitKey::Named(NamedKey::PageDown)),
+            Some(Key::PageDown)
+        );
         assert_eq!(key(&WinitKey::Named(NamedKey::Enter)), Some(Key::Enter));
         assert_eq!(key(&WinitKey::Named(NamedKey::Escape)), Some(Key::Escape));
-        assert_eq!(key(&WinitKey::Named(NamedKey::Backspace)), Some(Key::Backspace));
+        assert_eq!(
+            key(&WinitKey::Named(NamedKey::Backspace)),
+            Some(Key::Backspace)
+        );
         assert_eq!(key(&WinitKey::Character("a".into())), Some(Key::Char('a')));
         assert_eq!(key(&WinitKey::Character("ab".into())), None);
     }
 
     #[test]
     fn wheel_lines_and_pixels_become_notches() {
-        assert_eq!(wheel_notches(MouseScrollDelta::LineDelta(0.0, 2.0), 1.0), 2.0);
-        assert_eq!(wheel_notches(MouseScrollDelta::PixelDelta(PhysicalPosition::new(0.0, 40.0)), 2.0), 1.0);
+        assert_eq!(
+            wheel_notches(MouseScrollDelta::LineDelta(0.0, 2.0), 1.0),
+            2.0
+        );
+        assert_eq!(
+            wheel_notches(
+                MouseScrollDelta::PixelDelta(PhysicalPosition::new(0.0, 40.0)),
+                2.0
+            ),
+            1.0
+        );
     }
 }

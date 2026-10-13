@@ -27,7 +27,11 @@ pub fn canvas(name: &str, build: impl FnOnce(&mut Builder<'_>, NodeId)) -> Scene
     let mut controls: BTreeMap<NodeId, Control> = BTreeMap::new();
     let theme = Theme::stage_dark();
     {
-        let mut b = Builder { scene: &mut scene, controls: &mut controls, theme: &theme };
+        let mut b = Builder {
+            scene: &mut scene,
+            controls: &mut controls,
+            theme: &theme,
+        };
         let root = b.add(page, Node::new(NodeKind::Frame, name));
         build(&mut b, root);
     }
@@ -36,7 +40,10 @@ pub fn canvas(name: &str, build: impl FnOnce(&mut Builder<'_>, NodeId)) -> Scene
             n.control = Some(c);
         }
     }
-    let root = scene.node(page).and_then(|p| p.children.first().copied()).expect("root frame");
+    let root = scene
+        .node(page)
+        .and_then(|p| p.children.first().copied())
+        .expect("root frame");
     let hug = scene.hug_ops(root);
     scene.transact(hug).expect("hug");
     scene
@@ -47,7 +54,11 @@ pub fn canvas(name: &str, build: impl FnOnce(&mut Builder<'_>, NodeId)) -> Scene
 pub fn catalogs(faces: &[Face]) -> BTreeMap<&'static str, Catalog> {
     let mut out: BTreeMap<&'static str, Catalog> = BTreeMap::new();
     for f in faces {
-        let c = out.entry(f.plugin).or_insert_with(|| Catalog { id: format!("fts.{}", f.plugin), version: 1, ..Catalog::default() });
+        let c = out.entry(f.plugin).or_insert_with(|| Catalog {
+            id: format!("fts.{}", f.plugin),
+            version: 1,
+            ..Catalog::default()
+        });
         for p in &f.params {
             if c.param(&p.addr).is_none() {
                 c.params.push(p.clone());
@@ -79,23 +90,44 @@ pub fn stable_ids(mut scene: Scene, key: &str) -> Scene {
     let mut map: HashMap<NodeId, NodeId> = HashMap::new();
     let mut stack = vec![(scene.root, key.to_string())];
     while let Some((id, path)) = stack.pop() {
-        map.insert(id, NodeId(uuid::Uuid::new_v5(&ID_NAMESPACE, path.as_bytes())));
+        map.insert(
+            id,
+            NodeId(uuid::Uuid::new_v5(&ID_NAMESPACE, path.as_bytes())),
+        );
         let Some(node) = scene.node(id) else { continue };
         let mut seen: HashMap<&str, usize> = HashMap::new();
         for c in &node.children {
             let name = scene.node(*c).map_or("", |n| n.name.as_str());
             let n = seen.entry(name).or_insert(0);
-            let seg = if *n == 0 { name.to_string() } else { format!("{name}#{n}") };
+            let seg = if *n == 0 {
+                name.to_string()
+            } else {
+                format!("{name}#{n}")
+            };
             *n += 1;
             stack.push((*c, format!("{path}/{seg}")));
         }
     }
     // Nodes off the tree (none today) take an id from their place in it.
-    let off: Vec<NodeId> = scene.nodes.keys().filter(|id| !map.contains_key(id)).copied().collect();
+    let off: Vec<NodeId> = scene
+        .nodes
+        .keys()
+        .filter(|id| !map.contains_key(id))
+        .copied()
+        .collect();
     for (i, id) in off.into_iter().enumerate() {
-        map.insert(id, NodeId(uuid::Uuid::new_v5(&ID_NAMESPACE, format!("{key}/~{i}").as_bytes())));
+        map.insert(
+            id,
+            NodeId(uuid::Uuid::new_v5(
+                &ID_NAMESPACE,
+                format!("{key}/~{i}").as_bytes(),
+            )),
+        );
     }
-    let by_text: HashMap<String, String> = map.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+    let by_text: HashMap<String, String> = map
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect();
     // Rewrite each id wherever it appears, through the serialized scene
     // (its assets aside: they're content-addressed, and large).
     let assets = std::mem::take(&mut scene.assets);
@@ -104,7 +136,11 @@ pub fn stable_ids(mut scene: Scene, key: &str) -> Scene {
     let mut rest = json.as_str();
     while let Some(i) = rest.find('-') {
         // A uuid's first dash is its 9th character, of 36.
-        if let Some(new) = i.checked_sub(8).and_then(|start| rest.get(start..i + 28)).and_then(|s| by_text.get(s)) {
+        if let Some(new) = i
+            .checked_sub(8)
+            .and_then(|start| rest.get(start..i + 28))
+            .and_then(|s| by_text.get(s))
+        {
             out.push_str(&rest[..i - 8]);
             out.push_str(new);
             rest = &rest[i + 28..];
@@ -127,18 +163,44 @@ pub fn stable_ids(mut scene: Scene, key: &str) -> Scene {
 ///
 /// # Panics
 /// If `face` has no top frame (every face has one).
-pub fn embed(b: &mut Builder<'_>, parent: NodeId, face: &Face, (x, y, w, h): (f64, f64, f64, f64)) -> NodeId {
+pub fn embed(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    face: &Face,
+    (x, y, w, h): (f64, f64, f64, f64),
+) -> NodeId {
     let src = &face.scene;
     let page = src.pages()[0];
-    let top = src.node(page).and_then(|p| p.children.first().copied()).expect("face top frame");
-    let size = src.node(top).map_or(document_proto::Size { width: 1.0, height: 1.0 }, |n| n.size);
+    let top = src
+        .node(page)
+        .and_then(|p| p.children.first().copied())
+        .expect("face top frame");
+    let size = src.node(top).map_or(
+        document_proto::Size {
+            width: 1.0,
+            height: 1.0,
+        },
+        |n| n.size,
+    );
     let s = (w / size.width.max(1.0)).min(h / size.height.max(1.0));
-    let (ox, oy) = (x + (w - size.width * s) / 2.0, y + (h - size.height * s) / 2.0);
+    let (ox, oy) = (
+        x + (w - size.width * s) / 2.0,
+        y + (h - size.height * s) / 2.0,
+    );
     for id in src.walk(top) {
-        let Some(mut n) = src.node(id).cloned() else { continue };
+        let Some(mut n) = src.node(id).cloned() else {
+            continue;
+        };
         if id == top {
             n.parent = Some(parent);
-            n.transform = document_proto::Transform { a: s, b: 0.0, tx: ox, c: 0.0, d: s, ty: oy };
+            n.transform = document_proto::Transform {
+                a: s,
+                b: 0.0,
+                tx: ox,
+                c: 0.0,
+                d: s,
+                ty: oy,
+            };
         }
         b.scene.nodes.insert(id, n);
     }

@@ -213,7 +213,11 @@ pub struct Rasterized<W> {
 
 impl<W> Rasterized<W> {
     pub fn new(inner: W) -> Self {
-        Self { inner, raster: None, texture: None }
+        Self {
+            inner,
+            raster: None,
+            texture: None,
+        }
     }
 }
 
@@ -229,7 +233,9 @@ impl<W: blitz_dom::Widget> blitz_dom::Widget for Rasterized<W> {
     }
     fn can_create_surfaces(&mut self, render_ctx: &mut dyn anyrender::RenderContext) {
         self.texture = None;
-        self.raster = render_ctx.renderer_specific_context().and_then(anyrender_vello::Rasterizer::new);
+        self.raster = render_ctx
+            .renderer_specific_context()
+            .and_then(anyrender_vello::Rasterizer::new);
         match self.raster.as_mut() {
             Some(raster) => self.inner.can_create_surfaces(raster),
             None => self.inner.can_create_surfaces(render_ctx),
@@ -261,7 +267,9 @@ impl<W: blitz_dom::Widget> blitz_dom::Widget for Rasterized<W> {
             return self.inner.paint(render_ctx, styles, width, height, scale);
         };
         // Nothing new to draw: the texture already shows it.
-        let current = self.texture.is_some_and(|(_, size)| size == (width, height));
+        let current = self
+            .texture
+            .is_some_and(|(_, size)| size == (width, height));
         if !(current && !self.inner.needs_redraw()) {
             let scene = self.inner.paint(raster, styles, width, height, scale);
             let Some((texture, fresh)) = raster.render(scene, (width, height)) else {
@@ -283,7 +291,10 @@ impl<W: blitz_dom::Widget> blitz_dom::Widget for Rasterized<W> {
             scene.fill(
                 peniko::Fill::NonZero,
                 kurbo::Affine::IDENTITY,
-                anyrender::Paint::Resource(peniko::ImageBrush { image: id, sampler: peniko::ImageSampler::default() }),
+                anyrender::Paint::Resource(peniko::ImageBrush {
+                    image: id,
+                    sampler: peniko::ImageSampler::default(),
+                }),
                 None,
                 &kurbo::Rect::new(0.0, 0.0, f64::from(width), f64::from(height)),
             );

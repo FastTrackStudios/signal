@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 
 use daw::service::{ItemRef, Items, ProjectContext, TakeRef, Takes};
 use expression_editor::audio::quantize::SplitConfig;
-use expression_editor::{Viewport, kit::LaneRole};
 use expression_editor::standalone::practice::{PracticeSession, Song, album_directory};
 use expression_editor::standalone::{Runner, Source, Target};
+use expression_editor::{Viewport, kit::LaneRole};
 use sha2::{Digest, Sha256};
 
 fn digest(path: &Path) -> eyre::Result<[u8; 32]> {

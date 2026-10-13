@@ -24,7 +24,10 @@ use std::path::{Path, PathBuf};
 
 use document_proto::{Node, NodeId, NodeKind, Scene, Size, TextAlign, TextData, Transform};
 use surface_kit::{Place, draw, viz};
-use surface_proto::{Axis, Binding, Catalog, Control, ControlKind, CurveInput, FeedInfo, ParamInfo, PlotRange, PlotStyle, SlotRole};
+use surface_proto::{
+    Axis, Binding, Catalog, Control, ControlKind, CurveInput, FeedInfo, ParamInfo, PlotRange,
+    PlotStyle, SlotRole,
+};
 use surface_runtime::Surface;
 use surface_widgets::{Builder, Theme};
 
@@ -50,7 +53,9 @@ fn main() {
             "--out-dir" => dir = args.next().map(PathBuf::from).unwrap_or(dir),
             "--bare" => bare = args.next().map(PathBuf::from),
             other => {
-                eprintln!("make_lit_viz_examples: unknown argument {other}\nusage: make_lit_viz_examples [--out-dir DIR] [--bare DIR]");
+                eprintln!(
+                    "make_lit_viz_examples: unknown argument {other}\nusage: make_lit_viz_examples [--out-dir DIR] [--bare DIR]"
+                );
                 std::process::exit(2);
             }
         }
@@ -75,7 +80,12 @@ fn write(dir: &Path, ex: &Example) {
         eprintln!("make_lit_viz_examples: writing {}: {e}", fm.display());
         std::process::exit(1);
     }
-    println!("{{\"ok\":true,\"surface\":\"{}\",\"catalog\":\"{}\",\"controls\":{}}}", fm.display(), cat.display(), ex.surface.controls.len());
+    println!(
+        "{{\"ok\":true,\"surface\":\"{}\",\"catalog\":\"{}\",\"controls\":{}}}",
+        fm.display(),
+        cat.display(),
+        ex.surface.controls.len()
+    );
 }
 
 #[must_use]
@@ -91,12 +101,58 @@ pub fn bare_examples() -> Vec<Example> {
     let mut graph_params = viz::catalog::eq_params("eq", 24);
     graph_params.extend(viz::catalog::eq_view_params("eq"));
     [
-        ("eqgraph", "viz.eq_graph", Place::new("EQ").size(820.0).options(&["ns=eq", "h=340", "f_max=24000"]), graph_params, viz::catalog::eq_streams("eq", 128)),
-        ("comp", "viz.comp_scope", Place::new("Comp").size(620.0).options(&["ns=comp", "len=120", "h=520"]), comp_params, comp_feeds),
-        ("delay", "viz.delay_taps", Place::new("Delay").size(760.0).options(&["ns=delay", "h=190"]), viz::lit_catalog::delay_params("delay"), Vec::new()),
-        ("reverb", "viz.reverb_space", Place::new("Reverb").size(760.0).options(&["ns=reverb", "h=190"]), viz::lit_catalog::reverb_params("reverb"), Vec::new()),
-        ("mod", "viz.mod_lfo", Place::new("Mod").size(760.0).options(&["ns=mod", "h=220"]), viz::lit_catalog::mod_params("mod"), Vec::new()),
-        ("glow", "viz.eq_glow", Place::new("Glow").size(800.0).options(&["ns=eq", "bands=6", "h=336", "ground"]), eq_params, eq_feeds),
+        (
+            "eqgraph",
+            "viz.eq_graph",
+            Place::new("EQ")
+                .size(820.0)
+                .options(&["ns=eq", "h=340", "f_max=24000"]),
+            graph_params,
+            viz::catalog::eq_streams("eq", 128),
+        ),
+        (
+            "comp",
+            "viz.comp_scope",
+            Place::new("Comp")
+                .size(620.0)
+                .options(&["ns=comp", "len=120", "h=520"]),
+            comp_params,
+            comp_feeds,
+        ),
+        (
+            "delay",
+            "viz.delay_taps",
+            Place::new("Delay")
+                .size(760.0)
+                .options(&["ns=delay", "h=190"]),
+            viz::lit_catalog::delay_params("delay"),
+            Vec::new(),
+        ),
+        (
+            "reverb",
+            "viz.reverb_space",
+            Place::new("Reverb")
+                .size(760.0)
+                .options(&["ns=reverb", "h=190"]),
+            viz::lit_catalog::reverb_params("reverb"),
+            Vec::new(),
+        ),
+        (
+            "mod",
+            "viz.mod_lfo",
+            Place::new("Mod").size(760.0).options(&["ns=mod", "h=220"]),
+            viz::lit_catalog::mod_params("mod"),
+            Vec::new(),
+        ),
+        (
+            "glow",
+            "viz.eq_glow",
+            Place::new("Glow")
+                .size(800.0)
+                .options(&["ns=eq", "bands=6", "h=336", "ground"]),
+            eq_params,
+            eq_feeds,
+        ),
     ]
     .into_iter()
     .map(|(kind, id, place, params, feeds)| {
@@ -104,11 +160,21 @@ pub fn bare_examples() -> Vec<Example> {
         let page = scene.pages()[0];
         let mut controls = BTreeMap::new();
         let theme = Theme::stage_dark();
-        let mut b = Builder { scene: &mut scene, controls: &mut controls, theme: &theme };
+        let mut b = Builder {
+            scene: &mut scene,
+            controls: &mut controls,
+            theme: &theme,
+        };
         surface_kit::place(&mut b, page, id, &place).unwrap_or_else(|e| panic!("{id}: {e}"));
         let file: &'static str = Box::leak(format!("bare-{kind}.frame").into_boxed_str());
-        let catalog_file: &'static str = Box::leak(format!("bare-{kind}.catalog.json").into_boxed_str());
-        Example { file, catalog_file, surface: Surface { scene, controls }, catalog: catalog(id, params, feeds) }
+        let catalog_file: &'static str =
+            Box::leak(format!("bare-{kind}.catalog.json").into_boxed_str());
+        Example {
+            file,
+            catalog_file,
+            surface: Surface { scene, controls },
+            catalog: catalog(id, params, feeds),
+        }
     })
     .collect()
 }
@@ -127,28 +193,74 @@ impl Doc {
         let mut root = draw::frame(name, 0.0, 0.0, w, 100.0);
         root.fills = vec![draw::solid(BG)];
         let root_id = root.id;
-        scene.apply(document_proto::Op::Insert { node: root, parent: page, index: 0 }).expect("page exists");
-        let mut d = Self { scene, controls: BTreeMap::new(), root: root_id };
-        let mut t = draw::text("title", title, 24.0, 16.0, w - 48.0, 13.0, INK, TextAlign::Left);
-        if let NodeKind::Text(TextData { font_weight, letter_spacing, .. }) = &mut t.kind {
+        scene
+            .apply(document_proto::Op::Insert {
+                node: root,
+                parent: page,
+                index: 0,
+            })
+            .expect("page exists");
+        let mut d = Self {
+            scene,
+            controls: BTreeMap::new(),
+            root: root_id,
+        };
+        let mut t = draw::text(
+            "title",
+            title,
+            24.0,
+            16.0,
+            w - 48.0,
+            13.0,
+            INK,
+            TextAlign::Left,
+        );
+        if let NodeKind::Text(TextData {
+            font_weight,
+            letter_spacing,
+            ..
+        }) = &mut t.kind
+        {
             *font_weight = Some(700.0);
             *letter_spacing = 2.0;
         }
         d.add(root_id, t);
-        d.add(root_id, draw::text("subtitle", subtitle, 24.0, 34.0, w - 48.0, 10.0, DIM, TextAlign::Left));
+        d.add(
+            root_id,
+            draw::text(
+                "subtitle",
+                subtitle,
+                24.0,
+                34.0,
+                w - 48.0,
+                10.0,
+                DIM,
+                TextAlign::Left,
+            ),
+        );
         d
     }
 
     fn add(&mut self, parent: NodeId, node: Node) -> NodeId {
         let theme = Theme::stage_dark();
-        Builder { scene: &mut self.scene, controls: &mut self.controls, theme: &theme }.add(parent, node)
+        Builder {
+            scene: &mut self.scene,
+            controls: &mut self.controls,
+            theme: &theme,
+        }
+        .add(parent, node)
     }
 
     /// Place kit component `id` at (`x`, `y`) of the root.
     fn place(&mut self, id: &str, (x, y): (f64, f64), p: &Place) -> NodeId {
         let theme = Theme::stage_dark();
-        let mut b = Builder { scene: &mut self.scene, controls: &mut self.controls, theme: &theme };
-        let node = surface_kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
+        let mut b = Builder {
+            scene: &mut self.scene,
+            controls: &mut self.controls,
+            theme: &theme,
+        };
+        let node =
+            surface_kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
         self.scene.node_mut(node).expect("placed").transform = Transform::translate(x, y);
         node
     }
@@ -158,12 +270,25 @@ impl Doc {
         let theme = Theme::stage_dark();
         let cell = w / knobs.len() as f64;
         for (i, (legend, addr)) in knobs.iter().enumerate() {
-            let mut b = Builder { scene: &mut self.scene, controls: &mut self.controls, theme: &theme };
-            let p = Place::new(*legend).size(46.0).bind(Binding::param(*addr)).legend(*legend);
-            let knob = surface_kit::place_in_cell(&mut b, self.root, KNOB, &p).expect("knob places");
-            let holder = self.scene.node(knob).and_then(|n| n.parent).expect("in its cell");
+            let mut b = Builder {
+                scene: &mut self.scene,
+                controls: &mut self.controls,
+                theme: &theme,
+            };
+            let p = Place::new(*legend)
+                .size(46.0)
+                .bind(Binding::param(*addr))
+                .legend(*legend);
+            let knob =
+                surface_kit::place_in_cell(&mut b, self.root, KNOB, &p).expect("knob places");
+            let holder = self
+                .scene
+                .node(knob)
+                .and_then(|n| n.parent)
+                .expect("in its cell");
             let hw = self.scene.node(holder).map_or(0.0, |n| n.size.width);
-            self.scene.node_mut(holder).expect("cell").transform = Transform::translate(x + cell * (i as f64 + 0.5) - hw / 2.0, y);
+            self.scene.node_mut(holder).expect("cell").transform =
+                Transform::translate(x + cell * (i as f64 + 0.5) - hw / 2.0, y);
         }
     }
 
@@ -171,65 +296,203 @@ impl Doc {
     fn finish(mut self, margin: f64) -> Surface {
         let (_, _, _, h) = surface_kit::drawn_bounds(&self.scene, self.root);
         if let Some(n) = self.scene.node_mut(self.root) {
-            n.size = Size { width: n.size.width, height: (h + margin).ceil() };
+            n.size = Size {
+                width: n.size.width,
+                height: (h + margin).ceil(),
+            };
         }
-        Surface { scene: self.scene, controls: self.controls }
+        Surface {
+            scene: self.scene,
+            controls: self.controls,
+        }
     }
 }
 
 fn catalog(id: &str, params: Vec<ParamInfo>, streams: Vec<FeedInfo>) -> Catalog {
-    Catalog { id: id.into(), version: 1, params, actions: Vec::new(), streams, collections: Vec::new() }
+    Catalog {
+        id: id.into(),
+        version: 1,
+        params,
+        actions: Vec::new(),
+        streams,
+        collections: Vec::new(),
+    }
 }
 
 fn comp() -> Example {
-    let mut d = Doc::new("Lit Compressor", 660.0, "COMPRESSOR", "viz.comp_scope — processor's compressor panel: input, gain reduction, transfer curve; drag the threshold (wheel: ratio)");
-    d.place("viz.comp_scope", (20.0, 54.0), &Place::new("Compressor").size(620.0).options(&["ns=comp", "h=360", "len=128"]));
-    d.knobs((20.0, 620.0), 432.0, &[("Threshold", "comp/threshold"), ("Ratio", "comp/ratio"), ("Knee", "comp/knee")]);
+    let mut d = Doc::new(
+        "Lit Compressor",
+        660.0,
+        "COMPRESSOR",
+        "viz.comp_scope — processor's compressor panel: input, gain reduction, transfer curve; drag the threshold (wheel: ratio)",
+    );
+    d.place(
+        "viz.comp_scope",
+        (20.0, 54.0),
+        &Place::new("Compressor")
+            .size(620.0)
+            .options(&["ns=comp", "h=360", "len=128"]),
+    );
+    d.knobs(
+        (20.0, 620.0),
+        432.0,
+        &[
+            ("Threshold", "comp/threshold"),
+            ("Ratio", "comp/ratio"),
+            ("Knee", "comp/knee"),
+        ],
+    );
     let (params, feeds) = viz::lit_catalog::comp_scope("comp", 128);
-    Example { file: "12-lit-comp.frame", catalog_file: "lit-comp.catalog.json", surface: d.finish(18.0), catalog: catalog("viz.comp_scope", params, feeds) }
+    Example {
+        file: "12-lit-comp.frame",
+        catalog_file: "lit-comp.catalog.json",
+        surface: d.finish(18.0),
+        catalog: catalog("viz.comp_scope", params, feeds),
+    }
 }
 
 fn delay() -> Example {
-    let mut d = Doc::new("Lit Delay", 800.0, "DELAY", "viz.delay_taps — processor's delay lane: repeats up (left) and down (right), the machine's marks, the sweep");
-    d.place("viz.delay_taps", (20.0, 54.0), &Place::new("Delay").size(760.0).options(&["ns=delay", "h=190"]));
+    let mut d = Doc::new(
+        "Lit Delay",
+        800.0,
+        "DELAY",
+        "viz.delay_taps — processor's delay lane: repeats up (left) and down (right), the machine's marks, the sweep",
+    );
+    d.place(
+        "viz.delay_taps",
+        (20.0, 54.0),
+        &Place::new("Delay")
+            .size(760.0)
+            .options(&["ns=delay", "h=190"]),
+    );
     d.knobs(
         (20.0, 760.0),
         262.0,
-        &[("Time", "delay/time"), ("Feedback", "delay/feedback"), ("Left", "delay/tap_div_l"), ("Right", "delay/tap_div_r"), ("Machine", "delay/family"), ("Tempo", "delay/bpm")],
+        &[
+            ("Time", "delay/time"),
+            ("Feedback", "delay/feedback"),
+            ("Left", "delay/tap_div_l"),
+            ("Right", "delay/tap_div_r"),
+            ("Machine", "delay/family"),
+            ("Tempo", "delay/bpm"),
+        ],
     );
-    Example { file: "12-lit-delay.frame", catalog_file: "lit-delay.catalog.json", surface: d.finish(18.0), catalog: catalog("viz.delay_taps", viz::lit_catalog::delay_params("delay"), Vec::new()) }
+    Example {
+        file: "12-lit-delay.frame",
+        catalog_file: "lit-delay.catalog.json",
+        surface: d.finish(18.0),
+        catalog: catalog(
+            "viz.delay_taps",
+            viz::lit_catalog::delay_params("delay"),
+            Vec::new(),
+        ),
+    }
 }
 
 fn reverb() -> Example {
-    let mut d = Doc::new("Lit Reverb", 800.0, "REVERB", "viz.reverb_space — processor's reverb lane: pre-delay, early reflections, the tail and its damped core");
-    d.place("viz.reverb_space", (20.0, 54.0), &Place::new("Reverb").size(760.0).options(&["ns=reverb", "h=190"]));
+    let mut d = Doc::new(
+        "Lit Reverb",
+        800.0,
+        "REVERB",
+        "viz.reverb_space — processor's reverb lane: pre-delay, early reflections, the tail and its damped core",
+    );
+    d.place(
+        "viz.reverb_space",
+        (20.0, 54.0),
+        &Place::new("Reverb")
+            .size(760.0)
+            .options(&["ns=reverb", "h=190"]),
+    );
     d.knobs(
         (20.0, 760.0),
         262.0,
-        &[("Decay", "reverb/decay"), ("Pre-delay", "reverb/predelay"), ("Density", "reverb/density"), ("Damping", "reverb/damp"), ("Space", "reverb/family"), ("Tempo", "reverb/bpm")],
+        &[
+            ("Decay", "reverb/decay"),
+            ("Pre-delay", "reverb/predelay"),
+            ("Density", "reverb/density"),
+            ("Damping", "reverb/damp"),
+            ("Space", "reverb/family"),
+            ("Tempo", "reverb/bpm"),
+        ],
     );
-    Example { file: "12-lit-reverb.frame", catalog_file: "lit-reverb.catalog.json", surface: d.finish(18.0), catalog: catalog("viz.reverb_space", viz::lit_catalog::reverb_params("reverb"), Vec::new()) }
+    Example {
+        file: "12-lit-reverb.frame",
+        catalog_file: "lit-reverb.catalog.json",
+        surface: d.finish(18.0),
+        catalog: catalog(
+            "viz.reverb_space",
+            viz::lit_catalog::reverb_params("reverb"),
+            Vec::new(),
+        ),
+    }
 }
 
 fn modulation() -> Example {
-    let mut d = Doc::new("Lit Modulation", 800.0, "MODULATION", "viz.mod_lfo — processor's modulation panel: a picture per engine, moving at the LFO rate");
-    d.place("viz.mod_lfo", (20.0, 54.0), &Place::new("Modulation").size(760.0).options(&["ns=mod", "h=220"]));
-    d.knobs((20.0, 760.0), 292.0, &[("Rate", "mod/rate"), ("Depth", "mod/depth"), ("Mix", "mod/mix"), ("Engine", "mod/engine")]);
-    Example { file: "12-lit-mod.frame", catalog_file: "lit-mod.catalog.json", surface: d.finish(18.0), catalog: catalog("viz.mod_lfo", viz::lit_catalog::mod_params("mod"), Vec::new()) }
+    let mut d = Doc::new(
+        "Lit Modulation",
+        800.0,
+        "MODULATION",
+        "viz.mod_lfo — processor's modulation panel: a picture per engine, moving at the LFO rate",
+    );
+    d.place(
+        "viz.mod_lfo",
+        (20.0, 54.0),
+        &Place::new("Modulation")
+            .size(760.0)
+            .options(&["ns=mod", "h=220"]),
+    );
+    d.knobs(
+        (20.0, 760.0),
+        292.0,
+        &[
+            ("Rate", "mod/rate"),
+            ("Depth", "mod/depth"),
+            ("Mix", "mod/mix"),
+            ("Engine", "mod/engine"),
+        ],
+    );
+    Example {
+        file: "12-lit-mod.frame",
+        catalog_file: "lit-mod.catalog.json",
+        surface: d.finish(18.0),
+        catalog: catalog(
+            "viz.mod_lfo",
+            viz::lit_catalog::mod_params("mod"),
+            Vec::new(),
+        ),
+    }
 }
 
 /// The glow layer, with the EQ's combined response drawn over it.
 fn eq_glow() -> Example {
     const BANDS: usize = 6;
     let (w, h) = (800.0, 336.0);
-    let mut d = Doc::new("Lit EQ", 840.0, "EQ GLOW", "viz.eq_glow — processor's EQ light: the analyser as a field, a bloom under each band; the response curve drawn over it");
-    let glow = d.place("viz.eq_glow", (20.0, 54.0), &Place::new("Glow").size(w).options(&["ns=eq", "bands=6", "h=336", "ground"]));
+    let mut d = Doc::new(
+        "Lit EQ",
+        840.0,
+        "EQ GLOW",
+        "viz.eq_glow — processor's EQ light: the analyser as a field, a bloom under each band; the response curve drawn over it",
+    );
+    let glow = d.place(
+        "viz.eq_glow",
+        (20.0, 54.0),
+        &Place::new("Glow")
+            .size(w)
+            .options(&["ns=eq", "bands=6", "h=336", "ground"]),
+    );
     // The response over the light, as a graph would draw it.
-    let inputs: Vec<CurveInput> =
-        (1..=BANDS).flat_map(|n| ["freq", "gain", "q", "shape", "on"].map(|k| CurveInput::param(format!("b{n}_{k}"), format!("eq/b{n}_{k}")))).collect();
+    let inputs: Vec<CurveInput> = (1..=BANDS)
+        .flat_map(|n| {
+            ["freq", "gain", "q", "shape", "on"]
+                .map(|k| CurveInput::param(format!("b{n}_{k}"), format!("eq/b{n}_{k}")))
+        })
+        .collect();
     let frame = d.add(glow, draw::frame("response", 0.0, 0.0, w, h));
     let mut line = Node::new(NodeKind::Vector, "line");
-    line.size = Size { width: w, height: h };
+    line.size = Size {
+        width: w,
+        height: h,
+    };
     line.stroke = document_proto::Stroke {
         paints: vec![draw::solid("#ffffffe6")],
         weight: 2.0,
@@ -243,15 +506,29 @@ fn eq_glow() -> Example {
         inputs,
         series: Some("sum".into()),
         style: PlotStyle::Line,
-        x: Axis::Log { f_min: 20.0, f_max: 20_000.0 },
+        x: Axis::Log {
+            f_min: 20.0,
+            f_max: 20_000.0,
+        },
         y: PlotRange::linear(-24.0, 24.0),
     };
-    d.controls.insert(frame, Control::new(kind).slot(SlotRole::Trace, line.0));
-    let knobs: Vec<(String, String)> = (1..=BANDS).map(|n| (format!("Band {n}"), format!("eq/b{n}_gain"))).collect();
-    let refs: Vec<(&str, &str)> = knobs.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+    d.controls
+        .insert(frame, Control::new(kind).slot(SlotRole::Trace, line.0));
+    let knobs: Vec<(String, String)> = (1..=BANDS)
+        .map(|n| (format!("Band {n}"), format!("eq/b{n}_gain")))
+        .collect();
+    let refs: Vec<(&str, &str)> = knobs
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
     d.knobs((20.0, w), 54.0 + h + 18.0, &refs);
     let (params, feeds) = viz::lit_catalog::eq_glow("eq", BANDS, 128);
-    Example { file: "12-lit-eq-glow.frame", catalog_file: "lit-eq-glow.catalog.json", surface: d.finish(18.0), catalog: catalog("viz.eq_glow", params, feeds) }
+    Example {
+        file: "12-lit-eq-glow.frame",
+        catalog_file: "lit-eq-glow.catalog.json",
+        surface: d.finish(18.0),
+        catalog: catalog("viz.eq_glow", params, feeds),
+    }
 }
 
 #[cfg(test)]
@@ -267,16 +544,26 @@ mod tests {
         for ex in examples().into_iter().chain(bare_examples()) {
             let scene = ex.surface.to_scene();
             let text = document_text::print(&scene);
-            let back = document_text::parse(&text, scene.assets.clone()).unwrap_or_else(|e| panic!("{}: {e}", ex.file));
+            let back = document_text::parse(&text, scene.assets.clone())
+                .unwrap_or_else(|e| panic!("{}: {e}", ex.file));
             assert_eq!(back, scene, "{}: parse(print(s)) == s", ex.file);
             let issues = design_lint::lint(&scene, &ex.catalog, &design_lint::Config::default());
-            let errors: Vec<String> = issues.iter().filter(|i| i.severity == design_lint::Severity::Error).map(ToString::to_string).collect();
+            let errors: Vec<String> = issues
+                .iter()
+                .filter(|i| i.severity == design_lint::Severity::Error)
+                .map(ToString::to_string)
+                .collect();
             assert!(errors.is_empty(), "{}:\n{}", ex.file, errors.join("\n"));
         }
     }
 
     /// One bare component rendered at `t` s: `(pixels, floats uploaded)`.
-    fn render_bare(o: &mut render::offscreen::Offscreen, ex: &Example, mode: render::fx::Mode, t: f64) -> (render::offscreen::Pixels, usize) {
+    fn render_bare(
+        o: &mut render::offscreen::Offscreen,
+        ex: &Example,
+        mode: render::fx::Mode,
+        t: f64,
+    ) -> (render::offscreen::Pixels, usize) {
         let mut rt = surface_runtime::Runtime::new(ex.surface.clone(), ex.catalog.clone());
         for f in feed_memory::frames(&ex.catalog.streams, t) {
             rt.apply_frame(f, 0.0);
@@ -284,11 +571,23 @@ mod tests {
         rt.set_clock(t);
         let frame = rt.frame(0.0);
         let page = frame.pages()[0];
-        let root = frame.node(page).and_then(|p| p.children.first().copied()).expect("a root");
+        let root = frame
+            .node(page)
+            .and_then(|p| p.children.first().copied())
+            .expect("a root");
         let size = frame.node(root).expect("root").size;
-        let values: std::collections::HashMap<NodeId, f64> = rt.surface().controls.iter().map(|(id, c)| (*id, rt.position(*id, c))).collect();
+        let values: std::collections::HashMap<NodeId, f64> = rt
+            .surface()
+            .controls
+            .iter()
+            .map(|(id, c)| (*id, rt.position(*id, c)))
+            .collect();
         let inputs = rt.shader_inputs();
-        let floats = inputs.values().flat_map(BTreeMap::values).map(Vec::len).sum();
+        let floats = inputs
+            .values()
+            .flat_map(BTreeMap::values)
+            .map(Vec::len)
+            .sum();
         let px = o
             .render_with_effects(&render::fx::Frame {
                 mode,
@@ -296,7 +595,12 @@ mod tests {
                 values: Some(&values),
                 inputs: Some(&inputs),
                 base: peniko::Color::from_rgba8(8, 8, 8, 255),
-                ..render::fx::Frame::new(&frame, page, size.width.ceil() as u32, size.height.ceil() as u32)
+                ..render::fx::Frame::new(
+                    &frame,
+                    page,
+                    size.width.ceil() as u32,
+                    size.height.ceil() as u32,
+                )
             })
             .expect("render");
         (px, floats)
@@ -312,11 +616,32 @@ mod tests {
         for ex in bare_examples() {
             let (gpu, _) = render_bare(&mut o, &ex, render::fx::Mode::Gpu, 1.3);
             let (off, _) = render_bare(&mut o, &ex, render::fx::Mode::Off, 1.3);
-            let lit = gpu.rgba.as_chunks::<4>().0.iter().filter(|p| p[0].max(p[1]).max(p[2]) > 40).count();
-            let differ = gpu.rgba.as_chunks::<4>().0.iter().zip(off.rgba.as_chunks::<4>().0).filter(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| x.abs_diff(*y) > 8)).count();
+            let lit = gpu
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|p| p[0].max(p[1]).max(p[2]) > 40)
+                .count();
+            let differ = gpu
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(off.rgba.as_chunks::<4>().0)
+                .filter(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| x.abs_diff(*y) > 8))
+                .count();
             let n = gpu.rgba.len() / 4;
-            assert!(lit > n / 200, "{}: the shader lit only {lit} of {n} px", ex.file);
-            assert!(differ > n / 20, "{}: GPU and fallback differ in only {differ} of {n} px", ex.file);
+            assert!(
+                lit > n / 200,
+                "{}: the shader lit only {lit} of {n} px",
+                ex.file
+            );
+            assert!(
+                differ > n / 20,
+                "{}: GPU and fallback differ in only {differ} of {n} px",
+                ex.file
+            );
         }
     }
 
@@ -326,7 +651,9 @@ mod tests {
     #[test]
     #[ignore = "a measurement, not a check"]
     fn lit_frame_cost() {
-        let Ok(mut o) = render::offscreen::Offscreen::new() else { return };
+        let Ok(mut o) = render::offscreen::Offscreen::new() else {
+            return;
+        };
         for ex in bare_examples() {
             let n = 60;
             let mut rt = surface_runtime::Runtime::new(ex.surface.clone(), ex.catalog.clone());
@@ -348,7 +675,10 @@ mod tests {
                 for i in 0..n {
                     floats = render_bare(&mut o, &ex, mode, f64::from(i) / 60.0).1;
                 }
-                (started.elapsed().as_secs_f64() * 1000.0 / f64::from(n), floats)
+                (
+                    started.elapsed().as_secs_f64() * 1000.0 / f64::from(n),
+                    floats,
+                )
             };
             let (gpu_ms, floats) = time(render::fx::Mode::Gpu);
             let (off_ms, _) = time(render::fx::Mode::Off);
@@ -365,15 +695,26 @@ mod tests {
     #[test]
     fn checked_in_examples_play_against_their_catalogs() {
         for ex in examples() {
-            let text = std::fs::read_to_string(dir().join(ex.file)).unwrap_or_else(|e| panic!("{}: {e} (run make_lit_viz_examples)", ex.file));
+            let text = std::fs::read_to_string(dir().join(ex.file))
+                .unwrap_or_else(|e| panic!("{}: {e} (run make_lit_viz_examples)", ex.file));
             let json = std::fs::read_to_string(dir().join(ex.catalog_file)).unwrap();
             let catalog: Catalog = serde_json::from_str(&json).unwrap();
             let scene = document_text::parse(&text, BTreeMap::new()).unwrap();
             let surface = Surface::from_scene(scene);
-            assert_eq!(surface.controls.len(), ex.surface.controls.len(), "{} is stale: run make_lit_viz_examples", ex.file);
+            assert_eq!(
+                surface.controls.len(),
+                ex.surface.controls.len(),
+                "{} is stale: run make_lit_viz_examples",
+                ex.file
+            );
             for (id, c) in &surface.controls {
                 let issues = c.validate(&catalog);
-                assert!(issues.is_empty(), "{} {}: {issues:?}", ex.file, surface.scene.node(*id).map_or("?", |n| n.name.as_str()));
+                assert!(
+                    issues.is_empty(),
+                    "{} {}: {issues:?}",
+                    ex.file,
+                    surface.scene.node(*id).map_or("?", |n| n.name.as_str())
+                );
             }
             // Every shader input resolves once the mock engine has sent a frame.
             let mut rt = surface_runtime::Runtime::new(surface, catalog.clone());
@@ -382,12 +723,24 @@ mod tests {
             }
             rt.set_clock(1.0);
             let inputs = rt.shader_inputs();
-            let shaders: Vec<_> = rt.surface().scene.nodes.values().filter_map(|n| n.shader.as_ref().map(|s| (n.id, s))).filter(|(_, s)| !s.inputs.is_empty()).collect();
+            let shaders: Vec<_> = rt
+                .surface()
+                .scene
+                .nodes
+                .values()
+                .filter_map(|n| n.shader.as_ref().map(|s| (n.id, s)))
+                .filter(|(_, s)| !s.inputs.is_empty())
+                .collect();
             assert!(!shaders.is_empty(), "{}: no lit shader", ex.file);
             for (id, fx) in shaders {
                 let got = &inputs[&id];
                 for i in &fx.inputs {
-                    assert!(got.contains_key(&i.name), "{}: input `{}` has no data", ex.file, i.name);
+                    assert!(
+                        got.contains_key(&i.name),
+                        "{}: input `{}` has no data",
+                        ex.file,
+                        i.name
+                    );
                 }
                 let floats: usize = got.values().map(Vec::len).sum();
                 assert!(floats * 4 <= 4096, "{}: {floats} floats a frame", ex.file);

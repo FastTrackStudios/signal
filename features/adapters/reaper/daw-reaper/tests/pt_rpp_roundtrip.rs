@@ -18,7 +18,7 @@ use dawfile_reaper::types::project::ReaperProject;
 
 const FIXTURES: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../formats/dawfile-protools/tests/fixtures/"
+    "/../../../formats/tests/fixtures/protools/"
 );
 
 const SESSIONS: &[&str] = &[

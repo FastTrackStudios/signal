@@ -5,11 +5,11 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
+use crate::proto::ekit::EkitRig;
+use crate::proto::{EkitEvent, EkitStatus, Pad};
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use crate::proto::ekit::EkitRig;
-use crate::proto::{EkitEvent, EkitStatus, Pad};
 use sampler::{PreloadProfile, SamplerRig};
 use signal_space::{Space, knn};
 

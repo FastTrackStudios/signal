@@ -62,13 +62,41 @@ pub struct Chord {
 }
 
 impl Chord {
-    pub const NONE: Self = Self { shift: false, command: false, option: false };
-    pub const SHIFT: Self = Self { shift: true, command: false, option: false };
-    pub const COMMAND: Self = Self { shift: false, command: true, option: false };
-    pub const OPTION: Self = Self { shift: false, command: false, option: true };
-    pub const COMMAND_SHIFT: Self = Self { shift: true, command: true, option: false };
-    pub const OPTION_SHIFT: Self = Self { shift: true, command: false, option: true };
-    pub const OPTION_COMMAND: Self = Self { shift: false, command: true, option: true };
+    pub const NONE: Self = Self {
+        shift: false,
+        command: false,
+        option: false,
+    };
+    pub const SHIFT: Self = Self {
+        shift: true,
+        command: false,
+        option: false,
+    };
+    pub const COMMAND: Self = Self {
+        shift: false,
+        command: true,
+        option: false,
+    };
+    pub const OPTION: Self = Self {
+        shift: false,
+        command: false,
+        option: true,
+    };
+    pub const COMMAND_SHIFT: Self = Self {
+        shift: true,
+        command: true,
+        option: false,
+    };
+    pub const OPTION_SHIFT: Self = Self {
+        shift: true,
+        command: false,
+        option: true,
+    };
+    pub const OPTION_COMMAND: Self = Self {
+        shift: false,
+        command: true,
+        option: true,
+    };
 }
 
 /// How dragging a handle moves it while a chord is held.
@@ -192,13 +220,23 @@ impl Condition {
     /// On (≥ 0.5 for a toggle).
     #[must_use]
     pub fn on(addr: impl Into<String>) -> Self {
-        Self { addr: ParamAddr::new(addr), any_of: Vec::new(), at_least: 0.5, not: false }
+        Self {
+            addr: ParamAddr::new(addr),
+            any_of: Vec::new(),
+            at_least: 0.5,
+            not: false,
+        }
     }
 
     /// One of these option indices / values.
     #[must_use]
     pub fn any_of(addr: impl Into<String>, values: &[f64]) -> Self {
-        Self { addr: ParamAddr::new(addr), any_of: values.to_vec(), at_least: 0.0, not: false }
+        Self {
+            addr: ParamAddr::new(addr),
+            any_of: values.to_vec(),
+            at_least: 0.0,
+            not: false,
+        }
     }
 
     #[must_use]
@@ -210,7 +248,11 @@ impl Condition {
     /// Evaluate against a param's engineering value.
     #[must_use]
     pub fn test(&self, real: f64) -> bool {
-        let hit = if self.any_of.is_empty() { real >= self.at_least } else { self.any_of.iter().any(|v| (v - real).abs() < 0.5) };
+        let hit = if self.any_of.is_empty() {
+            real >= self.at_least
+        } else {
+            self.any_of.iter().any(|v| (v - real).abs() < 0.5)
+        };
         hit != self.not
     }
 }
@@ -276,13 +318,19 @@ impl Interact {
     /// selectable control.
     #[must_use]
     pub fn click_for(&self, chord: Chord) -> Option<&ClickAction> {
-        self.click.iter().find(|r| r.chord == chord).map(|r| &r.action)
+        self.click
+            .iter()
+            .find(|r| r.chord == chord)
+            .map(|r| &r.action)
     }
 
     /// The drag mode for `chord` (free when no rule names it).
     #[must_use]
     pub fn drag_for(&self, chord: Chord) -> DragMode {
-        self.drag.iter().find(|r| r.chord == chord && r.when.is_none()).map_or(DragMode::Free, |r| r.mode)
+        self.drag
+            .iter()
+            .find(|r| r.chord == chord && r.when.is_none())
+            .map_or(DragMode::Free, |r| r.mode)
     }
 
     /// Whether anything here needs the runtime's attention.
@@ -302,7 +350,10 @@ pub struct Assign {
 impl Assign {
     #[must_use]
     pub fn new(addr: impl Into<String>, value: f64) -> Self {
-        Self { addr: ParamAddr::new(addr), value }
+        Self {
+            addr: ParamAddr::new(addr),
+            value,
+        }
     }
 }
 
@@ -342,7 +393,9 @@ impl AddRule {
     /// The zone a click at axis value `x` and unit height `v` falls in.
     #[must_use]
     pub fn zone(&self, x: f64, v: f64) -> Option<&AddZone> {
-        self.zones.iter().find(|z| x >= z.x_min && x <= z.x_max && v >= z.y_min && v <= z.y_max)
+        self.zones
+            .iter()
+            .find(|z| x >= z.x_min && x <= z.x_max && v >= z.y_min && v <= z.y_max)
     }
 }
 
@@ -386,7 +439,14 @@ pub struct MenuItem {
 impl MenuItem {
     #[must_use]
     pub fn action(row: Uuid, commands: Vec<Command>) -> Self {
-        Self { row, role: ItemRole::Action, commands, checked: None, check: None, submenu: None }
+        Self {
+            row,
+            role: ItemRole::Action,
+            commands,
+            checked: None,
+            check: None,
+            submenu: None,
+        }
     }
 
     #[must_use]
@@ -456,7 +516,10 @@ mod tests {
 
     #[test]
     fn zoom_and_zones() {
-        let z = Zoom { param: ParamAddr::new("eq/range"), spans: vec![3.0, 6.0, 12.0] };
+        let z = Zoom {
+            param: ParamAddr::new("eq/range"),
+            spans: vec![3.0, 6.0, 12.0],
+        };
         assert_eq!(z.span(1.0), Some(6.0));
         assert_eq!(z.span(9.0), Some(12.0));
         let rule = AddRule {
@@ -464,7 +527,14 @@ mod tests {
             x: None,
             y: None,
             set: Vec::new(),
-            zones: vec![AddZone { x_min: 0.0, x_max: 30.0, y_min: 0.4, y_max: 0.6, set: vec![Assign::new("s", 3.0)], keep_y: false }],
+            zones: vec![AddZone {
+                x_min: 0.0,
+                x_max: 30.0,
+                y_min: 0.4,
+                y_max: 0.6,
+                set: vec![Assign::new("s", 3.0)],
+                keep_y: false,
+            }],
         };
         assert!(rule.zone(25.0, 0.5).is_some());
         assert!(rule.zone(25.0, 0.9).is_none());
@@ -474,13 +544,23 @@ mod tests {
     #[test]
     fn interact_rules_match_exact_chords() {
         let i = Interact {
-            drag: vec![DragRule { chord: Chord::OPTION, mode: DragMode::XOnly, when: None }],
-            click: vec![ClickRule { chord: Chord::COMMAND, action: ClickAction::ToggleSelection }],
+            drag: vec![DragRule {
+                chord: Chord::OPTION,
+                mode: DragMode::XOnly,
+                when: None,
+            }],
+            click: vec![ClickRule {
+                chord: Chord::COMMAND,
+                action: ClickAction::ToggleSelection,
+            }],
             ..Interact::default()
         };
         assert_eq!(i.drag_for(Chord::OPTION), DragMode::XOnly);
         assert_eq!(i.drag_for(Chord::OPTION_SHIFT), DragMode::Free);
-        assert_eq!(i.click_for(Chord::COMMAND), Some(&ClickAction::ToggleSelection));
+        assert_eq!(
+            i.click_for(Chord::COMMAND),
+            Some(&ClickAction::ToggleSelection)
+        );
         assert!(i.click_for(Chord::NONE).is_none());
         assert!(Interact::default().is_empty());
     }

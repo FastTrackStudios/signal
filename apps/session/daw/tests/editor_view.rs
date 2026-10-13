@@ -179,10 +179,7 @@ fn the_editor_opens_on_a_midi_item_and_reads_its_notes() {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     let editor = widget.editor().expect("landed");
-    assert_eq!(
-        editor.editor.mode,
-        expression_editor::Mode::PitchedAudio
-    );
+    assert_eq!(editor.editor.mode, expression_editor::Mode::PitchedAudio);
     assert_eq!(editor.item(), None, "an audio take writes nothing back");
 
     // A singer's folder: Main and DBL stacked, each from its source, on

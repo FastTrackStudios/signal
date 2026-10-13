@@ -180,7 +180,10 @@ pub fn preferred_editor_size(model: i32) -> (u32, u32) {
             (design.w + fts_audio_ui::shell::RAIL_W + 52.0) as u32,
             (design.h + 48.0) as u32,
         ),
-        None => (crate::ui::control_view::EDITOR_W, crate::ui::control_view::EDITOR_H),
+        None => (
+            crate::ui::control_view::EDITOR_W,
+            crate::ui::control_view::EDITOR_H,
+        ),
     }
 }
 

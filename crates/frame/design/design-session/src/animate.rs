@@ -48,7 +48,9 @@ fn motions(v: &Value) -> Result<Vec<Motion>> {
 }
 
 fn preset(a: &Args<'_>) -> Result<Option<Motion>> {
-    let Some(name) = a.opt_str("preset")? else { return Ok(None) };
+    let Some(name) = a.opt_str("preset")? else {
+        return Ok(None);
+    };
     let args = a.0.get("args").cloned().unwrap_or(Value::Null);
     let s = |k: &str| -> Result<String> {
         match args.get(k) {
@@ -69,11 +71,19 @@ fn preset(a: &Args<'_>) -> Result<Option<Motion>> {
         "ring_on" => kit::ring_on(&s("feed")?, num("freq", 4.0), num("decay", 1.5)),
         "spin" => kit::spin(&s("speed")?),
         "flicker" => kit::flicker(num("amount", 0.1)),
-        "pulse" => kit::pulse(num("rate", 1.0), args.get("low").and_then(Value::as_f64).unwrap_or(0.2)),
-        other => return err(format!("unknown preset `{other}`; presets: spring_follow, ring_on, spin, flicker, pulse")),
+        "pulse" => kit::pulse(
+            num("rate", 1.0),
+            args.get("low").and_then(Value::as_f64).unwrap_or(0.2),
+        ),
+        other => {
+            return err(format!(
+                "unknown preset `{other}`; presets: spring_follow, ring_on, spin, flicker, pulse"
+            ));
+        }
     };
     if let Some(t) = a.0.get("target") {
-        m.target = serde_json::from_value::<Target>(t.clone()).map_err(|e| ToolError(format!("target: {e}")))?;
+        m.target = serde_json::from_value::<Target>(t.clone())
+            .map_err(|e| ToolError(format!("target: {e}")))?;
     }
     if let Some(f) = a.0.get("from").and_then(Value::as_f64) {
         m.from = f;
@@ -86,7 +96,11 @@ fn preset(a: &Args<'_>) -> Result<Option<Motion>> {
 
 impl Session {
     pub(crate) fn animate(&mut self, node: NodeId, a: &Args<'_>) -> Result<String> {
-        let current = self.scene.node(node).map(|n| n.motion.clone()).unwrap_or_default();
+        let current = self
+            .scene
+            .node(node)
+            .map(|n| n.motion.clone())
+            .unwrap_or_default();
         let next = if let Some(v) = a.0.get("set") {
             Some(motions(v)?)
         } else if a.0.get("clear").and_then(Value::as_bool) == Some(true) {
@@ -94,7 +108,10 @@ impl Session {
         } else if let Some(i) = a.opt_u32("remove")? {
             let i = i as usize;
             if i >= current.len() {
-                return err(format!("the node has {} motion(s); no index {i}", current.len()));
+                return err(format!(
+                    "the node has {} motion(s); no index {i}",
+                    current.len()
+                ));
             }
             let mut v = current.clone();
             v.remove(i);
@@ -113,15 +130,29 @@ impl Session {
                     return err(format!("motion[{i}]: {p}"));
                 }
             }
-            self.commit(vec![Op::Set { id: node, prop: Prop::Motion(v) }])?;
+            self.commit(vec![Op::Set {
+                id: node,
+                prop: Prop::Motion(v),
+            }])?;
         }
-        let now = self.scene.node(node).map(|n| n.motion.clone()).unwrap_or_default();
+        let now = self
+            .scene
+            .node(node)
+            .map(|n| n.motion.clone())
+            .unwrap_or_default();
         let mut out = format!("{} motion(s) on {node}:\n", now.len());
         for (i, m) in now.iter().enumerate() {
-            out.push_str(&format!("  [{i}] {}\n", serde_json::to_string(m).unwrap_or_default()));
+            out.push_str(&format!(
+                "  [{i}] {}\n",
+                serde_json::to_string(m).unwrap_or_default()
+            ));
         }
-        let issues: Vec<String> =
-            self.issues().into_iter().filter(|i| i.rule == "motion" && i.node == node && i.severity >= Severity::Warning).map(|i| i.to_string()).collect();
+        let issues: Vec<String> = self
+            .issues()
+            .into_iter()
+            .filter(|i| i.rule == "motion" && i.node == node && i.severity >= Severity::Warning)
+            .map(|i| i.to_string())
+            .collect();
         if issues.is_empty() {
             out.push_str("motion lint: clean");
         } else {
@@ -143,16 +174,43 @@ mod tests {
         let mut s = Session::blank(demo_catalog());
         let out = s.call("write", &json!({"parent": s.scene().pages()[0].to_string(), "markup": "<Ellipse name=\"Reel\" w=60 h=60 />"})).unwrap();
         assert!(out.contains("Reel") || !out.is_empty());
-        let out = s.call("animate", &json!({"node": "Reel", "preset": "spin", "args": {"speed": "0.5"}})).unwrap();
-        assert!(out.contains("1 motion(s)") && out.contains("\"spin\""), "{out}");
+        let out = s
+            .call(
+                "animate",
+                &json!({"node": "Reel", "preset": "spin", "args": {"speed": "0.5"}}),
+            )
+            .unwrap();
+        assert!(
+            out.contains("1 motion(s)") && out.contains("\"spin\""),
+            "{out}"
+        );
         let out = s.call("animate", &json!({"node": "Reel", "add": {"target": "opacity", "input": "norm(nope/nothing)"}})).unwrap();
-        assert!(out.contains("2 motion(s)") && out.contains("no param `nope/nothing`"), "{out}");
-        let e = s.call("animate", &json!({"node": "Reel", "add": {"target": "x", "input": "1 +"}})).unwrap_err();
+        assert!(
+            out.contains("2 motion(s)") && out.contains("no param `nope/nothing`"),
+            "{out}"
+        );
+        let e = s
+            .call(
+                "animate",
+                &json!({"node": "Reel", "add": {"target": "x", "input": "1 +"}}),
+            )
+            .unwrap_err();
         assert!(e.0.contains("input"), "{e}");
-        s.call("animate", &json!({"node": "Reel", "remove": 1})).unwrap();
+        s.call("animate", &json!({"node": "Reel", "remove": 1}))
+            .unwrap();
         let out = s.call("read", &json!({"node": "Reel"})).unwrap();
         assert!(out.contains("motion={[{\"dynamics\":\"spin\""), "{out}");
         s.call("undo", &json!({})).unwrap();
-        assert_eq!(s.scene().nodes.values().find(|n| n.name == "Reel").unwrap().motion.len(), 2, "one undo per call");
+        assert_eq!(
+            s.scene()
+                .nodes
+                .values()
+                .find(|n| n.name == "Reel")
+                .unwrap()
+                .motion
+                .len(),
+            2,
+            "one undo per call"
+        );
     }
 }

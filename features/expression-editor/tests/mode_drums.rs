@@ -22,8 +22,8 @@ use dioxus_test::keyboard_types::Modifiers;
 use dioxus_test::{by_testid, render};
 use expression_editor::doc::{ExpressionDoc, Note, NoteId, TimeBase};
 use expression_editor::rows::DrumMap;
-use expression_editor::{Editor, Mode, RowSpace, Tool, Viewport};
 use expression_editor::ui::ExpressionEditor;
+use expression_editor::{Editor, Mode, RowSpace, Tool, Viewport};
 
 const PPQ: f64 = 960.0;
 

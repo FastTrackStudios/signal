@@ -91,7 +91,10 @@ pub enum Engine {
     /// A two-tube harmonics generator ([`crate::bluebox`]), with the
     /// two switches the panel has no knob for: which band the saturation
     /// tube's output feeds back, and which tube it is.
-    Bluebox { sat_freq: crate::bluebox::SatFreq, alt_tube: bool },
+    Bluebox {
+        sat_freq: crate::bluebox::SatFreq,
+        alt_tube: bool,
+    },
 }
 
 /// The engine settings a profile *is*.
@@ -456,7 +459,10 @@ pub static PROFILES: &[Profile] = &[
             character_b: Character::ModelB, // "Saturation"
             ..Voicing::base()
         },
-        engine: Engine::Bluebox { sat_freq: crate::bluebox::SatFreq::Flat, alt_tube: false },
+        engine: Engine::Bluebox {
+            sat_freq: crate::bluebox::SatFreq::Flat,
+            alt_tube: false,
+        },
         voice: "Pentode into triode with a parallel saturation tube: mix-bus richness up to outright overdrive.",
     },
     Profile {
@@ -473,7 +479,10 @@ pub static PROFILES: &[Profile] = &[
             character_b: Character::ModelB, // "Saturation"
             ..Voicing::base()
         },
-        engine: Engine::Bluebox { sat_freq: crate::bluebox::SatFreq::Low, alt_tube: false },
+        engine: Engine::Bluebox {
+            sat_freq: crate::bluebox::SatFreq::Low,
+            alt_tube: false,
+        },
         voice: "The saturation tube's harmonics fed back only in the lows: weight and body.",
     },
     Profile {
@@ -490,7 +499,10 @@ pub static PROFILES: &[Profile] = &[
             character_b: Character::ModelB, // "Saturation"
             ..Voicing::base()
         },
-        engine: Engine::Bluebox { sat_freq: crate::bluebox::SatFreq::High, alt_tube: false },
+        engine: Engine::Bluebox {
+            sat_freq: crate::bluebox::SatFreq::High,
+            alt_tube: false,
+        },
         voice: "The saturation tube's harmonics fed back only up top: presence and sizzle.",
     },
     Profile {
@@ -507,7 +519,10 @@ pub static PROFILES: &[Profile] = &[
             character_b: Character::ModelB, // "Saturation"
             ..Voicing::base()
         },
-        engine: Engine::Bluebox { sat_freq: crate::bluebox::SatFreq::Flat, alt_tube: true },
+        engine: Engine::Bluebox {
+            sat_freq: crate::bluebox::SatFreq::Flat,
+            alt_tube: true,
+        },
         voice: "The hotter saturation tube, full band.",
     },
     Profile {
@@ -524,7 +539,10 @@ pub static PROFILES: &[Profile] = &[
             character_b: Character::ModelB, // "Saturation"
             ..Voicing::base()
         },
-        engine: Engine::Bluebox { sat_freq: crate::bluebox::SatFreq::Low, alt_tube: true },
+        engine: Engine::Bluebox {
+            sat_freq: crate::bluebox::SatFreq::Low,
+            alt_tube: true,
+        },
         voice: "The hotter saturation tube, into the lows.",
     },
     Profile {
@@ -541,7 +559,10 @@ pub static PROFILES: &[Profile] = &[
             character_b: Character::ModelB, // "Saturation"
             ..Voicing::base()
         },
-        engine: Engine::Bluebox { sat_freq: crate::bluebox::SatFreq::High, alt_tube: true },
+        engine: Engine::Bluebox {
+            sat_freq: crate::bluebox::SatFreq::High,
+            alt_tube: true,
+        },
         voice: "The hotter saturation tube, up top.",
     },
 ];
@@ -588,7 +609,14 @@ pub static CATEGORIES: &[Category] = &[
         id: "bluebox",
         label: "Bluebox",
         badge: "BBX",
-        profiles: &["bluebox", "bluebox_low", "bluebox_high", "bluebox_alt", "bluebox_alt_low", "bluebox_alt_high"],
+        profiles: &[
+            "bluebox",
+            "bluebox_low",
+            "bluebox_high",
+            "bluebox_alt",
+            "bluebox_alt_low",
+            "bluebox_alt_high",
+        ],
     },
 ];
 
@@ -789,7 +817,11 @@ pub fn deluxe_params(c: &Controls) -> crate::deluxe::DeluxeParams {
 /// from the profile (the rail's variants). Mix is the engine's (linear);
 /// Output stays the plugin's.
 #[must_use]
-pub fn bluebox_params(c: &Controls, sat_freq: crate::bluebox::SatFreq, alt_tube: bool) -> crate::bluebox::BlueboxParams {
+pub fn bluebox_params(
+    c: &Controls,
+    sat_freq: crate::bluebox::SatFreq,
+    alt_tube: bool,
+) -> crate::bluebox::BlueboxParams {
     use crate::bluebox::{BlueboxParams, Cal};
     let unit = |v: f32| f64::from(v.clamp(0.0, 1.0));
     BlueboxParams {
@@ -931,7 +963,8 @@ mod tests {
                     (a.voicing, a.engine),
                     (b.voicing, b.engine),
                     "{} and {} are the same circuit under two names",
-                    a.id, b.id,
+                    a.id,
+                    b.id,
                 );
             }
         }

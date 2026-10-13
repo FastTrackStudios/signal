@@ -22,7 +22,10 @@ use tokio::sync::mpsc as tmpsc;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     /// (Re)connected: the engine's catalog and every current value.
-    Connected { catalog: Catalog, values: Vec<ParamValue> },
+    Connected {
+        catalog: Catalog,
+        values: Vec<ParamValue>,
+    },
     /// A telemetry frame or a parameter change.
     Engine(Incoming),
     /// The link dropped (or never came up); reconnecting.
@@ -59,13 +62,22 @@ impl Remote {
     pub fn start(url: &str, scope: Option<&str>) -> Result<Self, String> {
         let (cmd_tx, cmd_rx) = tmpsc::unbounded_channel();
         let (event_tx, event_rx) = mpsc::channel();
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| format!("tokio: {e}"))?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| format!("tokio: {e}"))?;
         let (u, s) = (url.to_owned(), scope.map(str::to_owned));
         let thread = std::thread::Builder::new()
             .name("frame-engine".into())
             .spawn(move || rt.block_on(supervise(u, s, cmd_rx, event_tx)))
             .map_err(|e| format!("engine thread: {e}"))?;
-        Ok(Self { url: url.to_owned(), cmds: cmd_tx, events: event_rx, snapshot: None, thread: Some(thread) })
+        Ok(Self {
+            url: url.to_owned(),
+            cmds: cmd_tx,
+            events: event_rx,
+            snapshot: None,
+            thread: Some(thread),
+        })
     }
 
     #[must_use]
@@ -120,8 +132,12 @@ impl Remote {
     /// Disconnected, or no answer within `timeout`.
     pub fn fetch_values(&self, timeout: Duration) -> Result<Vec<ParamValue>, String> {
         let (tx, rx) = mpsc::channel();
-        self.cmds.send(Cmd::Values(tx)).map_err(|_| "engine thread gone".to_string())?;
-        rx.recv_timeout(timeout).map_err(|_| "engine didn't answer".to_string())?.map_err(|e| e.0)
+        self.cmds
+            .send(Cmd::Values(tx))
+            .map_err(|_| "engine thread gone".to_string())?;
+        rx.recv_timeout(timeout)
+            .map_err(|_| "engine didn't answer".to_string())?
+            .map_err(|e| e.0)
     }
 }
 
@@ -140,15 +156,23 @@ impl Drop for Remote {
 /// calls are queued. So `sync::connect` / `sync::send` work unchanged.
 impl Engine for Remote {
     async fn catalog(&self) -> Result<Catalog, EngineError> {
-        self.snapshot.as_ref().map(|s| s.0.clone()).ok_or_else(|| EngineError("not connected".into()))
+        self.snapshot
+            .as_ref()
+            .map(|s| s.0.clone())
+            .ok_or_else(|| EngineError("not connected".into()))
     }
 
     async fn values(&self) -> Result<Vec<ParamValue>, EngineError> {
-        self.snapshot.as_ref().map(|s| s.1.clone()).ok_or_else(|| EngineError("not connected".into()))
+        self.snapshot
+            .as_ref()
+            .map(|s| s.1.clone())
+            .ok_or_else(|| EngineError("not connected".into()))
     }
 
     async fn call(&self, call: EngineCall) -> Result<(), EngineError> {
-        self.cmds.send(Cmd::Calls(vec![call])).map_err(|_| EngineError("engine thread gone".into()))
+        self.cmds
+            .send(Cmd::Calls(vec![call]))
+            .map_err(|_| EngineError("engine thread gone".into()))
     }
 }
 
@@ -178,7 +202,11 @@ async fn supervise(
                     reported = false;
                 }
                 if !reported {
-                    let what = if connected { "engine disconnected" } else { "engine unreachable" };
+                    let what = if connected {
+                        "engine disconnected"
+                    } else {
+                        "engine unreachable"
+                    };
                     eprintln!("frame: {what} ({reason}); retrying");
                     if events.send(Event::Disconnected(reason)).is_err() {
                         return;
@@ -210,7 +238,10 @@ async fn session(
     cmds: &mut tmpsc::UnboundedReceiver<Cmd>,
     events: &mpsc::Sender<Event>,
 ) -> Ended {
-    let lost = |e: EngineError| Ended::Lost { connected: false, reason: e.0 };
+    let lost = |e: EngineError| Ended::Lost {
+        connected: false,
+        reason: e.0,
+    };
     let client = match sync::connect_ws(url, scope).await {
         Ok(c) => c,
         Err(e) => return lost(e),
@@ -219,11 +250,18 @@ async fn session(
         Ok(c) => c,
         Err(e) => return lost(e),
     };
-    let (catalog, values) = match (Engine::catalog(&client).await, Engine::values(&client).await) {
+    let (catalog, values) = match (
+        Engine::catalog(&client).await,
+        Engine::values(&client).await,
+    ) {
         (Ok(c), Ok(v)) => (c, v),
         (Err(e), _) | (_, Err(e)) => return lost(e),
     };
-    eprintln!("frame: connected to engine `{}` at {url} ({} params)", catalog.id, catalog.params.len());
+    eprintln!(
+        "frame: connected to engine `{}` at {url} ({} params)",
+        catalog.id,
+        catalog.params.len()
+    );
     if events.send(Event::Connected { catalog, values }).is_err() {
         return Ended::UiGone;
     }
@@ -274,7 +312,11 @@ pub mod testing {
 
     impl Server {
         pub fn start(engine: Memory, scope: Option<&str>) -> Self {
-            Self::start_on(engine, scope, std::net::TcpListener::bind("127.0.0.1:0").unwrap())
+            Self::start_on(
+                engine,
+                scope,
+                std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+            )
         }
 
         fn start_on(engine: Memory, scope: Option<&str>, listener: std::net::TcpListener) -> Self {
@@ -296,12 +338,21 @@ pub mod testing {
                 });
                 rt.shutdown_background();
             });
-            Self { url, engine, stop: Some(stop), thread: Some(thread) }
+            Self {
+                url,
+                engine,
+                stop: Some(stop),
+                thread: Some(thread),
+            }
         }
 
         /// Serve again on the same port (after `kill`).
         pub fn restart(&mut self, scope: Option<&str>) {
-            let addr = self.url.trim_start_matches("ws://").trim_end_matches("/vox").to_owned();
+            let addr = self
+                .url
+                .trim_start_matches("ws://")
+                .trim_end_matches("/vox")
+                .to_owned();
             let listener = std::net::TcpListener::bind(addr).unwrap();
             *self = Self::start_on(self.engine.clone(), scope, listener);
         }
@@ -350,23 +401,52 @@ mod tests {
         let catalog = pollster::block_on(Engine::catalog(&remote)).unwrap();
         assert_eq!(catalog.id, "demo.guitar");
 
-        wait_for(&mut remote, &server.engine, |e| matches!(e, Event::Engine(Incoming::Frame(_))));
+        wait_for(&mut remote, &server.engine, |e| {
+            matches!(e, Event::Engine(Incoming::Frame(_)))
+        });
 
         let addr = ParamAddr::new("delay/mix");
-        remote.send(vec![EngineCall::SetParam { addr: addr.clone(), value: 0.5, phase: EditPhase::End }]);
+        remote.send(vec![EngineCall::SetParam {
+            addr: addr.clone(),
+            value: 0.5,
+            phase: EditPhase::End,
+        }]);
         let values = remote.fetch_values(Duration::from_secs(5)).unwrap();
-        assert!(values.iter().any(|v| v.addr == addr && (v.value - 0.5).abs() < 1e-9), "calls land before the read");
+        assert!(
+            values
+                .iter()
+                .any(|v| v.addr == addr && (v.value - 0.5).abs() < 1e-9),
+            "calls land before the read"
+        );
         assert_eq!(server.engine.value(&addr), Some(0.5));
-        wait_for(&mut remote, &server.engine, |e| matches!(e, Event::Engine(Incoming::Param(p)) if p.addr == addr));
+        wait_for(
+            &mut remote,
+            &server.engine,
+            |e| matches!(e, Event::Engine(Incoming::Param(p)) if p.addr == addr),
+        );
 
         server.kill();
-        wait_for(&mut remote, &server.engine, |e| matches!(e, Event::Disconnected(_)));
-        assert!(remote.fetch_values(Duration::from_secs(5)).is_err(), "reads fail while disconnected");
+        wait_for(&mut remote, &server.engine, |e| {
+            matches!(e, Event::Disconnected(_))
+        });
+        assert!(
+            remote.fetch_values(Duration::from_secs(5)).is_err(),
+            "reads fail while disconnected"
+        );
 
         server.restart(Some("guitar"));
-        let e = wait_for(&mut remote, &server.engine, |e| matches!(e, Event::Connected { .. }));
-        let Event::Connected { values, .. } = e else { unreachable!() };
-        assert!(values.iter().any(|v| v.addr == addr && (v.value - 0.5).abs() < 1e-9), "resynced");
+        let e = wait_for(&mut remote, &server.engine, |e| {
+            matches!(e, Event::Connected { .. })
+        });
+        let Event::Connected { values, .. } = e else {
+            unreachable!()
+        };
+        assert!(
+            values
+                .iter()
+                .any(|v| v.addr == addr && (v.value - 0.5).abs() < 1e-9),
+            "resynced"
+        );
     }
 
     #[test]
@@ -375,7 +455,9 @@ mod tests {
         let url = format!("ws://{}/vox", listener.local_addr().unwrap());
         drop(listener);
         let mut remote = Remote::start(&url, None).unwrap();
-        let err = remote.wait_connected(Duration::from_millis(600)).unwrap_err();
+        let err = remote
+            .wait_connected(Duration::from_millis(600))
+            .unwrap_err();
         assert!(err.contains("can't reach engine"), "{err}");
     }
 }

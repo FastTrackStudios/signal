@@ -95,8 +95,9 @@ fn a_saved_session_opens_as_it_was_saved() {
         &again,
         session_daw::guide_instrument::Library::Folder(session_daw::guide_instrument::samples_dir()),
     );
-    let loaded = session_daw::project_file::load(&again, "Saved Song", &saved, formats::store::MAIN)
-        .expect("load");
+    let loaded =
+        session_daw::project_file::load(&again, "Saved Song", &saved, formats::store::MAIN)
+            .expect("load");
     let after = snapshot(&again, &ProjectContext::Project(loaded));
 
     assert_eq!(before, after);

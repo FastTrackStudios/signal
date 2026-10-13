@@ -5,7 +5,7 @@ use formats::protools::{block, content_type::ContentType, cursor::Cursor, decryp
 
 fn main() {
     let path = std::env::args().nth(1).unwrap_or_else(|| {
-        "crates/dawfile-protools/tests/fixtures/studio-session-2.ptx".to_string()
+        "features/formats/tests/fixtures/protools/studio-session-2.ptx".to_string()
     });
 
     let mut data = std::fs::read(&path).expect("read");

@@ -170,7 +170,9 @@ fn the_preamps_static_transfer_is_pinned_per_shaper() {
     let g: Golden = golden!();
     for (name, shaper) in SHAPERS {
         let out: Vec<f32> = (0..LEN)
-            .map(|n| shaper.shape(dsp_core::golden::num::count_to_f32(n).mul_add(8.0 / 4096.0, -4.0)))
+            .map(|n| {
+                shaper.shape(dsp_core::golden::num::count_to_f32(n).mul_add(8.0 / 4096.0, -4.0))
+            })
             .collect();
         dsp_core::assert_golden!(g, &format!("shaper_{name}"), &out);
     }

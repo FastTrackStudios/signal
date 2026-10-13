@@ -51,7 +51,9 @@ fn spot(file: &str) -> Option<((f64, f64), f64, &'static str)> {
         "01-fet-black" => ((462.0, 172.0), 40.0, "black"),
         "02-fet-silver" => ((478.0, 170.0), 40.0, "black"),
         "03-fet-late" => ((472.0, 172.0), 40.0, "black"),
-        "01-fet-black-lane" | "02-fet-silver-lane" | "03-fet-late-lane" => ((351.0, 19.0), 36.0, "black"),
+        "01-fet-black-lane" | "02-fet-silver-lane" | "03-fet-late-lane" => {
+            ((351.0, 19.0), 36.0, "black")
+        }
         // Clear of the ratio legends on the black one; the silver and the
         // late have their power switch there.
         "01-fet-black-tall" => ((150.0, 128.0), 40.0, "black"),
@@ -89,9 +91,26 @@ fn spot(file: &str) -> Option<((f64, f64), f64, &'static str)> {
 }
 
 /// The SC key on `ns`'s view at (`cx`, `cy`) of `parent`, `w` wide.
-fn key(b: &mut Builder<'_>, parent: NodeId, ns: &str, (cx, cy): (f64, f64), w: f64, variant: &str) -> NodeId {
-    let opts = [format!("h={}", (w * 0.36).round()), format!("color={YELLOW}")];
-    let p = Place { options: Some(opts.to_vec()), ..Place::new("SC").size(w).variant(variant).legend("SC").bind(parts::bind(&view(ns))) };
+fn key(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    ns: &str,
+    (cx, cy): (f64, f64),
+    w: f64,
+    variant: &str,
+) -> NodeId {
+    let opts = [
+        format!("h={}", (w * 0.36).round()),
+        format!("color={YELLOW}"),
+    ];
+    let p = Place {
+        options: Some(opts.to_vec()),
+        ..Place::new("SC")
+            .size(w)
+            .variant(variant)
+            .legend("SC")
+            .bind(parts::bind(&view(ns)))
+    };
     parts::put(b, parent, "button.key", &p, cx, cy)
 }
 
@@ -101,16 +120,32 @@ fn key(b: &mut Builder<'_>, parent: NodeId, ns: &str, (cx, cy): (f64, f64), w: f
 /// # Panics
 /// If the face's top frame has no plate (every comp face has one).
 pub fn add_key(f: &mut Face) {
-    let Some((at, w, variant)) = spot(f.file) else { return };
-    let ns = f.params.first().and_then(|p| p.addr.0.as_str().split('/').next().map(str::to_string)).expect("comp face params");
+    let Some((at, w, variant)) = spot(f.file) else {
+        return;
+    };
+    let ns = f
+        .params
+        .first()
+        .and_then(|p| p.addr.0.as_str().split('/').next().map(str::to_string))
+        .expect("comp face params");
     let scene = &mut f.scene;
     let page = scene.pages()[0];
-    let top = scene.node(page).and_then(|p| p.children.first().copied()).expect("top frame");
-    let plate = scene.node(top).and_then(|t| t.children.first().copied()).expect("plate");
+    let top = scene
+        .node(page)
+        .and_then(|p| p.children.first().copied())
+        .expect("top frame");
+    let plate = scene
+        .node(top)
+        .and_then(|t| t.children.first().copied())
+        .expect("plate");
     let theme = Theme::stage_dark();
     let mut controls = BTreeMap::new();
     {
-        let mut b = Builder { scene, controls: &mut controls, theme: &theme };
+        let mut b = Builder {
+            scene,
+            controls: &mut controls,
+            theme: &theme,
+        };
         key(&mut b, plate, &ns, at, w, variant);
     }
     for (id, c) in controls {
@@ -140,7 +175,9 @@ fn params() -> Vec<ParamInfo> {
     let mut v = surface_kit::viz::catalog::eq_params(NS, BANDS);
     let shapes = surface_kit::viz::catalog::SHAPES.len() as f64 - 1.0;
     for p in &mut v {
-        let Some(k) = p.addr.0.as_str().strip_prefix("sc/b") else { continue };
+        let Some(k) = p.addr.0.as_str().strip_prefix("sc/b") else {
+            continue;
+        };
         let (n, field) = k.split_once('_').unwrap_or(("", ""));
         match (n, field) {
             ("1", "used") => p.default = 1.0,
@@ -152,7 +189,15 @@ fn params() -> Vec<ParamInfo> {
         }
     }
     v.extend(surface_kit::viz::catalog::eq_view_params(NS));
-    v.push(ParamInfo::new(format!("{NS}/title"), "Title", surface_proto::Range::default()).text().short("Title"));
+    v.push(
+        ParamInfo::new(
+            format!("{NS}/title"),
+            "Title",
+            surface_proto::Range::default(),
+        )
+        .text()
+        .short("Title"),
+    );
     v.push(view_param(NS, true));
     v
 }
@@ -164,7 +209,10 @@ fn params() -> Vec<ParamInfo> {
 pub fn face() -> Face {
     let scene = canvas("Sidechain EQ", |b, root| {
         if let Some(n) = b.scene.node_mut(root) {
-            n.size = document_proto::Size { width: W, height: H };
+            n.size = document_proto::Size {
+                width: W,
+                height: H,
+            };
         }
         let mut bg = draw::frame("Sidechain panel", 0.0, 0.0, W, H);
         bg.fills = vec![draw::linear(180.0, &[(0.0, "#17171a"), (1.0, "#0e0e10")])];
@@ -181,14 +229,44 @@ pub fn face() -> Face {
             }
             n
         };
-        let hint = b.add(field, style(draw::text("placeholder", "Sidechain EQ", 0.0, 8.0, 520.0, 12.0, "#facc15b3", TextAlign::Left)));
-        let value = b.add(field, style(draw::text("value", "", 0.0, 8.0, 520.0, 12.0, YELLOW, TextAlign::Left)));
-        let caret = b.add(field, draw::rect("caret", 0.0, 8.0, 1.5, 14.0, draw::solid("#00000000")));
-        let c = Control::new(ControlKind::TextField { click_to_edit: false, max_len: 48 })
-            .bound(Binding::param(format!("{NS}/title")))
-            .slot(SlotRole::Value, value.0)
-            .slot(SlotRole::Placeholder, hint.0)
-            .slot(SlotRole::Caret, caret.0);
+        let hint = b.add(
+            field,
+            style(draw::text(
+                "placeholder",
+                "Sidechain EQ",
+                0.0,
+                8.0,
+                520.0,
+                12.0,
+                "#facc15b3",
+                TextAlign::Left,
+            )),
+        );
+        let value = b.add(
+            field,
+            style(draw::text(
+                "value",
+                "",
+                0.0,
+                8.0,
+                520.0,
+                12.0,
+                YELLOW,
+                TextAlign::Left,
+            )),
+        );
+        let caret = b.add(
+            field,
+            draw::rect("caret", 0.0, 8.0, 1.5, 14.0, draw::solid("#00000000")),
+        );
+        let c = Control::new(ControlKind::TextField {
+            click_to_edit: false,
+            max_len: 48,
+        })
+        .bound(Binding::param(format!("{NS}/title")))
+        .slot(SlotRole::Value, value.0)
+        .slot(SlotRole::Placeholder, hint.0)
+        .slot(SlotRole::Caret, caret.0);
         b.controls.insert(field, c);
         pin(b, field, ResizeX::Left, ResizeY::Top);
 
@@ -199,12 +277,19 @@ pub fn face() -> Face {
             "button.key",
             &Place {
                 options: Some(vec!["h=14".into(), format!("color={YELLOW}")]),
-                ..Place::new("SC").size(40.0).variant("black").legend("SC").bind(parts::bind(&view(NS)))
+                ..Place::new("SC")
+                    .size(40.0)
+                    .variant("black")
+                    .legend("SC")
+                    .bind(parts::bind(&view(NS)))
             },
             0.0,
             0.0,
         );
-        let (kw, kh) = b.scene.node(k).map_or((40.0, 14.0), |n| (n.size.width, n.size.height));
+        let (kw, kh) = b
+            .scene
+            .node(k)
+            .map_or((40.0, 14.0), |n| (n.size.width, n.size.height));
         if let Some(n) = b.scene.node_mut(k) {
             n.transform = document_proto::Transform::translate(W - 10.0 - kw, (ROW - kh) / 2.0);
         }
@@ -219,12 +304,21 @@ pub fn face() -> Face {
             format!("tint={YELLOW}"),
             format!("h={gh}"),
         ];
-        let p = Place { options: Some(opts.to_vec()), ..Place::new("Sidechain").size(gw) };
+        let p = Place {
+            options: Some(opts.to_vec()),
+            ..Place::new("Sidechain").size(gw)
+        };
         let g = parts::put_at(b, bg, "viz.eq_graph", &p, inset, ROW);
         pin(b, g, ResizeX::Stretch, ResizeY::Stretch);
         solid_filters(b, g);
     });
-    Face { file: "00-sc-eq", plugin: "comp", scene, params: params(), streams: Vec::new() }
+    Face {
+        file: "00-sc-eq",
+        plugin: "comp",
+        scene,
+        params: params(),
+        streams: Vec::new(),
+    }
 }
 
 /// The filters solid: each band's area and the sum's well filled, not the
@@ -235,7 +329,11 @@ fn solid_filters(b: &mut Builder<'_>, graph: NodeId) {
         if n.name != "fill" {
             continue;
         }
-        let holder = n.parent.and_then(|p| b.scene.node(p)).map(|p| p.name.clone()).unwrap_or_default();
+        let holder = n
+            .parent
+            .and_then(|p| b.scene.node(p))
+            .map(|p| p.name.clone())
+            .unwrap_or_default();
         let fill = match holder.as_str() {
             // White, tinted by the band's colour (yellow).
             "curve" => "#ffffff73",

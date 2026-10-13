@@ -51,7 +51,6 @@ use std::sync::Arc;
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use midicore_proto::MidiEvent;
 use keys::proto::keys::{
     KeysEvent, KeysRig as KeysRigSvc, KeysRigClient, KeysRigStreamClient, KeysRigStreamSource,
 };
@@ -59,6 +58,7 @@ use keys::proto::{
     KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
     KeysMeter, KeysMixer, KeysModule, KeysNode, KeysPerform, KeysPreset, KeysRealtime, KeysStatus,
 };
+use midicore_proto::MidiEvent;
 
 use crate::web_keys_rig::Worklet;
 
@@ -146,10 +146,7 @@ pub(crate) struct WebKeysBackend {
 
 impl Services for WebKeysBackend {
     fn layers() -> impl Layer<Self> {
-        layers![
-            keys::proto::keys::Service,
-            keys::proto::keys::StreamService
-        ]
+        layers![keys::proto::keys::Service, keys::proto::keys::StreamService]
     }
 }
 

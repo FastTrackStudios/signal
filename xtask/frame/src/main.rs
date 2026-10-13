@@ -79,7 +79,10 @@ fn run_script(root: &Path, script: PathBuf, args: &[String]) -> Result<(), Strin
     let status = Command::new(&script)
         .args(args)
         .current_dir(root)
-        .env("CARGO", env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()))
+        .env(
+            "CARGO",
+            env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()),
+        )
         .status()
         .map_err(|e| format!("failed to run {}: {e}", script.display()))?;
 
@@ -109,11 +112,7 @@ fn cmd_svg_to_png(args: &[String]) -> Result<(), String> {
         match args[i].as_str() {
             "--out" | "-o" => {
                 i += 1;
-                output = Some(
-                    args.get(i)
-                        .ok_or("--out requires a value")?
-                        .clone(),
-                );
+                output = Some(args.get(i).ok_or("--out requires a value")?.clone());
             }
             "--width" => {
                 i += 1;
@@ -147,7 +146,12 @@ fn cmd_svg_to_png(args: &[String]) -> Result<(), String> {
     let input = input.ok_or("usage: cargo xtask svg_to_png <input.svg> --out <output.png>")?;
     let output = output.ok_or("--out <path.png> is required")?;
 
-    svg_to_png(Path::new(&input), Path::new(&output), width_override, height_override)?;
+    svg_to_png(
+        Path::new(&input),
+        Path::new(&output),
+        width_override,
+        height_override,
+    )?;
     eprintln!("wrote {output}");
     Ok(())
 }
@@ -162,8 +166,8 @@ fn svg_to_png(
         std::fs::read(svg_path).map_err(|e| format!("read {}: {e}", svg_path.display()))?;
 
     let opt = resvg::usvg::Options::default();
-    let tree = resvg::usvg::Tree::from_data(&svg_data, &opt)
-        .map_err(|e| format!("parse SVG: {e}"))?;
+    let tree =
+        resvg::usvg::Tree::from_data(&svg_data, &opt).map_err(|e| format!("parse SVG: {e}"))?;
 
     let svg_size = tree.size();
     let (px_w, px_h) = match (width, height) {
@@ -220,11 +224,7 @@ fn cmd_parity_svg_png(workspace_root: &Path, args: &[String]) -> Result<(), Stri
         match args[i].as_str() {
             "--scenario" | "-s" => {
                 i += 1;
-                scenario_filter = Some(
-                    args.get(i)
-                        .ok_or("--scenario requires a value")?
-                        .clone(),
-                );
+                scenario_filter = Some(args.get(i).ok_or("--scenario requires a value")?.clone());
             }
             "--all" => run_all = true,
             "--core10" => run_core10 = true,
@@ -350,15 +350,17 @@ fn resolve_scenarios(
     }
 
     // Default: core10
-    let text = std::fs::read_to_string(core10_path)
-        .map_err(|e| format!("read core10.txt: {e}"))?;
-    Ok(text.lines().filter(|l| !l.trim().is_empty()).map(String::from).collect())
+    let text = std::fs::read_to_string(core10_path).map_err(|e| format!("read core10.txt: {e}"))?;
+    Ok(text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(String::from)
+        .collect())
 }
 
 fn list_scenario_dirs(dir: &Path) -> Result<Vec<String>, String> {
     let mut names = Vec::new();
-    let entries =
-        std::fs::read_dir(dir).map_err(|e| format!("read {}: {e}", dir.display()))?;
+    let entries = std::fs::read_dir(dir).map_err(|e| format!("read {}: {e}", dir.display()))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("readdir: {e}"))?;
         if entry.file_type().map_or(false, |t| t.is_dir()) {
@@ -421,7 +423,8 @@ fn pixel_diff(a_path: &Path, b_path: &Path, threshold_percent: f64) -> Result<Di
     // If dimensions differ, resize a to match b (b is the reference)
     let (a_img, b_img, w, h) = if (aw, ah) != (bw, bh) {
         // Use the reference (b) dimensions
-        let resized = image::imageops::resize(&a_img, bw, bh, image::imageops::FilterType::Lanczos3);
+        let resized =
+            image::imageops::resize(&a_img, bw, bh, image::imageops::FilterType::Lanczos3);
         (resized, b_img, bw, bh)
     } else {
         (a_img, b_img, aw, ah)

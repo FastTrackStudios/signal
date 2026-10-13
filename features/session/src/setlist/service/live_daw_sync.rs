@@ -16,12 +16,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::proto::offset_map::SetlistOffsetMap;
 use daw::rpc::Project;
 use daw::service::item::Item;
 use daw::service::primitives::{Duration, PositionInSeconds};
 use daw::service::{ItemEvent, MarkerEvent, RegionEvent};
 use daw_synchronization::{SyncConfig, SyncDomain, SyncSession, SynchronizationEngine};
-use crate::proto::offset_map::SetlistOffsetMap;
 use tokio::sync::RwLock;
 use tokio::sync::broadcast::error::RecvError;
 use tracing::{debug, info, warn};

@@ -14,9 +14,7 @@
 //! The assertions that do not need it run on a fixture, because a test
 //! that silently skips is a test that silently stops working.
 
-use formats::session::{
-    DawProject, DocumentEdit, DocumentQuery, EntityId, ReceiveNode, SourceRef,
-};
+use formats::session::{DawProject, DocumentEdit, DocumentQuery, EntityId, ReceiveNode, SourceRef};
 use std::path::PathBuf;
 
 /// The real session, when this machine has it.

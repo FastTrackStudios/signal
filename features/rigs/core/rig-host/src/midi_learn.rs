@@ -47,17 +47,41 @@ impl Trigger {
     pub fn from_raw(status: u8, d1: u8, d2: u8) -> Option<(Self, bool)> {
         let channel = status & 0x0f;
         match status & 0xf0 {
-            0xb0 => Some((Self::Cc { channel, number: d1 }, d2 >= 64)),
-            0x90 => Some((Self::Note { channel, number: d1 }, d2 > 0)),
-            0x80 => Some((Self::Note { channel, number: d1 }, false)),
+            0xb0 => Some((
+                Self::Cc {
+                    channel,
+                    number: d1,
+                },
+                d2 >= 64,
+            )),
+            0x90 => Some((
+                Self::Note {
+                    channel,
+                    number: d1,
+                },
+                d2 > 0,
+            )),
+            0x80 => Some((
+                Self::Note {
+                    channel,
+                    number: d1,
+                },
+                false,
+            )),
             _ => None,
         }
     }
 }
 
 fn note_name(key: u8) -> String {
-    const NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-    format!("{}{}", NAMES[usize::from(key % 12)], i32::from(key / 12) - 1)
+    const NAMES: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+    ];
+    format!(
+        "{}{}",
+        NAMES[usize::from(key % 12)],
+        i32::from(key / 12) - 1
+    )
 }
 
 /// One binding: this trigger presses this target.
@@ -248,16 +272,24 @@ mod tests {
         assert_eq!(m.learning(), Some("stack:2"));
         assert_eq!(
             m.on_raw(0xb0, 101, 127),
-            Outcome::Learned { target: "stack:2".into() }
+            Outcome::Learned {
+                target: "stack:2".into()
+            }
         );
         assert_eq!(m.learning(), None);
         assert_eq!(
             m.on_raw(0xb0, 101, 127),
-            Outcome::Fire { target: "stack:2".into(), pressed: true }
+            Outcome::Fire {
+                target: "stack:2".into(),
+                pressed: true
+            }
         );
         assert_eq!(
             m.on_raw(0xb0, 101, 0),
-            Outcome::Fire { target: "stack:2".into(), pressed: false }
+            Outcome::Fire {
+                target: "stack:2".into(),
+                pressed: false
+            }
         );
         // Another channel is another pedal.
         assert_eq!(m.on_raw(0xb1, 101, 127), Outcome::Pass);
@@ -267,10 +299,30 @@ mod tests {
     fn pads_learn_as_notes() {
         let mut m = MidiLearn::in_memory();
         m.learn("tap");
-        assert_eq!(m.on_raw(0x99, 36, 100), Outcome::Learned { target: "tap".into() });
-        assert_eq!(m.labels(), vec![("tap".to_string(), "C2 · ch 10".to_string())]);
-        assert_eq!(m.on_raw(0x89, 36, 0), Outcome::Fire { target: "tap".into(), pressed: false });
-        assert_eq!(m.on_raw(0x99, 36, 0), Outcome::Fire { target: "tap".into(), pressed: false });
+        assert_eq!(
+            m.on_raw(0x99, 36, 100),
+            Outcome::Learned {
+                target: "tap".into()
+            }
+        );
+        assert_eq!(
+            m.labels(),
+            vec![("tap".to_string(), "C2 · ch 10".to_string())]
+        );
+        assert_eq!(
+            m.on_raw(0x89, 36, 0),
+            Outcome::Fire {
+                target: "tap".into(),
+                pressed: false
+            }
+        );
+        assert_eq!(
+            m.on_raw(0x99, 36, 0),
+            Outcome::Fire {
+                target: "tap".into(),
+                pressed: false
+            }
+        );
     }
 
     #[test]
@@ -286,7 +338,10 @@ mod tests {
         // Another pedal onto that switch: it replaces the first pedal.
         m.learn("stack:1");
         m.on_raw(0xb0, 21, 127);
-        assert_eq!(m.labels(), vec![("stack:1".to_string(), "CC 21 · ch 1".to_string())]);
+        assert_eq!(
+            m.labels(),
+            vec![("stack:1".to_string(), "CC 21 · ch 1".to_string())]
+        );
         m.clear("stack:1");
         assert!(m.bindings().is_empty());
     }
@@ -302,16 +357,38 @@ mod tests {
         m.on_raw(0xb0, 13, 127);
         m.renumber("stack:", 1);
         assert_eq!(m.on_raw(0xb0, 11, 127), Outcome::Pass);
-        assert_eq!(m.on_raw(0xb0, 12, 127), Outcome::Fire { target: "stack:1".into(), pressed: true });
-        assert_eq!(m.on_raw(0xb0, 10, 127), Outcome::Fire { target: "stack:0".into(), pressed: true });
-        assert_eq!(m.on_raw(0xb0, 13, 127), Outcome::Fire { target: "tap".into(), pressed: true });
+        assert_eq!(
+            m.on_raw(0xb0, 12, 127),
+            Outcome::Fire {
+                target: "stack:1".into(),
+                pressed: true
+            }
+        );
+        assert_eq!(
+            m.on_raw(0xb0, 10, 127),
+            Outcome::Fire {
+                target: "stack:0".into(),
+                pressed: true
+            }
+        );
+        assert_eq!(
+            m.on_raw(0xb0, 13, 127),
+            Outcome::Fire {
+                target: "tap".into(),
+                pressed: true
+            }
+        );
     }
 
     #[test]
     fn the_table_survives_the_file() {
         let dir = std::env::temp_dir().join(format!("midi-learn-{}", std::process::id()));
         let store = StyxDir::new(&dir);
-        let mut m = MidiLearn { store: Some(store.clone()), bindings: Vec::new(), learning: None };
+        let mut m = MidiLearn {
+            store: Some(store.clone()),
+            bindings: Vec::new(),
+            learning: None,
+        };
         m.learn("stack:3");
         m.on_raw(0xb2, 64, 127);
         let file: LearnFile = store.read(FILE).expect("saved");

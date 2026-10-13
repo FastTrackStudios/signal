@@ -27,7 +27,14 @@ pub struct SpectrumConfig {
 
 impl Default for SpectrumConfig {
     fn default() -> Self {
-        Self { bins: 64, f_min: 20.0, f_max: 20_000.0, floor_db: -90.0, decay_db_per_s: 30.0, smoothing_octaves: 0.0 }
+        Self {
+            bins: 64,
+            f_min: 20.0,
+            f_max: 20_000.0,
+            floor_db: -90.0,
+            decay_db_per_s: 30.0,
+            smoothing_octaves: 0.0,
+        }
     }
 }
 
@@ -37,7 +44,12 @@ impl SpectrumConfig {
     #[must_use]
     pub fn for_feed(kind: &FeedKind, options: &FeedOptions) -> Option<Self> {
         match kind.with_options(options) {
-            FeedKind::Spectrum { bins, f_min, f_max, floor_db } => Some(Self {
+            FeedKind::Spectrum {
+                bins,
+                f_min,
+                f_max,
+                floor_db,
+            } => Some(Self {
                 bins: usize::from(bins.max(1)),
                 f_min,
                 f_max,
@@ -104,8 +116,9 @@ pub struct SpectrumAnalyzer {
 pub fn spectrum(fft_size: usize, sample_rate: f64) -> (SpectrumTap, SpectrumAnalyzer) {
     let (w, r) = ring(fft_size * 2);
     let n = fft_size;
-    let window: Box<[f64]> =
-        (0..n).map(|i| 0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / n as f64).cos()).collect();
+    let window: Box<[f64]> = (0..n)
+        .map(|i| 0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / n as f64).cos())
+        .collect();
     let window_sum = window.iter().sum();
     let mut a = SpectrumAnalyzer {
         reader: r,
@@ -141,14 +154,21 @@ impl SpectrumAnalyzer {
         let f_min = cfg.f_min.max(1e-3);
         let f_max = cfg.f_max.max(f_min * 1.0001);
         let ratio = f_max / f_min;
-        self.edges = (0..=bins).map(|j| f_min * ratio.powf(j as f64 / bins as f64)).collect();
+        self.edges = (0..=bins)
+            .map(|j| f_min * ratio.powf(j as f64 / bins as f64))
+            .collect();
         if self.held.len() != bins {
             self.held = vec![cfg.floor_db; bins];
             self.primed = false;
         }
         self.power.resize(bins, 0.0);
         self.prefix.resize(bins + 1, 0.0);
-        self.cfg = SpectrumConfig { bins, f_min, f_max, ..cfg };
+        self.cfg = SpectrumConfig {
+            bins,
+            f_min,
+            f_max,
+            ..cfg
+        };
     }
 
     /// Forget the ballistics (the next read shows the spectrum as is).
@@ -188,7 +208,11 @@ impl SpectrumAnalyzer {
         let fall = self.cfg.decay_db_per_s.max(0.0) * dt.max(0.0);
         for (h, p) in self.held.iter_mut().zip(&self.power) {
             let now = amp_to_db(p.sqrt()).max(floor);
-            *h = if self.primed { now.max(*h - fall).max(floor) } else { now };
+            *h = if self.primed {
+                now.max(*h - fall).max(floor)
+            } else {
+                now
+            };
         }
         self.primed = true;
         out.clear();
@@ -240,7 +264,10 @@ impl SpectrumAnalyzer {
 impl FeedSource for SpectrumAnalyzer {
     fn configure(&mut self, info: &feed_proto::FeedInfo, options: &FeedOptions) {
         if let Some(cfg) = SpectrumConfig::for_feed(&info.kind, options) {
-            self.configure(SpectrumConfig { decay_db_per_s: self.cfg.decay_db_per_s, ..cfg });
+            self.configure(SpectrumConfig {
+                decay_db_per_s: self.cfg.decay_db_per_s,
+                ..cfg
+            });
         }
     }
 
@@ -256,11 +283,17 @@ mod tests {
     const SR: f64 = 48_000.0;
 
     fn sine(hz: f64, amp: f64, n: usize) -> Vec<f32> {
-        (0..n).map(|i| (amp * (2.0 * std::f64::consts::PI * hz * i as f64 / SR).sin()) as f32).collect()
+        (0..n)
+            .map(|i| (amp * (2.0 * std::f64::consts::PI * hz * i as f64 / SR).sin()) as f32)
+            .collect()
     }
 
     fn argmax(v: &[f64]) -> usize {
-        v.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map(|(i, _)| i).unwrap()
+        v.iter()
+            .enumerate()
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .map(|(i, _)| i)
+            .unwrap()
     }
 
     #[test]
@@ -274,7 +307,11 @@ mod tests {
         // 64 bins over 10 octaves: 1 kHz sits in bin ⌊64·log₁₀₀₀(50)⌋ = 36.
         assert_eq!(expect, 36);
         assert_eq!(argmax(&out), expect, "{out:?}");
-        assert!(out[expect] > -2.0 && out[expect] < 0.5, "full-scale sine ≈ 0 dBFS, got {}", out[expect]);
+        assert!(
+            out[expect] > -2.0 && out[expect] < 0.5,
+            "full-scale sine ≈ 0 dBFS, got {}",
+            out[expect]
+        );
         let far = an.bin_of(100.0).unwrap();
         assert!(out[far] < -60.0, "100 Hz reads {}", out[far]);
     }
@@ -282,8 +319,20 @@ mod tests {
     #[test]
     fn requested_bins_and_band_reshape_the_output() {
         let (mut tap, mut an) = spectrum(4096, SR);
-        let kind = FeedKind::Spectrum { bins: 32, f_min: 200.0, f_max: 5000.0, floor_db: -60.0 };
-        let cfg = SpectrumConfig::for_feed(&kind, &FeedOptions { bins: Some(128), ..FeedOptions::default() }).unwrap();
+        let kind = FeedKind::Spectrum {
+            bins: 32,
+            f_min: 200.0,
+            f_max: 5000.0,
+            floor_db: -60.0,
+        };
+        let cfg = SpectrumConfig::for_feed(
+            &kind,
+            &FeedOptions {
+                bins: Some(128),
+                ..FeedOptions::default()
+            },
+        )
+        .unwrap();
         an.configure(cfg);
         // 1.2 kHz sits mid-bin (1 kHz would sit on an edge: 200·√25).
         tap.push(&sine(1200.0, 0.5, 4096));
@@ -298,7 +347,10 @@ mod tests {
     #[test]
     fn peaks_attack_instantly_and_decay_at_the_set_rate() {
         let (mut tap, mut an) = spectrum(2048, SR);
-        an.configure(SpectrumConfig { decay_db_per_s: 20.0, ..SpectrumConfig::default() });
+        an.configure(SpectrumConfig {
+            decay_db_per_s: 20.0,
+            ..SpectrumConfig::default()
+        });
         let mut out = Vec::new();
         tap.push(&sine(1000.0, 1.0, 2048));
         an.analyze(0.0, &mut out);
@@ -307,7 +359,12 @@ mod tests {
         // Silence: the bin falls 20 dB/s, not to the floor at once.
         tap.push(&[0.0; 2048]);
         an.analyze(0.1, &mut out);
-        assert!((out[k] - (peak - 2.0)).abs() < 1e-9, "{} vs {}", out[k], peak - 2.0);
+        assert!(
+            (out[k] - (peak - 2.0)).abs() < 1e-9,
+            "{} vs {}",
+            out[k],
+            peak - 2.0
+        );
         an.analyze(0.5, &mut out);
         assert!((out[k] - (peak - 12.0)).abs() < 1e-9);
         an.analyze(100.0, &mut out);
@@ -324,7 +381,10 @@ mod tests {
         tap.push(&sine(1000.0, 1.0, 4096));
         let mut sharp = Vec::new();
         an.analyze(0.0, &mut sharp);
-        an.configure(SpectrumConfig { smoothing_octaves: 1.0, ..an.config().clone() });
+        an.configure(SpectrumConfig {
+            smoothing_octaves: 1.0,
+            ..an.config().clone()
+        });
         an.reset();
         let mut smooth = Vec::new();
         an.analyze(0.0, &mut smooth);

@@ -120,7 +120,11 @@ impl Content for Scene {
 /// # Errors
 /// I/O, or [`Error::MissingAsset`] when the replica references an asset it
 /// holds no bytes for.
-pub fn save(path: impl AsRef<Path>, content: &impl Content, manifest: &Manifest) -> Result<(), Error> {
+pub fn save(
+    path: impl AsRef<Path>,
+    content: &impl Content,
+    manifest: &Manifest,
+) -> Result<(), Error> {
     let bytes = to_bytes(content, manifest)?;
     std::fs::write(path, bytes)?;
     Ok(())
@@ -144,7 +148,8 @@ pub fn to_bytes(content: &impl Content, manifest: &Manifest) -> Result<Vec<u8>, 
         if let Some(missing) = live.missing_assets().into_iter().next() {
             return Err(Error::MissingAsset(missing));
         }
-        let manifest_text = facet_styx::to_string(manifest).map_err(|e| Error::Manifest(e.to_string()))?;
+        let manifest_text =
+            facet_styx::to_string(manifest).map_err(|e| Error::Manifest(e.to_string()))?;
 
         let deflate = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
         let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
@@ -173,17 +178,21 @@ pub fn from_bytes(bytes: &[u8]) -> Result<(Manifest, LoroScene), Error> {
 
     let manifest_text = String::from_utf8(read_entry(&mut zip, MANIFEST)?)
         .map_err(|e| Error::Manifest(e.to_string()))?;
-    let manifest: Manifest = facet_styx::from_str(&manifest_text).map_err(|e| Error::Manifest(e.to_string()))?;
+    let manifest: Manifest =
+        facet_styx::from_str(&manifest_text).map_err(|e| Error::Manifest(e.to_string()))?;
     if manifest.format != FORMAT_VERSION {
         return Err(Error::UnsupportedFormat(manifest.format));
     }
 
     let doc = read_entry(&mut zip, DOC)?;
-    let live = LoroScene::from_snapshot(&doc, AssetStorage::External).map_err(|e| Error::Doc(e.to_string()))?;
+    let live = LoroScene::from_snapshot(&doc, AssetStorage::External)
+        .map_err(|e| Error::Doc(e.to_string()))?;
 
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i)?;
-        let Some(name) = entry.name().strip_prefix(ASSETS_DIR).map(str::to_owned) else { continue };
+        let Some(name) = entry.name().strip_prefix(ASSETS_DIR).map(str::to_owned) else {
+            continue;
+        };
         if name.is_empty() {
             continue;
         }

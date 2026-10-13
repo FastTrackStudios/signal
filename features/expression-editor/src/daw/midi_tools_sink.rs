@@ -11,9 +11,9 @@
 
 use std::sync::Mutex;
 
+use crate::ops::velocity::{Note, Session, VelocityEdit};
 use daw::service::item::ItemRef;
 use daw::service::{Items, Midi, MidiNoteCreate, MidiTakeLocation, ProjectContext};
-use crate::ops::velocity::{Note, Session, VelocityEdit};
 
 /// What velocity editing needs from a backend.
 pub trait VelocityDaw: Items + Midi + Send + Sync + 'static {}

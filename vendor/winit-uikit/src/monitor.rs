@@ -18,7 +18,9 @@ struct MainThreadBoundDelegateImpls<T>(MainThreadBound<Retained<T>>);
 
 impl<T: Message> Clone for MainThreadBoundDelegateImpls<T> {
     fn clone(&self) -> Self {
-        Self(run_on_main(|mtm| MainThreadBound::new(Retained::clone(self.0.get(mtm)), mtm)))
+        Self(run_on_main(|mtm| {
+            MainThreadBound::new(Retained::clone(self.0.get(mtm)), mtm)
+        }))
     }
 }
 
@@ -105,12 +107,15 @@ impl MonitorHandleProvider for MonitorHandle {
     }
 
     fn position(&self) -> Option<PhysicalPosition<i32>> {
-        let bounds = self.ui_screen.get_on_main(|ui_screen| ui_screen.nativeBounds());
+        let bounds = self
+            .ui_screen
+            .get_on_main(|ui_screen| ui_screen.nativeBounds());
         Some((bounds.origin.x as f64, bounds.origin.y as f64).into())
     }
 
     fn scale_factor(&self) -> f64 {
-        self.ui_screen.get_on_main(|ui_screen| ui_screen.nativeScale()) as f64
+        self.ui_screen
+            .get_on_main(|ui_screen| ui_screen.nativeScale()) as f64
     }
 
     fn current_video_mode(&self) -> Option<VideoMode> {
@@ -187,7 +192,9 @@ impl MonitorHandle {
     pub(crate) fn new(ui_screen: Retained<UIScreen>) -> Self {
         // Holding `Retained<UIScreen>` implies we're on the main thread.
         let mtm = MainThreadMarker::new().unwrap();
-        Self { ui_screen: MainThreadBound::new(ui_screen, mtm) }
+        Self {
+            ui_screen: MainThreadBound::new(ui_screen, mtm),
+        }
     }
 
     pub fn video_modes_handles(&self) -> impl Iterator<Item = VideoModeHandle> + 'static {
@@ -250,7 +257,10 @@ fn refresh_rate_millihertz(uiscreen: &UIScreen) -> Option<NonZeroU32> {
 
 pub fn uiscreens(mtm: MainThreadMarker) -> VecDeque<MonitorHandle> {
     #[allow(deprecated)]
-    UIScreen::screens(mtm).into_iter().map(MonitorHandle::new).collect()
+    UIScreen::screens(mtm)
+        .into_iter()
+        .map(MonitorHandle::new)
+        .collect()
 }
 
 #[cfg(test)]
@@ -266,10 +276,17 @@ mod tests {
         // Test code, doesn't matter that it's not thread safe
         let mtm = unsafe { MainThreadMarker::new_unchecked() };
 
-        assert!(ptr::eq(&*UIScreen::mainScreen(mtm), &*UIScreen::mainScreen(mtm)));
+        assert!(ptr::eq(
+            &*UIScreen::mainScreen(mtm),
+            &*UIScreen::mainScreen(mtm)
+        ));
 
         let main = UIScreen::mainScreen(mtm);
-        assert!(UIScreen::screens(mtm).iter().any(|screen| ptr::eq(&*screen, &*main)));
+        assert!(
+            UIScreen::screens(mtm)
+                .iter()
+                .any(|screen| ptr::eq(&*screen, &*main))
+        );
 
         assert!(
             NSSet::setWithArray(&UIScreen::screens(mtm)).containsObject(&UIScreen::mainScreen(mtm))

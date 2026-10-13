@@ -834,7 +834,7 @@ pub const ITEMS: &[Item] = &[
     },
     Item {
         section: BUSES,
-        text: "`MIX BUS / INST BUS / {DRUM, BASS, ELECTRIC/{GTR RHYTHM, GTR LEAD,\nGTR SOLO}, ACOUSTIC, KEYS}` and `VOX BUS / {LEAD VOX, BGV}` —\n`crate::buses`' tree without GUITAR BUS, with the three\nelectric buses added.",
+        text: "`MIX BUS / INST BUS / {DRUM, BASS, ELECTRIC/{GTR RHYTHM, GTR LEAD,\nGTR SOLO}, ACOUSTIC, KEYS}` and `VOX BUS / {LEAD VOX, BGV}` —\n`dynamic_template::buses`' tree without GUITAR BUS, with the three\nelectric buses added.",
         check: Some(bus_tree),
     },
     Item {

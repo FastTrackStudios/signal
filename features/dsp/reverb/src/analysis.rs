@@ -86,12 +86,21 @@ mod tests {
     #[test]
     fn the_envelope_is_relative_to_its_peak_and_falls() {
         let mut out = [0.0_f32; 48];
-        impulse_envelope(AlgorithmType::Room, 0, &AlgorithmParams::default(), 2.0, &mut out);
+        impulse_envelope(
+            AlgorithmType::Room,
+            0,
+            &AlgorithmParams::default(),
+            2.0,
+            &mut out,
+        );
         let peak = out.iter().copied().fold(f32::MIN, f32::max);
         assert!((peak - 0.0).abs() < 1e-5, "peak slice is 0 dB, got {peak}");
         let head = out[..8].iter().copied().fold(f32::MIN, f32::max);
         let tail = out[40..].iter().copied().fold(f32::MIN, f32::max);
-        assert!(tail < head - 6.0, "tail {tail} should sit well under head {head}");
+        assert!(
+            tail < head - 6.0,
+            "tail {tail} should sit well under head {head}"
+        );
         assert!(out.iter().all(|v| (FLOOR_DB..=0.0).contains(v)));
     }
 
@@ -111,6 +120,11 @@ mod tests {
         impulse_envelope(AlgorithmType::Hall, 0, &short, 3.0, &mut a);
         impulse_envelope(AlgorithmType::Hall, 0, &long, 3.0, &mut b);
         let late = 36;
-        assert!(b[late] > a[late] + 6.0, "long {} vs short {}", b[late], a[late]);
+        assert!(
+            b[late] > a[late] + 6.0,
+            "long {} vs short {}",
+            b[late],
+            a[late]
+        );
     }
 }

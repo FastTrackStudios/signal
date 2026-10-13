@@ -1053,12 +1053,7 @@ fn separator_press(ed: &mut Editor, x: f64, y: f64, gesture: Gesture) -> Option<
         let step = ed.grid.step(ed.units_per_beat());
         let to = crate::timing::snap_to_beat(line.sep.t, ed.doc.start, step);
         ed.begin_gesture();
-        for e in crate::timing::plan(
-            &ed.doc,
-            line.sep,
-            to,
-            crate::StretchLaw::BothStretch,
-        ) {
+        for e in crate::timing::plan(&ed.doc, line.sep, to, crate::StretchLaw::BothStretch) {
             ed.apply_live(&e);
         }
         return Some(Drag::None);
@@ -1075,12 +1070,7 @@ fn separator_press(ed: &mut Editor, x: f64, y: f64, gesture: Gesture) -> Option<
 /// nothing else. That is deliberate — the drawing is a modal state with
 /// an explicit apply, and letting notes be selected or moved underneath
 /// it would make "what does Escape throw away?" unanswerable.
-pub fn draft_press(
-    ed: &Editor,
-    draft: &mut crate::PitchDraft,
-    x: f64,
-    y: f64,
-) -> Drag {
+pub fn draft_press(ed: &Editor, draft: &mut crate::PitchDraft, x: f64, y: f64) -> Drag {
     let t = ed.camera.t_at(x);
     let Some(note) = ed.doc.note(draft.note) else {
         return Drag::None;
@@ -1977,14 +1967,7 @@ pub fn pointer_move(ed: &mut Editor, drag: &mut Drag, x: f64, y: f64, mods: Mods
             if !*area_only {
                 ed.revert_gesture();
                 let insert = ed.razor_insert;
-                crate::razor::move_contents(
-                    &mut ed.doc,
-                    *area,
-                    dt,
-                    rows,
-                    *copy,
-                    insert,
-                );
+                crate::razor::move_contents(&mut ed.doc, *area, dt, rows, *copy, insert);
             }
             *applied_t = dt;
             *applied_rows = rows;
@@ -2018,12 +2001,7 @@ pub fn pointer_move(ed: &mut Editor, drag: &mut Drag, x: f64, y: f64, mods: Mods
                 // document compounds the scaling and re-splits material
                 // that has moved. Recompute from the gesture's start.
                 ed.revert_gesture();
-                crate::razor::stretch_contents(
-                    &mut ed.doc,
-                    area,
-                    next.t0,
-                    next.t1,
-                );
+                crate::razor::stretch_contents(&mut ed.doc, area, next.t0, next.t1);
             }
             if let Some(slot) = ed.razor.areas.get_mut(*index) {
                 *slot = next;

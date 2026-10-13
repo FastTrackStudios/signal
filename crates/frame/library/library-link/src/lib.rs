@@ -25,8 +25,13 @@ use tokio::sync::mpsc as tmpsc;
 /// # Errors
 /// When the socket can't be opened or the vox handshake fails.
 pub async fn connect(url: &str) -> Result<SurfaceStoreClient, String> {
-    let link = vox_websocket::WsLink::connect(url).await.map_err(|e| format!("ws connect {url}: {e:?}"))?;
-    vox_core::initiator_on(link).establish().await.map_err(|e| format!("vox handshake with {url}: {e:?}"))
+    let link = vox_websocket::WsLink::connect(url)
+        .await
+        .map_err(|e| format!("ws connect {url}: {e:?}"))?;
+    vox_core::initiator_on(link)
+        .establish()
+        .await
+        .map_err(|e| format!("vox handshake with {url}: {e:?}"))
 }
 
 /// Connect to a library's stream side (`updates`, `changes`).
@@ -34,8 +39,13 @@ pub async fn connect(url: &str) -> Result<SurfaceStoreClient, String> {
 /// # Errors
 /// When the socket can't be opened or the vox handshake fails.
 pub async fn connect_stream(url: &str) -> Result<SurfaceStoreStreamClient, String> {
-    let link = vox_websocket::WsLink::connect(url).await.map_err(|e| format!("ws connect {url}: {e:?}"))?;
-    vox_core::initiator_on(link).establish().await.map_err(|e| format!("vox handshake with {url}: {e:?}"))
+    let link = vox_websocket::WsLink::connect(url)
+        .await
+        .map_err(|e| format!("ws connect {url}: {e:?}"))?;
+    vox_core::initiator_on(link)
+        .establish()
+        .await
+        .map_err(|e| format!("vox handshake with {url}: {e:?}"))
 }
 
 /// Serve `router` as a WebSocket vox endpoint on `listener`. Runs until the
@@ -44,8 +54,14 @@ pub async fn serve_ws(listener: tokio::net::TcpListener, router: architect::Laye
     while let Ok((tcp, _)) = listener.accept().await {
         let router = router.clone();
         tokio::spawn(async move {
-            let Ok(link) = vox_websocket::WsLink::server(tcp).await else { return };
-            if let Ok(connection) = vox_core::acceptor_on(link).on_lane(router.acceptor()).establish_connection().await {
+            let Ok(link) = vox_websocket::WsLink::server(tcp).await else {
+                return;
+            };
+            if let Ok(connection) = vox_core::acceptor_on(link)
+                .on_lane(router.acceptor())
+                .establish_connection()
+                .await
+            {
                 let _connection = connection;
                 std::future::pending::<()>().await;
             }
@@ -67,16 +83,24 @@ impl Served {
     ///
     /// # Errors
     /// When the listener can't be used or the runtime can't start.
-    pub fn start(router: architect::LayerRouter, listener: std::net::TcpListener) -> Result<Self, String> {
+    pub fn start(
+        router: architect::LayerRouter,
+        listener: std::net::TcpListener,
+    ) -> Result<Self, String> {
         listener.set_nonblocking(true).map_err(|e| e.to_string())?;
-        let url = format!("ws://{}/vox", listener.local_addr().map_err(|e| e.to_string())?);
+        let url = format!(
+            "ws://{}/vox",
+            listener.local_addr().map_err(|e| e.to_string())?
+        );
         let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {e}"))?;
         let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
         let thread = std::thread::Builder::new()
             .name("library-serve".into())
             .spawn(move || {
                 rt.block_on(async move {
-                    let Ok(listener) = tokio::net::TcpListener::from_std(listener) else { return };
+                    let Ok(listener) = tokio::net::TcpListener::from_std(listener) else {
+                        return;
+                    };
                     tokio::select! {
                         () = serve_ws(listener, router) => {}
                         _ = stopped => {}
@@ -85,13 +109,19 @@ impl Served {
                 rt.shutdown_background();
             })
             .map_err(|e| e.to_string())?;
-        Ok(Self { url, stop: Some(stop), thread: Some(thread) })
+        Ok(Self {
+            url,
+            stop: Some(stop),
+            thread: Some(thread),
+        })
     }
 
     /// The `host:port` it listens on.
     #[must_use]
     pub fn addr(&self) -> &str {
-        self.url.trim_start_matches("ws://").trim_end_matches("/vox")
+        self.url
+            .trim_start_matches("ws://")
+            .trim_end_matches("/vox")
     }
 }
 
@@ -125,8 +155,15 @@ impl Blocking {
     /// # Errors
     /// When the runtime can't start.
     pub fn new(url: &str) -> Result<Self, String> {
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| format!("tokio: {e}"))?;
-        Ok(Self { rt, url: url.to_owned(), client: None })
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| format!("tokio: {e}"))?;
+        Ok(Self {
+            rt,
+            url: url.to_owned(),
+            client: None,
+        })
     }
 
     #[must_use]
@@ -222,7 +259,10 @@ impl Call {
     /// A refusal carries the library's error; anything else is the link.
     fn refused(e: impl std::fmt::Debug) -> Self {
         let text = format!("{e:?}");
-        if ["NotFound", "BadContent", "BadId", "Io("].iter().any(|k| text.contains(k)) {
+        if ["NotFound", "BadContent", "BadId", "Io("]
+            .iter()
+            .any(|k| text.contains(k))
+        {
             Self::Refused(text)
         } else {
             Self::Transport(text)
@@ -260,13 +300,21 @@ impl Follow {
     pub fn start(url: &str, id: Option<SurfaceId>) -> Result<Self, String> {
         let (cmd_tx, cmd_rx) = tmpsc::unbounded_channel();
         let (event_tx, event_rx) = mpsc::channel();
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| format!("tokio: {e}"))?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| format!("tokio: {e}"))?;
         let u = url.to_owned();
         let thread = std::thread::Builder::new()
             .name("library-follow".into())
             .spawn(move || rt.block_on(supervise(u, id, cmd_rx, event_tx)))
             .map_err(|e| format!("library thread: {e}"))?;
-        Ok(Self { url: url.to_owned(), cmds: cmd_tx, events: event_rx, thread: Some(thread) })
+        Ok(Self {
+            url: url.to_owned(),
+            cmds: cmd_tx,
+            events: event_rx,
+            thread: Some(thread),
+        })
     }
 
     #[must_use]
@@ -354,12 +402,20 @@ async fn session(
 ) -> Ended {
     let stream = match connect_stream(url).await {
         Ok(s) => s,
-        Err(reason) => return Ended::Lost { connected: false, reason },
+        Err(reason) => {
+            return Ended::Lost {
+                connected: false,
+                reason,
+            };
+        }
     };
     if events.send(Event::Connected).is_err() {
         return Ended::UiGone;
     }
-    let lost = |reason: String| Ended::Lost { connected: true, reason };
+    let lost = |reason: String| Ended::Lost {
+        connected: true,
+        reason,
+    };
     loop {
         let (tx, mut rx) = vox::channel::<SurfaceUpdate>();
         let (ctx, mut crx) = vox::channel::<IndexChange>();

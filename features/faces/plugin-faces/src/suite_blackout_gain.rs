@@ -87,7 +87,20 @@ pub const AMP_KNOB: &[&str] = &[
 
 /// The EQ's filter knob: a spun aluminium cap in a knurled chrome skirt, a
 /// black index.
-pub const EQ_KNOB: &[&str] = &["aniso=0.45", "index_w=0.1", "index_in=0.15", "index_out=0.92", "skirt=knurled", "skirt_color=#c9ccd0", "skirt_metal=1", "skirt_rough=0.25", "skirt_teeth=60", "cap_r=0.82", "dome=0.08", "ticks=none"];
+pub const EQ_KNOB: &[&str] = &[
+    "aniso=0.45",
+    "index_w=0.1",
+    "index_in=0.15",
+    "index_out=0.92",
+    "skirt=knurled",
+    "skirt_color=#c9ccd0",
+    "skirt_metal=1",
+    "skirt_rough=0.25",
+    "skirt_teeth=60",
+    "cap_r=0.82",
+    "dome=0.08",
+    "ticks=none",
+];
 
 /// The cab strip's knob: a dark grey knurled cap with a white dot index,
 /// in its dotted ring.

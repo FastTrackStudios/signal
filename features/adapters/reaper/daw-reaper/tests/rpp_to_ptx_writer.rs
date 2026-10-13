@@ -9,9 +9,9 @@
 //! Skipped when the converter binary isn't installed locally (CI on
 //! Linux without the macOS converter available).
 
-use formats::protools::write;
 use dawfile_reaper::RppSerialize;
 use dawfile_reaper::builder::ReaperProjectBuilder;
+use formats::protools::write;
 
 #[test]
 fn rpp_to_ptx_writer_smoke() {

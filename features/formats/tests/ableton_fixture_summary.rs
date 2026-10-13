@@ -4,7 +4,7 @@
 use formats::ableton::read_live_set;
 use std::path::PathBuf;
 
-const FIXTURE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/ableton_fixtures");
+const FIXTURE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/ableton");
 
 fn fixtures() -> Vec<PathBuf> {
     let mut v: Vec<_> = std::fs::read_dir(FIXTURE_DIR)

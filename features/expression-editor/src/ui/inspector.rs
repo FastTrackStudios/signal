@@ -10,13 +10,13 @@
 //! choosing which one to edit is a per-session decision that wants a
 //! list, not a cycling button.
 
-use dioxus::prelude::*;
 use crate::cc::{CC_COLORS, standard_name};
 use crate::doc::NoteId;
 use crate::flam::FlamStep;
 use crate::rows::Articulation;
 use crate::rows::Hand;
 use crate::{Edit, Editor, RowSpace, blob, chord, tuning};
+use dioxus::prelude::*;
 
 use crate::ui::theme;
 use crate::ui::widgets::{CenterSlider, Slider};

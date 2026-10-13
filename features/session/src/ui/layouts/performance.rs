@@ -23,8 +23,8 @@ use crate::ui::components::{
 };
 use crate::ui::prelude::*;
 use crate::ui::signals::{
-    Session, ACTIVE_INDICES, ARMED_TRACK_COUNT, LATENCY_TRACKER, PLAYBACK_STATE, SETLIST_STRUCTURE,
-    SONG_CHARTS, SONG_TRANSPORT, SONG_VIEWS,
+    ACTIVE_INDICES, ARMED_TRACK_COUNT, LATENCY_TRACKER, PLAYBACK_STATE, SETLIST_STRUCTURE,
+    SONG_CHARTS, SONG_TRANSPORT, SONG_VIEWS, Session,
 };
 
 /// The `#<KEY>` metadata token from a keyflow chart (`"A"` from `#A 127bpm`).

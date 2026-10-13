@@ -41,17 +41,31 @@ impl<F: FnMut(i64, usize) -> f32> Source for Fn<F> {
 
 fn sine(freq: f64, phase_right: f64) -> Fn<impl FnMut(i64, usize) -> f32> {
     Fn(move |t, ch| {
-        let x = core::f64::consts::TAU * freq * t as f64 / SR + if ch == 1 { phase_right } else { 0.0 };
+        let x =
+            core::f64::consts::TAU * freq * t as f64 / SR + if ch == 1 { phase_right } else { 0.0 };
         (0.5 * x.sin()) as f32
     })
 }
 
-fn render(stretcher: &mut Stretcher, source: &mut impl Source, frames: usize, ratio: f64, transpose: f32, block: usize) -> (Vec<f32>, Vec<f32>) {
+fn render(
+    stretcher: &mut Stretcher,
+    source: &mut impl Source,
+    frames: usize,
+    ratio: f64,
+    transpose: f32,
+    block: usize,
+) -> (Vec<f32>, Vec<f32>) {
     let (mut l, mut r) = (vec![0.0; frames], vec![0.0; frames]);
     let mut at = 0;
     while at < frames {
         let n = block.min(frames - at);
-        stretcher.render(&mut l[at..at + n], &mut r[at..at + n], ratio, transpose, source);
+        stretcher.render(
+            &mut l[at..at + n],
+            &mut r[at..at + n],
+            ratio,
+            transpose,
+            source,
+        );
         at += n;
     }
     (l, r)
@@ -95,10 +109,17 @@ fn unstretched_it_is_the_input_from_the_first_sample() {
     let mut expect = sine(440.0, 0.3);
     let (mut el, mut er) = (vec![0.0; 24_000], vec![0.0; 24_000]);
     expect.read(start as i64, &mut el, &mut er);
-    let noise: f64 = l.iter().zip(&el).map(|(&a, &b)| f64::from(a - b).powi(2)).sum::<f64>();
+    let noise: f64 = l
+        .iter()
+        .zip(&el)
+        .map(|(&a, &b)| f64::from(a - b).powi(2))
+        .sum::<f64>();
     let signal: f64 = el.iter().map(|&b| f64::from(b).powi(2)).sum::<f64>();
     let snr = 10.0 * (signal / noise).log10();
-    assert!(snr > 30.0, "identity SNR {snr:.1} dB — output 0 is input `position`, no latency");
+    assert!(
+        snr > 30.0,
+        "identity SNR {snr:.1} dB — output 0 is input `position`, no latency"
+    );
 }
 
 #[test]
@@ -113,7 +134,11 @@ fn slower_keeps_the_pitch_and_the_level() {
     let (a, b) = body.split_at(body.len() / 2);
     let db = 20.0 * (rms(a) / rms(b)).log10();
     assert!(db.abs() < 1.0, "level steady: {db:.2} dB between halves");
-    assert!((rms(body) - 0.5 / 2f64.sqrt()).abs() < 0.06, "level kept: rms {}", rms(body));
+    assert!(
+        (rms(body) - 0.5 / 2f64.sqrt()).abs() < 0.06,
+        "level kept: rms {}",
+        rms(body)
+    );
 }
 
 #[test]
@@ -148,8 +173,12 @@ fn the_stereo_image_survives_a_stretch() {
     let (l, r) = render(&mut s, &mut src, 48_000, 0.8, 1.0, 256);
     let seg = 20_000..28_000;
     let diff = phase_at(&r[seg.clone()], 440.0) - phase_at(&l[seg], 440.0);
-    let diff = (diff + core::f64::consts::PI).rem_euclid(core::f64::consts::TAU) - core::f64::consts::PI;
-    assert!((diff - core::f64::consts::FRAC_PI_2).abs() < 0.1, "L→R phase {diff:.3} rad, want π/2");
+    let diff =
+        (diff + core::f64::consts::PI).rem_euclid(core::f64::consts::TAU) - core::f64::consts::PI;
+    assert!(
+        (diff - core::f64::consts::FRAC_PI_2).abs() < 0.1,
+        "L→R phase {diff:.3} rad, want π/2"
+    );
 }
 
 #[test]
@@ -170,7 +199,11 @@ fn clicks_slowed_down_land_on_their_new_beats() {
     let every = (0.25 * SR) as i64;
     let mut src = Fn(move |t, _| {
         let at = t.rem_euclid(every);
-        if at < 48 { (1.0 - at as f32 / 48.0) * if at % 2 == 0 { 0.8 } else { -0.8 } } else { 0.0 }
+        if at < 48 {
+            (1.0 - at as f32 / 48.0) * if at % 2 == 0 { 0.8 } else { -0.8 }
+        } else {
+            0.0
+        }
     });
     let mut s = Stretcher::new(Config::for_sample_rate(SR));
     s.seek(0.0, 0.8, 1.0, &mut src);
@@ -187,7 +220,10 @@ fn clicks_slowed_down_land_on_their_new_beats() {
             .map(|(i, &v)| (i + lo, v.abs()))
             .fold((0, 0.0f32), |a, b| if b.1 > a.1 { b } else { a });
         let off_ms = (peak_at as f64 - centre) / SR * 1000.0;
-        assert!(off_ms.abs() < 6.0, "beat {beat}: click {off_ms:.1} ms from its place");
+        assert!(
+            off_ms.abs() < 6.0,
+            "beat {beat}: click {off_ms:.1} ms from its place"
+        );
         assert!(peak > 0.25, "beat {beat}: click kept its punch ({peak:.2})");
     }
 }

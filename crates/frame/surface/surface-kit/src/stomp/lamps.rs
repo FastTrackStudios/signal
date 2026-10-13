@@ -28,20 +28,67 @@ fn status_led(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     };
     let side = d * 2.0;
     let c = side / 2.0;
-    let name = if p.name.is_empty() { "LED" } else { p.name.as_str() };
+    let name = if p.name.is_empty() {
+        "LED"
+    } else {
+        p.name.as_str()
+    };
     let root = b.add(parent, draw::frame(name, 0.0, 0.0, side, side));
     let rim = d * 0.28;
-    let bz = draw::circle("bezel", c, c, d / 2.0 + rim, rad(0.4, 0.35, 0.8, &[(0.0, tint(bezel, 0.4)), (1.0, shade(bezel, 0.3))]));
-    b.add(root, draw::with_effects(bz, vec![draw::drop_shadow("#00000059", 0.0, d * 0.08, d * 0.2)]));
-    let dark = [(0.0, alpha("#ffffff", 0.35)), (0.5, tint(&shade(&color, 0.55), 0.3)), (1.0, shade(&color, 0.7))];
-    let off = b.add(root, draw::circle("lens", c, c, d / 2.0, rad(0.4, 0.34, 0.9, &dark)));
-    let hot = [(0.0, "#ffffff".to_string()), (0.3, tint(&color, 0.6)), (0.75, color.clone()), (1.0, shade(&color, 0.3))];
-    let lit = draw::emissive(draw::circle("lamp", c, c, d / 2.0, rad(0.45, 0.4, 0.8, &hot)), draw::hex(&color), 0.9, d * 1.8);
-    let lit = b.add(root, draw::with_effects(lit, vec![draw::drop_shadow(&alpha(&color, 0.8), 0.0, 0.0, d * 0.9)]));
+    let bz = draw::circle(
+        "bezel",
+        c,
+        c,
+        d / 2.0 + rim,
+        rad(
+            0.4,
+            0.35,
+            0.8,
+            &[(0.0, tint(bezel, 0.4)), (1.0, shade(bezel, 0.3))],
+        ),
+    );
+    b.add(
+        root,
+        draw::with_effects(
+            bz,
+            vec![draw::drop_shadow("#00000059", 0.0, d * 0.08, d * 0.2)],
+        ),
+    );
+    let dark = [
+        (0.0, alpha("#ffffff", 0.35)),
+        (0.5, tint(&shade(&color, 0.55), 0.3)),
+        (1.0, shade(&color, 0.7)),
+    ];
+    let off = b.add(
+        root,
+        draw::circle("lens", c, c, d / 2.0, rad(0.4, 0.34, 0.9, &dark)),
+    );
+    let hot = [
+        (0.0, "#ffffff".to_string()),
+        (0.3, tint(&color, 0.6)),
+        (0.75, color.clone()),
+        (1.0, shade(&color, 0.3)),
+    ];
+    let lit = draw::emissive(
+        draw::circle("lamp", c, c, d / 2.0, rad(0.45, 0.4, 0.8, &hot)),
+        draw::hex(&color),
+        0.9,
+        d * 1.8,
+    );
+    let lit = b.add(
+        root,
+        draw::with_effects(
+            lit,
+            vec![draw::drop_shadow(&alpha(&color, 0.8), 0.0, 0.0, d * 0.9)],
+        ),
+    );
     if let Some(rate) = p.opt("pulse") {
         motion::add(b, lit, motion::pulse(rate.to_string(), 0.35));
     }
-    let ctl = p.control(ControlKind::Readout).slot(SlotRole::On, lit.0).slot(SlotRole::Off, off.0);
+    let ctl = p
+        .control(ControlKind::Readout)
+        .slot(SlotRole::On, lit.0)
+        .slot(SlotRole::Off, off.0);
     b.controls.insert(root, ctl);
     root
 }
@@ -52,24 +99,100 @@ fn lit_fader(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let (cap_w, cap_h) = (13.0 * k, 22.0 * k);
     let w = (cap_w + 10.0 * k).max(p.touch.unwrap_or(0.0));
     let h = travel + cap_h;
-    let name = if p.name.is_empty() { "Fader" } else { p.name.as_str() };
+    let name = if p.name.is_empty() {
+        "Fader"
+    } else {
+        p.name.as_str()
+    };
     let root = b.add(parent, draw::frame(name, 0.0, 0.0, w, h));
     let x0 = w / 2.0;
     let slot_w = 11.0 * k;
-    let slot = draw::rect("slot", x0 - slot_w / 2.0, 0.0, slot_w, h, draw::linear(90.0, &[(0.0, "#050506"), (0.5, "#16161a"), (1.0, "#050506")]));
+    let slot = draw::rect(
+        "slot",
+        x0 - slot_w / 2.0,
+        0.0,
+        slot_w,
+        h,
+        draw::linear(
+            90.0,
+            &[(0.0, "#050506"), (0.5, "#16161a"), (1.0, "#050506")],
+        ),
+    );
     let slot = draw::stroked(draw::rounded(slot, slot_w / 2.0), "#ffffff1f", 0.8);
-    b.add(root, draw::with_effects(slot, vec![draw::inner_shadow("#000000", 0.0, 2.0 * k, 3.0 * k), draw::drop_shadow("#ffffff26", 0.0, 1.0, 0.0)]));
-    b.add(root, draw::rounded(draw::rect("rail", x0 - 1.2 * k, cap_h / 2.0, 2.4 * k, travel, draw::solid("#000000")), 1.2 * k));
+    b.add(
+        root,
+        draw::with_effects(
+            slot,
+            vec![
+                draw::inner_shadow("#000000", 0.0, 2.0 * k, 3.0 * k),
+                draw::drop_shadow("#ffffff26", 0.0, 1.0, 0.0),
+            ],
+        ),
+    );
+    b.add(
+        root,
+        draw::rounded(
+            draw::rect(
+                "rail",
+                x0 - 1.2 * k,
+                cap_h / 2.0,
+                2.4 * k,
+                travel,
+                draw::solid("#000000"),
+            ),
+            1.2 * k,
+        ),
+    );
     let lane = b.add(root, draw::frame("lane", x0 - cap_w / 2.0, 0.0, cap_w, h));
     let cap = b.add(lane, draw::frame("cap", 0.0, 0.0, cap_w, cap_h));
     let glow = p.lamp_color(0).unwrap_or_else(|| "#f4f6ff".into());
-    let body = draw::rect("shell", 0.0, 0.0, cap_w, cap_h, draw::linear(90.0, &[(0.0, "#9c9ea3"), (0.2, "#f7f7f5"), (0.8, "#ffffff"), (1.0, "#a3a5aa")]));
-    let body = draw::emissive(draw::rounded(body, 1.5 * k), draw::hex(&glow), 0.55, 9.0 * k);
-    b.add(cap, draw::with_effects(body, vec![draw::drop_shadow(&alpha(&glow, 0.55), 0.0, 0.0, 6.0 * k)]));
+    let body = draw::rect(
+        "shell",
+        0.0,
+        0.0,
+        cap_w,
+        cap_h,
+        draw::linear(
+            90.0,
+            &[
+                (0.0, "#9c9ea3"),
+                (0.2, "#f7f7f5"),
+                (0.8, "#ffffff"),
+                (1.0, "#a3a5aa"),
+            ],
+        ),
+    );
+    let body = draw::emissive(
+        draw::rounded(body, 1.5 * k),
+        draw::hex(&glow),
+        0.55,
+        9.0 * k,
+    );
+    b.add(
+        cap,
+        draw::with_effects(
+            body,
+            vec![draw::drop_shadow(&alpha(&glow, 0.55), 0.0, 0.0, 6.0 * k)],
+        ),
+    );
     for y in [0.14, 0.86] {
-        b.add(cap, draw::rect("band", 0.0, cap_h * y - 0.6 * k, cap_w, 1.2 * k, draw::solid("#2a2b2e")));
+        b.add(
+            cap,
+            draw::rect(
+                "band",
+                0.0,
+                cap_h * y - 0.6 * k,
+                cap_w,
+                1.2 * k,
+                draw::solid("#2a2b2e"),
+            ),
+        );
     }
-    let ctl = p.control(ControlKind::Fader { orientation: Orientation::Vertical }).slot(SlotRole::Thumb, cap.0);
+    let ctl = p
+        .control(ControlKind::Fader {
+            orientation: Orientation::Vertical,
+        })
+        .slot(SlotRole::Thumb, cap.0);
     b.controls.insert(root, ctl);
     root
 }

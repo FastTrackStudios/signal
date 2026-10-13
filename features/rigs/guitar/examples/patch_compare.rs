@@ -41,10 +41,7 @@ fn render(patch: &RigPatch, input: &[f32]) -> Option<f64> {
         .zip(&r)
         .map(|(a, b)| f64::from(a + b) * 0.5)
         .collect();
-    Some(sampler::loudness::integrated_lufs(
-        &mono,
-        f64::from(SR),
-    ))
+    Some(sampler::loudness::integrated_lufs(&mono, f64::from(SR)))
 }
 
 fn main() {
@@ -74,9 +71,8 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let rows = guitar::levelling::par_map(&built.patches, 0, |p| {
-        (render(p, &di), render(p, &playing))
-    });
+    let rows =
+        guitar::levelling::par_map(&built.patches, 0, |p| (render(p, &di), render(p, &playing)));
     let clean = rows.first().and_then(|r| r.0.zip(r.1));
     println!(
         "{:<16} {:>10} {:>10}   vs first patch (ref / playing)",

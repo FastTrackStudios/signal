@@ -16,9 +16,9 @@
 //!
 //! Spec: `drum-mode.md` r[drums.manual.stretch].
 
+use crate::timing::{MAX_FACTOR, MIN_FACTOR};
 use daw::service::item::Items;
 use daw::service::{ItemRef, ProjectContext, StretchMarkers, Takes};
-use crate::timing::{MAX_FACTOR, MIN_FACTOR};
 
 use crate::audio::align::{Alignment, Anchor, AnchorKind, Offset};
 use crate::audio::apply_quantize::{Applied, GroupError, apply_warp};

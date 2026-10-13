@@ -1,8 +1,8 @@
 //! Resolve the live kit and preflight writes before entering an undo block.
 use super::{DrumDaw, DrumHost, QuantizePanel, WriteMode, apply_warp, panel_bridge, stretch_hit};
-use daw::service::{Item, ItemRef, SourceType, TakeRef, TrackRef};
 use crate::audio::apply_quantize::{Applied, GroupError, apply_split};
 use crate::audio::quantize::{Piece, SplitConfig};
+use daw::service::{Item, ItemRef, SourceType, TakeRef, TrackRef};
 
 struct ItemSplit {
     item: ItemRef,
@@ -228,8 +228,7 @@ impl<D: DrumDaw> DrumHost<D> {
         delta: f64,
         cfg: SplitConfig,
     ) -> Result<Applied, GroupError> {
-        let pieces =
-            crate::audio::slip::slip_pieces(hit, next, self.take_secs, delta, cfg);
+        let pieces = crate::audio::slip::slip_pieces(hit, next, self.take_secs, delta, cfg);
         self.write_splits(&pieces, cfg, "Slip hit")
     }
 

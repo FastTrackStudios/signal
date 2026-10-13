@@ -7,8 +7,8 @@
 
 use expression_editor::rows::{RowSpace, SliceBands, StringTuning};
 use expression_editor::tracks::Track;
-use expression_editor::{Editor, ExpressionDoc, Mode, Note, NoteId, TimeBase, Viewport};
 use expression_editor::ui::stack;
+use expression_editor::{Editor, ExpressionDoc, Mode, Note, NoteId, TimeBase, Viewport};
 
 fn viewport() -> Viewport {
     Viewport {

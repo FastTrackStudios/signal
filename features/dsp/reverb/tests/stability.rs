@@ -176,8 +176,14 @@ fn the_longest_predelay_is_honoured() {
     let ir = impulse_response(AlgorithmType::Hall, 0.5, 1500.0, 2.5);
     let onset = ir.iter().position(|v| v.abs() > 1e-6).unwrap_or(ir.len());
     let at = num::f64_to_index(SR * 1.5);
-    assert!(onset >= at, "output at {onset} before the 1.5 s pre-delay ({at})");
-    assert!(onset < at + num::f64_to_index(SR * 0.2), "no tail within 200 ms of the pre-delay (onset {onset})");
+    assert!(
+        onset >= at,
+        "output at {onset} before the 1.5 s pre-delay ({at})"
+    );
+    assert!(
+        onset < at + num::f64_to_index(SR * 0.2),
+        "no tail within 200 ms of the pre-delay (onset {onset})"
+    );
 }
 
 /// Every tail eventually dies, measured over a horizon set by its own decay.

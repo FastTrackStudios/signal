@@ -3,11 +3,11 @@
 //! that sits in front of them.
 
 use document_proto::NodeId;
+use surface_kit::Place;
 use surface_kit::draw::{self, Lettering, family};
 use surface_kit::materials::cabinet::{self, CabinetSpec, Handle, Kind};
 use surface_kit::materials::light;
 use surface_kit::materials::paint::{Cloth, Grain, Material};
-use surface_kit::Place;
 use surface_proto::{Range, Unit};
 use surface_widgets::Builder;
 
@@ -39,34 +39,100 @@ pub fn cab_sized(cab_w: f64, cab_h: f64) -> Face {
     let scene = canvas("Cab 2x12", |b, root| {
         ui::fit_root(b, root, cab_w, cab_h);
         let mut spec = CabinetSpec::new(Kind::Combo, cab_w, cab_h);
-        spec.covering = Material::Tolex { grain: Grain::Bronco, color: "#1d1c1c".into(), scale: 1.0 };
-        spec.grille = Material::GrilleCloth { cloth: Cloth::Black };
+        spec.covering = Material::Tolex {
+            grain: Grain::Bronco,
+            color: "#1d1c1c".into(),
+            scale: 1.0,
+        };
+        spec.grille = Material::GrilleCloth {
+            cloth: Cloth::Black,
+        };
         spec.face_frac = 0.0;
         spec.piping = Some("#b9babc".into());
         spec.corners = Some("black".into());
         spec.handle = Handle::None;
         let c = cabinet::cabinet(b, root, "Cabinet", &spec);
-        let (gw, gh) = b.scene.node(c.grille).map_or((0.0, 0.0), |n| (n.size.width, n.size.height));
+        let (gw, gh) = b
+            .scene
+            .node(c.grille)
+            .map_or((0.0, 0.0), |n| (n.size.width, n.size.height));
         // Two speakers side by side behind the cloth, a mic on each.
         let s = (gw / 2.0).min(gh) * 0.96;
         for (i, left) in [(0_u8, true), (1, false)] {
             let cx = gw * (0.25 + 0.5 * f64::from(i));
-            let mut spk = draw::frame(&format!("Speaker {}", i + 1), cx - s / 2.0, (gh - s) / 2.0, s, s);
+            let mut spk = draw::frame(
+                &format!("Speaker {}", i + 1),
+                cx - s / 2.0,
+                (gh - s) / 2.0,
+                s,
+                s,
+            );
             spk.clips_content = false;
             let spk = b.add(c.grille, spk);
             let r = s * 0.4;
-            b.add(spk, draw::circle("cone", s / 2.0, s / 2.0, r, draw::radial(&[(0.0, "#ffffff12"), (0.3, "#ffffff08"), (0.62, "#00000038"), (0.66, "#ffffff10"), (0.7, "#00000000"), (1.0, "#00000000")])));
-            b.add(spk, draw::stroked(draw::circle("rim", s / 2.0, s / 2.0, r, draw::solid("#00000000")), "#ffffff16", 2.0));
+            b.add(
+                spk,
+                draw::circle(
+                    "cone",
+                    s / 2.0,
+                    s / 2.0,
+                    r,
+                    draw::radial(&[
+                        (0.0, "#ffffff12"),
+                        (0.3, "#ffffff08"),
+                        (0.62, "#00000038"),
+                        (0.66, "#ffffff10"),
+                        (0.7, "#00000000"),
+                        (1.0, "#00000000"),
+                    ]),
+                ),
+            );
+            b.add(
+                spk,
+                draw::stroked(
+                    draw::circle("rim", s / 2.0, s / 2.0, r, draw::solid("#00000000")),
+                    "#ffffff16",
+                    2.0,
+                ),
+            );
             studio_cab::mic_handle(b, spk, i + 1, left, (s, s));
         }
         // The logo plate, low on the cloth.
-        let plate = draw::rounded(draw::rect("logo plate", gw / 2.0 - 70.0, gh - 46.0, 140.0, 26.0, draw::linear(180.0, &[(0.0, "#d8d9db"), (1.0, "#8e9094")])), 3.0);
+        let plate = draw::rounded(
+            draw::rect(
+                "logo plate",
+                gw / 2.0 - 70.0,
+                gh - 46.0,
+                140.0,
+                26.0,
+                draw::linear(180.0, &[(0.0, "#d8d9db"), (1.0, "#8e9094")]),
+            ),
+            3.0,
+        );
         let plate = b.add(c.grille, draw::with_effects(plate, light::stand(2.0, 1.0)));
-        let slab = Lettering::family(family::PLAYFAIR_DISPLAY).weight(900.0).italic();
-        set(b, plate, "OPEN ROOM", 70.0, 13.0, 14.0, "#0e0e0e", &slab, 0.02);
+        let slab = Lettering::family(family::PLAYFAIR_DISPLAY)
+            .weight(900.0)
+            .italic();
+        set(
+            b,
+            plate,
+            "OPEN ROOM",
+            70.0,
+            13.0,
+            14.0,
+            "#0e0e0e",
+            &slab,
+            0.02,
+        );
     });
     let params = studio_cab::cab().params;
-    Face { file: "21-cab-2x12", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "21-cab-2x12",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }
 
 /// The gate: a small black box with a threshold dial and a release
@@ -77,31 +143,104 @@ pub fn gate() -> Face {
     const INK: &str = "#e6e6e8";
     let scene = canvas("Gate", |b, root| {
         ui::fit_root(b, root, W, PEDAL_H);
-        let opts = vec![format!("w={W}"), format!("h={PEDAL_H}"), "color=#26272a".into(), "finish=powder".into(), "jack_inset=8".into()];
-        let p = Place { options: Some(opts), ..Place::new("Enclosure").variant("micro") };
+        let opts = vec![
+            format!("w={W}"),
+            format!("h={PEDAL_H}"),
+            "color=#26272a".into(),
+            "finish=powder".into(),
+            "jack_inset=8".into(),
+        ];
+        let p = Place {
+            options: Some(opts),
+            ..Place::new("Enclosure").variant("micro")
+        };
         let enc = ui::put_at(b, root, "panel.pedal_3d", &p, 0.0, 0.0);
-        let lid = b.scene.node(enc).and_then(|n| n.children.iter().copied().find(|c| b.scene.node(*c).is_some_and(|c| c.name == "lid"))).expect("lid");
-        let (lw, lh) = b.scene.node(lid).map_or((W, PEDAL_H), |n| (n.size.width, n.size.height));
-        let k = Place::new("Threshold").legend(" ").size(52.0).variant("knurled_dome").options(&["touch=44", "ticks=none"]).bind(ui::bind("gate/threshold"));
+        let lid = b
+            .scene
+            .node(enc)
+            .and_then(|n| {
+                n.children
+                    .iter()
+                    .copied()
+                    .find(|c| b.scene.node(*c).is_some_and(|c| c.name == "lid"))
+            })
+            .expect("lid");
+        let (lw, lh) = b
+            .scene
+            .node(lid)
+            .map_or((W, PEDAL_H), |n| (n.size.width, n.size.height));
+        let k = Place::new("Threshold")
+            .legend(" ")
+            .size(52.0)
+            .variant("knurled_dome")
+            .options(&["touch=44", "ticks=none"])
+            .bind(ui::bind("gate/threshold"));
         place::centred_at(b, lid, "knob.3d", &k, lw / 2.0, lh * 0.16);
-        parts::print(b, lid, "THRESHOLD", lw / 2.0, lh * 0.29, 6.5, INK, 700.0, 0.08);
+        parts::print(
+            b,
+            lid,
+            "THRESHOLD",
+            lw / 2.0,
+            lh * 0.29,
+            6.5,
+            INK,
+            700.0,
+            0.08,
+        );
         parts::print(b, lid, "FAST", lw / 2.0, lh * 0.36, 6.0, INK, 600.0, 0.06);
         parts::toggle(b, lid, "gate/release", "Release", 12.0, lw / 2.0, lh * 0.42);
         parts::print(b, lid, "SLOW", lw / 2.0, lh * 0.48, 6.0, INK, 600.0, 0.06);
-        set(b, lid, "GATE", lw / 2.0, lh * 0.6, 20.0, INK, &Lettering::family(family::MICHROMA), 0.1);
-        parts::stomp(b, lid, "gate/on", "Bypass", 24.0, lw * 0.56, lh * 0.8, "#38e060", true);
+        set(
+            b,
+            lid,
+            "GATE",
+            lw / 2.0,
+            lh * 0.6,
+            20.0,
+            INK,
+            &Lettering::family(family::MICHROMA),
+            0.1,
+        );
+        parts::stomp(
+            b,
+            lid,
+            "gate/on",
+            "Bypass",
+            24.0,
+            lw * 0.56,
+            lh * 0.8,
+            "#38e060",
+            true,
+        );
     });
     let params = vec![
-        ui::param("gate/threshold", "Threshold", Range::linear(-90.0, 0.0, Unit::Db), -60.0).featured(),
+        ui::param(
+            "gate/threshold",
+            "Threshold",
+            Range::linear(-90.0, 0.0, Unit::Db),
+            -60.0,
+        )
+        .featured(),
         ui::choice("gate/release", "Release", &["Slow", "Fast"], 1),
         ui::toggle("gate/on", "Bypass", true).featured(),
     ];
-    Face { file: "22-gate", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "22-gate",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }
 
 /// The mixing rail under the cab: each mic's level and pan, the room
 /// send and level, phase, laid out in `rows` rows. Returns the rail frame.
-pub fn cab_rail(b: &mut Builder<'_>, parent: NodeId, (x, y, w): (f64, f64, f64), rows: usize) -> NodeId {
+pub fn cab_rail(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    (x, y, w): (f64, f64, f64),
+    rows: usize,
+) -> NodeId {
     const INK: &str = "#e8e6e1";
     const ROW_H: f64 = 108.0;
     let items: [(&str, &str, bool); 7] = [
@@ -125,10 +264,18 @@ pub fn cab_rail(b: &mut Builder<'_>, parent: NodeId, (x, y, w): (f64, f64, f64),
         let cx = step * (col as f64 + 0.5);
         let cy = ROW_H * row as f64 + 44.0;
         if *is_knob {
-            let p = Place::new(*name).legend(" ").size(kd).variant("spun_metal").options(&["skirt=knurled", "touch=44", "ticks=none"]).bind(ui::bind(addr));
+            let p = Place::new(*name)
+                .legend(" ")
+                .size(kd)
+                .variant("spun_metal")
+                .options(&["skirt=knurled", "touch=44", "ticks=none"])
+                .bind(ui::bind(addr));
             place::centred_at(b, rail, "knob.3d", &p, cx, cy);
         } else {
-            let p = Place::new(*name).size(26.0).variant("red").bind(ui::bind(addr));
+            let p = Place::new(*name)
+                .size(26.0)
+                .variant("red")
+                .bind(ui::bind(addr));
             place::centred_at(b, rail, "switch.mini_slide", &p, cx, cy);
         }
         parts::print(b, rail, name, cx, cy + 46.0, ls, INK, 650.0, 0.08);

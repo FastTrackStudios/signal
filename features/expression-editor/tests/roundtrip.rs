@@ -9,8 +9,8 @@ use daw::service::midi::{
     MidiCC, MidiCCCreate, MidiNote, MidiNoteCreate, MidiPitchBend, MidiTakeContent,
     MidiTakeSnapshot, smf,
 };
-use expression_editor::doc::Dimension;
 use expression_editor::daw::{to_content, to_doc, write_warnings};
+use expression_editor::doc::Dimension;
 
 const PPQ: f64 = 960.0;
 

@@ -43,7 +43,8 @@ fn run() -> Result<(), String> {
         .map_err(|e| format!("failed reading expected SVG {}: {e}", args.expected))?;
 
     let (actual_sig, actual_elements, actual_paths) = canonicalize_svg(&actual, args.precision)?;
-    let (expected_sig, expected_elements, expected_paths) = canonicalize_svg(&expected, args.precision)?;
+    let (expected_sig, expected_elements, expected_paths) =
+        canonicalize_svg(&expected, args.precision)?;
 
     let (first_diff_offset, first_diff_actual, first_diff_expected) =
         first_diff(&actual_sig, &expected_sig, 80);
@@ -101,12 +102,12 @@ fn run() -> Result<(), String> {
 
 fn parse_args() -> Result<Args, String> {
     let mut args = std::env::args().skip(1);
-    let actual = args
-        .next()
-        .ok_or_else(|| "usage: svg_canonical_diff <actual.svg> <expected.svg> [--precision N] [--json]".to_string())?;
-    let expected = args
-        .next()
-        .ok_or_else(|| "usage: svg_canonical_diff <actual.svg> <expected.svg> [--precision N] [--json]".to_string())?;
+    let actual = args.next().ok_or_else(|| {
+        "usage: svg_canonical_diff <actual.svg> <expected.svg> [--precision N] [--json]".to_string()
+    })?;
+    let expected = args.next().ok_or_else(|| {
+        "usage: svg_canonical_diff <actual.svg> <expected.svg> [--precision N] [--json]".to_string()
+    })?;
 
     let mut precision = 4usize;
     let mut json = false;
@@ -134,8 +135,8 @@ fn parse_args() -> Result<Args, String> {
 }
 
 fn canonicalize_svg(input: &str, precision: usize) -> Result<(String, usize, usize), String> {
-    let doc = roxmltree::Document::parse(input)
-        .map_err(|e| format!("invalid XML/SVG document: {e}"))?;
+    let doc =
+        roxmltree::Document::parse(input).map_err(|e| format!("invalid XML/SVG document: {e}"))?;
     let root = doc.root_element();
     let mut sig = String::new();
     let mut element_count = 0usize;
@@ -209,7 +210,9 @@ fn normalize_attr_value(name: &str, value: &str, precision: usize) -> String {
     match name {
         "d" => normalize_path_data(&collapsed, precision),
         "viewBox" | "x" | "y" | "width" | "height" | "opacity" | "fill-opacity"
-        | "stroke-opacity" | "stroke-width" | "rx" | "ry" => normalize_numbers(&collapsed, precision),
+        | "stroke-opacity" | "stroke-width" | "rx" | "ry" => {
+            normalize_numbers(&collapsed, precision)
+        }
         _ => collapsed,
     }
 }
@@ -532,7 +535,11 @@ fn collapse_ws(input: &str) -> String {
     out
 }
 
-fn first_diff(actual: &str, expected: &str, context: usize) -> (Option<usize>, Option<String>, Option<String>) {
+fn first_diff(
+    actual: &str,
+    expected: &str,
+    context: usize,
+) -> (Option<usize>, Option<String>, Option<String>) {
     let a = actual.as_bytes();
     let e = expected.as_bytes();
     let min_len = a.len().min(e.len());

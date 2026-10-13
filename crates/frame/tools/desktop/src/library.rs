@@ -10,7 +10,10 @@ use std::time::Duration;
 
 use design_lint::{Config, Severity};
 use document_proto::Scene;
-use library_link::{Blocking, Event, Follow, ListQuery, PublishMeta, Published, Surface as Stored, SurfaceMeta, SurfaceUpdate};
+use library_link::{
+    Blocking, Event, Follow, ListQuery, PublishMeta, Published, Surface as Stored, SurfaceMeta,
+    SurfaceUpdate,
+};
 use surface_proto::Catalog;
 use surface_runtime::Surface;
 
@@ -54,14 +57,23 @@ impl Live {
         let index = loop {
             match client.list(&ListQuery::default()) {
                 Ok(index) => break index,
-                Err(e) if std::time::Instant::now() >= deadline => return Err(format!("can't reach the library at {url}: {e}")),
+                Err(e) if std::time::Instant::now() >= deadline => {
+                    return Err(format!("can't reach the library at {url}: {e}"));
+                }
                 Err(_) => std::thread::sleep(Duration::from_millis(200)),
             }
         };
         let mut index = index;
         fill_previews(&mut client, &mut index);
         let follow_thread = Follow::start(url, follow.clone())?;
-        Ok(Self { follow: follow_thread, client, following: follow, index, shown: None, lost: None })
+        Ok(Self {
+            follow: follow_thread,
+            client,
+            following: follow,
+            index,
+            shown: None,
+            lost: None,
+        })
     }
 
     #[must_use]
@@ -127,7 +139,11 @@ impl Live {
 
     /// Record what's on stage (so its own echo isn't applied twice).
     pub fn shown(&mut self, stored: &Stored) {
-        self.shown = Some((stored.meta.id.clone(), stored.meta.version, hash(&stored.content.bytes)));
+        self.shown = Some((
+            stored.meta.id.clone(),
+            stored.meta.version,
+            hash(&stored.content.bytes),
+        ));
     }
 
     /// Drain the link. Updates for the followed surface that differ from
@@ -191,10 +207,20 @@ fn hash(bytes: &[u8]) -> u64 {
 ///
 /// # Errors
 /// Why the update was rejected.
-pub fn accept(update: &SurfaceUpdate, current: &Scene, catalog: &Catalog) -> Result<(Stored, Surface), String> {
+pub fn accept(
+    update: &SurfaceUpdate,
+    current: &Scene,
+    catalog: &Catalog,
+) -> Result<(Stored, Surface), String> {
     let who = format!("{} v{}", update.id, update.version);
-    let stored = update.surface.clone().ok_or_else(|| format!("{} was removed from the library", update.id))?;
-    let scene = stored.content.decode().map_err(|e| format!("{who} rejected: {e}"))?;
+    let stored = update
+        .surface
+        .clone()
+        .ok_or_else(|| format!("{} was removed from the library", update.id))?;
+    let scene = stored
+        .content
+        .decode()
+        .map_err(|e| format!("{who} rejected: {e}"))?;
     let errors = |s: &Scene| -> Vec<(String, String)> {
         design_lint::lint(s, catalog, &Config::default())
             .into_iter()
@@ -204,11 +230,13 @@ pub fn accept(update: &SurfaceUpdate, current: &Scene, catalog: &Catalog) -> Res
     };
     let before = errors(current);
     let after = design_lint::lint(&scene, catalog, &Config::default());
-    if let Some(new) = after
-        .iter()
-        .find(|i| i.severity == Severity::Error && !before.contains(&(i.rule.clone(), i.node_name.clone())))
-    {
-        return Err(format!("{who} rejected: {}[{}] \"{}\": {}", "lint", new.rule, new.node_name, new.message));
+    if let Some(new) = after.iter().find(|i| {
+        i.severity == Severity::Error && !before.contains(&(i.rule.clone(), i.node_name.clone()))
+    }) {
+        return Err(format!(
+            "{who} rejected: {}[{}] \"{}\": {}",
+            "lint", new.rule, new.node_name, new.message
+        ));
     }
     Ok((stored, Surface::from_scene(scene)))
 }
@@ -219,18 +247,28 @@ pub fn accept(update: &SurfaceUpdate, current: &Scene, catalog: &Catalog) -> Res
 /// # Errors
 /// When it can't be written.
 pub fn install(stored: &Stored, dir: &Path) -> Result<PathBuf, String> {
-    let rel: PathBuf = stored.meta.id.split('/').filter(|p| !p.is_empty() && *p != "..").collect();
-    let path = dir.join(rel).with_extension(stored.content.format.extension());
+    let rel: PathBuf = stored
+        .meta
+        .id
+        .split('/')
+        .filter(|p| !p.is_empty() && *p != "..")
+        .collect();
+    let path = dir
+        .join(rel)
+        .with_extension(stored.content.format.extension());
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
     match stored.content.format {
         library_link::Format::Markup => {
-            let text = std::str::from_utf8(&stored.content.bytes).map_err(|e| format!("{}: not UTF-8: {e}", path.display()))?;
-            document_io::write_markup(&path, text, &stored.content.assets).map_err(|e| e.to_string())?;
+            let text = std::str::from_utf8(&stored.content.bytes)
+                .map_err(|e| format!("{}: not UTF-8: {e}", path.display()))?;
+            document_io::write_markup(&path, text, &stored.content.assets)
+                .map_err(|e| e.to_string())?;
         }
         library_link::Format::Frame => {
-            std::fs::write(&path, &stored.content.bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+            std::fs::write(&path, &stored.content.bytes)
+                .map_err(|e| format!("{}: {e}", path.display()))?;
             document_io::prune_assets(&path).map_err(|e| e.to_string())?;
         }
     }
@@ -259,7 +297,11 @@ mod tests {
             id: "t".into(),
             version: 2,
             surface: Some(Stored {
-                meta: SurfaceMeta { id: "t".into(), version: 2, ..SurfaceMeta::default() },
+                meta: SurfaceMeta {
+                    id: "t".into(),
+                    version: 2,
+                    ..SurfaceMeta::default()
+                },
                 content: Content::markup_text(text),
             }),
         }
@@ -271,38 +313,82 @@ mod tests {
 
     #[test]
     fn a_good_update_is_accepted() {
-        let (_, s) = accept(&update(&GOOD.replace("w=200", "w=240")), &current(), &surface_memory::demo_catalog()).unwrap();
+        let (_, s) = accept(
+            &update(&GOOD.replace("w=200", "w=240")),
+            &current(),
+            &surface_memory::demo_catalog(),
+        )
+        .unwrap();
         assert_eq!(s.controls.len(), 1);
     }
 
     #[test]
     fn a_malformed_update_is_rejected_with_its_position() {
-        let err = accept(&update("<Document>\n  <Page>\n"), &current(), &surface_memory::demo_catalog()).unwrap_err();
+        let err = accept(
+            &update("<Document>\n  <Page>\n"),
+            &current(),
+            &surface_memory::demo_catalog(),
+        )
+        .unwrap_err();
         assert!(err.starts_with("t v2 rejected: "), "{err}");
-        assert!(err.trim_start_matches("t v2 rejected: ").split(':').next().unwrap().parse::<usize>().is_ok(), "line:col: {err}");
+        assert!(
+            err.trim_start_matches("t v2 rejected: ")
+                .split(':')
+                .next()
+                .unwrap()
+                .parse::<usize>()
+                .is_ok(),
+            "line:col: {err}"
+        );
     }
 
     #[test]
     fn an_update_that_breaks_a_binding_is_rejected() {
         let broken = GOOD.replace("amp/gain", "amp/nope");
-        let err = accept(&update(&broken), &current(), &surface_memory::demo_catalog()).unwrap_err();
+        let err = accept(
+            &update(&broken),
+            &current(),
+            &surface_memory::demo_catalog(),
+        )
+        .unwrap_err();
         assert!(err.contains("lint[binding]"), "{err}");
         // …but errors the stage already has don't block other edits.
         let current_broken = document_text::parse(&broken, Default::default()).unwrap();
-        assert!(accept(&update(&broken.replace("w=200", "w=220")), &current_broken, &surface_memory::demo_catalog()).is_ok());
+        assert!(
+            accept(
+                &update(&broken.replace("w=200", "w=220")),
+                &current_broken,
+                &surface_memory::demo_catalog()
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn a_removal_is_reported() {
-        let gone = SurfaceUpdate { id: "t".into(), version: 0, surface: None };
-        assert!(accept(&gone, &current(), &surface_memory::demo_catalog()).unwrap_err().contains("removed"));
+        let gone = SurfaceUpdate {
+            id: "t".into(),
+            version: 0,
+            surface: None,
+        };
+        assert!(
+            accept(&gone, &current(), &surface_memory::demo_catalog())
+                .unwrap_err()
+                .contains("removed")
+        );
     }
 
     #[test]
     fn install_writes_under_the_id() {
         let dir = std::env::temp_dir().join(format!("frame-install-{}", std::process::id()));
         let stored = update(GOOD).surface.unwrap();
-        let stored = Stored { meta: SurfaceMeta { id: "comp/../x/y".into(), ..stored.meta }, ..stored };
+        let stored = Stored {
+            meta: SurfaceMeta {
+                id: "comp/../x/y".into(),
+                ..stored.meta
+            },
+            ..stored
+        };
         let path = install(&stored, &dir).unwrap();
         assert_eq!(path, dir.join("comp/x/y.frame"));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), GOOD);
@@ -315,7 +401,11 @@ mod tests {
         let mut scene = current();
         scene.add_asset("image/png", b"texture".to_vec());
         let stored = Stored {
-            meta: SurfaceMeta { id: "amp/tex".into(), version: 1, ..SurfaceMeta::default() },
+            meta: SurfaceMeta {
+                id: "amp/tex".into(),
+                version: 1,
+                ..SurfaceMeta::default()
+            },
             content: Content::markup(&scene),
         };
         let path = install(&stored, &dir).unwrap();

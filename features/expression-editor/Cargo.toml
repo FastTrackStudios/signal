@@ -74,6 +74,9 @@ tune = { workspace = true, optional = true }
 view-gestures = { workspace = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+expression-editor = { path = ".", features = ["audio", "audio-daw", "corpus", "daw", "demo", "guitarpro", "host", "ops", "render", "standalone", "ui", "ui-host"] }
 anyrender_vello_cpu = { workspace = true }
 base64 = { workspace = true }
 blitz-traits = { workspace = true }
@@ -109,11 +112,11 @@ required-features = ["standalone", "webview"]
 
 [[test]]
 name = "scene_image_cost"
-required-features = ["ui", "ui-webview", "webview"]
+required-features = ["ui", "ui-webview"]
 
 [[test]]
 name = "raster_offthread"
-required-features = ["ui", "ui-webview", "webview"]
+required-features = ["ui", "ui-webview"]
 
 [[test]]
 name = "adapter"

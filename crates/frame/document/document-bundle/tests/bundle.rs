@@ -11,27 +11,48 @@ fn sample() -> (Scene, NodeId) {
     let mut scene = Scene::new("Page 1");
     let page = scene.pages()[0];
     let png = scene.add_asset("image/png", vec![137, 80, 78, 71, 1, 2, 3]);
-    let svg = scene.add_asset("image/svg+xml", b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec());
+    let svg = scene.add_asset(
+        "image/svg+xml",
+        b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec(),
+    );
     let mut img = Node::new(NodeKind::Rectangle, "Image");
-    img.size = Size { width: 100.0, height: 0.1 + 0.2 };
+    img.size = Size {
+        width: 100.0,
+        height: 0.1 + 0.2,
+    };
     img.fills = vec![Paint {
-        kind: PaintKind::Image { asset: png, source_ref: None, scale_mode: ImageScaleMode::Fill, transform: None },
+        kind: PaintKind::Image {
+            asset: png,
+            source_ref: None,
+            scale_mode: ImageScaleMode::Fill,
+            transform: None,
+        },
         opacity: 1.0,
         blend: BlendMode::Normal,
         visible: true,
     }];
     img.svg_snapshot = Some(svg);
     let id = img.id;
-    scene.apply(Op::Insert { node: img, parent: page, index: u32::MAX }).unwrap();
+    scene
+        .apply(Op::Insert {
+            node: img,
+            parent: page,
+            index: u32::MAX,
+        })
+        .unwrap();
     (scene, id)
 }
 
 fn kitchen_sink() -> Scene {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../render/tests/parity/scenarios/regression.kitchen-sink");
-    let path = [dir.join("latest-bridge-export.json"), dir.join("export/latest-bridge-export.json")]
-        .into_iter()
-        .find(|p| p.exists())
-        .expect("kitchen-sink bridge export");
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../render/tests/parity/scenarios/regression.kitchen-sink");
+    let path = [
+        dir.join("latest-bridge-export.json"),
+        dir.join("export/latest-bridge-export.json"),
+    ]
+    .into_iter()
+    .find(|p| p.exists())
+    .expect("kitchen-sink bridge export");
     figma_import::import_bytes(&std::fs::read(path).unwrap()).unwrap()
 }
 
@@ -71,12 +92,20 @@ fn sample_round_trips_through_a_file() {
 fn live_replica_keeps_history_and_keeps_bytes_out_of_the_doc() {
     let (scene, img) = sample();
     let live = LoroScene::from_scene(&scene);
-    live.apply(Op::Set { id: img, prop: Prop::Opacity(0.5) }).unwrap();
+    live.apply(Op::Set {
+        id: img,
+        prop: Prop::Opacity(0.5),
+    })
+    .unwrap();
     let bytes = document_bundle::to_bytes(&live, &Manifest::new("Live")).unwrap();
 
     let mut names = entries(&bytes);
     names.sort();
-    let mut want: Vec<String> = scene.assets.keys().map(|id| format!("assets/{id}")).collect();
+    let mut want: Vec<String> = scene
+        .assets
+        .keys()
+        .map(|id| format!("assets/{id}"))
+        .collect();
     want.extend(["doc.loro".to_owned(), "manifest.styx".to_owned()]);
     want.sort();
     assert_eq!(names, want);
@@ -84,7 +113,10 @@ fn live_replica_keeps_history_and_keeps_bytes_out_of_the_doc() {
     // doc.loro is exactly the replica's snapshot: no asset bytes in it.
     let mut zip = ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
     let mut doc = Vec::new();
-    zip.by_name("doc.loro").unwrap().read_to_end(&mut doc).unwrap();
+    zip.by_name("doc.loro")
+        .unwrap()
+        .read_to_end(&mut doc)
+        .unwrap();
     let bare = LoroScene::from_snapshot(&doc, AssetStorage::External).unwrap();
     assert_eq!(bare.missing_assets().len(), 2);
 
@@ -137,10 +169,14 @@ fn corrupt_asset_is_detected() {
         }
         Some(data)
     });
-    assert!(matches!(document_bundle::from_bytes(&corrupt), Err(Error::CorruptAsset(id)) if id == png));
+    assert!(
+        matches!(document_bundle::from_bytes(&corrupt), Err(Error::CorruptAsset(id)) if id == png)
+    );
 
     let missing = rewrite(&bytes, |name, data| (name != target).then_some(data));
-    assert!(matches!(document_bundle::from_bytes(&missing), Err(Error::MissingAsset(id)) if id == png));
+    assert!(
+        matches!(document_bundle::from_bytes(&missing), Err(Error::MissingAsset(id)) if id == png)
+    );
 }
 
 #[test]
@@ -149,5 +185,7 @@ fn newer_format_is_refused() {
     let mut manifest = Manifest::new("Future");
     manifest.format = FORMAT_VERSION + 1;
     let bytes = document_bundle::to_bytes(&scene, &manifest).unwrap();
-    assert!(matches!(document_bundle::from_bytes(&bytes), Err(Error::UnsupportedFormat(v)) if v == FORMAT_VERSION + 1));
+    assert!(
+        matches!(document_bundle::from_bytes(&bytes), Err(Error::UnsupportedFormat(v)) if v == FORMAT_VERSION + 1)
+    );
 }

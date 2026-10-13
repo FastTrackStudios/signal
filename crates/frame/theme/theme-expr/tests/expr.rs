@@ -1,6 +1,6 @@
 //! The binding language, as a theme author writes it.
 
-use theme_expr::{parse, Expr, Rgba, Scope, Value};
+use theme_expr::{Expr, Rgba, Scope, Value, parse};
 
 /// A strip 86 wide and 400 tall, with a track's data in slots.
 struct Strip {
@@ -14,7 +14,10 @@ impl Strip {
                 ("track.name", Value::text("Lead Vox")),
                 ("track.volume", Value::Num(0.5)),
                 ("track.mute", Value::Bool(true)),
-                ("track.color", Value::Color(Rgba::from_hex("#3366cc").unwrap())),
+                (
+                    "track.color",
+                    Value::Color(Rgba::from_hex("#3366cc").unwrap()),
+                ),
                 ("meter.peak", Value::Missing),
             ],
         }
@@ -28,7 +31,13 @@ impl Strip {
             _ => None,
         })
         .unwrap();
-        e.resolve_fields(&mut |name| self.fields.iter().position(|(n, _)| *n == name).map(|i| i as u32)).unwrap();
+        e.resolve_fields(&mut |name| {
+            self.fields
+                .iter()
+                .position(|(n, _)| *n == name)
+                .map(|i| i as u32)
+        })
+        .unwrap();
         e.fold()
     }
 
@@ -43,7 +52,9 @@ impl Scope for Strip {
     }
 
     fn field(&self, slot: u32) -> Value {
-        self.fields.get(slot as usize).map_or(Value::Missing, |(_, v)| v.clone())
+        self.fields
+            .get(slot as usize)
+            .map_or(Value::Missing, |(_, v)| v.clone())
     }
 }
 
@@ -67,21 +78,39 @@ fn conditions_choose() {
 #[test]
 fn colours_derive() {
     let s = Strip::new();
-    let mixed = s.eval("mix($strip.ground, track.color, 0.5)").color().unwrap();
+    let mixed = s
+        .eval("mix($strip.ground, track.color, 0.5)")
+        .color()
+        .unwrap();
     assert_eq!(mixed.to_hex(), "#2a4376");
-    assert_eq!(s.eval("alpha(track.color, 0.5)").color().unwrap().to_hex(), "#3366cc80");
-    assert_eq!(s.eval("ink($strip.ground)").color().unwrap().to_hex(), "#f2f2f2");
+    assert_eq!(
+        s.eval("alpha(track.color, 0.5)").color().unwrap().to_hex(),
+        "#3366cc80"
+    );
+    assert_eq!(
+        s.eval("ink($strip.ground)").color().unwrap().to_hex(),
+        "#f2f2f2"
+    );
     assert_eq!(s.eval("ink(#ffffff)").color().unwrap().to_hex(), "#141414");
     // A hover: channels scaled, the red clamped — not washed toward white.
-    assert_eq!(s.eval("lift(#ef4444, 0.25)").color().unwrap().to_hex(), "#ff5555");
-    assert_eq!(s.eval("lighten(#ef4444, 0.25)").color().unwrap().to_hex(), "#f37373");
+    assert_eq!(
+        s.eval("lift(#ef4444, 0.25)").color().unwrap().to_hex(),
+        "#ff5555"
+    );
+    assert_eq!(
+        s.eval("lighten(#ef4444, 0.25)").color().unwrap().to_hex(),
+        "#f37373"
+    );
 }
 
 #[test]
 fn text_joins_and_formats() {
     let s = Strip::new();
     assert_eq!(s.eval("upper(track.name)"), Value::text("LEAD VOX"));
-    assert_eq!(s.eval("fmt(db(track.volume), 1) + \" dB\""), Value::text("-6.0 dB"));
+    assert_eq!(
+        s.eval("fmt(db(track.volume), 1) + \" dB\""),
+        Value::text("-6.0 dB")
+    );
     assert_eq!(s.eval("len(track.name)"), Value::Num(8.0));
 }
 
@@ -102,7 +131,11 @@ fn folding_leaves_only_what_varies() {
     assert_eq!(s.compile("$pad * 2 + 1"), Expr::Lit(Value::Num(9.0)));
     assert!(s.compile("w - $pad").refs().size);
     assert_eq!(s.compile("true ? track.name : 3").refs().slots.len(), 1);
-    assert!(s.compile("mix($strip.ground, #ffffff, 0.1)").constant().is_some());
+    assert!(
+        s.compile("mix($strip.ground, #ffffff, 0.1)")
+            .constant()
+            .is_some()
+    );
 }
 
 #[test]
@@ -118,7 +151,10 @@ fn refs_name_what_an_expression_reads() {
 fn undefined_names_are_reported() {
     let mut e = parse("$nope + track.nope").unwrap();
     assert_eq!(e.inline_tokens(&mut |_| None), Err("nope".to_owned()));
-    assert_eq!(e.resolve_fields(&mut |_| None), Err("track.nope".to_owned()));
+    assert_eq!(
+        e.resolve_fields(&mut |_| None),
+        Err("track.nope".to_owned())
+    );
 }
 
 #[test]
@@ -150,7 +186,9 @@ fn precedence_is_conventional() {
 #[test]
 fn arc_is_path_data_from_twelve_oclock() {
     let s = Strip::new();
-    let Value::Text(path) = s.eval("arc(12, 12, 10, 0, 90)") else { panic!("text") };
+    let Value::Text(path) = s.eval("arc(12, 12, 10, 0, 90)") else {
+        panic!("text")
+    };
     // Starts at twelve o'clock, ends at three.
     assert!(path.starts_with("M12,2"), "{path}");
     assert!(path.ends_with("22,12"), "{path}");

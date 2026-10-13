@@ -333,10 +333,7 @@ fn excessive_host_slopes_saturate_at_brickwall() {
 fn unsupported_bandpass_variant_is_rejected() {
     let mut eq = prepared();
     eq.set_band(0, band(12, 0.0, 2.0));
-    assert_eq!(
-        eq.last_design_error(0),
-        Some(eq::Error::UnsupportedFilter)
-    );
+    assert_eq!(eq.last_design_error(0), Some(eq::Error::UnsupportedFilter));
 }
 
 #[test]

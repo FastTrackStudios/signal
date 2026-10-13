@@ -19,7 +19,12 @@ pub mod varimu;
 use crate::face::Face;
 
 pub fn faces() -> Vec<Face> {
-    vec![opto_leveler::face(), opto_comp::face(), twin_valve::face(), varimu::face()]
+    vec![
+        opto_leveler::face(),
+        opto_comp::face(),
+        twin_valve::face(),
+        varimu::face(),
+    ]
 }
 
 /// The tube compressors redrawn for a host's FX lane (see [`crate::lane`]).

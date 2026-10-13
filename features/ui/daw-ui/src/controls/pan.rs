@@ -173,7 +173,8 @@ pub fn TrackName(
     // `mcp_namebg` — a shade darker than the raised surface the plate
     // used, which read as a light bar across the bottom of every strip
     // next to REAPER's. The measured value lives in the token.
-    let plate = crate::theme::Color::hex(crate::theme::defaults::STRIP_BODY).expect("token is valid hex");
+    let plate =
+        crate::theme::Color::hex(crate::theme::defaults::STRIP_BODY).expect("token is valid hex");
     let _ = colour;
     // Black text on a light colour, white on a dark one — a track painted
     // yellow is unreadable otherwise. Rec. 601 luma, which is what a

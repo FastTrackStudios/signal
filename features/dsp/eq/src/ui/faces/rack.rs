@@ -9,7 +9,6 @@
 //! only thing worth watching on an equalizer is the curve, and that lives on
 //! the Main face.
 
-use plugin_core::prelude::*;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::button::{LedMeter, PanelButton};
 use fts_audio_ui::hardware::knob::HardwareKnob;
@@ -18,6 +17,7 @@ use fts_audio_ui::hardware::panel::{Panel, PanelSlot, Silkscreen, panel_scale};
 use fts_audio_ui::hardware::rack::{RackDesign, RackItem};
 use fts_audio_ui::hardware::switches::{RatioButtons, ToggleSwitch};
 use fts_audio_ui::shell::RAIL_W;
+use plugin_core::prelude::*;
 
 use crate::ui::faces::params_map::control_ptr;
 use crate::ui::param_adapter::param_handle;

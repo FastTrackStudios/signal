@@ -1180,7 +1180,8 @@ impl Painters {
             Picture::Reverb(view) => {
                 let (shared, widget) = self.reverbs.entry(key.to_owned()).or_insert_with(|| {
                     let shared = std::rc::Rc::new(std::cell::RefCell::new(view.clone()));
-                    let mut widget = reverb::ui::viz::ReverbWidget::new(std::rc::Rc::clone(&shared));
+                    let mut widget =
+                        reverb::ui::viz::ReverbWidget::new(std::rc::Rc::clone(&shared));
                     widget.create_surfaces(ctx);
                     (shared, widget)
                 });

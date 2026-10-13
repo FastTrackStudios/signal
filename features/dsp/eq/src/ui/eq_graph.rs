@@ -18,9 +18,9 @@ use std::sync::Arc;
 use dioxus_elements::input_data::MouseButton;
 // The component is portable: dioxus, and the geometry the graph is drawn
 // in. The plugin's custom-widget host is native only (below).
-use dioxus::prelude::*;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::ui::widget::CustomWidgetAttr;
+use dioxus::prelude::*;
 
 use super::eq_graph_interaction::{
     CreateMode, DotAction, DragMode, GraphMapper, Mods, WheelTarget, bands_in_rect, create_mode,
@@ -501,7 +501,14 @@ pub fn EqGraph(
     let graph_widget = {
         let state = render_state.clone();
         let fresh = graph_fresh.clone();
-        use_memo(move || CustomWidgetAttr::new(fts_audio_ui::widget::Rasterized::new(fts_audio_ui::widget::Freshened::new(EqGraphWidget::new(state.clone()), fresh.clone()))))
+        use_memo(move || {
+            CustomWidgetAttr::new(fts_audio_ui::widget::Rasterized::new(
+                fts_audio_ui::widget::Freshened::new(
+                    EqGraphWidget::new(state.clone()),
+                    fresh.clone(),
+                ),
+            ))
+        })
     };
     // Each render may have moved the graph (bands, curve, spectrum), and
     // only the widget draws it: the DOM does not change.

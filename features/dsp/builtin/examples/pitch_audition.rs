@@ -20,9 +20,9 @@
 
 use std::time::Instant;
 
-use dsp_core::audio::{AudioConfig, Processor};
-use daw::plugin::{PluginEvents, PluginInstance};
 use builtin::{NativeDelay, NativeReverb};
+use daw::plugin::{PluginEvents, PluginInstance};
+use dsp_core::audio::{AudioConfig, Processor};
 use pitch::chain::{Algorithm, PitchChain};
 
 const SR: f64 = 48_000.0;

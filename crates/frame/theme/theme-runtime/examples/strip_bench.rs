@@ -38,7 +38,12 @@ const STRIP: &str = r##"<Document>
 "##;
 
 fn main() {
-    let schema = Schema::new().field("track.name").field("track.color").field("track.mute").live("track.fader").live("meter.level");
+    let schema = Schema::new()
+        .field("track.name")
+        .field("track.color")
+        .field("track.mute")
+        .live("track.fader")
+        .live("meter.level");
     let theme = Theme::from_markup(STRIP, schema, None).expect("compiles");
     let fields = |i: usize| {
         vec![
@@ -54,7 +59,10 @@ fn main() {
 
     let t = Instant::now();
     theme.prepare("mcp.strip", size, &fields(0));
-    println!("layout, once per size:   {:>8.1} µs", t.elapsed().as_secs_f64() * 1e6);
+    println!(
+        "layout, once per size:   {:>8.1} µs",
+        t.elapsed().as_secs_f64() * 1e6
+    );
 
     for pass in ["record", "live"] {
         let mut best = f64::MAX;
@@ -73,6 +81,10 @@ fn main() {
             best = best.min(t.elapsed().as_secs_f64());
             cmds = rec.len();
         }
-        println!("{pass:>6}, {strips} strips:      {:>8.1} µs  ({:.2} µs/strip, {cmds} commands)", best * 1e6, best * 1e6 / strips as f64);
+        println!(
+            "{pass:>6}, {strips} strips:      {:>8.1} µs  ({:.2} µs/strip, {cmds} commands)",
+            best * 1e6,
+            best * 1e6 / strips as f64
+        );
     }
 }

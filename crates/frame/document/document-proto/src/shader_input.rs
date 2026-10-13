@@ -51,7 +51,11 @@ pub enum ShaderInputSource {
     /// `x0, y0, x1, y1, …` in engineering units; `series` picks one (else
     /// the first). Evaluated like a `Curve` control's, so the vector
     /// fallback and the shader agree.
-    Curve { provider: String, inputs: Vec<CurveInput>, series: Option<String> },
+    Curve {
+        provider: String,
+        inputs: Vec<CurveInput>,
+        series: Option<String>,
+    },
     /// Fixed values.
     Const { values: Vec<f64> },
 }
@@ -71,32 +75,64 @@ impl InputMap {
     #[must_use]
     pub fn apply(&self, v: f64) -> f64 {
         let span = self.hi - self.lo;
-        let u = if span.abs() < 1e-12 { 0.0 } else { (v - self.lo) / span };
+        let u = if span.abs() < 1e-12 {
+            0.0
+        } else {
+            (v - self.lo) / span
+        };
         if self.unclamped { u } else { u.clamp(0.0, 1.0) }
     }
 }
 
 impl ShaderInput {
     fn new(name: impl Into<String>, source: ShaderInputSource) -> Self {
-        Self { name: name.into(), source, len: None, map: None }
+        Self {
+            name: name.into(),
+            source,
+            len: None,
+            map: None,
+        }
     }
 
     /// A param's value.
     #[must_use]
     pub fn param(name: impl Into<String>, addr: impl Into<String>) -> Self {
-        Self::new(name, ShaderInputSource::Param { addr: ParamAddr::new(addr) })
+        Self::new(
+            name,
+            ShaderInputSource::Param {
+                addr: ParamAddr::new(addr),
+            },
+        )
     }
 
     /// A feed's latest frame.
     #[must_use]
     pub fn stream(name: impl Into<String>, id: impl Into<String>) -> Self {
-        Self::new(name, ShaderInputSource::Stream { id: EntryId::new(id), channel: None })
+        Self::new(
+            name,
+            ShaderInputSource::Stream {
+                id: EntryId::new(id),
+                channel: None,
+            },
+        )
     }
 
     /// A curve provider's series, flattened `x, y` pairs.
     #[must_use]
-    pub fn curve(name: impl Into<String>, provider: impl Into<String>, inputs: Vec<CurveInput>, series: Option<&str>) -> Self {
-        Self::new(name, ShaderInputSource::Curve { provider: provider.into(), inputs, series: series.map(str::to_string) })
+    pub fn curve(
+        name: impl Into<String>,
+        provider: impl Into<String>,
+        inputs: Vec<CurveInput>,
+        series: Option<&str>,
+    ) -> Self {
+        Self::new(
+            name,
+            ShaderInputSource::Curve {
+                provider: provider.into(),
+                inputs,
+                series: series.map(str::to_string),
+            },
+        )
     }
 
     /// Fixed values.
@@ -115,7 +151,11 @@ impl ShaderInput {
     /// Mapped `lo..hi → 0..1`, clamped.
     #[must_use]
     pub fn map(mut self, lo: f64, hi: f64) -> Self {
-        self.map = Some(InputMap { lo, hi, unclamped: false });
+        self.map = Some(InputMap {
+            lo,
+            hi,
+            unclamped: false,
+        });
         self
     }
 
@@ -147,7 +187,16 @@ impl ShaderInput {
 /// `IN_<NAME>`: upper-cased, anything not `[A-Z0-9_]` as `_`.
 #[must_use]
 pub fn constant_name(name: &str) -> String {
-    let body: String = name.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' }).collect();
+    let body: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
     format!("IN_{body}")
 }
 
@@ -190,16 +239,25 @@ mod tests {
 
     #[test]
     fn a_map_runs_either_way_and_clamps() {
-        let gr = InputMap { lo: 0.0, hi: -60.0, unclamped: false };
+        let gr = InputMap {
+            lo: 0.0,
+            hi: -60.0,
+            unclamped: false,
+        };
         assert!((gr.apply(-6.0) - 0.1).abs() < 1e-9);
         assert_eq!(gr.apply(3.0), 0.0);
-        let free = InputMap { unclamped: true, ..gr };
+        let free = InputMap {
+            unclamped: true,
+            ..gr
+        };
         assert!((free.apply(3.0) + 0.05).abs() < 1e-9);
     }
 
     #[test]
     fn shaping_maps_then_resamples_and_zeroes_gaps() {
-        let i = ShaderInput::stream("in", "comp/in_history").map(-60.0, 0.0).len(3);
+        let i = ShaderInput::stream("in", "comp/in_history")
+            .map(-60.0, 0.0)
+            .len(3);
         assert_eq!(i.shape(&[-60.0, f64::NAN, 0.0]), vec![0.0, 0.0, 1.0]);
         assert_eq!(i.constant_name(), "IN_IN");
         assert_eq!(constant_name("gr-trace"), "IN_GR_TRACE");
@@ -212,15 +270,28 @@ mod tests {
             params: Default::default(),
             inputs: vec![
                 ShaderInput::param("threshold", "comp/threshold"),
-                ShaderInput::stream("trace", "comp/in_history").map(-60.0, 0.0).len(128),
-                ShaderInput::curve("taps", "delay.taps", vec![CurveInput::param("time", "d/time")], Some("taps")),
+                ShaderInput::stream("trace", "comp/in_history")
+                    .map(-60.0, 0.0)
+                    .len(128),
+                ShaderInput::curve(
+                    "taps",
+                    "delay.taps",
+                    vec![CurveInput::param("time", "d/time")],
+                    Some("taps"),
+                ),
                 ShaderInput::constant("color", vec![0.2, 0.5, 1.0]),
             ],
         };
         let json = serde_json::to_string(&fx).unwrap();
         assert_eq!(serde_json::from_str::<crate::ShaderFx>(&json).unwrap(), fx);
         // Without inputs, the old shape exactly.
-        let plain = crate::ShaderFx { shader: "glass".into(), ..Default::default() };
-        assert_eq!(serde_json::to_string(&plain).unwrap(), r#"{"shader":"glass","params":{}}"#);
+        let plain = crate::ShaderFx {
+            shader: "glass".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            serde_json::to_string(&plain).unwrap(),
+            r#"{"shader":"glass","params":{}}"#
+        );
     }
 }

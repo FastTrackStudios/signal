@@ -7,8 +7,8 @@
 //! that rings long is fine; one that climbs is a speaker-destroying bug —
 //! the shimmer's did, to infinity in six seconds.
 
-use daw::plugin::{PluginEvents, PluginInstance};
 use builtin::{NativeDelay, NativeReverb};
+use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 512;
@@ -33,9 +33,14 @@ fn peaks(fx: &mut dyn PluginInstance, secs: usize) -> (f32, f32) {
                 })
                 .collect();
             let (mut l, mut r) = (vec![0.0f32; BLOCK], vec![0.0f32; BLOCK]);
-            fx.process_block(&x, &x, &mut l, &mut r, &PluginEvents::EMPTY).unwrap();
+            fx.process_block(&x, &x, &mut l, &mut r, &PluginEvents::EMPTY)
+                .unwrap();
             let p = l.iter().chain(&r).fold(0.0f32, |m, s| {
-                if s.is_finite() { m.max(s.abs()) } else { f32::INFINITY }
+                if s.is_finite() {
+                    m.max(s.abs())
+                } else {
+                    f32::INFINITY
+                }
             });
             if sec == 0 {
                 first = first.max(p);
@@ -51,7 +56,10 @@ fn assert_bounded(what: &str, fx: &mut dyn PluginInstance) {
     let (first, later) = peaks(fx, 12);
     assert!(first.is_finite() && later.is_finite(), "{what}: not finite");
     // Room to bloom (a swell, a shimmer building), none to run away.
-    assert!(later <= first.max(0.05) * 4.0, "{what}: grew from {first} to {later}");
+    assert!(
+        later <= first.max(0.05) * 4.0,
+        "{what}: grew from {first} to {later}"
+    );
 }
 
 #[test]
@@ -77,7 +85,12 @@ fn every_reverb_at_full_decay_stays_bounded() {
 
 #[test]
 fn the_shimmer_at_its_most_extreme_stays_bounded() {
-    for (amount, voice2, shift2) in [(1.0, 1.0, 12.0), (1.0, 0.0, 12.0), (0.5, 1.0, 12.0), (1.0, 1.0, 7.0)] {
+    for (amount, voice2, shift2) in [
+        (1.0, 1.0, 12.0),
+        (1.0, 0.0, 12.0),
+        (0.5, 1.0, 12.0),
+        (1.0, 1.0, 7.0),
+    ] {
         let mut r = NativeReverb::new(SR);
         for (n, v) in [
             ("algorithm", 6.0),
@@ -92,7 +105,10 @@ fn the_shimmer_at_its_most_extreme_stays_bounded() {
         ] {
             r.set_named(n, v);
         }
-        assert_bounded(&format!("shimmer amount {amount} voice2 {voice2} +{shift2}"), &mut r);
+        assert_bounded(
+            &format!("shimmer amount {amount} voice2 {voice2} +{shift2}"),
+            &mut r,
+        );
     }
 }
 

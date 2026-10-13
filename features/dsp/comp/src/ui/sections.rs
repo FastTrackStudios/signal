@@ -9,8 +9,8 @@
 //! [`crate::ui::profile_view::ProfileSkin`] so a profile change re-tints the whole
 //! surface without the layout code knowing which profile is active.
 
-use plugin_core::prelude::*;
 use fts_audio_ui::prelude::*;
+use plugin_core::prelude::*;
 
 use crate::ui::profile_view::ProfileSkin;
 

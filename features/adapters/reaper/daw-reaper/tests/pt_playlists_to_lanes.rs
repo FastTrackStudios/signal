@@ -13,7 +13,7 @@
 
 const FIXTURES: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../formats/dawfile-protools/tests/fixtures/"
+    "/../../../formats/tests/fixtures/protools/"
 );
 
 /// Count lines whose trimmed start is the given REAPER token (include the

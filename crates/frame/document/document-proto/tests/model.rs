@@ -2,7 +2,10 @@ use document_proto::*;
 
 fn rect(name: &str) -> Node {
     let mut n = Node::new(NodeKind::Rectangle, name);
-    n.size = Size { width: 10.0, height: 20.0 };
+    n.size = Size {
+        width: 10.0,
+        height: 20.0,
+    };
     n.fills = vec![Paint::solid(Color::rgba(1.0, 0.0, 0.0, 1.0))];
     n
 }
@@ -25,13 +28,37 @@ fn sample() -> (Scene, NodeId, NodeId) {
         hug_cross: false,
     });
     let frame_id = frame.id;
-    scene.apply(Op::Insert { node: frame, parent: page, index: u32::MAX }).unwrap();
+    scene
+        .apply(Op::Insert {
+            node: frame,
+            parent: page,
+            index: u32::MAX,
+        })
+        .unwrap();
     let r = rect("Knob");
     let r_id = r.id;
-    scene.apply(Op::Insert { node: r, parent: frame_id, index: u32::MAX }).unwrap();
-    let mut t = Node::new(NodeKind::Text(TextData { characters: "Gain".into(), ..TextData::default() }), "Label");
+    scene
+        .apply(Op::Insert {
+            node: r,
+            parent: frame_id,
+            index: u32::MAX,
+        })
+        .unwrap();
+    let mut t = Node::new(
+        NodeKind::Text(TextData {
+            characters: "Gain".into(),
+            ..TextData::default()
+        }),
+        "Label",
+    );
     t.fills = vec![Paint::solid(Color::rgba(1.0, 1.0, 1.0, 1.0))];
-    scene.apply(Op::Insert { node: t, parent: frame_id, index: u32::MAX }).unwrap();
+    scene
+        .apply(Op::Insert {
+            node: t,
+            parent: frame_id,
+            index: u32::MAX,
+        })
+        .unwrap();
     scene.add_asset("image/png", vec![1, 2, 3]);
     (scene, frame_id, r_id)
 }
@@ -54,9 +81,19 @@ fn move_and_set_round_trip() {
     let page = scene.pages()[0];
     let inv = scene
         .transact([
-            Op::Move { id: knob, parent: page, index: 0 },
-            Op::Set { id: knob, prop: Prop::Opacity(0.5) },
-            Op::Set { id: frame, prop: Prop::Name("Renamed".into()) },
+            Op::Move {
+                id: knob,
+                parent: page,
+                index: 0,
+            },
+            Op::Set {
+                id: knob,
+                prop: Prop::Opacity(0.5),
+            },
+            Op::Set {
+                id: frame,
+                prop: Prop::Name("Renamed".into()),
+            },
         ])
         .unwrap();
     assert_eq!(scene.node(knob).unwrap().parent, Some(page));
@@ -71,9 +108,16 @@ fn failed_transaction_rolls_back() {
     let before = scene.clone();
     let err = scene
         .transact([
-            Op::Set { id: knob, prop: Prop::Visible(false) },
+            Op::Set {
+                id: knob,
+                prop: Prop::Visible(false),
+            },
             // A frame can't move under its own child.
-            Op::Move { id: frame, parent: knob, index: 0 },
+            Op::Move {
+                id: frame,
+                parent: knob,
+                index: 0,
+            },
         ])
         .unwrap_err();
     assert_eq!(err, OpError::Cycle(frame));
@@ -85,7 +129,18 @@ fn history_undo_redo() {
     let (mut scene, _, knob) = sample();
     let original = scene.clone();
     let mut history = History::default();
-    history.commit(&mut scene, [Op::Set { id: knob, prop: Prop::Size(Size { width: 64.0, height: 64.0 }) }]).unwrap();
+    history
+        .commit(
+            &mut scene,
+            [Op::Set {
+                id: knob,
+                prop: Prop::Size(Size {
+                    width: 64.0,
+                    height: 64.0,
+                }),
+            }],
+        )
+        .unwrap();
     let edited = scene.clone();
     assert!(history.undo(&mut scene).unwrap());
     assert_eq!(scene, original);
@@ -97,7 +152,10 @@ fn history_undo_redo() {
 #[test]
 fn root_is_protected() {
     let (mut scene, _, _) = sample();
-    assert_eq!(scene.apply(Op::Remove { id: scene.root }).unwrap_err(), OpError::Root);
+    assert_eq!(
+        scene.apply(Op::Remove { id: scene.root }).unwrap_err(),
+        OpError::Root
+    );
 }
 
 #[test]
@@ -132,11 +190,23 @@ fn resizing_a_width_moves_and_stretches_by_each_nodes_rule() {
     let page = scene.pages()[0];
     let add = |scene: &mut Scene, parent, x: f64, w: f64, rule: Option<ResizeX>| {
         let mut n = Node::new(NodeKind::Frame, "n");
-        n.transform = Transform { tx: x, ..Transform::IDENTITY };
-        n.size = Size { width: w, height: 10.0 };
+        n.transform = Transform {
+            tx: x,
+            ..Transform::IDENTITY
+        };
+        n.size = Size {
+            width: w,
+            height: 10.0,
+        };
         n.layout_child.resize_x = rule;
         let id = n.id;
-        scene.apply(Op::Insert { node: n, parent, index: u32::MAX }).unwrap();
+        scene
+            .apply(Op::Insert {
+                node: n,
+                parent,
+                index: u32::MAX,
+            })
+            .unwrap();
         id
     };
     let root = add(&mut scene, page, 0.0, 100.0, None);
@@ -152,11 +222,31 @@ fn resizing_a_width_moves_and_stretches_by_each_nodes_rule() {
         (n.transform.tx, n.size.width)
     };
     assert_eq!(at(root), (0.0, 200.0));
-    assert_eq!(at(ground), (0.0, 200.0), "spanning its parent, it stretches");
-    assert_eq!(at(knob), (95.0, 10.0), "its centre moves in proportion; its size stays");
+    assert_eq!(
+        at(ground),
+        (0.0, 200.0),
+        "spanning its parent, it stretches"
+    );
+    assert_eq!(
+        at(knob),
+        (95.0, 10.0),
+        "its centre moves in proportion; its size stays"
+    );
     assert_eq!(at(pinned), (180.0, 10.0), "pinned right");
-    assert_eq!(at(window), (10.0, 150.0), "stretched: its width takes the change");
+    assert_eq!(
+        at(window),
+        (10.0, 150.0),
+        "stretched: its width takes the change"
+    );
     assert_eq!(at(inside), (0.0, 150.0), "and what spans it follows");
-    assert_eq!(at(drawing), (120.0, 20.0), "scaled: moved in proportion, its size as drawn…");
-    assert_eq!(scene.node(drawing).unwrap().transform.a, 2.0, "…and squeezed by its transform");
+    assert_eq!(
+        at(drawing),
+        (120.0, 20.0),
+        "scaled: moved in proportion, its size as drawn…"
+    );
+    assert_eq!(
+        scene.node(drawing).unwrap().transform.a,
+        2.0,
+        "…and squeezed by its transform"
+    );
 }

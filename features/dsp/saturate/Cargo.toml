@@ -35,6 +35,9 @@ parking_lot = { workspace = true, optional = true }
 peniko = { workspace = true, optional = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+saturate = { path = ".", features = ["native", "profiles", "ui", "viz"] }
 anyrender_vello_cpu = { workspace = true }
 approx = { workspace = true }
 dioxus = { workspace = true }

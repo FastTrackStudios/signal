@@ -38,7 +38,11 @@ impl Server {
             });
             rt.shutdown_background();
         });
-        Self { url, stop: Some(stop), thread: Some(thread) }
+        Self {
+            url,
+            stop: Some(stop),
+            thread: Some(thread),
+        }
     }
 
     fn kill(&mut self) {
@@ -58,7 +62,11 @@ impl Drop for Server {
 }
 
 /// Wait (ticking the engine) until the channel yields something matching.
-async fn wait_for(engine: &Memory, rx: &Receiver<Incoming>, want: impl Fn(&Incoming) -> bool) -> Incoming {
+async fn wait_for(
+    engine: &Memory,
+    rx: &Receiver<Incoming>,
+    want: impl Fn(&Incoming) -> bool,
+) -> Incoming {
     for i in 0..300 {
         engine.tick(f64::from(i) * 0.01);
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -72,7 +80,9 @@ async fn wait_for(engine: &Memory, rx: &Receiver<Incoming>, want: impl Fn(&Incom
 #[tokio::test]
 async fn telemetry_and_param_changes_arrive_over_a_websocket() {
     let engine = Memory::demo();
-    let mut server = Server::start(LayerRouter::new().merge_router_scoped("guitar", engine.clone().into_router()));
+    let mut server = Server::start(
+        LayerRouter::new().merge_router_scoped("guitar", engine.clone().into_router()),
+    );
     let url = server.url.clone();
 
     let client = sync::connect_ws(&url, Some("guitar")).await.unwrap();
@@ -83,27 +93,59 @@ async fn telemetry_and_param_changes_arrive_over_a_websocket() {
     let pump = tokio::spawn(async move { telemetry.pump(&stream).await });
 
     // Frames published by the engine arrive as `Incoming::Frame`.
-    let got = wait_for(&engine, &rx, |m| matches!(m, Incoming::Frame(f) if f.id == EntryId::new("out_level"))).await;
-    let Incoming::Frame(frame) = got else { unreachable!() };
+    let got = wait_for(
+        &engine,
+        &rx,
+        |m| matches!(m, Incoming::Frame(f) if f.id == EntryId::new("out_level")),
+    )
+    .await;
+    let Incoming::Frame(frame) = got else {
+        unreachable!()
+    };
     assert_eq!(frame.values.len(), 2, "stereo out_level");
 
     // A call through the call client echoes back as `Incoming::Param`.
     let addr = ParamAddr::new("delay/mix");
-    Engine::call(&client, EngineCall::SetParam { addr: addr.clone(), value: 0.5, phase: EditPhase::End })
-        .await
-        .unwrap();
-    let got = wait_for(&engine, &rx, |m| matches!(m, Incoming::Param(p) if p.addr == addr)).await;
-    assert_eq!(got, Incoming::Param(surface_proto::ParamValue { addr: addr.clone(), value: 0.5 }));
+    Engine::call(
+        &client,
+        EngineCall::SetParam {
+            addr: addr.clone(),
+            value: 0.5,
+            phase: EditPhase::End,
+        },
+    )
+    .await
+    .unwrap();
+    let got = wait_for(
+        &engine,
+        &rx,
+        |m| matches!(m, Incoming::Param(p) if p.addr == addr),
+    )
+    .await;
+    assert_eq!(
+        got,
+        Incoming::Param(surface_proto::ParamValue {
+            addr: addr.clone(),
+            value: 0.5
+        })
+    );
 
     // …and feeds a runtime built from the remote engine.
     let surface = Surface::from_scene(document_proto::Scene::new("S"));
     let mut rt = sync::connect(&client, surface).await.unwrap();
-    assert!(rt.values().iter().any(|v| v.addr == addr && (v.value - 0.5).abs() < 1e-9));
+    assert!(
+        rt.values()
+            .iter()
+            .any(|v| v.addr == addr && (v.value - 0.5).abs() < 1e-9)
+    );
     Incoming::Frame(frame.clone()).apply(&mut rt, 0.0);
 
     // The server going away ends the pump with `Lost`, not a hang.
     server.kill();
-    let end = tokio::time::timeout(Duration::from_secs(5), pump).await.expect("pump noticed the drop").unwrap();
+    let end = tokio::time::timeout(Duration::from_secs(5), pump)
+        .await
+        .expect("pump noticed the drop")
+        .unwrap();
     assert!(matches!(end, PumpEnd::Lost(_)), "{end:?}");
 }
 

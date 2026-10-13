@@ -8,11 +8,11 @@
 //! lowercase names stacked in a pedal's corner, a cartoon maker's mark on
 //! the amps — with every name invented.
 
-pub mod parts;
 mod amps;
 mod cab;
 mod delay;
 mod eq;
+pub mod parts;
 mod pedals;
 mod wah;
 
@@ -21,6 +21,19 @@ use crate::face::Face;
 /// Every unit of the suite, in signal order.
 #[must_use]
 pub fn faces() -> Vec<Face> {
-    vec![wah::face(), pedals::envelope(), pedals::squeeze(), pedals::glass(), pedals::haul(), amps::critic(), amps::engine(), amps::desk(), cab::face(), eq::face(), pedals::neon()
-, delay::face(), pedals::rinse()]
+    vec![
+        wah::face(),
+        pedals::envelope(),
+        pedals::squeeze(),
+        pedals::glass(),
+        pedals::haul(),
+        amps::critic(),
+        amps::engine(),
+        amps::desk(),
+        cab::face(),
+        eq::face(),
+        pedals::neon(),
+        delay::face(),
+        pedals::rinse(),
+    ]
 }

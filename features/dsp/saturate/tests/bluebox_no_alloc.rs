@@ -60,5 +60,10 @@ fn set_process_and_reset_never_allocate() {
     }
     let after = ALLOCATIONS.load(Ordering::SeqCst);
     assert!(acc.is_finite());
-    assert_eq!(after, before, "the audio path allocated {} times", after - before);
+    assert_eq!(
+        after,
+        before,
+        "the audio path allocated {} times",
+        after - before
+    );
 }

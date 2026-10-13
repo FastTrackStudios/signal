@@ -20,12 +20,12 @@
 
 use std::sync::Arc;
 
-use session::services::setlist_service::{SetlistServiceStreamClient, SetlistServiceStreamSource};
-use session::{SessionServiceError, SetlistServiceClient};
 use session::proto::{
     ActiveIndices, AudioLatencyInfo, MeasureInfo, MusicalPosition, Section, Setlist, SetlistEvent,
     Song, SongChartHydration,
 };
+use session::services::setlist_service::{SetlistServiceStreamClient, SetlistServiceStreamSource};
+use session::{SessionServiceError, SetlistServiceClient};
 use tokio::sync::RwLock;
 
 /// Every generated client method returns `Result<T, vox::VoxError<E>>` —

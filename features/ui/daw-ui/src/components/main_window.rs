@@ -15,6 +15,7 @@
 
 use std::collections::HashMap;
 
+use crate::art::geometry::tcp::{ROW_H, ROW_W};
 use crate::components::arrangement_view::{
     ArrangePreview, ArrangeRowKind, EnvelopeLaneView, EnvelopePreview, ItemPreview, plan_rows,
 };
@@ -27,7 +28,6 @@ use crate::panels::native::NativeTransportBar;
 use crate::prelude::*;
 use daw_proto::Fx;
 use daw_proto::{Item, Track};
-use crate::art::geometry::tcp::{ROW_H, ROW_W};
 
 /// The arrange ruler's height — stated here as well as in the arrange
 /// view because the TCP's spacer must be exactly it.

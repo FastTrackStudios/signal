@@ -25,8 +25,8 @@
 
 use std::collections::HashMap;
 
-use daw_proto::FolderDepthChange;
 use crate::proto::{TemplateBus, TemplateNode};
+use daw_proto::FolderDepthChange;
 
 use crate::buses::bus_nodes;
 

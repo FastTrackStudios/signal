@@ -4,17 +4,17 @@
 
 mod bare_toggle;
 mod buttons;
-mod key_column;
-pub(crate) mod parts;
-mod levers;
-mod studio;
-mod piano;
-mod switches;
-mod stomp;
 mod eq_slider;
-mod stomp_flat;
+mod key_column;
 mod lamp_rocker;
+mod levers;
+pub(crate) mod parts;
+mod piano;
+mod stomp;
 mod stomp_box;
+mod stomp_flat;
+mod studio;
+mod switches;
 
 use crate::registry::ComponentDef;
 

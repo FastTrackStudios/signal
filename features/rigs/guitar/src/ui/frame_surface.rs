@@ -75,7 +75,14 @@ pub fn FrameSurface(
         // Keyed by the face: another face (a lane switched to another
         // algorithm) is a new surface, opened on it, not the old one kept.
         // A one-item list, so the key is honoured wherever this sits.
-        let key = format!("{name}|{}", variants.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(","));
+        let key = format!(
+            "{name}|{}",
+            variants
+                .iter()
+                .map(|(n, _)| n.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
         rsx! {
             for k in [key] {
                 NativeFace { key: "{k}", name: name.clone(), values: values.clone(), on_edit, stretch, variants: variants.clone(), responsive, texts: texts.clone(), streams: streams.clone() }
@@ -84,15 +91,28 @@ pub fn FrameSurface(
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (name, values, on_edit, stretch, variants, responsive, texts, streams);
+        let _ = (
+            name, values, on_edit, stretch, variants, responsive, texts, streams,
+        );
         rsx! { div { style: "width: 100%; height: 100%;" } }
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[component]
-fn NativeFace(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>, streams: Vec<(String, Vec<f64>)>) -> Element {
-    native::mount(name, values, on_edit, stretch, variants, responsive, texts, streams)
+fn NativeFace(
+    name: String,
+    values: Vec<(String, f64)>,
+    on_edit: Option<EventHandler<(String, f64)>>,
+    stretch: bool,
+    variants: Vec<(String, f64)>,
+    responsive: bool,
+    texts: Vec<(String, String)>,
+    streams: Vec<(String, Vec<f64>)>,
+) -> Element {
+    native::mount(
+        name, values, on_edit, stretch, variants, responsive, texts, streams,
+    )
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -144,7 +164,11 @@ mod native {
                 .all
                 .iter()
                 .enumerate()
-                .min_by(|(_, (a, _)), (_, (b, _))| (a.ln() - want.ln()).abs().total_cmp(&(b.ln() - want.ln()).abs()))
+                .min_by(|(_, (a, _)), (_, (b, _))| {
+                    (a.ln() - want.ln())
+                        .abs()
+                        .total_cmp(&(b.ln() - want.ln()).abs())
+                })
                 .map_or(0, |(i, _)| i);
             let changed = best != self.active;
             self.active = best;
@@ -154,8 +178,14 @@ mod native {
 
     fn open_face(name: &str, stretch: bool, responsive: bool) -> Result<LiveSurface, String> {
         let path = super::design_dir().join(name);
-        let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
-        let stem = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let dir = path
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_default();
+        let stem = path
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let (markup, catalog) = frame_live::face_paths(&dir, &stem);
         LiveSurface::open(&markup, catalog)
             .map(|mut l| {
@@ -175,17 +205,32 @@ mod native {
     /// The UI's frame rate: `FTS_MAX_FPS`, as the window paces its own
     /// redraws (30 unless set; 0 = unpaced).
     fn max_fps() -> u32 {
-        std::env::var("FTS_MAX_FPS").ok().and_then(|v| v.parse().ok()).unwrap_or(30)
+        std::env::var("FTS_MAX_FPS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30)
     }
 
     /// How often the design's files are checked for a new version.
     const RELOAD_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn mount(name: String, values: Vec<(String, f64)>, on_edit: Option<EventHandler<(String, f64)>>, stretch: bool, variants: Vec<(String, f64)>, responsive: bool, texts: Vec<(String, String)>, streams: Vec<(String, Vec<f64>)>) -> Element {
+    pub(super) fn mount(
+        name: String,
+        values: Vec<(String, f64)>,
+        on_edit: Option<EventHandler<(String, f64)>>,
+        stretch: bool,
+        variants: Vec<(String, f64)>,
+        responsive: bool,
+        texts: Vec<(String, String)>,
+        streams: Vec<(String, Vec<f64>)>,
+    ) -> Element {
         let live: Shared = use_hook(|| {
             let opened = if variants.is_empty() {
-                open_face(&name, stretch, responsive).map(|l| Surfaces { all: vec![(1.0, l)], active: 0 })
+                open_face(&name, stretch, responsive).map(|l| Surfaces {
+                    all: vec![(1.0, l)],
+                    active: 0,
+                })
             } else {
                 variants
                     .iter()
@@ -265,7 +310,16 @@ mod native {
                 l.set_animate(moving);
             }
         }
-        let attr = use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(FrameWidget { live: Rc::clone(&live), edits: Rc::clone(&edits), update: update.clone(), target: None, fingers: Vec::new(), pinch: None }));
+        let attr = use_hook(|| {
+            dioxus_native_dom::CustomWidgetAttr::new(FrameWidget {
+                live: Rc::clone(&live),
+                edits: Rc::clone(&edits),
+                update: update.clone(),
+                target: None,
+                fingers: Vec::new(),
+                pinch: None,
+            })
+        });
         // The edits go out from a task, not from inside a render.
         let heard: Vec<(String, f64)> = std::mem::take(&mut *edits.borrow_mut());
         if let Some(handler) = on_edit
@@ -319,7 +373,10 @@ mod native {
     /// vectors into the page instead (`paint_vectors`).
     fn device_and_queue(ctx: Box<dyn std::any::Any>) -> Option<(wgpu::Device, wgpu::Queue)> {
         let vello_can = |adapter: &wgpu::Adapter| {
-            adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::INDIRECT_EXECUTION)
+            adapter
+                .get_downlevel_capabilities()
+                .flags
+                .contains(wgpu::DownlevelFlags::INDIRECT_EXECUTION)
         };
         let ctx = match ctx.downcast::<wgpu_context::DeviceHandle>() {
             Ok(h) => return vello_can(&h.adapter).then(|| (h.device.clone(), h.queue.clone())),
@@ -333,7 +390,11 @@ mod native {
 
     /// Shift = fine, Ctrl/Cmd = alternate (reset-on-click), as frame's player.
     fn mods(m: blitz_traits::events::Modifiers) -> frame_live::Modifiers {
-        frame_live::Modifiers { fine: m.shift(), alt: m.ctrl() || m.meta(), option: m.alt() }
+        frame_live::Modifiers {
+            fine: m.shift(),
+            alt: m.ctrl() || m.meta(),
+            option: m.alt(),
+        }
     }
 
     fn hand_on(edits: &Edits, live: &mut LiveSurface, update: &(dyn Fn() + Send + Sync)) {
@@ -352,7 +413,10 @@ mod native {
         fn can_create_surfaces(&mut self, render_ctx: &mut dyn RenderContext) {
             // No device Vello can render on: the face paints its vectors
             // into the page (see `paint`).
-            let Some((device, queue)) = render_ctx.renderer_specific_context().and_then(device_and_queue) else {
+            let Some((device, queue)) = render_ctx
+                .renderer_specific_context()
+                .and_then(device_and_queue)
+            else {
                 tracing::info!(target: "frame", "no device for Vello: frame surface paints vectors");
                 return;
             };
@@ -443,7 +507,12 @@ mod native {
                         BlitzWheelDelta::Lines(_, y) => -y,
                         BlitzWheelDelta::Pixels(_, y) => -y / PX_PER_NOTCH,
                     };
-                    live.wheel(f64::from(e.element.x), f64::from(e.element.y), notches, mods(e.mods));
+                    live.wheel(
+                        f64::from(e.element.x),
+                        f64::from(e.element.y),
+                        notches,
+                        mods(e.mods),
+                    );
                 }
                 _ => {}
             }
@@ -459,16 +528,27 @@ mod native {
         /// Something new to draw or still moving: Blitz draws a frame for
         /// it, and keeps drawing (paced) while it moves.
         fn needs_redraw(&self) -> bool {
-            self.live.try_borrow().is_ok_and(|s| s.as_ref().is_ok_and(|s| s.active().is_moving()))
+            self.live
+                .try_borrow()
+                .is_ok_and(|s| s.as_ref().is_ok_and(|s| s.active().is_moving()))
         }
 
-        fn paint(&mut self, render_ctx: &mut dyn RenderContext, _styles: &ComputedStyles, width: u32, height: u32, scale: f64) -> Scene {
+        fn paint(
+            &mut self,
+            render_ctx: &mut dyn RenderContext,
+            _styles: &ComputedStyles,
+            width: u32,
+            height: u32,
+            scale: f64,
+        ) -> Scene {
             let mut scene = Scene::new();
             if width < 2 || height < 2 {
                 return scene;
             }
             let mut guard = self.live.borrow_mut();
-            let Ok(surfaces) = guard.as_mut() else { return scene };
+            let Ok(surfaces) = guard.as_mut() else {
+                return scene;
+            };
             // The variant that fits this box (a face laid out for it).
             surfaces.pick(width, height);
             let active = surfaces.active;
@@ -482,7 +562,9 @@ mod native {
             {
                 tracing::warn!(target: "frame", error = %e, "frame reload failed; keeping the last good design");
             }
-            let stale = self.target.is_none_or(|(_, size, index)| size != (width, height) || index != active);
+            let stale = self
+                .target
+                .is_none_or(|(_, size, index)| size != (width, height) || index != active);
             if stale {
                 tracing::debug!(target: "frame", width, height, scale, "frame surface size");
             }
@@ -495,7 +577,9 @@ mod native {
                             }
                             match render_ctx.try_register_custom_resource(Box::new(texture)) {
                                 Ok(id) => self.target = Some((id, (width, height), active)),
-                                Err(e) => tracing::warn!(target: "frame", error = ?e, "Blitz would not take the frame texture"),
+                                Err(e) => {
+                                    tracing::warn!(target: "frame", error = ?e, "Blitz would not take the frame texture")
+                                }
                             }
                         }
                     }
@@ -515,7 +599,10 @@ mod native {
                 scene.fill(
                     Fill::NonZero,
                     Affine::IDENTITY,
-                    anyrender::Paint::Resource(ImageBrush { image: id, sampler: ImageSampler::default() }),
+                    anyrender::Paint::Resource(ImageBrush {
+                        image: id,
+                        sampler: ImageSampler::default(),
+                    }),
                     None,
                     &Rect::new(0.0, 0.0, f64::from(width), f64::from(height)),
                 );
@@ -532,8 +619,7 @@ mod native {
 /// long as it was up, and the phone's main thread had no turn for taps.
 fn same_values(a: &[(String, f64)], b: &[(String, f64)]) -> bool {
     a.len() == b.len()
-        && a.iter().zip(b).all(|((na, va), (nb, vb))| {
-            na == nb && (va == vb || (va.is_nan() && vb.is_nan()))
-        })
+        && a.iter()
+            .zip(b)
+            .all(|((na, va), (nb, vb))| na == nb && (va == vb || (va.is_nan() && vb.is_nan())))
 }
-

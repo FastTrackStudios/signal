@@ -3,11 +3,11 @@
 //! commands in `playback.rs`.
 
 use super::SetlistServiceImpl;
+use crate::proto::SessionServiceError;
 use daw::service::ProjectContext;
 use daw::service::Tracks;
 use daw::service::transport::service::Transport;
 use daw::service::{ExtState, Projects};
-use crate::proto::SessionServiceError;
 use tracing::{debug, warn};
 
 impl<D> SetlistServiceImpl<D>

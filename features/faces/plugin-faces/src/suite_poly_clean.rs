@@ -38,7 +38,7 @@ pub fn faces() -> Vec<Face> {
         pedals::reverb(),
         voices::face(),
     ]
-        .into_iter()
-        .map(crate::reverb::ui::formatted)
-        .collect()
+    .into_iter()
+    .map(crate::reverb::ui::formatted)
+    .collect()
 }

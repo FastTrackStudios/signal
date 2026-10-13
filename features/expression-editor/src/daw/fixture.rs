@@ -35,9 +35,9 @@
 //! pressure in a controller lane. That is a property of the write path,
 //! not of this fixture.
 
-use daw::service::midi::{MidiCC, MidiChannelPressure, MidiNote, MidiPitchBend, MidiTakeSnapshot};
 use crate::doc::ExpressionDoc;
 use crate::tuning;
+use daw::service::midi::{MidiCC, MidiChannelPressure, MidiNote, MidiPitchBend, MidiTakeSnapshot};
 
 /// Ticks per quarter note the fixture is authored at.
 pub const PPQ: f64 = 960.0;

@@ -5,7 +5,7 @@
 //! 2. parse_raw preserves the block tree structure
 //! 3. In-place modifications (track names, sample rate) survive round-trip
 
-const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
+const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/protools");
 
 fn fixture_path(name: &str) -> String {
     format!("{FIXTURES}/{name}")
@@ -401,7 +401,7 @@ fn set_track_mix_state_round_trip_user_session() {
 fn track_color_round_trip_color_testing_fixture() {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/color-testing.ptx"
+        "/tests/fixtures/protools/color-testing.ptx"
     );
     let original = std::fs::read(path).expect("color-testing.ptx fixture");
 
@@ -430,7 +430,8 @@ fn track_color_round_trip_color_testing_fixture() {
     assert_eq!(c_after, 0x10, "color survived round-trip");
 
     // Other tracks unaffected.
-    let c_last_after = formats::protools::get_track_color(&raw2, "23x2.dup1 1").expect("last after");
+    let c_last_after =
+        formats::protools::get_track_color(&raw2, "23x2.dup1 1").expect("last after");
     assert_eq!(c_last_after, 0x48, "last track unchanged");
 }
 

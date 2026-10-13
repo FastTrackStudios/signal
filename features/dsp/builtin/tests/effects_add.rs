@@ -7,11 +7,11 @@
 
 use std::sync::Arc;
 
+use builtin::NativeFxFactory;
 use daw::service::fx::{Effects, FxChainContext, FxRef, FxTarget};
 use daw::service::track::Tracks;
 use daw::service::{ProjectContext, ProjectInfo};
 use daw::standalone::sync::Standalone;
-use builtin::NativeFxFactory;
 
 fn seeded() -> (Standalone, ProjectContext, String) {
     let daw = Standalone::new();

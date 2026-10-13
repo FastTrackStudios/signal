@@ -13,9 +13,9 @@ use dioxus::prelude::*;
 use dioxus_test::keyboard_types::{Key, Modifiers};
 use dioxus_test::{by_testid, render};
 use expression_editor::kit::LaneRole;
-use expression_editor::{Editor, ExpressionDoc, Mode, Note, NoteId, TimeBase, Viewport};
 use expression_editor::ui::stack::HitGesture;
 use expression_editor::ui::{canvas, stack};
+use expression_editor::{Editor, ExpressionDoc, Mode, Note, NoteId, TimeBase, Viewport};
 
 const VP_W: f64 = 1000.0;
 const VP_H: f64 = 400.0;

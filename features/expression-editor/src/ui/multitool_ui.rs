@@ -8,10 +8,10 @@
 //! and the readout says what is happening. Without that feedback the
 //! zones are just a colourful rectangle.
 
-use dioxus::prelude::*;
 use crate::Point;
 use crate::multitool::{self, Bend, Capture, Drag as MtDrag, Pt, Steepness, Zone};
 use crate::{Dimension, Editor, NoteId};
+use dioxus::prelude::*;
 
 use crate::ui::theme;
 

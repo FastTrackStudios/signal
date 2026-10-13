@@ -55,11 +55,17 @@ impl Schema {
     /// The slot `name` is read from.
     #[must_use]
     pub fn slot(&self, name: &str) -> Option<u32> {
-        self.fields.iter().position(|(n, _)| n == name).and_then(|i| u32::try_from(i).ok())
+        self.fields
+            .iter()
+            .position(|(n, _)| n == name)
+            .and_then(|i| u32::try_from(i).ok())
     }
 
     pub(crate) fn kind(&self, slot: u32) -> Option<Kind> {
-        usize::try_from(slot).ok().and_then(|i| self.fields.get(i)).map(|(_, k)| *k)
+        usize::try_from(slot)
+            .ok()
+            .and_then(|i| self.fields.get(i))
+            .map(|(_, k)| *k)
     }
 
     #[must_use]
@@ -74,7 +80,9 @@ impl Schema {
 
     /// The layout fields' slots.
     pub(crate) fn layout_slots(&self) -> impl Iterator<Item = u32> + '_ {
-        (0..self.fields.len()).filter_map(|i| u32::try_from(i).ok()).filter(|s| self.is_layout(*s))
+        (0..self.fields.len())
+            .filter_map(|i| u32::try_from(i).ok())
+            .filter(|s| self.is_layout(*s))
     }
 
     /// Field names, in slot order.

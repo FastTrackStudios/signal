@@ -3,10 +3,10 @@
 //! [`crate::paint::cursor`] — a host that owns its window
 //! rasterizes the same drawing into a real cursor.
 
-use anyrender::Scene;
-use dioxus::prelude::*;
 use crate::Editor;
 use crate::tools::Mods;
+use anyrender::Scene;
+use dioxus::prelude::*;
 
 pub use crate::paint::cursor::{SIZE, cursor_at, draw, hotspot};
 
@@ -42,7 +42,9 @@ pub fn CursorLayer(
     // the crash regardless of which surface was showing.
     #[cfg(not(feature = "ui-webview"))]
     let widget = use_hook(|| {
-        dioxus_native_dom::CustomWidgetAttr::new(crate::ui::roll_widget::SceneWidget::new(slot.clone()))
+        dioxus_native_dom::CustomWidgetAttr::new(crate::ui::roll_widget::SceneWidget::new(
+            slot.clone(),
+        ))
     });
     #[cfg(feature = "ui-webview")]
     let widget = "";

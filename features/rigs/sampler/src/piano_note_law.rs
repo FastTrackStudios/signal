@@ -65,14 +65,35 @@ impl NoteOnLaw {
     pub fn of(piano: NiPiano, snapshot: Snapshot) -> &'static Self {
         static LAWS: [OnceLock<NoteOnLaw>; 8] = [const { OnceLock::new() }; 8];
         let (i, tsv) = match (piano, snapshot) {
-            (NiPiano::Grandeur, Snapshot::Factory) => (0, include_str!("../data/piano_release/grandeur_attack.tsv")),
-            (NiPiano::Gentleman, Snapshot::Factory) => (1, include_str!("../data/piano_release/gentleman_attack.tsv")),
-            (NiPiano::Maverick, Snapshot::Factory) => (2, include_str!("../data/piano_release/maverick_attack.tsv")),
-            (NiPiano::Giant, Snapshot::Factory) => (3, include_str!("../data/piano_release/giant_attack.tsv")),
-            (NiPiano::Grandeur, Snapshot::Worship) => (4, include_str!("../data/piano_release/grandeur_attack.worship.tsv")),
-            (NiPiano::Gentleman, Snapshot::Worship) => (5, include_str!("../data/piano_release/gentleman_attack.worship.tsv")),
-            (NiPiano::Maverick, Snapshot::Worship) => (6, include_str!("../data/piano_release/maverick_attack.worship.tsv")),
-            (NiPiano::Giant, Snapshot::Worship) => (7, include_str!("../data/piano_release/giant_attack.worship.tsv")),
+            (NiPiano::Grandeur, Snapshot::Factory) => {
+                (0, include_str!("../data/piano_release/grandeur_attack.tsv"))
+            }
+            (NiPiano::Gentleman, Snapshot::Factory) => (
+                1,
+                include_str!("../data/piano_release/gentleman_attack.tsv"),
+            ),
+            (NiPiano::Maverick, Snapshot::Factory) => {
+                (2, include_str!("../data/piano_release/maverick_attack.tsv"))
+            }
+            (NiPiano::Giant, Snapshot::Factory) => {
+                (3, include_str!("../data/piano_release/giant_attack.tsv"))
+            }
+            (NiPiano::Grandeur, Snapshot::Worship) => (
+                4,
+                include_str!("../data/piano_release/grandeur_attack.worship.tsv"),
+            ),
+            (NiPiano::Gentleman, Snapshot::Worship) => (
+                5,
+                include_str!("../data/piano_release/gentleman_attack.worship.tsv"),
+            ),
+            (NiPiano::Maverick, Snapshot::Worship) => (
+                6,
+                include_str!("../data/piano_release/maverick_attack.worship.tsv"),
+            ),
+            (NiPiano::Giant, Snapshot::Worship) => (
+                7,
+                include_str!("../data/piano_release/giant_attack.worship.tsv"),
+            ),
         };
         LAWS[i].get_or_init(|| Self::parse(tsv))
     }
@@ -119,7 +140,12 @@ mod tests {
 
     #[test]
     fn every_piano_has_a_law() {
-        for p in [NiPiano::Grandeur, NiPiano::Gentleman, NiPiano::Maverick, NiPiano::Giant] {
+        for p in [
+            NiPiano::Grandeur,
+            NiPiano::Gentleman,
+            NiPiano::Maverick,
+            NiPiano::Giant,
+        ] {
             for s in [Snapshot::Factory, Snapshot::Worship] {
                 let law = NoteOnLaw::of(p, s);
                 assert!((1..=127).any(|v| law.gain_db(60, v) != 0.0), "{p:?} {s:?}");
@@ -132,6 +158,11 @@ mod tests {
         // The gig's Color +14 moves every strike further up the layers.
         let law = NoteOnLaw::of(NiPiano::Grandeur, Snapshot::Worship);
         assert_eq!(law.play(60, 40).0, 70);
-        assert_eq!(NoteOnLaw::of(NiPiano::Grandeur, Snapshot::Factory).play(60, 40).0, 56);
+        assert_eq!(
+            NoteOnLaw::of(NiPiano::Grandeur, Snapshot::Factory)
+                .play(60, 40)
+                .0,
+            56
+        );
     }
 }

@@ -28,8 +28,13 @@
 //! `color=#hex` sets the lane colour (processor's defaults otherwise),
 //! `h=` the height.
 
-use document_proto::{Node, NodeId, NodeKind, Paint, ShaderFx, ShaderInput, Size, Stroke, StrokeAlign, StrokeCap, StrokeJoin};
-use surface_proto::{Axis, Binding, Control, ControlKind, CurveInput, HandleAxis, PlotRange, PlotStyle, SlotRole};
+use document_proto::{
+    Node, NodeId, NodeKind, Paint, ShaderFx, ShaderInput, Size, Stroke, StrokeAlign, StrokeCap,
+    StrokeJoin,
+};
+use surface_proto::{
+    Axis, Binding, Control, ControlKind, CurveInput, HandleAxis, PlotRange, PlotStyle, SlotRole,
+};
 use surface_widgets::Builder;
 
 use super::{ns, opt_f};
@@ -37,7 +42,13 @@ use crate::draw;
 use crate::registry::{ComponentDef, Family, Place};
 
 /// The lit components' ids.
-pub const IDS: [&str; 5] = ["viz.comp_scope", "viz.delay_taps", "viz.reverb_space", "viz.mod_lfo", "viz.eq_glow"];
+pub const IDS: [&str; 5] = [
+    "viz.comp_scope",
+    "viz.delay_taps",
+    "viz.reverb_space",
+    "viz.mod_lfo",
+    "viz.eq_glow",
+];
 
 /// processor's rack ground, under every lane (`#080808`).
 pub const RACK: &str = "#080808";
@@ -58,12 +69,20 @@ pub const MOD_COLOR: [u8; 3] = [34, 211, 238];
 // ── colour ───────────────────────────────────────────────────────────────
 
 fn rgba([r, g, b]: [u8; 3], a: f64) -> String {
-    format!("#{r:02x}{g:02x}{b:02x}{:02x}", (a.clamp(0.0, 1.0) * 255.0).round() as u8)
+    format!(
+        "#{r:02x}{g:02x}{b:02x}{:02x}",
+        (a.clamp(0.0, 1.0) * 255.0).round() as u8
+    )
 }
 
 /// `#rrggbb` → bytes (`fallback` when it doesn't parse).
 fn parse_rgb(s: Option<&str>, fallback: [u8; 3]) -> [u8; 3] {
-    let Some(h) = s.map(|s| s.trim_start_matches('#')).filter(|h| h.len() >= 6) else { return fallback };
+    let Some(h) = s
+        .map(|s| s.trim_start_matches('#'))
+        .filter(|h| h.len() >= 6)
+    else {
+        return fallback;
+    };
     let byte = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
     match (byte(0), byte(2), byte(4)) {
         (Some(r), Some(g), Some(b)) => [r, g, b],
@@ -80,7 +99,10 @@ fn palette(c: [u8; 3], lift: f64) -> ([u8; 3], [u8; 3]) {
 
 /// The shader's `tint_r/g/b` params.
 fn tint_params(c: [u8; 3]) -> std::collections::BTreeMap<String, f64> {
-    [("tint_r", c[0]), ("tint_g", c[1]), ("tint_b", c[2])].into_iter().map(|(k, v)| (k.to_string(), f64::from(v) / 255.0)).collect()
+    [("tint_r", c[0]), ("tint_g", c[1]), ("tint_b", c[2])]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), f64::from(v) / 255.0))
+        .collect()
 }
 
 // ── parts ────────────────────────────────────────────────────────────────
@@ -95,9 +117,21 @@ fn root(b: &mut Builder<'_>, parent: NodeId, name: &str, w: f64, h: f64, ground:
 
 /// The light: a `w × h` frame running `shader` over the vector fallback its
 /// children draw.
-fn light(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64, shader: &str, params: std::collections::BTreeMap<String, f64>, inputs: Vec<ShaderInput>) -> NodeId {
+fn light(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    w: f64,
+    h: f64,
+    shader: &str,
+    params: std::collections::BTreeMap<String, f64>,
+    inputs: Vec<ShaderInput>,
+) -> NodeId {
     let mut n = draw::frame("light", 0.0, 0.0, w, h);
-    n.shader = Some(ShaderFx { shader: shader.into(), params, inputs });
+    n.shader = Some(ShaderFx {
+        shader: shader.into(),
+        params,
+        inputs,
+    });
     b.add(parent, n)
 }
 
@@ -105,7 +139,11 @@ fn light(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64, shader: &str, para
 #[derive(Clone)]
 enum Ink {
     /// A stroked line.
-    Line { color: String, weight: f64, dash: bool },
+    Line {
+        color: String,
+        weight: f64,
+        dash: bool,
+    },
     /// The region between the curve and `baseline` (unit `y`).
     Fill { paint: Paint, baseline: f64 },
     /// A filled dot of radius `r` per point.
@@ -115,12 +153,28 @@ enum Ink {
 /// A `w × h` frame drawing one series of a curve provider (unit axes) in
 /// `ink`, registered as its `Curve` control.
 #[allow(clippy::too_many_arguments)]
-fn curve(b: &mut Builder<'_>, parent: NodeId, (w, h): (f64, f64), name: &str, provider: &str, inputs: &[CurveInput], series: &str, ink: Ink) -> NodeId {
+fn curve(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    (w, h): (f64, f64),
+    name: &str,
+    provider: &str,
+    inputs: &[CurveInput],
+    series: &str,
+    ink: Ink,
+) -> NodeId {
     let frame = b.add(parent, draw::frame(name, 0.0, 0.0, w, h));
     let mut n = Node::new(NodeKind::Vector, "line");
-    n.size = Size { width: w, height: h };
+    n.size = Size {
+        width: w,
+        height: h,
+    };
     let (style, role) = match &ink {
-        Ink::Line { color, weight, dash } => {
+        Ink::Line {
+            color,
+            weight,
+            dash,
+        } => {
             n.stroke = Stroke {
                 paints: vec![draw::solid(color)],
                 weight: *weight,
@@ -135,13 +189,23 @@ fn curve(b: &mut Builder<'_>, parent: NodeId, (w, h): (f64, f64), name: &str, pr
         Ink::Fill { paint, baseline } => {
             n.name = "fill".into();
             n.fills = vec![paint.clone()];
-            (PlotStyle::Area { baseline: *baseline }, SlotRole::Area)
+            (
+                PlotStyle::Area {
+                    baseline: *baseline,
+                },
+                SlotRole::Area,
+            )
         }
         Ink::Dots { color, r } => {
             n.name = "dots".into();
             n.fills = vec![draw::solid(color)];
             // A dot's radius is the stroke weight × 1.2 (unpainted).
-            n.stroke = Stroke { paints: Vec::new(), weight: r / 1.2, align: StrokeAlign::Center, ..Stroke::default() };
+            n.stroke = Stroke {
+                paints: Vec::new(),
+                weight: r / 1.2,
+                align: StrokeAlign::Center,
+                ..Stroke::default()
+            };
             (PlotStyle::Dots, SlotRole::Trace)
         }
     };
@@ -154,24 +218,66 @@ fn curve(b: &mut Builder<'_>, parent: NodeId, (w, h): (f64, f64), name: &str, pr
         x: Axis::Linear { min: 0.0, max: 1.0 },
         y: PlotRange::linear(0.0, 1.0),
     };
-    b.controls.insert(frame, Control::new(kind).slot(role, slot.0));
+    b.controls
+        .insert(frame, Control::new(kind).slot(role, slot.0));
     frame
 }
 
 /// A rule `x0,y0 → x1,y1` (node space) of `weight` in `color`.
-fn rule(b: &mut Builder<'_>, parent: NodeId, (w, h): (f64, f64), name: &str, d: String, color: &str, weight: f64) -> NodeId {
+fn rule(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    (w, h): (f64, f64),
+    name: &str,
+    d: String,
+    color: &str,
+    weight: f64,
+) -> NodeId {
     let mut n = draw::path(name, 0.0, 0.0, w, h, d, draw::solid("#00000000"));
     n.fills.clear();
-    n.stroke = Stroke { paints: vec![draw::solid(color)], weight, align: StrokeAlign::Center, ..Stroke::default() };
+    n.stroke = Stroke {
+        paints: vec![draw::solid(color)],
+        weight,
+        align: StrokeAlign::Center,
+        ..Stroke::default()
+    };
     b.add(parent, n)
 }
 
 /// processor's `lane::beats`: a line per beat, the bar lines brighter, from
 /// `provider`'s `beats` / `bars` series. (The lit shaders rule their own.)
-fn beat_grid(b: &mut Builder<'_>, parent: NodeId, size: (f64, f64), provider: &str, inputs: &[CurveInput]) {
-    let ink = |a: f64, weight: f64| Ink::Line { color: rgba([148, 163, 184], a), weight, dash: false };
-    curve(b, parent, size, "beats", provider, inputs, "beats", ink(0.22, 1.0));
-    curve(b, parent, size, "bars", provider, inputs, "bars", ink(0.46, 1.5));
+fn beat_grid(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    size: (f64, f64),
+    provider: &str,
+    inputs: &[CurveInput],
+) {
+    let ink = |a: f64, weight: f64| Ink::Line {
+        color: rgba([148, 163, 184], a),
+        weight,
+        dash: false,
+    };
+    curve(
+        b,
+        parent,
+        size,
+        "beats",
+        provider,
+        inputs,
+        "beats",
+        ink(0.22, 1.0),
+    );
+    curve(
+        b,
+        parent,
+        size,
+        "bars",
+        provider,
+        inputs,
+        "bars",
+        ink(0.46, 1.5),
+    );
 }
 
 fn param_input(ns: &str, name: &str, key: &str) -> CurveInput {
@@ -202,8 +308,12 @@ fn comp_scope(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
         ShaderInput::stream("in_db", feed("in")),
         // Gain reduction arrives ≤ 0 dB; the shader reads it positive.
         ShaderInput::stream("gr_db", feed("gr")).map(0.0, -1.0),
-        ShaderInput::stream("input", feed("in_history")).map(-range, 0.0).len(TRACE_LEN),
-        ShaderInput::stream("gr", feed("gr_history")).map(0.0, -range).len(TRACE_LEN),
+        ShaderInput::stream("input", feed("in_history"))
+            .map(-range, 0.0)
+            .len(TRACE_LEN),
+        ShaderInput::stream("gr", feed("gr_history"))
+            .map(0.0, -range)
+            .len(TRACE_LEN),
     ];
     if let Some(m) = inputs[4].map.as_mut() {
         m.unclamped = true;
@@ -222,16 +332,29 @@ fn comp_scope(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let plot = |b: &mut Builder<'_>, name: &str, stream: String, baseline: f64, fill: String| {
         let frame = b.add(light, draw::frame(name, 0.0, 0.0, w, h));
         let mut n = Node::new(NodeKind::Vector, "fill");
-        n.size = Size { width: w, height: h };
+        n.size = Size {
+            width: w,
+            height: h,
+        };
         n.fills = vec![draw::solid(&fill)];
         let slot = b.add(frame, n);
-        let c = Control::new(ControlKind::Plot { style: PlotStyle::Area { baseline }, x: Axis::Time { len }, y: db.clone() })
-            .bound(Binding::stream(stream))
-            .slot(SlotRole::Area, slot.0);
+        let c = Control::new(ControlKind::Plot {
+            style: PlotStyle::Area { baseline },
+            x: Axis::Time { len },
+            y: db.clone(),
+        })
+        .bound(Binding::stream(stream))
+        .slot(SlotRole::Area, slot.0);
         b.controls.insert(frame, c);
     };
     plot(b, "input", feed("in_history"), -range, rgba(signal, 0.22));
-    plot(b, "gain reduction", feed("gr_history"), 0.0, rgba([239, 68, 68], 0.30));
+    plot(
+        b,
+        "gain reduction",
+        feed("gr_history"),
+        0.0,
+        rgba([239, 68, 68], 0.30),
+    );
 
     let transfer = vec![
         CurveInput::param("threshold", addr("threshold")),
@@ -242,25 +365,66 @@ fn comp_scope(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     ];
     let frame = b.add(light, draw::frame("transfer", 0.0, 0.0, w, h));
     let mut line = Node::new(NodeKind::Vector, "line");
-    line.size = Size { width: w, height: h };
-    line.stroke = Stroke { paints: vec![draw::solid(&rgba(accent, 0.9))], weight: 1.5, join: StrokeJoin::Round, align: StrokeAlign::Center, ..Stroke::default() };
+    line.size = Size {
+        width: w,
+        height: h,
+    };
+    line.stroke = Stroke {
+        paints: vec![draw::solid(&rgba(accent, 0.9))],
+        weight: 1.5,
+        join: StrokeJoin::Round,
+        align: StrokeAlign::Center,
+        ..Stroke::default()
+    };
     let line = b.add(frame, line);
-    let ball = b.add(frame, draw::frame("ball", w / 2.0 - 3.0, h / 2.0 - 3.0, 6.0, 6.0));
-    b.add(ball, draw::circle("dot", 3.0, 3.0, 3.0, draw::solid(&rgba(accent, 0.95))));
-    let axis = Axis::Linear { min: -range, max: 0.0 };
-    let kind = ControlKind::Curve { provider: "comp.transfer".into(), inputs: transfer, series: Some("transfer".into()), style: PlotStyle::Line, x: axis, y: db };
-    b.controls.insert(frame, Control::new(kind).slot(SlotRole::Trace, line.0).slot(SlotRole::Marker, ball.0));
+    let ball = b.add(
+        frame,
+        draw::frame("ball", w / 2.0 - 3.0, h / 2.0 - 3.0, 6.0, 6.0),
+    );
+    b.add(
+        ball,
+        draw::circle("dot", 3.0, 3.0, 3.0, draw::solid(&rgba(accent, 0.95))),
+    );
+    let axis = Axis::Linear {
+        min: -range,
+        max: 0.0,
+    };
+    let kind = ControlKind::Curve {
+        provider: "comp.transfer".into(),
+        inputs: transfer,
+        series: Some("transfer".into()),
+        style: PlotStyle::Line,
+        x: axis,
+        y: db,
+    };
+    b.controls.insert(
+        frame,
+        Control::new(kind)
+            .slot(SlotRole::Trace, line.0)
+            .slot(SlotRole::Marker, ball.0),
+    );
 
     // The threshold: geometry in both paths, and what you drag.
     let touch = 44.0;
     let handle = b.add(root, draw::frame("threshold", 0.0, 0.0, w, touch));
-    rule(b, handle, (w, touch), "line", format!("M 0 {0:.1} H {w:.1}", touch / 2.0), &rgba(signal, 0.55), 1.0);
+    rule(
+        b,
+        handle,
+        (w, touch),
+        "line",
+        format!("M 0 {0:.1} H {w:.1}", touch / 2.0),
+        &rgba(signal, 0.55),
+        1.0,
+    );
     let kind = ControlKind::Handle {
         x: None,
         y: Some(Binding::param(addr("threshold"))),
         wheel: Some(Binding::param(addr("ratio"))),
         x_map: HandleAxis::new(Axis::Linear { min: 0.0, max: 1.0 }),
-        y_map: HandleAxis::new(Axis::Linear { min: -range, max: 0.0 }),
+        y_map: HandleAxis::new(Axis::Linear {
+            min: -range,
+            max: 0.0,
+        }),
     };
     b.controls.insert(handle, Control::new(kind));
     root
@@ -287,8 +451,15 @@ fn delay_taps(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     .into_iter()
     .chain(has_opt_param(p, "on").then(|| param_input(&ns, "on", "on")))
     .collect();
-    let tap_input = |name: &str, series: &str| ShaderInput::curve(name, "delay.taps", taps.clone(), Some(series));
-    let mut inputs = vec![tap_input("left", "left"), tap_input("right", "right"), tap_input("lane", "lane"), ShaderInput::param("family", format!("{ns}/family"))];
+    let tap_input = |name: &str, series: &str| {
+        ShaderInput::curve(name, "delay.taps", taps.clone(), Some(series))
+    };
+    let mut inputs = vec![
+        tap_input("left", "left"),
+        tap_input("right", "right"),
+        tap_input("lane", "lane"),
+        ShaderInput::param("family", format!("{ns}/family")),
+    ];
     if has_opt_param(p, "on") {
         inputs.push(ShaderInput::param("on", format!("{ns}/on")));
     }
@@ -296,34 +467,132 @@ fn delay_taps(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
 
     // processor's `paint_delay`.
     let mut ground = draw::frame("ground", 0.0, 0.0, w, h);
-    ground.fills = vec![draw::linear(90.0, &[(0.0, &rgba(signal, 0.10)), (1.0, "#00000000")])];
+    ground.fills = vec![draw::linear(
+        90.0,
+        &[(0.0, &rgba(signal, 0.10)), (1.0, "#00000000")],
+    )];
     b.add(light, ground);
     beat_grid(b, light, size, "delay.taps", &taps);
     let mid = h * 0.5;
-    rule(b, light, size, "rule", format!("M 0 {mid:.2} H {w:.2}"), &rgba(signal, 0.22), 1.0);
-    b.add(light, draw::rect("dry", 0.0, mid - h * 0.42, 2.0, h * 0.84, draw::solid(&rgba(signal, 0.9))));
-    let env = draw::linear(90.0, &[(0.0, &rgba(accent, 0.34)), (1.0, &rgba(accent, 0.02))]);
+    rule(
+        b,
+        light,
+        size,
+        "rule",
+        format!("M 0 {mid:.2} H {w:.2}"),
+        &rgba(signal, 0.22),
+        1.0,
+    );
+    b.add(
+        light,
+        draw::rect(
+            "dry",
+            0.0,
+            mid - h * 0.42,
+            2.0,
+            h * 0.84,
+            draw::solid(&rgba(signal, 0.9)),
+        ),
+    );
+    let env = draw::linear(
+        90.0,
+        &[(0.0, &rgba(accent, 0.34)), (1.0, &rgba(accent, 0.02))],
+    );
     for series in ["env_up", "env_down"] {
-        curve(b, light, size, series, "delay.taps", &taps, series, Ink::Fill { paint: env.clone(), baseline: 0.5 });
+        curve(
+            b,
+            light,
+            size,
+            series,
+            "delay.taps",
+            &taps,
+            series,
+            Ink::Fill {
+                paint: env.clone(),
+                baseline: 0.5,
+            },
+        );
     }
     // Three loudness buckets: bar alpha 0.35 + 0.65·s, cap 0.5 + 0.5·s,
     // cap radius 1.5 + 2·s, at each bucket's middle s.
-    curve(b, light, size, "blooms", "delay.taps", &taps, "blooms", Ink::Dots { color: rgba(accent, 0.18), r: 11.0 });
+    curve(
+        b,
+        light,
+        size,
+        "blooms",
+        "delay.taps",
+        &taps,
+        "blooms",
+        Ink::Dots {
+            color: rgba(accent, 0.18),
+            r: 11.0,
+        },
+    );
     for (i, s) in [1.0 / 6.0, 0.5, 5.0 / 6.0].into_iter().enumerate() {
-        let ink = Ink::Line { color: rgba(signal, 0.35 + 0.65 * s), weight: 2.0, dash: false };
-        curve(b, light, size, &format!("stems {i}"), "delay.taps", &taps, &format!("stems_{i}"), ink);
+        let ink = Ink::Line {
+            color: rgba(signal, 0.35 + 0.65 * s),
+            weight: 2.0,
+            dash: false,
+        };
+        curve(
+            b,
+            light,
+            size,
+            &format!("stems {i}"),
+            "delay.taps",
+            &taps,
+            &format!("stems_{i}"),
+            ink,
+        );
     }
     for (i, s) in [1.0 / 6.0, 0.5, 5.0 / 6.0].into_iter().enumerate() {
-        let ink = Ink::Dots { color: rgba(signal, 0.5 + 0.5 * s), r: 1.5 + 2.0 * s };
-        curve(b, light, size, &format!("caps {i}"), "delay.taps", &taps, &format!("caps_{i}"), ink);
+        let ink = Ink::Dots {
+            color: rgba(signal, 0.5 + 0.5 * s),
+            r: 1.5 + 2.0 * s,
+        };
+        curve(
+            b,
+            light,
+            size,
+            &format!("caps {i}"),
+            "delay.taps",
+            &taps,
+            &format!("caps_{i}"),
+            ink,
+        );
     }
     // The sweep: its trail (a gradient, in slices) and its edge.
     for j in 0..6 {
         let a = 0.16 * (j as f64 + 0.5) / 6.0;
-        let ink = Ink::Fill { paint: draw::solid(&rgba(signal, a)), baseline: 0.0 };
-        curve(b, light, size, &format!("trail {j}"), "delay.taps", &taps, &format!("trail_{j}"), ink);
+        let ink = Ink::Fill {
+            paint: draw::solid(&rgba(signal, a)),
+            baseline: 0.0,
+        };
+        curve(
+            b,
+            light,
+            size,
+            &format!("trail {j}"),
+            "delay.taps",
+            &taps,
+            &format!("trail_{j}"),
+            ink,
+        );
     }
-    curve(b, light, size, "sweep", "delay.taps", &taps, "head", Ink::Line { color: rgba(signal, 0.5), weight: 1.0, dash: false });
+    curve(
+        b,
+        light,
+        size,
+        "sweep",
+        "delay.taps",
+        &taps,
+        "head",
+        Ink::Line {
+            color: rgba(signal, 0.5),
+            weight: 1.0,
+            dash: false,
+        },
+    );
     root
 }
 
@@ -342,8 +611,12 @@ fn reverb_space(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
         .map(|k| param_input(&ns, k, k))
         .chain(has_opt_param(p, "on").then(|| param_input(&ns, "on", "on")))
         .collect();
-    let mut inputs: Vec<ShaderInput> =
-        ["decay", "predelay", "density", "damp", "mix", "bpm", "family"].into_iter().map(|k| ShaderInput::param(k, format!("{ns}/{k}"))).collect();
+    let mut inputs: Vec<ShaderInput> = [
+        "decay", "predelay", "density", "damp", "mix", "bpm", "family",
+    ]
+    .into_iter()
+    .map(|k| ShaderInput::param(k, format!("{ns}/{k}")))
+    .collect();
     if has_opt_param(p, "on") {
         inputs.push(ShaderInput::param("on", format!("{ns}/on")));
     }
@@ -351,27 +624,94 @@ fn reverb_space(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
 
     // processor's `paint_reverb`.
     let mut ground = draw::frame("ground", 0.0, 0.0, w, h);
-    ground.fills = vec![draw::linear(180.0, &[(0.0, &rgba(signal, 0.12)), (1.0, "#00000000")])];
+    ground.fills = vec![draw::linear(
+        180.0,
+        &[(0.0, &rgba(signal, 0.12)), (1.0, "#00000000")],
+    )];
     b.add(light, ground);
     beat_grid(b, light, size, "reverb.tail", &tail);
-    let env = draw::linear(0.0, &[(0.0, &rgba(signal, 0.06)), (1.0, &rgba(signal, 0.46))]);
-    curve(b, light, size, "tail", "reverb.tail", &tail, "env", Ink::Fill { paint: env, baseline: 0.0 });
+    let env = draw::linear(
+        0.0,
+        &[(0.0, &rgba(signal, 0.06)), (1.0, &rgba(signal, 0.46))],
+    );
+    curve(
+        b,
+        light,
+        size,
+        "tail",
+        "reverb.tail",
+        &tail,
+        "env",
+        Ink::Fill {
+            paint: env,
+            baseline: 0.0,
+        },
+    );
     for (i, v) in [1.0 / 6.0, 0.5, 5.0 / 6.0].into_iter().enumerate() {
-        let ink = Ink::Line { color: rgba(accent, 0.5 * v), weight: 1.0, dash: false };
-        curve(b, light, size, &format!("reflections {i}"), "reverb.tail", &tail, &format!("refl_{i}"), ink);
+        let ink = Ink::Line {
+            color: rgba(accent, 0.5 * v),
+            weight: 1.0,
+            dash: false,
+        };
+        curve(
+            b,
+            light,
+            size,
+            &format!("reflections {i}"),
+            "reverb.tail",
+            &tail,
+            &format!("refl_{i}"),
+            ink,
+        );
     }
     // The shimmer: its band (a gradient behind the head, in slices) and the
     // head, by brightness (`lit` at each bucket's middle).
     for j in 0..4 {
         let a = 0.26 * 0.5 * (j as f64 + 0.5) / 4.0;
-        let ink = Ink::Fill { paint: draw::solid(&rgba(signal, a)), baseline: 0.0 };
-        curve(b, light, size, &format!("shimmer band {j}"), "reverb.tail", &tail, &format!("band_{j}"), ink);
+        let ink = Ink::Fill {
+            paint: draw::solid(&rgba(signal, a)),
+            baseline: 0.0,
+        };
+        curve(
+            b,
+            light,
+            size,
+            &format!("shimmer band {j}"),
+            "reverb.tail",
+            &tail,
+            &format!("band_{j}"),
+            ink,
+        );
     }
     for (i, lit) in [1.0 / 6.0, 0.5, 5.0 / 6.0].into_iter().enumerate() {
-        let ink = Ink::Dots { color: rgba(accent, 0.55 * lit), r: 2.0 + 5.0 * lit };
-        curve(b, light, size, &format!("shimmer {i}"), "reverb.tail", &tail, &format!("shimmer_{i}"), ink);
+        let ink = Ink::Dots {
+            color: rgba(accent, 0.55 * lit),
+            r: 2.0 + 5.0 * lit,
+        };
+        curve(
+            b,
+            light,
+            size,
+            &format!("shimmer {i}"),
+            "reverb.tail",
+            &tail,
+            &format!("shimmer_{i}"),
+            ink,
+        );
     }
-    curve(b, light, size, "pre-delay", "reverb.tail", &tail, "pre", Ink::Fill { paint: draw::solid(&rgba(signal, 0.07)), baseline: 0.0 });
+    curve(
+        b,
+        light,
+        size,
+        "pre-delay",
+        "reverb.tail",
+        &tail,
+        "pre",
+        Ink::Fill {
+            paint: draw::solid(&rgba(signal, 0.07)),
+            baseline: 0.0,
+        },
+    );
     root
 }
 
@@ -390,7 +730,10 @@ fn mod_lfo(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
         .map(|k| param_input(&ns, k, k))
         .chain(has_opt_param(p, "on").then(|| param_input(&ns, "on", "on")))
         .collect();
-    let mut inputs: Vec<ShaderInput> = ["rate", "depth", "mix", "engine"].into_iter().map(|k| ShaderInput::param(k, format!("{ns}/{k}"))).collect();
+    let mut inputs: Vec<ShaderInput> = ["rate", "depth", "mix", "engine"]
+        .into_iter()
+        .map(|k| ShaderInput::param(k, format!("{ns}/{k}")))
+        .collect();
     if has_opt_param(p, "on") {
         inputs.push(ShaderInput::param("on", format!("{ns}/on")));
     }
@@ -398,26 +741,100 @@ fn mod_lfo(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
 
     // processor's `paint_mod`: the ground, then whichever engine it is.
     let mut ground = draw::frame("ground", 0.0, 0.0, w, h);
-    ground.fills = vec![draw::linear(180.0, &[(0.0, &rgba(base, 0.10)), (1.0, &rgba(base, 0.01))])];
+    ground.fills = vec![draw::linear(
+        180.0,
+        &[(0.0, &rgba(base, 0.10)), (1.0, &rgba(base, 0.01))],
+    )];
     b.add(light, ground);
-    let fill = |c: [u8; 3], a: f64| Ink::Fill { paint: draw::solid(&rgba(c, a)), baseline: 0.5 };
-    let bars = |c: [u8; 3], a: f64| Ink::Fill { paint: draw::solid(&rgba(c, a)), baseline: 0.0 };
+    let fill = |c: [u8; 3], a: f64| Ink::Fill {
+        paint: draw::solid(&rgba(c, a)),
+        baseline: 0.5,
+    };
+    let bars = |c: [u8; 3], a: f64| Ink::Fill {
+        paint: draw::solid(&rgba(c, a)),
+        baseline: 0.0,
+    };
     let slots: [(&str, Ink); 15] = [
         ("fill_up", fill(base, 0.16)),
         ("fill_down", fill(base, 0.16)),
         ("teeth_lo", bars(base, 0.35)),
         ("teeth_mid", bars(base, 0.6)),
         ("teeth_hi", bars(bright, 0.8)),
-        ("grid", Ink::Line { color: rgba(base, 0.22), weight: 1.0, dash: false }),
-        ("faint", Ink::Line { color: rgba(base, 0.42), weight: 1.2, dash: false }),
-        ("bright", Ink::Line { color: rgba(bright, 0.88), weight: 1.8, dash: false }),
-        ("thin", Ink::Line { color: rgba(bright, 0.85), weight: 1.4, dash: false }),
-        ("mid", Ink::Line { color: rgba(bright, 0.9), weight: 1.6, dash: false }),
-        ("dots_base", Ink::Dots { color: rgba(base, 0.5), r: 2.0 }),
-        ("trail_0", Ink::Dots { color: rgba(base, 0.5 / 6.0), r: 2.0 }),
-        ("trail_1", Ink::Dots { color: rgba(base, 0.25), r: 2.8 }),
-        ("trail_2", Ink::Dots { color: rgba(base, 2.5 / 6.0), r: 3.4 }),
-        ("dots_bright", Ink::Dots { color: rgba(bright, 0.95), r: 4.5 }),
+        (
+            "grid",
+            Ink::Line {
+                color: rgba(base, 0.22),
+                weight: 1.0,
+                dash: false,
+            },
+        ),
+        (
+            "faint",
+            Ink::Line {
+                color: rgba(base, 0.42),
+                weight: 1.2,
+                dash: false,
+            },
+        ),
+        (
+            "bright",
+            Ink::Line {
+                color: rgba(bright, 0.88),
+                weight: 1.8,
+                dash: false,
+            },
+        ),
+        (
+            "thin",
+            Ink::Line {
+                color: rgba(bright, 0.85),
+                weight: 1.4,
+                dash: false,
+            },
+        ),
+        (
+            "mid",
+            Ink::Line {
+                color: rgba(bright, 0.9),
+                weight: 1.6,
+                dash: false,
+            },
+        ),
+        (
+            "dots_base",
+            Ink::Dots {
+                color: rgba(base, 0.5),
+                r: 2.0,
+            },
+        ),
+        (
+            "trail_0",
+            Ink::Dots {
+                color: rgba(base, 0.5 / 6.0),
+                r: 2.0,
+            },
+        ),
+        (
+            "trail_1",
+            Ink::Dots {
+                color: rgba(base, 0.25),
+                r: 2.8,
+            },
+        ),
+        (
+            "trail_2",
+            Ink::Dots {
+                color: rgba(base, 2.5 / 6.0),
+                r: 3.4,
+            },
+        ),
+        (
+            "dots_bright",
+            Ink::Dots {
+                color: rgba(bright, 0.95),
+                r: 4.5,
+            },
+        ),
     ];
     for (series, ink) in slots {
         curve(b, light, size, series, "mod.lfo", &lfo, series, ink);
@@ -456,15 +873,25 @@ pub(crate) struct GlowSpec<'a> {
 /// params: processor's EQ light. Its children are the vector fallback (an
 /// EQ graph puts its analyser there — the glow draws the analyser as light,
 /// as processor's graph does).
-pub(crate) fn glow_light(b: &mut Builder<'_>, parent: NodeId, (w, h): (f64, f64), spec: &GlowSpec<'_>) -> NodeId {
+pub(crate) fn glow_light(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    (w, h): (f64, f64),
+    spec: &GlowSpec<'_>,
+) -> NodeId {
     let keys: &[&str] = match (spec.used, spec.bypass) {
         (true, true) => &["freq", "gain", "on", "used"],
         (true, false) => &["freq", "gain", "used"],
         (false, true) => &["freq", "gain", "on"],
         (false, false) => &["freq", "gain"],
     };
-    let band_inputs: Vec<CurveInput> =
-        (1..=spec.bands.min(GLOW_BANDS)).flat_map(|n| keys.iter().map(move |k| CurveInput::param(format!("b{n}_{k}"), format!("{}/b{n}_{k}", spec.ns)))).collect();
+    let band_inputs: Vec<CurveInput> = (1..=spec.bands.min(GLOW_BANDS))
+        .flat_map(|n| {
+            keys.iter().map(move |k| {
+                CurveInput::param(format!("b{n}_{k}"), format!("{}/b{n}_{k}", spec.ns))
+            })
+        })
+        .collect();
     let mut inputs = vec![
         ShaderInput::stream("spectrum", spec.spectrum.clone()).len(GLOW_BINS),
         ShaderInput::curve("bands", "eq.bands", band_inputs, Some("bands")),
@@ -477,7 +904,10 @@ pub(crate) fn glow_light(b: &mut Builder<'_>, parent: NodeId, (w, h): (f64, f64)
             inputs.push(ShaderInput::constant("ranges", spans.clone()));
         }
     }
-    let mut params: std::collections::BTreeMap<String, f64> = [("p0", spec.f.0), ("p1", spec.f.1)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+    let mut params: std::collections::BTreeMap<String, f64> = [("p0", spec.f.0), ("p1", spec.f.1)]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
     if let Some(rgb) = spec.tint.as_deref().and_then(hex_rgb) {
         for (k, v) in ["tint_r", "tint_g", "tint_b"].into_iter().zip(rgb) {
             params.insert(k.to_string(), v);
@@ -489,7 +919,11 @@ pub(crate) fn glow_light(b: &mut Builder<'_>, parent: NodeId, (w, h): (f64, f64)
 /// `#rrggbb` as 0..1 channels.
 fn hex_rgb(hex: &str) -> Option<[f64; 3]> {
     let h = hex.trim_start_matches('#');
-    let c = |i: usize| h.get(i..i + 2).and_then(|s| u8::from_str_radix(s, 16).ok()).map(|v| f64::from(v) / 255.0);
+    let c = |i: usize| {
+        h.get(i..i + 2)
+            .and_then(|s| u8::from_str_radix(s, 16).ok())
+            .map(|v| f64::from(v) / 255.0)
+    };
     Some([c(0)?, c(2)?, c(4)?])
 }
 
@@ -500,7 +934,9 @@ fn eq_glow(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let bands = (opt_f(p, "bands", 8.0) as usize).clamp(1, GLOW_BANDS);
     let range = opt_f(p, "db_range", 24.0);
     let (f_min, f_max) = (opt_f(p, "f_min", 20.0), opt_f(p, "f_max", 20_000.0));
-    let spectrum = p.opt("spectrum").map_or_else(|| format!("{ns}/spectrum"), ToString::to_string);
+    let spectrum = p
+        .opt("spectrum")
+        .map_or_else(|| format!("{ns}/spectrum"), ToString::to_string);
     let root = b.add(parent, {
         let mut n = draw::frame(&p.name, 0.0, 0.0, w, h);
         if p.flag("ground") {
@@ -526,17 +962,33 @@ fn eq_glow(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     // light; without the stage, this.
     let frame = b.add(light, draw::frame("analyser", 0.0, 0.0, w, h));
     let mut fill = Node::new(NodeKind::Vector, "fill");
-    fill.size = Size { width: w, height: h };
+    fill.size = Size {
+        width: w,
+        height: h,
+    };
     fill.fills = vec![draw::solid(&rgba([100, 180, 255], 20.0 / 255.0))];
     let fill = b.add(frame, fill);
     let mut line = Node::new(NodeKind::Vector, "line");
-    line.size = Size { width: w, height: h };
-    line.stroke = Stroke { paints: vec![draw::solid(&rgba([100, 180, 255], 90.0 / 255.0))], weight: 1.0, join: StrokeJoin::Round, align: StrokeAlign::Center, ..Stroke::default() };
+    line.size = Size {
+        width: w,
+        height: h,
+    };
+    line.stroke = Stroke {
+        paints: vec![draw::solid(&rgba([100, 180, 255], 90.0 / 255.0))],
+        weight: 1.0,
+        join: StrokeJoin::Round,
+        align: StrokeAlign::Center,
+        ..Stroke::default()
+    };
     let line = b.add(frame, line);
-    let c = Control::new(ControlKind::Plot { style: PlotStyle::Area { baseline: -range }, x: Axis::Log { f_min, f_max }, y: PlotRange::linear(-range, range) })
-        .bound(Binding::stream(spectrum))
-        .slot(SlotRole::Area, fill.0)
-        .slot(SlotRole::Trace, line.0);
+    let c = Control::new(ControlKind::Plot {
+        style: PlotStyle::Area { baseline: -range },
+        x: Axis::Log { f_min, f_max },
+        y: PlotRange::linear(-range, range),
+    })
+    .bound(Binding::stream(spectrum))
+    .slot(SlotRole::Area, fill.0)
+    .slot(SlotRole::Trace, line.0);
     b.controls.insert(frame, c);
     root
 }

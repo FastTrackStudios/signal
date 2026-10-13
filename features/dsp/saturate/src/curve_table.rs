@@ -47,10 +47,16 @@ pub struct CurveTable {
 /// Slope by the five-point stencil.
 fn slope(curve: fn(f64) -> f64, at: f64) -> f64 {
     let d = 1e-3;
-    (curve(at - 2.0 * d) - 8.0 * curve(at - d) + 8.0 * curve(at + d) - curve(at + 2.0 * d)) / (12.0 * d)
+    (curve(at - 2.0 * d) - 8.0 * curve(at - d) + 8.0 * curve(at + d) - curve(at + 2.0 * d))
+        / (12.0 * d)
 }
 
-#[expect(clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "a non-negative, bounded grid count")]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a non-negative, bounded grid count"
+)]
 fn count(lo: f64, hi: f64, step: f64) -> usize {
     libm::round((hi - lo) / step).max(1.0) as usize
 }
@@ -71,12 +77,25 @@ impl CurveTable {
                 let at = from + step * dsp_core::num::count_to_f64(node);
                 nodes.push([curve(at), step * slope(curve, at)]);
             }
-            Segment { lo: from, hi: to, inv_h: 1.0 / step, first, last: intervals.saturating_sub(1) }
+            Segment {
+                lo: from,
+                hi: to,
+                inv_h: 1.0 / step,
+                first,
+                last: intervals.saturating_sub(1),
+            }
         };
         let below = segment(lo, knee_lo, step_below);
         let fine = segment(knee_lo, knee_hi, step_fine);
         let above = segment(knee_hi, hi, step_above);
-        Self { left, below, fine, above, nodes, direct: curve }
+        Self {
+            left,
+            below,
+            fine,
+            above,
+            nodes,
+            direct: curve,
+        }
     }
 
     #[inline]
@@ -92,7 +111,9 @@ impl CurveTable {
         let cell = (pos as usize).min(seg.last);
         let frac = pos - cell as f64;
         let node = seg.first.saturating_add(cell);
-        let (Some(&[y0, m0]), Some(&[y1, m1])) = (self.nodes.get(node), self.nodes.get(node.saturating_add(1))) else {
+        let (Some(&[y0, m0]), Some(&[y1, m1])) =
+            (self.nodes.get(node), self.nodes.get(node.saturating_add(1)))
+        else {
             return (self.direct)(at);
         };
         let rise = y1 - y0;

@@ -79,7 +79,13 @@ impl Prop {
     pub(crate) const fn is_inset(self) -> bool {
         matches!(
             self,
-            Prop::InsetTop | Prop::InsetBottom | Prop::InsetLeft | Prop::InsetRight | Prop::Scale | Prop::ScaleX | Prop::ScaleY
+            Prop::InsetTop
+                | Prop::InsetBottom
+                | Prop::InsetLeft
+                | Prop::InsetRight
+                | Prop::Scale
+                | Prop::ScaleX
+                | Prop::ScaleY
         )
     }
 
@@ -171,9 +177,18 @@ impl Theme {
     ///
     /// # Errors
     /// The markup's parse error, or everything [`Theme::compile`] found.
-    pub fn from_markup(src: &str, schema: Schema, mode: Option<&str>) -> Result<Theme, Vec<Diagnostic>> {
-        let scene = document_text::parse(src, BTreeMap::new())
-            .map_err(|e| vec![Diagnostic { role: None, node: None, message: e.to_string() }])?;
+    pub fn from_markup(
+        src: &str,
+        schema: Schema,
+        mode: Option<&str>,
+    ) -> Result<Theme, Vec<Diagnostic>> {
+        let scene = document_text::parse(src, BTreeMap::new()).map_err(|e| {
+            vec![Diagnostic {
+                role: None,
+                node: None,
+                message: e.to_string(),
+            }]
+        })?;
         Theme::compile(Arc::new(scene), schema, mode)
     }
 
@@ -184,13 +199,21 @@ impl Theme {
     ///
     /// # Errors
     /// Every source's parse error, or everything [`Theme::compile`] found.
-    pub fn from_sources(sources: &[(&str, &str)], schema: Schema, mode: Option<&str>) -> Result<Theme, Vec<Diagnostic>> {
+    pub fn from_sources(
+        sources: &[(&str, &str)],
+        schema: Schema,
+        mode: Option<&str>,
+    ) -> Result<Theme, Vec<Diagnostic>> {
         let mut scenes = Vec::new();
         let mut diags = Vec::new();
         for (label, src) in sources {
             match document_text::parse(src, BTreeMap::new()) {
                 Ok(s) => scenes.push(s),
-                Err(e) => diags.push(Diagnostic { role: None, node: None, message: format!("{label}: {e}") }),
+                Err(e) => diags.push(Diagnostic {
+                    role: None,
+                    node: None,
+                    message: format!("{label}: {e}"),
+                }),
             }
         }
         if !diags.is_empty() {
@@ -208,14 +231,27 @@ impl Theme {
     ///
     /// # Errors
     /// Every problem found.
-    pub fn compile(scene: Arc<Scene>, schema: Schema, mode: Option<&str>) -> Result<Theme, Vec<Diagnostic>> {
+    pub fn compile(
+        scene: Arc<Scene>,
+        schema: Schema,
+        mode: Option<&str>,
+    ) -> Result<Theme, Vec<Diagnostic>> {
         let mut diags = Vec::new();
-        let mode = mode.map(str::to_owned).or_else(|| scene.variables.modes.first().cloned()).unwrap_or_default();
-        if !mode.is_empty() && !scene.variables.modes.is_empty() && !scene.variables.modes.contains(&mode) {
+        let mode = mode
+            .map(str::to_owned)
+            .or_else(|| scene.variables.modes.first().cloned())
+            .unwrap_or_default();
+        if !mode.is_empty()
+            && !scene.variables.modes.is_empty()
+            && !scene.variables.modes.contains(&mode)
+        {
             diags.push(Diagnostic {
                 role: None,
                 node: None,
-                message: format!("no mode `{mode}` (modes: {})", scene.variables.modes.join(", ")),
+                message: format!(
+                    "no mode `{mode}` (modes: {})",
+                    scene.variables.modes.join(", ")
+                ),
             });
         }
         let tokens = resolve_tokens(&scene, &mode, &mut diags);
@@ -223,29 +259,42 @@ impl Theme {
 
         let mut roles = HashMap::new();
         for &page in expanded.scene.pages() {
-            let Some(page_node) = expanded.scene.node(page) else { continue };
+            let Some(page_node) = expanded.scene.node(page) else {
+                continue;
+            };
             // A page's first frame is the role; a page of components alone
             // draws nothing itself.
-            let Some(root) = page_node
-                .children
-                .iter()
-                .copied()
-                .find(|c| expanded.scene.node(*c).is_some_and(|n| n.kind != NodeKind::Component))
-            else {
+            let Some(root) = page_node.children.iter().copied().find(|c| {
+                expanded
+                    .scene
+                    .node(*c)
+                    .is_some_and(|n| n.kind != NodeKind::Component)
+            }) else {
                 continue;
             };
             let name = page_node.name.clone();
             if let Some(role) = compile_role(&expanded, root, &name, &tokens, &schema, &mut diags)
                 && roles.insert(name.clone(), role).is_some()
             {
-                diags.push(Diagnostic { role: Some(name), node: None, message: "two pages with this name".into() });
+                diags.push(Diagnostic {
+                    role: Some(name),
+                    node: None,
+                    message: "two pages with this name".into(),
+                });
             }
         }
         if !diags.is_empty() {
             return Err(diags);
         }
         let font = Font::default().for_scene(&scene).into_owned();
-        Ok(Theme { source: scene, mode, schema, font, roles, tokens })
+        Ok(Theme {
+            source: scene,
+            mode,
+            schema,
+            font,
+            roles,
+            tokens,
+        })
     }
 
     /// The same document in another mode.
@@ -293,7 +342,9 @@ impl Theme {
     /// pass to run for it).
     #[must_use]
     pub fn has_live(&self, role: &str) -> bool {
-        self.roles.get(role).is_some_and(|r| r.binds.iter().any(|b| b.class == Class::Live))
+        self.roles
+            .get(role)
+            .is_some_and(|r| r.binds.iter().any(|b| b.class == Class::Live))
     }
 
     /// The host's schema this theme was compiled against.
@@ -304,7 +355,11 @@ impl Theme {
 }
 
 /// Every variable's value in `mode`, aliases and derivations followed.
-fn resolve_tokens(scene: &Scene, mode: &str, diags: &mut Vec<Diagnostic>) -> BTreeMap<String, Value> {
+fn resolve_tokens(
+    scene: &Scene,
+    mode: &str,
+    diags: &mut Vec<Diagnostic>,
+) -> BTreeMap<String, Value> {
     fn resolve(
         name: &str,
         scene: &Scene,
@@ -316,10 +371,18 @@ fn resolve_tokens(scene: &Scene, mode: &str, diags: &mut Vec<Diagnostic>) -> BTr
             return v.clone().ok_or_else(|| format!("`${name}` is invalid"));
         }
         if stack.iter().any(|s| s == name) {
-            return Err(format!("`${name}` refers to itself ({} → {name})", stack.join(" → ")));
+            return Err(format!(
+                "`${name}` refers to itself ({} → {name})",
+                stack.join(" → ")
+            ));
         }
-        let var = scene.variables.vars.get(name).ok_or_else(|| format!("no token `${name}`"))?;
-        let mut expr = theme_expr::parse(var.in_mode(mode)).map_err(|e| format!("`${name}`: {e}"))?;
+        let var = scene
+            .variables
+            .vars
+            .get(name)
+            .ok_or_else(|| format!("no token `${name}`"))?;
+        let mut expr =
+            theme_expr::parse(var.in_mode(mode)).map_err(|e| format!("`${name}`: {e}"))?;
         stack.push(name.to_owned());
         let mut inner = Ok(());
         expr.inline_tokens(&mut |t| match resolve(t, scene, mode, done, stack) {
@@ -336,7 +399,9 @@ fn resolve_tokens(scene: &Scene, mode: &str, diags: &mut Vec<Diagnostic>) -> BTr
         inner?;
         let refs = expr.refs();
         if refs.size || !refs.fields.is_empty() {
-            return Err(format!("`${name}` must be a constant; tokens cannot read the box or the host's data"));
+            return Err(format!(
+                "`${name}` must be a constant; tokens cannot read the box or the host's data"
+            ));
         }
         let v = expr.fold().constant().cloned().unwrap_or(Value::Missing);
         done.insert(name.to_owned(), Some(v.clone()));
@@ -346,11 +411,17 @@ fn resolve_tokens(scene: &Scene, mode: &str, diags: &mut Vec<Diagnostic>) -> BTr
     let mut done = BTreeMap::new();
     for name in scene.variables.vars.keys() {
         if let Err(e) = resolve(name, scene, mode, &mut done, &mut Vec::new()) {
-            diags.push(Diagnostic { role: None, node: None, message: e });
+            diags.push(Diagnostic {
+                role: None,
+                node: None,
+                message: e,
+            });
             done.insert(name.clone(), None);
         }
     }
-    done.into_iter().filter_map(|(k, v)| v.map(|v| (k, v))).collect()
+    done.into_iter()
+        .filter_map(|(k, v)| v.map(|v| (k, v)))
+        .collect()
 }
 
 fn compile_role(
@@ -374,24 +445,43 @@ fn compile_role(
     root_node.transform.tx = 0.0;
     root_node.transform.ty = 0.0;
     let authored = (root_node.size.width, root_node.size.height);
-    let mut scene = Scene { root, nodes, assets: source.assets.clone(), variables: document_proto::Variables::default() };
+    let mut scene = Scene {
+        root,
+        nodes,
+        assets: source.assets.clone(),
+        variables: document_proto::Variables::default(),
+    };
 
     let mut binds = Vec::new();
     let ids: Vec<NodeId> = scene.walk(root);
     for id in ids {
-        let Some(node) = scene.node_mut(id) else { continue };
+        let Some(node) = scene.node_mut(id) else {
+            continue;
+        };
         // Written here, or copied out of a component and parsed there.
-        let declared = std::mem::take(&mut node.bind).into_iter().map(|b| crate::expand::Parsed {
-            expr: theme_expr::parse(&b.expr).map_err(|e| e.to_string()),
-            prop: b.prop,
-        });
-        let copied = expanded.parsed.get(&id).into_iter().flatten().map(|p| crate::expand::Parsed {
-            prop: p.prop.clone(),
-            expr: p.expr.clone(),
-        });
+        let declared = std::mem::take(&mut node.bind)
+            .into_iter()
+            .map(|b| crate::expand::Parsed {
+                expr: theme_expr::parse(&b.expr).map_err(|e| e.to_string()),
+                prop: b.prop,
+            });
+        let copied =
+            expanded
+                .parsed
+                .get(&id)
+                .into_iter()
+                .flatten()
+                .map(|p| crate::expand::Parsed {
+                    prop: p.prop.clone(),
+                    expr: p.expr.clone(),
+                });
         for b in declared.chain(copied).collect::<Vec<_>>() {
             let mut err = |message: String| {
-                diags.push(Diagnostic { role: Some(role.to_owned()), node: Some(node.name.clone()), message });
+                diags.push(Diagnostic {
+                    role: Some(role.to_owned()),
+                    node: Some(node.name.clone()),
+                    message,
+                });
             };
             let Some(prop) = Prop::named(&b.prop) else {
                 err(format!("`bind:{}` is not a bindable property", b.prop));
@@ -409,7 +499,11 @@ fn compile_role(
                 continue;
             }
             if let Err(f) = expr.resolve_fields(&mut |f| schema.slot(f)) {
-                err(format!("bind:{}: the host has no field `{f}` (fields: {})", b.prop, schema.names().collect::<Vec<_>>().join(", ")));
+                err(format!(
+                    "bind:{}: the host has no field `{f}` (fields: {})",
+                    b.prop,
+                    schema.names().collect::<Vec<_>>().join(", ")
+                ));
                 continue;
             }
             let expr = expr.fold();
@@ -428,11 +522,22 @@ fn compile_role(
             } else {
                 Class::Static
             };
-            binds.push(Bound { node: id, prop, expr, class });
+            binds.push(Bound {
+                node: id,
+                prop,
+                expr,
+                class,
+            });
         }
         prepare(node, binds.iter().filter(|b| b.node == id));
     }
-    Some(Role { scene, root, authored, binds, plans: Mutex::new(HashMap::new()) })
+    Some(Role {
+        scene,
+        root,
+        authored,
+        binds,
+        plans: Mutex::new(HashMap::new()),
+    })
 }
 
 /// Make a node drawable whatever its bindings come to: a bound fill needs
@@ -442,9 +547,13 @@ fn prepare<'a>(node: &mut Node, binds: impl Iterator<Item = &'a Bound>) {
     for b in binds {
         match (b.prop, b.class) {
             (Prop::Visible, Class::Static | Class::Live) => node.visible = true,
-            (Prop::Fill, _) if node.fills.is_empty() => node.fills.push(Paint::solid(Color::rgba(0.0, 0.0, 0.0, 0.0))),
+            (Prop::Fill, _) if node.fills.is_empty() => node
+                .fills
+                .push(Paint::solid(Color::rgba(0.0, 0.0, 0.0, 0.0))),
             (Prop::Stroke, _) if node.stroke.paints.is_empty() => {
-                node.stroke.paints.push(Paint::solid(Color::rgba(0.0, 0.0, 0.0, 0.0)));
+                node.stroke
+                    .paints
+                    .push(Paint::solid(Color::rgba(0.0, 0.0, 0.0, 0.0)));
             }
             (Prop::Text, _) => {
                 if let NodeKind::Text(t) = &mut node.kind
@@ -490,7 +599,12 @@ pub(crate) fn apply(node: &mut Node, prop: Prop, v: &Value) {
         Prop::Rotation => {
             if let Some(deg) = v.num() {
                 let (sin, cos) = deg.to_radians().sin_cos();
-                (node.transform.a, node.transform.b, node.transform.c, node.transform.d) = (cos, -sin, sin, cos);
+                (
+                    node.transform.a,
+                    node.transform.b,
+                    node.transform.c,
+                    node.transform.d,
+                ) = (cos, -sin, sin, cos);
             }
         }
         Prop::Opacity => {
@@ -501,8 +615,12 @@ pub(crate) fn apply(node: &mut Node, prop: Prop, v: &Value) {
         Prop::Radius => {
             if let Some(n) = v.num() {
                 let r = n.max(0.0);
-                node.corner_radii =
-                    document_proto::CornerRadii { top_left: r, top_right: r, bottom_right: r, bottom_left: r };
+                node.corner_radii = document_proto::CornerRadii {
+                    top_left: r,
+                    top_right: r,
+                    bottom_right: r,
+                    bottom_left: r,
+                };
             }
         }
         Prop::Fill => {
@@ -521,8 +639,17 @@ pub(crate) fn apply(node: &mut Node, prop: Prop, v: &Value) {
                 node.stroke.dash_pattern = vec![n.max(0.0), DASH_GAP];
             }
         }
-        Prop::InsetTop | Prop::InsetBottom | Prop::InsetLeft | Prop::InsetRight | Prop::Scale | Prop::ScaleX | Prop::ScaleY => {}
-        Prop::RadiusTopLeft | Prop::RadiusTopRight | Prop::RadiusBottomRight | Prop::RadiusBottomLeft => {
+        Prop::InsetTop
+        | Prop::InsetBottom
+        | Prop::InsetLeft
+        | Prop::InsetRight
+        | Prop::Scale
+        | Prop::ScaleX
+        | Prop::ScaleY => {}
+        Prop::RadiusTopLeft
+        | Prop::RadiusTopRight
+        | Prop::RadiusBottomRight
+        | Prop::RadiusBottomLeft => {
             if let Some(n) = v.num() {
                 set_corner(&mut node.corner_radii, prop, n);
             }
@@ -563,5 +690,10 @@ pub(crate) fn set_corner(radii: &mut document_proto::CornerRadii, prop: Prop, r:
 pub(crate) const DASH_GAP: f64 = 1.0e5;
 
 pub(crate) fn doc_color(c: theme_expr::Rgba) -> Color {
-    Color::rgba(f64::from(c.r), f64::from(c.g), f64::from(c.b), f64::from(c.a))
+    Color::rgba(
+        f64::from(c.r),
+        f64::from(c.g),
+        f64::from(c.b),
+        f64::from(c.a),
+    )
 }

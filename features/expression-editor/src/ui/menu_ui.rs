@@ -9,9 +9,9 @@
 //! text — Blitz gives no text metrics, so a menu that sized itself to
 //! its labels would be a different width in every host.
 
-use dioxus::prelude::*;
 use crate::menu::{self, Command};
 use crate::{Editor, NoteId};
+use dioxus::prelude::*;
 
 use crate::ui::theme;
 

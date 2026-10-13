@@ -80,7 +80,12 @@ pub(crate) struct Target {
 }
 
 impl Plan {
-    pub(crate) fn build(role: &Role, size: (f64, f64), layout: &[(u32, theme_expr::Value)], font: &Font) -> Plan {
+    pub(crate) fn build(
+        role: &Role,
+        size: (f64, f64),
+        layout: &[(u32, theme_expr::Value)],
+        font: &Font,
+    ) -> Plan {
         let mut scene: Scene = role.scene.clone();
         let parents = lay_out(&mut scene, role.root, size, layout, &role.binds);
         let prims = render::build_scene_primitives(&scene, role.root);
@@ -100,7 +105,11 @@ impl Plan {
         // unit is chosen before anything inside it.
         let binds = &role.binds;
         let mut by_node: HashMap<NodeId, Vec<usize>> = HashMap::new();
-        for (i, b) in binds.iter().enumerate().filter(|(_, b)| b.class != Class::Size) {
+        for (i, b) in binds
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.class != Class::Size)
+        {
             by_node.entry(b.node).or_default().push(i);
         }
         let mut nodes_in_order: Vec<NodeId> = by_node.keys().copied().collect();
@@ -122,9 +131,19 @@ impl Plan {
         // whatever then follows it.
         let mut extent: HashMap<NodeId, kurbo::Rect> = HashMap::new();
         for id in scene.walk(role.root).into_iter().rev() {
-            let own = boxes.get(&id).map(|b| kurbo::Rect::new(b.x, b.y, b.x + b.width, b.y + b.height));
-            let kids = scene.node(id).map(|n| n.children.clone()).unwrap_or_default();
-            let all = kids.iter().filter_map(|k| extent.get(k)).copied().chain(own).reduce(|a, b| a.union(b));
+            let own = boxes
+                .get(&id)
+                .map(|b| kurbo::Rect::new(b.x, b.y, b.x + b.width, b.y + b.height));
+            let kids = scene
+                .node(id)
+                .map(|n| n.children.clone())
+                .unwrap_or_default();
+            let all = kids
+                .iter()
+                .filter_map(|k| extent.get(k))
+                .copied()
+                .chain(own)
+                .reduce(|a, b| a.union(b));
             if let Some(r) = all {
                 extent.insert(id, r);
             }
@@ -137,11 +156,17 @@ impl Plan {
         loop {
             let mut grown = false;
             for parent in scene.walk(role.root) {
-                let Some(kids) = scene.node(parent).map(|n| n.children.clone()) else { continue };
+                let Some(kids) = scene.node(parent).map(|n| n.children.clone()) else {
+                    continue;
+                };
                 let mut lit: Vec<kurbo::Rect> = Vec::new();
                 for kid in kids {
-                    let Some(r) = extent.get(&kid).copied() else { continue };
-                    let holds_live = live_roots.iter().any(|l| inside(*l, kid) || inside(kid, *l));
+                    let Some(r) = extent.get(&kid).copied() else {
+                        continue;
+                    };
+                    let holds_live = live_roots
+                        .iter()
+                        .any(|l| inside(*l, kid) || inside(kid, *l));
                     if holds_live {
                         lit.push(r);
                     } else if lit.iter().any(|l| overlaps(l, &r)) {
@@ -167,7 +192,10 @@ impl Plan {
                 continue;
             }
             // Placed (or, inset, a clip that reveals its children): the subtree.
-            let places = by_node[&id].iter().any(|&i| matches!(binds[i].prop, Prop::Visible | Prop::X | Prop::Y) || binds[i].prop.is_inset());
+            let places = by_node[&id].iter().any(|&i| {
+                matches!(binds[i].prop, Prop::Visible | Prop::X | Prop::Y)
+                    || binds[i].prop.is_inset()
+            });
             if places {
                 // Absorbs any node-only units already chosen inside it.
                 node_units.retain(|n| !inside(*n, id));
@@ -188,7 +216,13 @@ impl Plan {
                 .iter()
                 .enumerate()
                 .filter(|(_, b)| b.class != Class::Size)
-                .filter(|(_, b)| if whole { inside(b.node, root) } else { b.node == root })
+                .filter(|(_, b)| {
+                    if whole {
+                        inside(b.node, root)
+                    } else {
+                        b.node == root
+                    }
+                })
                 .filter(|(_, b)| live || !in_live(b.node))
                 .map(|(i, _)| i)
                 .collect()
@@ -197,7 +231,9 @@ impl Plan {
             binds
                 .iter()
                 .enumerate()
-                .filter(|(_, b)| b.node == root && b.prop == Prop::Visible && b.class != Class::Size)
+                .filter(|(_, b)| {
+                    b.node == root && b.prop == Prop::Visible && b.class != Class::Size
+                })
                 .map(|(i, _)| i)
                 .collect()
         };
@@ -205,7 +241,9 @@ impl Plan {
             binds
                 .iter()
                 .enumerate()
-                .filter(|(_, b)| b.class != Class::Size && matches!(b.prop, Prop::Visible | Prop::X | Prop::Y))
+                .filter(|(_, b)| {
+                    b.class != Class::Size && matches!(b.prop, Prop::Visible | Prop::X | Prop::Y)
+                })
                 .filter(|(_, b)| inside(node, b.node) && !(strict && b.node == node))
                 .map(|(i, _)| i)
                 .collect()
@@ -260,7 +298,11 @@ impl Plan {
                     sizers: binds
                         .iter()
                         .enumerate()
-                        .filter(|(_, b)| b.node == id && b.class != Class::Size && matches!(b.prop, Prop::W | Prop::H))
+                        .filter(|(_, b)| {
+                            b.node == id
+                                && b.class != Class::Size
+                                && matches!(b.prop, Prop::W | Prop::H)
+                        })
                         .map(|(i, _)| i)
                         .collect(),
                 })
@@ -274,7 +316,11 @@ impl Plan {
         // The slots, by where they start in paint order: each splits the
         // recording there. One inside a unit (a placed subtree) falls
         // after the whole unit.
-        let mut slot_at: Vec<(u32, usize)> = slots.iter().enumerate().map(|(k, t)| (span(t.node).0, k)).collect();
+        let mut slot_at: Vec<(u32, usize)> = slots
+            .iter()
+            .enumerate()
+            .map(|(k, t)| (span(t.node).0, k))
+            .collect();
         slot_at.sort_unstable();
         let mut next_slot = 0;
         let mut record = Vec::new();
@@ -286,7 +332,9 @@ impl Plan {
             }
             let mut rec = Recording::new();
             let keep = std::mem::take(run);
-            paint_filtered(&mut rec, &prims, Affine::IDENTITY, font, &|id| keep.contains(&id));
+            paint_filtered(&mut rec, &prims, Affine::IDENTITY, font, &|id| {
+                keep.contains(&id)
+            });
             record.push(Seg::Picture(rec));
         };
         while i < prims.len() {
@@ -337,7 +385,15 @@ impl Plan {
             record.push(Seg::Slot(k));
         }
 
-        Plan { order, parents, boxes, record, live, targets, slots }
+        Plan {
+            order,
+            parents,
+            boxes,
+            record,
+            live,
+            targets,
+            slots,
+        }
     }
 }
 
@@ -372,16 +428,27 @@ pub(crate) fn owner(p: &PaintPrimitive) -> NodeId {
 }
 
 pub(crate) fn is_leaf(p: &PaintPrimitive) -> bool {
-    matches!(p, PaintPrimitive::Rect { .. } | PaintPrimitive::Path { .. } | PaintPrimitive::Text { .. })
+    matches!(
+        p,
+        PaintPrimitive::Rect { .. } | PaintPrimitive::Path { .. } | PaintPrimitive::Text { .. }
+    )
 }
 
 fn closer(p: &PaintPrimitive) -> Option<PaintPrimitive> {
     Some(match p {
-        PaintPrimitive::GroupStart { node_id, .. } => PaintPrimitive::GroupEnd { node_id: *node_id },
-        PaintPrimitive::LayerStart { node_id, .. } => PaintPrimitive::LayerEnd { node_id: *node_id },
+        PaintPrimitive::GroupStart { node_id, .. } => {
+            PaintPrimitive::GroupEnd { node_id: *node_id }
+        }
+        PaintPrimitive::LayerStart { node_id, .. } => {
+            PaintPrimitive::LayerEnd { node_id: *node_id }
+        }
         PaintPrimitive::ClipStart { node_id, .. } => PaintPrimitive::ClipEnd { node_id: *node_id },
-        PaintPrimitive::MaskDefStart { node_id, .. } => PaintPrimitive::MaskDefEnd { node_id: *node_id },
-        PaintPrimitive::MaskApplyStart { node_id, .. } => PaintPrimitive::MaskApplyEnd { node_id: *node_id },
+        PaintPrimitive::MaskDefStart { node_id, .. } => {
+            PaintPrimitive::MaskDefEnd { node_id: *node_id }
+        }
+        PaintPrimitive::MaskApplyStart { node_id, .. } => {
+            PaintPrimitive::MaskApplyEnd { node_id: *node_id }
+        }
         _ => return None,
     })
 }
@@ -398,7 +465,10 @@ const fn is_close(p: &PaintPrimitive) -> bool {
 }
 
 /// The smallest index range holding every primitive `pick` says yes to.
-fn range_of(prims: &[PaintPrimitive], pick: impl Fn(&PaintPrimitive) -> bool) -> std::ops::Range<usize> {
+fn range_of(
+    prims: &[PaintPrimitive],
+    pick: impl Fn(&PaintPrimitive) -> bool,
+) -> std::ops::Range<usize> {
     let first = prims.iter().position(&pick).unwrap_or(0);
     let last = prims.iter().rposition(&pick).map_or(first, |i| i + 1);
     first..last
@@ -406,7 +476,11 @@ fn range_of(prims: &[PaintPrimitive], pick: impl Fn(&PaintPrimitive) -> bool) ->
 
 /// `range`'s primitives (those `keep` says yes to), opened by the
 /// structure enclosing the range and closed after it.
-fn wrap(prims: &[PaintPrimitive], range: std::ops::Range<usize>, keep: impl Fn(&PaintPrimitive) -> bool) -> Vec<PaintPrimitive> {
+fn wrap(
+    prims: &[PaintPrimitive],
+    range: std::ops::Range<usize>,
+    keep: impl Fn(&PaintPrimitive) -> bool,
+) -> Vec<PaintPrimitive> {
     let mut open: Vec<&PaintPrimitive> = Vec::new();
     for p in &prims[..range.start] {
         if closer(p).is_some() {
@@ -420,4 +494,3 @@ fn wrap(prims: &[PaintPrimitive], range: std::ops::Range<usize>, keep: impl Fn(&
     out.extend(open.iter().rev().filter_map(|p| closer(p)));
     out
 }
-

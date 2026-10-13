@@ -45,7 +45,10 @@ impl std::fmt::Display for ParamAddr {
     }
 }
 
-pub use feed_proto::{EntryId, FeedInfo, FeedKind, FormatMark, FormatStyle, Range, Scale, ScalarKind, Unit, ValueFormat, note_name};
+pub use feed_proto::{
+    EntryId, FeedInfo, FeedKind, FormatMark, FormatStyle, Range, ScalarKind, Scale, Unit,
+    ValueFormat, note_name,
+};
 
 /// A catalog's telemetry entry — a [`FeedInfo`]. The old name, kept so
 /// existing engines and surfaces compile unchanged.
@@ -154,7 +157,9 @@ impl ParamInfo {
     #[must_use]
     pub fn choice(mut self, options: &[&str]) -> Self {
         self.range.steps = u32::try_from(options.len()).ok();
-        self.kind = ParamKind::Choice { options: options.iter().map(ToString::to_string).collect() };
+        self.kind = ParamKind::Choice {
+            options: options.iter().map(ToString::to_string).collect(),
+        };
         self
     }
 
@@ -175,7 +180,9 @@ impl ParamInfo {
                     let i = (normalized.clamp(0.0, 1.0) * last as f64).round() as usize;
                     return labels[i.min(last)].clone();
                 }
-                (_, ParamKind::Continuous) => return self.range.format_as(self.range.to_real(normalized), f),
+                (_, ParamKind::Continuous) => {
+                    return self.range.format_as(self.range.to_real(normalized), f);
+                }
                 _ => {}
             }
         }
@@ -199,7 +206,6 @@ pub struct ActionInfo {
     pub name: String,
     pub group: Option<String>,
 }
-
 
 /// A browsable, selectable list (songs, patches, stacks, presets).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
@@ -273,7 +279,10 @@ mod tests {
         let r = Range::log(20.0, 20_000.0, Unit::Hz);
         assert!((r.to_real(0.0) - 20.0).abs() < 1e-9);
         assert!((r.to_real(1.0) - 20_000.0).abs() < 1e-6);
-        assert!((r.to_real(0.5) - 632.455_532).abs() < 1e-3, "geometric mean at center");
+        assert!(
+            (r.to_real(0.5) - 632.455_532).abs() < 1e-3,
+            "geometric mean at center"
+        );
         for i in 0..=10 {
             let n = f64::from(i) / 10.0;
             assert!((r.to_normalized(r.to_real(n)) - n).abs() < 1e-9);
@@ -289,21 +298,46 @@ mod tests {
     #[test]
     fn formatting() {
         assert_eq!(Range::log(20.0, 20_000.0, Unit::Hz).format(440.0), "440 Hz");
-        assert_eq!(Range::log(20.0, 20_000.0, Unit::Hz).format(2500.0), "2.50 kHz");
-        assert_eq!(Range::linear(-60.0, 12.0, Unit::Db).format(-6.0), "-6.00 dB");
-        assert_eq!(Range::linear(0.0, 10.0, Unit::Seconds).format(0.25), "250 ms");
+        assert_eq!(
+            Range::log(20.0, 20_000.0, Unit::Hz).format(2500.0),
+            "2.50 kHz"
+        );
+        assert_eq!(
+            Range::linear(-60.0, 12.0, Unit::Db).format(-6.0),
+            "-6.00 dB"
+        );
+        assert_eq!(
+            Range::linear(0.0, 10.0, Unit::Seconds).format(0.25),
+            "250 ms"
+        );
     }
 
     #[test]
     fn a_stepped_range_prints_the_decimals_its_step_needs() {
-        let half_db = Range { steps: Some(49), ..Range::linear(-12.0, 12.0, Unit::Db) };
+        let half_db = Range {
+            steps: Some(49),
+            ..Range::linear(-12.0, 12.0, Unit::Db)
+        };
         assert_eq!(half_db.format(-1.5), "-1.5 dB");
         assert_eq!(half_db.format(3.0), "3.0 dB");
-        let whole = Range { steps: Some(101), ..Range::linear(0.0, 100.0, Unit::Percent) };
+        let whole = Range {
+            steps: Some(101),
+            ..Range::linear(0.0, 100.0, Unit::Percent)
+        };
         assert_eq!(whole.format(35.0), "35 %");
-        let tenths = Range { steps: Some(21), ..Range::linear(0.0, 2.0, Unit::Ratio) };
+        let tenths = Range {
+            steps: Some(21),
+            ..Range::linear(0.0, 2.0, Unit::Ratio)
+        };
         assert_eq!(tenths.format(0.3), "0.3 :1");
-        assert_eq!(Range { steps: Some(5), ..Range::linear(-2.0, 2.0, Unit::Db) }.format(-0.0), "0 dB");
+        assert_eq!(
+            Range {
+                steps: Some(5),
+                ..Range::linear(-2.0, 2.0, Unit::Db)
+            }
+            .format(-0.0),
+            "0 dB"
+        );
     }
 
     #[test]
@@ -311,13 +345,23 @@ mod tests {
         let r = Range::linear(0.0, 10.0, Unit::Seconds);
         assert_eq!(r.format_as(2.6, &ValueFormat::decimals(0)), "3 s");
         assert_eq!(r.format_as(2.5, &ValueFormat::decimals(1).unit("")), "2.5");
-        assert_eq!(r.format_as(0.25, &ValueFormat::default().unit("sec")), "0.25 sec", "an explicit unit is not converted");
+        assert_eq!(
+            r.format_as(0.25, &ValueFormat::default().unit("sec")),
+            "0.25 sec",
+            "an explicit unit is not converted"
+        );
         let hz = Range::log(20.0, 20_000.0, Unit::Hz);
         assert_eq!(hz.format_as(440.0, &ValueFormat::note()), "A4");
         assert_eq!(hz.format_as(261.7, &ValueFormat::note()), "C4");
-        assert_eq!(Range::linear(0.0, 127.0, Unit::None).format_as(61.0, &ValueFormat::note()), "C#4");
+        assert_eq!(
+            Range::linear(0.0, 127.0, Unit::None).format_as(61.0, &ValueFormat::note()),
+            "C#4"
+        );
         let divs = ValueFormat::labels(&["1/4", "1/8", "1/16"]);
-        assert_eq!(Range::linear(0.0, 1.0, Unit::None).format_as(0.5, &divs), "1/8");
+        assert_eq!(
+            Range::linear(0.0, 1.0, Unit::None).format_as(0.5, &divs),
+            "1/8"
+        );
         let p = ParamInfo::new("d/div", "Division", Range::default());
         assert_eq!(p.display_as(1.0, Some(&divs)), "1/16");
         assert_eq!(ValueFormat::default().db(-6.04), "-6.0 dB");
@@ -344,12 +388,16 @@ mod tests {
         assert_eq!(pan.format_as(0.2, &f), "C");
         assert_eq!(pan.format_as(12.0, &f), "12");
         let p = ParamInfo::new("eq/hpf", "HPF", hpf);
-        assert_eq!(p.display_as(0.0, Some(&ValueFormat::decimals(0).mark(20.0, "OFF"))), "OFF");
+        assert_eq!(
+            p.display_as(0.0, Some(&ValueFormat::decimals(0).mark(20.0, "OFF"))),
+            "OFF"
+        );
     }
 
     #[test]
     fn choice_and_toggle_display() {
-        let p = ParamInfo::new("amp/voice", "Voice", Range::default()).choice(&["Clean", "Crunch", "Lead"]);
+        let p = ParamInfo::new("amp/voice", "Voice", Range::default())
+            .choice(&["Clean", "Crunch", "Lead"]);
         assert_eq!(p.display(0.0), "Clean");
         assert_eq!(p.display(0.5), "Crunch");
         assert_eq!(p.display(1.0), "Lead");
@@ -359,7 +407,10 @@ mod tests {
 
     #[test]
     fn stepped_ranges_quantize() {
-        let r = Range { steps: Some(5), ..Range::linear(0.0, 4.0, Unit::None) };
+        let r = Range {
+            steps: Some(5),
+            ..Range::linear(0.0, 4.0, Unit::None)
+        };
         assert_eq!(r.to_real(0.3), 1.0);
         assert_eq!(r.to_normalized(2.9), 0.75);
     }

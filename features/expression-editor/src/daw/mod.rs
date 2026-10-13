@@ -42,13 +42,13 @@ pub use session::Session;
 /// wire, so the two cannot drift apart.
 pub const DEFAULT_BEND_RANGE: f64 = 48.0;
 
+use crate::cc::CcLane;
+use crate::doc::{Dimension, ExpressionDoc, Note, NoteId, TimeBase};
+use crate::tuning;
 use daw::service::midi::{
     MidiCCCreate, MidiChannelPressureCreate, MidiNoteCreate, MidiPitchBendCreate, MidiTakeContent,
     MidiTakeSnapshot,
 };
-use crate::cc::CcLane;
-use crate::doc::{Dimension, ExpressionDoc, Note, NoteId, TimeBase};
-use crate::tuning;
 
 /// Convert a take snapshot into an editable document.
 pub fn to_doc(snapshot: &MidiTakeSnapshot, bend_range: f64) -> ExpressionDoc {

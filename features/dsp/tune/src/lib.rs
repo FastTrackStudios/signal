@@ -15,7 +15,6 @@
 //! DSP style matches the sibling fx crates: plain `std`, `f64`, allocation at
 //! construction only.
 
-
 pub use crate as dsp;
 
 pub mod correct;

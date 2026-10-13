@@ -14,11 +14,11 @@
 //! wow is not locked to its rate; an envelope wah draws a flat line because
 //! nothing periodic drives it at all.
 
+use crate::profiles::Character;
 use dioxus::prelude::*;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
 use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use crate::profiles::Character;
 use std::fmt::Write;
 
 /// Panel drawing size — 2U, like the saturator's faces.
@@ -127,9 +127,7 @@ pub static WAH: ModDesign = ModDesign {
 
 #[must_use]
 pub fn design_for(profile_id: &str) -> &'static ModDesign {
-    match crate::profiles::category_of(profile_id)
-        .map(|(c, _)| crate::profiles::CATEGORIES[c].id)
-    {
+    match crate::profiles::category_of(profile_id).map(|(c, _)| crate::profiles::CATEGORIES[c].id) {
         Some("chorus") => &CHORUS,
         Some("flanger") => &FLANGER,
         Some("vibrato") => &VIBRATO,
@@ -240,8 +238,8 @@ pub fn ModFace(
 ) -> Element {
     let _ = frame;
     let design = design_for(&profile_id);
-    let profile = crate::profiles::profile_by_id(&profile_id)
-        .unwrap_or(&crate::profiles::PROFILES[0]);
+    let profile =
+        crate::profiles::profile_by_id(&profile_id).unwrap_or(&crate::profiles::PROFILES[0]);
     let scale = fts_audio_ui::hardware::panel::panel_scale(W, H, fts_audio_ui::shell::RAIL_W);
 
     let value = |name: &str, fallback: f32| {
@@ -346,8 +344,8 @@ fn ShapeView(
     let depth = f64::from(controls.depth);
     let glow = depth.mul_add(0.5, 0.4).min(0.95);
 
-    let profile = crate::profiles::profile_by_id(&profile_id)
-        .unwrap_or(&crate::profiles::PROFILES[0]);
+    let profile =
+        crate::profiles::profile_by_id(&profile_id).unwrap_or(&crate::profiles::PROFILES[0]);
     let mut samples = [0.0f64; 180];
     crate::profiles::shape(profile, &controls, &mut samples);
 

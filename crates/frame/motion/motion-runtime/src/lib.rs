@@ -263,7 +263,11 @@ type ShapeCache = HashMap<usize, (Vec<f64>, (f64, f64), Vec<String>)>;
 
 impl std::fmt::Debug for Animator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Animator").field("motions", &self.progs.len()).field("clock", &self.clock).field("animating", &self.animating).finish_non_exhaustive()
+        f.debug_struct("Animator")
+            .field("motions", &self.progs.len())
+            .field("clock", &self.clock)
+            .field("animating", &self.animating)
+            .finish_non_exhaustive()
     }
 }
 
@@ -334,7 +338,10 @@ impl Animator {
     /// Motion `slot` of `node`'s output (mapped), once it has one.
     #[must_use]
     pub fn output(&self, node: NodeId, slot: usize) -> Option<f64> {
-        self.by_node.get(&node).and_then(|v| v.get(slot)).and_then(|i| self.outputs[*i])
+        self.by_node
+            .get(&node)
+            .and_then(|v| v.get(slot))
+            .and_then(|i| self.outputs[*i])
     }
 
     /// Rebuild from an edited scene, keeping each motion's state when its
@@ -344,7 +351,16 @@ impl Animator {
             .progs
             .iter()
             .enumerate()
-            .map(|(i, p)| ((p.node, p.slot), (p.sig(), std::mem::take(&mut self.states[i]), self.outputs[i])))
+            .map(|(i, p)| {
+                (
+                    (p.node, p.slot),
+                    (
+                        p.sig(),
+                        std::mem::take(&mut self.states[i]),
+                        self.outputs[i],
+                    ),
+                )
+            })
             .collect();
         self.compile(scene);
         // A scene left with no motions is still: nothing will step it to
@@ -378,7 +394,8 @@ impl Animator {
                 }
             }
         }
-        let index_of: HashMap<(NodeId, usize), usize> = slots.iter().enumerate().map(|(i, k)| (*k, i)).collect();
+        let index_of: HashMap<(NodeId, usize), usize> =
+            slots.iter().enumerate().map(|(i, k)| (*k, i)).collect();
         // Names: on the node, then up its ancestors, then anywhere.
         let mut global: HashMap<&str, usize> = HashMap::new();
         for (i, (id, s)) in slots.iter().enumerate() {
@@ -390,7 +407,11 @@ impl Animator {
             let mut at = Some(from);
             while let Some(id) = at {
                 let n = scene.node(id)?;
-                if let Some(s) = n.motion.iter().position(|m| m.name.as_deref() == Some(name)) {
+                if let Some(s) = n
+                    .motion
+                    .iter()
+                    .position(|m| m.name.as_deref() == Some(name))
+                {
                     return index_of.get(&(id, s)).copied();
                 }
                 at = n.parent;
@@ -400,9 +421,17 @@ impl Animator {
         let mut index = HashMap::new();
         let mut deps: Vec<Vec<usize>> = Vec::new();
         for (id, s) in &slots {
-            let Some(node) = scene.node(*id) else { continue };
+            let Some(node) = scene.node(*id) else {
+                continue;
+            };
             let m = node.motion[*s].clone();
-            let mut c = Compiler { keys: &mut self.keys, index: &mut index, node: *id, resolve: &resolve, deps: Vec::new() };
+            let mut c = Compiler {
+                keys: &mut self.keys,
+                index: &mut index,
+                node: *id,
+                resolve: &resolve,
+                deps: Vec::new(),
+            };
             let (input, mut timed) = c.text(m.input_expr());
             let mut params = Vec::new();
             for (_, n) in m.dynamics.nums() {
@@ -429,7 +458,17 @@ impl Animator {
             deps.push(std::mem::take(&mut c.deps));
             let seed = seed_of(*id, *s);
             self.by_node.entry(*id).or_default().push(self.progs.len());
-            self.progs.push(Prog { node: *id, slot: *s, motion: m, input, params, excite, shape_inputs, timed, seed });
+            self.progs.push(Prog {
+                node: *id,
+                slot: *s,
+                motion: m,
+                input,
+                params,
+                excite,
+                shape_inputs,
+                timed,
+                seed,
+            });
         }
         self.order = topo(&deps);
         self.samples = vec![None; self.keys.len()];
@@ -451,7 +490,11 @@ impl Animator {
         // steps (capped) for integrated ones. A fresh clock (or one that
         // went back) starts everything at rest.
         let restart = self.clock.is_none_or(|c| t < c - 1e-6);
-        let dt = if restart { 0.0 } else { (t - self.clock.unwrap_or(t)).max(0.0) };
+        let dt = if restart {
+            0.0
+        } else {
+            (t - self.clock.unwrap_or(t)).max(0.0)
+        };
         if restart {
             for s in &mut self.states {
                 s.started = false;
@@ -473,15 +516,45 @@ impl Animator {
         let order = std::mem::take(&mut self.order);
         for &i in &order {
             let (y, moving, shape) = {
-                let env = Env { time: t, samples: &self.samples, outputs: &self.outputs };
+                let env = Env {
+                    time: t,
+                    samples: &self.samples,
+                    outputs: &self.outputs,
+                };
                 let p = &self.progs[i];
                 let input = p.input.eval(&env);
                 let params: Vec<Option<f64>> = p.params.iter().map(|c| c.eval(&env)).collect();
                 let excite = p.excite.as_ref().and_then(|c| c.eval(&env));
-                let shape: Vec<f64> = p.shape_inputs.iter().map(|(_, c)| c.eval(&env).unwrap_or(f64::NAN)).collect();
+                let shape: Vec<f64> = p
+                    .shape_inputs
+                    .iter()
+                    .map(|(_, c)| c.eval(&env).unwrap_or(f64::NAN))
+                    .collect();
                 let st = &mut self.states[i];
-                let (y, moving) = step(&p.motion.dynamics, st, Step { input, params: &params, excite, dt, steps, t, seed: p.seed });
-                (y.map(|y| if p.motion.lag { y - input.unwrap_or(0.0) } else { y }), moving || p.timed, shape)
+                let (y, moving) = step(
+                    &p.motion.dynamics,
+                    st,
+                    Step {
+                        input,
+                        params: &params,
+                        excite,
+                        dt,
+                        steps,
+                        t,
+                        seed: p.seed,
+                    },
+                );
+                (
+                    y.map(|y| {
+                        if p.motion.lag {
+                            y - input.unwrap_or(0.0)
+                        } else {
+                            y
+                        }
+                    }),
+                    moving || p.timed,
+                    shape,
+                )
             };
             let p = &self.progs[i];
             animating |= moving;
@@ -497,11 +570,22 @@ impl Animator {
     /// controls), in motion order.
     pub fn apply(&mut self, scene: &mut Scene) {
         for (node_id, progs) in &self.by_node {
-            let Some(node) = scene.nodes.get_mut(node_id) else { continue };
+            let Some(node) = scene.nodes.get_mut(node_id) else {
+                continue;
+            };
             for &i in progs {
                 let Some(v) = self.outputs[i] else { continue };
                 let p = &self.progs[i];
-                apply_target(node, &p.motion, v, i, &self.states[i].shape, &self.shapes, &mut self.shape_cache, &p.shape_inputs);
+                apply_target(
+                    node,
+                    &p.motion,
+                    v,
+                    i,
+                    &self.states[i].shape,
+                    &self.shapes,
+                    &mut self.shape_cache,
+                    &p.shape_inputs,
+                );
             }
         }
     }
@@ -534,7 +618,11 @@ fn topo(deps: &[Vec<usize>]) -> Vec<usize> {
 
 fn seed_of(id: NodeId, slot: usize) -> u64 {
     let b = id.0.as_u128();
-    hash64((b as u64) ^ ((b >> 64) as u64).rotate_left(17) ^ (slot as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15))
+    hash64(
+        (b as u64)
+            ^ ((b >> 64) as u64).rotate_left(17)
+            ^ (slot as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15),
+    )
 }
 
 fn hash64(mut x: u64) -> u64 {
@@ -547,7 +635,10 @@ fn hash64(mut x: u64) -> u64 {
 
 /// A lattice value in −1..1.
 fn lattice(seed: u64, i: i64) -> f64 {
-    (hash64(seed ^ (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)) >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0
+    (hash64(seed ^ (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)) >> 11) as f64
+        / (1u64 << 53) as f64
+        * 2.0
+        - 1.0
 }
 
 /// Smooth value noise, −1..1, one new value per unit of `x`.
@@ -597,7 +688,11 @@ fn keyframes(times: &[f64], values: &[f64], easing: Easing, looping: bool, x: f6
         return 0.0;
     }
     let (t0, t1) = (times[0], times[n - 1]);
-    let x = if looping && t1 > t0 { t0 + (x - t0).rem_euclid(t1 - t0) } else { x };
+    let x = if looping && t1 > t0 {
+        t0 + (x - t0).rem_euclid(t1 - t0)
+    } else {
+        x
+    };
     if x <= t0 {
         return values[0];
     }
@@ -624,7 +719,12 @@ struct Step<'a> {
 
 impl Step<'_> {
     fn param(&self, i: usize, default: f64) -> f64 {
-        self.params.get(i).copied().flatten().filter(|v| v.is_finite()).unwrap_or(default)
+        self.params
+            .get(i)
+            .copied()
+            .flatten()
+            .filter(|v| v.is_finite())
+            .unwrap_or(default)
     }
 }
 
@@ -712,7 +812,10 @@ fn step(d: &Dynamics, st: &mut State, s: Step<'_>) -> (Option<f64>, bool) {
             } else {
                 st.x = (st.x + rate * s.dt).rem_euclid(1e6);
             }
-            (Some(input * wave(*shape, st.x + phase, s.seed)), rate != 0.0 && input != 0.0)
+            (
+                Some(input * wave(*shape, st.x + phase, s.seed)),
+                rate != 0.0 && input != 0.0,
+            )
         }
         Dynamics::Noise { .. } => {
             let rate = s.param(0, 8.0);
@@ -722,7 +825,10 @@ fn step(d: &Dynamics, st: &mut State, s: Step<'_>) -> (Option<f64>, bool) {
             } else {
                 st.x = (st.x + rate * s.dt).rem_euclid(1e6);
             }
-            (Some(input + amount * noise(s.seed, st.x)), rate != 0.0 && amount != 0.0)
+            (
+                Some(input + amount * noise(s.seed, st.x)),
+                rate != 0.0 && amount != 0.0,
+            )
         }
         Dynamics::Ballistic { .. } => {
             let attack = s.param(0, 0.01).max(1e-4);
@@ -741,9 +847,17 @@ fn step(d: &Dynamics, st: &mut State, s: Step<'_>) -> (Option<f64>, bool) {
             }
             (Some(st.x), !st.settled)
         }
-        Dynamics::Keyframes { times, values, easing, looping } => {
+        Dynamics::Keyframes {
+            times,
+            values,
+            easing,
+            looping,
+        } => {
             st.started = true;
-            (Some(keyframes(times, values, *easing, *looping, input)), false)
+            (
+                Some(keyframes(times, values, *easing, *looping, input)),
+                false,
+            )
         }
         Dynamics::Spin => {
             if fresh {
@@ -772,12 +886,22 @@ fn compose(p: &Transform, q: &Transform) -> Transform {
 
 /// `lin` about the local point (`px`, `py`), then the node's transform.
 fn about(t: &Transform, (a, b, c, d): (f64, f64, f64, f64), (px, py): (f64, f64)) -> Transform {
-    let l = Transform { a, b, tx: px - (a * px + b * py), c, d, ty: py - (c * px + d * py) };
+    let l = Transform {
+        a,
+        b,
+        tx: px - (a * px + b * py),
+        c,
+        d,
+        ty: py - (c * px + d * py),
+    };
     compose(t, &l)
 }
 
 fn mix(colors: &[String], v: f64) -> Option<document_proto::Color> {
-    let cs: Vec<[f64; 4]> = colors.iter().filter_map(|c| motion_proto::parse_hex(c)).collect();
+    let cs: Vec<[f64; 4]> = colors
+        .iter()
+        .filter_map(|c| motion_proto::parse_hex(c))
+        .collect();
     let (first, last) = (cs.first()?, cs.last()?);
     let c = if cs.len() == 1 || v <= 0.0 {
         *first
@@ -788,7 +912,12 @@ fn mix(colors: &[String], v: f64) -> Option<document_proto::Color> {
         let i = (x.floor() as usize).min(cs.len() - 2);
         let f = x - i as f64;
         let (a, b) = (cs[i], cs[i + 1]);
-        [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, a[3] + (b[3] - a[3]) * f]
+        [
+            a[0] + (b[0] - a[0]) * f,
+            a[1] + (b[1] - a[1]) * f,
+            a[2] + (b[2] - a[2]) * f,
+            a[3] + (b[3] - a[3]) * f,
+        ]
     };
     Some(document_proto::Color::rgba(c[0], c[1], c[2], c[3]))
 }
@@ -831,9 +960,15 @@ fn apply_target(
         Target::Scale => node.transform = about(&node.transform, (factor, 0.0, 0.0, factor), p),
         Target::StretchX => node.transform = about(&node.transform, (factor, 0.0, 0.0, 1.0), p),
         Target::StretchY => node.transform = about(&node.transform, (1.0, 0.0, 0.0, factor), p),
-        Target::SkewX => node.transform = about(&node.transform, (1.0, v.to_radians().tan(), 0.0, 1.0), p),
-        Target::SkewY => node.transform = about(&node.transform, (1.0, 0.0, v.to_radians().tan(), 1.0), p),
-        Target::Opacity => node.opacity = (if m.lag { node.opacity + v } else { v }).clamp(0.0, 1.0),
+        Target::SkewX => {
+            node.transform = about(&node.transform, (1.0, v.to_radians().tan(), 0.0, 1.0), p)
+        }
+        Target::SkewY => {
+            node.transform = about(&node.transform, (1.0, 0.0, v.to_radians().tan(), 1.0), p)
+        }
+        Target::Opacity => {
+            node.opacity = (if m.lag { node.opacity + v } else { v }).clamp(0.0, 1.0)
+        }
         Target::Fill { colors } => {
             if let Some(c) = mix(colors, v) {
                 recolor(&mut node.fills, c);
@@ -846,7 +981,12 @@ fn apply_target(
         }
         Target::Emission => {
             if let Some(e) = node.emission.as_mut() {
-                e.intensity = (if m.lag { e.intensity + v } else { e.intensity * v }).max(0.0);
+                e.intensity = (if m.lag {
+                    e.intensity + v
+                } else {
+                    e.intensity * v
+                })
+                .max(0.0);
             }
         }
         Target::DashOffset => node.stroke.dash_offset += v,
@@ -867,9 +1007,19 @@ fn apply_target(
                 set_geometry(node, g);
                 return;
             }
-            let mut args: Vec<(&str, f64)> = names.iter().map(|(k, _)| k.as_str()).zip(shape_args.iter().copied()).filter(|(_, v)| v.is_finite()).collect();
+            let mut args: Vec<(&str, f64)> = names
+                .iter()
+                .map(|(k, _)| k.as_str())
+                .zip(shape_args.iter().copied())
+                .filter(|(_, v)| v.is_finite())
+                .collect();
             args.push(("value", v));
-            let ctx = ShapeCtx { part: part.as_deref().unwrap_or(""), width: size.0, height: size.1, args: &args };
+            let ctx = ShapeCtx {
+                part: part.as_deref().unwrap_or(""),
+                width: size.0,
+                height: size.1,
+                args: &args,
+            };
             if let Some(g) = shapes.get(provider).and_then(|f| f(&ctx)) {
                 cache.insert(i, (key, size, g.clone()));
                 set_geometry(node, g);

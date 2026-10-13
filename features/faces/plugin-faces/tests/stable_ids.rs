@@ -14,7 +14,10 @@ fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
             if p.is_dir() {
                 stack.push(p);
             } else {
-                out.insert(p.strip_prefix(root).expect("under root").to_path_buf(), std::fs::read(&p).expect("read"));
+                out.insert(
+                    p.strip_prefix(root).expect("under root").to_path_buf(),
+                    std::fs::read(&p).expect("read"),
+                );
             }
         }
     }
@@ -29,10 +32,27 @@ fn a_second_regeneration_is_byte_identical() {
     assert_eq!(plugin_faces::write_all(&b), n);
     let (fa, fb) = (files(&a), files(&b));
     let _ = std::fs::remove_dir_all(&tmp);
-    assert!(fa.keys().filter(|p| p.extension().is_some_and(|e| e == "frame")).count() == n, "one .frame per face");
-    assert_eq!(fa.keys().collect::<Vec<_>>(), fb.keys().collect::<Vec<_>>(), "same files");
-    let differ: Vec<_> = fa.iter().filter(|(p, bytes)| fb.get(*p) != Some(*bytes)).map(|(p, _)| p.display().to_string()).collect();
-    assert!(differ.is_empty(), "files differ between two regenerations: {differ:?}");
+    assert!(
+        fa.keys()
+            .filter(|p| p.extension().is_some_and(|e| e == "frame"))
+            .count()
+            == n,
+        "one .frame per face"
+    );
+    assert_eq!(
+        fa.keys().collect::<Vec<_>>(),
+        fb.keys().collect::<Vec<_>>(),
+        "same files"
+    );
+    let differ: Vec<_> = fa
+        .iter()
+        .filter(|(p, bytes)| fb.get(*p) != Some(*bytes))
+        .map(|(p, _)| p.display().to_string())
+        .collect();
+    assert!(
+        differ.is_empty(),
+        "files differ between two regenerations: {differ:?}"
+    );
 }
 
 #[test]
@@ -42,7 +62,12 @@ fn ids_are_unique_and_follow_the_tree() {
         for (id, n) in &s.nodes {
             assert_eq!(*id, n.id, "{}: a node keyed by another id", f.file);
             for c in &n.children {
-                assert_eq!(s.node(*c).and_then(|c| c.parent), Some(*id), "{}: child's parent", f.file);
+                assert_eq!(
+                    s.node(*c).and_then(|c| c.parent),
+                    Some(*id),
+                    "{}: child's parent",
+                    f.file
+                );
             }
         }
     }

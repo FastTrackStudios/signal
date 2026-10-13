@@ -11,8 +11,6 @@
 //! use crate::ui::prelude::*;  // FTS UI components (Toggle, Section, etc.)
 //! ```
 
-
-
 // Re-export core dependencies
 pub use nice_plug;
 #[allow(

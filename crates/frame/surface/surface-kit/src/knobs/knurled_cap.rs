@@ -48,15 +48,43 @@ type Disc = (&'static [(f64, &'static str)], &'static str, &'static str);
 fn disc(variant: Option<&str>) -> Option<Disc> {
     match variant {
         Some("bare") => None,
-        Some("clear") => Some((&[(0.0, "#ffffff30"), (0.55, "#ffffff1a"), (1.0, "#0000001f")], "#ffffff66", "#f4f4f0")),
-        Some("clear_dark") => Some((&[(0.0, "#ffffff2e"), (0.55, "#ffffff18"), (1.0, "#0000001c")], "#ffffff5e", "#1b1b1d")),
-        _ => Some((&[(0.0, "#505055f0"), (0.6, "#3c3c41f0"), (1.0, "#29292df0")], "#ffffff24", "#d8d8d2")),
+        Some("clear") => Some((
+            &[(0.0, "#ffffff30"), (0.55, "#ffffff1a"), (1.0, "#0000001f")],
+            "#ffffff66",
+            "#f4f4f0",
+        )),
+        Some("clear_dark") => Some((
+            &[(0.0, "#ffffff2e"), (0.55, "#ffffff18"), (1.0, "#0000001c")],
+            "#ffffff5e",
+            "#1b1b1d",
+        )),
+        _ => Some((
+            &[(0.0, "#505055f0"), (0.6, "#3c3c41f0"), (1.0, "#29292df0")],
+            "#ffffff24",
+            "#d8d8d2",
+        )),
     }
 }
 
-fn caption(s: &str, cx: f64, cy: f64, size: f64, ink: &str, case: TextCase) -> document_proto::Node {
+fn caption(
+    s: &str,
+    cx: f64,
+    cy: f64,
+    size: f64,
+    ink: &str,
+    case: TextCase,
+) -> document_proto::Node {
     let w = text_w(s, size) * 1.2 + size * 2.0;
-    let mut n = draw::text("legend", s, cx - w / 2.0, cy - size * 0.68, w, size, ink, TextAlign::Center);
+    let mut n = draw::text(
+        "legend",
+        s,
+        cx - w / 2.0,
+        cy - size * 0.68,
+        w,
+        size,
+        ink,
+        TextAlign::Center,
+    );
     if let NodeKind::Text(t) = &mut n.kind {
         t.font_weight = Some(700.0);
         t.text_case = case;
@@ -72,8 +100,16 @@ fn knurl(c: f64, r0: f64, r1: f64, n: u32, w: f64) -> String {
         let a = 360.0 * f64::from(i) / f64::from(n);
         let (x0, y0) = draw::polar(c, c, r0, a);
         let (x1, y1) = draw::polar(c, c, r1, a);
-        let (nx, ny) = (a.to_radians().cos() * w / 2.0, a.to_radians().sin() * w / 2.0);
-        d.push_str(&draw::polygon(&[(x0 - nx, y0 - ny), (x0 + nx, y0 + ny), (x1 + nx, y1 + ny), (x1 - nx, y1 - ny)]));
+        let (nx, ny) = (
+            a.to_radians().cos() * w / 2.0,
+            a.to_radians().sin() * w / 2.0,
+        );
+        d.push_str(&draw::polygon(&[
+            (x0 - nx, y0 - ny),
+            (x0 + nx, y0 + ny),
+            (x1 + nx, y1 + ny),
+            (x1 - nx, y1 - ny),
+        ]));
         d.push(' ');
     }
     d
@@ -81,7 +117,12 @@ fn knurl(c: f64, r0: f64, r1: f64, n: u32, w: f64) -> String {
 
 fn circle_d(cx: f64, cy: f64, r: f64, ccw: bool) -> String {
     let sweep = u8::from(!ccw);
-    format!("M {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 {sweep} {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 {sweep} {:.3} {cy:.3} Z ", cx + r, cx - r, cx + r)
+    format!(
+        "M {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 {sweep} {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 {sweep} {:.3} {cy:.3} Z ",
+        cx + r,
+        cx - r,
+        cx + r
+    )
 }
 
 #[allow(clippy::too_many_lines)]
@@ -93,28 +134,51 @@ fn knurled_cap(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let rd = if dsc.is_some() { r * DISC } else { r };
     let ink = p.ink_color(PANEL_INK);
     let sweep = p.sweep.unwrap_or(300.0);
-    let labels: Vec<String> = p.scale.clone().unwrap_or_else(|| ATTEN.iter().map(ToString::to_string).collect());
+    let labels: Vec<String> = p
+        .scale
+        .clone()
+        .unwrap_or_else(|| ATTEN.iter().map(ToString::to_string).collect());
     let between: usize = p.opt("dots").and_then(|v| v.parse().ok()).unwrap_or(1);
 
     // The dot ring: every label position, and `between` dots in each gap.
     let n = labels.len();
-    let at = |i: usize| if n < 2 { 0.5 } else { i as f64 / (n - 1) as f64 };
+    let at = |i: usize| {
+        if n < 2 {
+            0.5
+        } else {
+            i as f64 / (n - 1) as f64
+        }
+    };
     let angle = |t: f64| (t - 0.5) * sweep;
     let ring_r = rd + 4.0 * k.max(0.6);
     let dot_r = (1.15 * k).max(0.8);
     let clear = ring_r + dot_r + 2.0 * k;
     let size = (8.2 * k).max(draw::SCALE_TYPE_MIN);
-    let extents: Vec<(f64, f64, f64, f64)> =
-        labels.iter().enumerate().filter(|(_, s)| !s.is_empty()).map(|(i, s)| draw::radial_extent(s, clear, angle(at(i)), size)).collect();
-    let reach = extents.iter().map(|e| e.0.abs().max(e.1.abs()).max(e.2.abs()).max(e.3.abs())).fold(ring_r + 3.0 * k, f64::max);
+    let extents: Vec<(f64, f64, f64, f64)> = labels
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| !s.is_empty())
+        .map(|(i, s)| draw::radial_extent(s, clear, angle(at(i)), size))
+        .collect();
+    let reach = extents
+        .iter()
+        .map(|e| e.0.abs().max(e.1.abs()).max(e.2.abs()).max(e.3.abs()))
+        .fold(ring_r + 3.0 * k, f64::max);
     let bottom = extents.iter().map(|e| e.3).fold(ring_r + dot_r, f64::max);
     let half = reach + 2.0 * k;
     let side = 2.0 * half;
     let c = half;
     let legend_size = (8.5 * k).max(8.0);
     let legend_y = c + bottom + 3.0 + legend_size * 0.7;
-    let name = if p.name.is_empty() { "Knurled cap" } else { p.name.as_str() };
-    let root = b.add(parent, draw::frame(name, 0.0, 0.0, side, legend_y + legend_size));
+    let name = if p.name.is_empty() {
+        "Knurled cap"
+    } else {
+        p.name.as_str()
+    };
+    let root = b.add(
+        parent,
+        draw::frame(name, 0.0, 0.0, side, legend_y + legend_size),
+    );
     let knob = b.add(root, draw::frame("knob", 0.0, 0.0, side, side));
 
     // ── the panel's printed scale ──
@@ -133,7 +197,10 @@ fn knurled_cap(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
         dots.push_str(&circle_d(x, y, dot_r, false));
     }
     if n > 0 {
-        b.add(knob, draw::path("scale dots", 0.0, 0.0, side, side, dots, draw::solid(&ink)));
+        b.add(
+            knob,
+            draw::path("scale dots", 0.0, 0.0, side, side, dots, draw::solid(&ink)),
+        );
     }
     for (i, s) in labels.iter().enumerate() {
         if s.is_empty() {
@@ -150,15 +217,56 @@ fn knurled_cap(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     if let Some((stops, rim, _)) = dsc {
         let disc = draw::circle("disc", c, c, rd, draw::radial_at(0.42, 0.34, 0.75, stops));
         let disc = draw::stroked(disc, rim, (0.8 * k).max(0.6));
-        b.add(knob, draw::with_effects(disc, vec![draw::drop_shadow("#00000059", 0.0, 1.2 * k, 2.5 * k)]));
+        b.add(
+            knob,
+            draw::with_effects(
+                disc,
+                vec![draw::drop_shadow("#00000059", 0.0, 1.2 * k, 2.5 * k)],
+            ),
+        );
         // The disc's bevelled edge catching the light at the top.
         let lip = draw::sector(c, c, rd - 1.6 * k, rd - 0.4 * k, -70.0, 45.0);
-        b.add(knob, draw::path("disc lip", 0.0, 0.0, side, side, lip, draw::solid("#ffffff2e")));
+        b.add(
+            knob,
+            draw::path(
+                "disc lip",
+                0.0,
+                0.0,
+                side,
+                side,
+                lip,
+                draw::solid("#ffffff2e"),
+            ),
+        );
     }
-    b.add(knob, draw::circle("collar shadow", c + 0.4 * k, c + 2.2 * k, r, draw::solid("#00000080")));
-    let collar = draw::circle("collar", c, c, r, draw::linear(165.0, &[(0.0, "#2c2c30"), (0.45, "#141416"), (1.0, "#060607")]));
+    b.add(
+        knob,
+        draw::circle(
+            "collar shadow",
+            c + 0.4 * k,
+            c + 2.2 * k,
+            r,
+            draw::solid("#00000080"),
+        ),
+    );
+    let collar = draw::circle(
+        "collar",
+        c,
+        c,
+        r,
+        draw::linear(
+            165.0,
+            &[(0.0, "#2c2c30"), (0.45, "#141416"), (1.0, "#060607")],
+        ),
+    );
     let collar = draw::stroked(collar, "#000000cc", (0.8 * k).max(0.6));
-    b.add(knob, draw::with_effects(collar, vec![draw::drop_shadow("#0000008c", 0.0, 2.5 * k, 5.0 * k)]));
+    b.add(
+        knob,
+        draw::with_effects(
+            collar,
+            vec![draw::drop_shadow("#0000008c", 0.0, 2.5 * k, 5.0 * k)],
+        ),
+    );
 
     // The cap: spun aluminium, flush in the collar. Its concentric turning
     // marks are rotation-invariant; the light on it is the room's.
@@ -168,26 +276,91 @@ fn knurled_cap(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
         c,
         c,
         rc,
-        draw::radial_at(0.5, 0.5, 0.5, &[(0.0, "#e2e3e2"), (0.55, "#cfd0cf"), (0.9, "#b4b5b3"), (1.0, "#8d8e8c")]),
+        draw::radial_at(
+            0.5,
+            0.5,
+            0.5,
+            &[
+                (0.0, "#e2e3e2"),
+                (0.55, "#cfd0cf"),
+                (0.9, "#b4b5b3"),
+                (1.0, "#8d8e8c"),
+            ],
+        ),
     );
-    b.add(knob, draw::with_effects(draw::stroked(cap, "#00000080", (0.6 * k).max(0.5)), vec![draw::inner_shadow("#00000059", 0.0, -0.8 * k, 1.5 * k)]));
+    b.add(
+        knob,
+        draw::with_effects(
+            draw::stroked(cap, "#00000080", (0.6 * k).max(0.5)),
+            vec![draw::inner_shadow("#00000059", 0.0, -0.8 * k, 1.5 * k)],
+        ),
+    );
     let sheen = draw::conic(
         200.0,
-        &[(0.0, "#ffffff5c"), (0.13, "#ffffff00"), (0.25, "#0000002e"), (0.38, "#ffffff00"), (0.5, "#ffffff52"), (0.63, "#ffffff00"), (0.75, "#00000029"), (0.88, "#ffffff00"), (1.0, "#ffffff5c")],
+        &[
+            (0.0, "#ffffff5c"),
+            (0.13, "#ffffff00"),
+            (0.25, "#0000002e"),
+            (0.38, "#ffffff00"),
+            (0.5, "#ffffff52"),
+            (0.63, "#ffffff00"),
+            (0.75, "#00000029"),
+            (0.88, "#ffffff00"),
+            (1.0, "#ffffff5c"),
+        ],
     );
     b.add(knob, draw::circle("cap sheen", c, c, rc - 0.4 * k, sheen));
     for f in [0.3, 0.52, 0.76] {
-        b.add(knob, draw::stroked(draw::circle("turning", c, c, rc * f, draw::solid("#00000000")), "#00000014", 0.5));
+        b.add(
+            knob,
+            draw::stroked(
+                draw::circle("turning", c, c, rc * f, draw::solid("#00000000")),
+                "#00000014",
+                0.5,
+            ),
+        );
     }
 
     // ── turning: the knurl round the cap, the disc's line, the cap's ring ──
     let body = b.add(knob, draw::frame("body", 0.0, 0.0, side, side));
     let ridges = (std::f64::consts::PI * d / (2.6 * k.max(0.5))).clamp(28.0, 84.0) as u32;
-    b.add(body, draw::path("knurl", 0.0, 0.0, side, side, knurl(c, rc + 0.6 * k, r - 0.3 * k, ridges, 0.9 * k), draw::solid("#4c4c52")));
-    b.add(body, draw::path("knurl shade", 0.0, 0.0, side, side, knurl(c, rc + 0.6 * k, r - 0.3 * k, ridges, 0.35 * k), draw::solid("#000000")));
+    b.add(
+        body,
+        draw::path(
+            "knurl",
+            0.0,
+            0.0,
+            side,
+            side,
+            knurl(c, rc + 0.6 * k, r - 0.3 * k, ridges, 0.9 * k),
+            draw::solid("#4c4c52"),
+        ),
+    );
+    b.add(
+        body,
+        draw::path(
+            "knurl shade",
+            0.0,
+            0.0,
+            side,
+            side,
+            knurl(c, rc + 0.6 * k, r - 0.3 * k, ridges, 0.35 * k),
+            draw::solid("#000000"),
+        ),
+    );
     if let Some((_, _, line)) = dsc {
         let lw = (1.5 * k).max(1.0);
-        let n = draw::rounded(draw::rect("index", c - lw / 2.0, c - rd + 1.2 * k, lw, rd - r - 1.8 * k, draw::solid(line)), lw / 2.0);
+        let n = draw::rounded(
+            draw::rect(
+                "index",
+                c - lw / 2.0,
+                c - rd + 1.2 * k,
+                lw,
+                rd - r - 1.8 * k,
+                draw::solid(line),
+            ),
+            lw / 2.0,
+        );
         b.add(body, n);
     } else {
         // The time knobs' index: a small ring engraved near the cap's edge.
@@ -197,12 +370,44 @@ fn knurled_cap(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     }
     // The room's light on the collar's top edge and the cap's rim.
     let lit = draw::sector(c, c, r - 1.2 * k, r - 0.2 * k, -80.0, 30.0);
-    b.add(knob, draw::path("collar light", 0.0, 0.0, side, side, lit, draw::solid("#ffffff2a")));
-    let glint = draw::circle("cap light", c - rc * 0.28, c - rc * 0.34, rc * 0.5, draw::radial(&[(0.0, "#ffffff4d"), (1.0, "#ffffff00")]));
+    b.add(
+        knob,
+        draw::path(
+            "collar light",
+            0.0,
+            0.0,
+            side,
+            side,
+            lit,
+            draw::solid("#ffffff2a"),
+        ),
+    );
+    let glint = draw::circle(
+        "cap light",
+        c - rc * 0.28,
+        c - rc * 0.34,
+        rc * 0.5,
+        draw::radial(&[(0.0, "#ffffff4d"), (1.0, "#ffffff00")]),
+    );
     b.add(knob, glint);
 
-    let legend = b.add(root, caption(p.legend.as_deref().unwrap_or(""), c, legend_y, legend_size, &ink, p.case()));
-    let ctl = p.control(ControlKind::Knob { sweep_degrees: sweep }).slot(SlotRole::Needle, body.0).slot(SlotRole::Label, legend.0);
+    let legend = b.add(
+        root,
+        caption(
+            p.legend.as_deref().unwrap_or(""),
+            c,
+            legend_y,
+            legend_size,
+            &ink,
+            p.case(),
+        ),
+    );
+    let ctl = p
+        .control(ControlKind::Knob {
+            sweep_degrees: sweep,
+        })
+        .slot(SlotRole::Needle, body.0)
+        .slot(SlotRole::Label, legend.0);
     b.controls.insert(root, ctl);
     if let Some(touch) = p.touch {
         crate::registry::tighten(b, root, (c, c), d, touch);

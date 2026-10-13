@@ -18,9 +18,9 @@
 //! it, so the same three knobs are a broad stroke at the top and a precise
 //! edit further in.
 
-use dioxus::prelude::*;
 use crate::proto::keys::KeysRigClient;
 use crate::proto::{KeysEngineModel, KeysLayerModel, KeysMacro, KeysMixer};
+use dioxus::prelude::*;
 
 use crate::ui::graphs::{Adsr, ModuleCurve};
 

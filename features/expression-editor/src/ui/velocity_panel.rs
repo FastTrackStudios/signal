@@ -30,11 +30,9 @@
 
 use std::sync::Arc;
 
-use dioxus::prelude::*;
-use crate::ops::velocity::{
-    CurvePreset, MAX_VELOCITY, MIN_VELOCITY, Pivot, Range, Session,
-};
+use crate::ops::velocity::{CurvePreset, MAX_VELOCITY, MIN_VELOCITY, Pivot, Range, Session};
 use crate::ops::{DemoSink, VelocitySink};
+use dioxus::prelude::*;
 
 use crate::ui::curve_editor::CurveEditor;
 use crate::ui::drag::{BarEditor, RangeSlider, Slider};

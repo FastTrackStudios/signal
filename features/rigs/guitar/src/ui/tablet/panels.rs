@@ -10,15 +10,19 @@
 //!   Key, Tempo, Starts on, Profile, Colour — a song's, in this set
 //!   Patch     what a section or part plays, where there is no browser
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{LibraryModel, PerformanceModel, ProfileEntry};
+use dioxus::prelude::*;
 
-use super::colors::{add_days, date_label, date_parts, name_colour, next_date_for, set_heading, set_meta, set_name, song_colour, tape_for, tape_mark, today_iso, when_label, SetMeta, SONG_PALETTE, TAPE_GAFFER};
+use super::colors::{
+    SONG_PALETTE, SetMeta, TAPE_GAFFER, add_days, date_label, date_parts, name_colour,
+    next_date_for, set_heading, set_meta, set_name, song_colour, tape_for, tape_mark, today_iso,
+    when_label,
+};
 use super::marks::{ProfileIcon, SourceIcon};
-use super::setlist::{call, give_part, sections_of, song_stacks, sound_of, PrimaryButton, Src};
-use signal_widgets::drag_bus::{DragBus, DragEvent};
+use super::setlist::{PrimaryButton, Src, call, give_part, sections_of, song_stacks, sound_of};
 use super::tokens::*;
+use signal_widgets::drag_bus::{DragBus, DragEvent};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DetailsMode {
@@ -45,7 +49,9 @@ pub enum Panel {
 /// The picked swatch's double ring: the sheet, then the focus ink.
 const SWATCH_RING: &str = "0 0 0 2px #141418, 0 0 0 4px #d4d4d8"; // SHEET_2, FOCUS_FG
 
-const KEYS: [&str; 12] = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+const KEYS: [&str; 12] = [
+    "C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B",
+];
 
 /// Every set's parts, in the set list's order.
 fn metas(perf: &PerformanceModel, lib: &LibraryModel) -> Vec<SetMeta> {
@@ -60,7 +66,12 @@ fn metas(perf: &PerformanceModel, lib: &LibraryModel) -> Vec<SetMeta> {
 }
 
 #[component]
-pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_close: EventHandler<()>) -> Element {
+pub fn PanelView(
+    panel: Panel,
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    on_close: EventHandler<()>,
+) -> Element {
     let mut current = use_signal(|| panel.clone());
     let mut seen = use_signal(|| panel.clone());
     if *seen.peek() != panel {
@@ -77,7 +88,14 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
         Panel::Sets => ("Sets".to_string(), format!("{} sets", perf.setlists.len())),
         Panel::Details(DetailsMode::New) => ("New set".to_string(), String::new()),
         Panel::Details(DetailsMode::Edit) => ("Set details".to_string(), set_name_now.clone()),
-        Panel::Details(DetailsMode::Duplicate) => ("Duplicate set".to_string(), format!("{} from {}", songs_label(perf.songs.len()), set_heading(&set_m))),
+        Panel::Details(DetailsMode::Duplicate) => (
+            "Duplicate set".to_string(),
+            format!(
+                "{} from {}",
+                songs_label(perf.songs.len()),
+                set_heading(&set_m)
+            ),
+        ),
         Panel::Add => ("Add songs".to_string(), format!("To {set_name_now}")),
         Panel::Key(i) => (song_at(*i).name, "Key".to_string()),
         Panel::Tempo(i) => (song_at(*i).name, "Tempo".to_string()),
@@ -88,31 +106,60 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
         Panel::Patch(k) => {
             let part = perf.parts.get(*k).cloned().unwrap_or_default();
             let song = song_at(perf.song_index as usize).name;
-            let sec = sections_of(&perf.parts).into_iter().find(|s| s.parts.contains(k));
+            let sec = sections_of(&perf.parts)
+                .into_iter()
+                .find(|s| s.parts.contains(k));
             match sec {
-                Some(sec) if sec.parts.len() > 1 => (format!("{} · {}", sec.name, part.name), format!("The patch this part plays — {song}")),
-                Some(sec) => (format!("{song} · {}", sec.name), "The patch this section plays".to_string()),
-                None => (format!("{song} · {}", part.name), "The patch this section plays".to_string()),
+                Some(sec) if sec.parts.len() > 1 => (
+                    format!("{} · {}", sec.name, part.name),
+                    format!("The patch this part plays — {song}"),
+                ),
+                Some(sec) => (
+                    format!("{song} · {}", sec.name),
+                    "The patch this section plays".to_string(),
+                ),
+                None => (
+                    format!("{song} · {}", part.name),
+                    "The patch this section plays".to_string(),
+                ),
             }
         }
     };
     let top = p == Panel::Sets;
     let body = match p.clone() {
-        Panel::Sets => rsx! { SetsBody { perf: perf.clone(), lib: lib.clone(), on_close, on_new: move |()| current.set(Panel::Details(DetailsMode::New)) } },
-        Panel::Details(mode) => rsx! { DetailsBody { mode, perf: perf.clone(), lib: lib.clone(), on_done: on_close } },
+        Panel::Sets => {
+            rsx! { SetsBody { perf: perf.clone(), lib: lib.clone(), on_close, on_new: move |()| current.set(Panel::Details(DetailsMode::New)) } }
+        }
+        Panel::Details(mode) => {
+            rsx! { DetailsBody { mode, perf: perf.clone(), lib: lib.clone(), on_done: on_close } }
+        }
         Panel::Add => rsx! { AddBody { perf: perf.clone(), lib: lib.clone() } },
         Panel::Key(i) => rsx! { KeyBody { index: i, perf: perf.clone(), on_done: on_close } },
         Panel::Tempo(i) => rsx! { TempoBody { index: i, perf: perf.clone() } },
-        Panel::Start(i) => rsx! { StartBody { index: i, perf: perf.clone(), lib: lib.clone(), on_done: on_close } },
+        Panel::Start(i) => {
+            rsx! { StartBody { index: i, perf: perf.clone(), lib: lib.clone(), on_done: on_close } }
+        }
         Panel::Colour(i) => rsx! { ColourBody { index: i, perf: perf.clone(), on_done: on_close } },
-        Panel::Profile(song) => rsx! { ProfileBody { song, perf: perf.clone(), lib: lib.clone(), on_done: on_close } },
-        Panel::Patch(k) => rsx! { PatchBody { part: k, perf: perf.clone(), lib: lib.clone(), on_done: on_close } },
+        Panel::Profile(song) => {
+            rsx! { ProfileBody { song, perf: perf.clone(), lib: lib.clone(), on_done: on_close } }
+        }
+        Panel::Patch(k) => {
+            rsx! { PatchBody { part: k, perf: perf.clone(), lib: lib.clone(), on_done: on_close } }
+        }
     };
     // Flat: the sheet stands off the scrim by its tone and a hairline.
     let (justify, radius, edge) = if top {
-        ("flex-start", format!("0 0 {R_MD} {R_MD}"), format!("border-bottom: 1px solid {RULE_STRONG};"))
+        (
+            "flex-start",
+            format!("0 0 {R_MD} {R_MD}"),
+            format!("border-bottom: 1px solid {RULE_STRONG};"),
+        )
     } else {
-        ("flex-end", format!("{R_MD} {R_MD} 0 0"), format!("border-top: 1px solid {RULE_STRONG};"))
+        (
+            "flex-end",
+            format!("{R_MD} {R_MD} 0 0"),
+            format!("border-top: 1px solid {RULE_STRONG};"),
+        )
     };
     // Pull a sheet down by its grabber or its title to close it.
     let bus = DragBus::try_use();
@@ -168,15 +215,32 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
 // ── Sets ───────────────────────────────────────────────────────────────────
 
 #[component]
-fn SetsBody(perf: PerformanceModel, lib: LibraryModel, on_close: EventHandler<()>, on_new: EventHandler<()>) -> Element {
+fn SetsBody(
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    on_close: EventHandler<()>,
+    on_new: EventHandler<()>,
+) -> Element {
     let today = today_iso();
     let ms = metas(&perf, &lib);
     let rows: Vec<(usize, SetMeta)> = ms.into_iter().enumerate().collect();
-    let mut upcoming: Vec<(usize, SetMeta)> = rows.iter().filter(|(_, m)| !m.date.is_empty() && m.date >= today).cloned().collect();
+    let mut upcoming: Vec<(usize, SetMeta)> = rows
+        .iter()
+        .filter(|(_, m)| !m.date.is_empty() && m.date >= today)
+        .cloned()
+        .collect();
     upcoming.sort_by(|a, b| a.1.date.cmp(&b.1.date));
-    let mut past: Vec<(usize, SetMeta)> = rows.iter().filter(|(_, m)| !m.date.is_empty() && m.date < today).cloned().collect();
+    let mut past: Vec<(usize, SetMeta)> = rows
+        .iter()
+        .filter(|(_, m)| !m.date.is_empty() && m.date < today)
+        .cloned()
+        .collect();
     past.sort_by(|a, b| b.1.date.cmp(&a.1.date));
-    let undated: Vec<(usize, SetMeta)> = rows.iter().filter(|(_, m)| m.date.is_empty()).cloned().collect();
+    let undated: Vec<(usize, SetMeta)> = rows
+        .iter()
+        .filter(|(_, m)| m.date.is_empty())
+        .cloned()
+        .collect();
     rsx! {
         div { style: "padding-bottom: 14px;",
             div { style: "padding: 12px 14px 0; display: flex; flex-direction: column;",
@@ -190,7 +254,13 @@ fn SetsBody(perf: PerformanceModel, lib: LibraryModel, on_close: EventHandler<()
 }
 
 #[component]
-fn SetGroup(label: &'static str, rows: Vec<(usize, SetMeta)>, perf: PerformanceModel, lib: LibraryModel, on_close: EventHandler<()>) -> Element {
+fn SetGroup(
+    label: &'static str,
+    rows: Vec<(usize, SetMeta)>,
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    on_close: EventHandler<()>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     if rows.is_empty() {
         return rsx! {};
@@ -258,7 +328,12 @@ fn EventChip(event: String, big: bool) -> Element {
 // ── Details ────────────────────────────────────────────────────────────────
 
 #[component]
-fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
+fn DetailsBody(
+    mode: DetailsMode,
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    on_done: EventHandler<()>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let set_index = perf.setlist_index as usize;
     let all = metas(&perf, &lib);
@@ -274,29 +349,62 @@ fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_
     }
     let start = match mode {
         DetailsMode::Edit => set.clone(),
-        DetailsMode::Duplicate => SetMeta { event: set.event.clone(), date: if set.date.is_empty() { today_iso() } else { add_days(&set.date, 7) }, title: String::new() },
+        DetailsMode::Duplicate => SetMeta {
+            event: set.event.clone(),
+            date: if set.date.is_empty() {
+                today_iso()
+            } else {
+                add_days(&set.date, 7)
+            },
+            title: String::new(),
+        },
         DetailsMode::New => {
-            let ev = if set.event.is_empty() { events.first().cloned().unwrap_or_default() } else { set.event.clone() };
-            SetMeta { date: next_date_for(&ev, &all), event: ev, title: String::new() }
+            let ev = if set.event.is_empty() {
+                events.first().cloned().unwrap_or_default()
+            } else {
+                set.event.clone()
+            };
+            SetMeta {
+                date: next_date_for(&ev, &all),
+                event: ev,
+                title: String::new(),
+            }
         }
     };
     let mut m = use_signal(|| start);
     let mut new_event = use_signal(|| None::<String>);
     let cur = m();
     let name = set_name(&cur);
-    let clash = perf.setlists.iter().enumerate().any(|(i, n)| n.eq_ignore_ascii_case(&name) && !(mode == DetailsMode::Edit && i == set_index));
+    let clash = perf.setlists.iter().enumerate().any(|(i, n)| {
+        n.eq_ignore_ascii_case(&name) && !(mode == DetailsMode::Edit && i == set_index)
+    });
     let ok = !cur.event.trim().is_empty() && !clash;
     let today = today_iso();
-    let mut quick: Vec<(String, String)> = vec![("Today".into(), today.clone()), ("Tomorrow".into(), add_days(&today, 1))];
-    let others: Vec<SetMeta> = all.iter().enumerate().filter(|(i, _)| mode != DetailsMode::Edit || *i != set_index).map(|(_, x)| x.clone()).collect();
+    let mut quick: Vec<(String, String)> = vec![
+        ("Today".into(), today.clone()),
+        ("Tomorrow".into(), add_days(&today, 1)),
+    ];
+    let others: Vec<SetMeta> = all
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| mode != DetailsMode::Edit || *i != set_index)
+        .map(|(_, x)| x.clone())
+        .collect();
     if !cur.event.is_empty() {
         let usual = next_date_for(&cur.event, &others);
         if usual != today && usual != add_days(&today, 1) {
-            quick.push((format!("Next {} · {}", cur.event, date_label(&usual)), usual));
+            quick.push((
+                format!("Next {} · {}", cur.event, date_label(&usual)),
+                usual,
+            ));
         }
     }
-    let field = format!("width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; color: {INK}; font-size: 16px; font-family: {FONT}; box-sizing: border-box;");
-    let label = format!("font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3}; margin-bottom: 8px;");
+    let field = format!(
+        "width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; color: {INK}; font-size: 16px; font-family: {FONT}; box-sizing: border-box;"
+    );
+    let label = format!(
+        "font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: {INK_3}; margin-bottom: 8px;"
+    );
     let confirm = match mode {
         DetailsMode::Edit => "Save".to_string(),
         DetailsMode::Duplicate => format!("Duplicate {}", songs_label(perf.songs.len())),
@@ -460,18 +568,32 @@ fn DateField(value: String, on_change: EventHandler<String>) -> Element {
     let (y, mo) = month();
     let first = chrono::NaiveDate::from_ymd_opt(y, mo, 1).unwrap_or(today);
     let lead = first.weekday().num_days_from_sunday() as usize;
-    let next_first = if mo == 12 { chrono::NaiveDate::from_ymd_opt(y + 1, 1, 1) } else { chrono::NaiveDate::from_ymd_opt(y, mo + 1, 1) };
+    let next_first = if mo == 12 {
+        chrono::NaiveDate::from_ymd_opt(y + 1, 1, 1)
+    } else {
+        chrono::NaiveDate::from_ymd_opt(y, mo + 1, 1)
+    };
     let days = next_first.map_or(30, |n| (n - first).num_days() as u32);
     let title = format!("{} {y}", first.format("%B"));
-    let shown = if value.is_empty() { "No date".to_string() } else { date_label(&value) };
+    let shown = if value.is_empty() {
+        "No date".to_string()
+    } else {
+        date_label(&value)
+    };
     let mut step = move |d: i32| {
         let (y, mo) = *month.peek();
         let k = y * 12 + mo as i32 - 1 + d;
         month.set((k.div_euclid(12), (k.rem_euclid(12) + 1) as u32));
     };
-    let field = format!("width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; font-size: 16px; font-family: {FONT}; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-start; text-align: left; cursor: pointer;");
-    let nav = format!("width: 44px; height: {HIT}px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 18px; font-family: {FONT}; cursor: pointer;");
-    let foot = format!("min-height: {HIT}px; padding: 0 12px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 14px; font-weight: 600; font-family: {FONT}; cursor: pointer;");
+    let field = format!(
+        "width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; font-size: 16px; font-family: {FONT}; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-start; text-align: left; cursor: pointer;"
+    );
+    let nav = format!(
+        "width: 44px; height: {HIT}px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 18px; font-family: {FONT}; cursor: pointer;"
+    );
+    let foot = format!(
+        "min-height: {HIT}px; padding: 0 12px; border: none; border-radius: {R}; background: transparent; color: {INK_2}; font-size: 14px; font-weight: 600; font-family: {FONT}; cursor: pointer;"
+    );
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 8px;",
             button {
@@ -548,9 +670,16 @@ fn AddBody(perf: PerformanceModel, lib: LibraryModel) -> Element {
     let mut bpm = use_signal(|| 72_u32);
     let set = perf.setlist_index;
     let query = q().trim().to_lowercase();
-    let shown: Vec<_> = lib.songs.iter().filter(|s| s.name.to_lowercase().contains(&query)).cloned().collect();
+    let shown: Vec<_> = lib
+        .songs
+        .iter()
+        .filter(|s| s.name.to_lowercase().contains(&query))
+        .cloned()
+        .collect();
     let exists = lib.songs.iter().any(|s| s.name.to_lowercase() == query);
-    let field = format!("width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; color: {INK}; font-size: 16px; font-family: {FONT}; box-sizing: border-box;");
+    let field = format!(
+        "width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; color: {INK}; font-size: 16px; font-family: {FONT}; box-sizing: border-box;"
+    );
     let typed = q().trim().to_string();
     rsx! {
         div {
@@ -683,7 +812,11 @@ fn KeyGrid(value: String, on_pick: EventHandler<String>) -> Element {
 fn KeyBody(index: usize, perf: PerformanceModel, on_done: EventHandler<()>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let song = perf.songs.get(index).cloned().unwrap_or_default();
-    let value = if song.key.is_empty() { "C".to_string() } else { song.key.clone() };
+    let value = if song.key.is_empty() {
+        "C".to_string()
+    } else {
+        song.key.clone()
+    };
     rsx! {
         div { style: "padding: 16px;",
             KeyGrid {
@@ -734,7 +867,12 @@ fn TempoBody(index: usize, perf: PerformanceModel) -> Element {
 }
 
 #[component]
-fn StartBody(index: usize, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
+fn StartBody(
+    index: usize,
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    on_done: EventHandler<()>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let song = perf.songs.get(index).cloned().unwrap_or_default();
     let current = (!song.start.is_empty()).then(|| song.start.clone());
@@ -805,28 +943,68 @@ fn ColourBody(index: usize, perf: PerformanceModel, on_done: EventHandler<()>) -
 }
 
 #[component]
-fn ProfileBody(song: Option<usize>, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
+fn ProfileBody(
+    song: Option<usize>,
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    on_done: EventHandler<()>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let set_index = perf.setlist_index;
-    let set_profile = lib.setlists.get(set_index as usize).map(|s| s.profile.clone()).unwrap_or_default();
+    let set_profile = lib
+        .setlists
+        .get(set_index as usize)
+        .map(|s| s.profile.clone())
+        .unwrap_or_default();
     let song_name = song.and_then(|i| perf.songs.get(i)).map(|s| s.name.clone());
     let current = match &song_name {
-        Some(n) => lib.songs.iter().find(|s| s.name.eq_ignore_ascii_case(n)).map(|s| s.profile.clone()).unwrap_or_default(),
+        Some(n) => lib
+            .songs
+            .iter()
+            .find(|s| s.name.eq_ignore_ascii_case(n))
+            .map(|s| s.profile.clone())
+            .unwrap_or_default(),
         None => set_profile.clone(),
     };
     // What it follows when it has none of its own.
     let fallback = match &song_name {
-        Some(_) => if set_profile.is_empty() { perf.profile_name.clone() } else { set_profile.clone() },
-        None => lib.profiles.iter().find(|p| p.active).map(|p| p.name.clone()).unwrap_or_else(|| perf.profile_name.clone()),
+        Some(_) => {
+            if set_profile.is_empty() {
+                perf.profile_name.clone()
+            } else {
+                set_profile.clone()
+            }
+        }
+        None => lib
+            .profiles
+            .iter()
+            .find(|p| p.active)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| perf.profile_name.clone()),
     };
-    let most = lib.profiles.iter().flat_map(|p| p.stacks.iter().map(move |st| p.patch_list.iter().filter(|x| &x.stack == st).count())).max().unwrap_or(1).max(1);
+    let most = lib
+        .profiles
+        .iter()
+        .flat_map(|p| {
+            p.stacks
+                .iter()
+                .map(move |st| p.patch_list.iter().filter(|x| &x.stack == st).count())
+        })
+        .max()
+        .unwrap_or(1)
+        .max(1);
     let mut profiles = lib.profiles.clone();
     profiles.sort_by_key(|p| !p.name.eq_ignore_ascii_case(&current));
-    let set = move |rig: Option<RigClient>, song_name: Option<String>, name: String| match song_name {
+    let set = move |rig: Option<RigClient>, song_name: Option<String>, name: String| match song_name
+    {
         Some(s) => call!(rig, |r| r.set_song_profile(s, name)),
         None => call!(rig, |r| r.set_setlist_profile(set_index, name)),
     };
-    let inherit_profile = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(&fallback)).cloned();
+    let inherit_profile = lib
+        .profiles
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(&fallback))
+        .cloned();
     rsx! {
         div { style: "display: flex; flex-direction: column;",
             ProfileCell {
@@ -874,13 +1052,43 @@ fn ProfileBody(song: Option<usize>, perf: PerformanceModel, lib: LibraryModel, o
 /// A profile in the list: its name, what it opens on, and its stacks drawn
 /// small at the right — a column per stack, a block per patch.
 #[component]
-fn ProfileCell(name: String, of: String, inherit: bool, profile: Option<ProfileEntry>, on: bool, most: usize, onclick: EventHandler<()>) -> Element {
+fn ProfileCell(
+    name: String,
+    of: String,
+    inherit: bool,
+    profile: Option<ProfileEntry>,
+    on: bool,
+    most: usize,
+    onclick: EventHandler<()>,
+) -> Element {
     let stacks: Vec<(String, usize)> = profile
         .as_ref()
-        .map(|p| p.stacks.iter().map(|st| (st.clone(), p.patch_list.iter().filter(|x| &x.stack == st).count())).filter(|x| x.1 > 0).collect())
+        .map(|p| {
+            p.stacks
+                .iter()
+                .map(|st| {
+                    (
+                        st.clone(),
+                        p.patch_list.iter().filter(|x| &x.stack == st).count(),
+                    )
+                })
+                .filter(|x| x.1 > 0)
+                .collect()
+        })
         .unwrap_or_default();
-    let first = profile.as_ref().and_then(|p| stacks.first().and_then(|(st, _)| p.patch_list.iter().find(|x| &x.stack == st)).map(|x| x.name.clone())).unwrap_or_default();
-    let meta: Vec<String> = [of.clone(), first].into_iter().filter(|x| !x.is_empty()).collect();
+    let first = profile
+        .as_ref()
+        .and_then(|p| {
+            stacks
+                .first()
+                .and_then(|(st, _)| p.patch_list.iter().find(|x| &x.stack == st))
+                .map(|x| x.name.clone())
+        })
+        .unwrap_or_default();
+    let meta: Vec<String> = [of.clone(), first]
+        .into_iter()
+        .filter(|x| !x.is_empty())
+        .collect();
     let colour = name_colour(&name).to_string();
     rsx! {
         button {
@@ -926,10 +1134,19 @@ fn ProfileCell(name: String, of: String, inherit: bool, profile: Option<ProfileE
 /// What a part plays: "Keep what plays", then the song's stacks, each with
 /// the song's own patches first.
 #[component]
-fn PatchBody(part: usize, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
+fn PatchBody(
+    part: usize,
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    on_done: EventHandler<()>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let p = perf.parts.get(part).cloned().unwrap_or_default();
-    let song = perf.songs.get(perf.song_index as usize).map(|s| s.name.clone()).unwrap_or_default();
+    let song = perf
+        .songs
+        .get(perf.song_index as usize)
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
     rsx! {
         PatchList {
             song,
@@ -951,21 +1168,44 @@ fn PatchBody(part: usize, perf: PerformanceModel, lib: LibraryModel, on_done: Ev
 /// profiles' patches wait below. A pick is the patch, and the profile it is
 /// borrowed from.
 #[component]
-fn PatchList(song: String, perf: PerformanceModel, lib: LibraryModel, current: Option<String>, default_label: &'static str, on_pick: EventHandler<Option<(String, Option<String>)>>) -> Element {
+fn PatchList(
+    song: String,
+    perf: PerformanceModel,
+    lib: LibraryModel,
+    current: Option<String>,
+    default_label: &'static str,
+    on_pick: EventHandler<Option<(String, Option<String>)>>,
+) -> Element {
     let mut show_others = use_signal(|| false);
-    let colour = perf.songs.iter().find(|s| s.name.eq_ignore_ascii_case(&song)).map_or_else(|| INK_3.to_string(), |s| song_colour(&s.name, &s.colour));
+    let colour = perf
+        .songs
+        .iter()
+        .find(|s| s.name.eq_ignore_ascii_case(&song))
+        .map_or_else(|| INK_3.to_string(), |s| song_colour(&s.name, &s.colour));
     // A song's own patches are in the stacks only while it is up.
-    let up = perf.songs.get(perf.song_index as usize).is_some_and(|s| s.name.eq_ignore_ascii_case(&song));
+    let up = perf
+        .songs
+        .get(perf.song_index as usize)
+        .is_some_and(|s| s.name.eq_ignore_ascii_case(&song));
     let stacks: Vec<(String, Vec<(String, Src)>)> = song_stacks(&perf, &lib)
         .into_iter()
         .map(|v| {
-            let mut patches: Vec<(String, Src)> = v.patches.into_iter().filter(|(_, src)| up || *src != Src::Song).collect();
+            let mut patches: Vec<(String, Src)> = v
+                .patches
+                .into_iter()
+                .filter(|(_, src)| up || *src != Src::Song)
+                .collect();
             patches.sort_by_key(|(_, src)| src.rank());
             (v.name, patches)
         })
         .filter(|(_, p)| !p.is_empty())
         .collect();
-    let own = lib.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(&perf.profile_name)).cloned().unwrap_or_default();
+    let own = lib
+        .profiles
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(&perf.profile_name))
+        .cloned()
+        .unwrap_or_default();
     let others: Vec<(String, Vec<(String, String)>)> = lib
         .profiles
         .iter()
@@ -974,16 +1214,32 @@ fn PatchList(song: String, perf: PerformanceModel, lib: LibraryModel, current: O
             let patches = p
                 .patch_list
                 .iter()
-                .filter(|x| !x.stack.is_empty() && x.song.is_empty() && !own.patch_list.iter().any(|o| o.name.eq_ignore_ascii_case(&x.name)))
+                .filter(|x| {
+                    !x.stack.is_empty()
+                        && x.song.is_empty()
+                        && !own
+                            .patch_list
+                            .iter()
+                            .any(|o| o.name.eq_ignore_ascii_case(&x.name))
+                })
                 .map(|x| (x.name.clone(), x.stack.clone()))
                 .collect::<Vec<_>>();
             (p.name.clone(), patches)
         })
         .filter(|(_, x)| !x.is_empty())
         .collect();
-    let other_names = others.iter().map(|o| o.0.clone()).collect::<Vec<_>>().join(" · ");
-    let is = |name: &str| current.as_deref().is_some_and(|c| c.eq_ignore_ascii_case(name));
-    let grid = "display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px;";
+    let other_names = others
+        .iter()
+        .map(|o| o.0.clone())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let is = |name: &str| {
+        current
+            .as_deref()
+            .is_some_and(|c| c.eq_ignore_ascii_case(name))
+    };
+    let grid =
+        "display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px;";
     let open = show_others();
     rsx! {
         div { style: "padding: 10px 14px 16px; display: flex; flex-direction: column; gap: 12px;",
@@ -1063,7 +1319,11 @@ fn PatchList(song: String, perf: PerformanceModel, lib: LibraryModel, current: O
 fn Tape(stack: String) -> Element {
     let tape = tape_for(&stack);
     let pressed = tape == TAPE_GAFFER;
-    let bg = if pressed { "rgba(0,0,0,0.5)".to_string() } else { format!("color-mix(in srgb, {tape} 20%, transparent)") };
+    let bg = if pressed {
+        "rgba(0,0,0,0.5)".to_string()
+    } else {
+        format!("color-mix(in srgb, {tape} 20%, transparent)")
+    };
     rsx! {
         span { style: "display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; color: {pick(pressed, \"#fafafa\", INK)}; background: {bg};",
             if !pressed {

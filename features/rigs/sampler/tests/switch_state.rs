@@ -15,8 +15,8 @@
 
 use std::sync::Arc;
 
-use signal_proto::block::BlockType;
 use sampler::{GuitarRig, ProfileRig, RigBlock, RigPatch, RigProfile};
+use signal_proto::block::BlockType;
 
 const SR: u32 = 48_000;
 
@@ -318,11 +318,7 @@ fn random_patch(g: &mut Lcg, name: &str, extra: bool) -> RigPatch {
 }
 
 /// The patch as it should play: its definition with its live state baked in.
-fn resolved(
-    patch: &RigPatch,
-    live: &[(String, sampler::LiveWrite)],
-    ids: &[String],
-) -> RigPatch {
+fn resolved(patch: &RigPatch, live: &[(String, sampler::LiveWrite)], ids: &[String]) -> RigPatch {
     let mut out = patch.clone();
     let reals: Vec<usize> = out
         .chain

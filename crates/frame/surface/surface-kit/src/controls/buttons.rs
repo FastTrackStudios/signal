@@ -38,14 +38,31 @@ enum Finish {
 impl Finish {
     fn paint(self, c: &str) -> document_proto::Paint {
         match self {
-            Self::Matte => lin(180.0, &[(0.0, tint(c, 0.14)), (0.5, tint(c, 0.04)), (1.0, shade(c, 0.06))]),
+            Self::Matte => lin(
+                180.0,
+                &[
+                    (0.0, tint(c, 0.14)),
+                    (0.5, tint(c, 0.04)),
+                    (1.0, shade(c, 0.06)),
+                ],
+            ),
             Self::Gloss => lin(
                 180.0,
-                &[(0.0, tint(c, 0.34)), (0.34, tint(c, 0.08)), (0.52, c.to_string()), (1.0, shade(c, 0.18))],
+                &[
+                    (0.0, tint(c, 0.34)),
+                    (0.34, tint(c, 0.08)),
+                    (0.52, c.to_string()),
+                    (1.0, shade(c, 0.18)),
+                ],
             ),
             Self::Metal => lin(
                 152.0,
-                &[(0.0, tint(c, 0.38)), (0.34, c.to_string()), (0.66, shade(c, 0.24)), (1.0, tint(c, 0.30))],
+                &[
+                    (0.0, tint(c, 0.38)),
+                    (0.34, c.to_string()),
+                    (0.66, shade(c, 0.24)),
+                    (1.0, tint(c, 0.30)),
+                ],
             ),
         }
     }
@@ -121,7 +138,12 @@ impl Style {
                 finish: Finish::Gloss,
                 border: "#0000008c",
                 lit: Lit::Backlit { bloom: 11.0 },
-                surround: Some(Surround { top: "#4a3524", bottom: "#2e2116", pad: 5.0, radius: 5.0 }),
+                surround: Some(Surround {
+                    top: "#4a3524",
+                    bottom: "#2e2116",
+                    pad: 5.0,
+                    radius: 5.0,
+                }),
                 travel: 1.4,
                 legend: 9.5,
             },
@@ -133,7 +155,12 @@ impl Style {
                 finish: Finish::Matte,
                 border: "#000000b3",
                 lit: Lit::Unlit,
-                surround: Some(Surround { top: "#23252a", bottom: "#15171a", pad: 3.2, radius: 2.2 }),
+                surround: Some(Surround {
+                    top: "#23252a",
+                    bottom: "#15171a",
+                    pad: 3.2,
+                    radius: 2.2,
+                }),
                 travel: 2.6,
                 legend: 8.5,
             },
@@ -197,7 +224,11 @@ impl Style {
                     _ => "#f4a62c",
                 };
                 // Unlit, a backlit cap is still a coloured lens, not a hole.
-                let dim = if self == Self::Square { "#5a5a5c" } else { "#3a2e22" };
+                let dim = if self == Self::Square {
+                    "#5a5a5c"
+                } else {
+                    "#3a2e22"
+                };
                 (mixs(lampc, dim, 0.55), "#1d1f22", lampc)
             }
             Self::PushIn => match v {
@@ -224,13 +255,33 @@ struct CapParts {
 
 /// Draw one cap (with its surround, if the part has one) at (`x`, `y`).
 #[allow(clippy::too_many_arguments)]
-fn cap(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, k: f64, spec: &Spec, (cap_c, ink_c, lamp_c): (&str, &str, &str), (legend, size): (&str, f64), case: TextCase) -> CapParts {
+fn cap(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    x: f64,
+    y: f64,
+    k: f64,
+    spec: &Spec,
+    (cap_c, ink_c, lamp_c): (&str, &str, &str),
+    (legend, size): (&str, f64),
+    case: TextCase,
+) -> CapParts {
     let pad = spec.surround.map_or(0.0, |s| s.pad * k);
     let (cw, ch) = (spec.w * k, spec.h * k);
     let lip = k.clamp(0.6, 1.6);
     if let Some(s) = spec.surround {
-        let well = draw::rect("surround", x, y, cw + 2.0 * pad, ch + 2.0 * pad, lin(180.0, &[(0.0, s.top.into()), (1.0, s.bottom.into())]));
-        let well = draw::with_effects(draw::rounded(well, s.radius * k), vec![draw::inner_shadow("#0000008c", 0.0, k, 3.0 * k)]);
+        let well = draw::rect(
+            "surround",
+            x,
+            y,
+            cw + 2.0 * pad,
+            ch + 2.0 * pad,
+            lin(180.0, &[(0.0, s.top.into()), (1.0, s.bottom.into())]),
+        );
+        let well = draw::with_effects(
+            draw::rounded(well, s.radius * k),
+            vec![draw::inner_shadow("#0000008c", 0.0, k, 3.0 * k)],
+        );
         b.add(parent, well);
     }
     let (cx, cy) = (x + pad, y + pad);
@@ -238,7 +289,11 @@ fn cap(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, k: f64, spec: &Spec,
     // Standing proud: a lit chamfer along the top, a dark one under it, and
     // the cast shadow on the panel — a flat fill with a shadow is a sticker.
     let body = draw::rect("cap", cx, cy, cw, ch, spec.finish.paint(cap_c));
-    let body = draw::stroked(draw::rounded(body, spec.radius * k), spec.border, k.max(1.0));
+    let body = draw::stroked(
+        draw::rounded(body, spec.radius * k),
+        spec.border,
+        k.max(1.0),
+    );
     let body = draw::with_effects(
         body,
         vec![
@@ -256,7 +311,10 @@ fn cap(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, k: f64, spec: &Spec,
         let lit = draw::stroked(draw::rounded(lit, spec.radius * k), spec.border, k.max(1.0));
         let lit = draw::with_effects(
             lit,
-            vec![draw::drop_shadow(&alpha(lamp_c, 0.9), 0.0, 0.0, bloom * k), draw::inner_shadow("#ffffff80", 0.0, lip, 0.0)],
+            vec![
+                draw::drop_shadow(&alpha(lamp_c, 0.9), 0.0, 0.0, bloom * k),
+                draw::inner_shadow("#ffffff80", 0.0, lip, 0.0),
+            ],
         );
         // Its light rides on the `Led` node, so it dims when the cap goes out.
         let lit = draw::emissive(lit, draw::hex(lamp_c), 0.6, bloom * k);
@@ -264,14 +322,45 @@ fn cap(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, k: f64, spec: &Spec,
     }
     // Down in its well: the light on the top lip is now on the bottom one,
     // and the shadow falls *into* the button.
-    let pressed = draw::rect("pressed", cx, cy, cw, ch, lin(180.0, &[(0.0, "#000000a6".into()), (0.28, "#00000033".into()), (0.8, "#00000000".into()), (1.0, "#ffffff1f".into())]));
+    let pressed = draw::rect(
+        "pressed",
+        cx,
+        cy,
+        cw,
+        ch,
+        lin(
+            180.0,
+            &[
+                (0.0, "#000000a6".into()),
+                (0.28, "#00000033".into()),
+                (0.8, "#00000000".into()),
+                (1.0, "#ffffff1f".into()),
+            ],
+        ),
+    );
     let pressed = draw::with_effects(
         draw::rounded(pressed, spec.radius * k),
-        vec![draw::inner_shadow("#0000008c", 0.0, lip * 1.5, drop * 2.0), draw::inner_shadow("#ffffff1a", 0.0, -lip, 0.0)],
+        vec![
+            draw::inner_shadow("#0000008c", 0.0, lip * 1.5, drop * 2.0),
+            draw::inner_shadow("#ffffff1a", 0.0, -lip, 0.0),
+        ],
     );
     leds.push(b.add(parent, pressed));
     // Caps are narrow: no tracking, and the size the caller fitted.
-    let mut text = cased(ink("legend", legend, cx - 2.0 * k, cy + ch / 2.0, cw + 4.0 * k, size, ink_c, TextAlign::Center, 800.0), case);
+    let mut text = cased(
+        ink(
+            "legend",
+            legend,
+            cx - 2.0 * k,
+            cy + ch / 2.0,
+            cw + 4.0 * k,
+            size,
+            ink_c,
+            TextAlign::Center,
+            800.0,
+        ),
+        case,
+    );
     if let document_proto::NodeKind::Text(t) = &mut text.kind {
         t.letter_spacing = 0.0;
     }
@@ -286,7 +375,10 @@ fn cap(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, k: f64, spec: &Spec,
 /// FILTERED small.
 fn cap_legend_size<'a>(spec: &Spec, k: f64, legends: impl IntoIterator<Item = &'a str>) -> f64 {
     let (size, width) = (spec.legend * k * 0.9, spec.w * k - 6.0 * k);
-    legends.into_iter().map(|l| fit_legend(l, size, width)).fold(size, f64::min)
+    legends
+        .into_iter()
+        .map(|l| fit_legend(l, size, width))
+        .fold(size, f64::min)
 }
 
 /// The type size a legend is set at: `size`, or smaller (down to a
@@ -316,20 +408,48 @@ fn unit(spec: &Spec, k: f64) -> (f64, f64) {
 /// One button (with its jewel) under `parent` at (`x`, `y`), registered as a
 /// control of `mode`.
 #[allow(clippy::too_many_arguments)]
-fn button_at(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, k: f64, style: Style, p: &Place, legend: (&str, f64), mode: ButtonMode, name: &str) -> NodeId {
+fn button_at(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    x: f64,
+    y: f64,
+    k: f64,
+    style: Style,
+    p: &Place,
+    legend: (&str, f64),
+    mode: ButtonMode,
+    name: &str,
+) -> NodeId {
     let spec = style.spec();
     let (cap_c, ink_c, lamp_c) = style.colors(p.variant.as_deref());
     let (w, h) = unit(&spec, k);
     let root = b.add(parent, draw::frame(name, x, y, w, h));
     let pad = spec.surround.map_or(0.0, |s| s.pad);
     let unit_w = (spec.w + 2.0 * pad) * k;
-    let parts = cap(b, root, (w - unit_w) / 2.0, 0.0, k, &spec, (&cap_c, ink_c, lamp_c), legend, p.case());
+    let parts = cap(
+        b,
+        root,
+        (w - unit_w) / 2.0,
+        0.0,
+        k,
+        &spec,
+        (&cap_c, ink_c, lamp_c),
+        legend,
+        p.case(),
+    );
     let mut c = Control::new(ControlKind::Button { mode });
     for led in parts.leds {
         c = c.slot(SlotRole::Led, led.0);
     }
     if let Lit::Jewel { d, gap } = spec.lit {
-        let lens = lamp(b, root, w / 2.0, (spec.h + 2.0 * pad + gap + d / 2.0) * k, d * k, lamp_c);
+        let lens = lamp(
+            b,
+            root,
+            w / 2.0,
+            (spec.h + 2.0 * pad + gap + d / 2.0) * k,
+            d * k,
+            lamp_c,
+        );
         c = c.slot(SlotRole::Led, lens.0);
     }
     c = c.slot(SlotRole::Label, parts.label.0);
@@ -344,8 +464,23 @@ fn single(b: &mut Builder<'_>, parent: NodeId, p: &Place, style: Style) -> NodeI
     let legend = p.legend.clone().unwrap_or_default();
     let size = cap_legend_size(&spec, k, [legend.as_str()]);
     // A TAP key: on only while held.
-    let mode = if p.flag("momentary") { ButtonMode::Momentary } else { ButtonMode::Toggle };
-    button_at(b, parent, 0.0, 0.0, k, style, p, (&legend, size), mode, &p.name)
+    let mode = if p.flag("momentary") {
+        ButtonMode::Momentary
+    } else {
+        ButtonMode::Toggle
+    };
+    button_at(
+        b,
+        parent,
+        0.0,
+        0.0,
+        k,
+        style,
+        p,
+        (&legend, size),
+        mode,
+        &p.name,
+    )
 }
 
 /// Bank options: `Place::options`, else numbered positions.
@@ -364,12 +499,29 @@ fn bank(b: &mut Builder<'_>, parent: NodeId, p: &Place, style: Style) -> NodeId 
     let n = opts.len();
     let (w, h) = unit(&spec, k);
     let gap = 6.0 * k;
-    let root = b.add(parent, draw::frame(&p.name, 0.0, 0.0, n as f64 * w + (n as f64 - 1.0) * gap, h));
+    let root = b.add(
+        parent,
+        draw::frame(&p.name, 0.0, 0.0, n as f64 * w + (n as f64 - 1.0) * gap, h),
+    );
     let size = cap_legend_size(&spec, k, opts.iter().map(String::as_str));
     for (i, label) in opts.iter().enumerate() {
-        let mode = ButtonMode::Select { index: i as u32, count: n as u32 };
+        let mode = ButtonMode::Select {
+            index: i as u32,
+            count: n as u32,
+        };
         let at = if p.reverse { n - 1 - i } else { i };
-        button_at(b, root, at as f64 * (w + gap), 0.0, k, style, p, (label, size), mode, &format!("{} {label}", p.name));
+        button_at(
+            b,
+            root,
+            at as f64 * (w + gap),
+            0.0,
+            k,
+            style,
+            p,
+            (label, size),
+            mode,
+            &format!("{} {label}", p.name),
+        );
     }
     root
 }
@@ -387,31 +539,106 @@ fn push_in_bank(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let n = opts.len() as f64;
     let (cw, ch) = (spec.w * k, spec.h * k);
     let size = 9.5 * k;
-    let label_w = opts.iter().map(|o| text_w(o, size)).fold(size * 1.6, f64::max);
+    let label_w = opts
+        .iter()
+        .map(|o| text_w(o, size))
+        .fold(size * 1.6, f64::max);
     let gap = 7.0 * k;
     let pad = 2.0 * k;
     let (hx, hw, hh) = (label_w + gap, cw + 2.0 * pad, n * ch + 2.0 * pad);
     let root = b.add(parent, draw::frame(&p.name, 0.0, 0.0, hx + hw, hh));
-    let housing = draw::rect("housing", hx, 0.0, hw, hh, lin(180.0, &[(0.0, "#17181a".into()), (1.0, "#0b0c0d".into())]));
+    let housing = draw::rect(
+        "housing",
+        hx,
+        0.0,
+        hw,
+        hh,
+        lin(180.0, &[(0.0, "#17181a".into()), (1.0, "#0b0c0d".into())]),
+    );
     let housing = draw::stroked(draw::rounded(housing, 2.5 * k), "#000000b3", k.max(1.0));
-    b.add(root, fixed(draw::with_effects(housing, vec![draw::inner_shadow("#00000099", 0.0, k, 3.0 * k)])));
+    b.add(
+        root,
+        fixed(draw::with_effects(
+            housing,
+            vec![draw::inner_shadow("#00000099", 0.0, k, 3.0 * k)],
+        )),
+    );
     for (i, label) in opts.iter().enumerate() {
         // Top to bottom in param order — or, reversed, the last option on top.
         let at = if p.reverse { opts.len() - 1 - i } else { i };
-        let row = b.add(root, draw::frame(&format!("{} {label}", p.name), 0.0, pad + at as f64 * ch, hx + hw, ch));
-        let text = b.add(row, cased(ink("legend", label, 0.0, ch / 2.0, label_w, size, panel_ink, TextAlign::Right, 700.0), p.case()));
-        let body = draw::rect("cap", hx + pad, 0.0, cw, ch, lin(180.0, &[(0.0, tint(&cap_c, 0.10)), (1.0, shade(&cap_c, 0.35))]));
+        let row = b.add(
+            root,
+            draw::frame(
+                &format!("{} {label}", p.name),
+                0.0,
+                pad + at as f64 * ch,
+                hx + hw,
+                ch,
+            ),
+        );
+        let text = b.add(
+            row,
+            cased(
+                ink(
+                    "legend",
+                    label,
+                    0.0,
+                    ch / 2.0,
+                    label_w,
+                    size,
+                    panel_ink,
+                    TextAlign::Right,
+                    700.0,
+                ),
+                p.case(),
+            ),
+        );
+        let body = draw::rect(
+            "cap",
+            hx + pad,
+            0.0,
+            cw,
+            ch,
+            lin(
+                180.0,
+                &[(0.0, tint(&cap_c, 0.10)), (1.0, shade(&cap_c, 0.35))],
+            ),
+        );
         let body = draw::with_effects(
             draw::rounded(body, 1.5 * k),
-            vec![draw::inner_shadow("#ffffff29", 0.0, k.max(0.8), 0.0), draw::inner_shadow("#0000008c", 0.0, -k.max(0.8), 0.0)],
+            vec![
+                draw::inner_shadow("#ffffff29", 0.0, k.max(0.8), 0.0),
+                draw::inner_shadow("#0000008c", 0.0, -k.max(0.8), 0.0),
+            ],
         );
         b.add(row, body);
-        let down = draw::rect("pressed", hx + pad, 0.0, cw, ch, lin(180.0, &[(0.0, alpha(&shade(&cap_c, 0.7), 0.95)), (1.0, alpha(&shade(&cap_c, 0.45), 0.9))]));
-        let down = draw::with_effects(draw::rounded(down, 1.5 * k), vec![draw::inner_shadow("#000000c0", 0.0, 2.0 * k, 4.0 * k)]);
+        let down = draw::rect(
+            "pressed",
+            hx + pad,
+            0.0,
+            cw,
+            ch,
+            lin(
+                180.0,
+                &[
+                    (0.0, alpha(&shade(&cap_c, 0.7), 0.95)),
+                    (1.0, alpha(&shade(&cap_c, 0.45), 0.9)),
+                ],
+            ),
+        );
+        let down = draw::with_effects(
+            draw::rounded(down, 1.5 * k),
+            vec![draw::inner_shadow("#000000c0", 0.0, 2.0 * k, 4.0 * k)],
+        );
         let down = b.add(row, down);
-        let mut c = Control::new(ControlKind::Button { mode: ButtonMode::Select { index: i as u32, count: n as u32 } })
-            .slot(SlotRole::Led, down.0)
-            .slot(SlotRole::Label, text.0);
+        let mut c = Control::new(ControlKind::Button {
+            mode: ButtonMode::Select {
+                index: i as u32,
+                count: n as u32,
+            },
+        })
+        .slot(SlotRole::Led, down.0)
+        .slot(SlotRole::Label, text.0);
         c.binding.clone_from(&p.binding);
         b.controls.insert(row, c);
     }
@@ -431,11 +658,38 @@ fn jewel(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
         _ => "#e33a2a",
     };
     let root = b.add(parent, draw::frame(&p.name, 0.0, 0.0, s, s));
-    let chrome = draw::circle("bezel", s / 2.0, s / 2.0, s / 2.0, draw::conic(20.0, &[(0.0, "#f2f2ef"), (0.25, "#8d8e8b"), (0.5, "#e6e6e2"), (0.75, "#7c7d7a"), (1.0, "#f2f2ef")]));
-    b.add(root, draw::with_effects(chrome, vec![draw::drop_shadow("#00000080", 0.0, s * 0.05, s * 0.1)]));
-    b.add(root, draw::circle("seat", s / 2.0, s / 2.0, s * 0.38, draw::solid("#1a1a1c")));
+    let chrome = draw::circle(
+        "bezel",
+        s / 2.0,
+        s / 2.0,
+        s / 2.0,
+        draw::conic(
+            20.0,
+            &[
+                (0.0, "#f2f2ef"),
+                (0.25, "#8d8e8b"),
+                (0.5, "#e6e6e2"),
+                (0.75, "#7c7d7a"),
+                (1.0, "#f2f2ef"),
+            ],
+        ),
+    );
+    b.add(
+        root,
+        draw::with_effects(
+            chrome,
+            vec![draw::drop_shadow("#00000080", 0.0, s * 0.05, s * 0.1)],
+        ),
+    );
+    b.add(
+        root,
+        draw::circle("seat", s / 2.0, s / 2.0, s * 0.38, draw::solid("#1a1a1c")),
+    );
     let lens = lamp(b, root, s / 2.0, s / 2.0, s * 0.62, color);
-    let mut c = Control::new(ControlKind::Button { mode: ButtonMode::Toggle }).slot(SlotRole::Led, lens.0);
+    let mut c = Control::new(ControlKind::Button {
+        mode: ButtonMode::Toggle,
+    })
+    .slot(SlotRole::Led, lens.0);
     c.binding.clone_from(&p.binding);
     b.controls.insert(root, c);
     root
@@ -454,19 +708,62 @@ fn led_bank(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let opts = options(p);
     let size = 7.5 * k;
     // One size for the row: the smallest any of its legends needs.
-    let fitted = opts.iter().map(|l| fit_legend(l, size, pitch - 4.0 * k)).fold(size, f64::min);
+    let fitted = opts
+        .iter()
+        .map(|l| fit_legend(l, size, pitch - 4.0 * k))
+        .fold(size, f64::min);
     let d = 9.0 * k;
     let h = size * 1.4 + 3.0 * k + d + 2.0 * k;
-    let root = b.add(parent, draw::frame(&p.name, 0.0, 0.0, pitch * opts.len() as f64, h));
+    let root = b.add(
+        parent,
+        draw::frame(&p.name, 0.0, 0.0, pitch * opts.len() as f64, h),
+    );
     let legend_ink = p.ink_color("#cfd4d8");
     for (i, label) in opts.iter().enumerate() {
         let at = if p.reverse { opts.len() - 1 - i } else { i };
-        let cell = b.add(root, draw::frame(&format!("{} {label}", p.name), at as f64 * pitch, 0.0, pitch, h));
-        let text = b.add(cell, cased(ink("legend", label, 0.0, 7.5 * k * 0.7, pitch, fitted, &legend_ink, TextAlign::Center, 700.0), p.case()));
-        let lens = lamp(b, cell, pitch / 2.0, size * 1.4 + 3.0 * k + d / 2.0, d, color);
-        let mut c = Control::new(ControlKind::Button { mode: ButtonMode::Select { index: i as u32, count: opts.len() as u32 } })
-            .slot(SlotRole::Led, lens.0)
-            .slot(SlotRole::Label, text.0);
+        let cell = b.add(
+            root,
+            draw::frame(
+                &format!("{} {label}", p.name),
+                at as f64 * pitch,
+                0.0,
+                pitch,
+                h,
+            ),
+        );
+        let text = b.add(
+            cell,
+            cased(
+                ink(
+                    "legend",
+                    label,
+                    0.0,
+                    7.5 * k * 0.7,
+                    pitch,
+                    fitted,
+                    &legend_ink,
+                    TextAlign::Center,
+                    700.0,
+                ),
+                p.case(),
+            ),
+        );
+        let lens = lamp(
+            b,
+            cell,
+            pitch / 2.0,
+            size * 1.4 + 3.0 * k + d / 2.0,
+            d,
+            color,
+        );
+        let mut c = Control::new(ControlKind::Button {
+            mode: ButtonMode::Select {
+                index: i as u32,
+                count: opts.len() as u32,
+            },
+        })
+        .slot(SlotRole::Led, lens.0)
+        .slot(SlotRole::Label, text.0);
         c.binding.clone_from(&p.binding);
         b.controls.insert(cell, c);
     }

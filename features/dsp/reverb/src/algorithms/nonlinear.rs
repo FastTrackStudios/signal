@@ -379,7 +379,8 @@ impl ReverbAlgorithm for NonLinear {
         if self.shape == EnvelopeShape::Swoosh {
             if self.swoosh_countdown == 0 {
                 self.swoosh_countdown = 64;
-                let cutoff = 400.0 * (8000.0f64 / 400.0).powf(position.unwrap_or(1.0).clamp(0.0, 1.0));
+                let cutoff =
+                    400.0 * (8000.0f64 / 400.0).powf(position.unwrap_or(1.0).clamp(0.0, 1.0));
                 self.swoosh_lp.set_freq(cutoff, self.sample_rate);
             }
             self.swoosh_countdown = self.swoosh_countdown.saturating_sub(1);

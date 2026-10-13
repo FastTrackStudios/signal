@@ -456,7 +456,8 @@ mod tests {
                 let base = param
                     .trim_end_matches(|c: char| c.is_ascii_digit())
                     .trim_end();
-                builtin::engine::setting(name, base, text).unwrap_or_else(|| panic!("{param}={text}"))
+                builtin::engine::setting(name, base, text)
+                    .unwrap_or_else(|| panic!("{param}={text}"))
             })
             .collect();
         let (silence, mut l, mut r) = (vec![0.0_f32; 64], vec![0.0_f32; 64], vec![0.0_f32; 64]);

@@ -55,7 +55,9 @@ impl StyxDir {
         if given.exists() {
             return;
         }
-        let Some(file) = given.file_name() else { return };
+        let Some(file) = given.file_name() else {
+            return;
+        };
         let folder = given.parent().and_then(std::path::Path::file_name);
         let found = folder
             .map(|f| self.dir.join(f).join(file))

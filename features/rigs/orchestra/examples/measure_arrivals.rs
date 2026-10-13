@@ -54,10 +54,10 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use signal_orchestra::timing::{pitch_share_curve, spectral_flux};
-use signal_orchestra::{CSS_CONFIG, CSS_ROOT};
 use sampler::PlayerPatch;
 use sampler::spec::{ArticulationKind, LibrarySpec, ZoneSpec};
+use signal_orchestra::timing::{pitch_share_curve, spectral_flux};
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT};
 
 /// Longest plausible arrival (ms) — anything later is a measurement error
 /// (mis-tracked pitch, room-noise flux), not a marker.

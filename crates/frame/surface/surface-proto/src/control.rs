@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::curve::Curve;
-use crate::interact::{AddRule, ClickAction, Command, Condition, Interact, MenuItem, Placement, Show, Zoom};
+use crate::interact::{
+    AddRule, ClickAction, Command, Condition, Interact, MenuItem, Placement, Show, Zoom,
+};
 use crate::param::{Catalog, EntryId, ParamAddr, ParamKind, StreamKind, ValueFormat};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Facet)]
@@ -44,7 +46,11 @@ impl ButtonMode {
     /// The position (0..1) a `Select` button sets.
     #[must_use]
     pub fn select_position(index: u32, count: u32) -> f64 {
-        if count < 2 { 0.0 } else { f64::from(index.min(count - 1)) / f64::from(count - 1) }
+        if count < 2 {
+            0.0
+        } else {
+            f64::from(index.min(count - 1)) / f64::from(count - 1)
+        }
     }
 }
 
@@ -62,19 +68,29 @@ pub enum ControlKind {
         sweep_degrees: f64,
     },
     /// Linear slider/fader.
-    Fader { orientation: Orientation },
-    Button { mode: ButtonMode },
+    Fader {
+        orientation: Orientation,
+    },
+    Button {
+        mode: ButtonMode,
+    },
     /// Stage footswitch: tap and hold are different gestures.
     Footswitch {
         /// Hold threshold (default 500 ms).
         hold_ms: u32,
     },
     /// Level / gain-reduction meter, driven by a stream.
-    Meter { orientation: Orientation },
+    Meter {
+        orientation: Orientation,
+    },
     /// A needle meter (VU, gain reduction, tuner): the `Needle` slot sweeps
     /// `sweep_degrees` (centered on straight up) across `floor_db..ceiling_db`
     /// of a level stream — or across a bound param's range.
-    Gauge { sweep_degrees: f64, floor_db: f64, ceiling_db: f64 },
+    Gauge {
+        sweep_degrees: f64,
+        floor_db: f64,
+        ceiling_db: f64,
+    },
     /// Two parameters at once (x → `binding`, y → `y_binding`).
     XyPad,
     /// Pick one of a choice parameter's options (segmented, dropdown, radio).
@@ -83,18 +99,35 @@ pub enum ControlKind {
     Readout,
     /// Draws the latest frame of the bound stream (a spectrum, a history
     /// of gain reduction, a waveform) into its `Trace` / `Area` slots.
-    Plot { style: PlotStyle, x: Axis, y: PlotRange },
+    Plot {
+        style: PlotStyle,
+        x: Axis,
+        y: PlotRange,
+    },
     /// Draws a function of params — `provider` names a function in the
     /// runtime's curve registry (`eq.response`, `comp.transfer`,
     /// `adsr.envelope`, `filter.response`), `inputs` bind its arguments.
     /// `series` picks one of the provider's series (`"b2"` = EQ band 2's
     /// own curve); `None` = its first (the combined response).
-    Curve { provider: String, inputs: Vec<CurveInput>, series: Option<String>, style: PlotStyle, x: Axis, y: PlotRange },
+    Curve {
+        provider: String,
+        inputs: Vec<CurveInput>,
+        series: Option<String>,
+        style: PlotStyle,
+        x: Axis,
+        y: PlotRange,
+    },
     /// A draggable point inside its parent (the plot area): `x` and `y`
     /// params placed through `x_map` / `y_map`, the wheel turns `wheel`
     /// (an EQ band's Q). Either axis may be unbound (a threshold chip
     /// only slides sideways).
-    Handle { x: Option<Binding>, y: Option<Binding>, wheel: Option<Binding>, x_map: HandleAxis, y_map: HandleAxis },
+    Handle {
+        x: Option<Binding>,
+        y: Option<Binding>,
+        wheel: Option<Binding>,
+        x_map: HandleAxis,
+        y_map: HandleAxis,
+    },
     /// A template: the runtime draws this node's subtree once per item
     /// `first..first + count` of an indexed family, `{n}` in every address,
     /// name and text inside it resolved to the item's index. An item shows
@@ -102,32 +135,52 @@ pub enum ControlKind {
     /// is setting `used`, removing it clearing it. The template itself is
     /// never drawn. Instances get stable ids (from the template's and the
     /// index), so live reloads keep their state.
-    Repeat { first: u32, count: u32, used: Option<ParamAddr> },
+    Repeat {
+        first: u32,
+        count: u32,
+        used: Option<ParamAddr>,
+    },
     /// The empty space of a plot area: press-and-drag draws a marquee that
     /// selects the selectable controls inside it, a click clears the
     /// selection, a double-click adds an item there (`add`) — its position
     /// read through `x` / `y` (the area's axes, `y` zoomed by the control's
     /// [`Zoom`]).
-    Canvas { x: Axis, y: Axis, add: Option<AddRule> },
+    Canvas {
+        x: Axis,
+        y: Axis,
+        add: Option<AddRule>,
+    },
     /// A panel that follows its `anchor` node (a handle): placed on its
     /// preferred side `gap` px away, flipped when that side doesn't fit
     /// inside the surface, clamped in, drawn above everything and shown per
     /// `show`. With `context` (a [`Repeat`](Self::Repeat) template node)
     /// there is one popover for all items: its anchor and every `{n}` inside
     /// it follow the active item (the dragged, last selected or hovered one).
-    Popover { anchor: Option<Uuid>, placement: Placement, gap: f64, show: Show, context: Option<Uuid> },
+    Popover {
+        anchor: Option<Uuid>,
+        placement: Placement,
+        gap: f64,
+        show: Show,
+        context: Option<Uuid>,
+    },
     /// A context menu: rows (`items`, each naming its row node), opened by
     /// a right-click on a control whose [`Interact::menu`] names it, at the
     /// pointer (clamped inside the surface). Arrow keys move the highlight,
     /// Enter runs, Right / Left open and close submenus, Escape closes. With
     /// `context` its `{n}` resolve to the item it was opened on.
-    Menu { items: Vec<MenuItem>, context: Option<Uuid> },
+    Menu {
+        items: Vec<MenuItem>,
+        context: Option<Uuid>,
+    },
     /// Inline text editing of a text param: click (or a
     /// [`Command::Edit`]) to edit — caret, selection, typing, Backspace /
     /// Delete, arrows, Home / End, Enter to commit, Escape to cancel. With
     /// `click_to_edit` off it only edits when told to (a name label on a
     /// handle, renamed by double-clicking the handle).
-    TextField { click_to_edit: bool, max_len: u32 },
+    TextField {
+        click_to_edit: bool,
+        max_len: u32,
+    },
 }
 
 /// How a plot or curve draws its points.
@@ -168,10 +221,18 @@ impl Axis {
     pub fn to_unit(&self, v: f64) -> f64 {
         match *self {
             Self::Linear { min, max } => {
-                if (max - min).abs() < f64::EPSILON { 0.0 } else { (v - min) / (max - min) }
+                if (max - min).abs() < f64::EPSILON {
+                    0.0
+                } else {
+                    (v - min) / (max - min)
+                }
             }
             Self::Log { f_min, f_max } => {
-                if f_min > 0.0 && f_max > f_min && v > 0.0 { (v / f_min).ln() / (f_max / f_min).ln() } else { 0.0 }
+                if f_min > 0.0 && f_max > f_min && v > 0.0 {
+                    (v / f_min).ln() / (f_max / f_min).ln()
+                } else {
+                    0.0
+                }
             }
             Self::Time { len } => v / f64::from(len.max(2) - 1),
         }
@@ -182,7 +243,9 @@ impl Axis {
     pub fn from_unit(&self, u: f64) -> f64 {
         match *self {
             Self::Linear { min, max } => min + (max - min) * u,
-            Self::Log { f_min, f_max } if f_min > 0.0 && f_max > f_min => f_min * (f_max / f_min).powf(u),
+            Self::Log { f_min, f_max } if f_min > 0.0 && f_max > f_min => {
+                f_min * (f_max / f_min).powf(u)
+            }
             Self::Log { f_min, .. } => f_min,
             Self::Time { len } => u * f64::from(len.max(2) - 1),
         }
@@ -201,7 +264,11 @@ pub struct PlotRange {
 impl PlotRange {
     #[must_use]
     pub fn linear(min: f64, max: f64) -> Self {
-        Self { min, max, curve: Curve::Linear }
+        Self {
+            min,
+            max,
+            curve: Curve::Linear,
+        }
     }
 
     /// A value → 0..1 up the plot (clamped; NaN stays NaN).
@@ -237,17 +304,31 @@ pub struct CurveInput {
 impl CurveInput {
     #[must_use]
     pub fn param(name: impl Into<String>, addr: impl Into<String>) -> Self {
-        Self { name: name.into(), source: InputSource::Param { addr: ParamAddr::new(addr) } }
+        Self {
+            name: name.into(),
+            source: InputSource::Param {
+                addr: ParamAddr::new(addr),
+            },
+        }
     }
 
     #[must_use]
     pub fn stream(name: impl Into<String>, id: impl Into<String>) -> Self {
-        Self { name: name.into(), source: InputSource::Stream { id: EntryId::new(id), channel: None } }
+        Self {
+            name: name.into(),
+            source: InputSource::Stream {
+                id: EntryId::new(id),
+                channel: None,
+            },
+        }
     }
 
     #[must_use]
     pub fn constant(name: impl Into<String>, value: f64) -> Self {
-        Self { name: name.into(), source: InputSource::Const { value } }
+        Self {
+            name: name.into(),
+            source: InputSource::Const { value },
+        }
     }
 }
 
@@ -278,7 +359,11 @@ pub struct HandleAxis {
 impl HandleAxis {
     #[must_use]
     pub fn new(axis: Axis) -> Self {
-        Self { axis, after: Vec::new(), shift: 0.0 }
+        Self {
+            axis,
+            after: Vec::new(),
+            shift: 0.0,
+        }
     }
 
     #[must_use]
@@ -308,12 +393,16 @@ pub const BUILTIN_CURVES: &[(&str, &[&str])] = &[
 impl ControlKind {
     #[must_use]
     pub const fn knob() -> Self {
-        Self::Knob { sweep_degrees: 270.0 }
+        Self::Knob {
+            sweep_degrees: 270.0,
+        }
     }
 
     #[must_use]
     pub const fn fader() -> Self {
-        Self::Fader { orientation: Orientation::Vertical }
+        Self::Fader {
+            orientation: Orientation::Vertical,
+        }
     }
 
     #[must_use]
@@ -348,13 +437,24 @@ impl ControlKind {
     /// Whether the control writes a value (vs. only displaying one).
     #[must_use]
     pub const fn is_input(&self) -> bool {
-        !matches!(self, Self::Meter { .. } | Self::Gauge { .. } | Self::Readout | Self::Plot { .. } | Self::Curve { .. } | Self::Repeat { .. })
+        !matches!(
+            self,
+            Self::Meter { .. }
+                | Self::Gauge { .. }
+                | Self::Readout
+                | Self::Plot { .. }
+                | Self::Curve { .. }
+                | Self::Repeat { .. }
+        )
     }
 
     /// Kinds that bind nothing themselves (their children and rules do).
     #[must_use]
     pub const fn is_container(&self) -> bool {
-        matches!(self, Self::Repeat { .. } | Self::Canvas { .. } | Self::Popover { .. } | Self::Menu { .. })
+        matches!(
+            self,
+            Self::Repeat { .. } | Self::Canvas { .. } | Self::Popover { .. } | Self::Menu { .. }
+        )
     }
 }
 
@@ -387,17 +487,39 @@ pub struct Binding {
 impl Binding {
     #[must_use]
     pub fn param(addr: impl Into<String>) -> Self {
-        Self { source: Source::Param { addr: ParamAddr::new(addr) }, curve: Curve::Linear, min: 0.0, max: 1.0 }
+        Self {
+            source: Source::Param {
+                addr: ParamAddr::new(addr),
+            },
+            curve: Curve::Linear,
+            min: 0.0,
+            max: 1.0,
+        }
     }
 
     #[must_use]
     pub fn action(id: impl Into<String>) -> Self {
-        Self { source: Source::Action { id: EntryId::new(id) }, curve: Curve::Linear, min: 0.0, max: 1.0 }
+        Self {
+            source: Source::Action {
+                id: EntryId::new(id),
+            },
+            curve: Curve::Linear,
+            min: 0.0,
+            max: 1.0,
+        }
     }
 
     #[must_use]
     pub fn stream(id: impl Into<String>) -> Self {
-        Self { source: Source::Stream { id: EntryId::new(id), channel: None }, curve: Curve::Linear, min: 0.0, max: 1.0 }
+        Self {
+            source: Source::Stream {
+                id: EntryId::new(id),
+                channel: None,
+            },
+            curve: Curve::Linear,
+            min: 0.0,
+            max: 1.0,
+        }
     }
 
     /// Control position (0..1) → target value (normalized).
@@ -413,7 +535,8 @@ impl Binding {
         if span == 0.0 {
             return 0.0;
         }
-        self.curve.invert(((value - self.min) / span).clamp(0.0, 1.0))
+        self.curve
+            .invert(((value - self.min) / span).clamp(0.0, 1.0))
     }
 }
 
@@ -436,7 +559,9 @@ pub struct MidiMapping {
 }
 
 /// Which part of a control's drawing a descendant node is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Facet)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Facet,
+)]
 #[repr(u8)]
 pub enum SlotRole {
     /// Rotates with the value (knob pointer).
@@ -566,7 +691,11 @@ pub struct MeterTap {
 impl MeterTap {
     #[must_use]
     pub fn new(stream: impl Into<String>) -> Self {
-        Self { stream: EntryId::new(stream), channel: None, offset_db: 0.0 }
+        Self {
+            stream: EntryId::new(stream),
+            channel: None,
+            offset_db: 0.0,
+        }
     }
 
     #[must_use]
@@ -594,7 +723,10 @@ pub struct SourceSelect {
 impl SourceSelect {
     #[must_use]
     pub fn new(param: impl Into<String>, taps: Vec<Option<MeterTap>>) -> Self {
-        Self { param: ParamAddr::new(param), taps }
+        Self {
+            param: ParamAddr::new(param),
+            taps,
+        }
     }
 
     /// The tap option `index` selects.
@@ -640,7 +772,9 @@ impl Control {
     /// node ids) and then every `{n}` resolved to `n`.
     #[must_use]
     pub fn instantiate(&self, n: u32, map: impl Fn(String) -> String) -> Self {
-        let Ok(json) = serde_json::to_string(self) else { return self.clone() };
+        let Ok(json) = serde_json::to_string(self) else {
+            return self.clone();
+        };
         let json = map(json).replace(crate::interact::INDEX, &n.to_string());
         serde_json::from_str(&json).unwrap_or_else(|_| self.clone())
     }
@@ -657,7 +791,12 @@ impl Control {
     #[must_use]
     pub fn extra_params(&self) -> Vec<&ParamAddr> {
         fn cmd<'a>(c: &'a Command, out: &mut Vec<&'a ParamAddr>) {
-            if let Command::Set { addr, .. } | Command::Toggle { addr } | Command::Cycle { addr } | Command::Invert { addr } | Command::Reset { addr } = c {
+            if let Command::Set { addr, .. }
+            | Command::Toggle { addr }
+            | Command::Cycle { addr }
+            | Command::Invert { addr }
+            | Command::Reset { addr } = c
+            {
                 out.push(addr);
             }
         }
@@ -670,9 +809,13 @@ impl Control {
                     }
                 }
             }
-            ControlKind::Handle { x_map, y_map, .. } => out.extend(x_map.after.iter().chain(&y_map.after)),
+            ControlKind::Handle { x_map, y_map, .. } => {
+                out.extend(x_map.after.iter().chain(&y_map.after))
+            }
             ControlKind::Repeat { used: Some(u), .. } => out.push(u),
-            ControlKind::Canvas { add: Some(rule), .. } => {
+            ControlKind::Canvas {
+                add: Some(rule), ..
+            } => {
                 out.extend(rule.x.iter().chain(&rule.y));
                 out.extend(rule.set.iter().map(|a| &a.addr));
                 for z in &rule.zones {
@@ -705,7 +848,12 @@ impl Control {
                     }
                 }
             }
-            for c in i.double_click.iter().chain(&i.press).chain(i.keys.iter().flat_map(|k| &k.commands)) {
+            for c in i
+                .double_click
+                .iter()
+                .chain(&i.press)
+                .chain(i.keys.iter().flat_map(|k| &k.commands))
+            {
                 cmd(c, &mut out);
             }
         }
@@ -737,7 +885,10 @@ impl Control {
     }
 
     pub fn slots_of(&self, role: SlotRole) -> impl Iterator<Item = Uuid> + '_ {
-        self.slots.iter().filter(move |s| s.role == role).map(|s| s.node)
+        self.slots
+            .iter()
+            .filter(move |s| s.role == role)
+            .map(|s| s.node)
     }
 }
 
@@ -746,12 +897,22 @@ impl Control {
 #[repr(u8)]
 pub enum BindingIssue {
     Unbound,
-    UnknownParam { addr: ParamAddr },
-    UnknownAction { id: EntryId },
-    UnknownStream { id: EntryId },
-    UnknownCollection { id: EntryId },
+    UnknownParam {
+        addr: ParamAddr,
+    },
+    UnknownAction {
+        id: EntryId,
+    },
+    UnknownStream {
+        id: EntryId,
+    },
+    UnknownCollection {
+        id: EntryId,
+    },
     /// The source type doesn't suit the control (a meter bound to an action…).
-    Mismatch { detail: String },
+    Mismatch {
+        detail: String,
+    },
 }
 
 impl std::fmt::Display for BindingIssue {
@@ -795,21 +956,32 @@ impl Control {
             && let Some(p) = catalog.param(&z.param)
             && !matches!(p.kind, ParamKind::Choice { .. })
         {
-            issues.push(BindingIssue::Mismatch { detail: format!("zoom follows `{}`, which is not a choice", z.param) });
+            issues.push(BindingIssue::Mismatch {
+                detail: format!("zoom follows `{}`, which is not a choice", z.param),
+            });
         }
         let has_commands = self.interact.as_ref().is_some_and(|i| !i.press.is_empty());
         match &self.kind {
-            ControlKind::Repeat { .. } | ControlKind::Canvas { .. } | ControlKind::Popover { .. } | ControlKind::Menu { .. } => return issues,
+            ControlKind::Repeat { .. }
+            | ControlKind::Canvas { .. }
+            | ControlKind::Popover { .. }
+            | ControlKind::Menu { .. } => return issues,
             ControlKind::TextField { .. } => {
                 match self.binding.as_ref().map(|b| &b.source) {
                     Some(Source::Param { addr }) => match catalog.param(addr) {
                         None => issues.push(BindingIssue::UnknownParam { addr: addr.clone() }),
                         Some(p) if p.kind != ParamKind::Text => {
-                            issues.push(BindingIssue::Mismatch { detail: format!("text field bound to `{addr}`, which is not a text param") });
+                            issues.push(BindingIssue::Mismatch {
+                                detail: format!(
+                                    "text field bound to `{addr}`, which is not a text param"
+                                ),
+                            });
                         }
                         Some(_) => {}
                     },
-                    Some(_) => issues.push(BindingIssue::Mismatch { detail: "a text field edits a text param".into() }),
+                    Some(_) => issues.push(BindingIssue::Mismatch {
+                        detail: "a text field edits a text param".into(),
+                    }),
                     None => issues.push(BindingIssue::Unbound),
                 }
                 return issues;
@@ -833,7 +1005,13 @@ impl Control {
                 }
                 return issues;
             }
-            ControlKind::Handle { x, y, wheel, x_map, y_map } => {
+            ControlKind::Handle {
+                x,
+                y,
+                wheel,
+                x_map,
+                y_map,
+            } => {
                 let bound: Vec<&Binding> = [x, y, wheel].into_iter().flatten().collect();
                 if bound.is_empty() {
                     issues.push(BindingIssue::Unbound);
@@ -844,7 +1022,9 @@ impl Control {
                             issues.push(BindingIssue::UnknownParam { addr: addr.clone() });
                         }
                         Source::Param { .. } => {}
-                        _ => issues.push(BindingIssue::Mismatch { detail: "a handle drags params; bind its axes to params".into() }),
+                        _ => issues.push(BindingIssue::Mismatch {
+                            detail: "a handle drags params; bind its axes to params".into(),
+                        }),
                     }
                 }
                 for addr in x_map.after.iter().chain(&y_map.after) {
@@ -864,33 +1044,64 @@ impl Control {
             Source::Param { addr } => match catalog.param(addr) {
                 None => issues.push(BindingIssue::UnknownParam { addr: addr.clone() }),
                 Some(p) => {
-                    if matches!(self.kind, ControlKind::Meter { .. } | ControlKind::Plot { .. }) {
+                    if matches!(
+                        self.kind,
+                        ControlKind::Meter { .. } | ControlKind::Plot { .. }
+                    ) {
                         issues.push(BindingIssue::Mismatch {
-                            detail: format!("{} bound to parameter `{addr}`; it displays streams", self.kind.name()),
+                            detail: format!(
+                                "{} bound to parameter `{addr}`; it displays streams",
+                                self.kind.name()
+                            ),
                         });
                     }
-                    if matches!(self.kind, ControlKind::Selector) && !matches!(p.kind, ParamKind::Choice { .. } | ParamKind::Toggle) {
-                        issues.push(BindingIssue::Mismatch { detail: format!("selector bound to continuous parameter `{addr}`") });
+                    if matches!(self.kind, ControlKind::Selector)
+                        && !matches!(p.kind, ParamKind::Choice { .. } | ParamKind::Toggle)
+                    {
+                        issues.push(BindingIssue::Mismatch {
+                            detail: format!("selector bound to continuous parameter `{addr}`"),
+                        });
                     }
                 }
             },
             Source::Action { id } => {
                 if catalog.action(id).is_none() {
                     issues.push(BindingIssue::UnknownAction { id: id.clone() });
-                } else if !matches!(self.kind, ControlKind::Button { .. } | ControlKind::Footswitch { .. }) {
-                    issues.push(BindingIssue::Mismatch { detail: format!("{} bound to action `{}`; only buttons and footswitches fire actions", self.kind.name(), id.0) });
+                } else if !matches!(
+                    self.kind,
+                    ControlKind::Button { .. } | ControlKind::Footswitch { .. }
+                ) {
+                    issues.push(BindingIssue::Mismatch {
+                        detail: format!(
+                            "{} bound to action `{}`; only buttons and footswitches fire actions",
+                            self.kind.name(),
+                            id.0
+                        ),
+                    });
                 }
             }
             Source::Stream { id, .. } => match catalog.stream(id) {
                 None => issues.push(BindingIssue::UnknownStream { id: id.clone() }),
                 Some(s) => {
                     if self.kind.is_input() {
-                        issues.push(BindingIssue::Mismatch { detail: format!("{} bound to read-only stream `{}`", self.kind.name(), id.0) });
+                        issues.push(BindingIssue::Mismatch {
+                            detail: format!(
+                                "{} bound to read-only stream `{}`",
+                                self.kind.name(),
+                                id.0
+                            ),
+                        });
                     }
-                    if matches!(self.kind, ControlKind::Meter { .. }) && matches!(s.kind, StreamKind::Spectrum { .. } | StreamKind::Tuner) {
-                        issues.push(BindingIssue::Mismatch { detail: format!("meter bound to non-level stream `{}`", id.0) });
+                    if matches!(self.kind, ControlKind::Meter { .. })
+                        && matches!(s.kind, StreamKind::Spectrum { .. } | StreamKind::Tuner)
+                    {
+                        issues.push(BindingIssue::Mismatch {
+                            detail: format!("meter bound to non-level stream `{}`", id.0),
+                        });
                     }
-                    if matches!(self.kind, ControlKind::Plot { .. }) && matches!(s.kind, StreamKind::Tuner | StreamKind::Envelope { .. }) {
+                    if matches!(self.kind, ControlKind::Plot { .. })
+                        && matches!(s.kind, StreamKind::Tuner | StreamKind::Envelope { .. })
+                    {
                         issues.push(BindingIssue::Mismatch {
                             detail: format!("plot bound to `{}`, which is not a series or a reading (bind a spectrum, history, waveform, level or scalar)", id.0),
                         });
@@ -909,15 +1120,24 @@ impl Control {
         }
         if let Some(sel) = &self.select {
             match catalog.param(&sel.param) {
-                None => issues.push(BindingIssue::UnknownParam { addr: sel.param.clone() }),
+                None => issues.push(BindingIssue::UnknownParam {
+                    addr: sel.param.clone(),
+                }),
                 Some(p) if !matches!(p.kind, ParamKind::Choice { .. } | ParamKind::Toggle) => {
-                    issues.push(BindingIssue::Mismatch { detail: format!("meter source switched by continuous parameter `{}`", sel.param) });
+                    issues.push(BindingIssue::Mismatch {
+                        detail: format!(
+                            "meter source switched by continuous parameter `{}`",
+                            sel.param
+                        ),
+                    });
                 }
                 Some(_) => {}
             }
             for tap in sel.taps.iter().flatten() {
                 if catalog.stream(&tap.stream).is_none() {
-                    issues.push(BindingIssue::UnknownStream { id: tap.stream.clone() });
+                    issues.push(BindingIssue::UnknownStream {
+                        id: tap.stream.clone(),
+                    });
                 }
             }
         }

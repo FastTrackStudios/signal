@@ -50,12 +50,12 @@ pub use engine::{
     BlockClock, ClickSubdivisions, GuideBuses, GuideConfig, GuideEngine, GuideTrigger,
     TriggerSource,
 };
-pub use samples::{get_guide_key, section_to_guide_filename, AudioSample, ClickSound, SampleBank};
+pub use samples::{AudioSample, ClickSound, SampleBank, get_guide_key, section_to_guide_filename};
 pub use schedule::{
-    sections_from_song, CountInOptions, CueEvent, CueSchedule, GuideSection, GuideSongTiming,
-    ScheduleOptions, ScheduledCue,
+    CountInOptions, CueEvent, CueSchedule, GuideSection, GuideSongTiming, ScheduleOptions,
+    ScheduledCue, sections_from_song,
 };
-pub use tts::{tts_cue_key, CueBank, TtsAudio, TtsRenderer};
+pub use tts::{CueBank, TtsAudio, TtsRenderer, tts_cue_key};
 
 #[cfg(feature = "tts")]
 pub use tts::{ChatterboxTts, ChatterboxTtsConfig};

@@ -14,10 +14,10 @@
 
 use std::path::PathBuf;
 
+use crate::proto::SetlistOffsetMap;
 use daw::file::diff::{self, ApplyOptions, DiffOptions};
 use daw::file::io::read_project;
 use daw::file::types::ReaperProject;
-use crate::proto::SetlistOffsetMap;
 use tracing::{debug, info, warn};
 
 use super::file_watcher::{SongFileChanged, SongFileWatcher};
@@ -174,12 +174,12 @@ impl LiveSyncState {
     /// combined setlist from scratch. Used when structural changes make
     /// incremental patching insufficient.
     fn regenerate_setlist(&mut self) -> bool {
-        use daw::file::setlist_rpp::{
-            build_song_infos_from_projects, concatenate_projects, measures_to_seconds,
-        };
         use crate::proto::{
             SongId,
             offset_map::{SetlistOffsetMap, SongOffset},
+        };
+        use daw::file::setlist_rpp::{
+            build_song_infos_from_projects, concatenate_projects, measures_to_seconds,
         };
 
         // Re-read all song RPPs

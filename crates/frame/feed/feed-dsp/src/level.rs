@@ -49,8 +49,15 @@ pub fn level(channels: usize, sample_rate: f64) -> (LevelTap, LevelReader) {
     });
     let coeff = (1.0 - (-1.0 / (0.3 * sample_rate)).exp()) as f32;
     (
-        LevelTap { shared: shared.clone(), ms: vec![0.0; channels].into(), coeff },
-        LevelReader { shared, last_peak: vec![crate::FLOOR_DB; channels].into() },
+        LevelTap {
+            shared: shared.clone(),
+            ms: vec![0.0; channels].into(),
+            coeff,
+        },
+        LevelReader {
+            shared,
+            last_peak: vec![crate::FLOOR_DB; channels].into(),
+        },
     )
 }
 
@@ -58,7 +65,9 @@ pub fn level(channels: usize, sample_rate: f64) -> (LevelTap, LevelReader) {
 #[inline]
 fn raise(slot: &AtomicU32, v: f32) {
     let bits = v.max(0.0).to_bits();
-    let _ = slot.fetch_update(Ordering::AcqRel, Ordering::Relaxed, |cur| (cur == EMPTY || bits > cur).then_some(bits));
+    let _ = slot.fetch_update(Ordering::AcqRel, Ordering::Relaxed, |cur| {
+        (cur == EMPTY || bits > cur).then_some(bits)
+    });
 }
 
 impl LevelTap {
@@ -70,7 +79,9 @@ impl LevelTap {
     /// One channel's block. Wait-free, no allocation.
     #[inline]
     pub fn push(&mut self, channel: usize, samples: &[f32]) {
-        let Some(ms) = self.ms.get_mut(channel) else { return };
+        let Some(ms) = self.ms.get_mut(channel) else {
+            return;
+        };
         let mut peak = 0.0f32;
         for &x in samples {
             peak = peak.max(x.abs());
@@ -148,7 +159,13 @@ pub struct ScalarReader {
 #[must_use]
 pub fn scalar(agg: Aggregate, rest: f64) -> (ScalarTap, ScalarReader) {
     let slot = Arc::new(AtomicU32::new(EMPTY));
-    (ScalarTap { slot: slot.clone(), agg }, ScalarReader { slot, last: rest })
+    (
+        ScalarTap {
+            slot: slot.clone(),
+            agg,
+        },
+        ScalarReader { slot, last: rest },
+    )
 }
 
 impl ScalarTap {
@@ -157,18 +174,22 @@ impl ScalarTap {
     #[inline]
     pub fn push(&self, v: f32) {
         let agg = self.agg;
-        let _ = self.slot.fetch_update(Ordering::AcqRel, Ordering::Relaxed, |cur| {
-            if cur == EMPTY {
-                return Some(v.to_bits());
-            }
-            let c = f32::from_bits(cur);
-            Some(match agg {
-                Aggregate::Max => c.max(v),
-                Aggregate::Min => c.min(v),
-                Aggregate::Mean | Aggregate::Last => v,
-            }
-            .to_bits())
-        });
+        let _ = self
+            .slot
+            .fetch_update(Ordering::AcqRel, Ordering::Relaxed, |cur| {
+                if cur == EMPTY {
+                    return Some(v.to_bits());
+                }
+                let c = f32::from_bits(cur);
+                Some(
+                    match agg {
+                        Aggregate::Max => c.max(v),
+                        Aggregate::Min => c.min(v),
+                        Aggregate::Mean | Aggregate::Last => v,
+                    }
+                    .to_bits(),
+                )
+            });
     }
 }
 
@@ -206,10 +227,16 @@ mod tests {
         tap.push(0, &[0.25]);
         tap.push(1, &[0.05]);
         r.peak_db(&mut out);
-        assert!((out[0] - amp_to_db(0.5)).abs() < 1e-6, "the block peak survives a quieter block");
+        assert!(
+            (out[0] - amp_to_db(0.5)).abs() < 1e-6,
+            "the block peak survives a quieter block"
+        );
         assert!((out[1] - amp_to_db(0.05)).abs() < 1e-5);
         r.peak_db(&mut out);
-        assert!((out[0] - amp_to_db(0.5)).abs() < 1e-6, "nothing new: hold the last reading");
+        assert!(
+            (out[0] - amp_to_db(0.5)).abs() < 1e-6,
+            "nothing new: hold the last reading"
+        );
         tap.push_interleaved(&[0.0, 1.0, 0.0, -1.0]);
         r.peak_db(&mut out);
         assert!(out[0] <= crate::FLOOR_DB && out[1].abs() < 1e-9, "{out:?}");
@@ -219,7 +246,9 @@ mod tests {
     fn rms_of_a_steady_sine_is_minus_3db() {
         let sr = 48_000.0;
         let (mut tap, r) = level(1, sr);
-        let s: Vec<f32> = (0..48_000).map(|i| (2.0 * std::f64::consts::PI * 1000.0 * f64::from(i) / sr).sin() as f32).collect();
+        let s: Vec<f32> = (0..48_000)
+            .map(|i| (2.0 * std::f64::consts::PI * 1000.0 * f64::from(i) / sr).sin() as f32)
+            .collect();
         tap.push(0, &s);
         let mut out = [0.0];
         r.rms_db(&mut out);

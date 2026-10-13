@@ -387,7 +387,8 @@ fn install_key_monitor() {
         // is, the key reached the plugin and was dropped inside it.
         // SAFETY: AppKit delivers local event monitors on the main thread.
         let mtm = unsafe { objc2_foundation::MainThreadMarker::new_unchecked() };
-        let responder = ev.window(mtm)
+        let responder = ev
+            .window(mtm)
             .and_then(|w| w.firstResponder())
             .map(|r| r.class().name().to_string_lossy().to_string())
             .unwrap_or_else(|| "<none>".to_string());

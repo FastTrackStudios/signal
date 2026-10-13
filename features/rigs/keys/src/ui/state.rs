@@ -1,10 +1,10 @@
 //! Live keys-rig view state — seeded once, then folded from the event
 //! stream. Every view reads these signals; nothing polls.
 
-use dioxus::prelude::*;
-use midicore_proto::MidiEvent;
 use crate::proto::keys::{KeysEvent, KeysRigClient, KeysRigStreamClient};
 use crate::proto::{KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus};
+use dioxus::prelude::*;
+use midicore_proto::MidiEvent;
 
 /// The whole rig, as the remote sees it. `PartialEq` compares the signal
 /// handles (cheap + stable), so it can ride as a component prop.

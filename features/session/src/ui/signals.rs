@@ -26,9 +26,9 @@
 //! session.setlist().play().await;
 //! ```
 
+use crate::proto::{ActiveIndices, Setlist, SetlistServiceClient, SongChartHydration};
 use crate::ui::prelude::*;
 use daw_proto::{MusicalPosition, PlayState};
-use crate::proto::{ActiveIndices, Setlist, SetlistServiceClient, SongChartHydration};
 use std::collections::HashMap;
 
 #[cfg(target_arch = "wasm32")]

@@ -12,8 +12,8 @@
 //! `/tmp/probe_<name>.ptx`, then dumps the block counts. Compare against
 //! `baseline` to see which block types appear/grow per feature.
 
-use formats::protools::raw_block::RawBlock;
 use dawfile_reaper::RppSerialize;
+use formats::protools::raw_block::RawBlock;
 use std::collections::BTreeMap;
 use std::process::Command;
 

@@ -300,7 +300,7 @@ fn organize_builtin(tracks: &[Track]) -> Vec<MixNode> {
 #[cfg(not(target_arch = "wasm32"))]
 fn organize_dynamic(tracks: &[Track]) -> Vec<MixNode> {
     use daw_proto::FolderDepthChange;
-    use dynamic_template::{default_config, OrganizeIntoTracks};
+    use dynamic_template::{OrganizeIntoTracks, default_config};
     use std::collections::{HashSet, VecDeque};
 
     let leaves: Vec<Track> = tracks.iter().filter(|t| !t.is_folder).cloned().collect();

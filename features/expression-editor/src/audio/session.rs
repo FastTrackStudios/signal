@@ -16,10 +16,10 @@
 //! from the recording rather than from the last render. Rendering a
 //! render is how a vocal turns to glass after three passes.
 
+use crate::{Editor, Mode, Viewport};
 use daw::service::audio_accessor::{AudioAccessors, GetSamplesRequest};
 use daw::service::item::Items;
 use daw::service::{ItemRef, ProjectContext, TakeRef};
-use crate::{Editor, Mode, Viewport};
 
 use crate::audio::analyze::{Analysis, TakeConfig, analyze_take, to_mono};
 
@@ -327,7 +327,8 @@ impl AudioSession {
 
         // Timing first, and always as markers.
         let placement = self.placement(daw);
-        let markers = crate::audio::stretch_markers(&self.analysis.doc, &self.analysis.pitch, placement);
+        let markers =
+            crate::audio::stretch_markers(&self.analysis.doc, &self.analysis.pitch, placement);
         let location = daw::service::StretchTakeRef::new(
             self.location.project.clone(),
             self.location.item.clone(),

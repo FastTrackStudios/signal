@@ -8,9 +8,9 @@
 
 use std::sync::Arc;
 
-use plugin_core::prelude::*;
 use eq::ui::eq_graph::{EqGraph, OverlayChoice};
 use eq::ui::eq_graph_model::{EqBand, EqBandShape};
+use plugin_core::prelude::*;
 
 use crate::ui::params::{CompParams, CompUiState, SC_EQ_BANDS};
 

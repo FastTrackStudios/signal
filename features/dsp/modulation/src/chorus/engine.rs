@@ -798,7 +798,11 @@ impl VoiceBank {
         self.bal.1 = (in_r * in_r - self.bal.1).mul_add(self.bal_k, self.bal.1);
         let (l, r) = (self.bal.0.max(0.0).sqrt(), self.bal.1.max(0.0).sqrt());
         let sum = l + r;
-        if sum <= 1.0e-12 { (0.5, 0.5) } else { (l / sum, r / sum) }
+        if sum <= 1.0e-12 {
+            (0.5, 0.5)
+        } else {
+            (l / sum, r / sum)
+        }
     }
 }
 

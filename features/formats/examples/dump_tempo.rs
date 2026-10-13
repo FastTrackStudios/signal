@@ -51,11 +51,11 @@ fn dump_session(_path: &str, data: &[u8]) {
 
 fn main() {
     let sessions = [
-        "crates/dawfile-protools/tests/fixtures/studio-session-2.ptx",
-        "crates/dawfile-protools/tests/fixtures/wonder-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/worship-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/GodnessOfGod.ptx",
-        "crates/dawfile-protools/tests/fixtures/goodplaylists2.ptf",
+        "features/formats/tests/fixtures/protools/studio-session-2.ptx",
+        "features/formats/tests/fixtures/protools/wonder-session.ptx",
+        "features/formats/tests/fixtures/protools/worship-session.ptx",
+        "features/formats/tests/fixtures/protools/GodnessOfGod.ptx",
+        "features/formats/tests/fixtures/protools/goodplaylists2.ptf",
     ];
     for path in &sessions {
         println!("{path}:");

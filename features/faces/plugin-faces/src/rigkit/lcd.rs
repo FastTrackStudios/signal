@@ -16,19 +16,25 @@ use crate::delay::parts;
 /// A 14-segment display face.
 #[must_use]
 pub const fn seg14(size: f64, color: &str) -> Letter<'_> {
-    Letter::new(size, 400.0, color).family(family::DSEG14).track(0.08)
+    Letter::new(size, 400.0, color)
+        .family(family::DSEG14)
+        .track(0.08)
 }
 
 /// A 7-segment display face.
 #[must_use]
 pub const fn seg7(size: f64, color: &str) -> Letter<'_> {
-    Letter::new(size, 400.0, color).family(family::DSEG7).track(0.08)
+    Letter::new(size, 400.0, color)
+        .family(family::DSEG7)
+        .track(0.08)
 }
 
 /// A dot-matrix display face.
 #[must_use]
 pub const fn dots(size: f64, color: &str) -> Letter<'_> {
-    Letter::new(size, 600.0, color).family(family::DOTO).track(0.04)
+    Letter::new(size, 600.0, color)
+        .family(family::DOTO)
+        .track(0.04)
 }
 
 /// Every segment of a DSEG family, lit: the unlit ghost of one cell.
@@ -40,7 +46,15 @@ pub fn all_segments(l: &Letter<'_>) -> char {
 /// A static line of display lettering in a box `w` wide at `x`, its caps
 /// centred on `cy`, aligned in the box (the ghosts and fixed legends of a
 /// display), lit when `glow` > 0.
-pub fn line(b: &mut Builder<'_>, parent: NodeId, s: &str, (x, cy, w): (f64, f64, f64), l: Letter<'_>, align: TextAlign, glow: f64) -> NodeId {
+pub fn line(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    (x, cy, w): (f64, f64, f64),
+    l: Letter<'_>,
+    align: TextAlign,
+    glow: f64,
+) -> NodeId {
     let mut n = text_in(s, (x, cy - cap_middle(&l), w), &l, align);
     n.name = format!("display {s}");
     if glow > 0.0 {

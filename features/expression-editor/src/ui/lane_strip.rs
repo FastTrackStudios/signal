@@ -7,9 +7,9 @@
 //! the way that is hardest to notice, because it wrote the velocity of
 //! whichever note sat under the *scaled* position.
 
+use crate::Editor;
 use dioxus::prelude::*;
 use dioxus_elements::input_data::MouseButton;
-use crate::Editor;
 
 use crate::ui::{canvas, paint, roll_widget, text, theme};
 
@@ -40,12 +40,10 @@ fn strip_write(mut editor: Signal<Editor>, h: f64, x: f64, y: f64) {
         return;
     }
     let edit = match editor.read().strip_lane {
-        crate::StripLane::OffVelocity => {
-            crate::Edit::SetOffVelocity {
-                notes: hit,
-                velocity: v,
-            }
-        }
+        crate::StripLane::OffVelocity => crate::Edit::SetOffVelocity {
+            notes: hit,
+            velocity: v,
+        },
         _ => crate::Edit::SetVelocity {
             notes: hit,
             velocity: v,

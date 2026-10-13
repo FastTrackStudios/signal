@@ -25,11 +25,18 @@ impl std::error::Error for ParseError {}
 /// The first problem found.
 pub fn parse(src: &str) -> Result<Expr, ParseError> {
     let tokens = lex(src)?;
-    let mut p = Parser { tokens, i: 0, src_len: src.len() };
+    let mut p = Parser {
+        tokens,
+        i: 0,
+        src_len: src.len(),
+    };
     let e = p.expr()?;
     match p.peek() {
         None => Ok(e),
-        Some((at, t)) => Err(ParseError { at, message: format!("unexpected {t} after the expression") }),
+        Some((at, t)) => Err(ParseError {
+            at,
+            message: format!("unexpected {t} after the expression"),
+        }),
     }
 }
 
@@ -58,8 +65,10 @@ impl fmt::Display for Tok {
     }
 }
 
-const PUNCT: [&str; 21] =
-    ["==", "!=", "<=", ">=", "&&", "||", "+", "-", "*", "/", "%", "<", ">", "!", "?", ":", "(", ")", ",", "{", "}"];
+const PUNCT: [&str; 21] = [
+    "==", "!=", "<=", ">=", "&&", "||", "+", "-", "*", "/", "%", "<", ">", "!", "?", ":", "(", ")",
+    ",", "{", "}",
+];
 
 fn is_name_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_' || c == '.'
@@ -78,14 +87,21 @@ fn lex(src: &str) -> Result<Vec<(usize, Tok)>, ParseError> {
         }
         let start = i;
         if c.is_ascii_digit() || (c == '.' && bytes.get(i + 1).is_some_and(u8::is_ascii_digit)) {
-            let len = rest.find(|c: char| !(c.is_ascii_digit() || c == '.' || c == 'e' || c == 'E')).unwrap_or(rest.len());
+            let len = rest
+                .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == 'e' || c == 'E'))
+                .unwrap_or(rest.len());
             // An exponent's sign: `1e-3`.
             let mut len = len;
             if rest[..len].ends_with(['e', 'E']) && rest[len..].starts_with(['-', '+']) {
-                len += 1 + rest[len + 1..].find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len() - len - 1);
+                len += 1 + rest[len + 1..]
+                    .find(|c: char| !c.is_ascii_digit())
+                    .unwrap_or(rest.len() - len - 1);
             }
             let text = &rest[..len];
-            let n = text.parse::<f64>().map_err(|_| ParseError { at: start, message: format!("bad number `{text}`") })?;
+            let n = text.parse::<f64>().map_err(|_| ParseError {
+                at: start,
+                message: format!("bad number `{text}`"),
+            })?;
             out.push((start, Tok::Num(n)));
             i += len;
         } else if c == '"' {
@@ -93,10 +109,18 @@ fn lex(src: &str) -> Result<Vec<(usize, Tok)>, ParseError> {
             let mut j = i + 1;
             loop {
                 match src[j..].chars().next() {
-                    None => return Err(ParseError { at: start, message: "unterminated string".into() }),
+                    None => {
+                        return Err(ParseError {
+                            at: start,
+                            message: "unterminated string".into(),
+                        });
+                    }
                     Some('"') => break,
                     Some('\\') => {
-                        let esc = src[j + 1..].chars().next().ok_or(ParseError { at: j, message: "unterminated string".into() })?;
+                        let esc = src[j + 1..].chars().next().ok_or(ParseError {
+                            at: j,
+                            message: "unterminated string".into(),
+                        })?;
                         s.push(match esc {
                             'n' => '\n',
                             't' => '\t',
@@ -113,16 +137,25 @@ fn lex(src: &str) -> Result<Vec<(usize, Tok)>, ParseError> {
             out.push((start, Tok::Str(s)));
             i = j + 1;
         } else if c == '#' {
-            let len = 1 + rest[1..].find(|c: char| !c.is_ascii_hexdigit()).unwrap_or(rest.len() - 1);
+            let len = 1 + rest[1..]
+                .find(|c: char| !c.is_ascii_hexdigit())
+                .unwrap_or(rest.len() - 1);
             let text = &rest[..len];
-            let color = Rgba::from_hex(text)
-                .ok_or_else(|| ParseError { at: start, message: format!("bad colour `{text}` — expected #rgb, #rrggbb or #rrggbbaa") })?;
+            let color = Rgba::from_hex(text).ok_or_else(|| ParseError {
+                at: start,
+                message: format!("bad colour `{text}` — expected #rgb, #rrggbb or #rrggbbaa"),
+            })?;
             out.push((start, Tok::Color(color)));
             i += len;
         } else if c == '$' {
-            let len = rest[1..].find(|c: char| !is_name_char(c)).unwrap_or(rest.len() - 1);
+            let len = rest[1..]
+                .find(|c: char| !is_name_char(c))
+                .unwrap_or(rest.len() - 1);
             if len == 0 {
-                return Err(ParseError { at: start, message: "`$` must be followed by a token's name".into() });
+                return Err(ParseError {
+                    at: start,
+                    message: "`$` must be followed by a token's name".into(),
+                });
             }
             out.push((start, Tok::Token(rest[1..=len].to_owned())));
             i += 1 + len;
@@ -134,7 +167,10 @@ fn lex(src: &str) -> Result<Vec<(usize, Tok)>, ParseError> {
             out.push((start, Tok::Punct(p)));
             i += p.len();
         } else {
-            return Err(ParseError { at: start, message: format!("unexpected `{c}`") });
+            return Err(ParseError {
+                at: start,
+                message: format!("unexpected `{c}`"),
+            });
         }
     }
     Ok(out)
@@ -150,7 +186,14 @@ struct Parser {
 const LEVELS: [&[(&str, BinOp)]; 5] = [
     &[("||", BinOp::Or)],
     &[("&&", BinOp::And)],
-    &[("==", BinOp::Eq), ("!=", BinOp::Ne), ("<=", BinOp::Le), (">=", BinOp::Ge), ("<", BinOp::Lt), (">", BinOp::Gt)],
+    &[
+        ("==", BinOp::Eq),
+        ("!=", BinOp::Ne),
+        ("<=", BinOp::Le),
+        (">=", BinOp::Ge),
+        ("<", BinOp::Lt),
+        (">", BinOp::Gt),
+    ],
     &[("+", BinOp::Add), ("-", BinOp::Sub)],
     &[("*", BinOp::Mul), ("/", BinOp::Div), ("%", BinOp::Rem)],
 ];
@@ -177,8 +220,13 @@ impl Parser {
         if self.eat(p) {
             return Ok(());
         }
-        let found = self.peek().map_or_else(|| "the end".to_owned(), |(_, t)| t.to_string());
-        Err(ParseError { at: self.at(), message: format!("expected `{p}`, found {found}") })
+        let found = self
+            .peek()
+            .map_or_else(|| "the end".to_owned(), |(_, t)| t.to_string());
+        Err(ParseError {
+            at: self.at(),
+            message: format!("expected `{p}`, found {found}"),
+        })
     }
 
     fn expr(&mut self) -> Result<Expr, ParseError> {
@@ -193,7 +241,9 @@ impl Parser {
     }
 
     fn binary(&mut self, level: usize) -> Result<Expr, ParseError> {
-        let Some(ops) = LEVELS.get(level) else { return self.unary() };
+        let Some(ops) = LEVELS.get(level) else {
+            return self.unary();
+        };
         let mut lhs = self.binary(level + 1)?;
         'more: loop {
             for (p, op) in *ops {
@@ -220,7 +270,10 @@ impl Parser {
     fn primary(&mut self) -> Result<Expr, ParseError> {
         let at = self.at();
         let Some((_, tok)) = self.peek() else {
-            return Err(ParseError { at, message: "expected a value, found the end".into() });
+            return Err(ParseError {
+                at,
+                message: "expected a value, found the end".into(),
+            });
         };
         let tok = tok.clone();
         self.i += 1;
@@ -245,7 +298,10 @@ impl Parser {
                 _ if self.eat("(") => {
                     let func = Func::named(&name).ok_or_else(|| ParseError {
                         at,
-                        message: format!("unknown function `{name}` (functions: {})", Func::names().join(", ")),
+                        message: format!(
+                            "unknown function `{name}` (functions: {})",
+                            Func::names().join(", ")
+                        ),
                     })?;
                     let mut args = Vec::new();
                     if !self.eat(")") {
@@ -259,17 +315,37 @@ impl Parser {
                     }
                     let (lo, hi) = func.arity();
                     if args.len() < lo || args.len() > hi {
-                        let want = if lo == hi { lo.to_string() } else if hi == usize::MAX { format!("{lo}+") } else { format!("{lo}–{hi}") };
-                        return Err(ParseError { at, message: format!("`{name}` takes {want} arguments, given {}", args.len()) });
+                        let want = if lo == hi {
+                            lo.to_string()
+                        } else if hi == usize::MAX {
+                            format!("{lo}+")
+                        } else {
+                            format!("{lo}–{hi}")
+                        };
+                        return Err(ParseError {
+                            at,
+                            message: format!(
+                                "`{name}` takes {want} arguments, given {}",
+                                args.len()
+                            ),
+                        });
                     }
                     Expr::Call(func, args)
                 }
                 _ if name.ends_with('.') || name.starts_with('.') || name.contains("..") => {
-                    return Err(ParseError { at, message: format!("bad field name `{name}`") });
+                    return Err(ParseError {
+                        at,
+                        message: format!("bad field name `{name}`"),
+                    });
                 }
                 _ => Expr::Field(Field::Name(name)),
             },
-            other => return Err(ParseError { at, message: format!("expected a value, found {other}") }),
+            other => {
+                return Err(ParseError {
+                    at,
+                    message: format!("expected a value, found {other}"),
+                });
+            }
         })
     }
 }

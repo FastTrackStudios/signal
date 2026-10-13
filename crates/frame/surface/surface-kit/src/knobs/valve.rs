@@ -29,7 +29,9 @@ use document_proto::{Color, Effect, EffectKind, Node, NodeId, NodeKind, Op, Pain
 use surface_widgets::Builder;
 
 use super::spec::{BODY_R, Index, KnobSpec, RingKind};
-use super::{BLACK, Geo, WHITE, circle_path, css, fmt_pts, hex_of, refs, room_light, rrect, scallop, vector};
+use super::{
+    BLACK, Geo, WHITE, circle_path, css, fmt_pts, hex_of, refs, room_light, rrect, scallop, vector,
+};
 use crate::draw;
 use crate::registry::{ComponentDef, Family, Place};
 
@@ -37,7 +39,14 @@ use crate::registry::{ComponentDef, Family, Place};
 const LINE: &str = "#f1efe9";
 
 /// A bare spec: the shared builder draws only the index line and the scale.
-const fn bare(index: Index, ring: RingKind, ring_offset: f64, scale: &'static [&'static str], variants: &'static [&'static str], tints: &'static [Option<&'static str>]) -> KnobSpec {
+const fn bare(
+    index: Index,
+    ring: RingKind,
+    ring_offset: f64,
+    scale: &'static [&'static str],
+    variants: &'static [&'static str],
+    tints: &'static [Option<&'static str>],
+) -> KnobSpec {
     KnobSpec {
         tiers: &[],
         index,
@@ -55,18 +64,85 @@ const fn bare(index: Index, ring: RingKind, ring_offset: f64, scale: &'static [&
 }
 
 /// No index of the builder's own (the style paints its own).
-const NO_LINE: Index = Index::Bar { from: 0.0, to: 0.0, width: 0.0, color: "#00000000" };
+const NO_LINE: Index = Index::Bar {
+    from: 0.0,
+    to: 0.0,
+    width: 0.0,
+    color: "#00000000",
+};
 
 const ZERO_TEN: &[&str] = &["0", "2", "4", "6", "8", "10"];
 const BLACKS: &[&str] = &["black"];
 const BLACK_TINT: &[Option<&str>] = &[None];
 
-static TAB_POINTER: KnobSpec = bare(Index::Bar { from: 0.10, to: 0.94, width: 2.4, color: LINE }, RingKind::Numerals, 7.0, ZERO_TEN, &["black", "brown"], &[None, Some("#2e2119")]);
-static HEPTAGON: KnobSpec = bare(Index::Bar { from: 0.08, to: 0.90, width: 2.6, color: LINE }, RingKind::Dots, 2.0, &["0", "", "", "", "", "10"], BLACKS, BLACK_TINT);
-static BAR_POINTER: KnobSpec = bare(Index::Bar { from: 0.06, to: 0.86, width: 2.2, color: LINE }, RingKind::Ticks, 4.0, &["1", "2", "3"], BLACKS, BLACK_TINT);
-static FLUTED_STACK: KnobSpec = bare(NO_LINE, RingKind::Numerals, 2.0, &["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], BLACKS, BLACK_TINT);
-static PADDLE: KnobSpec = bare(NO_LINE, RingKind::Ticks, 6.0, &["1", "2", "3", "4", "5", "6"], BLACKS, BLACK_TINT);
-static FIN: KnobSpec = bare(Index::Bar { from: 0.52, to: 0.94, width: 2.2, color: LINE }, RingKind::Ticks, 0.0, &["", "", "", "", "", "", "", "", "", "", ""], BLACKS, BLACK_TINT);
+static TAB_POINTER: KnobSpec = bare(
+    Index::Bar {
+        from: 0.10,
+        to: 0.94,
+        width: 2.4,
+        color: LINE,
+    },
+    RingKind::Numerals,
+    7.0,
+    ZERO_TEN,
+    &["black", "brown"],
+    &[None, Some("#2e2119")],
+);
+static HEPTAGON: KnobSpec = bare(
+    Index::Bar {
+        from: 0.08,
+        to: 0.90,
+        width: 2.6,
+        color: LINE,
+    },
+    RingKind::Dots,
+    2.0,
+    &["0", "", "", "", "", "10"],
+    BLACKS,
+    BLACK_TINT,
+);
+static BAR_POINTER: KnobSpec = bare(
+    Index::Bar {
+        from: 0.06,
+        to: 0.86,
+        width: 2.2,
+        color: LINE,
+    },
+    RingKind::Ticks,
+    4.0,
+    &["1", "2", "3"],
+    BLACKS,
+    BLACK_TINT,
+);
+static FLUTED_STACK: KnobSpec = bare(
+    NO_LINE,
+    RingKind::Numerals,
+    2.0,
+    &["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+    BLACKS,
+    BLACK_TINT,
+);
+static PADDLE: KnobSpec = bare(
+    NO_LINE,
+    RingKind::Ticks,
+    6.0,
+    &["1", "2", "3", "4", "5", "6"],
+    BLACKS,
+    BLACK_TINT,
+);
+static FIN: KnobSpec = bare(
+    Index::Bar {
+        from: 0.52,
+        to: 0.94,
+        width: 2.2,
+        color: LINE,
+    },
+    RingKind::Ticks,
+    0.0,
+    &["", "", "", "", "", "", "", "", "", "", ""],
+    BLACKS,
+    BLACK_TINT,
+);
 
 type Dress = fn(&mut Parts<'_, '_>);
 
@@ -142,7 +218,14 @@ impl Parts<'_, '_> {
     }
     /// A turning part, under the index line.
     fn turn(&mut self, n: Node) {
-        self.b.scene.apply(Op::Insert { node: n, parent: self.body, index: self.under }).expect("body exists");
+        self.b
+            .scene
+            .apply(Op::Insert {
+                node: n,
+                parent: self.body,
+                index: self.under,
+            })
+            .expect("body exists");
         self.under += 1;
     }
     /// A fixed part over the body (light, gloss).
@@ -160,7 +243,15 @@ impl Parts<'_, '_> {
         let shade = Color { a: alpha, ..BLACK };
         let s = self.side();
         let mut n = vector(name, 0.0, 0.0, s, s, d, vec![Paint::solid(shade)]);
-        n.effects = vec![Effect { kind: EffectKind::DropShadow, visible: true, color: shade, offset_x: 0.0, offset_y: 0.0, radius: 2.0 * blur * self.g.k, spread: 0.0 }];
+        n.effects = vec![Effect {
+            kind: EffectKind::DropShadow,
+            visible: true,
+            color: shade,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            radius: 2.0 * blur * self.g.k,
+            spread: 0.0,
+        }];
         self.turn(n);
     }
     /// A fixed path.
@@ -170,14 +261,20 @@ impl Parts<'_, '_> {
     }
     /// The moulding's colour: black phenolic, or the variant's tint.
     fn black(&self, base: &str) -> Color {
-        self.tint.map_or_else(|| css(base), |t| draw::mix(t, BLACK, 0.35))
+        self.tint
+            .map_or_else(|| css(base), |t| draw::mix(t, BLACK, 0.35))
     }
     /// A rotation-invariant fill for a round moulding of radius `r` units:
     /// `centre` at the shaft to `edge` at the rim (the sheen of a gloss
     /// moulding is the fixed light over it, not this).
     fn radial(&self, r: f64, centre: Color, edge: Color) -> Paint {
         let f = r * self.g.k / self.side();
-        let stops = [(0.0, hex_of(centre)), (f * 1.6, hex_of(draw::mix(centre, edge, 0.4))), (f * 2.0, hex_of(edge)), (1.0, hex_of(edge))];
+        let stops = [
+            (0.0, hex_of(centre)),
+            (f * 1.6, hex_of(draw::mix(centre, edge, 0.4))),
+            (f * 2.0, hex_of(edge)),
+            (1.0, hex_of(edge)),
+        ];
         draw::radial_at(0.5, 0.5, 0.5, &refs(&stops))
     }
     /// The room's gloss on a round surface of radius `r` units: the lit
@@ -190,23 +287,55 @@ impl Parts<'_, '_> {
             let (w, h) = (r * 0.62 * self.g.k, r * 0.30 * self.g.k);
             let mut blob = Node::new(NodeKind::Ellipse, format!("{name} highlight light"));
             blob.transform = document_proto::Transform::translate(cx - w / 2.0, cy - h / 2.0);
-            blob.size = document_proto::Size { width: w, height: h };
+            blob.size = document_proto::Size {
+                width: w,
+                height: h,
+            };
             let c = |a: f64| hex_of(Color { a, ..WHITE });
             let stops = [(0.0, c(spot)), (0.45, c(spot * 0.35)), (0.7, c(0.0))];
             blob.fills = vec![draw::radial_at(0.5, 0.5, 0.7, &refs(&stops))];
             self.fix(draw::rotated(blob, -34.0));
         }
-        let arc = draw::sector(self.g.c, self.g.c, (r - 0.9) * self.g.k, (r - 0.2) * self.g.k, -62.0, 28.0);
-        self.over(&format!("{name} rim light"), arc, vec![Paint::solid(Color { a: 0.22 * lit / 0.2, ..WHITE })]);
+        let arc = draw::sector(
+            self.g.c,
+            self.g.c,
+            (r - 0.9) * self.g.k,
+            (r - 0.2) * self.g.k,
+            -62.0,
+            28.0,
+        );
+        self.over(
+            &format!("{name} rim light"),
+            arc,
+            vec![Paint::solid(Color {
+                a: 0.22 * lit / 0.2,
+                ..WHITE
+            })],
+        );
     }
 }
 
 /// The shared builder with a bare spec, then `dress` adds the moulding.
-fn dressed(b: &mut Builder<'_>, parent: NodeId, p: &Place, spec: &KnobSpec, title: &str, default_size: f64, dress: Dress) -> NodeId {
+fn dressed(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    p: &Place,
+    spec: &KnobSpec,
+    title: &str,
+    default_size: f64,
+    dress: Dress,
+) -> NodeId {
     let root = super::build(b, parent, p, spec, title, default_size);
     let d = p.size.unwrap_or(default_size).max(12.0);
     let k = d / (2.0 * BODY_R);
-    let child = |b: &Builder<'_>, of: NodeId, name: &str| b.scene.node(of).and_then(|n| n.children.iter().copied().find(|c| b.scene.node(*c).is_some_and(|c| c.name == name)));
+    let child = |b: &Builder<'_>, of: NodeId, name: &str| {
+        b.scene.node(of).and_then(|n| {
+            n.children
+                .iter()
+                .copied()
+                .find(|c| b.scene.node(*c).is_some_and(|c| c.name == name))
+        })
+    };
     let knob = child(b, root, "knob").expect("a knob frame");
     let body = child(b, knob, "body").expect("a body frame");
     // The builder's round contact shadow: each dressing casts its own.
@@ -216,16 +345,32 @@ fn dressed(b: &mut Builder<'_>, parent: NodeId, p: &Place, spec: &KnobSpec, titl
         n.visible = false;
     }
     let side = b.scene.node(knob).map_or(0.0, |n| n.size.width);
-    let which = p.variant.as_deref().and_then(|v| spec.variants.iter().position(|n| *n == v)).unwrap_or(0);
+    let which = p
+        .variant
+        .as_deref()
+        .and_then(|v| spec.variants.iter().position(|n| *n == v))
+        .unwrap_or(0);
     let tint = spec.tints.get(which).copied().flatten().map(css);
-    let mut parts = Parts { b, knob, body, g: Geo { k, c: side / 2.0 }, tint, under: 0 };
+    let mut parts = Parts {
+        b,
+        knob,
+        body,
+        g: Geo { k, c: side / 2.0 },
+        tint,
+        under: 0,
+    };
     dress(&mut parts);
     root
 }
 
 /// A rounded, square-ended tab on the tail (pointing down, +v).
 fn tail_tab(from: f64, to: f64, half_in: f64, half_out: f64) -> [(f64, f64); 4] {
-    [(-half_in, from), (half_in, from), (half_out, to), (-half_out, to)]
+    [
+        (-half_in, from),
+        (half_in, from),
+        (half_out, to),
+        (-half_out, to),
+    ]
 }
 
 // ── the dressings ────────────────────────────────────────────────────────
@@ -238,7 +383,11 @@ fn dress_tab(k: &mut Parts<'_, '_>) {
     k.shadow("tab shadow", tab_d.clone(), 0.55, 2.2);
     let disc_d = k.circle(0.0, 0.0, BODY_R);
     k.shadow("dome shadow", disc_d.clone(), 0.55, 2.6);
-    k.part("tab", tab_d, vec![Paint::solid(draw::mix(black, WHITE, 0.03))]);
+    k.part(
+        "tab",
+        tab_d,
+        vec![Paint::solid(draw::mix(black, WHITE, 0.03))],
+    );
     // The dome: glossy phenolic, darkest at the rim.
     let dome = k.radial(BODY_R, draw::mix(black, WHITE, 0.10), black);
     k.part("dome", disc_d, vec![dome]);
@@ -267,26 +416,72 @@ fn dress_heptagon(k: &mut Parts<'_, '_>) {
     let black = k.black("#09090b");
     let skirt_d = k.circle(0.0, 0.0, BODY_R);
     k.shadow("skirt shadow", skirt_d.clone(), 0.5, 2.4);
-    k.part("skirt", skirt_d, vec![k.radial(BODY_R, draw::mix(black, WHITE, 0.08), black)]);
+    k.part(
+        "skirt",
+        skirt_d,
+        vec![k.radial(BODY_R, draw::mix(black, WHITE, 0.08), black)],
+    );
     // The seven-sided grip, a corner on the index.
     let grip = rounded_polygon(7, 27.5, 5.5);
     let grip_d = k.poly(&grip);
     k.shadow("grip shadow", grip_d.clone(), 0.6, 1.4);
-    let mut grip_n = vector("grip", 0.0, 0.0, k.side(), k.side(), grip_d, vec![k.radial(27.5, draw::mix(black, WHITE, 0.07), draw::mix(black, WHITE, 0.02))]);
-    grip_n.stroke = document_proto::Stroke { paints: vec![Paint::solid(Color { a: 0.10, ..WHITE })], weight: (0.5 * k.g.k).max(0.5), align: document_proto::StrokeAlign::Inside, ..document_proto::Stroke::default() };
+    let mut grip_n = vector(
+        "grip",
+        0.0,
+        0.0,
+        k.side(),
+        k.side(),
+        grip_d,
+        vec![k.radial(
+            27.5,
+            draw::mix(black, WHITE, 0.07),
+            draw::mix(black, WHITE, 0.02),
+        )],
+    );
+    grip_n.stroke = document_proto::Stroke {
+        paints: vec![Paint::solid(Color { a: 0.10, ..WHITE })],
+        weight: (0.5 * k.g.k).max(0.5),
+        align: document_proto::StrokeAlign::Inside,
+        ..document_proto::Stroke::default()
+    };
     k.turn(grip_n);
     // The flat, polished top.
     let top_d = k.circle(0.0, 0.0, 18.0);
-    let mut top = vector("top", 0.0, 0.0, k.side(), k.side(), top_d, vec![k.radial(18.0, draw::mix(black, WHITE, 0.06), draw::mix(black, WHITE, 0.02))]);
-    top.stroke = document_proto::Stroke { paints: vec![Paint::solid(Color { a: 0.3, ..BLACK })], weight: (0.4 * k.g.k).max(0.5), align: document_proto::StrokeAlign::Outside, ..document_proto::Stroke::default() };
+    let mut top = vector(
+        "top",
+        0.0,
+        0.0,
+        k.side(),
+        k.side(),
+        top_d,
+        vec![k.radial(
+            18.0,
+            draw::mix(black, WHITE, 0.06),
+            draw::mix(black, WHITE, 0.02),
+        )],
+    );
+    top.stroke = document_proto::Stroke {
+        paints: vec![Paint::solid(Color { a: 0.3, ..BLACK })],
+        weight: (0.4 * k.g.k).max(0.5),
+        align: document_proto::StrokeAlign::Outside,
+        ..document_proto::Stroke::default()
+    };
     k.turn(top);
     k.gloss("grip", 27.0, (0.18, 0.36), 0.0);
     // Polished: the window's reflection runs down the lit facets on the
     // right, a hard crescent, and a softer one on the left.
     let crescent = draw::sector(k.g.c, k.g.c, 20.5 * k.g.k, 25.5 * k.g.k, 22.0, 78.0);
-    k.over("grip window light", crescent, vec![Paint::solid(Color { a: 0.30, ..WHITE })]);
+    k.over(
+        "grip window light",
+        crescent,
+        vec![Paint::solid(Color { a: 0.30, ..WHITE })],
+    );
     let soft = draw::sector(k.g.c, k.g.c, 21.0 * k.g.k, 25.0 * k.g.k, -80.0, -40.0);
-    k.over("grip soft light", soft, vec![Paint::solid(Color { a: 0.10, ..WHITE })]);
+    k.over(
+        "grip soft light",
+        soft,
+        vec![Paint::solid(Color { a: 0.10, ..WHITE })],
+    );
 }
 
 fn dress_bar(k: &mut Parts<'_, '_>) {
@@ -295,15 +490,37 @@ fn dress_bar(k: &mut Parts<'_, '_>) {
     k.shadow("boss shadow", hub_d.clone(), 0.55, 2.4);
     // The bar: tapered, its tail longer than its nose, ends rounded.
     let (nose, tail) = (-27.0, 35.0);
-    let bar = |o: f64| vec![(-5.8 - o, nose - o), (5.8 + o, nose - o), (9.0 + o, tail + o), (-9.0 - o, tail + o)];
+    let bar = |o: f64| {
+        vec![
+            (-5.8 - o, nose - o),
+            (5.8 + o, nose - o),
+            (9.0 + o, tail + o),
+            (-9.0 - o, tail + o),
+        ]
+    };
     let bar_d = k.poly(&bar(0.0));
     k.shadow("bar shadow", bar_d.clone(), 0.6, 2.2);
-    k.part("boss", hub_d, vec![k.radial(20.0, draw::mix(black, WHITE, 0.12), black)]);
-    k.part("bar edge", k.poly(&bar(0.6)), vec![Paint::solid(Color { a: 0.7, ..BLACK })]);
+    k.part(
+        "boss",
+        hub_d,
+        vec![k.radial(20.0, draw::mix(black, WHITE, 0.12), black)],
+    );
+    k.part(
+        "bar edge",
+        k.poly(&bar(0.6)),
+        vec![Paint::solid(Color { a: 0.7, ..BLACK })],
+    );
     // Lit along its crest, down both flanks: a ridge, symmetric so it turns.
     let x = |u: f64| (k.g.c + u * k.g.k) / k.side();
     let c = |t: f64| hex_of(draw::mix(black, WHITE, t));
-    let crest = [(0.0, c(0.0)), (x(-7.0), c(0.0)), (x(-2.0), c(0.14)), (x(2.0), c(0.14)), (x(7.0), c(0.0)), (1.0, c(0.0))];
+    let crest = [
+        (0.0, c(0.0)),
+        (x(-7.0), c(0.0)),
+        (x(-2.0), c(0.14)),
+        (x(2.0), c(0.14)),
+        (x(7.0), c(0.0)),
+        (1.0, c(0.0)),
+    ];
     k.part("bar", bar_d, vec![draw::linear(90.0, &refs(&crest))]);
     k.gloss("boss", 20.0, (0.16, 0.30), 0.22);
 }
@@ -316,21 +533,69 @@ fn dress_fluted_stack(k: &mut Parts<'_, '_>) {
     let skirt = scallop(cx, cy, BODY_R * kk, 36, 1.3 * kk);
     let skirt_d = fmt_pts(&skirt);
     k.shadow("skirt shadow", skirt_d.clone(), 0.55, 2.6);
-    let mut skirt_n = vector("skirt", 0.0, 0.0, k.side(), k.side(), skirt_d, vec![k.radial(BODY_R, draw::mix(black, WHITE, 0.05), draw::mix(black, WHITE, 0.10))]);
-    skirt_n.stroke = document_proto::Stroke { paints: vec![Paint::solid(Color { a: 0.55, ..BLACK })], weight: (0.6 * kk).max(0.5), align: document_proto::StrokeAlign::Inside, ..document_proto::Stroke::default() };
+    let mut skirt_n = vector(
+        "skirt",
+        0.0,
+        0.0,
+        k.side(),
+        k.side(),
+        skirt_d,
+        vec![k.radial(
+            BODY_R,
+            draw::mix(black, WHITE, 0.05),
+            draw::mix(black, WHITE, 0.10),
+        )],
+    );
+    skirt_n.stroke = document_proto::Stroke {
+        paints: vec![Paint::solid(Color { a: 0.55, ..BLACK })],
+        weight: (0.6 * kk).max(0.5),
+        align: document_proto::StrokeAlign::Inside,
+        ..document_proto::Stroke::default()
+    };
     k.turn(skirt_n);
     // The step up to the body, as a dark wall.
-    k.part("step", k.circle(0.0, 0.0, 22.6), vec![Paint::solid(draw::mix(black, BLACK, 0.6))]);
-    k.part("body wall", k.circle(0.0, 0.0, 21.2), vec![k.radial(21.2, draw::mix(black, WHITE, 0.10), draw::mix(black, WHITE, 0.03))]);
+    k.part(
+        "step",
+        k.circle(0.0, 0.0, 22.6),
+        vec![Paint::solid(draw::mix(black, BLACK, 0.6))],
+    );
+    k.part(
+        "body wall",
+        k.circle(0.0, 0.0, 21.2),
+        vec![k.radial(
+            21.2,
+            draw::mix(black, WHITE, 0.10),
+            draw::mix(black, WHITE, 0.03),
+        )],
+    );
     // The dome on top.
     let dome = k.circle(0.0, 0.0, 13.5);
     k.shadow("dome shadow", dome.clone(), 0.45, 1.6);
-    k.part("dome", dome, vec![k.radial(13.5, draw::mix(black, WHITE, 0.16), draw::mix(black, WHITE, 0.04))]);
+    k.part(
+        "dome",
+        dome,
+        vec![k.radial(
+            13.5,
+            draw::mix(black, WHITE, 0.16),
+            draw::mix(black, WHITE, 0.04),
+        )],
+    );
     // The index: a white chevron on the skirt, a white dot on the body.
     let (w, t) = (3.6, 1.35);
-    let chevron = k.poly(&[(0.0, -29.2), (w + t, -23.0), (w, -22.0), (0.0, -26.7), (-w, -22.0), (-w - t, -23.0)]);
+    let chevron = k.poly(&[
+        (0.0, -29.2),
+        (w + t, -23.0),
+        (w, -22.0),
+        (0.0, -26.7),
+        (-w, -22.0),
+        (-w - t, -23.0),
+    ]);
     k.part("chevron", chevron, vec![Paint::solid(css(LINE))]);
-    k.part("dot", k.circle(0.0, -17.4, 1.9), vec![Paint::solid(css(LINE))]);
+    k.part(
+        "dot",
+        k.circle(0.0, -17.4, 1.9),
+        vec![Paint::solid(css(LINE))],
+    );
     k.gloss("skirt", BODY_R, (0.12, 0.30), 0.0);
     k.gloss("dome", 21.0, (0.16, 0.30), 0.30);
 }
@@ -346,23 +611,59 @@ fn dress_paddle(k: &mut Parts<'_, '_>) {
         let (x2, y2) = g.p(hw * 0.86, end - hw * 0.86);
         let (x3, y3) = g.p(-hw * 0.86, end - hw * 0.86);
         let r = hw * 0.86 * g.k;
-        format!("M {x0:.3} {y0:.3} L {x1:.3} {y1:.3} L {x2:.3} {y2:.3} A {r:.3} {r:.3} 0 0 1 {x3:.3} {y3:.3} Z")
+        format!(
+            "M {x0:.3} {y0:.3} L {x1:.3} {y1:.3} L {x2:.3} {y2:.3} A {r:.3} {r:.3} 0 0 1 {x3:.3} {y3:.3} Z"
+        )
     };
     k.shadow("paddle shadow", paddle(0.0), 0.6, 2.4);
     let collar = k.circle(0.0, 0.0, 20.5);
     k.shadow("collar shadow", collar.clone(), 0.5, 2.2);
-    k.part("paddle edge", paddle(0.6), vec![Paint::solid(Color { a: 0.7, ..BLACK })]);
+    k.part(
+        "paddle edge",
+        paddle(0.6),
+        vec![Paint::solid(Color { a: 0.7, ..BLACK })],
+    );
     let x = |u: f64| (k.g.c + u * k.g.k) / k.side();
     let c = |t: f64| hex_of(draw::mix(black, WHITE, t));
-    let ridge = [(0.0, c(0.02)), (x(-10.0), c(0.02)), (x(-3.0), c(0.11)), (x(3.0), c(0.11)), (x(10.0), c(0.02)), (1.0, c(0.02))];
-    k.part("paddle", paddle(0.0), vec![draw::linear(90.0, &refs(&ridge))]);
-    k.part("collar", collar, vec![k.radial(20.5, draw::mix(black, WHITE, 0.06), black)]);
+    let ridge = [
+        (0.0, c(0.02)),
+        (x(-10.0), c(0.02)),
+        (x(-3.0), c(0.11)),
+        (x(3.0), c(0.11)),
+        (x(10.0), c(0.02)),
+        (1.0, c(0.02)),
+    ];
+    k.part(
+        "paddle",
+        paddle(0.0),
+        vec![draw::linear(90.0, &refs(&ridge))],
+    );
+    k.part(
+        "collar",
+        collar,
+        vec![k.radial(20.5, draw::mix(black, WHITE, 0.06), black)],
+    );
     let cap = k.circle(0.0, 0.0, 15.0);
     k.shadow("cap shadow", cap.clone(), 0.4, 1.2);
-    k.part("cap", cap, vec![k.radial(15.0, draw::mix(black, WHITE, 0.15), draw::mix(black, WHITE, 0.03))]);
+    k.part(
+        "cap",
+        cap,
+        vec![k.radial(
+            15.0,
+            draw::mix(black, WHITE, 0.15),
+            draw::mix(black, WHITE, 0.03),
+        )],
+    );
     // The chevron at the nose, on the collar.
     let (w, t) = (4.2, 1.5);
-    let chevron = k.poly(&[(0.0, -26.5), (w + t, -18.8), (w, -17.6), (0.0, -23.6), (-w, -17.6), (-w - t, -18.8)]);
+    let chevron = k.poly(&[
+        (0.0, -26.5),
+        (w + t, -18.8),
+        (w, -17.6),
+        (0.0, -23.6),
+        (-w, -17.6),
+        (-w - t, -18.8),
+    ]);
     k.part("chevron", chevron, vec![Paint::solid(css(LINE))]);
     k.gloss("collar", 20.5, (0.16, 0.30), 0.0);
     k.gloss("cap", 15.0, (0.18, 0.28), 0.34);
@@ -372,14 +673,39 @@ fn dress_fin(k: &mut Parts<'_, '_>) {
     let black = k.black("#141416");
     let disc = k.circle(0.0, 0.0, BODY_R);
     k.shadow("disc shadow", disc.clone(), 0.5, 2.4);
-    k.part("disc", disc, vec![k.radial(BODY_R, draw::mix(black, WHITE, 0.05), draw::mix(black, BLACK, 0.3))]);
+    k.part(
+        "disc",
+        disc,
+        vec![k.radial(
+            BODY_R,
+            draw::mix(black, WHITE, 0.05),
+            draw::mix(black, BLACK, 0.3),
+        )],
+    );
     // The fin, straight across, standing proud of the disc.
     let g = k.g;
-    let fin = |o: f64| rrect(g.c - (7.0 + o) * g.k, g.c - (29.4 + o) * g.k, (14.0 + 2.0 * o) * g.k, (58.8 + 2.0 * o) * g.k, 3.0 * g.k);
+    let fin = |o: f64| {
+        rrect(
+            g.c - (7.0 + o) * g.k,
+            g.c - (29.4 + o) * g.k,
+            (14.0 + 2.0 * o) * g.k,
+            (58.8 + 2.0 * o) * g.k,
+            3.0 * g.k,
+        )
+    };
     k.shadow("fin shadow", fin(0.0), 0.6, 1.8);
     let x = |u: f64| (k.g.c + u * k.g.k) / k.side();
     let c = |t: f64| hex_of(draw::mix(black, WHITE, t));
-    let ridge = [(0.0, c(0.0)), (x(-7.0), c(0.0)), (x(-5.2), c(0.13)), (x(-3.8), c(0.07)), (x(3.8), c(0.07)), (x(5.2), c(0.13)), (x(7.0), c(0.0)), (1.0, c(0.0))];
+    let ridge = [
+        (0.0, c(0.0)),
+        (x(-7.0), c(0.0)),
+        (x(-5.2), c(0.13)),
+        (x(-3.8), c(0.07)),
+        (x(3.8), c(0.07)),
+        (x(5.2), c(0.13)),
+        (x(7.0), c(0.0)),
+        (1.0, c(0.0)),
+    ];
     k.part("fin", fin(0.0), vec![draw::linear(90.0, &refs(&ridge))]);
     k.gloss("disc", BODY_R, (0.10, 0.34), 0.0);
 }

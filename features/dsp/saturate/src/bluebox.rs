@@ -111,16 +111,27 @@ impl Taper {
     }
 }
 
-const TAPER_SAT: Taper = Taper([0.0, 0.007_23, 0.042_29, 0.258_7, 0.506_8, 0.712_8, 0.955_0, 0.992_0, 1.0]);
-const TAPER_TRIODE: Taper = Taper([0.0, 0.007_85, 0.052_80, 0.291_0, 0.510_0, 0.738_0, 0.957_0, 0.994_0, 1.0]);
-const TAPER_OUTPUT: Taper = Taper([0.0, 0.009_07, 0.060_30, 0.272_0, 0.503_0, 0.713_0, 0.946_0, 0.992_0, 1.0]);
-const TAPER_PENTODE: Taper = Taper([0.0, 0.021_71, 0.071_82, 0.118_0, 0.162_0, 0.256_1, 0.583_1, 0.971_0, 1.0]);
+const TAPER_SAT: Taper = Taper([
+    0.0, 0.007_23, 0.042_29, 0.258_7, 0.506_8, 0.712_8, 0.955_0, 0.992_0, 1.0,
+]);
+const TAPER_TRIODE: Taper = Taper([
+    0.0, 0.007_85, 0.052_80, 0.291_0, 0.510_0, 0.738_0, 0.957_0, 0.994_0, 1.0,
+]);
+const TAPER_OUTPUT: Taper = Taper([
+    0.0, 0.009_07, 0.060_30, 0.272_0, 0.503_0, 0.713_0, 0.946_0, 0.992_0, 1.0,
+]);
+const TAPER_PENTODE: Taper = Taper([
+    0.0, 0.021_71, 0.071_82, 0.118_0, 0.162_0, 0.256_1, 0.583_1, 0.971_0, 1.0,
+]);
 
 /// Air's cathode resistance (Ω) at knob positions 0, 5, …, 100, measured on
 /// the reference: its Air-In response against Air-In Off at 0.5–18 kHz,
 /// fitted with this stage's network per position (`teamb/hgb_airfit.py`;
 /// within 0.002 dB up to Air 75, 0.14 dB above). Linear between positions.
-const AIR_RA: [f64; 21] = [10030.3, 9985.2, 9940.1, 9891.5, 9842.0, 9719.6, 9539.2, 9117.0, 8210.7, 7283.5, 6188.2, 5093.0, 4190.4, 3312.2, 2304.4, 1235.9, 555.9, 351.1, 244.0, 242.2, 240.9];
+const AIR_RA: [f64; 21] = [
+    10030.3, 9985.2, 9940.1, 9891.5, 9842.0, 9719.6, 9539.2, 9117.0, 8210.7, 7283.5, 6188.2,
+    5093.0, 4190.4, 3312.2, 2304.4, 1235.9, 555.9, 351.1, 244.0, 242.2, 240.9,
+];
 
 /// Air's cathode resistance at knob `u` (0..1).
 fn air_ra(u: f64) -> f64 {
@@ -159,7 +170,11 @@ const SUPPLY: f64 = 320.0;
 fn softplus(k: f64, z: f64) -> f64 {
     let a = k * z.abs();
     // past 40 the correction is below 1e-17·k⁻¹
-    if a > 40.0 { z.max(0.0) } else { z.max(0.0) + libm::log1p(libm::exp(-a)) / k }
+    if a > 40.0 {
+        z.max(0.0)
+    } else {
+        z.max(0.0) + libm::log1p(libm::exp(-a)) / k
+    }
 }
 
 /// `(1 + x)^(−q)` for `x ≥ 0`.
@@ -183,12 +198,27 @@ impl SatCurve {
     #[inline]
     fn at(&self, v: f64) -> f64 {
         let s = softplus(self.k, v + self.c);
-        12.0 * (self.w * libm::exp(-s / self.lambda) + (1.0 - self.w) * inv_pow1p(s / self.v1, self.q1))
+        12.0 * (self.w * libm::exp(-s / self.lambda)
+            + (1.0 - self.w) * inv_pow1p(s / self.v1, self.q1))
     }
 }
 
-const SAT_NORMAL: SatCurve = SatCurve { lambda: 11.7561, c: 1.486_46, k: 3.306_65, v1: 11.8707, q1: 0.951_370, w: 0.216_030 };
-const SAT_ALT: SatCurve = SatCurve { lambda: 7.778_59, c: 1.496_82, k: 4.678_41, v1: 1.956_71, q1: 0.381_980, w: 0.596_760 };
+const SAT_NORMAL: SatCurve = SatCurve {
+    lambda: 11.7561,
+    c: 1.486_46,
+    k: 3.306_65,
+    v1: 11.8707,
+    q1: 0.951_370,
+    w: 0.216_030,
+};
+const SAT_ALT: SatCurve = SatCurve {
+    lambda: 7.778_59,
+    c: 1.496_82,
+    k: 4.678_41,
+    v1: 1.956_71,
+    q1: 0.381_980,
+    w: 0.596_760,
+};
 
 /// The pentode's plate volts against grid–cathode volts on its load line.
 #[inline]
@@ -220,8 +250,16 @@ fn plate2(v: f64) -> f64 {
     const K: f64 = 0.304_75;
     let s1 = softplus(K, v + 20.5530);
     let s2 = softplus(K, v + 74.9767);
-    let i1 = if s1 > 0.0 { 1.980_30 * libm::exp(1.528_16 * libm::log(s1)) } else { 0.0 };
-    let i2 = if s2 > 0.0 { libm::exp(22.4634 * libm::log(s2 / 70.2491)) } else { 0.0 };
+    let i1 = if s1 > 0.0 {
+        1.980_30 * libm::exp(1.528_16 * libm::log(s1))
+    } else {
+        0.0
+    };
+    let i2 = if s2 > 0.0 {
+        libm::exp(22.4634 * libm::log(s2 / 70.2491))
+    } else {
+        0.0
+    };
     VF + softplus(KF, (SUPPLY - VF) - i1 - i2)
 }
 
@@ -247,13 +285,19 @@ fn operating_point(plate: impl Fn(f64) -> f64, grid: f64, k: f64) -> f64 {
 
 /// Idle plate volts of the two stages (they do not depend on any control).
 fn idle() -> (f64, f64) {
-    (operating_point(plate1, 0.0, CAL_K), operating_point(plate2, limit(0.0), AIR_K))
+    (
+        operating_point(plate1, 0.0, CAL_K),
+        operating_point(plate2, limit(0.0), AIR_K),
+    )
 }
 
 /// As [`idle`], on the curves as the engine evaluates them, so it settles
 /// to the last bit.
 fn idle_on(k: &Curves) -> (f64, f64) {
-    (operating_point(|v| k.plate1(v), 0.0, CAL_K), operating_point(|v| k.plate2(v), k.limit(0.0), AIR_K))
+    (
+        operating_point(|v| k.plate1(v), 0.0, CAL_K),
+        operating_point(|v| k.plate2(v), k.limit(0.0), AIR_K),
+    )
 }
 
 fn sat_normal(v: f64) -> f64 {
@@ -282,37 +326,77 @@ impl Curves {
         let (f, c) = (1.0 / 32.0, 0.25);
         Self {
             exact,
-            sat0: CurveTable::new(sat_normal, Left::Const(12.0), [-12.0, -6.0, 6.0, 300.0], [c, f, c]),
-            sat1: CurveTable::new(sat_alt, Left::Const(12.0), [-10.0, -5.0, 6.0, 300.0], [c, f, c]),
-            plate1: CurveTable::new(plate1, Left::Const(SUPPLY), [-25.0, -10.0, 15.0, 400.0], [c, f, c]),
+            sat0: CurveTable::new(
+                sat_normal,
+                Left::Const(12.0),
+                [-12.0, -6.0, 6.0, 300.0],
+                [c, f, c],
+            ),
+            sat1: CurveTable::new(
+                sat_alt,
+                Left::Const(12.0),
+                [-10.0, -5.0, 6.0, 300.0],
+                [c, f, c],
+            ),
+            plate1: CurveTable::new(
+                plate1,
+                Left::Const(SUPPLY),
+                [-25.0, -10.0, 15.0, 400.0],
+                [c, f, c],
+            ),
             limit: CurveTable::new(limit, Left::Identity, [-45.0, -5.0, 35.0, 400.0], [c, f, c]),
-            plate2: CurveTable::new(plate2, Left::Const(plate2(-150.0)), [-150.0, -45.0, 30.0, 100.0], [c, 2.0 * f, c]),
+            plate2: CurveTable::new(
+                plate2,
+                Left::Const(plate2(-150.0)),
+                [-150.0, -45.0, 30.0, 100.0],
+                [c, 2.0 * f, c],
+            ),
         }
     }
 
     #[inline]
     fn sat0(&self, v: f64) -> f64 {
-        if self.exact { sat_normal(v) } else { self.sat0.eval(v) }
+        if self.exact {
+            sat_normal(v)
+        } else {
+            self.sat0.eval(v)
+        }
     }
 
     #[inline]
     fn sat1(&self, v: f64) -> f64 {
-        if self.exact { sat_alt(v) } else { self.sat1.eval(v) }
+        if self.exact {
+            sat_alt(v)
+        } else {
+            self.sat1.eval(v)
+        }
     }
 
     #[inline]
     fn plate1(&self, v: f64) -> f64 {
-        if self.exact { plate1(v) } else { self.plate1.eval(v) }
+        if self.exact {
+            plate1(v)
+        } else {
+            self.plate1.eval(v)
+        }
     }
 
     #[inline]
     fn limit(&self, v: f64) -> f64 {
-        if self.exact { limit(v) } else { self.limit.eval(v) }
+        if self.exact {
+            limit(v)
+        } else {
+            self.limit.eval(v)
+        }
     }
 
     #[inline]
     fn plate2(&self, v: f64) -> f64 {
-        if self.exact { plate2(v) } else { self.plate2.eval(v) }
+        if self.exact {
+            plate2(v)
+        } else {
+            self.plate2.eval(v)
+        }
     }
 }
 
@@ -451,7 +535,11 @@ impl Glide {
     #[inline]
     fn step(&mut self, a: f64) -> f64 {
         let d = self.target - self.now;
-        self.now = if d.abs() <= 1e-12 * self.target.abs().max(1e-6) { self.target } else { self.now + a * d };
+        self.now = if d.abs() <= 1e-12 * self.target.abs().max(1e-6) {
+            self.target
+        } else {
+            self.now + a * d
+        };
         self.now
     }
 
@@ -554,7 +642,13 @@ struct Circuit {
 impl Circuit {
     /// At rest on the operating point.
     fn settled(vp1: f64, vp2: f64) -> Self {
-        Self { cal: SUPPLY - vp1, vp1, air: SUPPLY - vp2, vp2, ..Self::default() }
+        Self {
+            cal: SUPPLY - vp1,
+            vp1,
+            air: SUPPLY - vp2,
+            vp2,
+            ..Self::default()
+        }
     }
 
     #[inline]
@@ -574,7 +668,8 @@ impl Circuit {
             } else if live.alt >= 1.0 {
                 curves.sat1(rc) - live.sat1_rest
             } else {
-                (1.0 - live.alt) * (curves.sat0(rc) - live.sat0_rest) + live.alt * (curves.sat1(rc) - live.sat1_rest)
+                (1.0 - live.alt) * (curves.sat0(rc) - live.sat0_rest)
+                    + live.alt * (curves.sat1(rc) - live.sat1_rest)
             };
             let flat = made - tpt(&mut self.sat_hp, live.sat_hp, made);
             let low = tpt(&mut self.sat_lp, live.sat_lp, flat);
@@ -704,7 +799,11 @@ impl Bluebox {
             latency: os.latency(),
             idle,
             ch: [channel, channel],
-            live: Live { sat0_rest: curves.sat0(0.0), sat1_rest: curves.sat1(0.0), ..live },
+            live: Live {
+                sat0_rest: curves.sat0(0.0),
+                sat1_rest: curves.sat1(0.0),
+                ..live
+            },
             curves,
             glide_a: 1.0 - libm::exp(-1.0 / (0.05 * fs)),
             alt_step: 1.0 / (0.05 * fs),
@@ -720,7 +819,11 @@ impl Bluebox {
             air_g: Glide::default(),
             air_m: Glide::default(),
             alt: Glide::default(),
-            band: BandFade { from: [0.0, 1.0, 0.0], to: SatFreq::Flat, t: 1.0 },
+            band: BandFade {
+                from: [0.0, 1.0, 0.0],
+                to: SatFreq::Flat,
+                t: 1.0,
+            },
             primed: false,
         };
         s.set(BlueboxParams::default());
@@ -748,7 +851,11 @@ impl Bluebox {
         let unit = |v: f64| (v / 100.0).clamp(0.0, 1.0);
         let d = density_drive(p.density);
         self.g_in.target = libm::pow(10.0, p.input_db.clamp(-12.0, 12.0) / 20.0) * d;
-        self.g_sat.target = if p.saturation_in { G_SAT * TAPER_SAT.at(unit(p.saturation)) } else { 0.0 };
+        self.g_sat.target = if p.saturation_in {
+            G_SAT * TAPER_SAT.at(unit(p.saturation))
+        } else {
+            0.0
+        };
         let pent = TAPER_PENTODE.at(unit(p.pentode));
         self.g_pent.target = 0.72 * pent;
         self.g_tri.target = 0.90 * TAPER_TRIODE.at(unit(p.triode));
@@ -822,15 +929,27 @@ impl Bluebox {
         self.live.air_g = self.air_g.step(a);
         self.live.air_m = self.air_m.step(a);
         let alt = &mut self.alt;
-        alt.now = if alt.target > alt.now { (alt.now + self.alt_step).min(alt.target) } else { (alt.now - self.alt_step).max(alt.target) };
+        alt.now = if alt.target > alt.now {
+            (alt.now + self.alt_step).min(alt.target)
+        } else {
+            (alt.now - self.alt_step).max(alt.target)
+        };
         self.live.alt = alt.now;
         self.live.band = self.band.step(self.band_step);
         let live = self.live;
         let latency = self.latency;
         let curves = &self.curves;
         let [l, r] = &mut self.ch;
-        let frame = Frame { g_in, g_out, wet, latency };
-        (l.run(&live, curves, frame, left), r.run(&live, curves, frame, right))
+        let frame = Frame {
+            g_in,
+            g_out,
+            wet,
+            latency,
+        };
+        (
+            l.run(&live, curves, frame, left),
+            r.run(&live, curves, frame, right),
+        )
     }
 }
 
@@ -844,7 +963,10 @@ impl Channel {
             *slot = input;
         }
         let back = frame.latency.min(DRY_LEN.saturating_sub(1));
-        let read = self.dry_pos.checked_sub(back).unwrap_or_else(|| self.dry_pos.saturating_add(DRY_LEN).saturating_sub(back));
+        let read = self
+            .dry_pos
+            .checked_sub(back)
+            .unwrap_or_else(|| self.dry_pos.saturating_add(DRY_LEN).saturating_sub(back));
         let dry = self.dry.get(read).copied().unwrap_or(0.0);
         let volts = self.input.run(input) * frame.g_in;
         let circuit = &mut self.circuit;
@@ -862,7 +984,8 @@ impl Channel {
 #[must_use]
 pub fn static_curve(params: &BlueboxParams, input: f64) -> f64 {
     let unit = |v: f64| (v / 100.0).clamp(0.0, 1.0);
-    let g_in = libm::pow(10.0, params.input_db.clamp(-12.0, 12.0) / 20.0) * density_drive(params.density);
+    let g_in =
+        libm::pow(10.0, params.input_db.clamp(-12.0, 12.0) / 20.0) * density_drive(params.density);
     let g_pent = 0.72 * TAPER_PENTODE.at(unit(params.pentode));
     let g_tri = 0.90 * TAPER_TRIODE.at(unit(params.triode));
     let (vp1, vp2) = idle();
@@ -890,7 +1013,13 @@ mod tests {
 
     #[test]
     fn tapers_run_zero_to_one() {
-        let laws: [&dyn Fn(f64) -> f64; 5] = [&|u| TAPER_SAT.at(u), &|u| TAPER_TRIODE.at(u), &|u| TAPER_OUTPUT.at(u), &|u| TAPER_PENTODE.at(u), &|u| (10_030.3 - air_ra(u)) / (10_030.3 - 240.9)];
+        let laws: [&dyn Fn(f64) -> f64; 5] = [
+            &|u| TAPER_SAT.at(u),
+            &|u| TAPER_TRIODE.at(u),
+            &|u| TAPER_OUTPUT.at(u),
+            &|u| TAPER_PENTODE.at(u),
+            &|u| (10_030.3 - air_ra(u)) / (10_030.3 - 240.9),
+        ];
         for t in laws {
             assert!(t(0.0).abs() < 1e-12);
             assert!((t(1.0) - 1.0).abs() < 1e-12);

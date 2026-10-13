@@ -534,12 +534,7 @@ pub static PROFILES: &[Profile] = &[
             depth: 0.45,
             mix: 1.0,
             wet_only: true,
-            knobs: [
-                k(Character::Colour, 0.5),
-                NO_KNOB,
-                NO_KNOB,
-                NO_KNOB,
-            ],
+            knobs: [k(Character::Colour, 0.5), NO_KNOB, NO_KNOB, NO_KNOB],
             ..Voicing::base(Circuit::Delay {
                 engine: EngineType::Ce2,
                 effect: EffectType::Vibrato,

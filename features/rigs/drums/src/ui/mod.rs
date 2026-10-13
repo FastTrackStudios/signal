@@ -5,14 +5,14 @@
 
 use std::collections::HashMap;
 
-use dioxus::prelude::*;
-use midicore_proto::MidiEvent;
-use midicore_ui::MidiMonitorPanel;
 use crate::proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
 use crate::proto::{
     DrumStatus, InputMap, KitInfo, KitSlot, LibraryPiece, MeterSnapshot, MixerStrip, PieceInfo,
     StripKind,
 };
+use dioxus::prelude::*;
+use midicore_proto::MidiEvent;
+use midicore_ui::MidiMonitorPanel;
 use signal_ui::components::Piano;
 
 /// Live drum-rig view-state: seeded once, then folded from the event stream.

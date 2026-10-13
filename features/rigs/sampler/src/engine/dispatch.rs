@@ -218,7 +218,7 @@ impl SampleEngine {
             // "which module is that, and did I not just switch it off?",
             // which the reader cannot answer from `artic` alone.
             tracing::warn!(
-                target: "crate::trigger",
+                target: "sampler::trigger",
                 library = %self.patch.spec.name,
                 section = %self.section,
                 mic = %self.mic,
@@ -927,7 +927,7 @@ impl SampleEngine {
             let had_body = self.body_voiced.remove(&note);
             let fire = had_body && body_peak >= RELEASE_BODY_FLOOR;
             tracing::debug!(
-                target: "crate::trigger",
+                target: "sampler::trigger",
                 note, strike, gain, body_peak, fire, dyn = %rel_dyn, "release tail"
             );
 

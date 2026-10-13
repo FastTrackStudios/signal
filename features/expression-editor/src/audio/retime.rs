@@ -16,8 +16,8 @@
 //! exclusively in the markers. [`crate::audio::Analysis::commit`] keeps them
 //! separate for exactly this reason.
 
-use daw::service::StretchMarker;
 use crate::{ExpressionDoc, NoteId};
+use daw::service::StretchMarker;
 use tune::model::PitchDoc;
 
 /// Where the take sits, which decides how document time converts.

@@ -315,11 +315,7 @@ pub fn note_rects(ed: &Editor) -> Vec<NoteRect> {
                 l.len() <= 2 || (w > l.len() as f64 * 6.5 + 8.0 && h >= 12.0)
             });
             let badge = n.articulation.map(|a| a.glyph()).filter(|g| !g.is_empty());
-            let head = matches!(
-                ed.row_space.note_shape(),
-                crate::NoteShape::Triangle
-            )
-            .then(|| {
+            let head = matches!(ed.row_space.note_shape(), crate::NoteShape::Triangle).then(|| {
                 // Flat edge on the onset, apex to the right: the attack
                 // is a straight vertical line you can align to the grid
                 // by eye, which is the whole reason for a head over a
@@ -484,9 +480,7 @@ pub fn draft_view(ed: &Editor, draft: &crate::PitchDraft) -> DraftView {
         .note(draft.note)
         .map(|n| n.row as f64)
         .unwrap_or(60.0);
-    let to_px = |p: &crate::Point| {
-        (ed.camera.x(p.t), ed.camera.y(row + p.value, ed.viewport))
-    };
+    let to_px = |p: &crate::Point| (ed.camera.x(p.t), ed.camera.y(row + p.value, ed.viewport));
     let polyline = |pts: &[crate::Point]| {
         pts.iter()
             .map(|p| {
@@ -1276,8 +1270,7 @@ pub fn cc_paths(ed: &Editor) -> Vec<CcPath> {
             CcPath {
                 number: dimension.number,
                 label: dimension.label(),
-                color: crate::cc::CC_COLORS
-                    [dimension.color % crate::cc::CC_COLORS.len()],
+                color: crate::cc::CC_COLORS[dimension.color % crate::cc::CC_COLORS.len()],
                 points: line,
                 fill,
                 opacity: if active {

@@ -8,8 +8,8 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    Asset, AssetId, AutoLayout, BlendMode, CornerRadii, Effect, LayoutChild, MaskKind, Node, NodeId, NodeKind,
-    Paint, Scene, Size, Stroke, Transform,
+    Asset, AssetId, AutoLayout, BlendMode, CornerRadii, Effect, LayoutChild, MaskKind, Node,
+    NodeId, NodeKind, Paint, Scene, Size, Stroke, Transform,
 };
 
 /// One property assignment on one node.
@@ -46,14 +46,31 @@ pub enum Prop {
 pub enum Op {
     /// Insert `node` (its `children` are ignored) under `parent` at `index`
     /// (clamped; `u32::MAX` = append).
-    Insert { node: Node, parent: NodeId, index: u32 },
+    Insert {
+        node: Node,
+        parent: NodeId,
+        index: u32,
+    },
     /// Remove a node and its whole subtree.
-    Remove { id: NodeId },
+    Remove {
+        id: NodeId,
+    },
     /// Reparent / reorder.
-    Move { id: NodeId, parent: NodeId, index: u32 },
-    Set { id: NodeId, prop: Prop },
-    PutAsset { asset: Asset },
-    DropAsset { id: AssetId },
+    Move {
+        id: NodeId,
+        parent: NodeId,
+        index: u32,
+    },
+    Set {
+        id: NodeId,
+        prop: Prop,
+    },
+    PutAsset {
+        asset: Asset,
+    },
+    DropAsset {
+        id: AssetId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet, thiserror::Error)]
@@ -76,12 +93,20 @@ impl Scene {
     /// Leaves the scene untouched and returns why, when the op doesn't fit.
     pub fn apply(&mut self, op: Op) -> Result<Vec<Op>, OpError> {
         match op {
-            Op::Insert { mut node, parent, index } => {
+            Op::Insert {
+                mut node,
+                parent,
+                index,
+            } => {
                 if self.nodes.contains_key(&node.id) {
                     return Err(OpError::DuplicateNode(node.id));
                 }
                 let id = node.id;
-                let siblings = &mut self.nodes.get_mut(&parent).ok_or(OpError::NoSuchNode(parent))?.children;
+                let siblings = &mut self
+                    .nodes
+                    .get_mut(&parent)
+                    .ok_or(OpError::NoSuchNode(parent))?
+                    .children;
                 let at = (index as usize).min(siblings.len());
                 siblings.insert(at, id);
                 node.parent = Some(parent);
@@ -99,7 +124,11 @@ impl Scene {
                 // Inverse: re-insert the subtree top-down, children appended in order.
                 let mut inverse = Vec::new();
                 for (n, (p, i)) in self.subtree_with_slots(id, parent, index) {
-                    inverse.push(Op::Insert { node: n, parent: p, index: i });
+                    inverse.push(Op::Insert {
+                        node: n,
+                        parent: p,
+                        index: i,
+                    });
                 }
                 for n in self.walk(id) {
                     self.nodes.remove(&n);
@@ -119,18 +148,30 @@ impl Scene {
                 if self.walk(id).contains(&parent) {
                     return Err(OpError::Cycle(id));
                 }
-                let old_parent = self.node(id).ok_or(OpError::NoSuchNode(id))?.parent.ok_or(OpError::Root)?;
+                let old_parent = self
+                    .node(id)
+                    .ok_or(OpError::NoSuchNode(id))?
+                    .parent
+                    .ok_or(OpError::Root)?;
                 let old_index = self.index_in_parent(id).unwrap_or(0);
                 if let Some(p) = self.nodes.get_mut(&old_parent) {
                     p.children.retain(|c| *c != id);
                 }
-                let siblings = &mut self.nodes.get_mut(&parent).ok_or(OpError::NoSuchNode(parent))?.children;
+                let siblings = &mut self
+                    .nodes
+                    .get_mut(&parent)
+                    .ok_or(OpError::NoSuchNode(parent))?
+                    .children;
                 let at = (index as usize).min(siblings.len());
                 siblings.insert(at, id);
                 if let Some(n) = self.nodes.get_mut(&id) {
                     n.parent = Some(parent);
                 }
-                Ok(vec![Op::Move { id, parent: old_parent, index: u32::try_from(old_index).unwrap_or(u32::MAX) }])
+                Ok(vec![Op::Move {
+                    id,
+                    parent: old_parent,
+                    index: u32::try_from(old_index).unwrap_or(u32::MAX),
+                }])
             }
             Op::Set { id, prop } => {
                 let node = self.nodes.get_mut(&id).ok_or(OpError::NoSuchNode(id))?;
@@ -144,7 +185,11 @@ impl Scene {
                     None => Ok(vec![Op::DropAsset { id }]),
                 }
             }
-            Op::DropAsset { id } => Ok(self.assets.remove(&id).map(|asset| vec![Op::PutAsset { asset }]).unwrap_or_default()),
+            Op::DropAsset { id } => Ok(self
+                .assets
+                .remove(&id)
+                .map(|asset| vec![Op::PutAsset { asset }])
+                .unwrap_or_default()),
         }
     }
 
@@ -177,7 +222,12 @@ impl Scene {
     }
 
     /// `(node without children, (parent, index))` for `id`'s subtree in pre-order.
-    fn subtree_with_slots(&self, id: NodeId, parent: NodeId, index: usize) -> Vec<(Node, (NodeId, u32))> {
+    fn subtree_with_slots(
+        &self,
+        id: NodeId,
+        parent: NodeId,
+        index: usize,
+    ) -> Vec<(Node, (NodeId, u32))> {
         let mut out = Vec::new();
         let mut stack = vec![(id, parent, index)];
         while let Some((n, p, i)) = stack.pop() {
@@ -235,7 +285,11 @@ impl History {
     ///
     /// # Errors
     /// See [`Scene::transact`]; nothing is recorded on error.
-    pub fn commit(&mut self, scene: &mut Scene, ops: impl IntoIterator<Item = Op>) -> Result<(), OpError> {
+    pub fn commit(
+        &mut self,
+        scene: &mut Scene,
+        ops: impl IntoIterator<Item = Op>,
+    ) -> Result<(), OpError> {
         let inverse = scene.transact(ops)?;
         self.undo.push(inverse);
         self.redo.clear();
@@ -247,7 +301,9 @@ impl History {
     /// # Errors
     /// Only if the scene was edited outside this history in a conflicting way.
     pub fn undo(&mut self, scene: &mut Scene) -> Result<bool, OpError> {
-        let Some(tx) = self.undo.pop() else { return Ok(false) };
+        let Some(tx) = self.undo.pop() else {
+            return Ok(false);
+        };
         let redo = scene.transact(tx)?;
         self.redo.push(redo);
         Ok(true)
@@ -258,7 +314,9 @@ impl History {
     /// # Errors
     /// Only if the scene was edited outside this history in a conflicting way.
     pub fn redo(&mut self, scene: &mut Scene) -> Result<bool, OpError> {
-        let Some(tx) = self.redo.pop() else { return Ok(false) };
+        let Some(tx) = self.redo.pop() else {
+            return Ok(false);
+        };
         let undo = scene.transact(tx)?;
         self.undo.push(undo);
         Ok(true)

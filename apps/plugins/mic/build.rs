@@ -30,9 +30,13 @@ fn candidates() -> Vec<PathBuf> {
 
 fn main() {
     println!("cargo:rerun-if-env-changed=FTS_MIC_MODELS");
-    let root = candidates().into_iter().find(|d| d.join("48000").join(DEFAULT).is_file());
+    let root = candidates()
+        .into_iter()
+        .find(|d| d.join("48000").join(DEFAULT).is_file());
     let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap_or_default());
-    let mut table = String::from("/// The default mic's model per set (folder name), built in.\npub static EMBEDDED: &[(&str, &[u8])] = &[\n");
+    let mut table = String::from(
+        "/// The default mic's model per set (folder name), built in.\npub static EMBEDDED: &[(&str, &[u8])] = &[\n",
+    );
     match &root {
         Some(root) => {
             for set in SETS {
@@ -45,10 +49,16 @@ fn main() {
                 if std::fs::copy(&src, &dst).is_err() {
                     continue;
                 }
-                let _ = writeln!(table, "    ({set:?}, include_bytes!({:?})),", dst.display().to_string());
+                let _ = writeln!(
+                    table,
+                    "    ({set:?}, include_bytes!({:?})),",
+                    dst.display().to_string()
+                );
             }
         }
-        None => println!("cargo:warning=FTS Mic: no mic models found at build time; the default mic is not built in"),
+        None => println!(
+            "cargo:warning=FTS Mic: no mic models found at build time; the default mic is not built in"
+        ),
     }
     table.push_str("];\n");
     let _ = std::fs::write(Path::new(&out).join("embedded.rs"), table);

@@ -9,12 +9,12 @@
 //! The project can be opened/created via the `ensure_routing_project` function,
 //! which checks for an existing routing project before creating one.
 
-use daw::service::{ExtState, ProjectContext, Projects, RecordInput, Routing, TrackRef, Tracks};
 use crate::proto::SessionServiceError;
 use crate::proto::routing_project::{
     EXT_STATE_KEY_IS_ROUTING, EXT_STATE_SECTION, EXT_STATE_VALUE_TRUE, LoopbackConfig,
     ROUTING_PROJECT_FILENAME, RoutingChannel, RoutingGroup,
 };
+use daw::service::{ExtState, ProjectContext, Projects, RecordInput, Routing, TrackRef, Tracks};
 use tracing::info;
 
 // r[impl routing.project.ensure]

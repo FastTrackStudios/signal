@@ -1,9 +1,9 @@
 //! Playback commands: play, pause, stop, toggle, loop controls
 
 use super::SetlistServiceImpl;
+use crate::proto::SessionServiceError;
 use daw::service::ProjectContext;
 use daw::service::transport::service::Transport;
-use crate::proto::SessionServiceError;
 use tracing::{debug, warn};
 
 impl<D> SetlistServiceImpl<D>

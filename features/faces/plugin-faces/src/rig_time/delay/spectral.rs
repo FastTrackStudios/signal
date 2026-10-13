@@ -14,7 +14,7 @@ use document_proto::motion::{Motion, Target};
 use surface_kit::{draw, motion};
 use surface_widgets::Builder;
 
-use super::machine::{self, Look, Machine, Room, ON};
+use super::machine::{self, Look, Machine, ON, Room};
 use crate::face::Face;
 use crate::reverb::ui;
 use crate::rig_time::kit::{self, DLY};
@@ -37,8 +37,22 @@ const MACHINE: Machine = Machine {
         edge: "#c3c8cf",
         texture: "#00000008",
         well: [(0.0, "#07090d"), (1.0, "#0c1018")],
-        knob: ["color=#f6f7f9", "pointer=#1e3a8a", "index=line", "index_w=0.1", "skirt=plain", "skirt_color=#b7bdc6"],
-        wheel: ["color=#20242b", "pointer=#bcd6ff", "index=line", "index_w=0.1", "skirt=plain", "skirt_color=#c9ced5"],
+        knob: [
+            "color=#f6f7f9",
+            "pointer=#1e3a8a",
+            "index=line",
+            "index_w=0.1",
+            "skirt=plain",
+            "skirt_color=#b7bdc6",
+        ],
+        wheel: [
+            "color=#20242b",
+            "pointer=#bcd6ff",
+            "index=line",
+            "index_w=0.1",
+            "skirt=plain",
+            "skirt_color=#c9ced5",
+        ],
         accent: kit::BLUE_DEEP,
         scrim: "#eceef1e6",
     },
@@ -49,15 +63,43 @@ const MACHINE: Machine = Machine {
         edge: "#2c2f35",
         texture: "#ffffff07",
         well: [(0.0, "#05070a"), (1.0, "#0a0d13")],
-        knob: ["color=#26292e", "pointer=#bcd6ff", "index=line", "index_w=0.1", "skirt=plain", "skirt_color=#0a0b0d"],
-        wheel: ["color=#1b1d21", "pointer=#bcd6ff", "index=line", "index_w=0.1", "skirt=plain", "skirt_color=#3d424a"],
+        knob: [
+            "color=#26292e",
+            "pointer=#bcd6ff",
+            "index=line",
+            "index_w=0.1",
+            "skirt=plain",
+            "skirt_color=#0a0b0d",
+        ],
+        wheel: [
+            "color=#1b1d21",
+            "pointer=#bcd6ff",
+            "index=line",
+            "index_w=0.1",
+            "skirt=plain",
+            "skirt_color=#3d424a",
+        ],
         accent: kit::BLUE_LIGHT,
         scrim: "#141619e6",
     },
     title: (draw::family::SAIRA, 500.0, 17.0, 0.04, 0.58),
-    front: [("feedback", "Repeats"), ("interval", "Tilt"), ("high_cut", "High Cut"), ("level", "Level")],
-    phone: [("feedback", "Repeats"), ("interval", "Tilt"), ("level", "Level")],
-    main: [("feedback", "Repeats"), ("interval", "Tilt"), ("high_cut", "High Cut"), ("level", "Level")],
+    front: [
+        ("feedback", "Repeats"),
+        ("interval", "Tilt"),
+        ("high_cut", "High Cut"),
+        ("level", "Level"),
+    ],
+    phone: [
+        ("feedback", "Repeats"),
+        ("interval", "Tilt"),
+        ("level", "Level"),
+    ],
+    main: [
+        ("feedback", "Repeats"),
+        ("interval", "Tilt"),
+        ("high_cut", "High Cut"),
+        ("level", "Level"),
+    ],
     picture,
     glass: true,
 };
@@ -65,7 +107,13 @@ const MACHINE: Machine = Machine {
 /// How much of `band` the cuts let through, 0…1.
 fn pass(band: usize) -> String {
     let f = centre(band);
-    format!("smoothstep({:.1}, {:.1}, param({DLY}/high_cut)) * (1 - smoothstep({:.1}, {:.1}, param({DLY}/high_pass)))", f * 0.7, f * 1.5, f * 0.6, f * 1.3)
+    format!(
+        "smoothstep({:.1}, {:.1}, param({DLY}/high_cut)) * (1 - smoothstep({:.1}, {:.1}, param({DLY}/high_pass)))",
+        f * 0.7,
+        f * 1.5,
+        f * 0.6,
+        f * 1.3
+    )
 }
 
 /// A band's delay time against the time: 1 at the middle band, tilted
@@ -76,7 +124,13 @@ fn stretch(band: usize) -> String {
 }
 
 /// The waterfall in (`x, y, w, h`).
-fn waterfall(b: &mut Builder<'_>, well: NodeId, (x, y, w, h): (f64, f64, f64, f64), labels: bool, echoes: u32) {
+fn waterfall(
+    b: &mut Builder<'_>,
+    well: NodeId,
+    (x, y, w, h): (f64, f64, f64, f64),
+    labels: bool,
+    echoes: u32,
+) {
     let mut f = draw::frame("Bands", x, y, w, h);
     f.clips_content = true;
     let f = b.add(well, f);
@@ -84,8 +138,18 @@ fn waterfall(b: &mut Builder<'_>, well: NodeId, (x, y, w, h): (f64, f64, f64, f6
     let span = w - lx - 8.0;
     let row = h / BANDS as f64;
     // The band lines and their frequencies.
-    let lines: Vec<Vec<(f64, f64)>> = (0..=BANDS).map(|i| vec![(lx, i as f64 * row), (w, i as f64 * row)]).collect();
-    b.add(f, ui::strokes("band lines", &lines, 0.5, draw::solid(&ui::alpha(DIM, 0.18))));
+    let lines: Vec<Vec<(f64, f64)>> = (0..=BANDS)
+        .map(|i| vec![(lx, i as f64 * row), (w, i as f64 * row)])
+        .collect();
+    b.add(
+        f,
+        ui::strokes(
+            "band lines",
+            &lines,
+            0.5,
+            draw::solid(&ui::alpha(DIM, 0.18)),
+        ),
+    );
     if labels {
         for (band, s) in [(0, "60"), (2, "270"), (4, "1k"), (6, "5k"), (7, "12k")] {
             let cy = h - (band as f64 + 0.5) * row;
@@ -100,18 +164,69 @@ fn waterfall(b: &mut Builder<'_>, well: NodeId, (x, y, w, h): (f64, f64, f64, f6
         // Low bands deep blue, high bands pale.
         let t = band as f64 / (BANDS - 1) as f64;
         let color = ui::blend(kit::BLUE_DEEP, kit::BLUE_LIGHT, 0.25 + 0.75 * t);
-        let lane = b.add(f, draw::frame(&format!("band {band}"), lx, cy - ch / 2.0, span, ch));
-        motion::add(b, lane, Motion::new(Target::Opacity).input(format!("0.12 + 0.88 * {}", pass(band))).range(0.0, 1.0).dynamics(machine::spring()));
+        let lane = b.add(
+            f,
+            draw::frame(&format!("band {band}"), lx, cy - ch / 2.0, span, ch),
+        );
+        motion::add(
+            b,
+            lane,
+            Motion::new(Target::Opacity)
+                .input(format!("0.12 + 0.88 * {}", pass(band)))
+                .range(0.0, 1.0)
+                .dynamics(machine::spring()),
+        );
         // The note: every band lit at zero.
-        b.add(lane, ui::glowing(draw::rounded(draw::rect("note", 0.0, 0.0, 3.0, ch, draw::solid(kit::BLUE_LIGHT)), 1.0), kit::BLUE_LIGHT, 1.0, kit::GLOW));
+        b.add(
+            lane,
+            ui::glowing(
+                draw::rounded(
+                    draw::rect("note", 0.0, 0.0, 3.0, ch, draw::solid(kit::BLUE_LIGHT)),
+                    1.0,
+                ),
+                kit::BLUE_LIGHT,
+                1.0,
+                kit::GLOW,
+            ),
+        );
         for k in 1..=echoes {
-            let cell = draw::rounded(draw::rect(&format!("echo {k}"), 0.0, 0.0, cw, ch, draw::solid(&color)), 1.5);
+            let cell = draw::rounded(
+                draw::rect(&format!("echo {k}"), 0.0, 0.0, cw, ch, draw::solid(&color)),
+                1.5,
+            );
             // The first echoes give off light; the rest are drawn.
-            let cell = b.add(lane, if k <= 2 { ui::glowing(cell, &color, 0.9, kit::GLOW) } else { cell });
-            let at = format!("clamp({k} * param({DLY}/time) * {} / {window}, 0, 1.1)", stretch(band));
-            motion::add(b, cell, Motion::new(Target::X).input(at).range(0.0, span - cw).dynamics(machine::spring()));
-            let fall = format!("(0.06 + 0.94 * pow(param({DLY}/feedback), {})) * (0.3 + 0.7 * {ON})", k - 1);
-            motion::add(b, cell, Motion::new(Target::Opacity).input(fall).range(0.0, 1.0).dynamics(machine::spring()));
+            let cell = b.add(
+                lane,
+                if k <= 2 {
+                    ui::glowing(cell, &color, 0.9, kit::GLOW)
+                } else {
+                    cell
+                },
+            );
+            let at = format!(
+                "clamp({k} * param({DLY}/time) * {} / {window}, 0, 1.1)",
+                stretch(band)
+            );
+            motion::add(
+                b,
+                cell,
+                Motion::new(Target::X)
+                    .input(at)
+                    .range(0.0, span - cw)
+                    .dynamics(machine::spring()),
+            );
+            let fall = format!(
+                "(0.06 + 0.94 * pow(param({DLY}/feedback), {})) * (0.3 + 0.7 * {ON})",
+                k - 1
+            );
+            motion::add(
+                b,
+                cell,
+                Motion::new(Target::Opacity)
+                    .input(fall)
+                    .range(0.0, 1.0)
+                    .dynamics(machine::spring()),
+            );
         }
     }
 }
@@ -121,20 +236,63 @@ fn waterfall(b: &mut Builder<'_>, well: NodeId, (x, y, w, h): (f64, f64, f64, f6
 fn cuts(b: &mut Builder<'_>, well: NodeId, (x, y, w, h): (f64, f64, f64, f64)) {
     let f = b.add(well, draw::frame("Cuts", x, y, w, h));
     let base = h - 10.0;
-    b.add(f, ui::strokes("floor", &[vec![(0.0, base), (w, base)]], 0.8, draw::solid(&ui::alpha(DIM, 0.4))));
+    b.add(
+        f,
+        ui::strokes(
+            "floor",
+            &[vec![(0.0, base), (w, base)]],
+            0.8,
+            draw::solid(&ui::alpha(DIM, 0.4)),
+        ),
+    );
     let step = w / BANDS as f64;
     for band in 0..BANDS {
         let t = band as f64 / (BANDS - 1) as f64;
         let color = ui::blend(kit::BLUE_DEEP, kit::BLUE_LIGHT, 0.25 + 0.75 * t);
-        let bar = b.add(f, draw::frame(&format!("band {band}"), step * band as f64 + step * 0.2, 4.0, step * 0.6, base - 4.0));
-        b.add(bar, ui::glowing(draw::rounded(draw::rect("bar", 0.0, 0.0, step * 0.6, base - 4.0, draw::solid(&color)), 1.5), &color, 0.8, kit::GLOW));
-        motion::add(b, bar, Motion::new(Target::StretchY).input(format!("0.04 + 0.96 * {}", pass(band))).range(0.0, 1.0).pivot(0.5, 1.0).dynamics(machine::spring()));
+        let bar = b.add(
+            f,
+            draw::frame(
+                &format!("band {band}"),
+                step * band as f64 + step * 0.2,
+                4.0,
+                step * 0.6,
+                base - 4.0,
+            ),
+        );
+        b.add(
+            bar,
+            ui::glowing(
+                draw::rounded(
+                    draw::rect("bar", 0.0, 0.0, step * 0.6, base - 4.0, draw::solid(&color)),
+                    1.5,
+                ),
+                &color,
+                0.8,
+                kit::GLOW,
+            ),
+        );
+        motion::add(
+            b,
+            bar,
+            Motion::new(Target::StretchY)
+                .input(format!("0.04 + 0.96 * {}", pass(band)))
+                .range(0.0, 1.0)
+                .pivot(0.5, 1.0)
+                .dynamics(machine::spring()),
+        );
     }
     ui::silk_left(b, f, "Low cut", 0.0, h - 3.0, 5.0, DIM, 800.0);
     ui::silk_right(b, f, "High cut", w, h - 3.0, 5.0, DIM, 800.0);
 }
 
-fn picture(b: &mut Builder<'_>, well: NodeId, (w, h): (f64, f64), _l: &Look, room: Room, _dark: bool) {
+fn picture(
+    b: &mut Builder<'_>,
+    well: NodeId,
+    (w, h): (f64, f64),
+    _l: &Look,
+    room: Room,
+    _dark: bool,
+) {
     match room {
         Room::Phone => waterfall(b, well, (6.0, 16.0, w - 10.0, h - 22.0), false, 5),
         Room::Lane => waterfall(b, well, (6.0, 16.0, w - 12.0, h - 24.0), true, ECHOES),

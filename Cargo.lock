@@ -1455,6 +1455,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "atomic_float",
+ "audio",
  "cpal",
  "facet",
  "libc",
@@ -2208,6 +2209,7 @@ checksum = "56ed6191a7e78c36abdb16ab65341eefd73d64d303fffccdbb00d51e4205967b"
 name = "builtin"
 version = "0.1.0"
 dependencies = [
+ "builtin",
  "comp",
  "comp-plugin",
  "daw",
@@ -2596,6 +2598,7 @@ name = "chords"
 version = "0.1.0"
 dependencies = [
  "architect-ui",
+ "chords",
  "daw",
  "daw-proto",
  "dioxus",
@@ -2995,6 +2998,7 @@ dependencies = [
  "atomic_float",
  "blitz-dom",
  "bytemuck",
+ "comp",
  "dioxus",
  "dioxus-native-dom",
  "dioxus-test",
@@ -3207,6 +3211,7 @@ dependencies = [
 name = "control-surfaces"
 version = "0.1.0"
 dependencies = [
+ "control-surfaces",
  "daw-control",
  "daw-proto",
  "daw-standalone",
@@ -4462,6 +4467,7 @@ dependencies = [
  "daw-module",
  "daw-proto",
  "daw-reaper-dioxus",
+ "daw-ui",
  "dioxus",
  "dioxus-native",
  "dioxus-ssr",
@@ -4574,6 +4580,7 @@ dependencies = [
  "blitz-dom",
  "bytemuck",
  "crossbeam-channel",
+ "delay",
  "dioxus",
  "dioxus-native-dom",
  "dioxus-test",
@@ -5973,6 +5980,7 @@ version = "0.1.0"
 dependencies = [
  "atomic_float",
  "dioxus",
+ "dsp-core",
  "ebur128",
  "fts-audio-ui",
  "nice-plug",
@@ -6031,6 +6039,7 @@ dependencies = [
  "daw-reaper",
  "daw-standalone",
  "dawfile-reaper",
+ "dynamic-template",
  "eyre",
  "facet",
  "facet-json",
@@ -6389,6 +6398,7 @@ dependencies = [
  "dioxus-ssr",
  "dioxus-test",
  "dsp-core",
+ "eq",
  "fts-audio-ui",
  "fts-plug-ui",
  "futures-timer",
@@ -6562,6 +6572,7 @@ dependencies = [
  "dioxus-native-dom",
  "dioxus-ssr",
  "dioxus-test",
+ "expression-editor",
  "eyre",
  "facet",
  "facet-styx",
@@ -7411,6 +7422,7 @@ dependencies = [
  "facet",
  "facet-styx",
  "flate2",
+ "formats",
  "loro",
  "plist",
  "pollster",
@@ -8598,6 +8610,7 @@ dependencies = [
  "fts-audio-ui",
  "fts-chrome",
  "futures",
+ "guitar",
  "hound",
  "image",
  "kurbo 0.13.1",
@@ -11769,6 +11782,7 @@ dependencies = [
  "fts-audio-ui",
  "fts-plug-ui",
  "hound",
+ "mic",
  "nice-plug",
  "nice-plug-dioxus",
  "realfft",
@@ -12011,6 +12025,7 @@ dependencies = [
  "dsp-core",
  "fts-audio-ui",
  "fts-plug-ui",
+ "modulation",
  "naga",
  "nice-plug",
  "nice-plug-dioxus",
@@ -15118,6 +15133,7 @@ dependencies = [
  "dioxus",
  "dioxus-test",
  "fts-audio-ui",
+ "preset-browser",
  "serde",
  "serde_json",
  "tokio",
@@ -16507,6 +16523,7 @@ dependencies = [
  "png 0.18.1",
  "preset-browser",
  "realfft",
+ "reverb",
  "symphonium",
  "thiserror 2.0.20",
  "tokio",
@@ -16966,6 +16983,7 @@ dependencies = [
  "ratatui",
  "rayon",
  "realfft",
+ "sampler",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -17008,6 +17026,7 @@ dependencies = [
  "parking_lot",
  "peniko 0.6.1",
  "png 0.17.16",
+ "saturate",
  "tokio",
 ]
 
@@ -17667,6 +17686,7 @@ dependencies = [
  "rustc-hash 2.1.3",
  "serde",
  "serde_json",
+ "session",
  "sha2 0.10.9",
  "smallvec 1.16.0",
  "task-dial",
@@ -21610,6 +21630,7 @@ dependencies = [
  "rustfft",
  "symphonia",
  "tokio",
+ "trigger",
 ]
 
 [[package]]

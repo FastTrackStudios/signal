@@ -12,7 +12,11 @@ pub struct ParseError {
 impl ParseError {
     pub(crate) fn at(src: &str, offset: usize, message: impl Into<String>) -> Self {
         let (line, col) = line_col(src, offset);
-        Self { line, col, message: message.into() }
+        Self {
+            line,
+            col,
+            message: message.into(),
+        }
     }
 }
 

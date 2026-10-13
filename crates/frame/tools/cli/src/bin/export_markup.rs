@@ -36,11 +36,21 @@ fn run() -> Result<(), String> {
     let out = out.ok_or("--out <file.frame> is required")?;
 
     let catalog = surface_memory::demo_catalog();
-    let surface = surface_for_catalog(&catalog, &Options { theme, ..Options::default() });
+    let surface = surface_for_catalog(
+        &catalog,
+        &Options {
+            theme,
+            ..Options::default()
+        },
+    );
     let scene = surface.to_scene();
     let text = document_text::print(&scene);
     // Markup plus its `.frame.assets/` sidecar when the scene carries any.
     document_io::save_surface(&out, &scene).map_err(|e| format!("writing {e}"))?;
-    println!("{{\"ok\":true,\"out\":\"{out}\",\"bytes\":{},\"controls\":{}}}", text.len(), surface.controls.len());
+    println!(
+        "{{\"ok\":true,\"out\":\"{out}\",\"bytes\":{},\"controls\":{}}}",
+        text.len(),
+        surface.controls.len()
+    );
     Ok(())
 }

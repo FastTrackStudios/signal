@@ -38,7 +38,9 @@ async fn main() {
             std::env::set_var("SIGNAL_RIG_SILENT", "1");
         }
     }
-    let out = std::env::args().nth(1).unwrap_or_else(|| "fixture.json".to_string());
+    let out = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "fixture.json".to_string());
     let backend = GuitarRigBackend::new();
     backend.open_blocking();
     let server = LocalServer::serve(backend.router(), Scope::new());
@@ -51,6 +53,10 @@ async fn main() {
         presets: rig.presets().await.expect("presets"),
         nodes: rig.nodes().await.expect("nodes"),
     };
-    std::fs::write(&out, facet_json::to_string(&fixture).expect("serialize fixture")).expect("write fixture");
+    std::fs::write(
+        &out,
+        facet_json::to_string(&fixture).expect("serialize fixture"),
+    )
+    .expect("write fixture");
     tracing::warn!(path = %out, "fixture written");
 }

@@ -127,7 +127,11 @@ impl LoroScene {
             index: HashMap::new(),
             blobs: BTreeMap::new(),
         };
-        Self { doc, storage, state: Mutex::new(state) }
+        Self {
+            doc,
+            storage,
+            state: Mutex::new(state),
+        }
     }
 
     /// A fresh ephemeral replica holding `scene` (external asset storage).
@@ -141,7 +145,8 @@ impl LoroScene {
     pub fn from_scene_with(scene: &Scene, storage: AssetStorage) -> Self {
         let this = Self::with_storage(CrdtDoc::ephemeral(), storage);
         // A fresh doc accepts every write below; a failure here is a bug.
-        this.write_scene(scene).expect("writing a scene into a fresh doc");
+        this.write_scene(scene)
+            .expect("writing a scene into a fresh doc");
         this
     }
 
@@ -222,7 +227,10 @@ impl LoroScene {
     /// Never in practice: a snapshot export of an attached doc can't fail.
     #[must_use]
     pub fn export_snapshot(&self) -> Vec<u8> {
-        self.doc.loro().export(ExportMode::Snapshot).expect("snapshot export")
+        self.doc
+            .loro()
+            .export(ExportMode::Snapshot)
+            .expect("snapshot export")
     }
 
     /// The updates a peer at `since` is missing.
@@ -231,7 +239,10 @@ impl LoroScene {
     /// Never in practice: an update export of an attached doc can't fail.
     #[must_use]
     pub fn export_updates(&self, since: &VersionVector) -> Vec<u8> {
-        self.doc.loro().export(ExportMode::updates(since)).expect("updates export")
+        self.doc
+            .loro()
+            .export(ExportMode::updates(since))
+            .expect("updates export")
     }
 
     /// This replica's version vector (what to send a peer to get a delta).
@@ -280,7 +291,11 @@ impl LoroScene {
     #[must_use]
     pub fn missing_assets(&self) -> Vec<AssetId> {
         self.with_scene(|scene| {
-            self.asset_entries().into_iter().map(|(id, _)| id).filter(|id| !scene.assets.contains_key(id)).collect()
+            self.asset_entries()
+                .into_iter()
+                .map(|(id, _)| id)
+                .filter(|id| !scene.assets.contains_key(id))
+                .collect()
         })
     }
 
@@ -322,9 +337,18 @@ impl LoroScene {
 
     fn write_op(&self, doc: &LoroDoc, st: &mut State, op: &Op) -> Result<(), LoroError> {
         let tree = doc.get_tree(NODES);
-        let tid = |st: &State, id: NodeId| st.index.get(&id).copied().ok_or(LoroError::NotFoundError(id.to_string().into()));
+        let tid = |st: &State, id: NodeId| {
+            st.index
+                .get(&id)
+                .copied()
+                .ok_or(LoroError::NotFoundError(id.to_string().into()))
+        };
         match op {
-            Op::Insert { node, parent, index } => {
+            Op::Insert {
+                node,
+                parent,
+                index,
+            } => {
                 let parent = tid(st, *parent)?;
                 let len = tree.children_num(parent).unwrap_or(0);
                 let at = (*index as usize).min(len);
@@ -338,7 +362,12 @@ impl LoroScene {
                 let parent = tid(st, *parent)?;
                 // `Scene` semantics: take the node out, then insert at `index`
                 // (clamped) — i.e. `index` is the final position.
-                let others = tree.children(parent).unwrap_or_default().into_iter().filter(|c| *c != target).count();
+                let others = tree
+                    .children(parent)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|c| *c != target)
+                    .count();
                 tree.mov_to(target, parent, (*index as usize).min(others))?;
             }
             Op::Set { id, prop } => {
@@ -358,7 +387,10 @@ impl LoroScene {
     fn write_asset(&self, doc: &LoroDoc, st: &mut State, asset: &Asset) -> Result<(), LoroError> {
         let mut entry: HashMap<String, LoroValue> = HashMap::new();
         entry.insert("mime".into(), asset.mime.as_str().into());
-        entry.insert("size".into(), LoroValue::I64(i64::try_from(asset.bytes.len()).unwrap_or(i64::MAX)));
+        entry.insert(
+            "size".into(),
+            LoroValue::I64(i64::try_from(asset.bytes.len()).unwrap_or(i64::MAX)),
+        );
         match self.storage {
             AssetStorage::Inline => {
                 entry.insert("bytes".into(), asset.bytes.clone().into());
@@ -367,7 +399,8 @@ impl LoroScene {
                 st.blobs.insert(asset.id.clone(), asset.bytes.clone());
             }
         }
-        doc.get_map(ASSETS).insert(&asset.id.0, LoroValue::Map(entry.into()))
+        doc.get_map(ASSETS)
+            .insert(&asset.id.0, LoroValue::Map(entry.into()))
     }
 
     /// Write a whole scene into this (empty) replica, as one commit.
@@ -396,7 +429,9 @@ impl LoroScene {
 
 impl std::fmt::Debug for LoroScene {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LoroScene").field("storage", &self.storage).finish_non_exhaustive()
+        f.debug_struct("LoroScene")
+            .field("storage", &self.storage)
+            .finish_non_exhaustive()
     }
 }
 
@@ -413,7 +448,9 @@ fn json<T: Serialize>(value: &T) -> Value {
 
 /// Write every meta key of `node` (all fields but parent/children).
 fn write_node(meta: &LoroMap, node: &Node) -> Result<(), LoroError> {
-    let Value::Object(fields) = json(node) else { return Ok(()) };
+    let Value::Object(fields) = json(node) else {
+        return Ok(());
+    };
     for (key, value) in &fields {
         if !STRUCTURAL.contains(&key.as_str()) {
             meta.insert(key, value::to_loro(value))?;
@@ -424,8 +461,12 @@ fn write_node(meta: &LoroMap, node: &Node) -> Result<(), LoroError> {
 
 /// Read a node (children empty, parent unset) back out of its meta.
 fn read_node(meta: &LoroMap) -> Option<Node> {
-    let LoroValue::Map(map) = meta.get_value() else { return None };
-    let Value::Object(mut fields) = value::from_loro(&LoroValue::Map(map)) else { return None };
+    let LoroValue::Map(map) = meta.get_value() else {
+        return None;
+    };
+    let Value::Object(mut fields) = value::from_loro(&LoroValue::Map(map)) else {
+        return None;
+    };
     fields.insert("parent".into(), Value::Null);
     fields.insert("children".into(), Value::Array(Vec::new()));
     serde_json::from_value(Value::Object(fields)).ok()
@@ -472,7 +513,12 @@ fn prop_entry(prop: &Prop) -> (&'static str, Value) {
 
 /// A placeholder for a doc that holds no scene yet.
 fn empty_scene() -> Scene {
-    Scene { root: NodeId(Uuid::nil()), nodes: BTreeMap::new(), assets: BTreeMap::new(), variables: document_proto::Variables::default() }
+    Scene {
+        root: NodeId(Uuid::nil()),
+        nodes: BTreeMap::new(),
+        assets: BTreeMap::new(),
+        variables: document_proto::Variables::default(),
+    }
 }
 
 /// Read the doc back into a `Scene`, plus the `NodeId → TreeID` index.
@@ -481,15 +527,23 @@ fn empty_scene() -> Scene {
 /// nodes that don't decode are skipped with their subtrees, and if two
 /// peers concurrently inserted the same `NodeId`, the lowest `TreeID` wins
 /// (on every replica alike) and the other copy is ignored.
-fn materialize(doc: &LoroDoc, blobs: &BTreeMap<AssetId, Vec<u8>>) -> (Scene, HashMap<NodeId, TreeID>) {
+fn materialize(
+    doc: &LoroDoc,
+    blobs: &BTreeMap<AssetId, Vec<u8>>,
+) -> (Scene, HashMap<NodeId, TreeID>) {
     let tree: LoroTree = doc.get_tree(NODES);
     let mut index: HashMap<NodeId, TreeID> = HashMap::new();
     for tid in tree.nodes() {
         if tree.is_node_deleted(&tid).unwrap_or(true) {
             continue;
         }
-        let Some(id) = tree.get_meta(tid).ok().as_ref().and_then(meta_id) else { continue };
-        index.entry(id).and_modify(|t| *t = (*t).min(tid)).or_insert(tid);
+        let Some(id) = tree.get_meta(tid).ok().as_ref().and_then(meta_id) else {
+            continue;
+        };
+        index
+            .entry(id)
+            .and_modify(|t| *t = (*t).min(tid))
+            .or_insert(tid);
     }
 
     let mut scene = empty_scene();
@@ -498,15 +552,23 @@ fn materialize(doc: &LoroDoc, blobs: &BTreeMap<AssetId, Vec<u8>>) -> (Scene, Has
         Some(ValueOrContainer::Value(LoroValue::String(s))) => Uuid::parse_str(&s).ok().map(NodeId),
         _ => None,
     };
-    let Some(root) = root else { return (scene, index) };
+    let Some(root) = root else {
+        return (scene, index);
+    };
     scene.root = root;
-    let Some(root_tid) = index.get(&root).copied() else { return (scene, index) };
-    let Some(root_node) = tree.get_meta(root_tid).ok().as_ref().and_then(read_node) else { return (scene, index) };
+    let Some(root_tid) = index.get(&root).copied() else {
+        return (scene, index);
+    };
+    let Some(root_node) = tree.get_meta(root_tid).ok().as_ref().and_then(read_node) else {
+        return (scene, index);
+    };
 
     let mut stack = vec![(root_tid, root_node)];
     while let Some((tid, mut node)) = stack.pop() {
         for child_tid in tree.children(tid).unwrap_or_default() {
-            let Some(mut child) = tree.get_meta(child_tid).ok().as_ref().and_then(read_node) else { continue };
+            let Some(mut child) = tree.get_meta(child_tid).ok().as_ref().and_then(read_node) else {
+                continue;
+            };
             if index.get(&child.id) != Some(&child_tid) {
                 continue;
             }
@@ -522,7 +584,9 @@ fn materialize(doc: &LoroDoc, blobs: &BTreeMap<AssetId, Vec<u8>>) -> (Scene, Has
 fn read_assets(doc: &LoroDoc, blobs: &BTreeMap<AssetId, Vec<u8>>) -> BTreeMap<AssetId, Asset> {
     let mut out = BTreeMap::new();
     doc.get_map(ASSETS).for_each(|key, v| {
-        let ValueOrContainer::Value(LoroValue::Map(entry)) = v else { return };
+        let ValueOrContainer::Value(LoroValue::Map(entry)) = v else {
+            return;
+        };
         let id = AssetId(key.to_string());
         let mime = match entry.get("mime") {
             Some(LoroValue::String(s)) => s.to_string(),

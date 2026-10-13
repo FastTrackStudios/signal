@@ -22,18 +22,47 @@ pub struct Style {
 /// Set `s` in `style`, its box `w` wide from `x`, vertically centred on `cy`.
 /// Returns the first (topmost) text node.
 #[allow(clippy::too_many_arguments)]
-pub fn mark(b: &mut Builder<'_>, parent: NodeId, s: &str, x: f64, cy: f64, w: f64, style: Style, color: &str, align: TextAlign) -> NodeId {
+pub fn mark(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    x: f64,
+    cy: f64,
+    w: f64,
+    style: Style,
+    color: &str,
+    align: TextAlign,
+) -> NodeId {
     // How far the overprints spread either side, px: none at 600, about 4 %
     // of the size at 900.
     let spread = (style.size * 0.042 * (style.weight - 600.0) / 300.0).max(0.0);
     let offsets: Vec<(f64, f64)> = if spread > 0.2 {
-        vec![(0.0, 0.0), (-spread, 0.0), (spread, 0.0), (-spread / 2.0, 0.0), (spread / 2.0, 0.0), (0.0, -spread / 2.0), (0.0, spread / 2.0)]
+        vec![
+            (0.0, 0.0),
+            (-spread, 0.0),
+            (spread, 0.0),
+            (-spread / 2.0, 0.0),
+            (spread / 2.0, 0.0),
+            (0.0, -spread / 2.0),
+            (0.0, spread / 2.0),
+        ]
     } else {
         vec![(0.0, 0.0)]
     };
     let mut first = None;
     for (dx, dy) in offsets {
-        let mut n = ui::text("mark", s, x + dx, cy + dy, w, style.size, color, align, style.weight, false);
+        let mut n = ui::text(
+            "mark",
+            s,
+            x + dx,
+            cy + dy,
+            w,
+            style.size,
+            color,
+            align,
+            style.weight,
+            false,
+        );
         if let NodeKind::Text(t) = &mut n.kind {
             t.letter_spacing = style.size * style.tracking;
             t.runs = vec![TextRun {

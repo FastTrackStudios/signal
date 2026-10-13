@@ -34,7 +34,9 @@ use render::LayoutBox;
 use serde::{Deserialize, Serialize};
 use surface_proto::{BUILTIN_CURVES, Catalog, Control, ControlKind, MidiMessage, SlotRole, Source};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Facet)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Facet,
+)]
 #[repr(u8)]
 pub enum Severity {
     Info,
@@ -61,7 +63,11 @@ impl std::fmt::Display for Issue {
             Severity::Warning => "warning",
             Severity::Info => "info",
         };
-        write!(f, "{sev}[{}] \"{}\" ({}): {} — fix: {}", self.rule, self.node_name, self.node, self.message, self.fix)
+        write!(
+            f,
+            "{sev}[{}] \"{}\" ({}): {} — fix: {}",
+            self.rule, self.node_name, self.node, self.message, self.fix
+        )
     }
 }
 
@@ -75,7 +81,10 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self { min_touch: 44.0, min_contrast: 4.5 }
+        Self {
+            min_touch: 44.0,
+            min_contrast: 4.5,
+        }
     }
 }
 
@@ -83,9 +92,19 @@ impl Default for Config {
 #[must_use]
 pub fn lint(scene: &Scene, catalog: &Catalog, config: &Config) -> Vec<Issue> {
     let boxes = render::build_scene_layout_boxes(scene, scene.root);
-    let mut cx = Cx { scene, catalog, config, boxes: &boxes, out: Vec::new() };
-    let controls: Vec<(&Node, &Control)> =
-        scene.walk(scene.root).into_iter().filter_map(|id| scene.node(id)).filter_map(|n| n.control.as_ref().map(|c| (n, c))).collect();
+    let mut cx = Cx {
+        scene,
+        catalog,
+        config,
+        boxes: &boxes,
+        out: Vec::new(),
+    };
+    let controls: Vec<(&Node, &Control)> = scene
+        .walk(scene.root)
+        .into_iter()
+        .filter_map(|id| scene.node(id))
+        .filter_map(|n| n.control.as_ref().map(|c| (n, c)))
+        .collect();
     for (node, control) in &controls {
         cx.binding(node, control);
         cx.curve(node, control);
@@ -100,7 +119,11 @@ pub fn lint(scene: &Scene, catalog: &Catalog, config: &Config) -> Vec<Issue> {
     cx.sizes(&controls);
     cx.contrast();
     motion::check(scene, catalog, &mut cx.out);
-    cx.out.sort_by(|a, b| b.severity.cmp(&a.severity).then_with(|| a.rule.cmp(&b.rule)));
+    cx.out.sort_by(|a, b| {
+        b.severity
+            .cmp(&a.severity)
+            .then_with(|| a.rule.cmp(&b.rule))
+    });
     cx.out
 }
 
@@ -121,7 +144,14 @@ struct Cx<'a> {
 
 impl Cx<'_> {
     fn push(&mut self, severity: Severity, rule: &str, node: &Node, message: String, fix: String) {
-        self.out.push(Issue { severity, rule: rule.into(), node: node.id, node_name: node.name.clone(), message, fix });
+        self.out.push(Issue {
+            severity,
+            rule: rule.into(),
+            node: node.id,
+            node_name: node.name.clone(),
+            message,
+            fix,
+        });
     }
 
     fn binding(&mut self, node: &Node, control: &Control) {
@@ -129,22 +159,43 @@ impl Cx<'_> {
             let fix = match &issue {
                 surface_proto::BindingIssue::Unbound => format!(
                     "bind it: set `binding.source` to a {} from the catalog",
-                    if control.kind.is_input() { "param or action" } else { "stream or param" }
+                    if control.kind.is_input() {
+                        "param or action"
+                    } else {
+                        "stream or param"
+                    }
                 ),
                 surface_proto::BindingIssue::UnknownParam { addr } => {
-                    format!("use an existing address{}", nearest(&addr.0, self.catalog.params.iter().map(|p| p.addr.0.as_str())))
+                    format!(
+                        "use an existing address{}",
+                        nearest(
+                            &addr.0,
+                            self.catalog.params.iter().map(|p| p.addr.0.as_str())
+                        )
+                    )
                 }
                 surface_proto::BindingIssue::UnknownAction { id } => {
-                    format!("use an existing action{}", nearest(&id.0, self.catalog.actions.iter().map(|a| a.id.0.as_str())))
+                    format!(
+                        "use an existing action{}",
+                        nearest(&id.0, self.catalog.actions.iter().map(|a| a.id.0.as_str()))
+                    )
                 }
                 surface_proto::BindingIssue::UnknownStream { id } => {
-                    format!("use an existing stream{}", nearest(&id.0, self.catalog.streams.iter().map(|s| s.id.0.as_str())))
+                    format!(
+                        "use an existing stream{}",
+                        nearest(&id.0, self.catalog.streams.iter().map(|s| s.id.0.as_str()))
+                    )
                 }
                 surface_proto::BindingIssue::UnknownCollection { id } => format!(
                     "use an existing collection{}",
-                    nearest(&id.0, self.catalog.collections.iter().map(|c| c.id.0.as_str()))
+                    nearest(
+                        &id.0,
+                        self.catalog.collections.iter().map(|c| c.id.0.as_str())
+                    )
                 ),
-                surface_proto::BindingIssue::Mismatch { .. } => "change the control kind or bind a matching source".into(),
+                surface_proto::BindingIssue::Mismatch { .. } => {
+                    "change the control kind or bind a matching source".into()
+                }
             };
             self.push(Severity::Error, "binding", node, issue.to_string(), fix);
         }
@@ -153,7 +204,12 @@ impl Cx<'_> {
     /// A curve names a provider frame knows (else only an engine that
     /// registers it draws it) and binds every input that provider needs.
     fn curve(&mut self, node: &Node, control: &Control) {
-        let ControlKind::Curve { provider, inputs, .. } = &control.kind else { return };
+        let ControlKind::Curve {
+            provider, inputs, ..
+        } = &control.kind
+        else {
+            return;
+        };
         let Some((_, required)) = BUILTIN_CURVES.iter().find(|(name, _)| name == provider) else {
             let known: Vec<&str> = BUILTIN_CURVES.iter().map(|(n, _)| *n).collect();
             self.push(
@@ -168,7 +224,11 @@ impl Cx<'_> {
         let has = |name: &str| inputs.iter().any(|i| i.name == name);
         let mut missing: Vec<&str> = required.iter().copied().filter(|r| !has(r)).collect();
         // An EQ needs at least one band.
-        if *provider == "eq.response" && !inputs.iter().any(|i| i.name.starts_with('b') && i.name.ends_with("_freq")) {
+        if *provider == "eq.response"
+            && !inputs
+                .iter()
+                .any(|i| i.name.starts_with('b') && i.name.ends_with("_freq"))
+        {
             missing.push("b1_freq");
         }
         if !missing.is_empty() {
@@ -177,7 +237,14 @@ impl Cx<'_> {
                 "curve-input",
                 node,
                 format!("`{provider}` curve has no input `{}`", missing.join("`, `")),
-                format!("add {} to its `inputs`, bound to a param (or a constant)", missing.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")),
+                format!(
+                    "add {} to its `inputs`, bound to a param (or a constant)",
+                    missing
+                        .iter()
+                        .map(|m| format!("`{m}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
             );
         }
     }
@@ -208,24 +275,56 @@ impl Cx<'_> {
                     Severity::Error,
                     "slot-dangling",
                     node,
-                    format!("{:?} slot points at {} which is not inside this control", slot.role, id),
+                    format!(
+                        "{:?} slot points at {} which is not inside this control",
+                        slot.role, id
+                    ),
                     "point the slot at a descendant of the control, or remove it".into(),
                 );
             }
         }
         let has = |r: SlotRole| control.slots.iter().any(|s| s.role == r);
         let needs: &[(&[SlotRole], &str)] = match control.kind {
-            ControlKind::Knob { .. } => &[(&[SlotRole::Needle, SlotRole::ValueArc], "a Needle or a ValueArc")],
-            ControlKind::Fader { .. } => &[(&[SlotRole::Fill, SlotRole::Thumb], "a Fill or a Thumb")],
-            ControlKind::Meter { .. } => &[(&[SlotRole::Fill, SlotRole::Thumb, SlotRole::Led], "a Fill, a Thumb or Led lamps")],
+            ControlKind::Knob { .. } => &[(
+                &[SlotRole::Needle, SlotRole::ValueArc],
+                "a Needle or a ValueArc",
+            )],
+            ControlKind::Fader { .. } => {
+                &[(&[SlotRole::Fill, SlotRole::Thumb], "a Fill or a Thumb")]
+            }
+            ControlKind::Meter { .. } => &[(
+                &[SlotRole::Fill, SlotRole::Thumb, SlotRole::Led],
+                "a Fill, a Thumb or Led lamps",
+            )],
             ControlKind::Gauge { .. } => &[(
-                &[SlotRole::Needle, SlotRole::Fill, SlotRole::Thumb, SlotRole::Led, SlotRole::Glow],
+                &[
+                    SlotRole::Needle,
+                    SlotRole::Fill,
+                    SlotRole::Thumb,
+                    SlotRole::Led,
+                    SlotRole::Glow,
+                ],
                 "a Needle (or a Fill, a Thumb, Led lamps, a Glow)",
             )],
-            ControlKind::Readout => &[(&[SlotRole::Value, SlotRole::Glow, SlotRole::On, SlotRole::Off, SlotRole::Tint], "a Value text, a Glow, On/Off or Tint nodes")],
+            ControlKind::Readout => &[(
+                &[
+                    SlotRole::Value,
+                    SlotRole::Glow,
+                    SlotRole::On,
+                    SlotRole::Off,
+                    SlotRole::Tint,
+                ],
+                "a Value text, a Glow, On/Off or Tint nodes",
+            )],
             ControlKind::TextField { .. } => &[(&[SlotRole::Value], "a Value text")],
-            ControlKind::Plot { .. } => &[(&[SlotRole::Trace, SlotRole::Area], "a Trace (or an Area) vector")],
-            ControlKind::Curve { .. } => &[(&[SlotRole::Trace, SlotRole::Area, SlotRole::Marker], "a Trace, an Area or a Marker")],
+            ControlKind::Plot { .. } => &[(
+                &[SlotRole::Trace, SlotRole::Area],
+                "a Trace (or an Area) vector",
+            )],
+            ControlKind::Curve { .. } => &[(
+                &[SlotRole::Trace, SlotRole::Area, SlotRole::Marker],
+                "a Trace, an Area or a Marker",
+            )],
             ControlKind::Button { .. }
             | ControlKind::Footswitch { .. }
             | ControlKind::XyPad
@@ -254,8 +353,17 @@ impl Cx<'_> {
     fn floating(&self, node: &Node) -> bool {
         let mut cur = Some(node.id);
         while let Some(id) = cur {
-            let Some(n) = self.scene.node(id) else { return false };
-            if n.control.as_ref().is_some_and(|c| matches!(c.kind, ControlKind::Popover { .. } | ControlKind::Menu { .. } | ControlKind::Repeat { .. })) {
+            let Some(n) = self.scene.node(id) else {
+                return false;
+            };
+            if n.control.as_ref().is_some_and(|c| {
+                matches!(
+                    c.kind,
+                    ControlKind::Popover { .. }
+                        | ControlKind::Menu { .. }
+                        | ControlKind::Repeat { .. }
+                )
+            }) {
                 return true;
             }
             cur = n.parent;
@@ -264,27 +372,49 @@ impl Cx<'_> {
     }
 
     fn touch(&mut self, node: &Node, control: &Control) {
-        if !control.kind.is_input() || control.kind.is_container() || matches!(control.kind, ControlKind::TextField { .. }) {
+        if !control.kind.is_input()
+            || control.kind.is_container()
+            || matches!(control.kind, ControlKind::TextField { .. })
+        {
             return;
         }
-        let Some(b) = self.boxes.get(&node.id) else { return };
+        let Some(b) = self.boxes.get(&node.id) else {
+            return;
+        };
         let min = self.config.min_touch;
         if b.width < min || b.height < min {
             self.push(
                 Severity::Warning,
                 "touch-target",
                 node,
-                format!("{}×{} px is below the {min} px touch minimum", b.width.round(), b.height.round()),
+                format!(
+                    "{}×{} px is below the {min} px touch minimum",
+                    b.width.round(),
+                    b.height.round()
+                ),
                 format!("make it at least {min}×{min} (stage use: larger)"),
             );
         }
     }
 
     fn labeled(&mut self, node: &Node, control: &Control) {
-        if control.kind.is_input() && !control.kind.is_container() && !control.slots.iter().any(|s| s.role == SlotRole::Label) {
-            let has_text_child = self.scene.walk(node.id).iter().any(|id| self.scene.node(*id).is_some_and(|n| n.text().is_some()));
+        if control.kind.is_input()
+            && !control.kind.is_container()
+            && !control.slots.iter().any(|s| s.role == SlotRole::Label)
+        {
+            let has_text_child = self
+                .scene
+                .walk(node.id)
+                .iter()
+                .any(|id| self.scene.node(*id).is_some_and(|n| n.text().is_some()));
             if !has_text_child {
-                self.push(Severity::Info, "unlabeled", node, "no label".into(), "add a Text child with a Label slot".into());
+                self.push(
+                    Severity::Info,
+                    "unlabeled",
+                    node,
+                    "no label".into(),
+                    "add a Text child with a Label slot".into(),
+                );
             }
         }
     }
@@ -302,7 +432,13 @@ impl Cx<'_> {
                     MidiMessage::Aftertouch => (m.channel, 3, 0),
                 };
                 if let Some(first) = midi.insert(key, node) {
-                    found.push((Severity::Error, "midi-duplicate", *node, format!("same MIDI message as \"{}\"", first.name), "give one of them a different CC/note or channel".to_string()));
+                    found.push((
+                        Severity::Error,
+                        "midi-duplicate",
+                        *node,
+                        format!("same MIDI message as \"{}\"", first.name),
+                        "give one of them a different CC/note or channel".to_string(),
+                    ));
                 }
             }
             if let Some(b) = &c.binding
@@ -341,13 +477,24 @@ impl Cx<'_> {
         let mut seen: BTreeMap<(Option<NodeId>, String), &Node> = BTreeMap::new();
         let mut found = Vec::new();
         for (node, c) in controls {
-            let Some(label) = self.label_text(node, c) else { continue };
+            let Some(label) = self.label_text(node, c) else {
+                continue;
+            };
             if let Some(first) = seen.insert((panel(node), label.to_lowercase()), node) {
-                found.push((*node, format!("shows the label \"{label}\", like \"{}\"", first.name)));
+                found.push((
+                    *node,
+                    format!("shows the label \"{label}\", like \"{}\"", first.name),
+                ));
             }
         }
         for (n, m) in found {
-            self.push(Severity::Warning, "label-duplicate", n, m, "give one a distinct label (e.g. prefix its group: \"Delay Mix\")".into());
+            self.push(
+                Severity::Warning,
+                "label-duplicate",
+                n,
+                m,
+                "give one a distinct label (e.g. prefix its group: \"Delay Mix\")".into(),
+            );
         }
     }
 
@@ -356,10 +503,18 @@ impl Cx<'_> {
     fn label_text(&self, node: &Node, c: &Control) -> Option<String> {
         let authored = c
             .slots_of(SlotRole::Label)
-            .filter_map(|id| self.scene.node(NodeId(id))?.text().map(|t| t.characters.clone()))
+            .filter_map(|id| {
+                self.scene
+                    .node(NodeId(id))?
+                    .text()
+                    .map(|t| t.characters.clone())
+            })
             .find(|t| !t.is_empty() && !t.starts_with('{'));
         authored.or_else(|| match c.binding.as_ref().map(|b| &b.source) {
-            Some(Source::Param { addr }) => self.catalog.param(addr).map(|p| p.short_name.clone().unwrap_or_else(|| p.name.clone())),
+            Some(Source::Param { addr }) => self
+                .catalog
+                .param(addr)
+                .map(|p| p.short_name.clone().unwrap_or_else(|| p.name.clone())),
             Some(Source::Action { id }) => self.catalog.action(id).map(|a| a.name.clone()),
             _ => {
                 let _ = node;
@@ -412,7 +567,9 @@ impl Cx<'_> {
                     && !y.not
                     && !x.any_of.is_empty()
                     && !y.any_of.is_empty()
-                    && x.any_of.iter().all(|v| !y.any_of.iter().any(|w| (v - w).abs() < 1e-9))
+                    && x.any_of
+                        .iter()
+                        .all(|v| !y.any_of.iter().any(|w| (v - w).abs() < 1e-9))
             })
         })
     }
@@ -422,7 +579,14 @@ impl Cx<'_> {
         // so where their boxes are authored says nothing.
         let inputs: Vec<(&Node, LayoutBox)> = controls
             .iter()
-            .filter(|(n, c)| c.kind.is_input() && !matches!(c.kind, ControlKind::Handle { .. } | ControlKind::Canvas { .. }) && !self.floating(n))
+            .filter(|(n, c)| {
+                c.kind.is_input()
+                    && !matches!(
+                        c.kind,
+                        ControlKind::Handle { .. } | ControlKind::Canvas { .. }
+                    )
+                    && !self.floating(n)
+            })
             .filter_map(|(n, _)| self.boxes.get(&n.id).map(|b| (*n, *b)))
             .collect();
         let mut found = Vec::new();
@@ -438,12 +602,26 @@ impl Cx<'_> {
                 let ix = (ab.x + ab.width).min(bb.x + bb.width) - ab.x.max(bb.x);
                 let iy = (ab.y + ab.height).min(bb.y + bb.height) - ab.y.max(bb.y);
                 if ix > 0.5 && iy > 0.5 {
-                    found.push((*b, format!("overlaps \"{}\" by {}×{} px", a.name, ix.round(), iy.round())));
+                    found.push((
+                        *b,
+                        format!(
+                            "overlaps \"{}\" by {}×{} px",
+                            a.name,
+                            ix.round(),
+                            iy.round()
+                        ),
+                    ));
                 }
             }
         }
         for (n, m) in found {
-            self.push(Severity::Error, "overlap", n, m, "move it apart, or put both in an auto-layout container".into());
+            self.push(
+                Severity::Error,
+                "overlap",
+                n,
+                m,
+                "move it apart, or put both in an auto-layout container".into(),
+            );
         }
     }
 
@@ -456,28 +634,47 @@ impl Cx<'_> {
         for ((_, kind), nodes) in groups {
             let Some(first) = nodes.first() else { continue };
             for n in &nodes[1..] {
-                if (n.size.width - first.size.width).abs() > 0.5 || (n.size.height - first.size.height).abs() > 0.5 {
-                    found.push((*n, format!(
-                        "{kind} is {}×{} but its sibling \"{}\" is {}×{}",
-                        n.size.width, n.size.height, first.name, first.size.width, first.size.height
-                    )));
+                if (n.size.width - first.size.width).abs() > 0.5
+                    || (n.size.height - first.size.height).abs() > 0.5
+                {
+                    found.push((
+                        *n,
+                        format!(
+                            "{kind} is {}×{} but its sibling \"{}\" is {}×{}",
+                            n.size.width,
+                            n.size.height,
+                            first.name,
+                            first.size.width,
+                            first.size.height
+                        ),
+                    ));
                 }
             }
         }
         for (n, m) in found {
-            self.push(Severity::Warning, "size-inconsistent", n, m, "use the same size for same-kind controls in a group".into());
+            self.push(
+                Severity::Warning,
+                "size-inconsistent",
+                n,
+                m,
+                "use the same size for same-kind controls in a group".into(),
+            );
         }
     }
 
     fn contrast(&mut self) {
         let mut found = Vec::new();
         for id in self.scene.walk(self.scene.root) {
-            let Some(node) = self.scene.node(id) else { continue };
+            let Some(node) = self.scene.node(id) else {
+                continue;
+            };
             if node.text().is_none_or(|t| t.characters.trim().is_empty()) || !node.visible {
                 continue;
             }
             let Some(fg) = solid(node) else { continue };
-            let Some(bg) = self.background_of(node) else { continue };
+            let Some(bg) = self.background_of(node) else {
+                continue;
+            };
             let ratio = contrast_ratio(&fg, &bg);
             if ratio < self.config.min_contrast {
                 found.push((node, ratio));
@@ -510,16 +707,27 @@ impl Cx<'_> {
 }
 
 fn solid(n: &Node) -> Option<Color> {
-    n.fills.iter().rev().filter(|p| p.visible).find_map(|p| match &p.kind {
-        PaintKind::Solid { color } => Some(Color { a: color.a * p.opacity, ..*color }),
-        _ => None,
-    })
+    n.fills
+        .iter()
+        .rev()
+        .filter(|p| p.visible)
+        .find_map(|p| match &p.kind {
+            PaintKind::Solid { color } => Some(Color {
+                a: color.a * p.opacity,
+                ..*color
+            }),
+            _ => None,
+        })
 }
 
 fn luminance(c: &Color) -> f64 {
     let ch = |v: f64| {
         let v = v.clamp(0.0, 1.0);
-        if v <= 0.039_28 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+        if v <= 0.039_28 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
     };
     0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b)
 }
@@ -534,7 +742,9 @@ pub fn contrast_ratio(a: &Color, b: &Color) -> f64 {
 
 /// `" — did you mean `x`?"` for the closest candidate, if any is close.
 fn nearest<'a>(wanted: &str, candidates: impl Iterator<Item = &'a str>) -> String {
-    let best = candidates.map(|c| (edit_distance(wanted, c), c)).min_by_key(|(d, _)| *d);
+    let best = candidates
+        .map(|c| (edit_distance(wanted, c), c))
+        .min_by_key(|(d, _)| *d);
     match best {
         Some((d, c)) if d <= wanted.len().max(3) / 2 + 1 => format!(" — did you mean `{c}`?"),
         _ => String::new(),
@@ -547,7 +757,11 @@ fn edit_distance(a: &str, b: &str) -> usize {
     for (i, ca) in a.iter().enumerate() {
         let mut cur = vec![i + 1];
         for (j, cb) in b.iter().enumerate() {
-            cur.push((prev[j] + usize::from(ca != cb)).min(prev[j + 1] + 1).min(cur[j] + 1));
+            cur.push(
+                (prev[j] + usize::from(ca != cb))
+                    .min(prev[j + 1] + 1)
+                    .min(cur[j] + 1),
+            );
         }
         prev = cur;
     }

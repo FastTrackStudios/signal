@@ -29,13 +29,13 @@
 //! arithmetic and allocation only — no clock, no threads — so it is as
 //! wasm-portable as the DSP it reads.
 
+use crate::digital::DigitalStage;
+use crate::preamp::{ClassAPreamp, analysis};
+use crate::profiles::{Controls, Profile};
 use anyrender::{PaintScene, Scene};
 use dsp_core::num;
 use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, RoundedRect, Stroke};
 use peniko::{Color, ColorStop, Fill, Gradient};
-use crate::digital::DigitalStage;
-use crate::preamp::{ClassAPreamp, analysis};
-use crate::profiles::{Controls, Profile};
 
 /// What kind of machine a stage reads as — the engine's own classification,
 /// decided from its shapers rather than its preset name, so a stage edited

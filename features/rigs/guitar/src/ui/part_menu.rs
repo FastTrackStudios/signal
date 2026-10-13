@@ -3,9 +3,9 @@
 //! remove it. The same menu from the footswitch grid's right-click and the
 //! setlist sidebar's switch rows.
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{PerfStack, PerformanceModel};
+use dioxus::prelude::*;
 
 use crate::ui::kit::{MenuItem, Picked};
 

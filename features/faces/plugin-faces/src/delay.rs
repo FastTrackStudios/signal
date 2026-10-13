@@ -23,15 +23,22 @@
 pub mod art;
 pub mod parts;
 
-mod digital;
-mod tape;
 mod analog;
+mod digital;
 mod pitch;
 mod rhythmic;
 mod special;
+mod tape;
 
 use crate::face::Face;
 
 pub fn faces() -> Vec<Face> {
-    vec![digital::face(), tape::face(), analog::face(), pitch::face(), rhythmic::face(), special::face()]
+    vec![
+        digital::face(),
+        tape::face(),
+        analog::face(),
+        pitch::face(),
+        rhythmic::face(),
+        special::face(),
+    ]
 }

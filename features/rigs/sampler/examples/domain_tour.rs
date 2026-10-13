@@ -41,8 +41,8 @@
 //! operations. They are one type wearing four labels, nestable to any depth —
 //! a Module inside a Module inside a Layer is just a tree.
 
-use signal_proto::block::BlockType;
 use sampler::rig_node::{Combine, Container, RigNode, Role};
+use signal_proto::block::BlockType;
 
 fn main() {
     let guitar = worship_guitar();

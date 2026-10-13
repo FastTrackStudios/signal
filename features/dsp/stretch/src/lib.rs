@@ -43,8 +43,6 @@
 //!
 //! Allocation happens in [`Stretcher::new`] only.
 
-
-
 use std::sync::Arc;
 
 use dsp_core::num::{count_to_f32, count_to_f64, f32_to_index, f64_to_index, trunc_to_i64};
@@ -73,7 +71,10 @@ impl Config {
     #[must_use]
     pub fn for_sample_rate(sample_rate: f64) -> Self {
         let target = f64_to_index(sample_rate * 0.085 / core::f64::consts::SQRT_2);
-        Self { frame: target.next_power_of_two().max(256), overlap: 4 }
+        Self {
+            frame: target.next_power_of_two().max(256),
+            overlap: 4,
+        }
     }
 }
 
@@ -161,7 +162,12 @@ impl Stretcher {
         // Periodic Hann: analysis × synthesis overlap-adds to a constant
         // at 75 %.
         let window = (0..n)
-            .map(|i| 0.5f32.mul_add(-(core::f32::consts::TAU * count_to_f32(i) / count_to_f32(n)).cos(), 0.5))
+            .map(|i| {
+                0.5f32.mul_add(
+                    -(core::f32::consts::TAU * count_to_f32(i) / count_to_f32(n)).cos(),
+                    0.5,
+                )
+            })
             .collect();
         let zeros = |len: usize| vec![0.0f32; len];
         let czeros = |len: usize| vec![Complex32::new(0.0, 0.0); len];
@@ -215,9 +221,13 @@ impl Stretcher {
         // The frames overlapping output [0, hop) are centred at output
         // times from n/2 back by whole hops; the ones before n/2 only fill
         // the accumulator, their finished hops lying before time 0.
-        let earlier = (self.n >> 1).checked_div(self.hop).unwrap_or(1).saturating_sub(1);
+        let earlier = (self.n >> 1)
+            .checked_div(self.hop)
+            .unwrap_or(1)
+            .saturating_sub(1);
         let hop = count_to_f64(self.hop);
-        let mut centre_out = count_to_f64(self.n >> 1) - count_to_f64(earlier.saturating_add(1)) * hop;
+        let mut centre_out =
+            count_to_f64(self.n >> 1) - count_to_f64(earlier.saturating_add(1)) * hop;
         for _ in 0..=earlier {
             self.centre = centre_out.mul_add(ratio, position);
             self.frame_out(source);
@@ -231,7 +241,14 @@ impl Stretcher {
     /// Render `left.len()` output frames at `ratio` input frames per output
     /// frame and `transpose` (1.0 = none; 2^(semitones/12)). Changes take
     /// effect from the next frame (a hop — ~20 ms — away).
-    pub fn render(&mut self, left: &mut [f32], right: &mut [f32], ratio: f64, transpose: f32, source: &mut impl Source) {
+    pub fn render(
+        &mut self,
+        left: &mut [f32],
+        right: &mut [f32],
+        ratio: f64,
+        transpose: f32,
+        source: &mut impl Source,
+    ) {
         self.ratio = ratio;
         self.transpose = transpose;
         let mut outputs = left.iter_mut().zip(right.iter_mut());
@@ -242,7 +259,8 @@ impl Stretcher {
                 self.ready_at = 0;
             }
             let [ready_l, ready_r] = &self.ready;
-            let (Some(rl), Some(rr)) = (ready_l.get(self.ready_at..), ready_r.get(self.ready_at..)) else {
+            let (Some(rl), Some(rr)) = (ready_l.get(self.ready_at..), ready_r.get(self.ready_at..))
+            else {
                 return;
             };
             let mut taken = 0usize;
@@ -274,8 +292,23 @@ impl Stretcher {
     /// Read and transform the frame and the one a hop before it; fill the
     /// input bins. Returns whether the frame starts an onset.
     fn analyse_frame(&mut self, source: &mut impl Source) -> bool {
-        let Self { n, hop, fft, fft_scratch, window, time, read, read_before, now, before, bins_in, centre, continuing, just_reset, .. } =
-            self;
+        let Self {
+            n,
+            hop,
+            fft,
+            fft_scratch,
+            window,
+            time,
+            read,
+            read_before,
+            now,
+            before,
+            bins_in,
+            centre,
+            continuing,
+            just_reset,
+            ..
+        } = self;
         let (n, hop) = (*n, *hop);
         let half = i64::try_from(n >> 1).unwrap_or(0);
         let hop_i = i64::try_from(hop).unwrap_or(0);
@@ -287,9 +320,12 @@ impl Stretcher {
             source.read(start.saturating_sub(hop_i), l, r);
         }
         for ch in 0..2 {
-            let (Some(src), Some(src_before), Some(spec), Some(spec_before)) =
-                (read.get(ch), read_before.get(ch), now.get_mut(ch), before.get_mut(ch))
-            else {
+            let (Some(src), Some(src_before), Some(spec), Some(spec_before)) = (
+                read.get(ch),
+                read_before.get(ch),
+                now.get_mut(ch),
+                before.get_mut(ch),
+            ) else {
                 continue;
             };
             analyse(&**fft, fft_scratch, window, time, src, spec);
@@ -325,7 +361,13 @@ impl Stretcher {
     /// Map the input bins to output bins (the transposition), find the
     /// peaks, and give every bin its peak.
     fn map_bins(&mut self) {
-        let Self { bins_in, bins_out, peaks, transpose, .. } = self;
+        let Self {
+            bins_in,
+            bins_out,
+            peaks,
+            transpose,
+            ..
+        } = self;
         let alpha = *transpose;
         // Map to output bins (pitch), and find the loudest.
         let last_in = bins_in.len().saturating_sub(1);
@@ -338,7 +380,11 @@ impl Stretcher {
             let (m, ml, mr) = match (lo, hi) {
                 (Some(lo), Some(hi)) if i < last_in => {
                     let lerp = |a: f32, b: f32| (b - a).mul_add(frac, a);
-                    (lerp(lo.mid_mag, hi.mid_mag), lerp(lo.mag[0], hi.mag[0]), lerp(lo.mag[1], hi.mag[1]))
+                    (
+                        lerp(lo.mid_mag, hi.mid_mag),
+                        lerp(lo.mag[0], hi.mag[0]),
+                        lerp(lo.mag[1], hi.mag[1]),
+                    )
                 }
                 _ => (0.0, 0.0, 0.0),
             };
@@ -393,17 +439,29 @@ impl Stretcher {
                 from = to.saturating_add(1);
             }
         }
-
     }
 
     /// The mid's output phases for this frame.
     fn rephase(&mut self, onset: bool) {
-        let Self { bins_in, bins_out, peaks, continuing, just_reset, transpose, .. } = self;
+        let Self {
+            bins_in,
+            bins_out,
+            peaks,
+            continuing,
+            just_reset,
+            transpose,
+            ..
+        } = self;
         let alpha = *transpose;
         // The mid's output phases: an onset or a fresh start takes the
         // input's; otherwise peaks turn by their (scaled) measured advance
         // and the bins they own keep their input offset from them.
-        let input = |i: u32| bins_in.get(usize::try_from(i).unwrap_or(0)).copied().unwrap_or_default();
+        let input = |i: u32| {
+            bins_in
+                .get(usize::try_from(i).unwrap_or(0))
+                .copied()
+                .unwrap_or_default()
+        };
         if !*continuing || onset {
             for out in bins_out.iter_mut() {
                 out.phase = input(out.from).phase;
@@ -419,12 +477,16 @@ impl Stretcher {
                 }
             }
             for k in 0..bins_out.len() {
-                let Some(&out) = bins_out.get(k) else { continue };
+                let Some(&out) = bins_out.get(k) else {
+                    continue;
+                };
                 let owner = usize::try_from(out.owner).unwrap_or(k);
                 if owner == k {
                     continue;
                 }
-                let Some(&peak) = bins_out.get(owner) else { continue };
+                let Some(&peak) = bins_out.get(owner) else {
+                    continue;
+                };
                 let phase = wrap(peak.phase + (input(out.from).phase - input(peak.from).phase));
                 if let Some(slot) = bins_out.get_mut(k) {
                     slot.phase = phase;
@@ -436,14 +498,31 @@ impl Stretcher {
         }
         *just_reset = onset;
         *continuing = true;
-
     }
 
     /// Each channel back to time, overlap-added; the finished hop out.
     fn synthesise(&mut self) {
-        let Self { n, hop, ifft, ifft_scratch, window, time, bins_in, bins_out, spectrum, ola, ready, .. } = self;
+        let Self {
+            n,
+            hop,
+            ifft,
+            ifft_scratch,
+            window,
+            time,
+            bins_in,
+            bins_out,
+            spectrum,
+            ola,
+            ready,
+            ..
+        } = self;
         let (n, hop) = (*n, *hop);
-        let input = |i: u32| bins_in.get(usize::try_from(i).unwrap_or(0)).copied().unwrap_or_default();
+        let input = |i: u32| {
+            bins_in
+                .get(usize::try_from(i).unwrap_or(0))
+                .copied()
+                .unwrap_or_default()
+        };
         // Each channel: its magnitude with the mid's phase plus its own
         // offset; back to time, windowed, overlap-added.
         let norm = 1.0 / (count_to_f32(n) * window_gain(n, hop));
@@ -460,7 +539,10 @@ impl Stretcher {
             if let Some(nyquist) = spectrum.last_mut() {
                 nyquist.im = 0.0;
             }
-            if ifft.process_with_scratch(spectrum, time, ifft_scratch).is_err() {
+            if ifft
+                .process_with_scratch(spectrum, time, ifft_scratch)
+                .is_err()
+            {
                 time.fill(0.0);
             }
             for (a, (&x, &w)) in acc.iter_mut().zip(time.iter().zip(window.iter())) {
@@ -508,7 +590,6 @@ fn wrap(x: f32) -> f32 {
     let y = TAU.mul_add(-(x / TAU).round(), x);
     if y <= -PI { y + TAU } else { y }
 }
-
 
 // ── from the stretch facade ──
 /// The frequency factor for a transposition in semitones (+12 = ×2).

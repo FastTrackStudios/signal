@@ -28,13 +28,13 @@ use signal_widgets::PopupHost;
 // The menus, prompts and small pieces live in `signal_widgets::kit`, shared
 // with the keys rig; the rig's own names for them stay.
 pub use signal_widgets::kit::{
-    ActionMenu, Button, Chips, DeleteButton, Dot, MenuItem, NamePrompt, Picked,
-    context_menu, context_menu_at, origin_of,
+    ActionMenu, Button, Chips, DeleteButton, Dot, MenuItem, NamePrompt, Picked, context_menu,
+    context_menu_at, origin_of,
 };
 
 use crate::ui::theme::{
-    DANGER, DIM, EYEBROW, FAINT, FIELD, FOCUS_BG, FOCUS_FG, LINE, LINE_STRONG, LIVE_BG, MENU, MUTED, R_MD,
-    R_SM, T_BODY, T_META, T_SMALL, TEXT,
+    DANGER, DIM, EYEBROW, FAINT, FIELD, FOCUS_BG, FOCUS_FG, LINE, LINE_STRONG, LIVE_BG, MENU,
+    MUTED, R_MD, R_SM, T_BODY, T_META, T_SMALL, TEXT,
 };
 
 /// Provided by a pane that holds a sidebar (Play's split): the sidebar

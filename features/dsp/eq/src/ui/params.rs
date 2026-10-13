@@ -3,10 +3,10 @@
 //! Lives in `eq-ui` (not `eq-plugin`) so the [`crate::ui::control_view`] component
 //! can render against the param tree without forcing a circular dep.
 
-use atomic_float::AtomicF32;
-use plugin_core::prelude::*;
-use parking_lot::Mutex;
 use crate::analyzer::{Analyzer, AudioFeed};
+use atomic_float::AtomicF32;
+use parking_lot::Mutex;
+use plugin_core::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 

@@ -45,15 +45,28 @@ pub struct Browser {
 impl Browser {
     #[must_use]
     pub fn new(source: impl Into<String>, fits: Option<(String, Signature)>) -> Self {
-        Self { source: source.into(), fits, items: Vec::new(), selected: 0, cache: None }
+        Self {
+            source: source.into(),
+            fits,
+            items: Vec::new(),
+            selected: 0,
+            cache: None,
+        }
     }
 
     /// Replace the listing (filtered by the engine, if any), keeping the
     /// selection on the same surface when it's still there.
     pub fn set_items(&mut self, all: &[SurfaceMeta]) {
         let keep = self.selected().map(|m| m.id.clone());
-        self.items = all.iter().filter(|m| self.fits.as_ref().is_none_or(|(_, s)| m.fits.fits(s))).cloned().collect();
-        self.selected = keep.and_then(|id| self.items.iter().position(|m| m.id == id)).unwrap_or(0).min(self.items.len().saturating_sub(1));
+        self.items = all
+            .iter()
+            .filter(|m| self.fits.as_ref().is_none_or(|(_, s)| m.fits.fits(s)))
+            .cloned()
+            .collect();
+        self.selected = keep
+            .and_then(|id| self.items.iter().position(|m| m.id == id))
+            .unwrap_or(0)
+            .min(self.items.len().saturating_sub(1));
         self.cache = None;
     }
 
@@ -98,7 +111,12 @@ impl Browser {
     /// The whole grid's box (what the window fits).
     #[must_use]
     pub fn content(&self) -> Bounds {
-        Bounds { x: 0.0, y: 0.0, width: WIDTH, height: HEIGHT }
+        Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: WIDTH,
+            height: HEIGHT,
+        }
     }
 
     /// The first row shown: pages of `ROWS` rows, following the selection.
@@ -108,7 +126,10 @@ impl Browser {
 
     fn tile_origin(slot: usize) -> (f64, f64) {
         let (r, c) = (slot / COLS, slot % COLS);
-        (GAP + c as f64 * (TILE_W + GAP), HEADER + GAP + r as f64 * (TILE_H + GAP))
+        (
+            GAP + c as f64 * (TILE_W + GAP),
+            HEADER + GAP + r as f64 * (TILE_H + GAP),
+        )
     }
 
     /// The tile under a point (scene px), as an index into the listing.
@@ -118,7 +139,8 @@ impl Browser {
         (0..COLS * ROWS).find_map(|slot| {
             let (tx, ty) = Self::tile_origin(slot);
             let i = first + slot;
-            (i < self.items.len() && x >= tx && x <= tx + TILE_W && y >= ty && y <= ty + TILE_H).then_some(i)
+            (i < self.items.len() && x >= tx && x <= tx + TILE_W && y >= ty && y <= ty + TILE_H)
+                .then_some(i)
         })
     }
 
@@ -143,13 +165,27 @@ impl Browser {
         let mut assets = BTreeMap::new();
         let pages = self.items.len().div_ceil(COLS * ROWS).max(1);
         let page = self.first_row() / ROWS + 1;
-        let filter = self.fits.as_ref().map_or_else(String::new, |(name, _)| format!(" · fits {name}"));
+        let filter = self
+            .fits
+            .as_ref()
+            .map_or_else(String::new, |(name, _)| format!(" · fits {name}"));
         let mut tiles = String::new();
         let first = self.first_row() * COLS;
-        for (slot, meta) in self.items.iter().enumerate().skip(first).take(COLS * ROWS).map(|(i, m)| (i - first, m)) {
+        for (slot, meta) in self
+            .items
+            .iter()
+            .enumerate()
+            .skip(first)
+            .take(COLS * ROWS)
+            .map(|(i, m)| (i - first, m))
+        {
             let (x, y) = Self::tile_origin(slot);
             let selected = first + slot == self.selected;
-            let stroke = if selected { r##"stroke="#4f8cff" stroke-weight=3 stroke-align="inside""## } else { r##"stroke="#ffffff14""## };
+            let stroke = if selected {
+                r##"stroke="#4f8cff" stroke-weight=3 stroke-align="inside""##
+            } else {
+                r##"stroke="#ffffff14""##
+            };
             let thumb = if meta.preview_png.is_empty() {
                 format!(
                     r##"<Frame name="thumb" x=10 y=10 w={w} h={THUMB_H} radius=6 fill="#23252b"><Text name="placeholder" x=0 y=64 w={w} h=20 size=13 text-align="center" fill="#6b6f7a" text="no preview" /></Frame>"##,
@@ -172,7 +208,14 @@ impl Browser {
                     id = id.0,
                 )
             };
-            let sub = format!("{} · v{}{}", meta.tags.join(" · "), meta.version, meta.forked_from.as_ref().map_or(String::new(), |f| format!(" · fork of {f}")));
+            let sub = format!(
+                "{} · v{}{}",
+                meta.tags.join(" · "),
+                meta.version,
+                meta.forked_from
+                    .as_ref()
+                    .map_or(String::new(), |f| format!(" · fork of {f}"))
+            );
             tiles += &format!(
                 r##"<Frame name={name} x={x} y={y} w={TILE_W} h={TILE_H} radius=10 fill="{fill}" {stroke}>{thumb}<Text name="title" x=12 y={ty} w={tw} h=20 size=15 fill="#f2f3f5" text={title} /><Text name="sub" x=12 y={sy} w={tw} h=16 size=11 fill="#8a8f9c" text={sub} /></Frame>"##,
                 name = q(&meta.id),
@@ -189,10 +232,16 @@ impl Browser {
                 r##"<Text name="empty" x={GAP} y={y} w={w} h=24 size=16 fill="#8a8f9c" text={t} />"##,
                 y = HEADER + 40.0,
                 w = WIDTH - 2.0 * GAP,
-                t = q(if self.fits.is_some() { "No surfaces in the library fit this engine." } else { "The library is empty." }),
+                t = q(if self.fits.is_some() {
+                    "No surfaces in the library fit this engine."
+                } else {
+                    "The library is empty."
+                }),
             );
         }
-        let selected = self.selected().map_or_else(String::new, |m| format!(" · {}", m.id));
+        let selected = self
+            .selected()
+            .map_or_else(String::new, |m| format!(" · {}", m.id));
         let src = format!(
             r##"<Document><Page name="Library"><Frame name="Browser" w={WIDTH} h={HEIGHT} fill="#0e0f12">
 <Text name="heading" x={GAP} y=18 w=600 h=28 size=22 weight=600 fill="#f2f3f5" text="Surface library" />
@@ -201,7 +250,11 @@ impl Browser {
 {tiles}</Frame></Page></Document>"##,
             sw = WIDTH - 2.0 * GAP,
             kx = WIDTH - GAP - 560.0,
-            status = q(&format!("{} surfaces · {}{filter} · page {page}/{pages}{selected}", self.items.len(), self.source)),
+            status = q(&format!(
+                "{} surfaces · {}{filter} · page {page}/{pages}{selected}",
+                self.items.len(),
+                self.source
+            )),
             keys = q("arrows select · Enter preview · I install · F fork · B back · Esc quit"),
         );
         let scene = match document_text::parse(&src, assets) {
@@ -218,7 +271,10 @@ impl Browser {
 
 /// A PNG's pixel size, from its IHDR.
 fn png_size(png: &[u8]) -> Option<(f64, f64)> {
-    let be = |at: usize| png.get(at..at + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]));
+    let be = |at: usize| {
+        png.get(at..at + 4)
+            .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    };
     let (w, h) = (be(16)?, be(20)?);
     (png.starts_with(b"\x89PNG") && w > 0 && h > 0).then(|| (f64::from(w), f64::from(h)))
 }
@@ -232,7 +288,10 @@ mod tests {
             id: id.into(),
             name: id.to_uppercase(),
             version: 1,
-            fits: Signature { params: params.iter().map(|s| (*s).to_owned()).collect(), ..Signature::default() },
+            fits: Signature {
+                params: params.iter().map(|s| (*s).to_owned()).collect(),
+                ..Signature::default()
+            },
             ..SurfaceMeta::default()
         }
     }
@@ -247,7 +306,13 @@ mod tests {
         b.set_items(&many(5));
         let (scene, page) = b.scene();
         let root = scene.node(*page).unwrap().children[0];
-        let tiles = scene.node(root).unwrap().children.iter().filter(|id| scene.node(**id).is_some_and(|n| n.name.starts_with("s0"))).count();
+        let tiles = scene
+            .node(root)
+            .unwrap()
+            .children
+            .iter()
+            .filter(|id| scene.node(**id).is_some_and(|n| n.name.starts_with("s0")))
+            .count();
         assert_eq!(tiles, 5);
     }
 
@@ -260,11 +325,18 @@ mod tests {
             out.into_inner()
         };
         let mut b = Browser::new("ws://x", None);
-        b.set_items(&[SurfaceMeta { preview_png: png, ..meta("a", &[]) }]);
+        b.set_items(&[SurfaceMeta {
+            preview_png: png,
+            ..meta("a", &[])
+        }]);
         let (scene, _) = b.scene();
         assert_eq!(scene.assets.len(), 1);
         let preview = scene.nodes.values().find(|n| n.name == "preview").unwrap();
-        assert_eq!((preview.size.width, preview.size.height), (260.0, 130.0), "2:1 fitted into the well");
+        assert_eq!(
+            (preview.size.width, preview.size.height),
+            (260.0, 130.0),
+            "2:1 fitted into the well"
+        );
     }
 
     #[test]
@@ -289,7 +361,10 @@ mod tests {
 
     #[test]
     fn fits_filter_and_selection_survive_a_refresh() {
-        let engine = Signature { params: vec!["a".into(), "b".into()], ..Signature::default() };
+        let engine = Signature {
+            params: vec!["a".into(), "b".into()],
+            ..Signature::default()
+        };
         let mut b = Browser::new("ws://x", Some(("demo".into(), engine)));
         let all = vec![meta("x", &["a"]), meta("y", &["z"]), meta("z", &["b"])];
         b.set_items(&all);

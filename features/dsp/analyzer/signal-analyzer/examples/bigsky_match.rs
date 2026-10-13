@@ -28,8 +28,8 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use daw::standalone::offline_fx::{self, RenderOptions};
 use builtin::NativeReverb;
+use daw::standalone::offline_fx::{self, RenderOptions};
 use signal_analyzer::reverb_character::{self, Character};
 use signal_analyzer::reverb_stimuli::Stimulus;
 
@@ -62,7 +62,9 @@ fn knob(k: &Knobs, name: &str) -> f64 {
 /// Piecewise-linear lookup in `(x, y)` points (sorted by x), clamped at
 /// the ends; `log` interpolates in log-log (for time laws).
 fn lookup(points: &[(f64, f64)], x: f64, log: bool) -> f64 {
-    let (Some(first), Some(last)) = (points.first(), points.last()) else { return 0.0 };
+    let (Some(first), Some(last)) = (points.first(), points.last()) else {
+        return 0.0;
+    };
     if x <= first.0 {
         return first.1;
     }
@@ -145,7 +147,10 @@ fn map_cloud(k: &Knobs) -> Vec<(String, f64)> {
             },
         ),
         // Our pre-delay line holds 500 ms; BigSky reaches 1.5 s past ~110.
-        p("predelay", lookup(CLOUD_PREDELAY_MS, knob(k, "PreDelay"), false)),
+        p(
+            "predelay",
+            lookup(CLOUD_PREDELAY_MS, knob(k, "PreDelay"), false),
+        ),
         // Our Cloud implements BigSky's Tone (two high shelves); `tone`
         // spans the knob with 0 at noon.
         p("tone", knob(k, "Tone") / 63.5 - 1.0),
@@ -179,7 +184,11 @@ struct Args(Vec<String>);
 
 impl Args {
     fn opt(&self, k: &str) -> Option<&str> {
-        self.0.iter().position(|a| a == k).and_then(|i| self.0.get(i + 1)).map(String::as_str)
+        self.0
+            .iter()
+            .position(|a| a == k)
+            .and_then(|i| self.0.get(i + 1))
+            .map(String::as_str)
     }
     fn flag(&self, k: &str) -> bool {
         self.0.iter().any(|a| a == k)
@@ -215,13 +224,24 @@ fn fail(msg: impl std::fmt::Display) -> ! {
 /// Render `input` through BigSky with `knobs`. A fresh instance per render,
 /// so no tail from the previous one leaks into the pre-roll.
 fn render_bigsky(algo: &Algo, knobs: &Knobs, input: &[f32], tail_s: f64) -> (Vec<f32>, Vec<f32>) {
-    let mut plugin = offline_fx::load_vst3(Path::new(BIGSKY), 0).unwrap_or_else(|e| fail(format!("{e:?}")));
-    let mut specs = vec![format!("EFFECT TYPE={}", algo.bigsky_type), "MIX=127".into()];
+    let mut plugin =
+        offline_fx::load_vst3(Path::new(BIGSKY), 0).unwrap_or_else(|e| fail(format!("{e:?}")));
+    let mut specs = vec![
+        format!("EFFECT TYPE={}", algo.bigsky_type),
+        "MIX=127".into(),
+    ];
     specs.extend(knobs.iter().map(|(k, v)| format!("{}{k}={v}", algo.prefix)));
     let refs: Vec<&str> = specs.iter().map(String::as_str).collect();
     let params = offline_fx::resolve_all(&mut *plugin, &refs).unwrap_or_else(|e| fail(e));
-    let opts = RenderOptions { sample_rate: SR, tail_secs: tail_s, params, pump_run_loop: true, ..RenderOptions::default() };
-    let out = offline_fx::render(&mut *plugin, input, input, &opts).unwrap_or_else(|e| fail(format!("{e:?}")));
+    let opts = RenderOptions {
+        sample_rate: SR,
+        tail_secs: tail_s,
+        params,
+        pump_run_loop: true,
+        ..RenderOptions::default()
+    };
+    let out = offline_fx::render(&mut *plugin, input, input, &opts)
+        .unwrap_or_else(|e| fail(format!("{e:?}")));
     plugin.deactivate();
     out
 }
@@ -231,7 +251,11 @@ fn render_ours(settings: &[(String, f64)], input: &[f32], tail_s: f64) -> (Vec<f
     for (name, v) in settings {
         rev.set_named(name, *v);
     }
-    let opts = RenderOptions { sample_rate: SR, tail_secs: tail_s, ..RenderOptions::default() };
+    let opts = RenderOptions {
+        sample_rate: SR,
+        tail_secs: tail_s,
+        ..RenderOptions::default()
+    };
     offline_fx::render(&mut rev, input, input, &opts).unwrap_or_else(|e| fail(format!("{e:?}")))
 }
 
@@ -239,7 +263,9 @@ fn render_ours(settings: &[(String, f64)], input: &[f32], tail_s: f64) -> (Vec<f
 fn our_settings(algo: &Algo, knobs: &Knobs, overrides: &[(String, String)]) -> Vec<(String, f64)> {
     let mut s = (algo.map)(knobs);
     for (k, v) in overrides {
-        let v: f64 = v.parse().unwrap_or_else(|_| fail(format!("--ours {k}={v}: not a number")));
+        let v: f64 = v
+            .parse()
+            .unwrap_or_else(|_| fail(format!("--ours {k}={v}: not a number")));
         match s.iter_mut().find(|(n, _)| n == k) {
             Some(slot) => slot.1 = v,
             None => s.push((k.clone(), v)),
@@ -253,7 +279,12 @@ fn tail_for(knobs: &Knobs) -> f64 {
 }
 
 fn write_wav(path: &Path, l: &[f32], r: &[f32]) {
-    let spec = hound::WavSpec { channels: 2, sample_rate: SR as u32, bits_per_sample: 32, sample_format: hound::SampleFormat::Float };
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: SR as u32,
+        bits_per_sample: 32,
+        sample_format: hound::SampleFormat::Float,
+    };
     let res = hound::WavWriter::create(path, spec).and_then(|mut w| {
         for (a, b) in l.iter().zip(r) {
             w.write_sample(*a)?;
@@ -268,20 +299,31 @@ fn write_wav(path: &Path, l: &[f32], r: &[f32]) {
 
 /// A WAV as a mono stimulus at 48 kHz (channels averaged; no resampling).
 fn read_input(path: &Path) -> Vec<f32> {
-    let mut r = hound::WavReader::open(path).unwrap_or_else(|e| fail(format!("{}: {e}", path.display())));
+    let mut r =
+        hound::WavReader::open(path).unwrap_or_else(|e| fail(format!("{}: {e}", path.display())));
     let spec = r.spec();
     if spec.sample_rate != SR as u32 {
-        eprintln!("warning: {} is {} Hz, used as 48 kHz", path.display(), spec.sample_rate);
+        eprintln!(
+            "warning: {} is {} Hz, used as 48 kHz",
+            path.display(),
+            spec.sample_rate
+        );
     }
     let ch = usize::from(spec.channels.max(1));
     let samples: Vec<f32> = match spec.sample_format {
         hound::SampleFormat::Float => r.samples::<f32>().map_while(Result::ok).collect(),
         hound::SampleFormat::Int => {
             let scale = 2f32.powi(i32::from(spec.bits_per_sample) - 1);
-            r.samples::<i32>().map_while(Result::ok).map(|v| v as f32 / scale).collect()
+            r.samples::<i32>()
+                .map_while(Result::ok)
+                .map(|v| v as f32 / scale)
+                .collect()
         }
     };
-    samples.chunks(ch).map(|f| f.iter().sum::<f32>() / ch as f32).collect()
+    samples
+        .chunks(ch)
+        .map(|f| f.iter().sum::<f32>() / ch as f32)
+        .collect()
 }
 
 /// A stimulus to run: its name, samples, excitation end and tone.
@@ -294,21 +336,40 @@ struct Case {
 
 impl Case {
     fn of(s: Stimulus) -> Self {
-        Self { name: s.name().into(), input: s.generate(SR), end_s: s.excitation_end_s(), tone: s.tone_hz() }
+        Self {
+            name: s.name().into(),
+            input: s.generate(SR),
+            end_s: s.excitation_end_s(),
+            tone: s.tone_hz(),
+        }
     }
 }
 
 fn main() {
     let args = Args(std::env::args().skip(1).collect());
     let algo_name = args.opt("--algo").unwrap_or("cloud");
-    let algo = ALGOS.iter().find(|a| a.name == algo_name).unwrap_or_else(|| fail(format!("unknown --algo {algo_name}")));
-    let mut knobs: Knobs = algo.defaults.iter().map(|(k, v)| ((*k).to_string(), (*v).to_string())).collect();
+    let algo = ALGOS
+        .iter()
+        .find(|a| a.name == algo_name)
+        .unwrap_or_else(|| fail(format!("unknown --algo {algo_name}")));
+    let mut knobs: Knobs = algo
+        .defaults
+        .iter()
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+        .collect();
     for (k, v) in pairs(args.opt("--knobs")) {
-        let key = knobs.keys().find(|n| n.eq_ignore_ascii_case(&k)).cloned().unwrap_or(k);
+        let key = knobs
+            .keys()
+            .find(|n| n.eq_ignore_ascii_case(&k))
+            .cloned()
+            .unwrap_or(k);
         knobs.insert(key, v);
     }
     let overrides = pairs(args.opt("--ours"));
-    let out = args.opt("--out").map_or_else(|| PathBuf::from("target/bigsky-match").join(algo.name), PathBuf::from);
+    let out = args.opt("--out").map_or_else(
+        || PathBuf::from("target/bigsky-match").join(algo.name),
+        PathBuf::from,
+    );
 
     match args.positional(0).unwrap_or("run") {
         "list" => list(),
@@ -319,14 +380,33 @@ fn main() {
 }
 
 fn list() {
-    let mut plugin = offline_fx::load_vst3(Path::new(BIGSKY), 0).unwrap_or_else(|e| fail(format!("{e:?}")));
+    let mut plugin =
+        offline_fx::load_vst3(Path::new(BIGSKY), 0).unwrap_or_else(|e| fail(format!("{e:?}")));
     for info in plugin.params() {
         let current = plugin.param_value(info.id).unwrap_or(info.default);
         let text = plugin.value_to_text(info.id, current).unwrap_or_default();
-        let (lo, hi) = (plugin.value_to_text(info.id, info.min).unwrap_or_default(), plugin.value_to_text(info.id, info.max).unwrap_or_default());
-        println!("{:>4}  {:<24} {:>10}   [{} .. {}]", info.id, info.name, text.trim(), lo.trim(), hi.trim());
+        let (lo, hi) = (
+            plugin.value_to_text(info.id, info.min).unwrap_or_default(),
+            plugin.value_to_text(info.id, info.max).unwrap_or_default(),
+        );
+        println!(
+            "{:>4}  {:<24} {:>10}   [{} .. {}]",
+            info.id,
+            info.name,
+            text.trim(),
+            lo.trim(),
+            hi.trim()
+        );
         if let Some(pos) = offline_fx::param_positions(&mut *plugin, &info) {
-            println!("{:>4}  {:<24} {}", "", "", pos.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>().join(" | "));
+            println!(
+                "{:>4}  {:<24} {}",
+                "",
+                "",
+                pos.iter()
+                    .map(|(t, _)| t.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            );
         }
     }
 }
@@ -334,14 +414,28 @@ fn list() {
 fn run(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)], out: &Path) {
     let cases: Vec<Case> = if let Some(path) = args.opt("--input") {
         let input = read_input(Path::new(path));
-        let name = Path::new(path).file_stem().map_or_else(|| "input".into(), |s| s.to_string_lossy().into_owned());
+        let name = Path::new(path)
+            .file_stem()
+            .map_or_else(|| "input".into(), |s| s.to_string_lossy().into_owned());
         let end_s = input.len() as f64 / SR;
-        vec![Case { name, input, end_s, tone: None }]
+        vec![Case {
+            name,
+            input,
+            end_s,
+            tone: None,
+        }]
     } else {
-        let names = args.opt("--stimuli").unwrap_or("impulse,burst,snare,sine220,sine1k,pluck,pad");
+        let names = args
+            .opt("--stimuli")
+            .unwrap_or("impulse,burst,snare,sine220,sine1k,pluck,pad");
         names
             .split(',')
-            .map(|n| Case::of(Stimulus::from_name(n.trim()).unwrap_or_else(|| fail(format!("unknown stimulus {n:?}")))))
+            .map(|n| {
+                Case::of(
+                    Stimulus::from_name(n.trim())
+                        .unwrap_or_else(|| fail(format!("unknown stimulus {n:?}"))),
+                )
+            })
             .collect()
     };
     if let Err(e) = std::fs::create_dir_all(out) {
@@ -352,16 +446,37 @@ fn run(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)], 
 
     let mut doc = String::new();
     let _ = writeln!(doc, "# BigSky {} vs FTS-Reverb\n", algo.bigsky_type);
-    let _ = writeln!(doc, "BigSky: {}\n", knobs.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(", "));
-    let _ = writeln!(doc, "Ours: {}\n", ours.iter().map(|(k, v)| format!("{k}={v:.3}")).collect::<Vec<_>>().join(", "));
-    let mut summary = String::from("| stimulus | level Δ dB | decay Δ | envelope dB | echo dens. | spec early dB | spec late dB | corr | mod spread Δ |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n");
+    let _ = writeln!(
+        doc,
+        "BigSky: {}\n",
+        knobs
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let _ = writeln!(
+        doc,
+        "Ours: {}\n",
+        ours.iter()
+            .map(|(k, v)| format!("{k}={v:.3}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let mut summary = String::from(
+        "| stimulus | level Δ dB | decay Δ | envelope dB | echo dens. | spec early dB | spec late dB | corr | mod spread Δ |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n",
+    );
     let mut sections = String::new();
     for case in &cases {
         eprintln!("{}: rendering BigSky…", case.name);
         let (bl, br) = render_bigsky(algo, knobs, &case.input, tail);
         eprintln!("{}: rendering ours…", case.name);
         let (ol, or) = render_ours(&ours, &case.input, tail);
-        write_wav(&out.join(format!("{}.input.wav", case.name)), &case.input, &case.input);
+        write_wav(
+            &out.join(format!("{}.input.wav", case.name)),
+            &case.input,
+            &case.input,
+        );
         write_wav(&out.join(format!("{}.bigsky.wav", case.name)), &bl, &br);
         write_wav(&out.join(format!("{}.ours.wav", case.name)), &ol, &or);
         let a = reverb_character::measure(&bl, &br, SR, case.end_s, case.tone);
@@ -380,7 +495,9 @@ fn run(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)], 
             d.correlation,
             pct(d.modulation_spread_log2),
         );
-        sections.push_str(&reverb_character::report(&case.name, &a, &b, "BigSky", "ours"));
+        sections.push_str(&reverb_character::report(
+            &case.name, &a, &b, "BigSky", "ours",
+        ));
     }
     let _ = writeln!(doc, "## Distance\n\n{summary}\n## Detail\n\n{sections}");
     let path = out.join("report.md");
@@ -393,24 +510,43 @@ fn run(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)], 
 
 /// A mean |log2 ratio| as "how far off", in percent.
 fn pct(v: Option<f64>) -> String {
-    v.map_or_else(|| "—".into(), |v| format!("{:.0}%", (2f64.powf(v) - 1.0) * 100.0))
+    v.map_or_else(
+        || "—".into(),
+        |v| format!("{:.0}%", (2f64.powf(v) - 1.0) * 100.0),
+    )
 }
 
 /// One decimal, or "—" for a measurement that does not apply (NaN).
 fn finite(v: f64) -> String {
-    if v.is_finite() { format!("{v:.1}") } else { "—".into() }
+    if v.is_finite() {
+        format!("{v:.1}")
+    } else {
+        "—".into()
+    }
 }
 
 /// One row of a sweep: the headline numbers for a single render.
 fn sweep_row(c: &Character) -> String {
     let t = |v: Option<f64>| v.map_or_else(|| "—".into(), |x| format!("{x:.2}"));
-    let band = |hz: f64| c.bands.iter().find(|b| (b.centre_hz - hz).abs() < 1.0).and_then(|b| b.decay.t20);
+    let band = |hz: f64| {
+        c.bands
+            .iter()
+            .find(|b| (b.centre_hz - hz).abs() < 1.0)
+            .and_then(|b| b.decay.t20)
+    };
     let late_centroid = {
         let v: Vec<f64> = c.centroid_hz.iter().skip(4).take(10).copied().collect();
         v.iter().sum::<f64>() / v.len().max(1) as f64
     };
-    let tilt = c.spectrum_late.get(18).zip(c.spectrum_late.get(9)).map(|(hi, lo)| hi - lo);
-    let m = c.modulation.map_or_else(|| "—".into(), |m| format!("{:.1}/{:.1}Hz", m.sustain_spread_hz, m.tail_spread_hz));
+    let tilt = c
+        .spectrum_late
+        .get(18)
+        .zip(c.spectrum_late.get(9))
+        .map(|(hi, lo)| hi - lo);
+    let m = c.modulation.map_or_else(
+        || "—".into(),
+        |m| format!("{:.1}/{:.1}Hz", m.sustain_spread_hz, m.tail_spread_hz),
+    );
     format!(
         "{:>7.1} {:>7.1} {:>6.0} {:>6} {:>6} {:>6} {:>6} {:>6} {:>7} {:>7.0} {:>7} {:>6.2} {:>11}",
         c.energy_db,
@@ -420,7 +556,9 @@ fn sweep_row(c: &Character) -> String {
         t(c.decay.t20),
         t(band(500.0)),
         t(band(4000.0)),
-        c.echo_density.get(10).map_or_else(|| "—".into(), |v| format!("{v:.2}")),
+        c.echo_density
+            .get(10)
+            .map_or_else(|| "—".into(), |v| format!("{v:.2}")),
         t(c.mixing_ms.map(|v| v / 1000.0)),
         late_centroid,
         tilt.map_or_else(|| "—".into(), |v| format!("{v:+.1}")),
@@ -444,15 +582,35 @@ fn sweep(args: &Args, algo: &Algo, knobs: &Knobs, overrides: &[(String, String)]
         fail("usage: sweep <Knob> <v1,v2,...> [--stimulus impulse] [--ref-only]")
     };
     let stim = args.opt("--stimulus").unwrap_or("impulse");
-    let case = Case::of(Stimulus::from_name(stim).unwrap_or_else(|| fail(format!("unknown stimulus {stim:?}"))));
-    let key = knobs.keys().find(|n| n.eq_ignore_ascii_case(name)).cloned().unwrap_or_else(|| name.to_string());
+    let case = Case::of(
+        Stimulus::from_name(stim).unwrap_or_else(|| fail(format!("unknown stimulus {stim:?}"))),
+    );
+    let key = knobs
+        .keys()
+        .find(|n| n.eq_ignore_ascii_case(name))
+        .cloned()
+        .unwrap_or_else(|| name.to_string());
     println!(
         "{algo} {key} sweep on {stim}  (tilt = late 4k − 500 Hz ⅓-oct, NED@50ms, corr 0.2–1 s, mod = held/tail spread around the tone)",
         algo = algo.name
     );
     println!(
         "{:>8} {:>7}  {:>7} {:>7} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>7} {:>7} {:>7} {:>6} {:>11}",
-        key, "who", "energy", "onset", "peak", "EDT", "T20", "T@500", "T@4k", "NED50", "mix(s)", "centr", "tilt", "corr", "mod"
+        key,
+        "who",
+        "energy",
+        "onset",
+        "peak",
+        "EDT",
+        "T20",
+        "T@500",
+        "T@4k",
+        "NED50",
+        "mix(s)",
+        "centr",
+        "tilt",
+        "corr",
+        "mod"
     );
     for v in values.split(',') {
         let mut k = knobs.clone();

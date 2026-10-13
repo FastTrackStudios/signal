@@ -23,7 +23,7 @@ use dioxus_test::{by_testid, render};
 use fts_audio_ui::controls::knob::{Knob, KnobSize};
 use fts_audio_ui::drag::DragProvider;
 use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
-use fts_audio_ui::hardware::knob_svg::{detent_ring, linear_scale_label, scale_ring, ScaleMark};
+use fts_audio_ui::hardware::knob_svg::{ScaleMark, detent_ring, linear_scale_label, scale_ring};
 use fts_audio_ui::param::ParamHandle;
 
 /// A parameter that shows what you tell it to.
@@ -256,7 +256,15 @@ const STATES: &[State] = &[
     ("Drive", "plain", 0.62, false, None, false, None),
     ("Tilt", "bipolar centre", 0.5, true, None, false, None),
     ("Tilt", "bipolar up", 0.78, true, None, false, None),
-    ("Cutoff", "modulated", 0.44, false, Some((0.30, 0.72)), false, None),
+    (
+        "Cutoff",
+        "modulated",
+        0.44,
+        false,
+        Some((0.30, 0.72)),
+        false,
+        None,
+    ),
     ("Mix", "accent", 0.66, false, None, false, Some("#e0703a")),
     ("Sag", "disabled", 0.35, false, None, true, None),
 ];

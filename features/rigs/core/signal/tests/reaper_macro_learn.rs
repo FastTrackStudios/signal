@@ -246,8 +246,7 @@ async fn macro_drives_reacomp_via_fx_params(
     })
     .to_string();
 
-    TrackHandleCompat::set_ext_state(&track, "FTS_MACROS", "mapping_config", &mapping_json)
-        .await?;
+    TrackHandleCompat::set_ext_state(&track, "FTS_MACROS", "mapping_config", &mapping_json).await?;
     ctx.log("Stored mapping config");
 
     // Wait for timer to discover
@@ -365,8 +364,7 @@ async fn four_point_stage_macro(ctx: &daw::test::ReaperTestContext) -> eyre::Res
     })
     .to_string();
 
-    TrackHandleCompat::set_ext_state(&track, "FTS_MACROS", "mapping_config", &mapping_json)
-        .await?;
+    TrackHandleCompat::set_ext_state(&track, "FTS_MACROS", "mapping_config", &mapping_json).await?;
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     let poll_timeout = Duration::from_secs(8);

@@ -187,10 +187,13 @@ fn parse_flat_namelist(b: &RawBlock, data: &[u8], out: &mut Vec<String>, has_col
 mod tests {
     use super::*;
 
-    const HEYLADY_PTX: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/HeyLady.ptx");
+    const HEYLADY_PTX: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/protools/HeyLady.ptx"
+    );
     const WORSHIP_PTX: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/worship-session.ptx"
+        "/tests/fixtures/protools/worship-session.ptx"
     );
 
     #[test]

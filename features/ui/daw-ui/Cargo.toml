@@ -43,6 +43,9 @@ tokio = { version = "1", features = ["time"] }
 tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+daw-ui = { path = ".", features = ["reaper-theme", "render"] }
 dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false }
 dioxus-test = { workspace = true }
 image = { workspace = true }

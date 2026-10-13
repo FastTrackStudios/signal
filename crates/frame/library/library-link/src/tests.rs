@@ -11,7 +11,8 @@ use library_fs::FsLibrary;
 
 use super::*;
 
-const PANEL: &str = r##"<Document><Page><Frame name="Panel" w=200 h=100 fill="#101010" /></Page></Document>"##;
+const PANEL: &str =
+    r##"<Document><Page><Frame name="Panel" w=200 h=100 fill="#101010" /></Page></Document>"##;
 
 fn panel(name: &str) -> String {
     PANEL.replace("\"Panel\"", &format!("{name:?}"))
@@ -49,7 +50,9 @@ fn wait_for(f: &Follow, want: impl Fn(&Event) -> bool) -> Event {
 
 fn name_of(e: &Event) -> Option<String> {
     match e {
-        Event::Update(SurfaceUpdate { surface: Some(s), .. }) => s.content.decode().ok().and_then(|sc| scene_name(&sc)),
+        Event::Update(SurfaceUpdate {
+            surface: Some(s), ..
+        }) => s.content.decode().ok().and_then(|sc| scene_name(&sc)),
         _ => None,
     }
 }
@@ -68,15 +71,37 @@ fn server_in_process_client_subscribes() {
     // publish → list → get, blocking.
     let mut client = Blocking::new(&served.url).unwrap();
     let content = Content::markup_text(panel("Delay"));
-    let p = client.publish(&content, &PublishMeta { id: "fx/delay".into(), author: "test".into(), ..PublishMeta::default() }).unwrap();
-    assert_eq!(p, Published { id: "fx/delay".into(), version: 1 });
-    let ids: Vec<String> = client.list(&ListQuery::default()).unwrap().into_iter().map(|m| m.id).collect();
+    let p = client
+        .publish(
+            &content,
+            &PublishMeta {
+                id: "fx/delay".into(),
+                author: "test".into(),
+                ..PublishMeta::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        p,
+        Published {
+            id: "fx/delay".into(),
+            version: 1
+        }
+    );
+    let ids: Vec<String> = client
+        .list(&ListQuery::default())
+        .unwrap()
+        .into_iter()
+        .map(|m| m.id)
+        .collect();
     assert_eq!(ids, ["fx/delay", "fx/verb"]);
     let got = client.get("fx/delay", None).unwrap();
     assert_eq!((got.content, got.meta.author.as_str()), (content, "test"));
     let refused = client.get("fx/none", None).unwrap_err();
     assert!(refused.contains("NotFound"), "{refused}");
-    let bad = client.publish(&Content::markup_text("<Document>"), &PublishMeta::default()).unwrap_err();
+    let bad = client
+        .publish(&Content::markup_text("<Document>"), &PublishMeta::default())
+        .unwrap_err();
     assert!(bad.contains("BadContent"), "{bad}");
 
     // Follow: the snapshot, then an edit on disk.
@@ -89,20 +114,33 @@ fn server_in_process_client_subscribes() {
     let Event::Update(u) = e else { unreachable!() };
     assert_eq!(u.version, 2);
     // The index change for it arrives as well.
-    wait_for(&follow, |e| matches!(e, Event::Index(c) if c.id == "fx/verb"));
+    wait_for(
+        &follow,
+        |e| matches!(e, Event::Index(c) if c.id == "fx/verb"),
+    );
 
     // Switch to another surface: its snapshot arrives.
     follow.follow(Some("fx/delay".into()));
-    let e = wait_for(&follow, |e| matches!(e, Event::Update(u) if u.id == "fx/delay"));
+    let e = wait_for(
+        &follow,
+        |e| matches!(e, Event::Update(u) if u.id == "fx/delay"),
+    );
     assert_eq!(name_of(&e).as_deref(), Some("Delay"));
 
     // Server gone → Lost; back → Connected and the snapshot again.
     let addr = served.addr().to_owned();
     drop(served);
     wait_for(&follow, |e| matches!(e, Event::Lost(_)));
-    let served = Served::start(lib.clone().into_router(), std::net::TcpListener::bind(&addr).unwrap()).unwrap();
+    let served = Served::start(
+        lib.clone().into_router(),
+        std::net::TcpListener::bind(&addr).unwrap(),
+    )
+    .unwrap();
     wait_for(&follow, |e| matches!(e, Event::Connected));
-    let e = wait_for(&follow, |e| matches!(e, Event::Update(u) if u.id == "fx/delay"));
+    let e = wait_for(
+        &follow,
+        |e| matches!(e, Event::Update(u) if u.id == "fx/delay"),
+    );
     assert_eq!(name_of(&e).as_deref(), Some("Delay"));
 
     // The blocking client recovers on a fresh link.

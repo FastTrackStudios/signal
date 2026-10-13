@@ -43,9 +43,9 @@ use std::sync::Arc;
 
 use envelope::EnvelopeCursor;
 use item_mix::mix_item_into_bus;
-use midi::{collect_midi_events_into, collect_note_expressions};
 #[cfg(test)]
 use midi::collect_midi_events;
+use midi::{collect_midi_events_into, collect_note_expressions};
 use parallel::{LaneJob, PluginPtr};
 use snapshot::{RenderSnapshot, TrackSnapshot};
 
@@ -351,7 +351,6 @@ struct RenderScratch {
     /// lanes first.
     lane_cost: Vec<u32>,
 }
-
 
 impl RenderScratch {
     /// Size everything for `n` tracks × `frames` and zero the buses.
@@ -674,9 +673,8 @@ impl ProjectRenderer {
                         if w.swap(NO_REVISION, Ordering::AcqRel) == NO_REVISION {
                             continue;
                         }
-                        let built = daw.read_project(&guid, |p| {
-                            (p.revision, RenderSnapshot::build(p))
-                        });
+                        let built =
+                            daw.read_project(&guid, |p| (p.revision, RenderSnapshot::build(p)));
                         if let Some(built) = built {
                             // A snapshot the audio thread never took is
                             // dropped here, on this thread.
@@ -725,9 +723,11 @@ impl ProjectRenderer {
         // Has the project moved on? Read without waiting.
         let revision = match self.daw.state.try_lock() {
             Ok(s) => s.projects.get(&self.project_guid).map(|p| p.revision),
-            Err(std::sync::TryLockError::Poisoned(p)) => {
-                p.into_inner().projects.get(&self.project_guid).map(|p| p.revision)
-            }
+            Err(std::sync::TryLockError::Poisoned(p)) => p
+                .into_inner()
+                .projects
+                .get(&self.project_guid)
+                .map(|p| p.revision),
             Err(std::sync::TryLockError::WouldBlock) => None,
         };
         match (&*current, revision) {
@@ -1192,7 +1192,9 @@ impl ProjectRenderer {
                 if fed[ti]
                     || !passes(ti)
                     || t.fx_chain.is_empty()
-                    || t.sends.iter().any(|s| s.mode == daw_proto::routing::SendMode::PreFx)
+                    || t.sends
+                        .iter()
+                        .any(|s| s.mode == daw_proto::routing::SendMode::PreFx)
                 {
                     continue;
                 }
@@ -1203,10 +1205,14 @@ impl ProjectRenderer {
                 job.chain.clear();
                 let mut ok = true;
                 for (i, fx_guid) in t.fx_chain.iter().enumerate() {
-                    if !t.fx_enabled.get(i).copied().unwrap_or(true) || panicked_fx.contains(fx_guid) {
+                    if !t.fx_enabled.get(i).copied().unwrap_or(true)
+                        || panicked_fx.contains(fx_guid)
+                    {
                         continue;
                     }
-                    let Some(plugin) = map.get_mut(fx_guid) else { continue };
+                    let Some(plugin) = map.get_mut(fx_guid) else {
+                        continue;
+                    };
                     if !plugin.is_prepared() || !plugin.parallel_safe() {
                         ok = false;
                         break;
@@ -1247,8 +1253,13 @@ impl ProjectRenderer {
                     job.midi.append(bucket);
                     job.midi.sort_by_key(|e| e.offset);
                 }
-                job.note_expr =
-                    collect_note_expressions(t, start_seconds, end_seconds, frames_per_second, frames);
+                job.note_expr = collect_note_expressions(
+                    t,
+                    start_seconds,
+                    end_seconds,
+                    frames_per_second,
+                    frames,
+                );
                 job.ran = false;
                 job.panicked = None;
                 jobs += 1;
@@ -1685,7 +1696,11 @@ impl ProjectRenderer {
                         from_aux = t.volume as f32;
                     }
                     let span = (snd.from_pair - 1) * frames * 2..snd.from_pair * frames * 2;
-                    match aux.get(ti).filter(|_| aux_live[ti]).and_then(|a| a.get(span)) {
+                    match aux
+                        .get(ti)
+                        .filter(|_| aux_live[ti])
+                        .and_then(|a| a.get(span))
+                    {
                         Some(pair) => pair,
                         None => continue,
                     }

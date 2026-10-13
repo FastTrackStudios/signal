@@ -35,7 +35,9 @@ fn broken(params: &dyn Params) -> Vec<String> {
             };
             let again = unsafe { ptr.normalized_value_to_string(parsed, true) };
             if again != shown {
-                out.push(format!("{id} ({name}): {at} printed {shown:?}, which parsed back as {again:?}"));
+                out.push(format!(
+                    "{id} ({name}): {at} printed {shown:?}, which parsed back as {again:?}"
+                ));
                 break;
             }
         }

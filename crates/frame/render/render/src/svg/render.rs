@@ -1,7 +1,8 @@
-use super::normalize::{normalize_svg_for_figma_parity, NormalizeOptions};
 use super::context::RenderCtx;
+use super::normalize::{NormalizeOptions, normalize_svg_for_figma_parity};
 use super::scene_source::{
-    export_base_color, export_bbox, export_root, set_group_depth, source_bounds, source_id, stroke_paints,
+    export_base_color, export_bbox, export_root, set_group_depth, source_bounds, source_id,
+    stroke_paints,
 };
 #[cfg(feature = "svg_export")]
 use kurbo::Shape;
@@ -35,13 +36,12 @@ impl ElementExt for svg::node::element::Element {
 pub fn run_cli<E: std::fmt::Display>(
     load: impl FnOnce(&[u8]) -> Result<document_proto::Scene, E>,
 ) -> Result<(), String> {
-    use crate::{build_scene_layout_boxes, build_scene_primitives, PaintPrimitive};
+    use crate::{PaintPrimitive, build_scene_layout_boxes, build_scene_primitives};
     use document_proto::NodeKind;
-    use svg::node::element::{
-        ClipPath, Element, ForeignObject, Group, Image, Line, Mask,
-        Path as SvgPath, Rectangle,
-    };
     use svg::Document;
+    use svg::node::element::{
+        ClipPath, Element, ForeignObject, Group, Image, Line, Mask, Path as SvgPath, Rectangle,
+    };
 
     let mut args = std::env::args().skip(1);
     let input = args
@@ -81,8 +81,8 @@ pub fn run_cli<E: std::fmt::Display>(
 
     let out_path = out_path.ok_or_else(|| "--out <output_svg> is required".to_string())?;
     let bytes = std::fs::read(&input).map_err(|e| format!("failed reading {input}: {e}"))?;
-    let scene = load(&bytes)
-        .map_err(|e| format!("failed importing source document from {input}: {e}"))?;
+    let scene =
+        load(&bytes).map_err(|e| format!("failed importing source document from {input}: {e}"))?;
     let export_node = export_root(&scene, root_figma_id.as_deref());
     let export_bbox = export_node.and_then(export_bbox);
     let base_color = export_node
@@ -103,7 +103,12 @@ pub fn run_cli<E: std::fmt::Display>(
     let root_id_suffix = root_figma_id
         .clone()
         .or_else(|| export_node.and_then(source_id).map(ToString::to_string))
-        .or_else(|| scene.node(root).and_then(source_id).map(ToString::to_string))
+        .or_else(|| {
+            scene
+                .node(root)
+                .and_then(source_id)
+                .map(ToString::to_string)
+        })
         .unwrap_or_else(|| "root".to_string())
         .replace(':', "_");
 
@@ -170,8 +175,12 @@ pub fn run_cli<E: std::fmt::Display>(
     let ty = -min_y;
     let canvas_w = width as f64;
     let canvas_h = height as f64;
-    let (bg_hex, bg_opacity) =
-        svg_color_paint_values(base_color.0, base_color.1, base_color.2, f64::from(base_color.3) / 255.0);
+    let (bg_hex, bg_opacity) = svg_color_paint_values(
+        base_color.0,
+        base_color.1,
+        base_color.2,
+        f64::from(base_color.3) / 255.0,
+    );
     // Export parity corpus expects an explicit root background only when the
     // source background is fully opaque.
     if bg_opacity.is_none() {
@@ -441,8 +450,9 @@ pub fn run_cli<E: std::fmt::Display>(
                                         .set("fill", format!("url(#{gradient_id})"));
                                     rect = apply_corner_radii_rect(rect, &effective_corner_radii);
                                     if let Some(mode) = svg_mix_blend_mode(fill_blend) {
-                                        aggregate_group = aggregate_group
-                                            .add(rect.set("style", format!("mix-blend-mode:{mode}")));
+                                        aggregate_group = aggregate_group.add(
+                                            rect.set("style", format!("mix-blend-mode:{mode}")),
+                                        );
                                     } else {
                                         aggregate_group = aggregate_group.add(rect);
                                     }
@@ -474,8 +484,9 @@ pub fn run_cli<E: std::fmt::Display>(
                                         .set("fill", format!("url(#{gradient_id})"));
                                     rect = apply_corner_radii_rect(rect, &effective_corner_radii);
                                     if let Some(mode) = svg_mix_blend_mode(fill_blend) {
-                                        aggregate_group = aggregate_group
-                                            .add(rect.set("style", format!("mix-blend-mode:{mode}")));
+                                        aggregate_group = aggregate_group.add(
+                                            rect.set("style", format!("mix-blend-mode:{mode}")),
+                                        );
                                     } else {
                                         aggregate_group = aggregate_group.add(rect);
                                     }
@@ -511,7 +522,15 @@ pub fn run_cli<E: std::fmt::Display>(
                                     deferred_images.push(image);
                                     new_id
                                 };
-                                let pattern = svg_image_pattern(&pattern_id, &image_id, *scale_mode, image_transform.as_ref(), rw, rh, data_base64);
+                                let pattern = svg_image_pattern(
+                                    &pattern_id,
+                                    &image_id,
+                                    *scale_mode,
+                                    image_transform.as_ref(),
+                                    rw,
+                                    rh,
+                                    data_base64,
+                                );
                                 defs = defs.add(pattern);
                                 has_defs = true;
                                 has_xlink_namespace = true;
@@ -543,8 +562,9 @@ pub fn run_cli<E: std::fmt::Display>(
                                     rect = apply_corner_radii_rect(rect, &effective_corner_radii);
                                     rect = apply_fill_style_rect(rect, &style);
                                     if let Some(mode) = svg_mix_blend_mode(fill_blend) {
-                                        aggregate_group = aggregate_group
-                                            .add(rect.set("style", format!("mix-blend-mode:{mode}")));
+                                        aggregate_group = aggregate_group.add(
+                                            rect.set("style", format!("mix-blend-mode:{mode}")),
+                                        );
                                     } else {
                                         aggregate_group = aggregate_group.add(rect);
                                     }
@@ -596,9 +616,8 @@ pub fn run_cli<E: std::fmt::Display>(
                 // Compute frame stroke overlay data before the single-fill shortcut so
                 // FRAME nodes with gradient strokes emit their stroke overlay rects even
                 // when there is only one gradient fill.
-                let raw_frame_strokes_early = node
-                    .map(|n| stroke_paints(n, &scene))
-                    .unwrap_or_default();
+                let raw_frame_strokes_early =
+                    node.map(|n| stroke_paints(n, &scene)).unwrap_or_default();
                 let has_complex_frame_strokes_early = raw_frame_strokes_early.len() > 1
                     || raw_frame_strokes_early.iter().any(|paint| {
                         !matches!(paint, crate::anyrender_renderer::FillPaint::Solid(_))
@@ -612,7 +631,10 @@ pub fn run_cli<E: std::fmt::Display>(
                 if fills.len() == 1 {
                     if let Some((fill, blend_mode)) = fills.first() {
                         match fill {
-                            crate::anyrender_renderer::FillPaint::GradientLinear { transform, stops } => {
+                            crate::anyrender_renderer::FillPaint::GradientLinear {
+                                transform,
+                                stops,
+                            } => {
                                 let gradient_id =
                                     format!("paint{gradient_count}_linear_{root_id_suffix}");
                                 gradient_count += 1;
@@ -689,7 +711,10 @@ pub fn run_cli<E: std::fmt::Display>(
                                     continue;
                                 }
                             }
-                            crate::anyrender_renderer::FillPaint::GradientRadial { transform, stops } => {
+                            crate::anyrender_renderer::FillPaint::GradientRadial {
+                                transform,
+                                stops,
+                            } => {
                                 let gradient_id =
                                     format!("paint{gradient_count}_radial_{root_id_suffix}");
                                 gradient_count += 1;
@@ -777,7 +802,8 @@ pub fn run_cli<E: std::fmt::Display>(
                                     .set("y", fmt_f64(ry))
                                     .set("width", fmt_f64(rw))
                                     .set("height", fmt_f64(rh));
-                                defs = defs.add(ClipPath::new().set("id", clip_id.clone()).add(clip_rect));
+                                defs = defs
+                                    .add(ClipPath::new().set("id", clip_id.clone()).add(clip_rect));
                                 has_defs = true;
 
                                 let center_x = rx + rw * 0.5;
@@ -790,7 +816,11 @@ pub fn run_cli<E: std::fmt::Display>(
                                     .set("width", "2022.22")
                                     .set("height", "2022.22");
                                 let mut div = Element::new("div");
-                                svg::Node::assign(&mut div, "xmlns", "http://www.w3.org/1999/xhtml");
+                                svg::Node::assign(
+                                    &mut div,
+                                    "xmlns",
+                                    "http://www.w3.org/1999/xhtml",
+                                );
                                 svg::Node::assign(
                                     &mut div,
                                     "style",
@@ -820,7 +850,14 @@ pub fn run_cli<E: std::fmt::Display>(
                                     .set("height", fmt_f64(rh))
                                     .set(
                                         "data-figma-gradient-fill",
-                                        svg_angular_metadata_attr(rx, ry, rw, rh, None, stops.as_slice()),
+                                        svg_angular_metadata_attr(
+                                            rx,
+                                            ry,
+                                            rw,
+                                            rh,
+                                            None,
+                                            stops.as_slice(),
+                                        ),
                                     );
                                 let angular_group = Group::new().add(group).add(metadata_rect);
                                 push_node_with_optional_blend(
@@ -890,7 +927,15 @@ pub fn run_cli<E: std::fmt::Display>(
                                     new_id
                                 };
 
-                                let pattern = svg_image_pattern(&pattern_id, &image_id, *scale_mode, image_transform.as_ref(), rw, rh, data_base64);
+                                let pattern = svg_image_pattern(
+                                    &pattern_id,
+                                    &image_id,
+                                    *scale_mode,
+                                    image_transform.as_ref(),
+                                    rw,
+                                    rh,
+                                    data_base64,
+                                );
                                 defs = defs.add(pattern);
                                 has_defs = true;
                                 has_xlink_namespace = true;
@@ -974,7 +1019,8 @@ pub fn run_cli<E: std::fmt::Display>(
                                 rect = rect.set("fill", hex);
                                 let opacity = fill_opacity;
                                 if let Some(mode) = svg_mix_blend_mode(blend_mode) {
-                                    let mut group = Group::new().set("style", format!("mix-blend-mode:{mode}"));
+                                    let mut group =
+                                        Group::new().set("style", format!("mix-blend-mode:{mode}"));
                                     if let Some(opacity) = opacity {
                                         group = group.set("opacity", opacity);
                                     }
@@ -1063,7 +1109,10 @@ pub fn run_cli<E: std::fmt::Display>(
                 let frame_stroke_width = frame_stroke_width_early;
                 for (fill, fill_blend) in fills {
                     match &fill {
-                        crate::anyrender_renderer::FillPaint::GradientLinear { transform, stops } => {
+                        crate::anyrender_renderer::FillPaint::GradientLinear {
+                            transform,
+                            stops,
+                        } => {
                             let gradient_id =
                                 format!("paint{gradient_count}_linear_{root_id_suffix}");
                             gradient_count += 1;
@@ -1111,7 +1160,10 @@ pub fn run_cli<E: std::fmt::Display>(
                             }
                             continue;
                         }
-                        crate::anyrender_renderer::FillPaint::GradientRadial { transform, stops } => {
+                        crate::anyrender_renderer::FillPaint::GradientRadial {
+                            transform,
+                            stops,
+                        } => {
                             let gradient_id =
                                 format!("paint{gradient_count}_radial_{root_id_suffix}");
                             gradient_count += 1;
@@ -1172,7 +1224,8 @@ pub fn run_cli<E: std::fmt::Display>(
                                 .set("y", fmt_f64(ry))
                                 .set("width", fmt_f64(rw))
                                 .set("height", fmt_f64(rh));
-                            defs = defs.add(ClipPath::new().set("id", clip_id.clone()).add(clip_rect));
+                            defs =
+                                defs.add(ClipPath::new().set("id", clip_id.clone()).add(clip_rect));
                             has_defs = true;
 
                             let center_x = rx + rw * 0.5;
@@ -1215,7 +1268,14 @@ pub fn run_cli<E: std::fmt::Display>(
                                 .set("height", fmt_f64(rh))
                                 .set(
                                     "data-figma-gradient-fill",
-                                    svg_angular_metadata_attr(rx, ry, rw, rh, None, stops.as_slice()),
+                                    svg_angular_metadata_attr(
+                                        rx,
+                                        ry,
+                                        rw,
+                                        rh,
+                                        None,
+                                        stops.as_slice(),
+                                    ),
                                 );
                             let angular_group = Group::new().add(group).add(metadata_rect);
                             push_node_with_optional_blend(
@@ -1238,26 +1298,34 @@ pub fn run_cli<E: std::fmt::Display>(
                             let image_key = image_hash
                                 .clone()
                                 .unwrap_or_else(|| format!("inline:{data_base64}"));
-                                let image_id = if let Some(existing) = image_defs.get(&image_key) {
-                                    existing.clone()
-                                } else {
-                                    let new_id = format!("image{image_count}_{root_id_suffix}");
-                                    image_count += 1;
-                                    image_defs.insert(image_key, new_id.clone());
-                                    let image = Image::new()
-                                        .set("id", new_id.clone())
-                                        .set("width", "1")
-                                        .set("height", "1")
-                                        .set("preserveAspectRatio", "none")
-                                        .set(
-                                            "xlink:href",
-                                            format!("data:image/png;base64,{data_base64}"),
-                                        );
-                                    deferred_images.push(image);
-                                    new_id
-                                };
+                            let image_id = if let Some(existing) = image_defs.get(&image_key) {
+                                existing.clone()
+                            } else {
+                                let new_id = format!("image{image_count}_{root_id_suffix}");
+                                image_count += 1;
+                                image_defs.insert(image_key, new_id.clone());
+                                let image = Image::new()
+                                    .set("id", new_id.clone())
+                                    .set("width", "1")
+                                    .set("height", "1")
+                                    .set("preserveAspectRatio", "none")
+                                    .set(
+                                        "xlink:href",
+                                        format!("data:image/png;base64,{data_base64}"),
+                                    );
+                                deferred_images.push(image);
+                                new_id
+                            };
 
-                            let pattern = svg_image_pattern(&pattern_id, &image_id, *scale_mode, image_transform.as_ref(), rw, rh, data_base64);
+                            let pattern = svg_image_pattern(
+                                &pattern_id,
+                                &image_id,
+                                *scale_mode,
+                                image_transform.as_ref(),
+                                rw,
+                                rh,
+                                data_base64,
+                            );
                             defs = defs.add(pattern);
                             has_defs = true;
                             has_xlink_namespace = true;
@@ -1299,11 +1367,11 @@ pub fn run_cli<E: std::fmt::Display>(
                     }
                     if let Some(style) = svg_fill_style(&fill) {
                         let mut rect = Rectangle::new()
-                                .set("x", fmt_f64(rx))
-                                .set("y", fmt_f64(ry))
-                                .set("width", fmt_f64(rw))
-                                .set("height", fmt_f64(rh));
-                            rect = apply_corner_radii_rect(rect, &effective_corner_radii);
+                            .set("x", fmt_f64(rx))
+                            .set("y", fmt_f64(ry))
+                            .set("width", fmt_f64(rw))
+                            .set("height", fmt_f64(rh));
+                        rect = apply_corner_radii_rect(rect, &effective_corner_radii);
                         rect = apply_fill_style_rect(rect, &style);
                         if svg_mix_blend_mode(&fill_blend).is_some() {
                             super::effects::push_group_with_blend_and_effects(
@@ -1442,17 +1510,16 @@ pub fn run_cli<E: std::fmt::Display>(
                 // A rectangle emits its node's own stroke paints (gradients
                 // included) as overlays; its primitive's gradient stroke
                 // would only move its geometry.
-                let stroke = if is_rectangle_node && stroke.as_ref().is_some_and(|s| s.gradient.is_some()) { None } else { stroke };
+                let stroke =
+                    if is_rectangle_node && stroke.as_ref().is_some_and(|s| s.gradient.is_some()) {
+                        None
+                    } else {
+                        stroke
+                    };
                 let is_line_node = matches!(kind, Some(NodeKind::Line));
                 if !text_outline && is_rectangle_node && svg_base64.is_none() {
                     let rotation_degrees = rotation.to_degrees();
-                    let ResolvedRectGeometry {
-                        rx,
-                        ry,
-                        rw,
-                        rh,
-                        ..
-                    } = resolve_rect_geometry(
+                    let ResolvedRectGeometry { rx, ry, rw, rh, .. } = resolve_rect_geometry(
                         node,
                         &layout_boxes,
                         x,
@@ -1497,14 +1564,12 @@ pub fn run_cli<E: std::fmt::Display>(
                         }
                     }
                     let node_blend_mode = svg_mix_blend_mode(&blend);
-                    let fill_blend_mode = fills.first().and_then(|(_, fill_blend)| {
-                        svg_mix_blend_mode(fill_blend)
-                    });
+                    let fill_blend_mode = fills
+                        .first()
+                        .and_then(|(_, fill_blend)| svg_mix_blend_mode(fill_blend));
                     let blend_mode = fill_blend_mode.or(node_blend_mode);
                     let mut blend_group_opacity: Option<String> = None;
-                    let raw_strokes = node
-                        .map(|n| stroke_paints(n, &scene))
-                        .unwrap_or_default();
+                    let raw_strokes = node.map(|n| stroke_paints(n, &scene)).unwrap_or_default();
                     let has_complex_raw_strokes = raw_strokes.len() > 1
                         || raw_strokes.iter().any(|paint| {
                             !matches!(paint, crate::anyrender_renderer::FillPaint::Solid(_))
@@ -1513,7 +1578,10 @@ pub fn run_cli<E: std::fmt::Display>(
                     let mut fill_is_image = false;
                     if let Some((fill, _)) = fills.first() {
                         match fill {
-                            crate::anyrender_renderer::FillPaint::GradientLinear { transform, stops } => {
+                            crate::anyrender_renderer::FillPaint::GradientLinear {
+                                transform,
+                                stops,
+                            } => {
                                 let gradient_id =
                                     format!("paint{gradient_count}_linear_{root_id_suffix}");
                                 gradient_count += 1;
@@ -1531,7 +1599,10 @@ pub fn run_cli<E: std::fmt::Display>(
                                     rect = rect.set("fill", format!("url(#{gradient_id})"));
                                 }
                             }
-                            crate::anyrender_renderer::FillPaint::GradientRadial { transform, stops } => {
+                            crate::anyrender_renderer::FillPaint::GradientRadial {
+                                transform,
+                                stops,
+                            } => {
                                 let gradient_id =
                                     format!("paint{gradient_count}_radial_{root_id_suffix}");
                                 gradient_count += 1;
@@ -1562,7 +1633,8 @@ pub fn run_cli<E: std::fmt::Display>(
                                     .set("y", fmt_f64(ry))
                                     .set("width", fmt_f64(rw))
                                     .set("height", fmt_f64(rh));
-                                defs = defs.add(ClipPath::new().set("id", clip_id.clone()).add(clip_rect));
+                                defs = defs
+                                    .add(ClipPath::new().set("id", clip_id.clone()).add(clip_rect));
                                 has_defs = true;
 
                                 let center_x = rx + rw * 0.5;
@@ -1575,7 +1647,11 @@ pub fn run_cli<E: std::fmt::Display>(
                                     .set("width", "2022.22")
                                     .set("height", "2022.22");
                                 let mut div = Element::new("div");
-                                svg::Node::assign(&mut div, "xmlns", "http://www.w3.org/1999/xhtml");
+                                svg::Node::assign(
+                                    &mut div,
+                                    "xmlns",
+                                    "http://www.w3.org/1999/xhtml",
+                                );
                                 svg::Node::assign(
                                     &mut div,
                                     "style",
@@ -1606,7 +1682,14 @@ pub fn run_cli<E: std::fmt::Display>(
                                     .set("height", fmt_f64(rh))
                                     .set(
                                         "data-figma-gradient-fill",
-                                        svg_angular_metadata_attr(rx, ry, rw, rh, None, stops.as_slice()),
+                                        svg_angular_metadata_attr(
+                                            rx,
+                                            ry,
+                                            rw,
+                                            rh,
+                                            None,
+                                            stops.as_slice(),
+                                        ),
                                     );
                                 push_node(&mut svg_doc, &mut group_stack, metadata_rect);
                                 emit_rect = stroke.is_some();
@@ -1619,8 +1702,7 @@ pub fn run_cli<E: std::fmt::Display>(
                                 scale_mode,
                                 image_transform,
                             } => {
-                                let pattern_id =
-                                    format!("pattern{pattern_count}_{root_id_suffix}");
+                                let pattern_id = format!("pattern{pattern_count}_{root_id_suffix}");
                                 pattern_count += 1;
                                 let image_key = image_hash
                                     .clone()
@@ -1644,7 +1726,15 @@ pub fn run_cli<E: std::fmt::Display>(
                                     new_id
                                 };
 
-                                let pattern = svg_image_pattern(&pattern_id, &image_id, *scale_mode, image_transform.as_ref(), rw, rh, data_base64);
+                                let pattern = svg_image_pattern(
+                                    &pattern_id,
+                                    &image_id,
+                                    *scale_mode,
+                                    image_transform.as_ref(),
+                                    rw,
+                                    rh,
+                                    data_base64,
+                                );
                                 defs = defs.add(pattern);
                                 has_defs = true;
                                 has_xlink_namespace = true;
@@ -1704,7 +1794,8 @@ pub fn run_cli<E: std::fmt::Display>(
                                 );
                             }
                             if !rect_corner_radii.is_zero() {
-                                stroke_rect = apply_corner_radii_rect(stroke_rect, &rect_corner_radii);
+                                stroke_rect =
+                                    apply_corner_radii_rect(stroke_rect, &rect_corner_radii);
                             }
                             match paint {
                                 crate::anyrender_renderer::FillPaint::Solid(color) => {
@@ -1737,8 +1828,8 @@ pub fn run_cli<E: std::fmt::Display>(
                                     ) {
                                         deferred_gradients.push(Box::new(gradient));
                                         has_defs = true;
-                                        stroke_rect =
-                                            stroke_rect.set("stroke", format!("url(#{gradient_id})"));
+                                        stroke_rect = stroke_rect
+                                            .set("stroke", format!("url(#{gradient_id})"));
                                     } else {
                                         continue;
                                     }
@@ -1761,8 +1852,8 @@ pub fn run_cli<E: std::fmt::Display>(
                                     ) {
                                         deferred_gradients.push(Box::new(gradient));
                                         has_defs = true;
-                                        stroke_rect =
-                                            stroke_rect.set("stroke", format!("url(#{gradient_id})"));
+                                        stroke_rect = stroke_rect
+                                            .set("stroke", format!("url(#{gradient_id})"));
                                     } else {
                                         continue;
                                     }
@@ -1789,7 +1880,10 @@ pub fn run_cli<E: std::fmt::Display>(
                     }
                     if emit_rect {
                         if let Some(mode) = blend_mode {
-                            if fill_is_image && stroke_overlays.is_empty() && blend_group_opacity.is_none() {
+                            if fill_is_image
+                                && stroke_overlays.is_empty()
+                                && blend_group_opacity.is_none()
+                            {
                                 rect = rect.set("style", format!("mix-blend-mode:{mode}"));
                                 push_node(&mut svg_doc, &mut group_stack, rect);
                             } else {
@@ -1831,9 +1925,7 @@ pub fn run_cli<E: std::fmt::Display>(
                 // exported as paths and must remain paths.
                 if !text_outline
                     && is_ellipse_node
-                    && fill_paths
-                        .iter()
-                        .all(|d| svg_path_is_full_ellipse_like(d))
+                    && fill_paths.iter().all(|d| svg_path_is_full_ellipse_like(d))
                     && stroke_paths
                         .iter()
                         .all(|d| svg_path_is_full_ellipse_like(d))
@@ -1880,9 +1972,8 @@ pub fn run_cli<E: std::fmt::Display>(
                         let t = node.transform;
                         let (a, c, b, d) = (t.a, t.b, t.c, t.d);
                         let det = a * d - b * c;
-                        let is_rotation = det > 0.0
-                            && (a - d).abs() <= 1e-4
-                            && (c + b).abs() <= 1e-4;
+                        let is_rotation =
+                            det > 0.0 && (a - d).abs() <= 1e-4 && (c + b).abs() <= 1e-4;
                         if det < -1e-6 {
                             // The circle sits at local origin (r, r); use the
                             // absoluteBoundingBox center (cx, cy) to derive the
@@ -1936,15 +2027,16 @@ pub fn run_cli<E: std::fmt::Display>(
                     );
                     let mut group = Group::new();
                     if fills.is_empty() {
-                        let mut base = new_circle_or_ellipse(circle_cx, circle_cy, rx, ry)
-                            .set("fill", "none");
+                        let mut base =
+                            new_circle_or_ellipse(circle_cx, circle_cy, rx, ry).set("fill", "none");
                         if let Some(transform) = &circle_transform {
                             base = base.set("transform", transform.clone());
                         }
                         group = group.add(base);
                     } else {
                         for (fill, fill_blend) in &fills {
-                            let mut fill_circle = new_circle_or_ellipse(circle_cx, circle_cy, rx, ry);
+                            let mut fill_circle =
+                                new_circle_or_ellipse(circle_cx, circle_cy, rx, ry);
                             if let Some(transform) = &circle_transform {
                                 fill_circle = fill_circle.set("transform", transform.clone());
                             }
@@ -2009,11 +2101,15 @@ pub fn run_cli<E: std::fmt::Display>(
                                         format!("paint{gradient_count}_angular_{root_id_suffix}");
                                     gradient_count += 1;
                                     let clip_id = format!("{gradient_id}_clip_path");
-                                    let mut clip_circle = new_circle_or_ellipse(circle_cx, circle_cy, rx, ry);
+                                    let mut clip_circle =
+                                        new_circle_or_ellipse(circle_cx, circle_cy, rx, ry);
                                     if let Some(transform) = &circle_transform {
-                                        clip_circle = clip_circle.set("transform", transform.clone());
+                                        clip_circle =
+                                            clip_circle.set("transform", transform.clone());
                                     }
-                                    defs = defs.add(ClipPath::new().set("id", clip_id.clone()).add(clip_circle));
+                                    defs = defs.add(
+                                        ClipPath::new().set("id", clip_id.clone()).add(clip_circle),
+                                    );
                                     has_defs = true;
 
                                     let stroke_weight = node.map_or(0.0, |n| n.stroke.weight);
@@ -2042,11 +2138,18 @@ pub fn run_cli<E: std::fmt::Display>(
                                         .set("width", fo_size.clone())
                                         .set("height", fo_size);
                                     let mut div = Element::new("div");
-                                    svg::Node::assign(&mut div, "xmlns", "http://www.w3.org/1999/xhtml");
+                                    svg::Node::assign(
+                                        &mut div,
+                                        "xmlns",
+                                        "http://www.w3.org/1999/xhtml",
+                                    );
                                     svg::Node::assign(
                                         &mut div,
                                         "style",
-                                        svg_angular_conic_style(transform.as_ref(), stops.as_slice()),
+                                        svg_angular_conic_style(
+                                            transform.as_ref(),
+                                            stops.as_slice(),
+                                        ),
                                     );
                                     foreign = foreign.add(div);
                                     let inner = Group::new()
@@ -2069,24 +2172,23 @@ pub fn run_cli<E: std::fmt::Display>(
                                             .set("data-figma-skip-parse", "true")
                                             .add(inner),
                                     );
-                                    group = group.add(
-                                        {
-                                            let metadata_val = svg_angular_metadata_attr(
-                                                cx - r,
-                                                cy - r,
-                                                r * 2.0,
-                                                r * 2.0,
-                                                transform.as_ref().map(|t| (t, cx, cy)),
-                                                stops.as_slice(),
-                                            );
-                                            let mut circle = new_circle_or_ellipse(circle_cx, circle_cy, rx, ry)
+                                    group = group.add({
+                                        let metadata_val = svg_angular_metadata_attr(
+                                            cx - r,
+                                            cy - r,
+                                            r * 2.0,
+                                            r * 2.0,
+                                            transform.as_ref().map(|t| (t, cx, cy)),
+                                            stops.as_slice(),
+                                        );
+                                        let mut circle =
+                                            new_circle_or_ellipse(circle_cx, circle_cy, rx, ry)
                                                 .set("data-figma-gradient-fill", metadata_val);
-                                            if let Some(transform) = &circle_transform {
-                                                circle = circle.set("transform", transform.clone());
-                                            }
-                                            circle
-                                        },
-                                    );
+                                        if let Some(transform) = &circle_transform {
+                                            circle = circle.set("transform", transform.clone());
+                                        }
+                                        circle
+                                    });
                                     continue;
                                 }
                                 crate::anyrender_renderer::FillPaint::Image {
@@ -2096,12 +2198,15 @@ pub fn run_cli<E: std::fmt::Display>(
                                     scale_mode,
                                     image_transform,
                                 } => {
-                                    let pattern_id = format!("pattern{pattern_count}_{root_id_suffix}");
+                                    let pattern_id =
+                                        format!("pattern{pattern_count}_{root_id_suffix}");
                                     pattern_count += 1;
                                     let image_key = image_hash
                                         .clone()
                                         .unwrap_or_else(|| format!("inline:{data_base64}"));
-                                    let image_id = if let Some(existing) = image_defs.get(&image_key) {
+                                    let image_id = if let Some(existing) =
+                                        image_defs.get(&image_key)
+                                    {
                                         existing.clone()
                                     } else {
                                         let new_id = format!("image{image_count}_{root_id_suffix}");
@@ -2120,13 +2225,23 @@ pub fn run_cli<E: std::fmt::Display>(
                                         new_id
                                     };
 
-                                    let pattern = svg_image_pattern(&pattern_id, &image_id, *scale_mode, image_transform.as_ref(), r * 2.0, r * 2.0, data_base64);
+                                    let pattern = svg_image_pattern(
+                                        &pattern_id,
+                                        &image_id,
+                                        *scale_mode,
+                                        image_transform.as_ref(),
+                                        r * 2.0,
+                                        r * 2.0,
+                                        data_base64,
+                                    );
                                     defs = defs.add(pattern);
                                     has_defs = true;
                                     has_xlink_namespace = true;
-                                    fill_circle = fill_circle.set("fill", format!("url(#{pattern_id})"));
+                                    fill_circle =
+                                        fill_circle.set("fill", format!("url(#{pattern_id})"));
                                     if *alpha < 1.0 {
-                                        fill_circle = fill_circle.set("fill-opacity", fmt_f64(*alpha));
+                                        fill_circle =
+                                            fill_circle.set("fill-opacity", fmt_f64(*alpha));
                                     }
                                 }
                                 _ => {
@@ -2138,7 +2253,8 @@ pub fn run_cli<E: std::fmt::Display>(
                                 }
                             }
                             if let Some(mode) = svg_mix_blend_mode(fill_blend) {
-                                fill_circle = fill_circle.set("style", format!("mix-blend-mode:{mode}"));
+                                fill_circle =
+                                    fill_circle.set("style", format!("mix-blend-mode:{mode}"));
                             }
                             group = group.add(fill_circle);
                         }
@@ -2225,7 +2341,8 @@ pub fn run_cli<E: std::fmt::Display>(
                             line = line.set("stroke-opacity", opacity);
                         }
                         if !stroke.dash_pattern.is_empty() {
-                            line = line.set("stroke-dasharray", svg_dasharray(&stroke.dash_pattern));
+                            line =
+                                line.set("stroke-dasharray", svg_dasharray(&stroke.dash_pattern));
                         }
                         if stroke.dash_offset.abs() > f64::EPSILON {
                             line = line.set("stroke-dashoffset", fmt_f64(stroke.dash_offset));
@@ -2272,7 +2389,9 @@ pub fn run_cli<E: std::fmt::Display>(
                 let is_nonfull_ellipse = !text_outline
                     && is_ellipse_node
                     && (!fill_paths.iter().all(|d| svg_path_is_full_ellipse_like(d))
-                        || !stroke_paths.iter().all(|d| svg_path_is_full_ellipse_like(d)));
+                        || !stroke_paths
+                            .iter()
+                            .all(|d| svg_path_is_full_ellipse_like(d)));
                 if is_nonfull_ellipse {
                     let ellipse_inset = 0.4;
                     px += ellipse_inset;
@@ -2288,85 +2407,83 @@ pub fn run_cli<E: std::fmt::Display>(
                     }
                 } else if !text_outline {
                     if let Some(node) = node {
-                    if let Some((bx, by, bw, bh)) = source_bounds(node) {
-                        let target = (bx + tx, by + ty, bw.max(0.0), bh.max(0.0));
-                        let source_paths = if fill_paths.is_empty() {
-                            &stroke_paths
-                        } else {
-                            &fill_paths
-                        };
-                        if let Some((raw_min_x, raw_min_y, _, _)) = union_path_bounds(source_paths, 0.0, 0.0)
-                        {
-                            // Some parity exports emit absolute path data; infer translation
-                            // from the source bbox so we don't double-translate.
-                            let candidate_px = target.0 - raw_min_x;
-                            let candidate_py = target.1 - raw_min_y;
-                            if let (Some(default_bounds), Some(candidate_bounds)) = (
-                                union_path_bounds(source_paths, px, py),
-                                union_path_bounds(source_paths, candidate_px, candidate_py),
-                            ) {
-                                let default_err = bbox_alignment_error(default_bounds, target);
-                                let candidate_err = bbox_alignment_error(candidate_bounds, target);
-                                if candidate_err + 1e-4 < default_err {
-                                    px = candidate_px;
-                                    py = candidate_py;
+                        if let Some((bx, by, bw, bh)) = source_bounds(node) {
+                            let target = (bx + tx, by + ty, bw.max(0.0), bh.max(0.0));
+                            let source_paths = if fill_paths.is_empty() {
+                                &stroke_paths
+                            } else {
+                                &fill_paths
+                            };
+                            if let Some((raw_min_x, raw_min_y, _, _)) =
+                                union_path_bounds(source_paths, 0.0, 0.0)
+                            {
+                                // Some parity exports emit absolute path data; infer translation
+                                // from the source bbox so we don't double-translate.
+                                let candidate_px = target.0 - raw_min_x;
+                                let candidate_py = target.1 - raw_min_y;
+                                if let (Some(default_bounds), Some(candidate_bounds)) = (
+                                    union_path_bounds(source_paths, px, py),
+                                    union_path_bounds(source_paths, candidate_px, candidate_py),
+                                ) {
+                                    let default_err = bbox_alignment_error(default_bounds, target);
+                                    let candidate_err =
+                                        bbox_alignment_error(candidate_bounds, target);
+                                    if candidate_err + 1e-4 < default_err {
+                                        px = candidate_px;
+                                        py = candidate_py;
+                                    }
                                 }
                             }
                         }
-                    }
                     }
                 }
                 // Apply 2×2 rotation to path geometry for Vector/Shape nodes with non-trivial rotation.
                 // Figma convention: path data is in local coords; render by applying the 2×2 rotation to
                 // the path coordinates and translating so the rotated local center aligns with the
                 // absoluteBoundingBox center in screen space.
-                let (fill_paths, stroke_paths) = if !text_outline
-                    && rotation.abs() > 1e-6
-                    && has_native_geometry
-                {
-                    // Resolve the absolute bounding box center for rotation.
-                    // Prefer the source bounds (Figma absoluteBoundingBox) when available,
-                    // fall back to the layout box center.
-                    let bbox_center = node
-                        .and_then(source_bounds)
-                        .map(|(bx, by, bw, bh)| (bx + tx + bw / 2.0, by + ty + bh / 2.0))
-                        .or_else(|| {
-                            Some((x + tx + width / 2.0, y + ty + height / 2.0))
-                        });
-                    if let Some((abs_cx, abs_cy)) = bbox_center {
-                        let cos_r = rotation.cos();
-                        let sin_r = rotation.sin();
-                        // chain_sx/chain_sy: translate such that rotated local center → abs center
-                        let chain_sx =
-                            abs_cx - cos_r * (width / 2.0) + sin_r * (height / 2.0);
-                        let chain_sy =
-                            abs_cy - sin_r * (width / 2.0) - cos_r * (height / 2.0);
-                        // kurbo Affine::new([a,b,c,d,e,f]) is column-major: |a c e| / |b d f|
-                        // Figma 2×2: x'=cos_r*lx - sin_r*ly, y'=sin_r*lx + cos_r*ly
-                        let rot =
-                            kurbo::Affine::new([cos_r, sin_r, -sin_r, cos_r, 0.0, 0.0]);
-                        let apply = |paths: Vec<String>| -> Vec<String> {
-                            paths
-                                .into_iter()
-                                .filter_map(|d| {
-                                    let bp = kurbo::BezPath::from_svg(&d).ok()?;
-                                    Some((rot * bp).to_svg())
-                                })
-                                .collect()
-                        };
-                        px = chain_sx;
-                        py = chain_sy;
-                        (apply(fill_paths), apply(stroke_paths))
+                let (fill_paths, stroke_paths) =
+                    if !text_outline && rotation.abs() > 1e-6 && has_native_geometry {
+                        // Resolve the absolute bounding box center for rotation.
+                        // Prefer the source bounds (Figma absoluteBoundingBox) when available,
+                        // fall back to the layout box center.
+                        let bbox_center = node
+                            .and_then(source_bounds)
+                            .map(|(bx, by, bw, bh)| (bx + tx + bw / 2.0, by + ty + bh / 2.0))
+                            .or_else(|| Some((x + tx + width / 2.0, y + ty + height / 2.0)));
+                        if let Some((abs_cx, abs_cy)) = bbox_center {
+                            let cos_r = rotation.cos();
+                            let sin_r = rotation.sin();
+                            // chain_sx/chain_sy: translate such that rotated local center → abs center
+                            let chain_sx = abs_cx - cos_r * (width / 2.0) + sin_r * (height / 2.0);
+                            let chain_sy = abs_cy - sin_r * (width / 2.0) - cos_r * (height / 2.0);
+                            // kurbo Affine::new([a,b,c,d,e,f]) is column-major: |a c e| / |b d f|
+                            // Figma 2×2: x'=cos_r*lx - sin_r*ly, y'=sin_r*lx + cos_r*ly
+                            let rot = kurbo::Affine::new([cos_r, sin_r, -sin_r, cos_r, 0.0, 0.0]);
+                            let apply = |paths: Vec<String>| -> Vec<String> {
+                                paths
+                                    .into_iter()
+                                    .filter_map(|d| {
+                                        let bp = kurbo::BezPath::from_svg(&d).ok()?;
+                                        Some((rot * bp).to_svg())
+                                    })
+                                    .collect()
+                            };
+                            px = chain_sx;
+                            py = chain_sy;
+                            (apply(fill_paths), apply(stroke_paths))
+                        } else {
+                            (fill_paths, stroke_paths)
+                        }
                     } else {
                         (fill_paths, stroke_paths)
-                    }
-                } else {
-                    (fill_paths, stroke_paths)
-                };
+                    };
                 // An authored stroke without stroke geometry strokes the whole
                 // fill geometry, but open subpaths are lines: only the closed
                 // ones are filled.
-                let (fill_paths, stroked_fill_paths) = if authored && stroke.is_some() && stroke_paths.is_empty() {
+                let (fill_paths, stroked_fill_paths) = if authored
+                    && stroke.is_some()
+                    && stroke_paths.is_empty()
+                {
                     let closed: Vec<String> = fill_paths
                         .iter()
                         .filter_map(|d| crate::anyrender_renderer::subpaths::closed_subpaths_svg(d))
@@ -2411,16 +2528,24 @@ pub fn run_cli<E: std::fmt::Display>(
                 for d in &fill_paths {
                     if let Some((min_x, min_y, max_x, max_y)) = svg_path_bounds(d, px, py) {
                         fill_bounds = match fill_bounds {
-                            Some((bx0, by0, bx1, by1)) => {
-                                Some((bx0.min(min_x), by0.min(min_y), bx1.max(max_x), by1.max(max_y)))
-                            }
+                            Some((bx0, by0, bx1, by1)) => Some((
+                                bx0.min(min_x),
+                                by0.min(min_y),
+                                bx1.max(max_x),
+                                by1.max(max_y),
+                            )),
                             None => Some((min_x, min_y, max_x, max_y)),
                         };
                     }
                 }
                 let (fill_x, fill_y, fill_w, fill_h) =
                     if let Some((min_x, min_y, max_x, max_y)) = fill_bounds {
-                        (min_x, min_y, (max_x - min_x).max(0.0), (max_y - min_y).max(0.0))
+                        (
+                            min_x,
+                            min_y,
+                            (max_x - min_x).max(0.0),
+                            (max_y - min_y).max(0.0),
+                        )
                     } else {
                         (px, py, width.max(0.0), height.max(0.0))
                     };
@@ -2449,7 +2574,10 @@ pub fn run_cli<E: std::fmt::Display>(
                                     fill_path_opacity = opacity;
                                 }
                             }
-                            crate::anyrender_renderer::FillPaint::GradientLinear { transform, stops } => {
+                            crate::anyrender_renderer::FillPaint::GradientLinear {
+                                transform,
+                                stops,
+                            } => {
                                 let gradient_id =
                                     format!("paint{gradient_count}_linear_{root_id_suffix}");
                                 gradient_count += 1;
@@ -2467,7 +2595,10 @@ pub fn run_cli<E: std::fmt::Display>(
                                     fill_ref = Some(format!("url(#{gradient_id})"));
                                 }
                             }
-                            crate::anyrender_renderer::FillPaint::GradientRadial { transform, stops } => {
+                            crate::anyrender_renderer::FillPaint::GradientRadial {
+                                transform,
+                                stops,
+                            } => {
                                 let gradient_id =
                                     format!("paint{gradient_count}_radial_{root_id_suffix}");
                                 gradient_count += 1;
@@ -2517,7 +2648,15 @@ pub fn run_cli<E: std::fmt::Display>(
                                     new_id
                                 };
 
-                                let pattern = svg_image_pattern(&pattern_id, &image_id, *scale_mode, image_transform.as_ref(), fill_w, fill_h, data_base64);
+                                let pattern = svg_image_pattern(
+                                    &pattern_id,
+                                    &image_id,
+                                    *scale_mode,
+                                    image_transform.as_ref(),
+                                    fill_w,
+                                    fill_h,
+                                    data_base64,
+                                );
                                 defs = defs.add(pattern);
                                 has_defs = true;
                                 has_xlink_namespace = true;
@@ -2546,240 +2685,268 @@ pub fn run_cli<E: std::fmt::Display>(
                         path_group = path_group.set("opacity", opacity);
                     }
                 } else if is_nonfull_ellipse {
-                        let mut fill_stack_opacity: Option<String> = None;
-                        for (fill_idx, (fill, fill_blend)) in fills.iter().enumerate() {
-                            let mut fill_ref: Option<String> = None;
-                            let mut fill_path_opacity: Option<String> = None;
-                            match fill {
-                                crate::anyrender_renderer::FillPaint::Solid(color) => {
-                                    let (hex, opacity) = svg_color_paint_values(
-                                        to_u8(color.r),
-                                        to_u8(color.g),
-                                        to_u8(color.b),
-                                        color.a,
-                                    );
-                                    fill_ref = Some(hex);
-                                    if fills.len() > 1 && fill_idx == 0 {
-                                        fill_stack_opacity = opacity;
-                                    } else {
-                                        fill_path_opacity = opacity;
-                                    }
-                                }
-                                crate::anyrender_renderer::FillPaint::GradientLinear { transform, stops } => {
-                                    let gradient_id =
-                                        format!("paint{gradient_count}_linear_{root_id_suffix}");
-                                    gradient_count += 1;
-                                    if let Some(gradient) = svg_linear_gradient_def(
-                                        &gradient_id,
-                                        fill_x,
-                                        fill_y,
-                                        fill_w,
-                                        fill_h,
-                                        transform.as_ref(),
-                                        stops.as_slice(),
-                                    ) {
-                                        deferred_gradients.push(Box::new(gradient));
-                                        has_defs = true;
-                                        fill_ref = Some(format!("url(#{gradient_id})"));
-                                    }
-                                }
-                                crate::anyrender_renderer::FillPaint::GradientRadial { transform, stops } => {
-                                    let gradient_id =
-                                        format!("paint{gradient_count}_radial_{root_id_suffix}");
-                                    gradient_count += 1;
-                                    if let Some(gradient) = svg_radial_gradient_def(
-                                        &gradient_id,
-                                        fill_x,
-                                        fill_y,
-                                        fill_w,
-                                        fill_h,
-                                        transform.as_ref(),
-                                        stops.as_slice(),
-                                    ) {
-                                        deferred_gradients.push(Box::new(gradient));
-                                        has_defs = true;
-                                        fill_ref = Some(format!("url(#{gradient_id})"));
-                                    }
-                                }
-                                crate::anyrender_renderer::FillPaint::GradientAngular { .. } => {}
-                                crate::anyrender_renderer::FillPaint::Image {
-                                    image_hash,
-                                    data_base64,
-                                    alpha,
-                                    scale_mode,
-                                    image_transform,
-                                } => {
-                                    let pattern_id = format!("pattern{pattern_count}_{root_id_suffix}");
-                                    pattern_count += 1;
-                                    let image_key = image_hash
-                                        .clone()
-                                        .unwrap_or_else(|| format!("inline:{data_base64}"));
-                                    let image_id = if let Some(existing) = image_defs.get(&image_key) {
-                                        existing.clone()
-                                    } else {
-                                        let new_id = format!("image{image_count}_{root_id_suffix}");
-                                        image_count += 1;
-                                        image_defs.insert(image_key, new_id.clone());
-                                        let image = Image::new()
-                                            .set("id", new_id.clone())
-                                            .set("width", "1")
-                                            .set("height", "1")
-                                            .set("preserveAspectRatio", "none")
-                                            .set(
-                                                "xlink:href",
-                                                format!("data:image/png;base64,{data_base64}"),
-                                            );
-                                        deferred_images.push(image);
-                                        new_id
-                                    };
-                                    let pattern = svg_image_pattern(&pattern_id, &image_id, *scale_mode, image_transform.as_ref(), fill_w, fill_h, data_base64);
-                                    defs = defs.add(pattern);
-                                    has_defs = true;
-                                    has_xlink_namespace = true;
-                                    fill_ref = Some(format!("url(#{pattern_id})"));
-                                    if *alpha < 1.0 {
-                                        fill_path_opacity = Some(fmt_f64(*alpha));
-                                    }
+                    let mut fill_stack_opacity: Option<String> = None;
+                    for (fill_idx, (fill, fill_blend)) in fills.iter().enumerate() {
+                        let mut fill_ref: Option<String> = None;
+                        let mut fill_path_opacity: Option<String> = None;
+                        match fill {
+                            crate::anyrender_renderer::FillPaint::Solid(color) => {
+                                let (hex, opacity) = svg_color_paint_values(
+                                    to_u8(color.r),
+                                    to_u8(color.g),
+                                    to_u8(color.b),
+                                    color.a,
+                                );
+                                fill_ref = Some(hex);
+                                if fills.len() > 1 && fill_idx == 0 {
+                                    fill_stack_opacity = opacity;
+                                } else {
+                                    fill_path_opacity = opacity;
                                 }
                             }
-                            let Some(fill_ref) = fill_ref else {
-                                continue;
-                            };
-
-                            for d in &fill_paths {
-                                let mut path = SvgPath::new()
-                                    .set("d", d.as_str())
-                                    .set("transform", transform.clone())
-                                    .set("fill", fill_ref.clone());
-                                if let Some(opacity) = &fill_path_opacity {
-                                    path = path.set("fill-opacity", opacity.clone());
+                            crate::anyrender_renderer::FillPaint::GradientLinear {
+                                transform,
+                                stops,
+                            } => {
+                                let gradient_id =
+                                    format!("paint{gradient_count}_linear_{root_id_suffix}");
+                                gradient_count += 1;
+                                if let Some(gradient) = svg_linear_gradient_def(
+                                    &gradient_id,
+                                    fill_x,
+                                    fill_y,
+                                    fill_w,
+                                    fill_h,
+                                    transform.as_ref(),
+                                    stops.as_slice(),
+                                ) {
+                                    deferred_gradients.push(Box::new(gradient));
+                                    has_defs = true;
+                                    fill_ref = Some(format!("url(#{gradient_id})"));
                                 }
-                                if let Some(mode) = svg_mix_blend_mode(fill_blend) {
-                                    path = path.set("style", format!("mix-blend-mode:{mode}"));
+                            }
+                            crate::anyrender_renderer::FillPaint::GradientRadial {
+                                transform,
+                                stops,
+                            } => {
+                                let gradient_id =
+                                    format!("paint{gradient_count}_radial_{root_id_suffix}");
+                                gradient_count += 1;
+                                if let Some(gradient) = svg_radial_gradient_def(
+                                    &gradient_id,
+                                    fill_x,
+                                    fill_y,
+                                    fill_w,
+                                    fill_h,
+                                    transform.as_ref(),
+                                    stops.as_slice(),
+                                ) {
+                                    deferred_gradients.push(Box::new(gradient));
+                                    has_defs = true;
+                                    fill_ref = Some(format!("url(#{gradient_id})"));
                                 }
-                                path_group = path_group.add(path);
+                            }
+                            crate::anyrender_renderer::FillPaint::GradientAngular { .. } => {}
+                            crate::anyrender_renderer::FillPaint::Image {
+                                image_hash,
+                                data_base64,
+                                alpha,
+                                scale_mode,
+                                image_transform,
+                            } => {
+                                let pattern_id = format!("pattern{pattern_count}_{root_id_suffix}");
+                                pattern_count += 1;
+                                let image_key = image_hash
+                                    .clone()
+                                    .unwrap_or_else(|| format!("inline:{data_base64}"));
+                                let image_id = if let Some(existing) = image_defs.get(&image_key) {
+                                    existing.clone()
+                                } else {
+                                    let new_id = format!("image{image_count}_{root_id_suffix}");
+                                    image_count += 1;
+                                    image_defs.insert(image_key, new_id.clone());
+                                    let image = Image::new()
+                                        .set("id", new_id.clone())
+                                        .set("width", "1")
+                                        .set("height", "1")
+                                        .set("preserveAspectRatio", "none")
+                                        .set(
+                                            "xlink:href",
+                                            format!("data:image/png;base64,{data_base64}"),
+                                        );
+                                    deferred_images.push(image);
+                                    new_id
+                                };
+                                let pattern = svg_image_pattern(
+                                    &pattern_id,
+                                    &image_id,
+                                    *scale_mode,
+                                    image_transform.as_ref(),
+                                    fill_w,
+                                    fill_h,
+                                    data_base64,
+                                );
+                                defs = defs.add(pattern);
+                                has_defs = true;
+                                has_xlink_namespace = true;
+                                fill_ref = Some(format!("url(#{pattern_id})"));
+                                if *alpha < 1.0 {
+                                    fill_path_opacity = Some(fmt_f64(*alpha));
+                                }
                             }
                         }
-                        if let Some(opacity) = fill_stack_opacity {
-                            path_group = path_group.set("opacity", opacity);
-                        }
-                    } else {
-                        for (fill, fill_blend) in fills.iter() {
-                            let mut fill_ref: Option<String> = None;
-                            let mut fill_path_opacity: Option<String> = None;
-                            match fill {
-                                crate::anyrender_renderer::FillPaint::Solid(color) => {
-                                    let (hex, opacity) = svg_color_paint_values(
-                                        to_u8(color.r),
-                                        to_u8(color.g),
-                                        to_u8(color.b),
-                                        color.a,
-                                    );
-                                    fill_ref = Some(hex);
-                                    if effects.is_empty() {
-                                        fill_path_opacity = opacity;
-                                    } else if fills.len() == 1 {
-                                        effect_group_opacity = opacity;
-                                    } else {
-                                        fill_path_opacity = opacity;
-                                    }
-                                }
-                                crate::anyrender_renderer::FillPaint::GradientLinear { transform, stops } => {
-                                    let gradient_id =
-                                        format!("paint{gradient_count}_linear_{root_id_suffix}");
-                                    gradient_count += 1;
-                                    if let Some(gradient) = svg_linear_gradient_def(
-                                        &gradient_id,
-                                        fill_x,
-                                        fill_y,
-                                        fill_w,
-                                        fill_h,
-                                        transform.as_ref(),
-                                        stops.as_slice(),
-                                    ) {
-                                        deferred_gradients.push(Box::new(gradient));
-                                        has_defs = true;
-                                        fill_ref = Some(format!("url(#{gradient_id})"));
-                                    }
-                                }
-                                crate::anyrender_renderer::FillPaint::GradientRadial { transform, stops } => {
-                                    let gradient_id =
-                                        format!("paint{gradient_count}_radial_{root_id_suffix}");
-                                    gradient_count += 1;
-                                    if let Some(gradient) = svg_radial_gradient_def(
-                                        &gradient_id,
-                                        fill_x,
-                                        fill_y,
-                                        fill_w,
-                                        fill_h,
-                                        transform.as_ref(),
-                                        stops.as_slice(),
-                                    ) {
-                                        deferred_gradients.push(Box::new(gradient));
-                                        has_defs = true;
-                                        fill_ref = Some(format!("url(#{gradient_id})"));
-                                    }
-                                }
-                                crate::anyrender_renderer::FillPaint::GradientAngular { .. } => {}
-                                crate::anyrender_renderer::FillPaint::Image {
-                                    image_hash,
-                                    data_base64,
-                                    alpha,
-                                    scale_mode,
-                                    image_transform,
-                                } => {
-                                    let pattern_id = format!("pattern{pattern_count}_{root_id_suffix}");
-                                    pattern_count += 1;
-                                    let image_key = image_hash
-                                        .clone()
-                                        .unwrap_or_else(|| format!("inline:{data_base64}"));
-                                    let image_id = if let Some(existing) = image_defs.get(&image_key) {
-                                        existing.clone()
-                                    } else {
-                                        let new_id = format!("image{image_count}_{root_id_suffix}");
-                                        image_count += 1;
-                                        image_defs.insert(image_key, new_id.clone());
-                                        let image = Image::new()
-                                            .set("id", new_id.clone())
-                                            .set("width", "1")
-                                            .set("height", "1")
-                                            .set("preserveAspectRatio", "none")
-                                            .set(
-                                                "xlink:href",
-                                                format!("data:image/png;base64,{data_base64}"),
-                                            );
-                                        deferred_images.push(image);
-                                        new_id
-                                    };
-                                    let pattern = svg_image_pattern(&pattern_id, &image_id, *scale_mode, image_transform.as_ref(), fill_w, fill_h, data_base64);
-                                    defs = defs.add(pattern);
-                                    has_defs = true;
-                                    has_xlink_namespace = true;
-                                    fill_ref = Some(format!("url(#{pattern_id})"));
-                                    if *alpha < 1.0 {
-                                        fill_path_opacity = Some(fmt_f64(*alpha));
-                                    }
-                                }
-                            }
+                        let Some(fill_ref) = fill_ref else {
+                            continue;
+                        };
 
-                            let Some(fill_ref) = fill_ref else {
-                                continue;
-                            };
-                            for d in &fill_paths {
-                                let mut path = SvgPath::new()
-                                    .set("d", d.as_str())
-                                    .set("transform", transform.clone())
-                                    .set("fill", fill_ref.clone());
-                                if let Some(opacity) = &fill_path_opacity {
-                                    path = path.set("fill-opacity", opacity.clone());
-                                }
-                                if let Some(mode) = svg_mix_blend_mode(fill_blend) {
-                                    path = path.set("style", format!("mix-blend-mode:{mode}"));
-                                }
-                                path_group = path_group.add(path);
+                        for d in &fill_paths {
+                            let mut path = SvgPath::new()
+                                .set("d", d.as_str())
+                                .set("transform", transform.clone())
+                                .set("fill", fill_ref.clone());
+                            if let Some(opacity) = &fill_path_opacity {
+                                path = path.set("fill-opacity", opacity.clone());
                             }
+                            if let Some(mode) = svg_mix_blend_mode(fill_blend) {
+                                path = path.set("style", format!("mix-blend-mode:{mode}"));
+                            }
+                            path_group = path_group.add(path);
                         }
                     }
+                    if let Some(opacity) = fill_stack_opacity {
+                        path_group = path_group.set("opacity", opacity);
+                    }
+                } else {
+                    for (fill, fill_blend) in fills.iter() {
+                        let mut fill_ref: Option<String> = None;
+                        let mut fill_path_opacity: Option<String> = None;
+                        match fill {
+                            crate::anyrender_renderer::FillPaint::Solid(color) => {
+                                let (hex, opacity) = svg_color_paint_values(
+                                    to_u8(color.r),
+                                    to_u8(color.g),
+                                    to_u8(color.b),
+                                    color.a,
+                                );
+                                fill_ref = Some(hex);
+                                if effects.is_empty() {
+                                    fill_path_opacity = opacity;
+                                } else if fills.len() == 1 {
+                                    effect_group_opacity = opacity;
+                                } else {
+                                    fill_path_opacity = opacity;
+                                }
+                            }
+                            crate::anyrender_renderer::FillPaint::GradientLinear {
+                                transform,
+                                stops,
+                            } => {
+                                let gradient_id =
+                                    format!("paint{gradient_count}_linear_{root_id_suffix}");
+                                gradient_count += 1;
+                                if let Some(gradient) = svg_linear_gradient_def(
+                                    &gradient_id,
+                                    fill_x,
+                                    fill_y,
+                                    fill_w,
+                                    fill_h,
+                                    transform.as_ref(),
+                                    stops.as_slice(),
+                                ) {
+                                    deferred_gradients.push(Box::new(gradient));
+                                    has_defs = true;
+                                    fill_ref = Some(format!("url(#{gradient_id})"));
+                                }
+                            }
+                            crate::anyrender_renderer::FillPaint::GradientRadial {
+                                transform,
+                                stops,
+                            } => {
+                                let gradient_id =
+                                    format!("paint{gradient_count}_radial_{root_id_suffix}");
+                                gradient_count += 1;
+                                if let Some(gradient) = svg_radial_gradient_def(
+                                    &gradient_id,
+                                    fill_x,
+                                    fill_y,
+                                    fill_w,
+                                    fill_h,
+                                    transform.as_ref(),
+                                    stops.as_slice(),
+                                ) {
+                                    deferred_gradients.push(Box::new(gradient));
+                                    has_defs = true;
+                                    fill_ref = Some(format!("url(#{gradient_id})"));
+                                }
+                            }
+                            crate::anyrender_renderer::FillPaint::GradientAngular { .. } => {}
+                            crate::anyrender_renderer::FillPaint::Image {
+                                image_hash,
+                                data_base64,
+                                alpha,
+                                scale_mode,
+                                image_transform,
+                            } => {
+                                let pattern_id = format!("pattern{pattern_count}_{root_id_suffix}");
+                                pattern_count += 1;
+                                let image_key = image_hash
+                                    .clone()
+                                    .unwrap_or_else(|| format!("inline:{data_base64}"));
+                                let image_id = if let Some(existing) = image_defs.get(&image_key) {
+                                    existing.clone()
+                                } else {
+                                    let new_id = format!("image{image_count}_{root_id_suffix}");
+                                    image_count += 1;
+                                    image_defs.insert(image_key, new_id.clone());
+                                    let image = Image::new()
+                                        .set("id", new_id.clone())
+                                        .set("width", "1")
+                                        .set("height", "1")
+                                        .set("preserveAspectRatio", "none")
+                                        .set(
+                                            "xlink:href",
+                                            format!("data:image/png;base64,{data_base64}"),
+                                        );
+                                    deferred_images.push(image);
+                                    new_id
+                                };
+                                let pattern = svg_image_pattern(
+                                    &pattern_id,
+                                    &image_id,
+                                    *scale_mode,
+                                    image_transform.as_ref(),
+                                    fill_w,
+                                    fill_h,
+                                    data_base64,
+                                );
+                                defs = defs.add(pattern);
+                                has_defs = true;
+                                has_xlink_namespace = true;
+                                fill_ref = Some(format!("url(#{pattern_id})"));
+                                if *alpha < 1.0 {
+                                    fill_path_opacity = Some(fmt_f64(*alpha));
+                                }
+                            }
+                        }
+
+                        let Some(fill_ref) = fill_ref else {
+                            continue;
+                        };
+                        for d in &fill_paths {
+                            let mut path = SvgPath::new()
+                                .set("d", d.as_str())
+                                .set("transform", transform.clone())
+                                .set("fill", fill_ref.clone());
+                            if let Some(opacity) = &fill_path_opacity {
+                                path = path.set("fill-opacity", opacity.clone());
+                            }
+                            if let Some(mode) = svg_mix_blend_mode(fill_blend) {
+                                path = path.set("style", format!("mix-blend-mode:{mode}"));
+                            }
+                            path_group = path_group.add(path);
+                        }
+                    }
+                }
                 if let Some(opacity) = effect_group_opacity {
                     path_group = path_group.set("opacity", opacity);
                 }
@@ -2845,7 +3012,9 @@ pub fn run_cli<E: std::fmt::Display>(
             // Figma text arrives as outlines (`Path`s); authored text is a
             // `<text>` carrying its family, weight, style and width.
             text @ PaintPrimitive::Text { .. } => {
-                if let Some(el) = super::text::text_element(&text, tx, ty, render_fonts::FontBook::bundled()) {
+                if let Some(el) =
+                    super::text::text_element(&text, tx, ty, render_fonts::FontBook::bundled())
+                {
                     push_node(&mut svg_doc, &mut group_stack, el);
                 }
             }
@@ -2948,12 +3117,8 @@ fn push_complex_frame_stroke_overlays(
 
         match stroke_paint {
             crate::anyrender_renderer::FillPaint::Solid(color) => {
-                let (hex, opacity) = svg_color_paint_values(
-                    to_u8(color.r),
-                    to_u8(color.g),
-                    to_u8(color.b),
-                    color.a,
-                );
+                let (hex, opacity) =
+                    svg_color_paint_values(to_u8(color.r), to_u8(color.g), to_u8(color.b), color.a);
                 stroke_rect = stroke_rect.set("stroke", hex);
                 if let Some(opacity) = opacity {
                     stroke_rect = stroke_rect.set("stroke-opacity", opacity);
@@ -3025,10 +3190,7 @@ fn union_path_bounds(paths: &[String], tx: f64, ty: f64) -> Option<(f64, f64, f6
 }
 
 #[cfg(feature = "svg_export")]
-fn bbox_alignment_error(
-    bounds: (f64, f64, f64, f64),
-    target: (f64, f64, f64, f64),
-) -> f64 {
+fn bbox_alignment_error(bounds: (f64, f64, f64, f64), target: (f64, f64, f64, f64)) -> f64 {
     let (b0x, b0y, b1x, b1y) = bounds;
     let (tx, ty, tw, th) = target;
     let bw = (b1x - b0x).max(0.0);
@@ -3039,7 +3201,10 @@ fn bbox_alignment_error(
 #[cfg(feature = "svg_export")]
 fn resolve_rect_geometry(
     node: Option<&document_proto::Node>,
-    layout_boxes: &std::collections::HashMap<document_proto::NodeId, crate::anyrender_renderer::LayoutBox>,
+    layout_boxes: &std::collections::HashMap<
+        document_proto::NodeId,
+        crate::anyrender_renderer::LayoutBox,
+    >,
     x: f64,
     y: f64,
     width: f64,
@@ -3076,8 +3241,9 @@ fn resolve_rect_geometry(
         }
     }
     if rotation.abs() > 1e-6 {
-        if let Some((width_local, height_local)) =
-            fill_paths.first().and_then(|d| svg_local_rect_size_from_path(d))
+        if let Some((width_local, height_local)) = fill_paths
+            .first()
+            .and_then(|d| svg_local_rect_size_from_path(d))
         {
             rw = width_local;
             rh = height_local;
@@ -3112,12 +3278,7 @@ fn resolve_rect_geometry(
             rh = (rh - inset * 2.0).max(0.0);
         }
     }
-    ResolvedRectGeometry {
-        rx,
-        ry,
-        rw,
-        rh,
-    }
+    ResolvedRectGeometry { rx, ry, rw, rh }
 }
 
 #[cfg(feature = "svg_export")]
@@ -3156,7 +3317,9 @@ pub(super) fn apply_corner_radii_rect(
 }
 
 #[cfg(feature = "svg_export")]
-pub(super) fn svg_mix_blend_mode(mode: &crate::anyrender_renderer::BlendMix) -> Option<&'static str> {
+pub(super) fn svg_mix_blend_mode(
+    mode: &crate::anyrender_renderer::BlendMix,
+) -> Option<&'static str> {
     use crate::anyrender_renderer::BlendMix;
     match mode {
         BlendMix::Multiply => Some("multiply"),
@@ -3217,12 +3380,7 @@ fn svg_fill_style(fill: &crate::anyrender_renderer::FillPaint) -> Option<FillSty
     use crate::anyrender_renderer::FillPaint;
     match fill {
         FillPaint::Solid(c) => {
-            let (hex, opacity) = svg_color_paint_values(
-                to_u8(c.r),
-                to_u8(c.g),
-                to_u8(c.b),
-                c.a,
-            );
+            let (hex, opacity) = svg_color_paint_values(to_u8(c.r), to_u8(c.g), to_u8(c.b), c.a);
             Some(FillStyle::Solid { hex, opacity })
         }
         FillPaint::GradientLinear { .. }
@@ -3246,9 +3404,7 @@ fn gradient_transform_point(
 }
 
 #[cfg(feature = "svg_export")]
-fn svg_gradient_stop(
-    stop: &crate::anyrender_renderer::GradientStop,
-) -> svg::node::element::Stop {
+fn svg_gradient_stop(stop: &crate::anyrender_renderer::GradientStop) -> svg::node::element::Stop {
     let (hex, opacity) = svg_color_paint_values(
         to_u8(stop.color.r),
         to_u8(stop.color.g),
@@ -3389,7 +3545,12 @@ fn svg_local_rect_size_from_path(d: &str) -> Option<(f64, f64)> {
             _ => return None,
         }
     }
-    if !saw_point || !min_x.is_finite() || !min_y.is_finite() || !max_x.is_finite() || !max_y.is_finite() {
+    if !saw_point
+        || !min_x.is_finite()
+        || !min_y.is_finite()
+        || !max_x.is_finite()
+        || !max_y.is_finite()
+    {
         return None;
     }
     Some(((max_x - min_x).max(0.0), (max_y - min_y).max(0.0)))
@@ -3414,11 +3575,13 @@ fn svg_stroke_paint(
     let def: Option<(String, Box<dyn svg::Node>)> = match &stroke.gradient {
         Some(FillPaint::GradientLinear { transform, stops }) => {
             let id = format!("paint{gradient_count}_linear_{root_id_suffix}");
-            svg_linear_gradient_def(&id, x, y, w, h, transform.as_ref(), stops).map(|g| (id, Box::new(g) as Box<dyn svg::Node>))
+            svg_linear_gradient_def(&id, x, y, w, h, transform.as_ref(), stops)
+                .map(|g| (id, Box::new(g) as Box<dyn svg::Node>))
         }
         Some(FillPaint::GradientRadial { transform, stops }) => {
             let id = format!("paint{gradient_count}_radial_{root_id_suffix}");
-            svg_radial_gradient_def(&id, x, y, w, h, transform.as_ref(), stops).map(|g| (id, Box::new(g) as Box<dyn svg::Node>))
+            svg_radial_gradient_def(&id, x, y, w, h, transform.as_ref(), stops)
+                .map(|g| (id, Box::new(g) as Box<dyn svg::Node>))
         }
         _ => None,
     };
@@ -3428,7 +3591,12 @@ fn svg_stroke_paint(
         *has_defs = true;
         return (format!("url(#{id})"), None);
     }
-    svg_color_paint_values(to_u8(stroke.color.r), to_u8(stroke.color.g), to_u8(stroke.color.b), stroke.color.a)
+    svg_color_paint_values(
+        to_u8(stroke.color.r),
+        to_u8(stroke.color.g),
+        to_u8(stroke.color.b),
+        stroke.color.a,
+    )
 }
 
 #[cfg(feature = "svg_export")]
@@ -3488,11 +3656,8 @@ fn svg_radial_gradient_def(
         let rx = (ax.0 * ax.0 + ax.1 * ax.1).sqrt() * 0.5;
         let ry = (ay.0 * ay.0 + ay.1 * ay.1).sqrt() * 0.5;
         let angle = ax.1.atan2(ax.0).to_degrees();
-        let mut gradient_transform = format!(
-            "translate({} {})",
-            fmt_f64(center_x),
-            fmt_f64(center_y)
-        );
+        let mut gradient_transform =
+            format!("translate({} {})", fmt_f64(center_x), fmt_f64(center_y));
         if angle.abs() > 1e-6 {
             gradient_transform.push_str(&format!(" rotate({})", fmt_f64(angle)));
         }
@@ -3603,7 +3768,12 @@ fn svg_angular_metadata_attr(
     };
     format!(
         "{{\"type\":\"GRADIENT_ANGULAR\",\"stops\":[{stops_json}],\"stopsVar\":[],\"transform\":{{\"m00\":{},\"m01\":{},\"m02\":{},\"m10\":{},\"m11\":{},\"m12\":{}}},\"opacity\":1.0,\"blendMode\":\"NORMAL\",\"visible\":true}}",
-        raw_f(m00), raw_f(m01), raw_f(m02), raw_f(m10), raw_f(m11), raw_f(m12)
+        raw_f(m00),
+        raw_f(m01),
+        raw_f(m02),
+        raw_f(m10),
+        raw_f(m11),
+        raw_f(m12)
     )
 }
 
@@ -3772,7 +3942,10 @@ pub(super) fn push_node<N: svg::Node>(
 /// Open a group that also nests correctly while a mask definition is being
 /// captured (its content lands in the mask, not the document).
 #[cfg(feature = "svg_export")]
-fn open_scoped_group(groups: &mut Vec<svg::node::element::Group>, group: svg::node::element::Group) {
+fn open_scoped_group(
+    groups: &mut Vec<svg::node::element::Group>,
+    group: svg::node::element::Group,
+) {
     let mut group = Some(group);
     MASK_CAPTURE_STATE.with(|slot| {
         if let Some(state) = slot.borrow_mut().as_mut() {
@@ -3787,7 +3960,8 @@ fn open_scoped_group(groups: &mut Vec<svg::node::element::Group>, group: svg::no
 /// Close the group [`open_scoped_group`] opened, adding it to its parent.
 #[cfg(feature = "svg_export")]
 fn close_scoped_group(doc: &mut svg::Document, groups: &mut Vec<svg::node::element::Group>) {
-    let captured = MASK_CAPTURE_STATE.with(|slot| slot.borrow_mut().as_mut().map(|state| state.groups.pop()));
+    let captured =
+        MASK_CAPTURE_STATE.with(|slot| slot.borrow_mut().as_mut().map(|state| state.groups.pop()));
     match captured {
         Some(Some(group)) => push_node(doc, groups, group),
         Some(None) => {}
@@ -3868,12 +4042,7 @@ fn svg_path_bounds(d: &str, tx: f64, ty: f64) -> Option<(f64, f64, f64, f64)> {
     if bb.width() <= 0.0 || bb.height() <= 0.0 {
         return None;
     }
-    Some((
-        bb.x0 + tx,
-        bb.y0 + ty,
-        bb.x1 + tx,
-        bb.y1 + ty,
-    ))
+    Some((bb.x0 + tx, bb.y0 + ty, bb.x1 + tx, bb.y1 + ty))
 }
 
 #[cfg(feature = "svg_export")]
@@ -3936,14 +4105,18 @@ fn svg_image_pattern(
     height: f64,
     data_base64: &str,
 ) -> svg::node::element::Pattern {
-    let pattern = svg::node::element::Pattern::new().set("id", pattern_id.to_string()).set("patternContentUnits", "objectBoundingBox");
+    let pattern = svg::node::element::Pattern::new()
+        .set("id", pattern_id.to_string())
+        .set("patternContentUnits", "objectBoundingBox");
     let image_use = svg::node::element::Use::new().set("xlink:href", format!("#{image_id}"));
     if scale_mode == crate::anyrender_renderer::ImageScaleMode::Tile
         && width > 0.0
         && height > 0.0
         && let Some((iw, ih)) = image_pixel_size(data_base64)
     {
-        let t = image_transform.copied().unwrap_or_else(crate::anyrender_renderer::AffineTransform2D::identity);
+        let t = image_transform
+            .copied()
+            .unwrap_or_else(crate::anyrender_renderer::AffineTransform2D::identity);
         let tw = f64::from(iw) * t.a.hypot(t.c) / width;
         let th = f64::from(ih) * t.b.hypot(t.d) / height;
         if tw > 0.0 && th > 0.0 {
@@ -3952,14 +4125,25 @@ fn svg_image_pattern(
                 .set("y", fmt_f64(t.ty / height))
                 .set("width", fmt_f64(tw))
                 .set("height", fmt_f64(th))
-                .add(image_use.set("transform", format!("scale({} {})", fmt_f64(tw), fmt_f64(th))));
+                .add(image_use.set(
+                    "transform",
+                    format!("scale({} {})", fmt_f64(tw), fmt_f64(th)),
+                ));
         }
     }
     let pattern = pattern.set("width", "1").set("height", "1");
     let image_use = match svg_image_fill_transform(scale_mode, image_transform, width, height) {
         Some((a, b, c, d, e, f)) => image_use.set(
             "transform",
-            format!("matrix({} {} {} {} {} {})", fmt_f64(a), fmt_f64(b), fmt_f64(c), fmt_f64(d), fmt_f64(e), fmt_f64(f)),
+            format!(
+                "matrix({} {} {} {} {} {})",
+                fmt_f64(a),
+                fmt_f64(b),
+                fmt_f64(c),
+                fmt_f64(d),
+                fmt_f64(e),
+                fmt_f64(f)
+            ),
         ),
         None => image_use,
     };
@@ -4075,7 +4259,10 @@ fn fmt_translate_component(v: f64) -> String {
 #[cfg(all(test, feature = "svg_export"))]
 mod tests {
     use super::*;
-    use crate::anyrender_renderer::{AffineTransform2D, FillPaint, GradientStop, ImageScaleMode, Rgba, StrokeAlign, StrokeCap, StrokeJoin, StrokeStyle};
+    use crate::anyrender_renderer::{
+        AffineTransform2D, FillPaint, GradientStop, ImageScaleMode, Rgba, StrokeAlign, StrokeCap,
+        StrokeJoin, StrokeStyle,
+    };
     use base64::Engine as _;
 
     /// A minimal PNG header for a `w × h` image (enough for its size).
@@ -4092,23 +4279,61 @@ mod tests {
         let data = png_header_b64(10, 20);
         assert_eq!(image_pixel_size(&data), Some((10, 20)));
         let scale = AffineTransform2D::from([[2.0, 0.0, 5.0], [0.0, 2.0, 0.0]]);
-        let p = svg_image_pattern("p", "i", ImageScaleMode::Tile, Some(&scale), 100.0, 80.0, &data).to_string();
+        let p = svg_image_pattern(
+            "p",
+            "i",
+            ImageScaleMode::Tile,
+            Some(&scale),
+            100.0,
+            80.0,
+            &data,
+        )
+        .to_string();
         // 20 × 40 px tiles in a 100 × 80 box, offset 5 px.
-        assert!(p.contains(r#"width="0.2""#) && p.contains(r#"height="0.5""#), "{p}");
-        assert!(p.contains(r#"x="0.05""#) && p.contains("scale(0.2 0.5)"), "{p}");
+        assert!(
+            p.contains(r#"width="0.2""#) && p.contains(r#"height="0.5""#),
+            "{p}"
+        );
+        assert!(
+            p.contains(r#"x="0.05""#) && p.contains("scale(0.2 0.5)"),
+            "{p}"
+        );
         // Other modes still cover the box once.
-        let fill = svg_image_pattern("p", "i", ImageScaleMode::Stretch, None, 100.0, 80.0, &data).to_string();
-        assert!(fill.contains(r#"width="1""#) && fill.contains(r#"height="1""#), "{fill}");
+        let fill = svg_image_pattern("p", "i", ImageScaleMode::Stretch, None, 100.0, 80.0, &data)
+            .to_string();
+        assert!(
+            fill.contains(r#"width="1""#) && fill.contains(r#"height="1""#),
+            "{fill}"
+        );
     }
 
     #[test]
     fn a_gradient_stroke_exports_as_a_gradient_paint() {
-        let red = Rgba { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
+        let red = Rgba {
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        };
         let stroke = StrokeStyle {
             color: red.clone(),
             gradient: Some(FillPaint::GradientLinear {
                 transform: None,
-                stops: vec![GradientStop { offset: 0.0, color: red }, GradientStop { offset: 1.0, color: Rgba { r: 0.0, g: 0.0, b: 1.0, a: 1.0 } }],
+                stops: vec![
+                    GradientStop {
+                        offset: 0.0,
+                        color: red,
+                    },
+                    GradientStop {
+                        offset: 1.0,
+                        color: Rgba {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 1.0,
+                            a: 1.0,
+                        },
+                    },
+                ],
             }),
             width: 4.0,
             cap: StrokeCap::None,
@@ -4120,15 +4345,35 @@ mod tests {
         };
         let (mut count, mut defs, mut has_defs) = (0, Vec::new(), false);
         // A horizontal line: no height, widened to the stroke.
-        let (paint, opacity) = svg_stroke_paint(&stroke, (10.0, 20.0, 100.0, 0.0), &mut count, "x", &mut defs, &mut has_defs);
+        let (paint, opacity) = svg_stroke_paint(
+            &stroke,
+            (10.0, 20.0, 100.0, 0.0),
+            &mut count,
+            "x",
+            &mut defs,
+            &mut has_defs,
+        );
         assert_eq!(paint, "url(#paint0_linear_x)");
         assert_eq!(opacity, None);
         assert!(has_defs && defs.len() == 1 && count == 1);
         let def = defs[0].to_string();
-        assert!(def.contains(r#"x1="10""#) && def.contains(r#"x2="110""#), "{def}");
+        assert!(
+            def.contains(r#"x1="10""#) && def.contains(r#"x2="110""#),
+            "{def}"
+        );
         // Solid strokes are unchanged.
-        let solid = StrokeStyle { gradient: None, ..stroke };
-        let (paint, _) = svg_stroke_paint(&solid, (0.0, 0.0, 1.0, 1.0), &mut count, "x", &mut defs, &mut has_defs);
+        let solid = StrokeStyle {
+            gradient: None,
+            ..stroke
+        };
+        let (paint, _) = svg_stroke_paint(
+            &solid,
+            (0.0, 0.0, 1.0, 1.0),
+            &mut count,
+            "x",
+            &mut defs,
+            &mut has_defs,
+        );
         assert!(paint.eq_ignore_ascii_case("#ff0000"), "{paint}");
     }
 }

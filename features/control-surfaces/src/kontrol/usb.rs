@@ -18,7 +18,7 @@
 //! the keyboard's MIDI. Accessing the hidraw node needs USB permissions (a
 //! udev `uaccess` rule for VID `0x17cc`, or root).
 
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 use hidapi::{HidApi, HidDevice};
 
 use crate::kontrol::LightColor;

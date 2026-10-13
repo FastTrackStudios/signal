@@ -12,7 +12,7 @@ use document_proto::motion::{Motion, Target};
 use surface_kit::{draw, motion};
 use surface_widgets::Builder;
 
-use super::machine::{self, Look, Machine, Room, ON, PERIOD};
+use super::machine::{self, Look, Machine, ON, PERIOD, Room};
 use crate::face::Face;
 use crate::reverb::ui;
 use crate::rig_time::kit::{self, DLY};
@@ -33,8 +33,22 @@ const MACHINE: Machine = Machine {
         edge: "#aeb7c3",
         texture: "#ffffff50",
         well: [(0.0, "#141a24"), (1.0, "#0b0f16")],
-        knob: ["color=#f4f6f9", "pointer=#1e3a8a", "index=line", "index_w=0.1", "skirt=plain", "skirt_color=#9aa5b4"],
-        wheel: ["color=#1f2733", "pointer=#bcd6ff", "index=line", "index_w=0.1", "skirt=plain", "skirt_color=#aab4c2"],
+        knob: [
+            "color=#f4f6f9",
+            "pointer=#1e3a8a",
+            "index=line",
+            "index_w=0.1",
+            "skirt=plain",
+            "skirt_color=#9aa5b4",
+        ],
+        wheel: [
+            "color=#1f2733",
+            "pointer=#bcd6ff",
+            "index=line",
+            "index_w=0.1",
+            "skirt=plain",
+            "skirt_color=#aab4c2",
+        ],
         accent: kit::BLUE_DEEP,
         scrim: "#dde2e9e6",
     },
@@ -45,15 +59,43 @@ const MACHINE: Machine = Machine {
         edge: "#3a4452",
         texture: "#ffffff0a",
         well: [(0.0, "#0e131b"), (1.0, "#080b10")],
-        knob: ["color=#2b3340", "pointer=#bcd6ff", "index=line", "index_w=0.1", "skirt=plain", "skirt_color=#0f1318"],
-        wheel: ["color=#1a2029", "pointer=#bcd6ff", "index=line", "index_w=0.1", "skirt=plain", "skirt_color=#4a5566"],
+        knob: [
+            "color=#2b3340",
+            "pointer=#bcd6ff",
+            "index=line",
+            "index_w=0.1",
+            "skirt=plain",
+            "skirt_color=#0f1318",
+        ],
+        wheel: [
+            "color=#1a2029",
+            "pointer=#bcd6ff",
+            "index=line",
+            "index_w=0.1",
+            "skirt=plain",
+            "skirt_color=#4a5566",
+        ],
         accent: kit::BLUE_LIGHT,
         scrim: "#20262fe6",
     },
     title: (draw::family::ORBITRON, 600.0, 13.0, 0.06, 0.82),
-    front: [("feedback", "Repeats"), ("interval", "Spread"), ("high_cut", "Tone"), ("level", "Level")],
-    phone: [("feedback", "Repeats"), ("interval", "Spread"), ("level", "Level")],
-    main: [("feedback", "Repeats"), ("interval", "Spread"), ("high_cut", "Tone"), ("level", "Level")],
+    front: [
+        ("feedback", "Repeats"),
+        ("interval", "Spread"),
+        ("high_cut", "Tone"),
+        ("level", "Level"),
+    ],
+    phone: [
+        ("feedback", "Repeats"),
+        ("interval", "Spread"),
+        ("level", "Level"),
+    ],
+    main: [
+        ("feedback", "Repeats"),
+        ("interval", "Spread"),
+        ("high_cut", "Tone"),
+        ("level", "Level"),
+    ],
     picture,
     glass: true,
 };
@@ -69,7 +111,10 @@ fn length(ghosts: bool) -> String {
 /// Where tap `i` (1…) sits along the pattern, 0…1: bunched early or late
 /// by the spread.
 fn place(i: usize) -> String {
-    format!("pow({:.4}, lerp(1.8, 0.55, param({DLY}/interval) / 30))", i as f64 / TAPS as f64)
+    format!(
+        "pow({:.4}, lerp(1.8, 0.55, param({DLY}/interval) / 30))",
+        i as f64 / TAPS as f64
+    )
 }
 
 /// The ladder in `well` (`w × h`), its top rail at `top`.
@@ -78,67 +123,198 @@ fn ladder(b: &mut Builder<'_>, well: NodeId, (w, h): (f64, f64), top: f64, ghost
     let span = x1 - x0;
     let bottom = h - 16.0;
     // The rails: the line in, the sum out; a ruler on the line.
-    b.add(well, ui::strokes("rails", &[vec![(x0 - 10.0, top), (x1, top)], vec![(x0 - 10.0, bottom), (x1, bottom)]], 1.4, draw::solid(&ui::alpha(RAIL, 0.6))));
-    let ticks: Vec<Vec<(f64, f64)>> = (0..=40).map(|i| {
-        let x = x0 + span * f64::from(i) / 40.0;
-        let l = if i % 5 == 0 { 4.0 } else { 2.0 };
-        vec![(x, top - l), (x, top)]
-    }).collect();
-    b.add(well, ui::strokes("ruler", &ticks, 0.8, draw::solid(&ui::alpha(RAIL, 0.35))));
+    b.add(
+        well,
+        ui::strokes(
+            "rails",
+            &[
+                vec![(x0 - 10.0, top), (x1, top)],
+                vec![(x0 - 10.0, bottom), (x1, bottom)],
+            ],
+            1.4,
+            draw::solid(&ui::alpha(RAIL, 0.6)),
+        ),
+    );
+    let ticks: Vec<Vec<(f64, f64)>> = (0..=40)
+        .map(|i| {
+            let x = x0 + span * f64::from(i) / 40.0;
+            let l = if i % 5 == 0 { 4.0 } else { 2.0 };
+            vec![(x, top - l), (x, top)]
+        })
+        .collect();
+    b.add(
+        well,
+        ui::strokes("ruler", &ticks, 0.8, draw::solid(&ui::alpha(RAIL, 0.35))),
+    );
     ui::silk_right(b, well, "In", x0 - 13.0, top, 5.0, DIM, 800.0);
     ui::silk_right(b, well, "Out", x0 - 13.0, bottom, 5.0, DIM, 800.0);
     // The note, at the head of the line.
-    b.add(well, ui::glowing(draw::rect("note", x0 - 1.0, top, 2.0, bottom - top, draw::solid(kit::BLUE_LIGHT)), kit::BLUE_LIGHT, 1.1, kit::GLOW));
+    b.add(
+        well,
+        ui::glowing(
+            draw::rect(
+                "note",
+                x0 - 1.0,
+                top,
+                2.0,
+                bottom - top,
+                draw::solid(kit::BLUE_LIGHT),
+            ),
+            kit::BLUE_LIGHT,
+            1.1,
+            kit::GLOW,
+        ),
+    );
     // The read pulse, running down the line once a delay time.
-    let pulse = b.add(well, draw::emissive(draw::circle("read", x0, top, 3.2, draw::solid(kit::BLUE_LIGHT)), draw::hex(kit::BLUE_LIGHT), 1.3, kit::BLOOM));
+    let pulse = b.add(
+        well,
+        draw::emissive(
+            draw::circle("read", x0, top, 3.2, draw::solid(kit::BLUE_LIGHT)),
+            draw::hex(kit::BLUE_LIGHT),
+            1.3,
+            kit::BLOOM,
+        ),
+    );
     let run = format!("fract(time * 1000 / {PERIOD}) * {}", length(ghosts));
     motion::add(b, pulse, Motion::new(Target::X).input(run).range(0.0, span));
     let rung_h = bottom - top;
-    let rung = |b: &mut Builder<'_>, name: &str, at: String, level: String, light: Option<String>, color: &str| {
+    let rung = |b: &mut Builder<'_>,
+                name: &str,
+                at: String,
+                level: String,
+                light: Option<String>,
+                color: &str| {
         let lit = light.is_some();
-        let col = b.add(well, draw::frame(name, x0 - 6.0, top - 6.0, 12.0, rung_h + 6.0));
-        motion::add(b, col, Motion::new(Target::X).input(at).range(0.0, span).dynamics(machine::spring()));
-        b.add(col, ui::strokes("rung", &[vec![(6.0, 6.0), (6.0, rung_h + 6.0)]], 1.0, draw::solid(&ui::alpha(RAIL, 0.4))));
+        let col = b.add(
+            well,
+            draw::frame(name, x0 - 6.0, top - 6.0, 12.0, rung_h + 6.0),
+        );
+        motion::add(
+            b,
+            col,
+            Motion::new(Target::X)
+                .input(at)
+                .range(0.0, span)
+                .dynamics(machine::spring()),
+        );
+        b.add(
+            col,
+            ui::strokes(
+                "rung",
+                &[vec![(6.0, 6.0), (6.0, rung_h + 6.0)]],
+                1.0,
+                draw::solid(&ui::alpha(RAIL, 0.4)),
+            ),
+        );
         // Its level: a bar up from the out rail.
         // (Stretched as a group: a light stretches with its group, not on
         // its own node.)
         let bar = b.add(col, draw::frame("level", 3.5, 14.0, 5.0, rung_h - 8.0));
         let fill = draw::rect("bar", 0.0, 0.0, 5.0, rung_h - 8.0, draw::solid(color));
-        b.add(bar, if lit { ui::glowing(fill, color, 0.9, kit::GLOW) } else { fill });
-        motion::add(b, bar, Motion::new(Target::StretchY).input(level).range(0.0, 1.0).pivot(0.5, 1.0).dynamics(machine::spring()));
+        b.add(
+            bar,
+            if lit {
+                ui::glowing(fill, color, 0.9, kit::GLOW)
+            } else {
+                fill
+            },
+        );
+        motion::add(
+            b,
+            bar,
+            Motion::new(Target::StretchY)
+                .input(level)
+                .range(0.0, 1.0)
+                .pivot(0.5, 1.0)
+                .dynamics(machine::spring()),
+        );
         // Its head on the line: a diamond, lit as the pulse passes.
-        let head = draw::path("tap", 0.0, 0.0, 12.0, 12.0, draw::polygon(&[(6.0, 1.5), (10.5, 6.0), (6.0, 10.5), (1.5, 6.0)]), draw::solid(color));
+        let head = draw::path(
+            "tap",
+            0.0,
+            0.0,
+            12.0,
+            12.0,
+            draw::polygon(&[(6.0, 1.5), (10.5, 6.0), (6.0, 10.5), (1.5, 6.0)]),
+            draw::solid(color),
+        );
         let head = b.add(col, draw::emissive(head, draw::hex(color), 1.2, kit::GLOW));
         if let Some(light) = light {
-            motion::add(b, head, Motion::new(Target::Opacity).input(light).range(0.35, 1.0));
+            motion::add(
+                b,
+                head,
+                Motion::new(Target::Opacity).input(light).range(0.35, 1.0),
+            );
         }
     };
     for (k, lv) in LEVELS.iter().enumerate() {
         let i = k + 1;
         let at = format!("{} * {}", place(i), length(ghosts));
-        let light = format!("pow(1 - fract(time * 1000 / {PERIOD} - {}), 6) * {ON}", place(i));
-        rung(b, &format!("tap {i}"), at, format!("{lv} * (0.25 + 0.75 * {ON})"), Some(light), kit::BLUE_LIGHT);
+        let light = format!(
+            "pow(1 - fract(time * 1000 / {PERIOD} - {}), 6) * {ON}",
+            place(i)
+        );
+        rung(
+            b,
+            &format!("tap {i}"),
+            at,
+            format!("{lv} * (0.25 + 0.75 * {ON})"),
+            Some(light),
+            kit::BLUE_LIGHT,
+        );
     }
     if ghosts {
         // The pattern again, a pattern's length on, lower by the feedback.
         for (k, lv) in LEVELS.iter().enumerate() {
             let i = k + 1;
             let at = format!("(1 + {}) * {}", place(i), length(ghosts));
-            rung(b, &format!("repeat {i}"), at, format!("{lv} * param({DLY}/feedback) * (0.25 + 0.75 * {ON})"), None, kit::BLUE);
+            rung(
+                b,
+                &format!("repeat {i}"),
+                at,
+                format!("{lv} * param({DLY}/feedback) * (0.25 + 0.75 * {ON})"),
+                None,
+                kit::BLUE,
+            );
         }
     }
 }
 
-fn picture(b: &mut Builder<'_>, well: NodeId, (w, h): (f64, f64), _l: &Look, room: Room, _dark: bool) {
+fn picture(
+    b: &mut Builder<'_>,
+    well: NodeId,
+    (w, h): (f64, f64),
+    _l: &Look,
+    room: Room,
+    _dark: bool,
+) {
     // A faint grid behind the ladder.
-    let grid: Vec<Vec<(f64, f64)>> = (1..(w / 18.0) as i32).map(|i| vec![(f64::from(i) * 18.0, 0.0), (f64::from(i) * 18.0, h)]).collect();
-    b.add(well, ui::strokes("grid", &grid, 0.5, draw::solid(&ui::alpha(RAIL, 0.06))));
+    let grid: Vec<Vec<(f64, f64)>> = (1..(w / 18.0) as i32)
+        .map(|i| vec![(f64::from(i) * 18.0, 0.0), (f64::from(i) * 18.0, h)])
+        .collect();
+    b.add(
+        well,
+        ui::strokes("grid", &grid, 0.5, draw::solid(&ui::alpha(RAIL, 0.06))),
+    );
     match room {
         Room::Phone => ladder(b, well, (w, h), 30.0, false),
         Room::Lane => ladder(b, well, (w, h), 30.0, true),
         Room::Tall => ladder(b, well, (w, h), 54.0, true),
     }
-    ui::silk_left(b, well, if room == Room::Phone { "Tap ladder" } else { "Tap ladder · 6 taps" }, 8.0, 9.0, 5.5, DIM, 800.0);
+    ui::silk_left(
+        b,
+        well,
+        if room == Room::Phone {
+            "Tap ladder"
+        } else {
+            "Tap ladder · 6 taps"
+        },
+        8.0,
+        9.0,
+        5.5,
+        DIM,
+        800.0,
+    );
 }
 
 #[must_use]

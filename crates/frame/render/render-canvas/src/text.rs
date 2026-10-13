@@ -14,8 +14,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 use kurbo::{Affine, BezPath};
-pub use render::fonts::{FontBook, FontSpec};
 use render::fonts::Resolved;
+pub use render::fonts::{FontBook, FontSpec};
 
 /// frame's UI face (Inter, variable). Hosts may hand in their own book.
 pub static INTER: &[u8] = render_fonts::INTER;
@@ -31,7 +31,9 @@ pub struct Font {
 
 impl std::fmt::Debug for Font {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Font").field("families", &self.book.families()).finish()
+        f.debug_struct("Font")
+            .field("families", &self.book.families())
+            .finish()
     }
 }
 
@@ -50,7 +52,10 @@ pub struct Line {
 }
 
 fn spec_of(weight: f64) -> FontSpec {
-    FontSpec { weight: Some(weight), ..FontSpec::default() }
+    FontSpec {
+        weight: Some(weight),
+        ..FontSpec::default()
+    }
 }
 
 impl Font {
@@ -62,7 +67,10 @@ impl Font {
 
     #[must_use]
     pub fn from_book(book: Cow<'static, FontBook>) -> Self {
-        Self { book, cache: Arc::new(Mutex::new(HashMap::new())) }
+        Self {
+            book,
+            cache: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     #[must_use]
@@ -76,7 +84,10 @@ impl Font {
     pub fn for_scene(&self, scene: &document_proto::Scene) -> Cow<'_, Font> {
         match render::book_for_scene(&self.book, scene) {
             Cow::Borrowed(_) => Cow::Borrowed(self),
-            Cow::Owned(book) => Cow::Owned(Self { book: Cow::Owned(book), cache: self.cache.clone() }),
+            Cow::Owned(book) => Cow::Owned(Self {
+                book: Cow::Owned(book),
+                cache: self.cache.clone(),
+            }),
         }
     }
 
@@ -89,7 +100,9 @@ impl Font {
     /// Ascent of `spec` at `size`, px.
     #[must_use]
     pub fn ascent_of(&self, spec: &FontSpec, size: f64) -> f64 {
-        self.book.resolve(&spec.query()).map_or(size * 0.8, |r| r.ascent(size))
+        self.book
+            .resolve(&spec.query())
+            .map_or(size * 0.8, |r| r.ascent(size))
     }
 
     /// How wide regular `text` sets at `size` with `spacing` px between
@@ -120,9 +133,16 @@ impl Font {
         let mut path = BezPath::new();
         let mut pen_x = 0.0;
         for ch in text.chars().filter(|c| *c != '\n') {
-            let Some((face, gid)) = chain.pick(ch) else { continue };
+            let Some((face, gid)) = chain.pick(ch) else {
+                continue;
+            };
             if let Some(glyph) = self.glyph(face, gid, size) {
-                path.extend((Affine::translate((pen_x, 0.0)) * (*glyph).clone()).elements().iter().copied());
+                path.extend(
+                    (Affine::translate((pen_x, 0.0)) * (*glyph).clone())
+                        .elements()
+                        .iter()
+                        .copied(),
+                );
             }
             pen_x += face.advance(gid, size) + spacing;
         }
@@ -133,7 +153,12 @@ impl Font {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         face.coords.hash(&mut h);
         (face.synthetic_bold, face.synthetic_italic).hash(&mut h);
-        let key = (face.face.id(), gid.to_u32(), (size * 64.0).round() as u32, h.finish());
+        let key = (
+            face.face.id(),
+            gid.to_u32(),
+            (size * 64.0).round() as u32,
+            h.finish(),
+        );
         if let Some(hit) = self.cache.lock().ok()?.get(&key) {
             return Some(hit.clone());
         }
@@ -170,7 +195,13 @@ mod tests {
         let regular = ink(&FontSpec::default());
         let black = ink(&spec_of(900.0));
         assert!(black > regular * 1.4, "black {black} vs regular {regular}");
-        let lcd = FontSpec { family: Some("DSEG14 Classic".into()), ..FontSpec::default() };
-        assert!((ink(&lcd) - regular).abs() > 1.0, "a different family draws different glyphs");
+        let lcd = FontSpec {
+            family: Some("DSEG14 Classic".into()),
+            ..FontSpec::default()
+        };
+        assert!(
+            (ink(&lcd) - regular).abs() > 1.0,
+            "a different family draws different glyphs"
+        );
     }
 }

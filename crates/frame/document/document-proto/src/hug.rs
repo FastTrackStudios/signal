@@ -29,20 +29,45 @@ impl Scene {
                 .collect();
             let gaps = al.gap * kids.len().saturating_sub(1) as f64;
             let row = matches!(al.direction, LayoutDirection::Horizontal);
-            let along: f64 = kids.iter().map(|s| if row { s.width } else { s.height }).sum::<f64>() + gaps;
-            let across = kids.iter().map(|s| if row { s.height } else { s.width }).fold(0.0, f64::max);
-            let (pad_w, pad_h) = (al.padding_left + al.padding_right, al.padding_top + al.padding_bottom);
+            let along: f64 = kids
+                .iter()
+                .map(|s| if row { s.width } else { s.height })
+                .sum::<f64>()
+                + gaps;
+            let across = kids
+                .iter()
+                .map(|s| if row { s.height } else { s.width })
+                .fold(0.0, f64::max);
+            let (pad_w, pad_h) = (
+                al.padding_left + al.padding_right,
+                al.padding_top + al.padding_bottom,
+            );
             let mut size = node.size;
-            let (main, cross) = if row { (along + pad_w, across + pad_h) } else { (along + pad_h, across + pad_w) };
+            let (main, cross) = if row {
+                (along + pad_w, across + pad_h)
+            } else {
+                (along + pad_h, across + pad_w)
+            };
             if al.hug_main {
-                if row { size.width = main } else { size.height = main }
+                if row {
+                    size.width = main
+                } else {
+                    size.height = main
+                }
             }
             if al.hug_cross {
-                if row { size.height = cross } else { size.width = cross }
+                if row {
+                    size.height = cross
+                } else {
+                    size.width = cross
+                }
             }
             sizes.insert(id, size);
             if size != node.size {
-                ops.push(Op::Set { id, prop: Prop::Size(size) });
+                ops.push(Op::Set {
+                    id,
+                    prop: Prop::Size(size),
+                });
             }
         }
         ops

@@ -29,7 +29,9 @@ async fn main() {
     backend.open_blocking();
     let server = LocalServer::serve(backend.router(), Scope::new());
     let rig: RigClient = server.establish().await.expect("rig client");
-    rig.presets_from_patches().await.expect("presets_from_patches");
+    rig.presets_from_patches()
+        .await
+        .expect("presets_from_patches");
     let comp = rig.compositions().await.expect("compositions");
     let made = comp.modules.iter().filter(|m| m.module == "Preset").count();
     tracing::info!(presets = made, "presets in the library");

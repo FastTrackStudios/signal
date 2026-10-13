@@ -15,11 +15,11 @@
 
 use std::sync::Arc;
 
+#[cfg(not(target_arch = "wasm32"))]
+use audio::io::AudioIoPrefs;
 use daw::service::handle::DawHandle as _;
 use daw::standalone::Standalone;
 use daw::standalone::metering::Meters;
-#[cfg(not(target_arch = "wasm32"))]
-use audio::io::AudioIoPrefs;
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
@@ -307,7 +307,10 @@ impl PluginInstance for KeysInstrument {
         let now = self.render.active_voices() as u32;
         self.health.voices(now);
         let before = self.voices.swap(now, std::sync::atomic::Ordering::Relaxed);
-        TOTAL_VOICES.fetch_add(i64::from(now) - i64::from(before), std::sync::atomic::Ordering::Relaxed);
+        TOTAL_VOICES.fetch_add(
+            i64::from(now) - i64::from(before),
+            std::sync::atomic::Ordering::Relaxed,
+        );
         // A tree swapped out is still finishing its notes: render it into
         // scratch and sum. It gets NO new events — new notes belong to the
         // new tree — so it drains as its voices release, and is dropped the
@@ -617,7 +620,11 @@ pub fn render_load() -> f32 {
     #[cfg(not(target_arch = "wasm32"))]
     // SAFETY: only ever set from `Arc::into_raw` of a leaked (never freed)
     // Arc, so a non-null pointer is valid for the program's life.
-    if let Some(st) = unsafe { ENGINE_STATS.load(std::sync::atomic::Ordering::Acquire).as_ref() } {
+    if let Some(st) = unsafe {
+        ENGINE_STATS
+            .load(std::sync::atomic::Ordering::Acquire)
+            .as_ref()
+    } {
         let frames = st.block_frames.load(Relaxed).max(1);
         let budget_ns = f64::from(frames) / 48_000.0 * 1e9;
         return (st.render_ns.load(Relaxed) as f64 / budget_ns) as f32;
@@ -655,7 +662,9 @@ enum Guard {
     Keep,
     /// Fade old release tails (level 1) — because the rig ran hot for a
     /// while (`by_load`), or held more voices than its budget.
-    ShedTails { by_load: bool },
+    ShedTails {
+        by_load: bool,
+    },
     /// Also fade the oldest held notes (level 2).
     CutNote,
 }
@@ -678,10 +687,20 @@ fn guard_step(
     total: i64,
 ) -> Guard {
     *since_cut = since_cut.saturating_add(1);
-    *hot = if load > GUARD_SHED { hot.saturating_add(1) } else { 0 };
-    *over = if load > GUARD_CUT { over.saturating_add(1) } else { 0 };
+    *hot = if load > GUARD_SHED {
+        hot.saturating_add(1)
+    } else {
+        0
+    };
+    *over = if load > GUARD_CUT {
+        over.saturating_add(1)
+    } else {
+        0
+    };
     let crowded = load > GUARD_CROWDED;
-    if (*over >= GUARD_CUT_BLOCKS || (total > VOICE_CUT && crowded)) && *since_cut >= GUARD_CUT_EVERY {
+    if (*over >= GUARD_CUT_BLOCKS || (total > VOICE_CUT && crowded))
+        && *since_cut >= GUARD_CUT_EVERY
+    {
         *since_cut = 0;
         Guard::CutNote
     } else if *hot >= GUARD_SHED_BLOCKS {
@@ -1569,7 +1588,12 @@ impl KeysRig {
 
     /// Whether `guid`'s last-sent state `differs` from what is being sent;
     /// records `set` as sent when it does.
-    fn mix_changed(&self, guid: &str, differs: impl Fn(&LaneMix) -> bool, set: impl Fn(&mut LaneMix)) -> bool {
+    fn mix_changed(
+        &self,
+        guid: &str,
+        differs: impl Fn(&LaneMix) -> bool,
+        set: impl Fn(&mut LaneMix),
+    ) -> bool {
         let mut applied = self
             .applied
             .lock()
@@ -1604,7 +1628,11 @@ impl KeysRig {
     /// Solo a lane (daw folder-aware solo: ancestors pass, siblings drop).
     pub fn set_lane_solo(&self, role: Role, name: &str, soloed: bool) {
         if let Some(guid) = self.lane_guid(role, name) {
-            if self.mix_changed(guid, |m| m.soloed != Some(soloed), |m| m.soloed = Some(soloed)) {
+            if self.mix_changed(
+                guid,
+                |m| m.soloed != Some(soloed),
+                |m| m.soloed = Some(soloed),
+            ) {
                 let _ = self.daw.current().track(guid).set_soloed(soloed);
             }
         }
@@ -2228,7 +2256,10 @@ mod guard_tests {
     #[test]
     fn the_voice_count_only_warns_when_the_cpu_is_busy() {
         assert_eq!(run(&[0.68], VOICE_SHED + 40), vec![Guard::Keep]);
-        assert_eq!(run(&[0.8], VOICE_SHED + 40), vec![Guard::ShedTails { by_load: false }]);
+        assert_eq!(
+            run(&[0.8], VOICE_SHED + 40),
+            vec![Guard::ShedTails { by_load: false }]
+        );
         assert_eq!(run(&[0.5], VOICE_CUT + 1), vec![Guard::Keep]);
         assert_eq!(run(&[0.8], VOICE_CUT + 1), vec![Guard::CutNote]);
     }
@@ -2277,35 +2308,61 @@ mod tests {
     fn the_lookahead_limiter_holds_the_ceiling_cleanly() {
         let scopes = ScopeCells::default();
         let cells = Arc::new(scopes);
-        cells.limiter.store(true, std::sync::atomic::Ordering::Relaxed);
+        cells
+            .limiter
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         let mut stage = ScopeStage::new(cells, 48_000.0);
         let n = 48_128; // a whole number of 256-frame blocks
         let hot: Vec<f32> = (0..n)
             .map(|i| 1.5 * (i as f32 * 440.0 * std::f32::consts::TAU / 48_000.0).sin())
             .collect();
         let (mut ol, mut or) = (vec![0.0; n], vec![0.0; n]);
-        let ev = PluginEvents { params: &[], midi: &[], note_expressions: &[] };
+        let ev = PluginEvents {
+            params: &[],
+            midi: &[],
+            note_expressions: &[],
+        };
         for c in 0..n / 256 {
             let r = c * 256..(c + 1) * 256;
             stage
-                .process_block(&hot[r.clone()], &hot[r.clone()], &mut ol[r.clone()], &mut or[r], &ev)
+                .process_block(
+                    &hot[r.clone()],
+                    &hot[r.clone()],
+                    &mut ol[r.clone()],
+                    &mut or[r],
+                    &ev,
+                )
                 .unwrap();
         }
-        assert!(ol.iter().all(|v| v.abs() <= LIMIT_CEILING + 1e-5), "over the ceiling");
+        assert!(
+            ol.iter().all(|v| v.abs() <= LIMIT_CEILING + 1e-5),
+            "over the ceiling"
+        );
         // Settled second half: output = k · input delayed, k constant.
         let d = stage.look.len;
         let tail = n / 2..n - 1;
-        let k = ol[tail.clone()].iter().map(|v| v.abs()).fold(0.0f32, f32::max) / 1.5;
+        let k = ol[tail.clone()]
+            .iter()
+            .map(|v| v.abs())
+            .fold(0.0f32, f32::max)
+            / 1.5;
         let err = tail
             .map(|i| (ol[i] - k * hot[i - d]).abs())
             .fold(0.0f32, f32::max);
         let lag = (0..400)
             .min_by(|&x, &y| {
-                let e = |d: usize| (n / 2..n / 2 + 2000).map(|i| (ol[i] - k * hot[i - d]).abs()).sum::<f32>();
+                let e = |d: usize| {
+                    (n / 2..n / 2 + 2000)
+                        .map(|i| (ol[i] - k * hot[i - d]).abs())
+                        .sum::<f32>()
+                };
                 e(x).total_cmp(&e(y))
             })
             .unwrap();
-        assert!(err < 0.01, "distortion {err} (window {d}, best lag {lag}, k {k})");
+        assert!(
+            err < 0.01,
+            "distortion {err} (window {d}, best lag {lag}, k {k})"
+        );
     }
 
     use signal_plugin_host::PluginMidiEvent;

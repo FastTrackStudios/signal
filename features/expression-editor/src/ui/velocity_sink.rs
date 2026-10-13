@@ -22,12 +22,12 @@ use std::cell::RefCell;
 
 use dioxus::prelude::*;
 
-use crate::ui::theme;
 use crate::Editor;
 use crate::doc::NoteId;
 use crate::edit::Edit;
 use crate::ops::VelocitySink;
 use crate::ops::velocity::{Note as VNote, Session};
+use crate::ui::theme;
 
 /// A sink over a live [`Editor`] signal.
 pub struct EditorSink {

@@ -5,7 +5,7 @@ use formats::aaf::parse::parse_session;
 use formats::aaf::types::{ClipKind, TrackKind};
 use std::path::PathBuf;
 
-const FIXTURE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/aaf_fixtures");
+const FIXTURE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/aaf");
 
 fn fixtures() -> Vec<PathBuf> {
     let mut v: Vec<_> = std::fs::read_dir(FIXTURE_DIR)

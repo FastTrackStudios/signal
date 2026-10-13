@@ -16,8 +16,8 @@ use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use audio::io::AudioIoPrefs;
-use midicore::MidiEvent;
 use keys::KeysRig;
+use midicore::MidiEvent;
 use sampler::rig_node::{Container, RigNode, Role};
 use synth::omni_import::{
     OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,

@@ -16,11 +16,11 @@
 
 use std::time::Instant;
 
-use anyrender::{PaintScene, Scene};
 use crate::drum::HitGesture;
 use crate::mouse::{Action, Context as MouseContext, Gesture as MouseGesture};
 use crate::tools::Mods;
 use crate::{Editor, Tool};
+use anyrender::{PaintScene, Scene};
 use kurbo::{Affine, Line, Rect};
 use peniko::Fill;
 
@@ -517,17 +517,14 @@ impl Stack {
             Editor::ACTIVE_BOOST,
             ed.lane_floor().max(MIN_LANE),
         );
-        let hit = crate::tracks::Workspace::row_at(
-            &rows,
-            num::sample(sy / 4096.0) * 4096.0,
-        )
-        .filter(|&lane| Some(lane) != ed.tracks.active_lane())
-        .and_then(|lane| {
-            ed.tracks
-                .lane_tracks(lane)
-                .into_iter()
-                .find(|&i| ed.tracks.track(i).is_some_and(|t| !t.hidden))
-        });
+        let hit = crate::tracks::Workspace::row_at(&rows, num::sample(sy / 4096.0) * 4096.0)
+            .filter(|&lane| Some(lane) != ed.tracks.active_lane())
+            .and_then(|lane| {
+                ed.tracks
+                    .lane_tracks(lane)
+                    .into_iter()
+                    .find(|&i| ed.tracks.track(i).is_some_and(|t| !t.hidden))
+            });
         if let Some(track) = hit {
             ed.switch_track(track);
             return true;

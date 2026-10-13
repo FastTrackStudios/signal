@@ -38,9 +38,7 @@ use signal_widgets::{Picker, PickerSize};
 use crate::ui::library::Kind;
 
 use crate::ui::kit::{MenuItem, PickOption, Picked, PresetBar};
-use crate::ui::theme::{
-    DIM, FAINT, FIELD, LINE, LINE_STRONG, LIVE, LIVE_BG, MUTED, SIDEBAR, TEXT,
-};
+use crate::ui::theme::{DIM, FAINT, FIELD, LINE, LINE_STRONG, LIVE, LIVE_BG, MUTED, SIDEBAR, TEXT};
 
 /// The set's menu: rename, duplicate, a new set, move it in the list,
 /// delete (refused for the only one), and the library.
@@ -599,12 +597,24 @@ fn Field(
 fn set_act(rig: &Option<RigClient>, index: u32, on_browse: EventHandler<Kind>, p: Picked) {
     let text = p.text;
     match p.id {
-        "rename" => send(rig, move |r| async move { let _ = r.rename_setlist(index, text).await; }),
-        "duplicate" => send(rig, move |r| async move { let _ = r.duplicate_setlist(index, text).await; }),
-        "new" => send(rig, move |r| async move { let _ = r.add_setlist(text).await; }),
-        "up" => send(rig, move |r| async move { let _ = r.move_setlist(index, index.saturating_sub(1)).await; }),
-        "down" => send(rig, move |r| async move { let _ = r.move_setlist(index, index + 1).await; }),
-        "delete" => send(rig, move |r| async move { let _ = r.delete_setlist(index).await; }),
+        "rename" => send(rig, move |r| async move {
+            let _ = r.rename_setlist(index, text).await;
+        }),
+        "duplicate" => send(rig, move |r| async move {
+            let _ = r.duplicate_setlist(index, text).await;
+        }),
+        "new" => send(rig, move |r| async move {
+            let _ = r.add_setlist(text).await;
+        }),
+        "up" => send(rig, move |r| async move {
+            let _ = r.move_setlist(index, index.saturating_sub(1)).await;
+        }),
+        "down" => send(rig, move |r| async move {
+            let _ = r.move_setlist(index, index + 1).await;
+        }),
+        "delete" => send(rig, move |r| async move {
+            let _ = r.delete_setlist(index).await;
+        }),
         "library" => on_browse.call(Kind::Setlists),
         _ => {}
     }
@@ -613,18 +623,42 @@ fn set_act(rig: &Option<RigClient>, index: u32, on_browse: EventHandler<Kind>, p
 /// A song row's menu: the song itself (its name, its key and tempo — the
 /// library's, wherever it is played), then its key and tempo in this set
 /// and its place in it.
-fn song_items(row: &crate::proto::SongSlot, entry: Option<&crate::proto::SongEntry>, names: &[String], index: usize, count: usize) -> Vec<MenuItem> {
+fn song_items(
+    row: &crate::proto::SongSlot,
+    entry: Option<&crate::proto::SongEntry>,
+    names: &[String],
+    index: usize,
+    count: usize,
+) -> Vec<MenuItem> {
     let others: Vec<String> = names.iter().filter(|n| **n != row.name).cloned().collect();
     let (key, bpm) = entry.map_or((row.key.clone(), row.bpm), |e| (e.key.clone(), e.bpm));
     vec![
         MenuItem::head(format!("Song · {}", row.name)),
         MenuItem::name("song_rename", "Rename…", "Rename", &row.name, others),
         MenuItem::name("song_key", format!("Key ({key})…"), "Set", &key, Vec::new()),
-        MenuItem::name("song_bpm", format!("Tempo ({bpm} BPM)…"), "Set", bpm.to_string(), Vec::new()),
+        MenuItem::name(
+            "song_bpm",
+            format!("Tempo ({bpm} BPM)…"),
+            "Set",
+            bpm.to_string(),
+            Vec::new(),
+        ),
         MenuItem::sep(),
         MenuItem::head("In this set"),
-        MenuItem::name("set_key", format!("Key here ({})…", row.key), "Set", &row.key, Vec::new()),
-        MenuItem::name("set_bpm", format!("Tempo here ({} BPM)…", row.bpm), "Set", row.bpm.to_string(), Vec::new()),
+        MenuItem::name(
+            "set_key",
+            format!("Key here ({})…", row.key),
+            "Set",
+            &row.key,
+            Vec::new(),
+        ),
+        MenuItem::name(
+            "set_bpm",
+            format!("Tempo here ({} BPM)…", row.bpm),
+            "Set",
+            row.bpm.to_string(),
+            Vec::new(),
+        ),
         MenuItem::run("up", "Move up").unless((index == 0).then(|| "First".to_string())),
         MenuItem::run("down", "Move down").unless((index + 1 >= count).then(|| "Last".to_string())),
         MenuItem::delete("remove", "Remove from this set", None),
@@ -632,29 +666,52 @@ fn song_items(row: &crate::proto::SongSlot, entry: Option<&crate::proto::SongEnt
 }
 
 /// What a song row's menu does.
-fn song_act(rig: &Option<RigClient>, row: &crate::proto::SongSlot, entry: Option<&crate::proto::SongEntry>, index: usize, setlist: u32, p: Picked) {
+fn song_act(
+    rig: &Option<RigClient>,
+    row: &crate::proto::SongSlot,
+    entry: Option<&crate::proto::SongEntry>,
+    index: usize,
+    setlist: u32,
+    p: Picked,
+) {
     let name = row.name.clone();
     let (key, bpm) = entry.map_or((row.key.clone(), row.bpm), |e| (e.key.clone(), e.bpm));
     let (here_key, here_bpm) = (row.key.clone(), row.bpm);
     let text = p.text.trim().to_string();
     let i = index as u32;
     match p.id {
-        "song_rename" if !text.is_empty() => send(rig, move |r| async move { let _ = r.edit_song(name, text, key, bpm).await; }),
-        "song_key" => send(rig, move |r| async move { let _ = r.edit_song(name.clone(), name, text, bpm).await; }),
+        "song_rename" if !text.is_empty() => send(rig, move |r| async move {
+            let _ = r.edit_song(name, text, key, bpm).await;
+        }),
+        "song_key" => send(rig, move |r| async move {
+            let _ = r.edit_song(name.clone(), name, text, bpm).await;
+        }),
         "song_bpm" => {
             if let Ok(b) = text.parse::<u32>() {
-                send(rig, move |r| async move { let _ = r.edit_song(name.clone(), name, key, b).await; });
+                send(rig, move |r| async move {
+                    let _ = r.edit_song(name.clone(), name, key, b).await;
+                });
             }
         }
-        "set_key" => send(rig, move |r| async move { let _ = r.set_setlist_entry(i, text, here_bpm).await; }),
+        "set_key" => send(rig, move |r| async move {
+            let _ = r.set_setlist_entry(i, text, here_bpm).await;
+        }),
         "set_bpm" => {
             if let Ok(b) = text.parse::<u32>() {
-                send(rig, move |r| async move { let _ = r.set_setlist_entry(i, here_key, b).await; });
+                send(rig, move |r| async move {
+                    let _ = r.set_setlist_entry(i, here_key, b).await;
+                });
             }
         }
-        "up" if index > 0 => send(rig, move |r| async move { let _ = r.move_song(i, i - 1).await; }),
-        "down" => send(rig, move |r| async move { let _ = r.move_song(i, i + 1).await; }),
-        "remove" => send(rig, move |r| async move { let _ = r.remove_setlist_entry(setlist, i).await; }),
+        "up" if index > 0 => send(rig, move |r| async move {
+            let _ = r.move_song(i, i - 1).await;
+        }),
+        "down" => send(rig, move |r| async move {
+            let _ = r.move_song(i, i + 1).await;
+        }),
+        "remove" => send(rig, move |r| async move {
+            let _ = r.remove_setlist_entry(setlist, i).await;
+        }),
         _ => {}
     }
 }
@@ -1001,7 +1058,11 @@ pub fn SectionPicker(model: PerformanceModel) -> Element {
         .unwrap_or_default();
     let (title, sub) = match &part {
         Some(p) => (
-            if p.section.is_empty() { p.name.clone() } else { p.section.clone() },
+            if p.section.is_empty() {
+                p.name.clone()
+            } else {
+                p.section.clone()
+            },
             if p.patch.is_empty() {
                 format!("{song} · keeps what plays")
             } else {

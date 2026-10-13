@@ -279,8 +279,8 @@ fn corrections_accumulate_across_separate_writes() {
 
 // ── The rest of the per-take bucket (#192) ───────────────────────────
 
-use expression_editor::{Dimension, Editor, StripLane, Viewport, tuning};
 use expression_editor::daw::state::{TakeView, TuningRef};
+use expression_editor::{Dimension, Editor, StripLane, Viewport, tuning};
 
 fn editor() -> Editor {
     Editor::new(
@@ -444,8 +444,8 @@ fn re_capturing_a_take_replaces_its_view() {
 
 // ── The lane layout (#201) ───────────────────────────────────────────
 
-use expression_editor::{ExpressionDoc as Doc, TimeBase, Track, Workspace};
 use expression_editor::daw::state::StoredLayout;
+use expression_editor::{ExpressionDoc as Doc, TimeBase, Track, Workspace};
 
 fn doc_for(_n: &str) -> Doc {
     Doc::new(TimeBase::Ppq { ppq: 960.0 }, 0.0, 3840.0)

@@ -1,11 +1,11 @@
+use crate::proto::SectionType;
+use crate::proto::keyflow_actions::{KeyflowActions, register_keyflow_actions};
+use crate::proto::ruler_lanes::{CoreLane, FtsLane, InstrumentLane, classify_marker_lane};
 use architect::platform::Instant;
 use daw::module::ModuleContext;
 use daw::service::transport::service::Transport as TransportService;
 use daw::service::{Markers, MusicalPosition, ProjectContext, Projects, Region, Regions, TempoMap};
 use keyflow::sections::colors_for_section_type;
-use crate::proto::SectionType;
-use crate::proto::keyflow_actions::{KeyflowActions, register_keyflow_actions};
-use crate::proto::ruler_lanes::{CoreLane, FtsLane, InstrumentLane, classify_marker_lane};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, warn};
 

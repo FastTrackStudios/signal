@@ -16,8 +16,8 @@
 //! palette arrives as props so a panel matches the plugin it is mounted in
 //! rather than imposing its own look.
 
-use dioxus::prelude::*;
 use crate::{Preset, PresetBrowser};
+use dioxus::prelude::*;
 
 /// How a preset is applied, and what the panel should look like doing it.
 #[derive(Props, Clone, PartialEq)]

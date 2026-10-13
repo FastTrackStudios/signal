@@ -20,10 +20,10 @@
 //! control that scores 0.21 alone scores 0.21 here — so this file holds
 //! only layout, no geometry.
 
-use daw_ui::theme::Color;
 use daw_ui::art::render::{rasterise, render_svg};
 use daw_ui::art::slice::{Slice, expect_art as art};
 use daw_ui::art::vector_controls as v;
+use daw_ui::theme::Color;
 
 /// The routing button as *this drawing* wants it: two rows short of
 /// `mcp_io`'s 23x32 source, which is what the reference shot measures.

@@ -11,8 +11,8 @@ use std::path::PathBuf;
 use dawfile_reaper::RppSerialize;
 use dawfile_reaper::builder::ReaperProjectBuilder;
 use dawfile_reaper::types::item::SourceType;
-use expression_editor::{Mode, Viewport};
 use expression_editor::standalone::{Args, LoadError, Runner, Source, Target, scene_by_name};
+use expression_editor::{Mode, Viewport};
 
 fn viewport() -> Viewport {
     Viewport::new(1100.0, 400.0)
@@ -289,8 +289,7 @@ fn a_guitar_pro_extension_is_recognised() {
 fn a_transcription_opens_as_a_guitar_roll() {
     // The fixture the importer's own suite uses, so this cannot drift
     // from what the parser is tested against.
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let Some(file) = std::fs::read_dir(&fixture).ok().and_then(|d| {
         d.flatten()
             .map(|e| e.path())

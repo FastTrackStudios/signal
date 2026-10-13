@@ -66,9 +66,25 @@ fn cols(i: usize) -> (f64, f64) {
 
 /// A console cap with its dotted, numbered scale and its legend under it.
 #[allow(clippy::too_many_arguments)]
-fn cap(b: &mut Builder<'_>, panel: NodeId, addr: &str, legend: &str, color: &str, scale: &[String], cx: f64, cy: f64) -> NodeId {
+fn cap(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    addr: &str,
+    legend: &str,
+    color: &str,
+    scale: &[String],
+    cx: f64,
+    cy: f64,
+) -> NodeId {
     let scale: Vec<&str> = scale.iter().map(String::as_str).collect();
-    let p = Place::new(format!("{addr} {legend}")).size(CAP).variant(color).legend(legend).keep_case().touch(TOUCH_MIN).bind(bind(addr)).scale(&scale);
+    let p = Place::new(format!("{addr} {legend}"))
+        .size(CAP)
+        .variant(color)
+        .legend(legend)
+        .keep_case()
+        .touch(TOUCH_MIN)
+        .bind(bind(addr))
+        .scale(&scale);
     ui::put(b, panel, "knob.console_cap", &p, cx, cy)
 }
 
@@ -79,9 +95,26 @@ fn gain(b: &mut Builder<'_>, panel: NodeId, addr: &str, color: &str, cx: f64, cy
 
 /// A grey key with its legend on the cap; `lamp` gives it a status LED.
 #[allow(clippy::too_many_arguments)]
-fn key(b: &mut Builder<'_>, panel: NodeId, addr: &str, legend: &str, lamp: Option<&str>, cx: f64, cy: f64) {
-    let opts: Vec<String> = lamp.map_or_else(|| vec!["nolamp".into()], |c| vec![format!("color={c}")]);
-    let p = Place { options: Some(opts), ..Place::new(format!("{addr} key")).size(48.0).variant("grey").legend(legend).keep_case().bind(bind(addr)) };
+fn key(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    addr: &str,
+    legend: &str,
+    lamp: Option<&str>,
+    cx: f64,
+    cy: f64,
+) {
+    let opts: Vec<String> =
+        lamp.map_or_else(|| vec!["nolamp".into()], |c| vec![format!("color={c}")]);
+    let p = Place {
+        options: Some(opts),
+        ..Place::new(format!("{addr} key"))
+            .size(48.0)
+            .variant("grey")
+            .legend(legend)
+            .keep_case()
+            .bind(bind(addr))
+    };
     ui::put_at(b, panel, "button.key", &p, cx - 24.0, cy - 12.0);
 }
 
@@ -91,22 +124,39 @@ fn hairline(b: &mut Builder<'_>, panel: NodeId, x: f64) {
 }
 
 fn title(b: &mut Builder<'_>, panel: NodeId, s: &str, i: usize) {
-    ui::silk_left(b, panel, s, LEFT + SECTION * i as f64 + 10.0, HEAD, 12.0, INK, 800.0);
+    ui::silk_left(
+        b,
+        panel,
+        s,
+        LEFT + SECTION * i as f64 + 10.0,
+        HEAD,
+        12.0,
+        INK,
+        800.0,
+    );
 }
 
 pub fn face() -> Face {
     let scene = canvas("Console Channel EQ", |b, root| {
         ui::fit_root(b, root, W, H);
         let panel = ui::panel(b, root, "panel.painted", "charcoal", W, H, "none");
-        paint(b, panel, &[(0.0, "#5e5c58"), (0.5, "#504f4b"), (1.0, "#43423f")]);
+        paint(
+            b,
+            panel,
+            &[(0.0, "#5e5c58"), (0.5, "#504f4b"), (1.0, "#43423f")],
+        );
         let (hz, khz) = ("Hz", "kHz");
 
         // ── Filters ────────────────────────────────────────────────────
         title(b, panel, "Filters", 0);
         let (l, r) = cols(0);
-        let lpf: Vec<String> = ["3", "3.5", "4", "8", "12", "Out"].map(ToString::to_string).to_vec();
+        let lpf: Vec<String> = ["3", "3.5", "4", "8", "12", "Out"]
+            .map(ToString::to_string)
+            .to_vec();
         cap(b, panel, "consoleeq/lpf", khz, "grey", &lpf, r, R1);
-        let hpf: Vec<String> = ["Out", "20", "70", "", "200", "300", "350"].map(ToString::to_string).to_vec();
+        let hpf: Vec<String> = ["Out", "20", "70", "", "200", "300", "350"]
+            .map(ToString::to_string)
+            .to_vec();
         cap(b, panel, "consoleeq/hpf", hz, "grey", &hpf, l, R2);
         key(b, panel, "consoleeq/filters_in", "IN", None, r, R3 - 6.0);
         hairline(b, panel, LEFT + SECTION - 2.0);
@@ -116,15 +166,42 @@ pub fn face() -> Face {
         let (l, r) = cols(1);
         gain(b, panel, "consoleeq/hf_gain", "red", l, R1);
         key(b, panel, "consoleeq/hf_bell", "BELL", None, r, R1 - 30.0);
-        cap(b, panel, "consoleeq/hf_freq", khz, "red", &marks(HF, true), r, R2 - 10.0);
+        cap(
+            b,
+            panel,
+            "consoleeq/hf_freq",
+            khz,
+            "red",
+            &marks(HF, true),
+            r,
+            R2 - 10.0,
+        );
         hairline(b, panel, LEFT + 2.0 * SECTION - 2.0);
 
         // ── HMF ────────────────────────────────────────────────────────
         title(b, panel, "HMF", 2);
         let (l, r) = cols(2);
         gain(b, panel, "consoleeq/hmf_gain", "green", l, R1);
-        cap(b, panel, "consoleeq/hmf_freq", khz, "green", &marks(HMF, true), r, R2 - 12.0);
-        cap(b, panel, "consoleeq/hmf_q", "Q", "green", &marks(QS, false), l, R3 - 16.0);
+        cap(
+            b,
+            panel,
+            "consoleeq/hmf_freq",
+            khz,
+            "green",
+            &marks(HMF, true),
+            r,
+            R2 - 12.0,
+        );
+        cap(
+            b,
+            panel,
+            "consoleeq/hmf_q",
+            "Q",
+            "green",
+            &marks(QS, false),
+            l,
+            R3 - 16.0,
+        );
         key(b, panel, "consoleeq/hmf_x3", "×3", None, r, R1 - 30.0);
         hairline(b, panel, LEFT + 3.0 * SECTION - 2.0);
 
@@ -132,15 +209,42 @@ pub fn face() -> Face {
         title(b, panel, "LMF", 3);
         let (l, r) = cols(3);
         gain(b, panel, "consoleeq/lmf_gain", "blue", l, R1);
-        cap(b, panel, "consoleeq/lmf_freq", khz, "blue", &marks(LMF, true), r, R2 - 12.0);
-        cap(b, panel, "consoleeq/lmf_q", "Q", "blue", &marks(QS, false), l, R3 - 16.0);
+        cap(
+            b,
+            panel,
+            "consoleeq/lmf_freq",
+            khz,
+            "blue",
+            &marks(LMF, true),
+            r,
+            R2 - 12.0,
+        );
+        cap(
+            b,
+            panel,
+            "consoleeq/lmf_q",
+            "Q",
+            "blue",
+            &marks(QS, false),
+            l,
+            R3 - 16.0,
+        );
         key(b, panel, "consoleeq/lmf_div3", "÷3", None, r, R1 - 30.0);
         hairline(b, panel, LEFT + 4.0 * SECTION - 2.0);
 
         // ── LF ─────────────────────────────────────────────────────────
         title(b, panel, "LF", 4);
         let (l, r) = cols(4);
-        cap(b, panel, "consoleeq/lf_freq", hz, "black", &marks(LF, false), r - 8.0, R1);
+        cap(
+            b,
+            panel,
+            "consoleeq/lf_freq",
+            hz,
+            "black",
+            &marks(LF, false),
+            r - 8.0,
+            R1,
+        );
         gain(b, panel, "consoleeq/lf_gain", "black", l, R2 - 30.0);
         key(b, panel, "consoleeq/lf_bell", "BELL", None, r, R2 - 20.0);
         hairline(b, panel, LEFT + 5.0 * SECTION - 2.0);
@@ -150,7 +254,16 @@ pub fn face() -> Face {
         ui::silk(b, panel, "Equaliser", x, HEAD, 9.0, INK, 800.0);
         key(b, panel, "consoleeq/eq_in", "IN", Some("#39d353"), x, 62.0);
         key(b, panel, "consoleeq/phase", "Ø", Some("#ff3b2f"), x, 128.0);
-        let trim = cap(b, panel, "consoleeq/trim", "Trim", "grey", &["-24", "", "", "0", "", "", "+24"].map(ToString::to_string), x, R3 - 26.0);
+        let trim = cap(
+            b,
+            panel,
+            "consoleeq/trim",
+            "Trim",
+            "grey",
+            &["-24", "", "", "0", "", "", "+24"].map(ToString::to_string),
+            x,
+            R3 - 26.0,
+        );
         ui::add_value(b, trim, 8.0, INK);
         if let Some(c) = b.controls.get_mut(&trim) {
             c.format = Some(ValueFormat::decimals(1));
@@ -162,13 +275,26 @@ pub fn face() -> Face {
         ui::silk(b, panel, "Out", mx + 18.0, HEAD, 9.0, INK, 800.0);
         let (top, bottom, floor, ceiling) = (52.0, 306.0, -40.0, 6.0);
         for (name, ch, dx) in [("Output L", 0, 0.0), ("Output R", 1, 22.0)] {
-            let bind = Binding { source: Source::Stream { id: surface_proto::EntryId::new("consoleeq/out"), channel: Some(ch) }, ..Binding::stream("consoleeq/out") };
-            let col = Place::new(name).size(bottom - top).options(&["floor=-40", "ceiling=6", "segments=23", "thick=14"]).bind(bind);
+            let bind = Binding {
+                source: Source::Stream {
+                    id: surface_proto::EntryId::new("consoleeq/out"),
+                    channel: Some(ch),
+                },
+                ..Binding::stream("consoleeq/out")
+            };
+            let col = Place::new(name)
+                .size(bottom - top)
+                .options(&["floor=-40", "ceiling=6", "segments=23", "thick=14"])
+                .bind(bind);
             ui::put_at(b, panel, "meter.led_column", &col, mx + dx, top);
         }
         for db in [6.0, 0.0, -10.0, -20.0, -30.0, -40.0] {
             let y = top + 2.0 + (bottom - top - 4.0) * (ceiling - db) / (ceiling - floor);
-            let label = if db > 0.0 { format!("+{db}") } else { format!("{db}") };
+            let label = if db > 0.0 {
+                format!("+{db}")
+            } else {
+                format!("{db}")
+            };
             ui::silk_right(b, panel, &label, mx - 6.0, y, 7.5, INK, 700.0);
             ui::rule(b, panel, mx - 4.0, y - 0.5, 3.0, 1.0, "#f1f0ea99");
         }
@@ -181,23 +307,49 @@ pub fn face() -> Face {
         ui::param("consoleeq/lpf", "LPF", ui::printed(LPF, Unit::Hz), 22000.0),
         ui::toggle("consoleeq/filters_in", "Filters In", true),
         ui::db("consoleeq/lf_gain", "LF Gain", -15.0, 15.0, 0.0).featured(),
-        ui::param("consoleeq/lf_freq", "LF Freq", ui::printed(LF, Unit::Hz), 100.0),
+        ui::param(
+            "consoleeq/lf_freq",
+            "LF Freq",
+            ui::printed(LF, Unit::Hz),
+            100.0,
+        ),
         ui::toggle("consoleeq/lf_bell", "LF Bell", false),
         ui::db("consoleeq/lmf_gain", "LMF Gain", -15.0, 15.0, 0.0).featured(),
-        ui::param("consoleeq/lmf_freq", "LMF Freq", ui::printed(LMF, Unit::Hz), 800.0),
+        ui::param(
+            "consoleeq/lmf_freq",
+            "LMF Freq",
+            ui::printed(LMF, Unit::Hz),
+            800.0,
+        ),
         ui::param("consoleeq/lmf_q", "LMF Q", ui::printed(QS, Unit::None), 1.0),
         ui::toggle("consoleeq/lmf_div3", "LMF ÷3", false),
         ui::db("consoleeq/hmf_gain", "HMF Gain", -15.0, 15.0, 0.0).featured(),
-        ui::param("consoleeq/hmf_freq", "HMF Freq", ui::printed(HMF, Unit::Hz), 3000.0),
+        ui::param(
+            "consoleeq/hmf_freq",
+            "HMF Freq",
+            ui::printed(HMF, Unit::Hz),
+            3000.0,
+        ),
         ui::param("consoleeq/hmf_q", "HMF Q", ui::printed(QS, Unit::None), 1.0),
         ui::toggle("consoleeq/hmf_x3", "HMF ×3", false),
         ui::db("consoleeq/hf_gain", "HF Gain", -15.0, 15.0, 0.0).featured(),
-        ui::param("consoleeq/hf_freq", "HF Freq", ui::printed(HF, Unit::Hz), 8000.0),
+        ui::param(
+            "consoleeq/hf_freq",
+            "HF Freq",
+            ui::printed(HF, Unit::Hz),
+            8000.0,
+        ),
         ui::toggle("consoleeq/hf_bell", "HF Bell", false),
         ui::toggle("consoleeq/eq_in", "EQ In", true).featured(),
         ui::toggle("consoleeq/phase", "Phase", false),
         ui::db("consoleeq/trim", "Trim", -24.0, 24.0, 0.0),
     ];
     let streams = vec![ui::level_stream("consoleeq/out", "Output Level", 2)];
-    Face { file: "02-console-eq", plugin: "eq", scene, params, streams }
+    Face {
+        file: "02-console-eq",
+        plugin: "eq",
+        scene,
+        params,
+        streams,
+    }
 }

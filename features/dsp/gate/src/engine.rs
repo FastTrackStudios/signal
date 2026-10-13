@@ -271,7 +271,8 @@ impl DrumGate {
     #[must_use]
     pub fn new(sample_rate: f64, channels: usize, settings: Settings) -> Self {
         let sample_rate = sample_rate.max(1.0);
-        let capacity = num::f64_to_index(libm::ceil(MAX_LOOKAHEAD_MS * 0.001 * sample_rate)).saturating_add(3);
+        let capacity =
+            num::f64_to_index(libm::ceil(MAX_LOOKAHEAD_MS * 0.001 * sample_rate)).saturating_add(3);
         let mut gate = Self {
             sample_rate,
             settings,

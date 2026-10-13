@@ -35,7 +35,11 @@ impl Drop for Dir {
     }
 }
 
-fn tick_until(view: &mut LibraryView, player: &mut Player, want: impl Fn(&Outcome) -> bool) -> Outcome {
+fn tick_until(
+    view: &mut LibraryView,
+    player: &mut Player,
+    want: impl Fn(&Outcome) -> bool,
+) -> Outcome {
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
         if let Some(o) = view.tick(player).into_iter().find(|o| want(o)) {
@@ -47,7 +51,9 @@ fn tick_until(view: &mut LibraryView, player: &mut Player, want: impl Fn(&Outcom
 }
 
 fn gain(player: &Player) -> f64 {
-    player.engine_value(&surface_proto::ParamAddr::new("amp/gain")).unwrap()
+    player
+        .engine_value(&surface_proto::ParamAddr::new("amp/gain"))
+        .unwrap()
 }
 
 #[test]
@@ -57,12 +63,20 @@ fn edits_swap_in_place_and_bad_ones_are_refused() {
     std::fs::write(&file, PANEL).unwrap();
     let lib = FsLibrary::open(&dir.0).unwrap();
     let _watch = lib.watch_every(Duration::from_millis(20));
-    let served = Served::start(lib.clone().into_router(), std::net::TcpListener::bind("127.0.0.1:0").unwrap()).unwrap();
+    let served = Served::start(
+        lib.clone().into_router(),
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+    )
+    .unwrap();
 
     let installs = dir.0.join(".installed");
-    let mut view = LibraryView::start(&served.url, Some("live".into()), false, installs.clone()).unwrap();
+    let mut view =
+        LibraryView::start(&served.url, Some("live".into()), false, installs.clone()).unwrap();
     assert_eq!(view.mode(), Mode::Preview);
-    let surface = view.initial().unwrap().expect("preview mode starts on the surface");
+    let surface = view
+        .initial()
+        .unwrap()
+        .expect("preview mode starts on the surface");
     let mut player = Player::new(Backend::Local(Memory::demo()), surface).unwrap();
 
     // Grab the knob and drag it partway: a gesture in flight.
@@ -78,37 +92,82 @@ fn edits_swap_in_place_and_bad_ones_are_refused() {
 
     // The design changes on the server's disk (an agent's save): it swaps in
     // under the hand — same values, the drag goes on.
-    std::fs::write(&file, PANEL.replace("\"Live\"", "\"Edited\"").replace("fill=\"#101010\"", "fill=\"#202020\"")).unwrap();
-    let o = tick_until(&mut view, &mut player, |o| matches!(o, Outcome::Applied { .. }));
-    assert_eq!(o, Outcome::Applied { id: "live".into(), version: 2 });
-    assert_eq!(library_link::scene_name(player.scene()).as_deref(), Some("Edited"));
-    assert!((gain(&player) - mid).abs() < 1e-9, "param value kept across the swap");
+    std::fs::write(
+        &file,
+        PANEL
+            .replace("\"Live\"", "\"Edited\"")
+            .replace("fill=\"#101010\"", "fill=\"#202020\""),
+    )
+    .unwrap();
+    let o = tick_until(&mut view, &mut player, |o| {
+        matches!(o, Outcome::Applied { .. })
+    });
+    assert_eq!(
+        o,
+        Outcome::Applied {
+            id: "live".into(),
+            version: 2
+        }
+    );
+    assert_eq!(
+        library_link::scene_name(player.scene()).as_deref(),
+        Some("Edited")
+    );
+    assert!(
+        (gain(&player) - mid).abs() < 1e-9,
+        "param value kept across the swap"
+    );
     player.pointer_move((cx, cy - 60.0), m, 300.0);
     player.pointer_up(316.0);
     player.tick(600.0);
-    assert!(gain(&player) > mid, "the same drag continued after the swap");
+    assert!(
+        gain(&player) > mid,
+        "the same drag continued after the swap"
+    );
     let kept = gain(&player);
 
     // A malformed save is refused: the stage keeps the last good version.
     std::fs::write(&file, "<Document>\n  <Page>\n    <Frame name=\"Half").unwrap();
-    let o = tick_until(&mut view, &mut player, |o| matches!(o, Outcome::Rejected(_)));
-    let Outcome::Rejected(why) = o else { unreachable!() };
+    let o = tick_until(&mut view, &mut player, |o| {
+        matches!(o, Outcome::Rejected(_))
+    });
+    let Outcome::Rejected(why) = o else {
+        unreachable!()
+    };
     assert!(why.starts_with("live v3 rejected: "), "{why}");
-    assert_eq!(library_link::scene_name(player.scene()).as_deref(), Some("Edited"), "not blanked");
+    assert_eq!(
+        library_link::scene_name(player.scene()).as_deref(),
+        Some("Edited"),
+        "not blanked"
+    );
     assert!(view.toast_text().is_some_and(|t| t.error && t.text == why));
     assert!(view.toast(1000.0, 800.0).is_some(), "the toast draws");
     assert!((gain(&player) - kept).abs() < 1e-9);
 
     // The fix goes live again.
     std::fs::write(&file, PANEL.replace("\"Live\"", "\"Fixed\"")).unwrap();
-    tick_until(&mut view, &mut player, |o| matches!(o, Outcome::Applied { version: 4, .. }));
-    assert_eq!(library_link::scene_name(player.scene()).as_deref(), Some("Fixed"));
+    tick_until(&mut view, &mut player, |o| {
+        matches!(o, Outcome::Applied { version: 4, .. })
+    });
+    assert_eq!(
+        library_link::scene_name(player.scene()).as_deref(),
+        Some("Fixed")
+    );
 
     // Install copies it out; fork publishes a copy and previews that.
     view.install();
-    assert_eq!(std::fs::read_to_string(installs.join("live.frame")).unwrap(), PANEL.replace("\"Live\"", "\"Fixed\""));
+    assert_eq!(
+        std::fs::read_to_string(installs.join("live.frame")).unwrap(),
+        PANEL.replace("\"Live\"", "\"Fixed\"")
+    );
     view.fork(&mut player);
-    assert_eq!(view.title(), format!("frame — fixed-fork — live from {} — B for the library", served.url));
+    assert_eq!(
+        view.title(),
+        format!(
+            "frame — fixed-fork — live from {} — B for the library",
+            served.url
+        )
+    );
     let fork = lib.get("fixed-fork".into(), None).unwrap();
     assert_eq!(fork.meta.forked_from.as_deref(), Some("live@4"));
 
@@ -117,27 +176,49 @@ fn edits_swap_in_place_and_bad_ones_are_refused() {
     assert!(view.browsing());
     tick_until(&mut view, &mut player, |o| matches!(o, Outcome::Changed));
     let (scene, _) = view.document().unwrap();
-    assert!(scene.nodes.values().any(|n| n.name == "fixed-fork"), "the fork's tile");
+    assert!(
+        scene.nodes.values().any(|n| n.name == "fixed-fork"),
+        "the fork's tile"
+    );
 }
 
 #[test]
 fn browse_mode_opens_a_surface_by_click() {
     let dir = Dir::new("browse");
     std::fs::create_dir_all(dir.0.join("a")).unwrap();
-    std::fs::write(dir.0.join("a/one.frame"), PANEL.replace("\"Live\"", "\"One\"")).unwrap();
-    std::fs::write(dir.0.join("a/two.frame"), PANEL.replace("\"Live\"", "\"Two\"")).unwrap();
+    std::fs::write(
+        dir.0.join("a/one.frame"),
+        PANEL.replace("\"Live\"", "\"One\""),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.0.join("a/two.frame"),
+        PANEL.replace("\"Live\"", "\"Two\""),
+    )
+    .unwrap();
     let lib = FsLibrary::open(&dir.0).unwrap();
-    let served = Served::start(lib.into_router(), std::net::TcpListener::bind("127.0.0.1:0").unwrap()).unwrap();
+    let served = Served::start(
+        lib.into_router(),
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+    )
+    .unwrap();
     let mut view = LibraryView::start(&served.url, None, true, dir.0.join(".i")).unwrap();
     assert!(view.browsing());
     assert!(view.initial().unwrap().is_none());
-    let mut player = Player::new(Backend::Local(Memory::demo()), crate::source::placeholder()).unwrap();
+    let mut player =
+        Player::new(Backend::Local(Memory::demo()), crate::source::placeholder()).unwrap();
     view.nav(crate::browser::Nav::Right);
     view.open_selected(&mut player);
     assert_eq!(view.mode(), Mode::Preview);
-    assert_eq!(library_link::scene_name(player.scene()).as_deref(), Some("Two"));
+    assert_eq!(
+        library_link::scene_name(player.scene()).as_deref(),
+        Some("Two")
+    );
     view.back();
     // The first tile sits at the grid's first slot.
     assert!(view.click((40.0, 130.0), &mut player));
-    assert_eq!(library_link::scene_name(player.scene()).as_deref(), Some("One"));
+    assert_eq!(
+        library_link::scene_name(player.scene()).as_deref(),
+        Some("One")
+    );
 }

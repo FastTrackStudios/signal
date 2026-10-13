@@ -5,15 +5,15 @@ use super::{
     ACTIVE_INDICES_PROGRESS_EMIT_MS, PROJECT_SWITCH_DEBOUNCE_MS, SetlistServiceImpl,
     TRANSPORT_PROGRESS_EPSILON, TRANSPORT_TIME_EPSILON_SECS,
 };
+use crate::proto::{
+    ActiveIndices, AdvanceMode, MeasureInfo, Section, SessionServiceError, SetlistEvent,
+    SetlistService, Song, SongTransportState,
+};
 use architect::platform::Instant;
 use daw::rpc::Daw;
 use daw::service::transport::service::Transport;
 use daw::service::{AudioEngine, ProjectContext, Projects};
 use rustc_hash::FxHashMap;
-use crate::proto::{
-    ActiveIndices, AdvanceMode, MeasureInfo, Section, SessionServiceError, SetlistEvent,
-    SetlistService, Song, SongTransportState,
-};
 use smallvec::SmallVec;
 use std::ops::ControlFlow;
 use std::sync::Arc;
@@ -2061,10 +2061,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::proto::SongId;
     use daw::service::Position;
     use daw_proto::{PositionInSeconds, TimeSignature};
     use daw_standalone::Standalone;
-    use crate::proto::SongId;
 
     fn song_at(name: &str, start: f64, end: f64, tempo: f64, ts: (u32, u32)) -> Song {
         Song {

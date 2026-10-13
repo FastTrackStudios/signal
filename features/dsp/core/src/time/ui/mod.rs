@@ -17,9 +17,9 @@
 //! Inline styles only, per the repo's UI rules: Blitz does not load external
 //! stylesheets, and these components are embedded in plugin editors.
 
+use crate::time::{Flavour, MusicalTime, NoteValue};
 use dioxus::prelude::*;
 use fts_audio_ui::ParamHandle;
-use crate::time::{Flavour, MusicalTime, NoteValue};
 
 /// Read the note value a division parameter is currently on.
 fn current(handle: &ParamHandle) -> MusicalTime {

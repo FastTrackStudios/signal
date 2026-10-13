@@ -16,11 +16,11 @@ pub mod units;
 
 use std::sync::Arc;
 
-use plugin_core::prelude::*;
 use crate::profiles::Profile;
 use fts_audio_ui::ParamHandle;
 use fts_audio_ui::shell::ShellItem;
 use nice_plug_dioxus::prelude::ParamContext;
+use plugin_core::prelude::*;
 
 use crate::ui::params::CompUiState;
 use crate::ui::profile_handle::handle_for;
@@ -94,7 +94,9 @@ pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
             let names: Vec<&str> = category
                 .profiles
                 .iter()
-                .filter_map(|id| crate::profiles::profile_by_id(id).map(crate::profiles::Profile::name))
+                .filter_map(|id| {
+                    crate::profiles::profile_by_id(id).map(crate::profiles::Profile::name)
+                })
                 .collect();
             let label = if names.len() > 1 {
                 format!(
@@ -156,7 +158,10 @@ pub const fn preferred_editor_size(_profile_index: usize) -> (u32, u32) {
     // a unit. A window that changes shape under you while you are browsing is
     // worse than a graph with less height, so Main wears the rack's size too
     // and the window only moves when you ask it to with a size preset.
-    (crate::ui::control_view::EDITOR_W, crate::ui::control_view::EDITOR_H)
+    (
+        crate::ui::control_view::EDITOR_W,
+        crate::ui::control_view::EDITOR_H,
+    )
 }
 
 /// The editor size for a profile *and* a chosen form: the form decides, except

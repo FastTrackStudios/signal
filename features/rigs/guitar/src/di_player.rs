@@ -25,7 +25,9 @@ pub fn recording(clip: u32, rate: u32) -> Arc<Vec<f32>> {
     static CACHE: OnceLock<Cache> = OnceLock::new();
     let clip = (clip as usize).min(RECORDINGS.len() - 1);
     let cache = CACHE.get_or_init(|| Mutex::new(Vec::new()));
-    let mut cache = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut cache = cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some((_, samples)) = cache.iter().find(|(key, _)| *key == (clip, rate)) {
         return samples.clone();
     }
@@ -41,14 +43,22 @@ pub fn recorded(path: &std::path::Path, rate: u32) -> Arc<Vec<f32>> {
     type Cache = Mutex<Vec<((std::path::PathBuf, u32), Arc<Vec<f32>>)>>;
     static CACHE: OnceLock<Cache> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(Vec::new()));
-    let mut cache = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut cache = cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some((_, samples)) = cache.iter().find(|(key, _)| key.0 == path && key.1 == rate) {
         return samples.clone();
     }
     let (samples, from) = match hound::WavReader::open(path) {
         Ok(reader) => {
             let from = reader.spec().sample_rate;
-            (reader.into_samples::<i16>().map(|s| f32::from(s.unwrap_or(0)) / 32_768.0).collect::<Vec<_>>(), from)
+            (
+                reader
+                    .into_samples::<i16>()
+                    .map(|s| f32::from(s.unwrap_or(0)) / 32_768.0)
+                    .collect::<Vec<_>>(),
+                from,
+            )
         }
         Err(e) => {
             tracing::warn!(error = %e, "di player: a recording does not read");
@@ -68,7 +78,12 @@ pub fn write(path: &std::path::Path, samples: &[f32], rate: u32) -> Result<(), h
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let spec = hound::WavSpec { channels: 1, sample_rate: rate, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: rate,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
     let mut w = hound::WavWriter::create(path, spec)?;
     for s in samples {
         w.write_sample((s.clamp(-1.0, 1.0) * 32_767.0) as i16)?;
@@ -120,8 +135,14 @@ mod tests {
         assert_eq!(RECORDINGS.len(), crate::proto::DI_CLIPS.len());
         for clip in 0..RECORDINGS.len() as u32 {
             let r = recording(clip, RECORDED_RATE);
-            assert!(r.len() > 3 * RECORDED_RATE as usize, "clip {clip} is seconds long");
-            assert!(r.iter().any(|s| s.abs() > 0.05), "clip {clip} is a recording, not silence");
+            assert!(
+                r.len() > 3 * RECORDED_RATE as usize,
+                "clip {clip} is seconds long"
+            );
+            assert!(
+                r.iter().any(|s| s.abs() > 0.05),
+                "clip {clip} is a recording, not silence"
+            );
         }
     }
 
@@ -144,7 +165,13 @@ mod recorded_tests {
         write(&path, &played, 48_000).expect("it writes");
         let back = recorded(&path, 48_000);
         assert_eq!(back.len(), played.len());
-        assert!(played.iter().zip(back.iter()).all(|(a, b)| (a - b).abs() < 1e-3), "16-bit, to within a step");
+        assert!(
+            played
+                .iter()
+                .zip(back.iter())
+                .all(|(a, b)| (a - b).abs() < 1e-3),
+            "16-bit, to within a step"
+        );
         // At another rate, resampled to it.
         assert_eq!(recorded(&path, 24_000).len(), played.len() / 2);
         let _ = std::fs::remove_file(&path);

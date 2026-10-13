@@ -46,7 +46,13 @@ pub fn ring(capacity: usize) -> (RingWriter, RingReader) {
         claimed: AtomicU64::new(0),
         written: AtomicU64::new(0),
     });
-    (RingWriter { shared: shared.clone(), pos: 0 }, RingReader { shared })
+    (
+        RingWriter {
+            shared: shared.clone(),
+            pos: 0,
+        },
+        RingReader { shared },
+    )
 }
 
 impl RingWriter {
@@ -65,7 +71,8 @@ impl RingWriter {
     #[inline]
     pub fn push_slice(&mut self, xs: &[f32]) {
         let s = &*self.shared;
-        s.claimed.store(self.pos + xs.len() as u64, Ordering::Relaxed);
+        s.claimed
+            .store(self.pos + xs.len() as u64, Ordering::Relaxed);
         fence(Ordering::Release);
         for &x in xs {
             s.data[(self.pos as usize) & s.mask].store(x.to_bits(), Ordering::Relaxed);
@@ -105,7 +112,9 @@ impl RingReader {
             let start = end - n;
             let dst_at = out.len() - n as usize;
             for (i, d) in out[dst_at..].iter_mut().enumerate() {
-                *d = f32::from_bits(s.data[((start + i as u64) as usize) & s.mask].load(Ordering::Relaxed));
+                *d = f32::from_bits(
+                    s.data[((start + i as u64) as usize) & s.mask].load(Ordering::Relaxed),
+                );
             }
             // Which positions might the writer have overwritten meanwhile?
             fence(Ordering::Acquire);

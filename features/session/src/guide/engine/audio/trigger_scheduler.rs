@@ -229,7 +229,7 @@ impl TriggerScheduler {
             if let Ok(sample) = usize::try_from(samples_until_eighth) {
                 if sample < params.buffer_len {
                     debug!(
-                        target: "crate::guide::engine::audio",
+                        target: "session::guide::engine::audio",
                         "Scheduling eighth at sample {} | time_sig={}/{}",
                         sample,
                         params.time_sig_num,
@@ -257,7 +257,7 @@ impl TriggerScheduler {
             if let Ok(sample) = usize::try_from(samples_until_sixteenth) {
                 if sample < params.buffer_len {
                     debug!(
-                        target: "crate::guide::engine::audio",
+                        target: "session::guide::engine::audio",
                         "Scheduling sixteenth at sample {} | time_sig={}/{}",
                         sample,
                         params.time_sig_num,
@@ -406,7 +406,7 @@ impl TriggerScheduler {
                 params.buffer_len,
             ) {
                 debug!(
-                    target: "crate::guide::engine::audio",
+                    target: "session::guide::engine::audio",
                     "Scheduling beat at sample {} | current_beat={:.3} | next_beat={:.3} | time_sig={}/{}",
                     sample, params.current_beat_position, next_beat, params.time_sig_num, params.time_sig_den
                 );

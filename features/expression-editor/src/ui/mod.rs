@@ -18,8 +18,8 @@
 //! selection) directly and the document only through `Editor::apply`,
 //! so undo stays honest no matter which gesture produced the change.
 
-use dioxus::prelude::*;
 use crate::{Dimension, Editor};
+use dioxus::prelude::*;
 
 pub mod arp_panel;
 pub use crate::paint::canvas;
@@ -68,10 +68,10 @@ pub mod velocity_sink;
 pub mod widgets;
 pub mod workflow;
 
-pub use drawer::ModDrawer;
 pub use crate as core;
 pub use crate::paint::BendFlow;
 pub use crate::paint::Drag;
+pub use drawer::ModDrawer;
 pub use lane_strip::LaneStrip;
 pub use menu_ui::ContextMenu;
 pub use multitool_ui::MultiTool;

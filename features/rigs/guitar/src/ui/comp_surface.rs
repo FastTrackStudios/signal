@@ -357,13 +357,18 @@ pub fn CompSurface(
     let phone = crate::ui::control::use_tier() <= crate::ui::control::Tier::Phone;
     // Wide (a desktop pane): the picture square at the left, the controls a
     // column at the right.
-    let side = fit.filter(|(w, h)| !phone && *w > *h * 1.5).map(|(w, h)| (w - h).clamp(150.0, 240.0));
+    let side = fit
+        .filter(|(w, h)| !phone && *w > *h * 1.5)
+        .map(|(w, h)| (w - h).clamp(150.0, 240.0));
     let picture_box = match side {
         _ if phone => format!("position:absolute; left:0; right:0; top:0; bottom:{STRIP_H}px;"),
         Some(cw) => format!("position:absolute; left:0; top:0; bottom:0; right:{cw}px;"),
         None => "position:absolute; inset:0;".to_string(),
     };
-    let root_style = side.map_or_else(|| "background: #080808;".to_string(), |cw| format!("background: #080808; padding-right: {cw}px; box-sizing: border-box;"));
+    let root_style = side.map_or_else(
+        || "background: #080808;".to_string(),
+        |cw| format!("background: #080808; padding-right: {cw}px; box-sizing: border-box;"),
+    );
     let gr_right = side.map_or(8.0, |cw| cw + 8.0);
 
     rsx! {

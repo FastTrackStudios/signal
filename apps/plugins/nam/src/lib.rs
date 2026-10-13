@@ -20,8 +20,8 @@
 //! track). Scratch buffers are preallocated to the host's max buffer size in
 //! `initialize()`; `process()` never allocates.
 //!
-use plugin_core::prelude::{DioxusState, create_dioxus_editor_with_state};
 use nice_plug::prelude::*;
+use plugin_core::prelude::{DioxusState, create_dioxus_editor_with_state};
 use std::sync::Arc;
 
 use neural_amp_modeler::NamModel;

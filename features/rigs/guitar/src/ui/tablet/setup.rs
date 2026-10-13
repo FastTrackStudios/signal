@@ -16,14 +16,14 @@
 //! here and sends it back whole; a drag sends it when the finger lifts.
 //! Levels are the rig's own meters.
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{AudioRigEntry, ControllerEntry, GuitarEntry, GuitarTone, Pickup, SetupModel};
-use signal_widgets::drag_bus::{DragBus, DragEvent};
+use dioxus::prelude::*;
 use signal_widgets::PopupHost;
+use signal_widgets::drag_bus::{DragBus, DragEvent};
 
 use super::marks::OverrideIcon;
-use super::menu::{open_menu, open_naming, Item, MoreButton, Picked, MENU_W};
+use super::menu::{Item, MENU_W, MoreButton, Picked, open_menu, open_naming};
 use super::tokens::*;
 use crate::ui::state::RigViewState;
 
@@ -49,7 +49,12 @@ struct Interface {
 const INTERFACES: &[Interface] = &[
     Interface {
         name: "Arturia MiniFuse 4",
-        inputs: &[("Input 1", "Inst"), ("Input 2", "Inst"), ("Input 3", "Line"), ("Input 4", "Line")],
+        inputs: &[
+            ("Input 1", "Inst"),
+            ("Input 2", "Inst"),
+            ("Input 3", "Line"),
+            ("Input 4", "Line"),
+        ],
         outputs: &["Outputs 1–2", "Outputs 3–4"],
         phones: &["Phones 1", "Phones 2"],
         rates: &[44_100, 48_000, 88_200, 96_000, 192_000],
@@ -77,10 +82,16 @@ const INTERFACES: &[Interface] = &[
 ];
 
 /// MIDI controllers, how each connects, and its switches.
-const MIDI_DEVICES: &[(&str, &str, u32)] = &[("XSonic AIRSTEP", "Bluetooth", 5), ("Morningstar MC6", "USB", 6)];
+const MIDI_DEVICES: &[(&str, &str, u32)] = &[
+    ("XSonic AIRSTEP", "Bluetooth", 5),
+    ("Morningstar MC6", "USB", 6),
+];
 
 fn interface_of(r: &AudioRigEntry) -> &'static Interface {
-    INTERFACES.iter().find(|i| i.name == r.device).unwrap_or(&INTERFACES[0])
+    INTERFACES
+        .iter()
+        .find(|i| i.name == r.device)
+        .unwrap_or(&INTERFACES[0])
 }
 
 /// A fresh id's stamp: the time, in milliseconds.
@@ -101,7 +112,11 @@ fn latency_ms(r: &AudioRigEntry) -> f64 {
 
 fn khz(rate: u32) -> String {
     let k = f64::from(rate) / 1000.0;
-    if (k - k.round()).abs() < 0.05 { format!("{} kHz", k.round()) } else { format!("{k:.1} kHz") }
+    if (k - k.round()).abs() < 0.05 {
+        format!("{} kHz", k.round())
+    } else {
+        format!("{k:.1} kHz")
+    }
 }
 
 const LIVE_WASH: &str = LIVE_BG;
@@ -113,23 +128,42 @@ const END: &str = "flex-end";
 const START: &str = "flex-start";
 
 fn left_rule(on: bool) -> String {
-    if on { format!("border-left: 1px solid {RULE};") } else { String::new() }
+    if on {
+        format!("border-left: 1px solid {RULE};")
+    } else {
+        String::new()
+    }
 }
 fn top_rule(on: bool) -> String {
-    if on { format!("border-top: 1px solid {RULE};") } else { String::new() }
+    if on {
+        format!("border-top: 1px solid {RULE};")
+    } else {
+        String::new()
+    }
 }
 fn outline(on: bool) -> String {
-    if on { format!("1px solid {RULE_STRONG}") } else { "none".to_string() }
+    if on {
+        format!("1px solid {RULE_STRONG}")
+    } else {
+        "none".to_string()
+    }
 }
 fn tick(d: i32) -> String {
-    if d == 0 { "0".to_string() } else { format!("−{}", -d) }
+    if d == 0 {
+        "0".to_string()
+    } else {
+        format!("−{}", -d)
+    }
 }
 /// A scale tick's label on −60…0: the ends flush, the rest centred on it.
 fn tick_place(d: i32) -> String {
     match d {
         -60 => "position: absolute; left: 0px;".to_string(),
         0 => "position: absolute; right: 0px;".to_string(),
-        _ => format!("position: absolute; left: {}%; width: 40px; margin-left: -20px; text-align: center;", f64::from(d + 60) / 60.0 * 100.0),
+        _ => format!(
+            "position: absolute; left: {}%; width: 40px; margin-left: -20px; text-align: center;",
+            f64::from(d + 60) / 60.0 * 100.0
+        ),
     }
 }
 /// A gate scale tick's label on −96…−24: the ends flush, the rest centred.
@@ -138,11 +172,18 @@ fn gate_tick_place(d: i32) -> String {
     match d {
         -96 => "position: absolute; left: 0px;".to_string(),
         -24 => "position: absolute; right: 0px;".to_string(),
-        _ => format!("position: absolute; left: {}%; width: 40px; margin-left: -20px; text-align: center;", at / (GATE_MAX - GATE_MIN) * 100.0),
+        _ => format!(
+            "position: absolute; left: {}%; width: 40px; margin-left: -20px; text-align: center;",
+            at / (GATE_MAX - GATE_MIN) * 100.0
+        ),
     }
 }
 fn link_label(link: &str) -> &'static str {
-    if link == "Bluetooth" { "Bluetooth MIDI · connected" } else { "USB · connected" }
+    if link == "Bluetooth" {
+        "Bluetooth MIDI · connected"
+    } else {
+        "USB · connected"
+    }
 }
 
 /// The lines of `log` that came after `prev` — where the end of the one
@@ -157,12 +198,20 @@ fn after<'a>(prev: &[String], log: &'a [String]) -> &'a [String] {
 }
 
 fn signed(v: f64) -> String {
-    if v > 0.0 { format!("+{}", trim0(v)) } else { trim0(v) }
+    if v > 0.0 {
+        format!("+{}", trim0(v))
+    } else {
+        trim0(v)
+    }
 }
 
 /// A number without a trailing `.0`.
 fn trim0(v: f64) -> String {
-    if (v - v.round()).abs() < 0.001 { format!("{}", v.round() as i64) } else { format!("{v:.1}") }
+    if (v - v.round()).abs() < 0.001 {
+        format!("{}", v.round() as i64)
+    } else {
+        format!("{v:.1}")
+    }
 }
 
 fn tone_name(part: &str) -> &'static str {
@@ -175,7 +224,10 @@ fn tone_name(part: &str) -> &'static str {
 }
 
 fn gates_above(floor: f64) -> Vec<f32> {
-    [5.0, 10.0, 16.0, 24.0].iter().map(|d| (floor + d) as f32).collect()
+    [5.0, 10.0, 16.0, 24.0]
+        .iter()
+        .map(|d| (floor + d) as f32)
+        .collect()
 }
 
 // ── The setup, held here and sent back ─────────────────────────────────────
@@ -230,13 +282,25 @@ impl Setup {
 }
 
 fn guitar(m: &SetupModel) -> GuitarEntry {
-    m.guitars.get(m.guitar_index as usize).or(m.guitars.first()).cloned().unwrap_or_default()
+    m.guitars
+        .get(m.guitar_index as usize)
+        .or(m.guitars.first())
+        .cloned()
+        .unwrap_or_default()
 }
 fn audio_rig(m: &SetupModel) -> AudioRigEntry {
-    m.rigs.get(m.rig_index as usize).or(m.rigs.first()).cloned().unwrap_or_default()
+    m.rigs
+        .get(m.rig_index as usize)
+        .or(m.rigs.first())
+        .cloned()
+        .unwrap_or_default()
 }
 fn controller(m: &SetupModel) -> ControllerEntry {
-    m.controllers.get(m.controller_index as usize).or(m.controllers.first()).cloned().unwrap_or_default()
+    m.controllers
+        .get(m.controller_index as usize)
+        .or(m.controllers.first())
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// Where a tone change lands: the guitar's default, or this rig only.
@@ -250,7 +314,9 @@ enum Scope {
 fn toning(m: &mut SetupModel, scope: Scope, part: &str, f: impl FnOnce(&mut GuitarTone)) {
     let rig = audio_rig(m).id;
     let k = m.guitar_index as usize;
-    let Some(g) = m.guitars.get_mut(k) else { return };
+    let Some(g) = m.guitars.get_mut(k) else {
+        return;
+    };
     match scope {
         // A default changed under an override stays under it.
         Scope::Guitar => f(&mut g.tone),
@@ -260,7 +326,11 @@ fn toning(m: &mut SetupModel, scope: Scope, part: &str, f: impl FnOnce(&mut Guit
             let o = match g.overrides.iter().position(|o| o.rig == rig) {
                 Some(i) => &mut g.overrides[i],
                 None => {
-                    g.overrides.push(crate::proto::ToneOverride { rig: rig.clone(), parts: Vec::new(), tone: g.tone.clone() });
+                    g.overrides.push(crate::proto::ToneOverride {
+                        rig: rig.clone(),
+                        parts: Vec::new(),
+                        tone: g.tone.clone(),
+                    });
                     g.overrides.last_mut().expect("just pushed")
                 }
             };
@@ -286,7 +356,9 @@ fn toning(m: &mut SetupModel, scope: Scope, part: &str, f: impl FnOnce(&mut Guit
 fn settle(m: &mut SetupModel, parts: &[String], keep: bool) {
     let rig = audio_rig(m).id;
     let k = m.guitar_index as usize;
-    let Some(g) = m.guitars.get_mut(k) else { return };
+    let Some(g) = m.guitars.get_mut(k) else {
+        return;
+    };
     let on = g.tone_on(&rig);
     if keep {
         for p in parts {
@@ -371,11 +443,25 @@ fn SetupTabs(tab: SetupTab, options: bool, on_tab: EventHandler<SetupTab>) -> El
     let m = setup.model.read().clone();
     let (g, r, c) = (guitar(&m), audio_rig(&m), controller(&m));
     let dev = MIDI_DEVICES.iter().find(|d| d.0 == c.device);
-    let over: Vec<&str> = g.overridden_on(&r.id).iter().map(|p| tone_name(p)).collect();
+    let over: Vec<&str> = g
+        .overridden_on(&r.id)
+        .iter()
+        .map(|p| tone_name(p))
+        .collect();
     let tabs = [
         (SetupTab::Guitar, "Guitar", g.name.clone(), over.join(", ")),
-        (SetupTab::Audio, "Audio", r.name.clone(), format!("{} · {} · {:.1} ms", khz(r.rate), r.buffer, latency_ms(&r))),
-        (SetupTab::Midi, "MIDI", c.name.clone(), format!("{} · {}", c.device, dev.map_or("USB", |d| d.1))),
+        (
+            SetupTab::Audio,
+            "Audio",
+            r.name.clone(),
+            format!("{} · {} · {:.1} ms", khz(r.rate), r.buffer, latency_ms(&r)),
+        ),
+        (
+            SetupTab::Midi,
+            "MIDI",
+            c.name.clone(),
+            format!("{} · {}", c.device, dev.map_or("USB", |d| d.1)),
+        ),
     ];
     rsx! {
         div { style: "flex-shrink: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); height: {HEADER_H}px; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box;",
@@ -604,7 +690,16 @@ fn SetupList(tab: SetupTab, on_picked: EventHandler<()>) -> Element {
 
 /// A row in the list: the one in use marked green.
 #[component]
-fn ListRow(in_use: bool, title: String, sub: String, sub_mark: bool, on_pick: EventHandler<()>, items: Vec<Item>, on_menu: EventHandler<Picked>, children: Element) -> Element {
+fn ListRow(
+    in_use: bool,
+    title: String,
+    sub: String,
+    sub_mark: bool,
+    on_pick: EventHandler<()>,
+    items: Vec<Item>,
+    on_menu: EventHandler<Picked>,
+    children: Element,
+) -> Element {
     let has_menu = !items.is_empty();
     rsx! {
         div { style: "position: relative; display: flex; align-items: center; border-top: 1px solid {RULE};",
@@ -649,10 +744,18 @@ fn GuitarTab(state: RigViewState) -> Element {
         scope.set(Scope::Guitar);
     }
     let sc = scope();
-    let tone = if sc == Scope::Guitar { g.tone.clone() } else { g.tone_on(&r.id) };
+    let tone = if sc == Scope::Guitar {
+        g.tone.clone()
+    } else {
+        g.tone_on(&r.id)
+    };
     let over_names: Vec<&str> = over.iter().map(|p| tone_name(p)).collect();
     let over_ink = format!("color-mix(in oklab, {RIG} 70%, {INK})");
-    let gates_was = format!("Default {} dB{}", trim0(f64::from(g.tone.gates.get(1).copied().unwrap_or(-70.0))), if g.tone.noisy { " · noisy" } else { "" });
+    let gates_was = format!(
+        "Default {} dB{}",
+        trim0(f64::from(g.tone.gates.get(1).copied().unwrap_or(-70.0))),
+        if g.tone.noisy { " · noisy" } else { "" }
+    );
     rsx! {
         div { style: "display: flex; align-items: flex-start; min-height: 100%;",
             // The guitar: its photo, upright, and its pickups.
@@ -732,12 +835,28 @@ fn GuitarTab(state: RigViewState) -> Element {
 /// A part of the guitar's tone: its title, and whether the rig overrides
 /// it — with Save to guitar and Discard, as a section's override.
 #[component]
-fn ToneBlock(title: &'static str, parts: Vec<String>, over: Vec<String>, scope: Scope, rig: String, was: String, children: Element) -> Element {
+fn ToneBlock(
+    title: &'static str,
+    parts: Vec<String>,
+    over: Vec<String>,
+    scope: Scope,
+    rig: String,
+    was: String,
+    children: Element,
+) -> Element {
     let setup = use_context::<Setup>();
     let mine: Vec<String> = over.into_iter().filter(|p| parts.contains(p)).collect();
     let showing = scope == Scope::Rig && !mine.is_empty();
-    let bg = if showing { format!("color-mix(in oklab, {RIG} 5%, transparent)") } else { CLEAR.to_string() };
-    let note = if scope == Scope::Rig { format!("Override on {rig} · guitar: {was}") } else { format!("Overridden on {rig} — showing the guitar's") };
+    let bg = if showing {
+        format!("color-mix(in oklab, {RIG} 5%, transparent)")
+    } else {
+        CLEAR.to_string()
+    };
+    let note = if scope == Scope::Rig {
+        format!("Override on {rig} · guitar: {was}")
+    } else {
+        format!("Overridden on {rig} — showing the guitar's")
+    };
     let (m1, m2) = (mine.clone(), mine.clone());
     rsx! {
         section { style: "position: relative; padding: 18px 20px 22px; border-bottom: 1px solid {RULE}; background: {bg};",
@@ -778,7 +897,11 @@ fn level_db(state: RigViewState, trim_db: f32) -> f64 {
     let lin = state.in_level.read().clamp(0.0, 1.0);
     // The meter is perceptual (sqrt-curved): back to amplitude, then dB.
     let amp = lin * lin;
-    let db = if amp <= 1e-5 { -90.0 } else { 20.0 * amp.log10() };
+    let db = if amp <= 1e-5 {
+        -90.0
+    } else {
+        20.0 * amp.log10()
+    };
     (db + f64::from(trim_db)).min(0.0)
 }
 
@@ -868,7 +991,9 @@ fn Gates(state: RigViewState, tone: GuitarTone, scope: Scope) -> Element {
     {
         measuring.set(Some(now));
     }
-    let gates: Vec<f64> = (0..4).map(|i| f64::from(tone.gates.get(i).copied().unwrap_or(-70.0))).collect();
+    let gates: Vec<f64> = (0..4)
+        .map(|i| f64::from(tone.gates.get(i).copied().unwrap_or(-70.0)))
+        .collect();
     let pct = |db: f64| ((db - GATE_MIN) / (GATE_MAX - GATE_MIN) * 100.0).clamp(0.0, 100.0);
     // Keep the four in order, a dB apart.
     let place = move |m: &mut SetupModel, which: usize, db: f64| {
@@ -876,8 +1001,16 @@ fn Gates(state: RigViewState, tone: GuitarTone, scope: Scope) -> Element {
             while t.gates.len() < 4 {
                 t.gates.push(-70.0);
             }
-            let lo = if which > 0 { f64::from(t.gates[which - 1]) + 1.0 } else { GATE_MIN };
-            let hi = if which < 3 { f64::from(t.gates[which + 1]) - 1.0 } else { GATE_MAX };
+            let lo = if which > 0 {
+                f64::from(t.gates[which - 1]) + 1.0
+            } else {
+                GATE_MIN
+            };
+            let hi = if which < 3 {
+                f64::from(t.gates[which + 1]) - 1.0
+            } else {
+                GATE_MAX
+            };
             t.gates[which] = db.clamp(lo, hi).round() as f32;
         });
     };
@@ -1003,10 +1136,24 @@ fn GuitarEq(tone: GuitarTone, scope: Scope) -> Element {
         y(tone.treble_db)
     );
     let bands: [(&str, &str, f64, f64, f64, f64); 4] = [
-        ("lowcut", "Low cut", 20.0, 200.0, 5.0, f64::from(tone.low_cut_hz)),
+        (
+            "lowcut",
+            "Low cut",
+            20.0,
+            200.0,
+            5.0,
+            f64::from(tone.low_cut_hz),
+        ),
         ("bass", "Bass", -12.0, 12.0, 0.5, f64::from(tone.bass_db)),
         ("mid", "Mid", -12.0, 12.0, 0.5, f64::from(tone.mid_db)),
-        ("treble", "Treble", -12.0, 12.0, 0.5, f64::from(tone.treble_db)),
+        (
+            "treble",
+            "Treble",
+            -12.0,
+            12.0,
+            0.5,
+            f64::from(tone.treble_db),
+        ),
     ];
     rsx! {
         div { style: "display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap;",
@@ -1046,7 +1193,13 @@ fn AudioTab(state: RigViewState) -> Element {
     let r = audio_rig(&m);
     let dev = interface_of(&r);
     let lat = latency_ms(&r);
-    let lat_ink = if lat < 8.0 { LIVE } else if lat < 14.0 { WARN } else { VOID };
+    let lat_ink = if lat < 8.0 {
+        LIVE
+    } else if lat < 14.0 {
+        WARN
+    } else {
+        VOID
+    };
     let set = move |f: Box<dyn FnOnce(&mut AudioRigEntry)>| {
         setup.edit(move |m| {
             let k = m.rig_index as usize;
@@ -1057,7 +1210,10 @@ fn AudioTab(state: RigViewState) -> Element {
     };
     let rate = r.rate;
     let outs = dev.outputs.len() * 2 + dev.phones.len() * 2;
-    let devices: Vec<(String, String, String)> = INTERFACES.iter().map(|i| (i.name.to_string(), i.name.to_string(), String::new())).collect();
+    let devices: Vec<(String, String, String)> = INTERFACES
+        .iter()
+        .map(|i| (i.name.to_string(), i.name.to_string(), String::new()))
+        .collect();
     rsx! {
         // The interface: the device, and the three numbers that decide feel.
         section { style: "border-bottom: 1px solid {RULE};",
@@ -1172,10 +1328,21 @@ fn OutputStrip(state: RigViewState, house: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut check = use_signal(|| None::<u8>);
     let side = check();
-    let options: Vec<(String, String, String)> = if house { dev.outputs } else { dev.phones }.iter().map(|o| (o.to_string(), o.to_string(), String::new())).collect();
+    let options: Vec<(String, String, String)> = if house { dev.outputs } else { dev.phones }
+        .iter()
+        .map(|o| (o.to_string(), o.to_string(), String::new()))
+        .collect();
     let label = if house { "House" } else { "Phones" };
-    let out_label: &'static str = if house { "House output" } else { "Phones output" };
-    let out_value = if house { r.house.clone() } else { r.phones.clone() };
+    let out_label: &'static str = if house {
+        "House output"
+    } else {
+        "Phones output"
+    };
+    let out_value = if house {
+        r.house.clone()
+    } else {
+        r.phones.clone()
+    };
     rsx! {
         div { style: "padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0;",
             div { style: "display: flex; align-items: center; gap: 10px;",
@@ -1271,7 +1438,11 @@ fn MidiTab() -> Element {
                                 let fresh = after(prev, &log);
                                 if !fresh.is_empty() {
                                     // Something new from a switch the map knows: light it.
-                                    if let Some(n) = fresh.last().and_then(|l| l.strip_prefix("Switch ")).and_then(|x| x.split(' ').next()).and_then(|x| x.parse::<usize>().ok())
+                                    if let Some(n) = fresh
+                                        .last()
+                                        .and_then(|l| l.strip_prefix("Switch "))
+                                        .and_then(|x| x.split(' ').next())
+                                        .and_then(|x| x.parse::<usize>().ok())
                                         && n > 0
                                     {
                                         light(n - 1);
@@ -1306,7 +1477,11 @@ fn MidiTab() -> Element {
     let clocks = vec![
         ("off".to_string(), "Off".to_string(), String::new()),
         ("send".to_string(), "Send tempo".to_string(), String::new()),
-        ("receive".to_string(), "Follow it".to_string(), String::new()),
+        (
+            "receive".to_string(),
+            "Follow it".to_string(),
+            String::new(),
+        ),
     ];
     rsx! {
         section { style: "border-bottom: 1px solid {RULE};",
@@ -1389,10 +1564,19 @@ fn Cell(label: &'static str, children: Element) -> Element {
 /// A dropdown: the value and a chevron; it opens the choices as a menu.
 /// `options`: (id, shown, detail).
 #[component]
-fn Select(label: &'static str, value: String, options: Vec<(String, String, String)>, #[props(default)] width: Option<u32>, on_pick: EventHandler<String>) -> Element {
+fn Select(
+    label: &'static str,
+    value: String,
+    options: Vec<(String, String, String)>,
+    #[props(default)] width: Option<u32>,
+    on_pick: EventHandler<String>,
+) -> Element {
     let host = PopupHost::try_use();
     let sized = width.map_or(String::new(), |w| format!("width: {w}px;"));
-    let shown = options.iter().find(|o| o.0 == value).map_or(value.clone(), |o| o.1.clone());
+    let shown = options
+        .iter()
+        .find(|o| o.0 == value)
+        .map_or(value.clone(), |o| o.1.clone());
     rsx! {
         button {
             style: "{sized} min-width: 0; height: 44px; padding: 0 12px 0 14px; display: flex; align-items: center; gap: 10px; border: none; border-radius: {R}; background: {FILL}; color: {INK}; text-align: left; font-family: {FONT}; cursor: pointer;",
@@ -1428,7 +1612,18 @@ fn Toggle(on: bool, on_flip: EventHandler<()>) -> Element {
 
 /// A wide touch fader: its value written in it, the signal along its foot.
 #[component]
-fn Fader(value: f64, min: f64, max: f64, step: f64, level: Option<f64>, hot: bool, unit: &'static str, signed_value: bool, on_change: EventHandler<f64>, on_end: EventHandler<()>) -> Element {
+fn Fader(
+    value: f64,
+    min: f64,
+    max: f64,
+    step: f64,
+    level: Option<f64>,
+    hot: bool,
+    unit: &'static str,
+    signed_value: bool,
+    on_change: EventHandler<f64>,
+    on_end: EventHandler<()>,
+) -> Element {
     let bus = DragBus::try_use();
     let mut width = use_signal(|| 300.0_f64);
     let fill = ((value - min) / (max - min)).clamp(0.0, 1.0) * 100.0;
@@ -1479,7 +1674,14 @@ fn Fader(value: f64, min: f64, max: f64, step: f64, level: Option<f64>, hot: boo
 
 /// An upright fader: an EQ band.
 #[component]
-fn VFader(value: f64, min: f64, max: f64, step: f64, on_change: EventHandler<f64>, on_end: EventHandler<()>) -> Element {
+fn VFader(
+    value: f64,
+    min: f64,
+    max: f64,
+    step: f64,
+    on_change: EventHandler<f64>,
+    on_end: EventHandler<()>,
+) -> Element {
     let bus = DragBus::try_use();
     const H: f64 = 70.0;
     let fill = ((value - min) / (max - min)).clamp(0.0, 1.0);
@@ -1555,12 +1757,21 @@ fn GuitarPhoto(image: String, colour: String, size: u32) -> Element {
                 let bytes = r.guitar_photo(wanted.clone()).await.unwrap_or_default();
                 if !bytes.is_empty() {
                     use base64::Engine as _;
-                    let mime = match wanted.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str() {
+                    let mime = match wanted
+                        .rsplit('.')
+                        .next()
+                        .unwrap_or("")
+                        .to_ascii_lowercase()
+                        .as_str()
+                    {
                         "png" => "image/png",
                         "jpg" | "jpeg" => "image/jpeg",
                         _ => "image/webp",
                     };
-                    let url = format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes));
+                    let url = format!(
+                        "data:{mime};base64,{}",
+                        base64::engine::general_purpose::STANDARD.encode(&bytes)
+                    );
                     photos.write().insert(wanted, url);
                 } else {
                     // Failed: fetched again when the guitar's image changes.
@@ -1570,8 +1781,16 @@ fn GuitarPhoto(image: String, colour: String, size: u32) -> Element {
         }
     }));
     let url = setup.photos.read().get(&image).cloned().unwrap_or_default();
-    let colour = if colour.is_empty() { "#71717a".to_string() } else { colour };
-    let (w, h, r) = if size == 0 { ("100%".to_string(), "260px".to_string(), 10) } else { (format!("{size}px"), format!("{size}px"), 8) };
+    let colour = if colour.is_empty() {
+        "#71717a".to_string()
+    } else {
+        colour
+    };
+    let (w, h, r) = if size == 0 {
+        ("100%".to_string(), "260px".to_string(), 10)
+    } else {
+        (format!("{size}px"), format!("{size}px"), 8)
+    };
     if !url.is_empty() {
         return rsx! {
             img { src: "{url}", style: "width: {w}; height: {h}; flex-shrink: 0; border-radius: {r}px; display: block; object-fit: cover; object-position: 50% 62%; background: {colour};" }
@@ -1624,7 +1843,13 @@ fn ControllerGlyph(switches: u32, on: bool) -> Element {
 /// Speakers or phones, each side lit while the check plays it.
 #[component]
 fn SideGlyph(house: bool, side: Option<u8>) -> Element {
-    let lit = |s: u8| if side == Some(s) || side == Some(2) { LIVE } else { DIM };
+    let lit = |s: u8| {
+        if side == Some(s) || side == Some(2) {
+            LIVE
+        } else {
+            DIM
+        }
+    };
     let (l, r) = (lit(0), lit(1));
     rsx! {
         svg { key: "{side:?}", width: "30", height: "26", view_box: "0 0 30 26", style: "flex-shrink: 0;",

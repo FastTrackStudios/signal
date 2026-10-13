@@ -38,13 +38,30 @@ const EARLY_OUT: f64 = EARLY_TO_TAP * 0.25;
 
 /// BigSky's modulation by MOD knob (0…127): how far each Diffusion allpass's
 /// delay shortens at most, ms, and its LFO's rate, Hz.
-const MOD_DEPTH_MS: [(f64, f64); 6] = [(0.0, 0.0), (64.0, 0.385), (80.0, 0.37), (96.0, 0.31), (112.0, 0.27), (127.0, 0.207)];
-const MOD_RATE_HZ: [(f64, f64); 8] =
-    [(0.0, 0.87), (72.0, 0.88), (80.0, 1.16), (88.0, 1.68), (96.0, 2.3), (104.0, 3.1), (112.0, 4.26), (127.0, 7.5)];
+const MOD_DEPTH_MS: [(f64, f64); 6] = [
+    (0.0, 0.0),
+    (64.0, 0.385),
+    (80.0, 0.37),
+    (96.0, 0.31),
+    (112.0, 0.27),
+    (127.0, 0.207),
+];
+const MOD_RATE_HZ: [(f64, f64); 8] = [
+    (0.0, 0.87),
+    (72.0, 0.88),
+    (80.0, 1.16),
+    (88.0, 1.68),
+    (96.0, 2.3),
+    (104.0, 3.1),
+    (112.0, 4.26),
+    (127.0, 7.5),
+];
 
 /// Linear interpolation in a `(x, y)` table, clamped at its ends.
 fn interp<const N: usize>(table: &[(f64, f64); N], x: f64) -> f64 {
-    let (Some(first), Some(last)) = (table.first(), table.last()) else { return 0.0 };
+    let (Some(first), Some(last)) = (table.first(), table.last()) else {
+        return 0.0;
+    };
     if x <= first.0 {
         return first.1;
     }
@@ -64,7 +81,10 @@ impl InputStage {
     fn new(sample_rate: f64) -> Self {
         let mut low_cut = Hp1::new();
         low_cut.set_freq(300.0, sample_rate);
-        Self { low_cut, diffuser: InputChain::new(sample_rate) }
+        Self {
+            low_cut,
+            diffuser: InputChain::new(sample_rate),
+        }
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
@@ -127,7 +147,9 @@ impl Shelf1 {
 
     #[inline]
     fn tick(&mut self, x: f64) -> f64 {
-        let y = self.b0.mul_add(x, self.b1.mul_add(self.x1, -self.a1 * self.y1));
+        let y = self
+            .b0
+            .mul_add(x, self.b1.mul_add(self.x1, -self.a1 * self.y1));
         self.x1 = x;
         self.y1 = y;
         y
@@ -151,7 +173,11 @@ struct ToneStage {
 
 impl ToneStage {
     fn new() -> Self {
-        Self { shelves: [[Shelf1::default(); 2]; 2], on: false, top: [Lp1::new(), Lp1::new()] }
+        Self {
+            shelves: [[Shelf1::default(); 2]; 2],
+            on: false,
+            top: [Lp1::new(), Lp1::new()],
+        }
     }
 
     fn set(&mut self, tone: f64, sample_rate: f64) {
@@ -394,7 +420,8 @@ impl ReverbAlgorithm for Cloud {
 
         // Decay is a time (CLOUD_T60); the ring turns it into one loop
         // gain per trip, and Freeze's infinite holds the ring.
-        self.ring.set_t60(decay_to_t60(params.decay, CLOUD_T60.0, CLOUD_T60.1));
+        self.ring
+            .set_t60(decay_to_t60(params.decay, CLOUD_T60.0, CLOUD_T60.1));
         self.ring.set_size(params.size);
 
         // Diffusion: the gain of every allpass, input chain and tank (zero =
@@ -440,7 +467,11 @@ impl ReverbAlgorithm for Cloud {
         // Hz. The chain's `low_end` reaches us as `low_decay_mult`; undo
         // that law to get the knob back.
         let le = params.low_decay_mult;
-        let knob01 = if le < 1.0 { le - 0.5 } else { (le - 1.0) / 1.2 + 0.5 };
+        let knob01 = if le < 1.0 {
+            le - 0.5
+        } else {
+            (le - 1.0) / 1.2 + 0.5
+        };
         let low_end = knob01.clamp(0.0, 1.0).mul_add(20.0, -10.0);
         let low_cut_hz = low_end.mul_add(-23.3, 300.0).clamp(20.0, 1000.0);
         self.for_inputs(|s| s.low_cut.set_cutoff(low_cut_hz));
@@ -472,6 +503,9 @@ impl ReverbAlgorithm for Cloud {
         let early_l = self.input_l.tick(in_l);
         let early_r = self.input_r.tick(in_r);
         let (ring_l, ring_r) = self.ring.tick(early_l, early_r);
-        self.tone.tick(EARLY_OUT.mul_add(early_l, ring_l), EARLY_OUT.mul_add(early_r, ring_r))
+        self.tone.tick(
+            EARLY_OUT.mul_add(early_l, ring_l),
+            EARLY_OUT.mul_add(early_r, ring_r),
+        )
     }
 }

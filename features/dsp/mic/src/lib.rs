@@ -13,7 +13,6 @@
 //! anchors, and whose low cut and proximity are exact first-order moves of
 //! a corner. See `signal-analyzer`'s `sphere_capture` for the measurement.
 
-
 #[cfg(feature = "ui")]
 pub mod ui;
 
@@ -22,5 +21,8 @@ pub mod engine;
 pub mod model;
 pub mod section;
 
-pub use engine::{DualAdjust, DualMic, DualSettings, LATENCY, MicChain, latency, Settings, Solo, StereoMic, StereoSettings};
+pub use engine::{
+    DualAdjust, DualMic, DualSettings, LATENCY, MicChain, Settings, Solo, StereoMic,
+    StereoSettings, latency,
+};
 pub use model::{MicModel, ModelError, ProximityLaw};

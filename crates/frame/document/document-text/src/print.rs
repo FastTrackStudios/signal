@@ -1,14 +1,15 @@
 //! Scene → markup. Deterministic: same scene, same bytes.
 
 use document_proto::{
-    BlendMode, CornerRadii, Node, NodeId, NodeKind, Scene, SourceRef, StrokeAlign, StrokeCap, StrokeJoin, TextAlign,
-    TextCase, Transform,
+    BlendMode, CornerRadii, Node, NodeId, NodeKind, Scene, SourceRef, StrokeAlign, StrokeCap,
+    StrokeJoin, TextAlign, TextCase, Transform,
 };
 use serde_json::Value;
 
 use crate::schema::{default_name, tag_of};
 use crate::values::{
-    Keyword, effects_json, num, num_list, paints_json, plain_solid_hex, quote, rotation_of, runs_json, to_json,
+    Keyword, effects_json, num, num_list, paints_json, plain_solid_hex, quote, rotation_of,
+    runs_json, to_json,
 };
 
 /// Print the whole scene, rooted at `scene.root`.
@@ -35,7 +36,11 @@ pub fn print(scene: &Scene) -> String {
 fn variables(v: &document_proto::Variables) -> String {
     let mut out = format!("  <Variables modes={}>\n", quote(&v.modes.join(" ")));
     for (name, var) in &v.vars {
-        out.push_str(&format!("    <Var name={} value={}", quote(name), quote(&var.value)));
+        out.push_str(&format!(
+            "    <Var name={} value={}",
+            quote(name),
+            quote(&var.value)
+        ));
         for (mode, value) in &var.modes {
             out.push_str(&format!(" {mode}={}", quote(value)));
         }
@@ -59,7 +64,12 @@ fn print_node(scene: &Scene, id: NodeId, depth: usize, out: &mut String) {
     let Some(node) = scene.node(id) else { return };
     let indent = "  ".repeat(depth);
     let tag = tag_of(&node.kind);
-    let children: Vec<NodeId> = node.children.iter().copied().filter(|c| scene.nodes.contains_key(c)).collect();
+    let children: Vec<NodeId> = node
+        .children
+        .iter()
+        .copied()
+        .filter(|c| scene.nodes.contains_key(c))
+        .collect();
     let (attrs, body) = attributes(node, !children.is_empty());
 
     out.push_str(&indent);
@@ -192,7 +202,12 @@ fn attributes(n: &Node, has_children: bool) -> (Vec<(&'static str, String)>, Opt
         if l.gap != 0.0 {
             a.push(("gap", num(l.gap)));
         }
-        let (t, r, b, lft) = (l.padding_top, l.padding_right, l.padding_bottom, l.padding_left);
+        let (t, r, b, lft) = (
+            l.padding_top,
+            l.padding_right,
+            l.padding_bottom,
+            l.padding_left,
+        );
         if !(t == 0.0 && r == 0.0 && b == 0.0 && lft == 0.0) {
             let v = if t == r && r == b && b == lft {
                 num(t)
@@ -236,7 +251,12 @@ fn attributes(n: &Node, has_children: bool) -> (Vec<(&'static str, String)>, Opt
     if let Some(r) = lc.resize_y {
         a.push(("resize-y", quote(&r.keyword())));
     }
-    for (k, v) in [("min-w", lc.min_width), ("min-h", lc.min_height), ("max-w", lc.max_width), ("max-h", lc.max_height)] {
+    for (k, v) in [
+        ("min-w", lc.min_width),
+        ("min-h", lc.min_height),
+        ("max-w", lc.max_width),
+        ("max-h", lc.max_height),
+    ] {
         if let Some(v) = v {
             a.push((k, num(v)));
         }
@@ -334,7 +354,11 @@ fn radius(r: &CornerRadii) -> Option<String> {
         return None;
     }
     let all = [r.top_left, r.top_right, r.bottom_right, r.bottom_left];
-    Some(if all.iter().all(|v| *v == all[0]) { num(all[0]) } else { quote(&num_list(&all)) })
+    Some(if all.iter().all(|v| *v == all[0]) {
+        num(all[0])
+    } else {
+        quote(&num_list(&all))
+    })
 }
 
 fn paints_attr(ps: &[document_proto::Paint]) -> Option<String> {

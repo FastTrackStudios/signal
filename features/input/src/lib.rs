@@ -10,11 +10,10 @@
 
 #![deny(unsafe_code)]
 
-pub mod proto;
 #[cfg(feature = "dioxus")]
 pub mod dioxus;
 pub mod keybinds;
-
+pub mod proto;
 
 pub mod command;
 pub mod config;

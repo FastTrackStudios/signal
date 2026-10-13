@@ -64,11 +64,19 @@ fn size(scene: &Scene) -> (u32, u32) {
 /// tiles, and it's the textures this compares. `None` without a GPU.
 fn render(scene: &Scene, catalog: &Catalog) -> Option<Vec<u8>> {
     let mut gpu = render::offscreen::Offscreen::new().ok()?;
-    let rt = surface_runtime::Runtime::new(surface_runtime::Surface::from_scene(scene.clone()), catalog.clone());
+    let rt = surface_runtime::Runtime::new(
+        surface_runtime::Surface::from_scene(scene.clone()),
+        catalog.clone(),
+    );
     let scene = rt.frame(0.0);
     let (w, h) = size(&scene);
     let page = scene.pages()[0];
-    let values: std::collections::HashMap<_, f64> = rt.surface().controls.iter().map(|(id, c)| (*id, rt.position(*id, c))).collect();
+    let values: std::collections::HashMap<_, f64> = rt
+        .surface()
+        .controls
+        .iter()
+        .map(|(id, c)| (*id, rt.position(*id, c)))
+        .collect();
     let inputs = rt.shader_inputs();
     let frame = render::fx::Frame {
         fonts: Some(render::FontBook::bundled()),
@@ -83,7 +91,10 @@ fn render(scene: &Scene, catalog: &Catalog) -> Option<Vec<u8>> {
 
 /// Pixels whose channels differ by more than `tol`.
 fn differing(a: &[u8], b: &[u8], tol: u8) -> usize {
-    a.chunks_exact(4).zip(b.chunks_exact(4)).filter(|(p, q)| p.iter().zip(q.iter()).any(|(x, y)| x.abs_diff(*y) > tol)).count()
+    a.chunks_exact(4)
+        .zip(b.chunks_exact(4))
+        .filter(|(p, q)| p.iter().zip(q.iter()).any(|(x, y)| x.abs_diff(*y) > tol))
+        .count()
 }
 
 #[test]
@@ -91,7 +102,10 @@ fn a_loaded_face_renders_like_the_one_in_memory() {
     let dir = TempDir::new("render");
     let faces = textured();
     let catalogs = plugin_faces::catalogs(&faces);
-    let face = faces.iter().find(|f| f.file.contains("cab-room")).expect("the room cab");
+    let face = faces
+        .iter()
+        .find(|f| f.file.contains("cab-room"))
+        .expect("the room cab");
     let catalog = &catalogs[face.plugin];
     let path = dir.0.join("face.frame");
     document_io::save_surface(&path, &face.scene).unwrap();
@@ -107,7 +121,10 @@ fn a_loaded_face_renders_like_the_one_in_memory() {
     let memory = render(&face.scene, catalog).expect("a GPU");
     let n = memory.len() / 4;
     let off = differing(&memory, &disk, 2);
-    assert!(off * 1000 <= n, "{off} of {n} px differ between the in-memory and loaded face");
+    assert!(
+        off * 1000 <= n,
+        "{off} of {n} px differ between the in-memory and loaded face"
+    );
 
     // …and the textures are really in the picture: pointed at assets that
     // aren't there (what loading `.frame` used to amount to), it draws flat.
@@ -118,5 +135,8 @@ fn a_loaded_face_renders_like_the_one_in_memory() {
     let flat = document_text::parse(&text, std::collections::BTreeMap::new()).unwrap();
     let bare = render(&flat, catalog).expect("a GPU");
     let lost = differing(&memory, &bare, 2);
-    assert!(lost * 50 > n, "dropping the textures changed only {lost} of {n} px");
+    assert!(
+        lost * 50 > n,
+        "dropping the textures changed only {lost} of {n} px"
+    );
 }

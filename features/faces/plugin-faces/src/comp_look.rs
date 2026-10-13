@@ -69,29 +69,99 @@ fn look(file: &str) -> Look {
     };
     match file.get(..2).unwrap_or("") {
         // Black anodised aluminium: the band dimmer and cooler on it.
-        "01" => Look { brushed: 1.0, plate: 0.32, band: 0.28, tint: COOL, dome: 0.12, spun: 0.78, knob_rough: 0.25, ..base },
+        "01" => Look {
+            brushed: 1.0,
+            plate: 0.32,
+            band: 0.28,
+            tint: COOL,
+            dome: 0.12,
+            spun: 0.78,
+            knob_rough: 0.25,
+            ..base
+        },
         // Clear-anodised, brushed.
-        "02" | "03" => Look { brushed: 1.0, plate: 0.42, band: 0.28, tint: COOL, dome: 0.12, spun: 0.78, knob_rough: 0.25, ..base },
+        "02" | "03" => Look {
+            brushed: 1.0,
+            plate: 0.42,
+            band: 0.28,
+            tint: COOL,
+            dome: 0.12,
+            spun: 0.78,
+            knob_rough: 0.25,
+            ..base
+        },
         // The leveler's light grey enamel, satin.
-        "04" => Look { plate: 0.34, rough: 0.55, dome: 0.5, knob_rough: 0.22, backlight: 0.55, ..base },
+        "04" => Look {
+            plate: 0.34,
+            rough: 0.55,
+            dome: 0.5,
+            knob_rough: 0.22,
+            backlight: 0.55,
+            ..base
+        },
         // Blue enamel.
-        "05" => Look { plate: 0.36, rough: 0.5, knob_rough: 0.3, ..base },
+        "05" => Look {
+            plate: 0.36,
+            rough: 0.5,
+            knob_rough: 0.3,
+            ..base
+        },
         // Grey cabinet, black plate; the movement isn't lit.
-        "06" => Look { plate: 0.34, rough: 0.5, knob_rough: 0.28, backlight: 0.0, ..base },
+        "06" => Look {
+            plate: 0.34,
+            rough: 0.5,
+            knob_rough: 0.28,
+            backlight: 0.0,
+            ..base
+        },
         // Brushed upper plate.
-        "07" => Look { brushed: 1.0, plate: 0.36, band: 0.5, tint: COOL, dome: 0.3, ..base },
+        "07" => Look {
+            brushed: 1.0,
+            plate: 0.36,
+            band: 0.5,
+            tint: COOL,
+            dome: 0.3,
+            ..base
+        },
         // Painted grey, the meter amber-lit.
-        "08" => Look { plate: 0.34, rough: 0.55, dome: 0.15, knob_rough: 0.3, backlight: 0.45, ..base },
+        "08" => Look {
+            plate: 0.34,
+            rough: 0.55,
+            dome: 0.15,
+            knob_rough: 0.3,
+            backlight: 0.45,
+            ..base
+        },
         // Gloss black in a dark anodised chassis; the meter lamp warm.
-        "09" => Look { plate: 0.36, rough: 0.25, dome: 0.15, spun: 0.48, knob_rough: 0.25, glass: 0.8, backlight: 0.55, ..base },
+        "09" => Look {
+            plate: 0.36,
+            rough: 0.25,
+            dome: 0.15,
+            spun: 0.48,
+            knob_rough: 0.25,
+            glass: 0.8,
+            backlight: 0.55,
+            ..base
+        },
         // Satin black.
-        _ => Look { plate: 0.32, rough: 0.45, dome: 0.3, knob_rough: 0.3, ..base },
+        _ => Look {
+            plate: 0.32,
+            rough: 0.45,
+            dome: 0.3,
+            knob_rough: 0.3,
+            ..base
+        },
     }
 }
 
 fn fx(shader: &str, params: &[(&str, f64)]) -> ShaderFx {
-    let params: BTreeMap<String, f64> = params.iter().map(|(k, v)| ((*k).to_string(), *v)).collect();
-    ShaderFx { shader: shader.into(), params, inputs: Vec::new() }
+    let params: BTreeMap<String, f64> =
+        params.iter().map(|(k, v)| ((*k).to_string(), *v)).collect();
+    ShaderFx {
+        shader: shader.into(),
+        params,
+        inputs: Vec::new(),
+    }
 }
 
 /// Light `scene` (a comp face built from `file`).
@@ -118,9 +188,18 @@ fn saturator_look(file: &str) -> Option<Look> {
     };
     match file.get(..3).unwrap_or("") {
         // Pultec blue-grey enamel, satin; the VU lamp-lit.
-        "03-" => Some(Look { plate: 0.34, rough: 0.5, ..base }),
+        "03-" => Some(Look {
+            plate: 0.34,
+            rough: 0.5,
+            ..base
+        }),
         // The deck's warm grey enamel; the VUs lamp-lit.
-        "02-" => Some(Look { plate: 0.32, rough: 0.55, backlight: 0.6, ..base }),
+        "02-" => Some(Look {
+            plate: 0.32,
+            rough: 0.55,
+            backlight: 0.6,
+            ..base
+        }),
         _ => None,
     }
 }
@@ -129,41 +208,87 @@ fn saturator_look(file: &str) -> Option<Look> {
 /// and glaze its window into the unit (`Chassis window`, `Deck window`):
 /// the same curved glass as the meters, unlit from behind.
 pub fn apply_saturator(scene: &mut Scene, file: &str) {
-    let Some(l) = saturator_look(file) else { return };
+    let Some(l) = saturator_look(file) else {
+        return;
+    };
     light(scene, &l);
-    let glass_id = format!("asset:{}", scene.add_asset("text/wgsl", GLASS.as_bytes().to_vec()).0);
-    let windows: Vec<NodeId> = scene.walk(scene.root).into_iter().filter(|id| scene.node(*id).is_some_and(|n| matches!(n.name.as_str(), "Chassis window" | "Deck window"))).collect();
+    let glass_id = format!(
+        "asset:{}",
+        scene.add_asset("text/wgsl", GLASS.as_bytes().to_vec()).0
+    );
+    let windows: Vec<NodeId> = scene
+        .walk(scene.root)
+        .into_iter()
+        .filter(|id| {
+            scene
+                .node(*id)
+                .is_some_and(|n| matches!(n.name.as_str(), "Chassis window" | "Deck window"))
+        })
+        .collect();
     for id in windows {
         if let Some(n) = scene.node_mut(id) {
-            n.shader = Some(fx(&glass_id, &[("strength", 0.42), ("p0", 0.0), ("p1", 0.4)]));
+            n.shader = Some(fx(
+                &glass_id,
+                &[("strength", 0.42), ("p0", 0.0), ("p1", 0.4)],
+            ));
         }
     }
     // Tape reels: the knob light on their spun flanges, from a frame that
     // stays put while the flange turns under it (`reel lit`, the reel's
     // radius 5 in from its sides).
-    let reels: Vec<NodeId> = scene.walk(scene.root).into_iter().filter(|id| scene.node(*id).is_some_and(|n| n.name == "reel lit")).collect();
+    let reels: Vec<NodeId> = scene
+        .walk(scene.root)
+        .into_iter()
+        .filter(|id| scene.node(*id).is_some_and(|n| n.name == "reel lit"))
+        .collect();
     if reels.is_empty() {
         return;
     }
-    let knob_id = format!("asset:{}", scene.add_asset("text/wgsl", KNOB.as_bytes().to_vec()).0);
+    let knob_id = format!(
+        "asset:{}",
+        scene.add_asset("text/wgsl", KNOB.as_bytes().to_vec()).0
+    );
     for id in reels {
         if let Some(n) = scene.node_mut(id) {
             let side = n.size.width.max(1.0);
             let radius = ((side - 10.0) / 2.0 / side).clamp(0.05, 0.5);
-            n.shader = Some(fx(&knob_id, &[("strength", 0.75), ("radius", radius), ("p0", 0.0), ("p1", 0.97), ("p2", 1.02), ("softness", 0.22)]));
+            n.shader = Some(fx(
+                &knob_id,
+                &[
+                    ("strength", 0.75),
+                    ("radius", radius),
+                    ("p0", 0.0),
+                    ("p1", 0.97),
+                    ("p2", 1.02),
+                    ("softness", 0.22),
+                ],
+            ));
         }
     }
 }
 
 fn light(scene: &mut Scene, l: &Look) {
     let l = *l;
-    let plate_id = format!("asset:{}", scene.add_asset("text/wgsl", PLATE.as_bytes().to_vec()).0);
-    let knob_id = format!("asset:{}", scene.add_asset("text/wgsl", KNOB.as_bytes().to_vec()).0);
-    let glass_id = format!("asset:{}", scene.add_asset("text/wgsl", GLASS.as_bytes().to_vec()).0);
+    let plate_id = format!(
+        "asset:{}",
+        scene.add_asset("text/wgsl", PLATE.as_bytes().to_vec()).0
+    );
+    let knob_id = format!(
+        "asset:{}",
+        scene.add_asset("text/wgsl", KNOB.as_bytes().to_vec()).0
+    );
+    let glass_id = format!(
+        "asset:{}",
+        scene.add_asset("text/wgsl", GLASS.as_bytes().to_vec()).0
+    );
 
     let page = scene.pages()[0];
-    let Some(top) = scene.node(page).and_then(|p| p.children.first().copied()) else { return };
-    let Some(plate) = scene.node(top).and_then(|t| t.children.first().copied()) else { return };
+    let Some(top) = scene.node(page).and_then(|p| p.children.first().copied()) else {
+        return;
+    };
+    let Some(plate) = scene.node(top).and_then(|t| t.children.first().copied()) else {
+        return;
+    };
     plate_light(scene, plate, &plate_id, &l);
 
     for id in scene.walk(top) {
@@ -175,7 +300,11 @@ fn light(scene: &mut Scene, l: &Look) {
             }
             continue;
         }
-        if !n.control.as_ref().is_some_and(|c| matches!(c.kind, ControlKind::Knob { .. })) {
+        if !n
+            .control
+            .as_ref()
+            .is_some_and(|c| matches!(c.kind, ControlKind::Knob { .. }))
+        {
             continue;
         }
         knob_light(scene, id, &knob_id, &l);
@@ -196,14 +325,28 @@ fn plate_light(scene: &mut Scene, plate: NodeId, shader: &str, l: &Look) {
         .filter(|(_, c)| {
             scene.node(**c).is_some_and(|c| {
                 matches!(c.kind, NodeKind::Rectangle | NodeKind::Vector)
-                    && matches!(c.name.as_str(), "grain" | "smear" | "sheen" | "plate" | "gloss" | "left field" | "right field" | "top field" | "bottom field")
+                    && matches!(
+                        c.name.as_str(),
+                        "grain"
+                            | "smear"
+                            | "sheen"
+                            | "plate"
+                            | "gloss"
+                            | "left field"
+                            | "right field"
+                            | "top field"
+                            | "bottom field"
+                    )
             })
         })
         .map(|(i, _)| i + 1)
         .max()
         .unwrap_or(0);
     let mut n = Node::new(NodeKind::Frame, "plate light");
-    n.size = document_proto::Size { width: w, height: h };
+    n.size = document_proto::Size {
+        width: w,
+        height: h,
+    };
     n.layout_child.absolute = true;
     n.parent = Some(plate);
     n.shader = Some(fx(
@@ -231,10 +374,21 @@ fn plate_light(scene: &mut Scene, plate: NodeId, shader: &str, l: &Look) {
 /// square, on the shaft — whose `body shadow` is the body's footprint).
 fn knob_light(scene: &mut Scene, root: NodeId, shader: &str, l: &Look) {
     let Some(r) = scene.node(root) else { return };
-    let Some(knob) = r.children.iter().copied().find(|c| scene.node(*c).is_some_and(|n| n.name == "knob")) else { return };
+    let Some(knob) = r
+        .children
+        .iter()
+        .copied()
+        .find(|c| scene.node(*c).is_some_and(|n| n.name == "knob"))
+    else {
+        return;
+    };
     let Some(k) = scene.node(knob) else { return };
     // A knob the stage already draws (`knob.3d`) is lit by its own shader.
-    if scene.walk(knob).into_iter().any(|c| scene.node(c).is_some_and(|n| n.shader.is_some())) {
+    if scene
+        .walk(knob)
+        .into_iter()
+        .any(|c| scene.node(c).is_some_and(|n| n.shader.is_some()))
+    {
         return;
     }
     let side = k.size.width.min(k.size.height).max(1.0);

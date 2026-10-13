@@ -56,7 +56,13 @@ impl Runtime {
     /// Every text param's value the runtime holds.
     #[must_use]
     pub fn texts(&self) -> Vec<TextValue> {
-        self.texts.iter().map(|(addr, text)| TextValue { addr: addr.clone(), text: text.clone() }).collect()
+        self.texts
+            .iter()
+            .map(|(addr, text)| TextValue {
+                addr: addr.clone(),
+                text: text.clone(),
+            })
+            .collect()
     }
 
     /// Text values from the engine. A field being edited keeps its buffer.
@@ -69,9 +75,18 @@ impl Runtime {
     /// The param a text field edits.
     fn field_addr(&self, id: NodeId) -> Option<(ParamAddr, usize)> {
         let c = self.surface.controls.get(&id)?;
-        let ControlKind::TextField { max_len, .. } = c.kind else { return None };
+        let ControlKind::TextField { max_len, .. } = c.kind else {
+            return None;
+        };
         match &c.binding.as_ref()?.source {
-            Source::Param { addr } => Some((addr.clone(), if max_len == 0 { usize::MAX } else { max_len as usize })),
+            Source::Param { addr } => Some((
+                addr.clone(),
+                if max_len == 0 {
+                    usize::MAX
+                } else {
+                    max_len as usize
+                },
+            )),
             _ => None,
         }
     }
@@ -79,10 +94,20 @@ impl Runtime {
     /// Start editing text field `id` (everything selected, or the caret at
     /// the end).
     pub fn begin_edit(&mut self, id: NodeId, select_all: bool) -> bool {
-        let Some((addr, max_len)) = self.field_addr(id) else { return false };
+        let Some((addr, max_len)) = self.field_addr(id) else {
+            return false;
+        };
         let text = self.texts.get(&addr).cloned().unwrap_or_default();
         let len = text.chars().count();
-        self.ui.edit = Some(Edit { node: id, addr, buffer: text.clone(), caret: len, anchor: if select_all { 0 } else { len }, original: text, max_len });
+        self.ui.edit = Some(Edit {
+            node: id,
+            addr,
+            buffer: text.clone(),
+            caret: len,
+            anchor: if select_all { 0 } else { len },
+            original: text,
+            max_len,
+        });
         self.ui.focus = Some(id);
         true
     }
@@ -116,7 +141,9 @@ impl Runtime {
             return Some(Vec::new());
         }
         let (lo, hi) = (e.caret.min(e.anchor), e.caret.max(e.anchor));
-        let room = e.max_len.saturating_sub(e.buffer.chars().count() - (hi - lo));
+        let room = e
+            .max_len
+            .saturating_sub(e.buffer.chars().count() - (hi - lo));
         let insert: String = clean.chars().take(room).collect();
         let (bl, bh) = (byte_at(&e.buffer, lo), byte_at(&e.buffer, hi));
         e.buffer.replace_range(bl..bh, &insert);
@@ -135,7 +162,9 @@ impl Runtime {
     }
 
     pub(crate) fn edit_key(&mut self, key: Key, mods: Modifiers) -> Vec<EngineCall> {
-        let Some(e) = self.ui.edit.as_mut() else { return Vec::new() };
+        let Some(e) = self.ui.edit.as_mut() else {
+            return Vec::new();
+        };
         let len = e.buffer.chars().count();
         let (lo, hi) = (e.caret.min(e.anchor), e.caret.max(e.anchor));
         let mut changed = false;
@@ -184,7 +213,11 @@ impl Runtime {
             Key::Escape => return self.cancel_edit(),
             _ => {}
         }
-        if changed { self.edit_changed() } else { Vec::new() }
+        if changed {
+            self.edit_changed()
+        } else {
+            Vec::new()
+        }
     }
 
     /// The value node a field shows its text in, with its style.
@@ -207,9 +240,13 @@ impl Runtime {
 
     /// Put the caret nearest box-space x (Shift extends the selection).
     pub(crate) fn place_caret(&mut self, id: NodeId, x: f64, extend: bool) {
-        let Some((node, data, width)) = self.field_text(id) else { return };
+        let Some((node, data, width)) = self.field_text(id) else {
+            return;
+        };
         let Some(b) = self.box_of(node) else { return };
-        let Some(text) = self.ui.edit.as_ref().map(|e| e.buffer.clone()) else { return };
+        let Some(text) = self.ui.edit.as_ref().map(|e| e.buffer.clone()) else {
+            return;
+        };
         let left = b.x + self.text_left(&data, width, &text);
         let mut best = (0usize, f64::MAX);
         let chars: Vec<char> = text.chars().collect();
@@ -239,7 +276,11 @@ impl Runtime {
             left + self.measure(&data, &prefix)
         };
         let (lo, hi) = (e.caret.min(e.anchor), e.caret.max(e.anchor));
-        Some(EditView { text: e.buffer.clone(), caret_x: x_of(e.caret), selection: (lo != hi).then(|| (x_of(lo), x_of(hi))) })
+        Some(EditView {
+            text: e.buffer.clone(),
+            caret_x: x_of(e.caret),
+            selection: (lo != hi).then(|| (x_of(lo), x_of(hi))),
+        })
     }
 }
 

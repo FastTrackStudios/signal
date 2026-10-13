@@ -173,7 +173,11 @@ impl AllpassDiffuser {
     /// diffuser really is.
     #[must_use]
     pub fn total_delay(&self) -> usize {
-        self.filters.iter().take(self.stages).map(|f| f.sample_delay).sum()
+        self.filters
+            .iter()
+            .take(self.stages)
+            .map(|f| f.sample_delay)
+            .sum()
     }
 
     pub fn clear(&mut self) {

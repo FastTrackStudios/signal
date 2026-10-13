@@ -79,7 +79,6 @@ impl DecayTable {
     }
 }
 
-
 /// One engine's measured curves across sizes.
 pub struct SizedTable {
     /// The sizes measured, rising.
@@ -102,9 +101,18 @@ impl SizedTable {
     #[must_use]
     pub fn reach(&self, size: f64) -> (f64, f64) {
         let n = self.sizes.len();
-        let i = self.sizes.iter().position(|&s| s >= size).unwrap_or(n - 1).max(1);
+        let i = self
+            .sizes
+            .iter()
+            .position(|&s| s >= size)
+            .unwrap_or(n - 1)
+            .max(1);
         let (s0, s1) = (self.sizes[i - 1], self.sizes[i]);
-        let f = if s1 > s0 { ((size - s0) / (s1 - s0)).clamp(0.0, 1.0) } else { 0.0 };
+        let f = if s1 > s0 {
+            ((size - s0) / (s1 - s0)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         let (a, b) = (self.rows[i - 1].range(), self.rows[i].range());
         let lerp = |x: f64, y: f64| (x.ln() + f * (y.ln() - x.ln())).exp();
         (lerp(a.0, b.0), lerp(a.1, b.1))
@@ -121,10 +129,22 @@ impl SizedTable {
         if size >= self.sizes[n - 1] {
             return self.rows[n - 1].engine_decay(t60_s);
         }
-        let i = self.sizes.iter().position(|&s| s >= size).unwrap_or(n - 1).max(1);
+        let i = self
+            .sizes
+            .iter()
+            .position(|&s| s >= size)
+            .unwrap_or(n - 1)
+            .max(1);
         let (s0, s1) = (self.sizes[i - 1], self.sizes[i]);
-        let f = if s1 > s0 { (size - s0) / (s1 - s0) } else { 0.0 };
-        let (d0, d1) = (self.rows[i - 1].engine_decay(t60_s), self.rows[i].engine_decay(t60_s));
+        let f = if s1 > s0 {
+            (size - s0) / (s1 - s0)
+        } else {
+            0.0
+        };
+        let (d0, d1) = (
+            self.rows[i - 1].engine_decay(t60_s),
+            self.rows[i].engine_decay(t60_s),
+        );
         d0 + f * (d1 - d0)
     }
 }
@@ -142,10 +162,19 @@ mod tests {
             assert_eq!(t.rows.len(), t.sizes.len(), "{a:?}/{v}");
             for (row, size) in t.rows.iter().zip(t.sizes) {
                 assert!(row.t60.len() >= 2, "{a:?}/{v} at {size} has a curve");
-                assert!(row.t60.windows(2).all(|w| w[1] > w[0]), "{a:?}/{v} at {size} rises");
-                assert!(row.decay.windows(2).all(|w| w[1] > w[0]), "{a:?}/{v} at {size} decay rises");
+                assert!(
+                    row.t60.windows(2).all(|w| w[1] > w[0]),
+                    "{a:?}/{v} at {size} rises"
+                );
+                assert!(
+                    row.decay.windows(2).all(|w| w[1] > w[0]),
+                    "{a:?}/{v} at {size} decay rises"
+                );
                 for (d, s) in row.decay.iter().zip(row.t60) {
-                    assert!((row.engine_decay(*s) - d).abs() < 1e-9, "{a:?}/{v} inverts at {s}");
+                    assert!(
+                        (row.engine_decay(*s) - d).abs() < 1e-9,
+                        "{a:?}/{v} inverts at {s}"
+                    );
                 }
             }
         }

@@ -26,10 +26,10 @@
 //! cargo run --release -p signal-orchestra --example analyze_joins
 //! ```
 
-use signal_orchestra::timing::{dest_energy_curve, pitch_arrival, timing_corpus};
-use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
 use sampler::SamplerRig;
 use sampler::document::DocumentRenderOptions;
+use signal_orchestra::timing::{dest_energy_curve, pitch_arrival, timing_corpus};
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings};
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;

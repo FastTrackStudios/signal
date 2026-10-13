@@ -20,7 +20,6 @@
 //! DSP style matches the sibling fx crates (`comp-dsp`, `pitch-dsp`): plain
 //! `std`, `f64`, allocation confined to construction/`set_sample_rate`.
 
-
 pub use crate as dsp;
 
 pub mod analyze;

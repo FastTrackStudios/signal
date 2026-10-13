@@ -8,7 +8,13 @@ use surface_runtime::{ControlState, visual::control_ops};
 
 fn insert(scene: &mut Scene, parent: NodeId, node: Node) -> NodeId {
     let id = node.id;
-    scene.apply(Op::Insert { node, parent, index: u32::MAX }).unwrap();
+    scene
+        .apply(Op::Insert {
+            node,
+            parent,
+            index: u32::MAX,
+        })
+        .unwrap();
     id
 }
 
@@ -18,17 +24,29 @@ fn knob() -> (Scene, NodeId, NodeId, Control) {
     let mut scene = Scene::new("Stage");
     let page = scene.pages()[0];
     let mut knob = Node::new(NodeKind::Frame, "Knob");
-    knob.size = Size { width: 64.0, height: 64.0 };
+    knob.size = Size {
+        width: 64.0,
+        height: 64.0,
+    };
     let knob_id = insert(&mut scene, page, knob);
     let mut pivot = Node::new(NodeKind::Frame, "pivot");
-    pivot.size = Size { width: 64.0, height: 64.0 };
+    pivot.size = Size {
+        width: 64.0,
+        height: 64.0,
+    };
     let pivot_id = insert(&mut scene, knob_id, pivot);
     let mut body = Node::new(NodeKind::Ellipse, "body");
-    body.size = Size { width: 64.0, height: 64.0 };
+    body.size = Size {
+        width: 64.0,
+        height: 64.0,
+    };
     body.fills = vec![Paint::solid(Color::rgba(0.3, 0.3, 0.3, 1.0))];
     insert(&mut scene, pivot_id, body);
     let mut notch = Node::new(NodeKind::Rectangle, "notch");
-    notch.size = Size { width: 4.0, height: 12.0 };
+    notch.size = Size {
+        width: 4.0,
+        height: 12.0,
+    };
     notch.transform = Transform::translate(30.0, 4.0);
     notch.fills = vec![Paint::solid(Color::rgba(1.0, 0.0, 0.0, 1.0))];
     let notch_id = insert(&mut scene, pivot_id, notch);
@@ -40,21 +58,42 @@ fn knob() -> (Scene, NodeId, NodeId, Control) {
 fn at(position: f64) -> (Scene, NodeId) {
     let (scene, knob_id, notch_id, control) = knob();
     let mut frame = scene.clone();
-    frame.transact(control_ops(&scene, knob_id, &control, &ControlState { position, ..ControlState::default() })).unwrap();
+    frame
+        .transact(control_ops(
+            &scene,
+            knob_id,
+            &control,
+            &ControlState {
+                position,
+                ..ControlState::default()
+            },
+        ))
+        .unwrap();
     // The slot op rotates the pivot frame only; the notch keeps its authored transform.
-    assert_eq!(frame.node(notch_id).unwrap().transform, Transform::translate(30.0, 4.0));
+    assert_eq!(
+        frame.node(notch_id).unwrap().transform,
+        Transform::translate(30.0, 4.0)
+    );
     (frame, notch_id)
 }
 
 /// Which of `points` are red in a 64×64 render; `None` without a GPU.
 fn red_at(scene: &Scene, points: &[(u32, u32)]) -> Option<Vec<bool>> {
     let mut vs = vello::Scene::new();
-    render::paint_scene_into(&mut vs, scene, scene.pages()[0], kurbo::Affine::IDENTITY, None);
+    render::paint_scene_into(
+        &mut vs,
+        scene,
+        scene.pages()[0],
+        kurbo::Affine::IDENTITY,
+        None,
+    );
     let Ok(mut offscreen) = render::offscreen::Offscreen::new() else {
         eprintln!("skipping pixel check: no GPU adapter");
         return None;
     };
-    let px = offscreen.render(&vs, 64, 64, peniko::Color::from_rgba8(0, 0, 0, 255)).expect("render");
+    let px = offscreen
+        .render(&vs, 64, 64, peniko::Color::from_rgba8(0, 0, 0, 255))
+        .expect("render");
     Some(
         points
             .iter()
@@ -83,8 +122,15 @@ fn needle_slot_on_a_frame_rotates_the_notch_inside_it() {
     assert_eq!(groups(&rest), 0, "the centered needle is untransformed");
     assert_eq!(groups(&turned), 1);
 
-    if let (Some(before), Some(after)) = (red_at(&rest, &[(32, 10), (54, 32)]), red_at(&turned, &[(32, 10), (54, 32)])) {
+    if let (Some(before), Some(after)) = (
+        red_at(&rest, &[(32, 10), (54, 32)]),
+        red_at(&turned, &[(32, 10), (54, 32)]),
+    ) {
         assert_eq!(before, vec![true, false], "notch at 12 o'clock");
-        assert_eq!(after, vec![false, true], "notch turned to 3 o'clock with its frame");
+        assert_eq!(
+            after,
+            vec![false, true],
+            "notch turned to 3 o'clock with its frame"
+        );
     }
 }

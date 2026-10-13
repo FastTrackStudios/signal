@@ -52,14 +52,33 @@ pub const fn pedal_knob(d: f64) -> rk::KnobStyle<'static> {
 
 /// [`pedal_knob`]'s `knob.3d` options.
 pub const PEDAL_KNOB: &[&str] = &[
-    "color=#0b0b0c", "pointer=#f4f4f2", "ticks=none", "ribs=7", "rib_depth=0.11", "cap_r=0.97", "height=0.6", "dome=0.1", "edge=0.16",
-    "rough=0.3", "coat=0.45", "spec=1.0", "index=line", "index_w=0.09", "index_in=0.12", "index_out=0.72",
+    "color=#0b0b0c",
+    "pointer=#f4f4f2",
+    "ticks=none",
+    "ribs=7",
+    "rib_depth=0.11",
+    "cap_r=0.97",
+    "height=0.6",
+    "dome=0.1",
+    "edge=0.16",
+    "rough=0.3",
+    "coat=0.45",
+    "spec=1.0",
+    "index=line",
+    "index_w=0.09",
+    "index_in=0.12",
+    "index_out=0.72",
 ];
 
 /// A knob of the suite in any `knob.3d` preset, colour and extra options
 /// (`color=`, `profile=`, `skirt=`, `index=`, `ticks=`, …).
 #[must_use]
-pub const fn knob(cap: &'static str, d: f64, ink: &'static str, opts: &'static [&'static str]) -> rk::KnobStyle<'static> {
+pub const fn knob(
+    cap: &'static str,
+    d: f64,
+    ink: &'static str,
+    opts: &'static [&'static str],
+) -> rk::KnobStyle<'static> {
     rk::KnobStyle::new(KNOB_ID, cap, d, ink).opts(opts)
 }
 
@@ -71,12 +90,17 @@ pub mod type_ {
     /// Model names across a pedal: wide engraved capitals, widely spaced.
     #[must_use]
     pub const fn name(size: f64, color: &str) -> Letter<'_> {
-        Letter::new(size, 400.0, color).family(family::MICHROMA).track(0.14)
+        Letter::new(size, 400.0, color)
+            .family(family::MICHROMA)
+            .track(0.14)
     }
     /// Control legends: a semi-condensed bold technical sans.
     #[must_use]
     pub const fn legend(size: f64, color: &str) -> Letter<'_> {
-        Letter::new(size, 650.0, color).family(family::SAIRA).stretch(0.92).track(0.02)
+        Letter::new(size, 650.0, color)
+            .family(family::SAIRA)
+            .stretch(0.92)
+            .track(0.02)
     }
     /// The maker's mark: heavy geometric tech capitals.
     #[must_use]
@@ -86,7 +110,9 @@ pub mod type_ {
     /// Fine print ("designed in …"): the engraved face, small and spaced.
     #[must_use]
     pub const fn fine(size: f64, color: &str) -> Letter<'_> {
-        Letter::new(size, 400.0, color).family(family::MICHROMA).track(0.2)
+        Letter::new(size, 400.0, color)
+            .family(family::MICHROMA)
+            .track(0.2)
     }
 }
 

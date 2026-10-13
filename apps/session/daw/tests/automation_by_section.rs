@@ -175,7 +175,8 @@ fn the_kicks_top_end_comes_up_in_the_loud_sections() {
         ]
     );
 
-    let (index, _) = builtin::engine::setting("FTS EQ", "SSL HF Gain", "0 dB").expect("the parameter");
+    let (index, _) =
+        builtin::engine::setting("FTS EQ", "SSL HF Gain", "0 dB").expect("the parameter");
     let level = |t: &str| {
         builtin::engine::setting("FTS EQ", "SSL HF Gain", t)
             .map(|(_, v)| v)

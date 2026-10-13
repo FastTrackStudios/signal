@@ -27,7 +27,15 @@ pub struct ScopeReader {
 pub fn scope(capacity: usize) -> (ScopeTap, ScopeReader) {
     let (w, r) = ring(capacity);
     let len = (r.capacity() / 4).max(1);
-    (ScopeTap { ring: w }, ScopeReader { ring: r, len, trigger: Trigger::Rising, scratch: Vec::new() })
+    (
+        ScopeTap { ring: w },
+        ScopeReader {
+            ring: r,
+            len,
+            trigger: Trigger::Rising,
+            scratch: Vec::new(),
+        },
+    )
 }
 
 impl ScopeTap {
@@ -96,12 +104,18 @@ mod tests {
         let (mut tap, mut r) = scope(1024);
         r.set_len(100);
         let period = 40.0;
-        let s: Vec<f32> = (0..777).map(|i| (2.0 * std::f64::consts::PI * (f64::from(i) + 7.0) / period).sin() as f32).collect();
+        let s: Vec<f32> = (0..777)
+            .map(|i| (2.0 * std::f64::consts::PI * (f64::from(i) + 7.0) / period).sin() as f32)
+            .collect();
         tap.push(&s);
         let mut out = Vec::new();
         r.snapshot(&mut out);
         assert_eq!(out.len(), 100);
-        assert!(out[0] >= 0.0 && out[0] < 0.2, "starts just past the crossing: {}", out[0]);
+        assert!(
+            out[0] >= 0.0 && out[0] < 0.2,
+            "starts just past the crossing: {}",
+            out[0]
+        );
         assert!(out[1] > out[0], "going up");
         // Free-running: just the latest samples.
         r.set_trigger(Trigger::Free);

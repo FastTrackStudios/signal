@@ -140,7 +140,9 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
     let mut rig = None;
     let (mut library, mut surface, mut browse, mut install_dir) = (None, None, false, None);
     let mut out = Args {
-        source: Source::Generated { theme: Box::new(Theme::stage_dark()) },
+        source: Source::Generated {
+            theme: Box::new(Theme::stage_dark()),
+        },
         gallery: Vec::new(),
         stats: false,
         size: (1280, 480),
@@ -155,7 +157,10 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
     };
     let mut args = args.into_iter();
     while let Some(a) = args.next() {
-        let mut value = || args.next().ok_or_else(|| format!("{a} needs a value\n{USAGE}"));
+        let mut value = || {
+            args.next()
+                .ok_or_else(|| format!("{a} needs a value\n{USAGE}"))
+        };
         match a.as_str() {
             "--theme" => {
                 theme = match value()?.as_str() {
@@ -170,7 +175,10 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size wants WxH")?;
-                out.size = (w.parse().map_err(|_| "--size wants WxH")?, h.parse().map_err(|_| "--size wants WxH")?);
+                out.size = (
+                    w.parse().map_err(|_| "--size wants WxH")?,
+                    h.parse().map_err(|_| "--size wants WxH")?,
+                );
             }
             "--screenshot" => out.screenshot = Some(value()?.into()),
             "--frames" => out.frames = value()?.parse().map_err(|_| "--frames wants a count")?,
@@ -187,7 +195,12 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
                     other => return Err(format!("unknown script {other:?} ({})", Script::NAMES)),
                 }
             }
-            "--engine" => out.engine = Some(EngineArg { url: value()?, rig: None }),
+            "--engine" => {
+                out.engine = Some(EngineArg {
+                    url: value()?,
+                    rig: None,
+                })
+            }
             "--rig" => rig = Some(value()?),
             "--catalog" => out.catalogs.push(value()?.into()),
             "--library" => library = Some(value()?),
@@ -202,13 +215,24 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
         }
     }
     match (library, &file) {
-        (Some(_), Some(_)) => return Err(format!("--library plays from the library; drop the file argument\n{USAGE}")),
+        (Some(_), Some(_)) => {
+            return Err(format!(
+                "--library plays from the library; drop the file argument\n{USAGE}"
+            ));
+        }
         (Some(url), None) => {
             let install_dir = install_dir.unwrap_or_else(library::default_install_dir);
-            out.library = Some(LibraryArg { url, surface, browse, install_dir });
+            out.library = Some(LibraryArg {
+                url,
+                surface,
+                browse,
+                install_dir,
+            });
         }
         (None, _) if surface.is_some() || browse || install_dir.is_some() => {
-            return Err(format!("--surface/--browse/--install-dir need --library\n{USAGE}"));
+            return Err(format!(
+                "--surface/--browse/--install-dir need --library\n{USAGE}"
+            ));
         }
         (None, _) => {}
     }
@@ -224,7 +248,11 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
             }
             out.source = Source::from_path(path);
         }
-        None => out.source = Source::Generated { theme: Box::new(theme) },
+        None => {
+            out.source = Source::Generated {
+                theme: Box::new(theme),
+            }
+        }
     }
     match (&mut out.engine, rig) {
         (Some(e), rig) => e.rig = rig,
@@ -236,30 +264,49 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
 
 /// `*.catalog.json` files in `dir` — engines a surface there was designed for.
 fn sibling_catalogs(dir: &std::path::Path) -> Vec<PathBuf> {
-    let mut out: Vec<PathBuf> = std::fs::read_dir(if dir.as_os_str().is_empty() { std::path::Path::new(".") } else { dir })
-        .into_iter()
-        .flatten()
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().ends_with(".catalog.json")))
-        .collect();
+    let mut out: Vec<PathBuf> = std::fs::read_dir(if dir.as_os_str().is_empty() {
+        std::path::Path::new(".")
+    } else {
+        dir
+    })
+    .into_iter()
+    .flatten()
+    .filter_map(|e| e.ok().map(|e| e.path()))
+    .filter(|p| {
+        p.file_name()
+            .is_some_and(|n| n.to_string_lossy().ends_with(".catalog.json"))
+    })
+    .collect();
     out.sort();
     out
 }
 
 /// The demo rig plus every extra catalog (files, and those a library
 /// served), as one mock engine.
-fn mock_engine(extra: &[PathBuf], served: Vec<surface_proto::Catalog>) -> Result<surface_memory::Memory, String> {
+fn mock_engine(
+    extra: &[PathBuf],
+    served: Vec<surface_proto::Catalog>,
+) -> Result<surface_memory::Memory, String> {
     let mut catalog = surface_memory::demo_catalog();
     let mut all = Vec::new();
     for path in extra {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let c: surface_proto::Catalog = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-        eprintln!("frame: mock engine also serves `{}` ({} params) from {}", c.id, c.params.len(), path.display());
+        let c: surface_proto::Catalog =
+            serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        eprintln!(
+            "frame: mock engine also serves `{}` ({} params) from {}",
+            c.id,
+            c.params.len(),
+            path.display()
+        );
         all.push(c);
     }
     if !served.is_empty() {
         let ids: Vec<&str> = served.iter().map(|c| c.id.as_str()).collect();
-        eprintln!("frame: mock engine also serves the library's catalogs: {}", ids.join(", "));
+        eprintln!(
+            "frame: mock engine also serves the library's catalogs: {}",
+            ids.join(", ")
+        );
     }
     for c in all.into_iter().chain(served) {
         catalog.params.extend(c.params);
@@ -301,16 +348,30 @@ pub struct Started {
 /// When `--engine` or `--library` can't be reached.
 pub fn start(args: &Args) -> Result<Started, String> {
     let mut library = match &args.library {
-        Some(l) => Some(LibraryView::start(&l.url, l.surface.clone(), l.browse, l.install_dir.clone())?),
+        Some(l) => Some(LibraryView::start(
+            &l.url,
+            l.surface.clone(),
+            l.browse,
+            l.install_dir.clone(),
+        )?),
         None => None,
     };
     let engine = match &args.engine {
         None => {
-            let served = library.as_mut().map(LibraryView::catalogs).unwrap_or_default();
+            let served = library
+                .as_mut()
+                .map(LibraryView::catalogs)
+                .unwrap_or_default();
             Backend::Local(mock_engine(&args.catalogs, served)?)
         }
         Some(e) => {
-            eprintln!("frame: connecting to {}{}", e.url, e.rig.as_ref().map_or(String::new(), |r| format!(" (rig {r})")));
+            eprintln!(
+                "frame: connecting to {}{}",
+                e.url,
+                e.rig
+                    .as_ref()
+                    .map_or(String::new(), |r| format!(" (rig {r})"))
+            );
             let mut remote = Remote::start(&e.url, e.rig.as_deref())?;
             remote.wait_connected(CONNECT_TIMEOUT)?;
             Backend::Remote(remote)
@@ -326,17 +387,32 @@ pub fn start(args: &Args) -> Result<Started, String> {
         None => args.source.load(&catalog),
     };
     Ok(match loaded {
-        Ok(surface) => Started { engine, surface, error: None, library },
+        Ok(surface) => Started {
+            engine,
+            surface,
+            error: None,
+            library,
+        },
         Err(e) => {
             eprintln!("{e}");
-            Started { engine, surface: source::placeholder(), error: Some(e), library }
+            Started {
+                engine,
+                surface: source::placeholder(),
+                error: Some(e),
+                library,
+            }
         }
     })
 }
 
 fn main() {
-    let result = parse_args(std::env::args().skip(1))
-        .and_then(|args| if args.screenshot.is_some() { headless::run(&args) } else { window::run(&args) });
+    let result = parse_args(std::env::args().skip(1)).and_then(|args| {
+        if args.screenshot.is_some() {
+            headless::run(&args)
+        } else {
+            window::run(&args)
+        }
+    });
     if let Err(err) = result {
         eprintln!("frame: {err}");
         std::process::exit(1);
@@ -382,11 +458,27 @@ mod tests {
     #[test]
     fn engine_and_rig() {
         let a = args("--engine ws://127.0.0.1:4040/vox --rig guitar").unwrap();
-        assert!(matches!(a.source, Source::Generated { .. }), "no file → generated from the engine's catalog");
-        assert_eq!(a.engine, Some(EngineArg { url: "ws://127.0.0.1:4040/vox".into(), rig: Some("guitar".into()) }));
+        assert!(
+            matches!(a.source, Source::Generated { .. }),
+            "no file → generated from the engine's catalog"
+        );
+        assert_eq!(
+            a.engine,
+            Some(EngineArg {
+                url: "ws://127.0.0.1:4040/vox".into(),
+                rig: Some("guitar".into())
+            })
+        );
         let a = args("--rig keys s.frame --engine ws://h/vox").unwrap();
-        assert_eq!(a.engine.unwrap().rig.as_deref(), Some("keys"), "flag order doesn't matter");
-        assert_eq!(args("--engine ws://h/vox").unwrap().engine.unwrap().rig, None);
+        assert_eq!(
+            a.engine.unwrap().rig.as_deref(),
+            Some("keys"),
+            "flag order doesn't matter"
+        );
+        assert_eq!(
+            args("--engine ws://h/vox").unwrap().engine.unwrap().rig,
+            None
+        );
         assert!(args("--rig guitar").is_err(), "--rig without --engine");
         assert!(args("--engine").is_err());
     }

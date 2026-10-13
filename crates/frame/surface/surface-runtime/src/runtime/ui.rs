@@ -8,8 +8,8 @@ use std::collections::HashMap;
 
 use document_proto::{NodeId, NodeKind};
 use surface_proto::{
-    Binding, ClickAction, Chord, Command, Condition, Control, ControlKind, DragMode, EditPhase, ItemRole, ParamAddr, ParamKind, Placement,
-    Show, Source,
+    Binding, Chord, ClickAction, Command, Condition, Control, ControlKind, DragMode, EditPhase,
+    ItemRole, ParamAddr, ParamKind, Placement, Show, Source,
 };
 
 use super::repeat::{bind_context, instance_id};
@@ -132,7 +132,11 @@ impl Ui {
 /// The chord `mods` hold.
 #[must_use]
 pub fn chord(mods: Modifiers) -> Chord {
-    Chord { shift: mods.fine, command: mods.alt, option: mods.option }
+    Chord {
+        shift: mods.fine,
+        command: mods.alt,
+        option: mods.option,
+    }
 }
 
 fn inside(b: &Bounds, x: f64, y: f64) -> bool {
@@ -186,14 +190,21 @@ impl Runtime {
     /// Instance roots of every repeat template, by index.
     #[must_use]
     pub fn instances(&self) -> Vec<(NodeId, u32, NodeId)> {
-        self.expansion.templates.iter().flat_map(|(t, tpl)| tpl.instances.iter().map(|(n, root)| (*t, *n, *root))).collect()
+        self.expansion
+            .templates
+            .iter()
+            .flat_map(|(t, tpl)| tpl.instances.iter().map(|(n, root)| (*t, *n, *root)))
+            .collect()
     }
 
     /// Whether item `n` of `template` is in use.
     #[must_use]
     pub fn item_used(&self, template: NodeId, n: u32) -> bool {
-        let Some(t) = self.expansion.templates.get(&template) else { return false };
-        t.used_addr(n).is_none_or(|a| self.real(&a).is_some_and(|v| v >= 0.5))
+        let Some(t) = self.expansion.templates.get(&template) else {
+            return false;
+        };
+        t.used_addr(n)
+            .is_none_or(|a| self.real(&a).is_some_and(|v| v >= 0.5))
     }
 
     /// Whether `cond` holds now.
@@ -222,12 +233,20 @@ impl Runtime {
                 return false;
             }
             if let Some(control) = self.surface.controls.get(&c) {
-                if control.show_if.as_ref().is_some_and(|cond| !self.holds(cond)) {
+                if control
+                    .show_if
+                    .as_ref()
+                    .is_some_and(|cond| !self.holds(cond))
+                {
                     return false;
                 }
                 match control.kind {
-                    ControlKind::Popover { .. } if self.popover_origin(c).is_none() => return false,
-                    ControlKind::Menu { .. } if !self.ui.menus.iter().any(|m| m.node == c) => return false,
+                    ControlKind::Popover { .. } if self.popover_origin(c).is_none() => {
+                        return false;
+                    }
+                    ControlKind::Menu { .. } if !self.ui.menus.iter().any(|m| m.node == c) => {
+                        return false;
+                    }
                     _ => {}
                 }
             }
@@ -240,7 +259,10 @@ impl Runtime {
 
     /// A node's layout box (box space).
     pub(crate) fn box_of(&self, id: NodeId) -> Option<Bounds> {
-        self.all_boxes.get(&id).or_else(|| self.boxes.get(&id)).copied()
+        self.all_boxes
+            .get(&id)
+            .or_else(|| self.boxes.get(&id))
+            .copied()
     }
 
     /// The top-level frame holding `id` (a popover's stage), and its box.
@@ -264,7 +286,10 @@ impl Runtime {
         let mut cur = Some(id);
         let mut found = None;
         while let Some(c) = cur {
-            if matches!(self.surface.controls.get(&c).map(|k| &k.kind), Some(ControlKind::Popover { .. } | ControlKind::Menu { .. })) {
+            if matches!(
+                self.surface.controls.get(&c).map(|k| &k.kind),
+                Some(ControlKind::Popover { .. } | ControlKind::Menu { .. })
+            ) {
                 found = Some(c);
             }
             cur = scene.node(c).and_then(|n| n.parent);
@@ -275,8 +300,12 @@ impl Runtime {
     /// How far a node is drawn from where it was laid out: its floating
     /// root's placement less its authored box.
     pub(crate) fn displacement(&self, id: NodeId) -> (f64, f64) {
-        let Some(root) = self.floating_root(id) else { return (0.0, 0.0) };
-        let (Some(at), Some(b)) = (self.floating_origin(root), self.box_of(root)) else { return (0.0, 0.0) };
+        let Some(root) = self.floating_root(id) else {
+            return (0.0, 0.0);
+        };
+        let (Some(at), Some(b)) = (self.floating_origin(root), self.box_of(root)) else {
+            return (0.0, 0.0);
+        };
         (at.0 - b.x, at.1 - b.y)
     }
 
@@ -291,11 +320,18 @@ impl Runtime {
     /// The anchor node of a popover right now (a context popover's: the
     /// active item's instance of it).
     pub(crate) fn popover_anchor(&self, id: NodeId) -> Option<NodeId> {
-        let ControlKind::Popover { anchor, context, .. } = &self.surface.controls.get(&id)?.kind else { return None };
+        let ControlKind::Popover {
+            anchor, context, ..
+        } = &self.surface.controls.get(&id)?.kind
+        else {
+            return None;
+        };
         let anchor = NodeId((*anchor)?);
         match context {
             // Already bound to an item's instance.
-            Some(_) if self.expansion.owner.contains_key(&anchor) => Some(anchor).filter(|a| self.expansion.item_of(*a) == self.ui.active),
+            Some(_) if self.expansion.owner.contains_key(&anchor) => {
+                Some(anchor).filter(|a| self.expansion.item_of(*a) == self.ui.active)
+            }
             Some(t) => {
                 let (template, n) = self.ui.active?;
                 (template.0 == *t).then(|| instance_id(anchor, n))
@@ -312,25 +348,39 @@ impl Runtime {
         let dragging = self.captured == Some(anchor);
         let hovered = self.ui.hover == Some(anchor);
         let selected = self.ui.selected.contains(&anchor);
-        let over_me = self.ui.hover.is_some_and(|h| h == id || self.floating_root(h) == Some(id));
+        let over_me = self
+            .ui
+            .hover
+            .is_some_and(|h| h == id || self.floating_root(h) == Some(id));
         match show {
             Show::Always => true,
             Show::Hovered => dragging || hovered,
             Show::Selected => selected,
             Show::Active => {
                 let item = self.expansion.item_of(anchor);
-                dragging || over_me || (item.is_some() && item == self.ui.active) || (item.is_none() && (hovered || self.ui.selected.last() == Some(&anchor)))
+                dragging
+                    || over_me
+                    || (item.is_some() && item == self.ui.active)
+                    || (item.is_none() && (hovered || self.ui.selected.last() == Some(&anchor)))
             }
         }
     }
 
     /// A node that is laid out, drawn and not in an unused item (anchors).
     fn is_live(&self, id: NodeId) -> bool {
-        if self.expansion.template_nodes.contains(&id) || !self.boxes.contains_key(&id) && !self.all_boxes.contains_key(&id) {
+        if self.expansion.template_nodes.contains(&id)
+            || !self.boxes.contains_key(&id) && !self.all_boxes.contains_key(&id)
+        {
             return false;
         }
-        self.expansion.item_of(id).is_none_or(|(t, n)| self.item_used(t, n))
-            && self.surface.controls.get(&id).is_none_or(|c| c.show_if.as_ref().is_none_or(|cond| self.holds(cond)))
+        self.expansion
+            .item_of(id)
+            .is_none_or(|(t, n)| self.item_used(t, n))
+            && self
+                .surface
+                .controls
+                .get(&id)
+                .is_none_or(|c| c.show_if.as_ref().is_none_or(|cond| self.holds(cond)))
     }
 
     /// Where a shown popover goes (top-left, surface coordinates): beside
@@ -339,8 +389,23 @@ impl Runtime {
     #[must_use]
     pub fn popover_origin(&self, id: NodeId) -> Option<(f64, f64)> {
         let control = self.surface.controls.get(&id)?;
-        let ControlKind::Popover { placement, gap, show, context, .. } = &control.kind else { return None };
-        if context.is_some() && !self.expansion.contexts.get(&id).is_some_and(|c| c.bound.is_some()) {
+        let ControlKind::Popover {
+            placement,
+            gap,
+            show,
+            context,
+            ..
+        } = &control.kind
+        else {
+            return None;
+        };
+        if context.is_some()
+            && !self
+                .expansion
+                .contexts
+                .get(&id)
+                .is_some_and(|c| c.bound.is_some())
+        {
             return None;
         }
         let anchor = self.popover_anchor(id)?;
@@ -353,10 +418,20 @@ impl Runtime {
         }
         let a = self.anchor_box(anchor)?;
         let size = self.surface.scene.node(id)?.size;
-        let stage = self.stage_of(id).unwrap_or(Bounds { x: f64::MIN / 4.0, y: f64::MIN / 4.0, width: f64::MAX / 2.0, height: f64::MAX / 2.0 });
+        let stage = self.stage_of(id).unwrap_or(Bounds {
+            x: f64::MIN / 4.0,
+            y: f64::MIN / 4.0,
+            width: f64::MAX / 2.0,
+            height: f64::MAX / 2.0,
+        });
         if matches!(placement, Placement::DockBottom | Placement::DockTop) {
             // Docked to the anchor's area: a handle's plot, else the stage.
-            let area = if self.surface.controls.get(&anchor).is_some_and(|c| matches!(c.kind, ControlKind::Handle { .. })) {
+            let area = if self
+                .surface
+                .controls
+                .get(&anchor)
+                .is_some_and(|c| matches!(c.kind, ControlKind::Handle { .. }))
+            {
                 self.handle_area(anchor)
             } else {
                 stage
@@ -364,7 +439,13 @@ impl Runtime {
             let (x, y) = place(a, (size.width, size.height), *placement, *gap, area);
             // Held where it was while it is being used.
             let x = match self.ui.held.get(&id) {
-                Some(h) if h.2 == self.ui.active && (self.ui.pointer_in_popover == Some(id) || self.ui.clock - h.1 < POPOVER_HOLD_MS) => h.0,
+                Some(h)
+                    if h.2 == self.ui.active
+                        && (self.ui.pointer_in_popover == Some(id)
+                            || self.ui.clock - h.1 < POPOVER_HOLD_MS) =>
+                {
+                    h.0
+                }
                 _ => x,
             };
             return Some((x, y));
@@ -375,10 +456,18 @@ impl Runtime {
     /// An anchor's box where it is drawn now (a handle's where its values
     /// put it).
     fn anchor_box(&self, anchor: NodeId) -> Option<Bounds> {
-        let b = if self.surface.controls.contains_key(&anchor) { self.hit_box(anchor) } else { None };
+        let b = if self.surface.controls.contains_key(&anchor) {
+            self.hit_box(anchor)
+        } else {
+            None
+        };
         let b = b.or_else(|| self.box_of(anchor))?;
         let (dx, dy) = self.displacement(anchor);
-        Some(Bounds { x: b.x + dx, y: b.y + dy, ..b })
+        Some(Bounds {
+            x: b.x + dx,
+            y: b.y + dy,
+            ..b
+        })
     }
 
     /// Note the pointer against docked popovers: one under the pointer is
@@ -390,7 +479,15 @@ impl Runtime {
             .surface
             .controls
             .iter()
-            .filter(|(_, c)| matches!(c.kind, ControlKind::Popover { placement: Placement::DockBottom | Placement::DockTop, .. }))
+            .filter(|(_, c)| {
+                matches!(
+                    c.kind,
+                    ControlKind::Popover {
+                        placement: Placement::DockBottom | Placement::DockTop,
+                        ..
+                    }
+                )
+            })
             .map(|(id, _)| *id)
             .collect();
         let mut under = None;
@@ -399,25 +496,37 @@ impl Runtime {
                 self.ui.held.remove(&id);
                 continue;
             };
-            let Some(size) = self.surface.scene.node(id).map(|n| n.size) else { continue };
+            let Some(size) = self.surface.scene.node(id).map(|n| n.size) else {
+                continue;
+            };
             // On the panel where it's drawn: not a handle drawn over it.
             let inside = at.is_some_and(|(px, py)| {
                 px >= x
                     && py >= y
                     && px <= x + size.width
                     && py <= y + size.height
-                    && self.hit(px, py).is_none_or(|h| h == id || self.floating_root(h) == Some(id))
+                    && self
+                        .hit(px, py)
+                        .is_none_or(|h| h == id || self.floating_root(h) == Some(id))
             });
             if inside {
                 under = Some(id);
                 let active = self.ui.active;
-                let x0 = self.ui.held.get(&id).filter(|h| h.2 == active).map_or(x, |h| h.0);
+                let x0 = self
+                    .ui
+                    .held
+                    .get(&id)
+                    .filter(|h| h.2 == active)
+                    .map_or(x, |h| h.0);
                 self.ui.held.insert(id, (x0, t, active));
             }
         }
         // A drag that began on the panel keeps it in use until release.
         if under.is_none() && self.captured.is_some() {
-            under = self.ui.pointer_in_popover.filter(|id| self.captured.is_some_and(|c| self.floating_root(c) == Some(*id)));
+            under = self.ui.pointer_in_popover.filter(|id| {
+                self.captured
+                    .is_some_and(|c| self.floating_root(c) == Some(*id))
+            });
         }
         self.ui.pointer_in_popover = under;
         if let Some(id) = under
@@ -432,7 +541,10 @@ impl Runtime {
         let size = self.surface.scene.node(id)?.size;
         let stage = self.stage_of(id)?;
         let x = m.at.0.min(stage.x + stage.width - size.width).max(stage.x);
-        let y = m.at.1.min(stage.y + stage.height - size.height).max(stage.y);
+        let y =
+            m.at.1
+                .min(stage.y + stage.height - size.height)
+                .max(stage.y);
         Some((x, y))
     }
 
@@ -446,18 +558,31 @@ impl Runtime {
 
     /// Whether popover `id` is docked (drawn under its area's handles).
     pub(crate) fn is_docked(&self, id: NodeId) -> bool {
-        self.surface
-            .controls
-            .get(&id)
-            .is_some_and(|c| matches!(c.kind, ControlKind::Popover { placement: Placement::DockBottom | Placement::DockTop, .. }))
+        self.surface.controls.get(&id).is_some_and(|c| {
+            matches!(
+                c.kind,
+                ControlKind::Popover {
+                    placement: Placement::DockBottom | Placement::DockTop,
+                    ..
+                }
+            )
+        })
     }
 
     /// Floating controls under a point: menus and ordinary popovers
     /// (`docked == false`), or only docked popovers (`docked == true`), which
     /// sit under the handles of their area.
     pub(crate) fn hit_floating_where(&self, x: f64, y: f64, docked: bool) -> Option<NodeId> {
-        let mut roots: Vec<NodeId> = if docked { Vec::new() } else { self.ui.menus.iter().rev().map(|m| m.node).collect() };
-        let mut pops: Vec<NodeId> = self.popover_layers().into_iter().filter(|id| self.is_docked(*id) == docked).collect();
+        let mut roots: Vec<NodeId> = if docked {
+            Vec::new()
+        } else {
+            self.ui.menus.iter().rev().map(|m| m.node).collect()
+        };
+        let mut pops: Vec<NodeId> = self
+            .popover_layers()
+            .into_iter()
+            .filter(|id| self.is_docked(*id) == docked)
+            .collect();
         pops.reverse();
         roots.extend(pops);
         for root in roots {
@@ -467,9 +592,26 @@ impl Runtime {
                 self.surface.controls.get(id).is_some_and(|c| {
                     // A popover's own box blocks what is under it — not a
                     // label riding a handle.
-                    (c.kind.is_input() && !matches!(c.kind, ControlKind::Popover { show: Show::Always, .. }))
+                    (c.kind.is_input()
+                        && !matches!(
+                            c.kind,
+                            ControlKind::Popover {
+                                show: Show::Always,
+                                ..
+                            }
+                        ))
                         && self.hittable(*id, c)
-                        && self.box_of(*id).is_some_and(|b| inside(&Bounds { x: b.x + dx, y: b.y + dy, ..b }, x, y))
+                        && self.box_of(*id).is_some_and(|b| {
+                            inside(
+                                &Bounds {
+                                    x: b.x + dx,
+                                    y: b.y + dy,
+                                    ..b
+                                },
+                                x,
+                                y,
+                            )
+                        })
                 })
             });
             if hit.is_some() {
@@ -485,15 +627,23 @@ impl Runtime {
         let mut always = Vec::new();
         let mut rest = Vec::new();
         for id in order {
-            let Some(c) = self.surface.controls.get(&id) else { continue };
-            let ControlKind::Popover { show, .. } = c.kind else { continue };
+            let Some(c) = self.surface.controls.get(&id) else {
+                continue;
+            };
+            let ControlKind::Popover { show, .. } = c.kind else {
+                continue;
+            };
             if self.expansion.template_nodes.contains(&id) || self.popover_origin(id).is_none() {
                 continue;
             }
             if !self.is_shown_below(id) {
                 continue;
             }
-            if show == Show::Always { always.push(id) } else { rest.push(id) }
+            if show == Show::Always {
+                always.push(id)
+            } else {
+                rest.push(id)
+            }
         }
         always.extend(rest);
         always
@@ -501,8 +651,16 @@ impl Runtime {
 
     /// `is_shown` for the node's ancestors (not the node's own popover test).
     fn is_shown_below(&self, id: NodeId) -> bool {
-        self.surface.scene.node(id).and_then(|n| n.parent).is_none_or(|p| self.is_shown(p))
-            && self.surface.controls.get(&id).is_none_or(|c| c.show_if.as_ref().is_none_or(|cond| self.holds(cond)))
+        self.surface
+            .scene
+            .node(id)
+            .and_then(|n| n.parent)
+            .is_none_or(|p| self.is_shown(p))
+            && self
+                .surface
+                .controls
+                .get(&id)
+                .is_none_or(|c| c.show_if.as_ref().is_none_or(|cond| self.holds(cond)))
             && self.surface.scene.node(id).is_some_and(|n| n.visible)
     }
 
@@ -520,12 +678,20 @@ impl Runtime {
     // ── selection ─────────────────────────────────────────────────────────
 
     fn selectable(&self, id: NodeId) -> bool {
-        self.surface.controls.get(&id).is_some_and(|c| c.interact.as_ref().is_some_and(|i| i.selectable)) && self.is_shown(id)
+        self.surface
+            .controls
+            .get(&id)
+            .is_some_and(|c| c.interact.as_ref().is_some_and(|i| i.selectable))
+            && self.is_shown(id)
     }
 
     /// Select exactly `ids`.
     pub fn select(&mut self, ids: &[NodeId]) {
-        self.ui.selected = ids.iter().copied().filter(|id| self.selectable(*id)).collect();
+        self.ui.selected = ids
+            .iter()
+            .copied()
+            .filter(|id| self.selectable(*id))
+            .collect();
         self.update_active();
     }
 
@@ -566,7 +732,10 @@ impl Runtime {
                     .iter()
                     .filter(|(cid, c)| {
                         c.interact.as_ref().is_some_and(|i| i.selectable)
-                            && self.expansion.item_of(**cid).is_some_and(|(ct, n)| ct == t && (lo..=hi).contains(&n))
+                            && self
+                                .expansion
+                                .item_of(**cid)
+                                .is_some_and(|(ct, n)| ct == t && (lo..=hi).contains(&n))
                     })
                     .map(|(cid, _)| *cid)
                     .filter(|cid| self.is_shown(*cid))
@@ -583,24 +752,59 @@ impl Runtime {
     /// hovered one's, the last selected one's — held while the pointer is
     /// on a context popover.
     pub(crate) fn update_active(&mut self) {
-        let item = |id: Option<NodeId>| id.and_then(|i| self.expansion.item_of(i)).filter(|(t, n)| self.item_used(*t, *n));
-        let handle = |id: &NodeId| self.surface.controls.get(id).is_some_and(|c| matches!(c.kind, ControlKind::Handle { .. }));
-        let over_context = self.ui.hover.and_then(|h| self.floating_root(h)).is_some_and(|r| self.expansion.contexts.contains_key(&r))
+        let item = |id: Option<NodeId>| {
+            id.and_then(|i| self.expansion.item_of(i))
+                .filter(|(t, n)| self.item_used(*t, *n))
+        };
+        let handle = |id: &NodeId| {
+            self.surface
+                .controls
+                .get(id)
+                .is_some_and(|c| matches!(c.kind, ControlKind::Handle { .. }))
+        };
+        let over_context = self
+            .ui
+            .hover
+            .and_then(|h| self.floating_root(h))
+            .is_some_and(|r| self.expansion.contexts.contains_key(&r))
             || self.ui.pointer.is_some_and(|(x, y)| {
                 self.expansion.contexts.keys().any(|r| {
                     self.floating_origin(*r).is_some_and(|(ox, oy)| {
-                        self.surface.scene.node(*r).is_some_and(|n| inside(&Bounds { x: ox, y: oy, width: n.size.width, height: n.size.height }, x, y))
+                        self.surface.scene.node(*r).is_some_and(|n| {
+                            inside(
+                                &Bounds {
+                                    x: ox,
+                                    y: oy,
+                                    width: n.size.width,
+                                    height: n.size.height,
+                                },
+                                x,
+                                y,
+                            )
+                        })
                     })
                 })
             });
         let next = item(self.captured.filter(handle))
             .or_else(|| item(self.ui.hover.filter(handle)))
-            .or_else(|| if over_context || self.ui.edit.is_some() { self.ui.active } else { None })
+            .or_else(|| {
+                if over_context || self.ui.edit.is_some() {
+                    self.ui.active
+                } else {
+                    None
+                }
+            })
             .or_else(|| item(self.ui.selected.last().copied()))
             .filter(|(t, n)| self.item_used(*t, *n));
         self.ui.active = next;
         if let Some((template, n)) = next {
-            let roots: Vec<NodeId> = self.expansion.contexts.iter().filter(|(_, c)| c.repeat == template).map(|(r, _)| *r).collect();
+            let roots: Vec<NodeId> = self
+                .expansion
+                .contexts
+                .iter()
+                .filter(|(_, c)| c.repeat == template)
+                .map(|(r, _)| *r)
+                .collect();
             for root in roots {
                 self.rebind(root, n);
             }
@@ -621,8 +825,16 @@ impl Runtime {
     // ── commands ──────────────────────────────────────────────────────────
 
     /// Set a param to `real` engineering units (a gesture's end).
-    pub(crate) fn set_real(&mut self, addr: &ParamAddr, real: f64, t: f64, calls: &mut Vec<EngineCall>) {
-        let Some(n) = self.normalized(addr, real) else { return };
+    pub(crate) fn set_real(
+        &mut self,
+        addr: &ParamAddr,
+        real: f64,
+        t: f64,
+        calls: &mut Vec<EngineCall>,
+    ) {
+        let Some(n) = self.normalized(addr, real) else {
+            return;
+        };
         let b = Binding::param(addr.0.clone());
         self.send(&b, n, EditPhase::End, t, calls);
     }
@@ -632,11 +844,20 @@ impl Runtime {
             return;
         }
         self.texts.insert(addr.clone(), text.clone());
-        calls.push(EngineCall::SetText { addr: addr.clone(), text });
+        calls.push(EngineCall::SetText {
+            addr: addr.clone(),
+            text,
+        });
     }
 
     /// Run commands for `item` (`from`: the control they came from).
-    pub(crate) fn run(&mut self, commands: &[Command], item: Option<(NodeId, u32)>, from: Option<NodeId>, t: f64) -> Vec<EngineCall> {
+    pub(crate) fn run(
+        &mut self,
+        commands: &[Command],
+        item: Option<(NodeId, u32)>,
+        from: Option<NodeId>,
+        t: f64,
+    ) -> Vec<EngineCall> {
         let mut calls = Vec::new();
         let resolve = |addr: &ParamAddr| match item {
             Some((_, n)) => ParamAddr::new(surface_proto::substitute(&addr.0, n)),
@@ -644,7 +865,9 @@ impl Runtime {
         };
         for c in commands {
             match c {
-                Command::Set { addr, value } => self.set_real(&resolve(addr), *value, t, &mut calls),
+                Command::Set { addr, value } => {
+                    self.set_real(&resolve(addr), *value, t, &mut calls)
+                }
                 Command::Toggle { addr } => {
                     let a = resolve(addr);
                     let v = self.real(&a).unwrap_or(0.0);
@@ -680,14 +903,21 @@ impl Runtime {
                     let mut items: Vec<(NodeId, u32)> = Vec::new();
                     let from_selected = from.is_some_and(|f| self.ui.selected.contains(&f));
                     if from_selected {
-                        items.extend(self.ui.selected.iter().filter_map(|s| self.expansion.item_of(*s)));
+                        items.extend(
+                            self.ui
+                                .selected
+                                .iter()
+                                .filter_map(|s| self.expansion.item_of(*s)),
+                        );
                     }
                     items.extend(item);
                     calls.extend(self.remove_items(&items, t));
                 }
                 Command::Edit { node } => {
                     let id = match item {
-                        Some((_, n)) if self.expansion.template_nodes.contains(&NodeId(*node)) => instance_id(NodeId(*node), n),
+                        Some((_, n)) if self.expansion.template_nodes.contains(&NodeId(*node)) => {
+                            instance_id(NodeId(*node), n)
+                        }
                         _ => NodeId(*node),
                     };
                     self.begin_edit(id, true);
@@ -711,11 +941,25 @@ impl Runtime {
                 continue;
             }
             done.push((*template, *n));
-            let Some(addr) = self.expansion.templates.get(template).and_then(|tpl| tpl.used_addr(*n)) else { continue };
+            let Some(addr) = self
+                .expansion
+                .templates
+                .get(template)
+                .and_then(|tpl| tpl.used_addr(*n))
+            else {
+                continue;
+            };
             self.set_real(&addr, 0.0, t, &mut calls);
         }
-        self.ui.selected.retain(|s| self.expansion.item_of(*s).is_none_or(|i| !done.contains(&i)));
-        if self.captured.is_some_and(|c| self.expansion.item_of(c).is_some_and(|i| done.contains(&i))) {
+        self.ui.selected.retain(|s| {
+            self.expansion
+                .item_of(*s)
+                .is_none_or(|i| !done.contains(&i))
+        });
+        if self
+            .captured
+            .is_some_and(|c| self.expansion.item_of(c).is_some_and(|i| done.contains(&i)))
+        {
             self.captured = None;
         }
         self.update_active();
@@ -725,13 +969,33 @@ impl Runtime {
     /// Add an item on `canvas` at unit point (`u`, `v`) per its add rule:
     /// the next free index, reset, marked used, placed, zoned, selected.
     /// Returns the calls and the new item's selectable control.
-    pub fn add_at(&mut self, canvas: NodeId, u: f64, v: f64, t: f64) -> (Vec<EngineCall>, Option<NodeId>) {
+    pub fn add_at(
+        &mut self,
+        canvas: NodeId,
+        u: f64,
+        v: f64,
+        t: f64,
+    ) -> (Vec<EngineCall>, Option<NodeId>) {
         let mut calls = Vec::new();
-        let Some(control) = self.surface.controls.get(&canvas).cloned() else { return (calls, None) };
-        let ControlKind::Canvas { x, y, add: Some(rule) } = &control.kind else { return (calls, None) };
+        let Some(control) = self.surface.controls.get(&canvas).cloned() else {
+            return (calls, None);
+        };
+        let ControlKind::Canvas {
+            x,
+            y,
+            add: Some(rule),
+        } = &control.kind
+        else {
+            return (calls, None);
+        };
         let template = NodeId(rule.repeat);
-        let Some(tpl) = self.expansion.templates.get(&template).cloned() else { return (calls, None) };
-        let Some(n) = (tpl.first..tpl.first + tpl.count).find(|n| !self.item_used(template, *n)) else { return (calls, None) };
+        let Some(tpl) = self.expansion.templates.get(&template).cloned() else {
+            return (calls, None);
+        };
+        let Some(n) = (tpl.first..tpl.first + tpl.count).find(|n| !self.item_used(template, *n))
+        else {
+            return (calls, None);
+        };
         // A clean slate: every param of the item back to its default.
         if let Some(prefix) = tpl.family_prefix(n) {
             let family: Vec<(ParamAddr, f64, bool)> = self
@@ -752,7 +1016,10 @@ impl Runtime {
         }
         let resolve = |a: &ParamAddr| ParamAddr::new(surface_proto::substitute(&a.0, n));
         let y_axis = self.zoomed_axis(&control, y);
-        let (xv, yv) = (x.from_unit(u.clamp(0.0, 1.0)), y_axis.from_unit(v.clamp(0.0, 1.0)));
+        let (xv, yv) = (
+            x.from_unit(u.clamp(0.0, 1.0)),
+            y_axis.from_unit(v.clamp(0.0, 1.0)),
+        );
         let zone = rule.zone(xv, v).cloned();
         if let Some(a) = &rule.x {
             self.set_real(&resolve(a), xv, t, &mut calls);
@@ -761,7 +1028,11 @@ impl Runtime {
             let keep = zone.as_ref().is_none_or(|z| z.keep_y);
             self.set_real(&resolve(a), if keep { yv } else { 0.0 }, t, &mut calls);
         }
-        for s in rule.set.iter().chain(zone.iter().flat_map(|z| z.set.iter())) {
+        for s in rule
+            .set
+            .iter()
+            .chain(zone.iter().flat_map(|z| z.set.iter()))
+        {
             self.set_real(&resolve(&s.addr), s.value, t, &mut calls);
         }
         if let Some(used) = tpl.used_addr(n) {
@@ -772,7 +1043,10 @@ impl Runtime {
             .surface
             .controls
             .iter()
-            .filter(|(id, c)| c.interact.as_ref().is_some_and(|i| i.selectable) && self.expansion.item_of(**id) == Some((template, n)))
+            .filter(|(id, c)| {
+                c.interact.as_ref().is_some_and(|i| i.selectable)
+                    && self.expansion.item_of(**id) == Some((template, n))
+            })
             .map(|(id, _)| *id)
             .next();
         if let Some(id) = new {
@@ -786,7 +1060,14 @@ impl Runtime {
 
     /// A press: menus first, then text editing, canvases, selection and
     /// chord clicks, then the control's own gesture.
-    pub(crate) fn press(&mut self, x: f64, y: f64, mods: Modifiers, input: Input, t: f64) -> Vec<EngineCall> {
+    pub(crate) fn press(
+        &mut self,
+        x: f64,
+        y: f64,
+        mods: Modifiers,
+        input: Input,
+        t: f64,
+    ) -> Vec<EngineCall> {
         let mut calls = Vec::new();
         self.ui.pointer = Some((x, y));
         if !self.ui.menus.is_empty() {
@@ -809,7 +1090,14 @@ impl Runtime {
             calls.extend(self.commit_edit());
         }
         self.captured = hit;
-        self.ui.press = Some(Press { x, y, moved: false, deferred: Vec::new(), item: hit.and_then(|h| self.item_of(h)), inert: false });
+        self.ui.press = Some(Press {
+            x,
+            y,
+            moved: false,
+            deferred: Vec::new(),
+            item: hit.and_then(|h| self.item_of(h)),
+            inert: false,
+        });
         self.ui.outside = None;
         self.ui.group = None;
         self.ui.wheel_drag = None;
@@ -821,12 +1109,23 @@ impl Runtime {
             return calls;
         };
         self.ui.focus = Some(id);
-        let Some(control) = self.surface.controls.get(&id).cloned() else { return calls };
+        let Some(control) = self.surface.controls.get(&id).cloned() else {
+            return calls;
+        };
         match &control.kind {
             ControlKind::Canvas { .. } => {
-                let base = if mods.fine { self.ui.selected.clone() } else { Vec::new() };
+                let base = if mods.fine {
+                    self.ui.selected.clone()
+                } else {
+                    Vec::new()
+                };
                 self.ui.selected = base.clone();
-                self.ui.marquee = Some(Marquee { canvas: id, from: (x, y), to: (x, y), base });
+                self.ui.marquee = Some(Marquee {
+                    canvas: id,
+                    from: (x, y),
+                    to: (x, y),
+                    base,
+                });
                 self.update_active();
                 return calls;
             }
@@ -842,7 +1141,10 @@ impl Runtime {
             _ => {}
         }
         if let Some(interact) = control.interact.clone() {
-            let action = interact.click_for(chord(mods)).cloned().or_else(|| interact.selectable.then_some(ClickAction::Select));
+            let action = interact
+                .click_for(chord(mods))
+                .cloned()
+                .or_else(|| interact.selectable.then_some(ClickAction::Select));
             match action {
                 // Runs on a release without travel; a drag is a drag.
                 Some(ClickAction::Run { commands }) => {
@@ -941,7 +1243,9 @@ impl Runtime {
         let mut calls = Vec::new();
         let press = self.ui.press.take();
         self.ui.marquee = None;
-        let Some(id) = self.captured else { return calls };
+        let Some(id) = self.captured else {
+            return calls;
+        };
         let inert = press.as_ref().is_some_and(|p| p.inert);
         if !inert {
             calls.extend(self.feed(id, input, t));
@@ -976,14 +1280,25 @@ impl Runtime {
     /// A double-click on the captured control: its `double_click`
     /// commands, a canvas's add, else the gesture's own (a reset).
     pub(crate) fn double_click(&mut self, t: f64) -> Vec<EngineCall> {
-        let Some(id) = self.captured else { return Vec::new() };
-        let Some(control) = self.surface.controls.get(&id).cloned() else { return Vec::new() };
+        let Some(id) = self.captured else {
+            return Vec::new();
+        };
+        let Some(control) = self.surface.controls.get(&id).cloned() else {
+            return Vec::new();
+        };
         if let ControlKind::Canvas { .. } = control.kind {
             self.ui.marquee = None;
-            let Some(p) = self.ui.press.clone() else { return Vec::new() };
-            let Some(b) = self.box_of(id) else { return Vec::new() };
+            let Some(p) = self.ui.press.clone() else {
+                return Vec::new();
+            };
+            let Some(b) = self.box_of(id) else {
+                return Vec::new();
+            };
             let (lx, ly) = self.local(id, p.x, p.y);
-            let (u, v) = ((lx - b.x) / b.width.max(1.0), 1.0 - (ly - b.y) / b.height.max(1.0));
+            let (u, v) = (
+                (lx - b.x) / b.width.max(1.0),
+                1.0 - (ly - b.y) / b.height.max(1.0),
+            );
             let (mut calls, new) = self.add_at(id, u, v, t);
             // The new item is under the hand: keep dragging it.
             if let Some(h) = new {
@@ -991,7 +1306,16 @@ impl Runtime {
                 if let Some(pr) = &mut self.ui.press {
                     pr.item = self.expansion.item_of(h);
                 }
-                calls.extend(self.feed(h, Input::Down { x: p.x, y: p.y, t, mods: Modifiers::default() }, t));
+                calls.extend(self.feed(
+                    h,
+                    Input::Down {
+                        x: p.x,
+                        y: p.y,
+                        t,
+                        mods: Modifiers::default(),
+                    },
+                    t,
+                ));
             }
             return calls;
         }
@@ -1021,7 +1345,15 @@ impl Runtime {
 
     /// A handle's input with its interaction rules: wheel rules, drag
     /// modes, a group drag.
-    pub(crate) fn feed_handle(&mut self, id: NodeId, control: &Control, input: Input, uv: (f64, f64), area: Bounds, t: f64) -> Vec<EngineCall> {
+    pub(crate) fn feed_handle(
+        &mut self,
+        id: NodeId,
+        control: &Control,
+        input: Input,
+        uv: (f64, f64),
+        area: Bounds,
+        t: f64,
+    ) -> Vec<EngineCall> {
         let interact = control.interact.clone().unwrap_or_default();
         let mut calls = Vec::new();
         if let Input::Wheel { notches, mods } = input {
@@ -1030,7 +1362,10 @@ impl Runtime {
             let rule = interact
                 .wheel
                 .iter()
-                .find(|r| (r.chord == c || r.chord == unfine) && r.when.as_ref().is_none_or(|w| self.holds(w)))
+                .find(|r| {
+                    (r.chord == c || r.chord == unfine)
+                        && r.when.as_ref().is_none_or(|w| self.holds(w))
+                })
                 .cloned();
             if let Some(r) = rule {
                 self.nudge(&r.target, notches, r.step, mods.fine, t, &mut calls);
@@ -1049,24 +1384,51 @@ impl Runtime {
             interact
                 .drag
                 .iter()
-                .find(|r| (r.chord == c || r.chord == unfine) && r.when.as_ref().is_none_or(|w| self.holds(w)))
+                .find(|r| {
+                    (r.chord == c || r.chord == unfine)
+                        && r.when.as_ref().is_none_or(|w| self.holds(w))
+                })
                 .map_or(DragMode::Free, |r| r.mode)
         });
-        self.ui.drag_mode = if matches!(input, Input::Up { .. } | Input::Cancel { .. }) { None } else { Some(mode) };
+        self.ui.drag_mode = if matches!(input, Input::Up { .. } | Input::Cancel { .. }) {
+            None
+        } else {
+            Some(mode)
+        };
         // With chord rules, Cmd/Ctrl is a chord, not the gesture's reset.
         let input = match input {
-            Input::Down { x, y, t, mods } if !interact.click.is_empty() || !interact.drag.is_empty() => {
-                Input::Down { x, y, t, mods: Modifiers { alt: false, ..mods } }
+            Input::Down { x, y, t, mods }
+                if !interact.click.is_empty() || !interact.drag.is_empty() =>
+            {
+                Input::Down {
+                    x,
+                    y,
+                    t,
+                    mods: Modifiers { alt: false, ..mods },
+                }
             }
             other => other,
         };
         if matches!(input, Input::Down { .. }) {
             self.ui.wheel_drag = Some(uv.1);
         }
-        let outputs = self.gestures.entry(id).or_insert_with(|| Gesture::new(control.kind.clone())).point(input, uv, area);
-        let start = self.ui.group.as_ref().and_then(|(_, s)| s.get(&id).copied());
+        let outputs = self
+            .gestures
+            .entry(id)
+            .or_insert_with(|| Gesture::new(control.kind.clone()))
+            .point(input, uv, area);
+        let start = self
+            .ui
+            .group
+            .as_ref()
+            .and_then(|(_, s)| s.get(&id).copied());
         for o in outputs {
-            let Output::SetXy { x: nu, y: nv, phase } = o else {
+            let Output::SetXy {
+                x: nu,
+                y: nv,
+                phase,
+            } = o
+            else {
                 self.handle_output(control, o, t, &mut calls);
                 continue;
             };
@@ -1086,7 +1448,13 @@ impl Runtime {
                     {
                         let now = self.values.get(addr).map_or(0.0, |v| b.to_position(*v));
                         let b = b.clone();
-                        self.send(&b, (now + dy_px * per_px).clamp(0.0, 1.0), EditPhase::Change, t, &mut calls);
+                        self.send(
+                            &b,
+                            (now + dy_px * per_px).clamp(0.0, 1.0),
+                            EditPhase::Change,
+                            t,
+                            &mut calls,
+                        );
                     }
                     (uv.0, uv.1)
                 }
@@ -1094,7 +1462,16 @@ impl Runtime {
             if !matches!(mode, DragMode::Wheel { .. }) {
                 self.ui.wheel_drag = None;
             }
-            self.handle_output(control, Output::SetXy { x: nu, y: nv, phase }, t, &mut calls);
+            self.handle_output(
+                control,
+                Output::SetXy {
+                    x: nu,
+                    y: nv,
+                    phase,
+                },
+                t,
+                &mut calls,
+            );
             // The rest of the group follows by the same travel.
             if let Some((grabbed, starts)) = self.ui.group.clone()
                 && grabbed == id
@@ -1105,7 +1482,11 @@ impl Runtime {
                         continue;
                     }
                     if let Some(oc) = self.surface.controls.get(&other).cloned() {
-                        let out = Output::SetXy { x: (su + du).clamp(0.0, 1.0), y: (sv + dv).clamp(0.0, 1.0), phase };
+                        let out = Output::SetXy {
+                            x: (su + du).clamp(0.0, 1.0),
+                            y: (sv + dv).clamp(0.0, 1.0),
+                            phase,
+                        };
                         self.handle_output(&oc, out, t, &mut calls);
                     }
                 }
@@ -1116,13 +1497,25 @@ impl Runtime {
 
     /// Turn `addr` by `notches` × `step` position units (a stepped param:
     /// whole detents).
-    fn nudge(&mut self, addr: &ParamAddr, notches: f64, step: f64, fine: bool, t: f64, calls: &mut Vec<EngineCall>) {
-        let Some(p) = self.catalog.param(addr) else { return };
+    fn nudge(
+        &mut self,
+        addr: &ParamAddr,
+        notches: f64,
+        step: f64,
+        fine: bool,
+        t: f64,
+        calls: &mut Vec<EngineCall>,
+    ) {
+        let Some(p) = self.catalog.param(addr) else {
+            return;
+        };
         let now = self.values.get(addr).copied().unwrap_or(p.default);
         let next = match p.range.steps.filter(|n| *n >= 2) {
             Some(n) => {
                 let k = f64::from(n - 1);
-                (((now * k).round() + notches.signum() * notches.abs().round().max(1.0)).clamp(0.0, k)) / k
+                (((now * k).round() + notches.signum() * notches.abs().round().max(1.0))
+                    .clamp(0.0, k))
+                    / k
             }
             None => (now + notches * step * if fine { FINE } else { 1.0 }).clamp(0.0, 1.0),
         };
@@ -1143,12 +1536,20 @@ impl Runtime {
         }
         self.ui.menus.clear();
         self.ui.pointer = Some((x, y));
-        let Some(id) = self.hit(x, y) else { return calls };
-        let Some(control) = self.surface.controls.get(&id).cloned() else { return calls };
-        let Some(menu) = control.interact.as_ref().and_then(|i| i.menu) else { return calls };
+        let Some(id) = self.hit(x, y) else {
+            return calls;
+        };
+        let Some(control) = self.surface.controls.get(&id).cloned() else {
+            return calls;
+        };
+        let Some(menu) = control.interact.as_ref().and_then(|i| i.menu) else {
+            return calls;
+        };
         let item = self.expansion.item_of(id);
         let menu = match item {
-            Some((_, n)) if self.expansion.template_nodes.contains(&NodeId(menu)) => instance_id(NodeId(menu), n),
+            Some((_, n)) if self.expansion.template_nodes.contains(&NodeId(menu)) => {
+                instance_id(NodeId(menu), n)
+            }
             _ => NodeId(menu),
         };
         let point = match control.kind {
@@ -1156,10 +1557,16 @@ impl Runtime {
                 self.ui.selected.clear();
                 let b = self.box_of(id).unwrap_or_default();
                 let (lx, ly) = self.local(id, x, y);
-                Some((id, (lx - b.x) / b.width.max(1.0), 1.0 - (ly - b.y) / b.height.max(1.0)))
+                Some((
+                    id,
+                    (lx - b.x) / b.width.max(1.0),
+                    1.0 - (ly - b.y) / b.height.max(1.0),
+                ))
             }
             _ => {
-                if control.interact.as_ref().is_some_and(|i| i.selectable) && !self.ui.selected.contains(&id) {
+                if control.interact.as_ref().is_some_and(|i| i.selectable)
+                    && !self.ui.selected.contains(&id)
+                {
                     self.ui.selected = vec![id];
                 }
                 None
@@ -1170,7 +1577,13 @@ impl Runtime {
         {
             self.rebind_menu(menu, n);
         }
-        self.ui.menus.push(OpenMenu { node: menu, at: (x + MENU_OFFSET, y + MENU_OFFSET), item, point, active: None });
+        self.ui.menus.push(OpenMenu {
+            node: menu,
+            at: (x + MENU_OFFSET, y + MENU_OFFSET),
+            item,
+            point,
+            active: None,
+        });
         self.update_active();
         let _ = t;
         calls
@@ -1180,7 +1593,9 @@ impl Runtime {
     fn rebind_menu(&mut self, menu: NodeId, n: u32) {
         self.rebind(menu, n);
         let subs: Vec<NodeId> = match self.surface.controls.get(&menu).map(|c| &c.kind) {
-            Some(ControlKind::Menu { items, .. }) => items.iter().filter_map(|i| i.submenu).map(NodeId).collect(),
+            Some(ControlKind::Menu { items, .. }) => {
+                items.iter().filter_map(|i| i.submenu).map(NodeId).collect()
+            }
             _ => Vec::new(),
         };
         for s in subs {
@@ -1200,14 +1615,38 @@ impl Runtime {
     /// The (menu depth, row) under a point.
     fn menu_at(&self, x: f64, y: f64) -> Option<(usize, Option<usize>)> {
         for (depth, m) in self.ui.menus.iter().enumerate().rev() {
-            let Some((ox, oy)) = self.menu_origin(m.node) else { continue };
-            let Some(node) = self.surface.scene.node(m.node) else { continue };
-            if !inside(&Bounds { x: ox, y: oy, width: node.size.width, height: node.size.height }, x, y) {
+            let Some((ox, oy)) = self.menu_origin(m.node) else {
+                continue;
+            };
+            let Some(node) = self.surface.scene.node(m.node) else {
+                continue;
+            };
+            if !inside(
+                &Bounds {
+                    x: ox,
+                    y: oy,
+                    width: node.size.width,
+                    height: node.size.height,
+                },
+                x,
+                y,
+            ) {
                 continue;
             }
             let (dx, dy) = self.displacement(m.node);
             let row = self.menu_items(m.node).iter().position(|it| {
-                it.selectable() && self.box_of(NodeId(it.row)).is_some_and(|b| inside(&Bounds { x: b.x + dx, y: b.y + dy, ..b }, x, y))
+                it.selectable()
+                    && self.box_of(NodeId(it.row)).is_some_and(|b| {
+                        inside(
+                            &Bounds {
+                                x: b.x + dx,
+                                y: b.y + dy,
+                                ..b
+                            },
+                            x,
+                            y,
+                        )
+                    })
             });
             return Some((depth, row));
         }
@@ -1226,32 +1665,54 @@ impl Runtime {
 
     /// Open row `row`'s submenu of menu `depth` beside it.
     fn open_submenu(&mut self, depth: usize, row: usize) {
-        let Some(m) = self.ui.menus.get(depth).cloned() else { return };
+        let Some(m) = self.ui.menus.get(depth).cloned() else {
+            return;
+        };
         let items = self.menu_items(m.node);
-        let Some(sub) = items.get(row).and_then(|i| i.submenu) else { return };
+        let Some(sub) = items.get(row).and_then(|i| i.submenu) else {
+            return;
+        };
         let sub = NodeId(sub);
         let (dx, dy) = self.displacement(m.node);
-        let Some(rb) = self.box_of(NodeId(items[row].row)) else { return };
-        let Some(menu_node) = self.surface.scene.node(m.node) else { return };
+        let Some(rb) = self.box_of(NodeId(items[row].row)) else {
+            return;
+        };
+        let Some(menu_node) = self.surface.scene.node(m.node) else {
+            return;
+        };
         let (ox, _) = self.menu_origin(m.node).unwrap_or((rb.x + dx, rb.y + dy));
         let w = self.surface.scene.node(sub).map_or(0.0, |n| n.size.width);
         let stage = self.stage_of(m.node).unwrap_or_default();
         let right = ox + menu_node.size.width - 2.0;
-        let x = if right + w > stage.x + stage.width { ox - w + 2.0 } else { right };
+        let x = if right + w > stage.x + stage.width {
+            ox - w + 2.0
+        } else {
+            right
+        };
         self.ui.menus.truncate(depth + 1);
         if let Some((_, n)) = m.item
             && self.expansion.contexts.contains_key(&sub)
         {
             self.rebind(sub, n);
         }
-        self.ui.menus.push(OpenMenu { node: sub, at: (x, rb.y + dy - 4.0), item: m.item, point: m.point, active: None });
+        self.ui.menus.push(OpenMenu {
+            node: sub,
+            at: (x, rb.y + dy - 4.0),
+            item: m.item,
+            point: m.point,
+            active: None,
+        });
     }
 
     fn menu_activate(&mut self, depth: usize, row: Option<usize>, t: f64) -> Vec<EngineCall> {
         let Some(row) = row else { return Vec::new() };
-        let Some(m) = self.ui.menus.get(depth).cloned() else { return Vec::new() };
+        let Some(m) = self.ui.menus.get(depth).cloned() else {
+            return Vec::new();
+        };
         let items = self.menu_items(m.node);
-        let Some(item) = items.get(row) else { return Vec::new() };
+        let Some(item) = items.get(row) else {
+            return Vec::new();
+        };
         if item.submenu.is_some() && item.commands.is_empty() {
             self.menu_hover(depth, Some(row));
             return Vec::new();
@@ -1262,7 +1723,10 @@ impl Runtime {
         let point = self.ui.menus.first().and_then(|m| m.point);
         let calls = {
             let saved = self.ui.menus.clone();
-            self.ui.menus = vec![OpenMenu { point, ..saved[0].clone() }];
+            self.ui.menus = vec![OpenMenu {
+                point,
+                ..saved[0].clone()
+            }];
             self.run(&commands, m.item, None, t)
         };
         self.ui.menus.clear();
@@ -1274,12 +1738,19 @@ impl Runtime {
         let depth = self.ui.menus.len() - 1;
         let m = self.ui.menus[depth].clone();
         let items = self.menu_items(m.node);
-        let selectable: Vec<usize> = items.iter().enumerate().filter(|(_, i)| i.role == ItemRole::Action).map(|(i, _)| i).collect();
+        let selectable: Vec<usize> = items
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| i.role == ItemRole::Action)
+            .map(|(i, _)| i)
+            .collect();
         let step = |dir: isize| {
             if selectable.is_empty() {
                 return None;
             }
-            let pos = m.active.and_then(|a| selectable.iter().position(|s| *s == a));
+            let pos = m
+                .active
+                .and_then(|a| selectable.iter().position(|s| *s == a));
             let len = selectable.len() as isize;
             let next = match pos {
                 Some(p) => (p as isize + dir).rem_euclid(len),
@@ -1295,7 +1766,10 @@ impl Runtime {
                 if let Some(a) = m.active {
                     self.open_submenu(depth, a);
                     if let Some(sub) = self.ui.menus.get(depth + 1).cloned() {
-                        let first = self.menu_items(sub.node).iter().position(|i| i.role == ItemRole::Action);
+                        let first = self
+                            .menu_items(sub.node)
+                            .iter()
+                            .position(|i| i.role == ItemRole::Action);
                         self.ui.menus[depth + 1].active = first;
                     }
                 }
@@ -1331,7 +1805,12 @@ impl Runtime {
                     .ui
                     .selected
                     .iter()
-                    .filter(|s| self.surface.controls.get(s).is_some_and(|c| c.interact.as_ref().is_some_and(|i| i.removable)))
+                    .filter(|s| {
+                        self.surface
+                            .controls
+                            .get(s)
+                            .is_some_and(|c| c.interact.as_ref().is_some_and(|i| i.removable))
+                    })
                     .filter_map(|s| self.expansion.item_of(*s))
                     .collect();
                 if items.is_empty() {
@@ -1353,7 +1832,12 @@ impl Runtime {
                         .controls
                         .get(&s)
                         .and_then(|ctl| ctl.interact.as_ref())
-                        .and_then(|i| i.keys.iter().find(|k| k.key.to_lowercase() == c.to_lowercase().to_string()).cloned())
+                        .and_then(|i| {
+                            i.keys
+                                .iter()
+                                .find(|k| k.key.to_lowercase() == c.to_lowercase().to_string())
+                                .cloned()
+                        })
                     else {
                         continue;
                     };
@@ -1368,7 +1852,9 @@ impl Runtime {
             _ => {}
         }
         let target = self.ui.selected.last().copied().or(self.ui.focus)?;
-        if !self.surface.controls.contains_key(&target) || matches!(key, Key::Escape | Key::Tab | Key::Char(_)) {
+        if !self.surface.controls.contains_key(&target)
+            || matches!(key, Key::Escape | Key::Tab | Key::Char(_))
+        {
             return None;
         }
         Some(self.feed(target, Input::Key { key, mods }, t))
@@ -1378,9 +1864,20 @@ impl Runtime {
 /// Place a `size` box beside `a` on `side` with `gap`, flipped to the
 /// opposite side if it runs off `stage`, then clamped inside it.
 #[must_use]
-pub fn place(a: Bounds, (w, h): (f64, f64), side: Placement, gap: f64, stage: Bounds) -> (f64, f64) {
+pub fn place(
+    a: Bounds,
+    (w, h): (f64, f64),
+    side: Placement,
+    gap: f64,
+    stage: Bounds,
+) -> (f64, f64) {
     let (cx, cy) = (a.x + a.width / 2.0, a.y + a.height / 2.0);
-    let (sx0, sy0, sx1, sy1) = (stage.x, stage.y, stage.x + stage.width, stage.y + stage.height);
+    let (sx0, sy0, sx1, sy1) = (
+        stage.x,
+        stage.y,
+        stage.x + stage.width,
+        stage.y + stage.height,
+    );
     let (x, y) = match side {
         Placement::Above | Placement::Below => {
             let above = a.y - gap - h;
@@ -1416,27 +1913,59 @@ pub fn place(a: Bounds, (w, h): (f64, f64), side: Placement, gap: f64, stage: Bo
 mod tests {
     use super::*;
 
-    const STAGE: Bounds = Bounds { x: 0.0, y: 0.0, width: 400.0, height: 300.0 };
+    const STAGE: Bounds = Bounds {
+        x: 0.0,
+        y: 0.0,
+        width: 400.0,
+        height: 300.0,
+    };
 
     #[test]
     fn popovers_flip_and_clamp() {
-        let a = Bounds { x: 190.0, y: 140.0, width: 20.0, height: 20.0 };
-        assert_eq!(place(a, (100.0, 50.0), Placement::Above, 4.0, STAGE), (150.0, 86.0));
-        assert_eq!(place(a, (100.0, 50.0), Placement::Below, 4.0, STAGE), (150.0, 164.0));
+        let a = Bounds {
+            x: 190.0,
+            y: 140.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        assert_eq!(
+            place(a, (100.0, 50.0), Placement::Above, 4.0, STAGE),
+            (150.0, 86.0)
+        );
+        assert_eq!(
+            place(a, (100.0, 50.0), Placement::Below, 4.0, STAGE),
+            (150.0, 164.0)
+        );
         // Near the top: flips below.
         let top = Bounds { y: 10.0, ..a };
-        assert_eq!(place(top, (100.0, 50.0), Placement::Above, 4.0, STAGE).1, 34.0);
+        assert_eq!(
+            place(top, (100.0, 50.0), Placement::Above, 4.0, STAGE).1,
+            34.0
+        );
         // Near the left edge: clamped in.
         let left = Bounds { x: 0.0, ..a };
-        assert_eq!(place(left, (100.0, 50.0), Placement::Above, 4.0, STAGE).0, 0.0);
+        assert_eq!(
+            place(left, (100.0, 50.0), Placement::Above, 4.0, STAGE).0,
+            0.0
+        );
         // Right of an anchor at the right edge: flips left.
         let right = Bounds { x: 380.0, ..a };
-        assert_eq!(place(right, (100.0, 50.0), Placement::Right, 4.0, STAGE).0, 276.0);
+        assert_eq!(
+            place(right, (100.0, 50.0), Placement::Right, 4.0, STAGE).0,
+            276.0
+        );
     }
 
     #[test]
     fn chords_from_modifiers() {
-        assert_eq!(chord(Modifiers { fine: true, alt: false, option: true }), Chord::OPTION_SHIFT);
+        assert_eq!(
+            chord(Modifiers {
+                fine: true,
+                alt: false,
+                option: true
+            }),
+            Chord::OPTION_SHIFT
+        );
         assert_eq!(chord(Modifiers::default()), Chord::NONE);
     }
 }

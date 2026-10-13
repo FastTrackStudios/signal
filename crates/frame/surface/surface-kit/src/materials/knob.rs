@@ -141,13 +141,21 @@ impl Look {
             Cap::ChickenHead => (Skirt::None, "#161617"),
             Cap::Pointer => (Skirt::Ridged, "#ece8df"),
         };
-        let pointer = if luma(color) > 0.5 { "#1a1a1a" } else { "#f2f0ea" };
+        let pointer = if luma(color) > 0.5 {
+            "#1a1a1a"
+        } else {
+            "#f2f0ea"
+        };
         Self {
             cap,
             skirt,
             material: KnobMaterial::Plastic,
             color: color.into(),
-            skirt_color: if cap == Cap::Pointer { "#18181a".into() } else { shade(color, 0.25) },
+            skirt_color: if cap == Cap::Pointer {
+                "#18181a".into()
+            } else {
+                shade(color, 0.25)
+            },
             pointer: pointer.into(),
             bevel: 1.0,
             specular: 1.0,
@@ -185,7 +193,11 @@ impl Look {
         if let Some(c) = p.opt("color").filter(|c| c.starts_with('#')) {
             l.color = c.into();
             if p.opt("pointer").is_none() {
-                l.pointer = if luma(c) > 0.5 { "#1a1a1a".into() } else { "#f2f0ea".into() };
+                l.pointer = if luma(c) > 0.5 {
+                    "#1a1a1a".into()
+                } else {
+                    "#f2f0ea".into()
+                };
             }
             if p.opt("skirt_color").is_none() && l.cap != Cap::Pointer {
                 l.skirt_color = shade(c, 0.25);
@@ -221,14 +233,27 @@ impl Look {
 
 /// A circle as a path (for joining into multi-shape paths).
 fn circle_d(cx: f64, cy: f64, r: f64) -> String {
-    format!("M {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 1 {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 1 {:.3} {cy:.3} Z ", cx - r, cx + r, cx - r)
+    format!(
+        "M {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 1 {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 1 {:.3} {cy:.3} Z ",
+        cx - r,
+        cx + r,
+        cx - r
+    )
 }
 
 fn seg(a: (f64, f64), b: (f64, f64), w: f64) -> String {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let len = dx.hypot(dy).max(1e-6);
     let (nx, ny) = (-dy / len * w / 2.0, dx / len * w / 2.0);
-    format!("{} ", draw::polygon(&[(a.0 + nx, a.1 + ny), (b.0 + nx, b.1 + ny), (b.0 - nx, b.1 - ny), (a.0 - nx, a.1 - ny)]))
+    format!(
+        "{} ",
+        draw::polygon(&[
+            (a.0 + nx, a.1 + ny),
+            (b.0 + nx, b.1 + ny),
+            (b.0 - nx, b.1 - ny),
+            (a.0 - nx, a.1 - ny)
+        ])
+    )
 }
 
 /// Smooth lobes: `lobes` bumps of `depth` on radius `r` (outer edge `r`).
@@ -251,7 +276,16 @@ fn polar_pt(cx: f64, cy: f64, r: f64, deg: f64) -> (f64, f64) {
 }
 
 fn caption(s: &str, cx: f64, cy: f64, w: f64, size: f64, ink: &str, case: TextCase) -> Node {
-    let mut n = draw::text("legend", s, cx - w / 2.0, cy - size * 0.68, w, size, ink, TextAlign::Center);
+    let mut n = draw::text(
+        "legend",
+        s,
+        cx - w / 2.0,
+        cy - size * 0.68,
+        w,
+        size,
+        ink,
+        TextAlign::Center,
+    );
     if let NodeKind::Text(t) = &mut n.kind {
         t.font_weight = Some(700.0);
         t.text_case = case;
@@ -270,8 +304,17 @@ fn about_shaft(mid: &str, edge: &str) -> document_proto::Paint {
 /// (its bare options), else 300°.
 #[must_use]
 pub fn travel(p: &Place) -> f64 {
-    let steps = p.options.iter().flatten().filter(|o| !o.contains('=')).count();
-    p.sweep.unwrap_or(if steps > 0 { crate::registry::detent_sweep(steps) } else { 300.0 })
+    let steps = p
+        .options
+        .iter()
+        .flatten()
+        .filter(|o| !o.contains('='))
+        .count();
+    p.sweep.unwrap_or(if steps > 0 {
+        crate::registry::detent_sweep(steps)
+    } else {
+        300.0
+    })
 }
 
 /// The `cap` frame [`build_with`] makes, in the knob's own frame: `(side,
@@ -295,14 +338,30 @@ pub fn build(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look) -> Nod
 /// knob's box less its printed ring) carrying `shader`: a GPU renderer
 /// draws the knob with it (`knob.3d`), everything else this vector knob.
 #[allow(clippy::too_many_lines)]
-pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, shader: Option<document_proto::ShaderFx>) -> NodeId {
+pub fn build_with(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    p: &Place,
+    look: &Look,
+    shader: Option<document_proto::ShaderFx>,
+) -> NodeId {
     let d = p.size.unwrap_or(48.0).max(16.0);
     let r = d / 2.0;
     let k = d / 48.0;
     let ink = p.ink_color(PANEL_INK);
-    let labels: Vec<String> = p.options.iter().flatten().filter(|o| !o.contains('=')).cloned().collect();
+    let labels: Vec<String> = p
+        .options
+        .iter()
+        .flatten()
+        .filter(|o| !o.contains('='))
+        .cloned()
+        .collect();
     let stepped = !labels.is_empty();
-    let labels = if stepped { labels } else { p.scale.clone().unwrap_or_default() };
+    let labels = if stepped {
+        labels
+    } else {
+        p.scale.clone().unwrap_or_default()
+    };
     let sweep = travel(p);
     let print_ring = p.scale.as_ref().is_none_or(|s| !s.is_empty()) && look.ticks != Ticks::None;
 
@@ -315,7 +374,11 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
     let lsize = (d * 0.2).max(8.0);
     let lh = lsize * 1.9;
     let top = if look.legend_top { lh } else { 0.0 };
-    let name = if p.name.is_empty() { "Rendered knob" } else { p.name.as_str() };
+    let name = if p.name.is_empty() {
+        "Rendered knob"
+    } else {
+        p.name.as_str()
+    };
     let root = b.add(parent, draw::frame(name, 0.0, 0.0, side, side + lh));
     let knob = b.add(root, draw::frame("knob", 0.0, top, side, side));
 
@@ -324,19 +387,40 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
         let n = if labels.is_empty() { 11 } else { labels.len() };
         let angle = |i: usize| (i as f64 / (n.max(2) - 1) as f64 - 0.5) * sweep;
         let dd: String = match look.ticks {
-            Ticks::Lines => (0..n).map(|i| seg(draw::polar(c, c, ring_r - dot * 1.5, angle(i)), draw::polar(c, c, ring_r + dot * 1.5, angle(i)), dot)).collect(),
-            _ => (0..n).map(|i| {
-                let (x, y) = draw::polar(c, c, ring_r, angle(i));
-                circle_d(x, y, dot)
-            }).collect(),
+            Ticks::Lines => (0..n)
+                .map(|i| {
+                    seg(
+                        draw::polar(c, c, ring_r - dot * 1.5, angle(i)),
+                        draw::polar(c, c, ring_r + dot * 1.5, angle(i)),
+                        dot,
+                    )
+                })
+                .collect(),
+            _ => (0..n)
+                .map(|i| {
+                    let (x, y) = draw::polar(c, c, ring_r, angle(i));
+                    circle_d(x, y, dot)
+                })
+                .collect(),
         };
-        b.add(knob, draw::path("scale dots", 0.0, 0.0, side, side, dd, draw::solid(&ink)));
+        b.add(
+            knob,
+            draw::path("scale dots", 0.0, 0.0, side, side, dd, draw::solid(&ink)),
+        );
         let size = (d * 0.17).max(draw::SCALE_TYPE_MIN);
         for (i, s) in labels.iter().enumerate() {
             if s.is_empty() {
                 continue;
             }
-            let mut t = draw::radial_label("numeral", s, (c, c), ring_r + dot * 2.0, angle(i), size, &ink);
+            let mut t = draw::radial_label(
+                "numeral",
+                s,
+                (c, c),
+                ring_r + dot * 2.0,
+                angle(i),
+                size,
+                &ink,
+            );
             if let NodeKind::Text(td) = &mut t.kind {
                 td.text_case = p.case();
                 td.font_weight = Some(600.0);
@@ -359,7 +443,13 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
     let has_skirt = look.skirt != Skirt::None;
     let cap_r = match (look.cap, has_skirt) {
         (Cap::Pointer, _) => r * 0.82,
-        (_, true) => if look.skirt == Skirt::Flared { r * 0.7 } else { r * 0.8 },
+        (_, true) => {
+            if look.skirt == Skirt::Flared {
+                r * 0.7
+            } else {
+                r * 0.8
+            }
+        }
         (_, false) => r,
     };
     // The cap's flat top, inside its edge.
@@ -379,30 +469,81 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
 
     // ── fixed tiers: occlusion, skirt, wall ──
     let (ox, oy) = light::shadow_offset(d * 0.1);
-    let ao = draw::circle("occlusion", c + ox, c + oy, r * 1.14, draw::radial(&[(0.0, &alpha("#000000", 0.7 * look.shadow.min(1.4))), (0.72, &alpha("#000000", 0.45 * look.shadow.min(1.4))), (1.0, "#00000000")]));
+    let ao = draw::circle(
+        "occlusion",
+        c + ox,
+        c + oy,
+        r * 1.14,
+        draw::radial(&[
+            (0.0, &alpha("#000000", 0.7 * look.shadow.min(1.4))),
+            (0.72, &alpha("#000000", 0.45 * look.shadow.min(1.4))),
+            (1.0, "#00000000"),
+        ]),
+    );
     b.add(knob, ao);
     let outer_r = match (look.cap, has_skirt) {
         (_, true) => r,
         (Cap::ChickenHead, false) => cap_r * 0.62,
         _ => cap_r,
     };
-    let foot_col = if has_skirt { look.skirt_color.as_str() } else { col };
+    let foot_col = if has_skirt {
+        look.skirt_color.as_str()
+    } else {
+        col
+    };
     // The side of the knob (or its skirt), seen under the top: lit on the
     // light's side, falling into shadow on the far side.
-    let side_paint = lin(light::sheen_angle() - 55.0, &[(0.0, tint(foot_col, 0.12)), (0.45, shade(foot_col, 0.3)), (1.0, shade(foot_col, 0.7))]);
+    let side_paint = lin(
+        light::sheen_angle() - 55.0,
+        &[
+            (0.0, tint(foot_col, 0.12)),
+            (0.45, shade(foot_col, 0.3)),
+            (1.0, shade(foot_col, 0.7)),
+        ],
+    );
     let foot_drop = if has_skirt { wall * 0.6 } else { wall };
-    let foot = draw::with_effects(draw::circle("foot", c, c + foot_drop, outer_r, side_paint), light::stand(height, look.shadow));
+    let foot = draw::with_effects(
+        draw::circle("foot", c, c + foot_drop, outer_r, side_paint),
+        light::stand(height, look.shadow),
+    );
     b.add(knob, foot);
     if has_skirt {
         let s = look.skirt_color.as_str();
         let paint = match look.skirt {
-            Skirt::Chrome => draw::linear(light::sheen_angle(), &[(0.0, "#f4f6f8"), (0.35, "#aeb4ba"), (0.5, "#3a3e44"), (0.62, "#8d949b"), (1.0, "#e3e6e9")]),
-            _ => lin(light::sheen_angle(), &[(0.0, tint(s, 0.22)), (0.5, s.to_string()), (1.0, shade(s, 0.45))]),
+            Skirt::Chrome => draw::linear(
+                light::sheen_angle(),
+                &[
+                    (0.0, "#f4f6f8"),
+                    (0.35, "#aeb4ba"),
+                    (0.5, "#3a3e44"),
+                    (0.62, "#8d949b"),
+                    (1.0, "#e3e6e9"),
+                ],
+            ),
+            _ => lin(
+                light::sheen_angle(),
+                &[
+                    (0.0, tint(s, 0.22)),
+                    (0.5, s.to_string()),
+                    (1.0, shade(s, 0.45)),
+                ],
+            ),
         };
         b.add(knob, draw::circle("skirt", c, c, r, paint));
         if look.skirt == Skirt::Flared {
             // The flare's slope: lit toward the light, a crisp lip at the cap.
-            b.add(knob, draw::path("skirt slope", 0.0, 0.0, side, side, ring(c, c, cap_r, r), light::sheen(0.22, 0.3)));
+            b.add(
+                knob,
+                draw::path(
+                    "skirt slope",
+                    0.0,
+                    0.0,
+                    side,
+                    side,
+                    ring(c, c, cap_r, r),
+                    light::sheen(0.22, 0.3),
+                ),
+            );
         }
     }
     // The cap's side wall, seen under its top edge.
@@ -412,8 +553,24 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
             Cap::ChickenHead => cap_r * 0.62,
             _ => cap_r,
         };
-        let wp = lin(light::sheen_angle() - 55.0, &[(0.0, tint(col, 0.1)), (0.45, shade(col, 0.3)), (1.0, shade(col, 0.7))]);
-        b.add(knob, draw::circle("wall", c, c + wall * if has_skirt { 0.7 } else { 1.0 }, wall_r, wp));
+        let wp = lin(
+            light::sheen_angle() - 55.0,
+            &[
+                (0.0, tint(col, 0.1)),
+                (0.45, shade(col, 0.3)),
+                (1.0, shade(col, 0.7)),
+            ],
+        );
+        b.add(
+            knob,
+            draw::circle(
+                "wall",
+                c,
+                c + wall * if has_skirt { 0.7 } else { 1.0 },
+                wall_r,
+                wp,
+            ),
+        );
     }
 
     // ── the body: what turns ──
@@ -421,30 +578,107 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
     let mid = col.to_string();
     let edge = shade(col, 0.35);
     if look.skirt == Skirt::Ridged {
-        let teeth = ((r * std::f64::consts::TAU) / (2.4 * k)).round().clamp(24.0, 72.0) as u32;
+        let teeth = ((r * std::f64::consts::TAU) / (2.4 * k))
+            .round()
+            .clamp(24.0, 72.0) as u32;
         let s = look.skirt_color.as_str();
-        b.add(body, draw::path("skirt teeth", 0.0, 0.0, side, side, lobes(c, c, r, teeth, r * 0.06, 1.0), about_shaft(&tint(s, 0.05), &shade(s, 0.4))));
+        b.add(
+            body,
+            draw::path(
+                "skirt teeth",
+                0.0,
+                0.0,
+                side,
+                side,
+                lobes(c, c, r, teeth, r * 0.06, 1.0),
+                about_shaft(&tint(s, 0.05), &shade(s, 0.4)),
+            ),
+        );
     }
     match look.cap {
         Cap::Fluted => {
-            b.add(body, draw::path("flutes", 0.0, 0.0, side, side, lobes(c, c, cap_r, 8, cap_r * 0.13, 1.6), about_shaft(&mid, &shade(col, 0.2))));
+            b.add(
+                body,
+                draw::path(
+                    "flutes",
+                    0.0,
+                    0.0,
+                    side,
+                    side,
+                    lobes(c, c, cap_r, 8, cap_r * 0.13, 1.6),
+                    about_shaft(&mid, &shade(col, 0.2)),
+                ),
+            );
             // The flutes' grooves, as darker bands down each valley.
-            let grooves: String = (0..8).map(|i| {
-                let a = (f64::from(i) + 0.5) * 45.0;
-                seg(draw::polar(c, c, face_r * 1.02, a), draw::polar(c, c, cap_r * 0.9, a), cap_r * 0.07)
-            }).collect();
-            b.add(body, draw::path("grooves", 0.0, 0.0, side, side, grooves, draw::solid(&alpha("#000000", 0.35))));
-            b.add(body, draw::circle("face", c, c, face_r, about_shaft(&tint(col, 0.04), &mid)));
+            let grooves: String = (0..8)
+                .map(|i| {
+                    let a = (f64::from(i) + 0.5) * 45.0;
+                    seg(
+                        draw::polar(c, c, face_r * 1.02, a),
+                        draw::polar(c, c, cap_r * 0.9, a),
+                        cap_r * 0.07,
+                    )
+                })
+                .collect();
+            b.add(
+                body,
+                draw::path(
+                    "grooves",
+                    0.0,
+                    0.0,
+                    side,
+                    side,
+                    grooves,
+                    draw::solid(&alpha("#000000", 0.35)),
+                ),
+            );
+            b.add(
+                body,
+                draw::circle("face", c, c, face_r, about_shaft(&tint(col, 0.04), &mid)),
+            );
         }
         Cap::Knurled => {
-            let teeth = ((cap_r * std::f64::consts::TAU) / (2.2 * k)).round().clamp(24.0, 90.0) as u32;
-            b.add(body, draw::path("knurl", 0.0, 0.0, side, side, lobes(c, c, cap_r, teeth, cap_r * 0.05, 1.0), about_shaft(&mid, &edge)));
-            let ribs: String = (0..teeth).map(|i| {
-                let a = f64::from(i) * 360.0 / f64::from(teeth);
-                seg(draw::polar(c, c, face_r, a), draw::polar(c, c, cap_r * 0.97, a), (cap_r * std::f64::consts::TAU / f64::from(teeth)) * 0.35)
-            }).collect();
-            b.add(body, draw::path("ribs", 0.0, 0.0, side, side, ribs, draw::solid(&alpha("#000000", 0.4))));
-            b.add(body, draw::circle("face", c, c, face_r, about_shaft(&tint(col, 0.03), &mid)));
+            let teeth = ((cap_r * std::f64::consts::TAU) / (2.2 * k))
+                .round()
+                .clamp(24.0, 90.0) as u32;
+            b.add(
+                body,
+                draw::path(
+                    "knurl",
+                    0.0,
+                    0.0,
+                    side,
+                    side,
+                    lobes(c, c, cap_r, teeth, cap_r * 0.05, 1.0),
+                    about_shaft(&mid, &edge),
+                ),
+            );
+            let ribs: String = (0..teeth)
+                .map(|i| {
+                    let a = f64::from(i) * 360.0 / f64::from(teeth);
+                    seg(
+                        draw::polar(c, c, face_r, a),
+                        draw::polar(c, c, cap_r * 0.97, a),
+                        (cap_r * std::f64::consts::TAU / f64::from(teeth)) * 0.35,
+                    )
+                })
+                .collect();
+            b.add(
+                body,
+                draw::path(
+                    "ribs",
+                    0.0,
+                    0.0,
+                    side,
+                    side,
+                    ribs,
+                    draw::solid(&alpha("#000000", 0.4)),
+                ),
+            );
+            b.add(
+                body,
+                draw::circle("face", c, c, face_r, about_shaft(&tint(col, 0.03), &mid)),
+            );
         }
         Cap::ChickenHead => {
             // The boss and the beak: one outline, tapering to the tip.
@@ -460,22 +694,67 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
                 draw::polar(c, c, bw * 0.95, 120.0),
             ]);
             let d_all = format!("{base} {}", circle_d(c, c, bw));
-            let wing = draw::with_effects(draw::path("wing", 0.0, 0.0, side, side, d_all, about_shaft(&mid, &edge)), vec![draw::drop_shadow(&alpha("#000000", 0.5 * look.shadow), 0.0, 0.0, d * 0.05)]);
+            let wing = draw::with_effects(
+                draw::path(
+                    "wing",
+                    0.0,
+                    0.0,
+                    side,
+                    side,
+                    d_all,
+                    about_shaft(&mid, &edge),
+                ),
+                vec![draw::drop_shadow(
+                    &alpha("#000000", 0.5 * look.shadow),
+                    0.0,
+                    0.0,
+                    d * 0.05,
+                )],
+            );
             b.add(body, wing);
-            b.add(body, draw::circle("face", c, c, face_r, about_shaft(&tint(col, 0.05), &mid)));
+            b.add(
+                body,
+                draw::circle("face", c, c, face_r, about_shaft(&tint(col, 0.05), &mid)),
+            );
         }
         Cap::Pointer => {
             let tip = r * 1.02;
             let drop = format!(
                 "{} {}",
-                draw::polygon(&[draw::polar(c, c, cap_r * 0.8, -42.0), draw::polar(c, c, tip * 0.88, -10.0), draw::polar(c, c, tip, 0.0), draw::polar(c, c, tip * 0.88, 10.0), draw::polar(c, c, cap_r * 0.8, 42.0)]),
+                draw::polygon(&[
+                    draw::polar(c, c, cap_r * 0.8, -42.0),
+                    draw::polar(c, c, tip * 0.88, -10.0),
+                    draw::polar(c, c, tip, 0.0),
+                    draw::polar(c, c, tip * 0.88, 10.0),
+                    draw::polar(c, c, cap_r * 0.8, 42.0)
+                ]),
                 circle_d(c, c, cap_r * 0.84)
             );
-            let cap = draw::with_effects(draw::path("cap", 0.0, 0.0, side, side, drop, about_shaft(&mid, &shade(col, 0.18))), vec![draw::drop_shadow(&alpha("#000000", 0.55 * look.shadow), 0.0, 0.0, d * 0.06)]);
+            let cap = draw::with_effects(
+                draw::path(
+                    "cap",
+                    0.0,
+                    0.0,
+                    side,
+                    side,
+                    drop,
+                    about_shaft(&mid, &shade(col, 0.18)),
+                ),
+                vec![draw::drop_shadow(
+                    &alpha("#000000", 0.55 * look.shadow),
+                    0.0,
+                    0.0,
+                    d * 0.06,
+                )],
+            );
             b.add(body, cap);
         }
         Cap::Flat | Cap::Domed => {
-            let (m, e) = if look.cap == Cap::Domed { (tint(col, 0.06), shade(col, 0.45)) } else { (mid.clone(), edge.clone()) };
+            let (m, e) = if look.cap == Cap::Domed {
+                (tint(col, 0.06), shade(col, 0.45))
+            } else {
+                (mid.clone(), edge.clone())
+            };
             b.add(body, draw::circle("cap", c, c, cap_r, about_shaft(&m, &e)));
         }
     }
@@ -490,8 +769,24 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
     // A pointer cap's own point is its index; it takes a line only when
     // `pointer=` asks for one.
     if look.cap != Cap::Pointer || p.opt("pointer").is_some() {
-        let pointer = draw::rounded(draw::rect("pointer", c - pw / 2.0, c - p1, pw, p1 - p0, draw::solid(&look.pointer)), pw / 2.0);
-        b.add(body, draw::with_effects(pointer, vec![draw::drop_shadow("#00000066", 0.0, 0.0, pw * 0.6)]));
+        let pointer = draw::rounded(
+            draw::rect(
+                "pointer",
+                c - pw / 2.0,
+                c - p1,
+                pw,
+                p1 - p0,
+                draw::solid(&look.pointer),
+            ),
+            pw / 2.0,
+        );
+        b.add(
+            body,
+            draw::with_effects(
+                pointer,
+                vec![draw::drop_shadow("#00000066", 0.0, 0.0, pw * 0.6)],
+            ),
+        );
     }
 
     // ── fixed overlays: the room's light on the cap ──
@@ -499,22 +794,71 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
     let (hx, hy) = light::hotspot();
     let face_light = match (look.material, look.cap) {
         (KnobMaterial::Rubber, _) => light::sheen(0.08, 0.28),
-        (KnobMaterial::Chrome, _) => draw::linear(light::sheen_angle(), &[(0.0, "#ffffffa0"), (0.3, "#ffffff30"), (0.48, "#00000070"), (0.56, "#00000030"), (1.0, "#ffffff50")]),
-        (_, Cap::Domed) => draw::radial_at(hx, hy, 0.9, &[(0.0, &alpha("#ffffff", 0.3)), (0.45, "#ffffff08"), (0.75, "#00000030"), (1.0, "#00000090")]),
+        (KnobMaterial::Chrome, _) => draw::linear(
+            light::sheen_angle(),
+            &[
+                (0.0, "#ffffffa0"),
+                (0.3, "#ffffff30"),
+                (0.48, "#00000070"),
+                (0.56, "#00000030"),
+                (1.0, "#ffffff50"),
+            ],
+        ),
+        (_, Cap::Domed) => draw::radial_at(
+            hx,
+            hy,
+            0.9,
+            &[
+                (0.0, &alpha("#ffffff", 0.3)),
+                (0.45, "#ffffff08"),
+                (0.75, "#00000030"),
+                (1.0, "#00000090"),
+            ],
+        ),
         _ => light::sheen(0.14, 0.32),
     };
     b.add(knob, draw::circle("face light", c, c, face_r, face_light));
     if look.material == KnobMaterial::Metal {
         // A spun face: the bow-tie sheen lined up with the light, and rings.
-        let stops = [(0.0, "#ffffff90"), (0.125, "#00000040"), (0.25, "#ffffff10"), (0.375, "#00000040"), (0.5, "#ffffff90"), (0.625, "#00000040"), (0.75, "#ffffff10"), (0.875, "#00000040"), (1.0, "#ffffff90")];
-        b.add(knob, draw::circle("spun light", c, c, face_r, draw::conic(light::AZIMUTH, &stops)));
+        let stops = [
+            (0.0, "#ffffff90"),
+            (0.125, "#00000040"),
+            (0.25, "#ffffff10"),
+            (0.375, "#00000040"),
+            (0.5, "#ffffff90"),
+            (0.625, "#00000040"),
+            (0.75, "#ffffff10"),
+            (0.875, "#00000040"),
+            (1.0, "#ffffff90"),
+        ];
+        b.add(
+            knob,
+            draw::circle(
+                "spun light",
+                c,
+                c,
+                face_r,
+                draw::conic(light::AZIMUTH, &stops),
+            ),
+        );
         let mut rings = String::new();
         let mut rr = face_r * 0.1;
         while rr < face_r {
             rings.push_str(&ring(c, c, rr, rr + 0.25 * k));
             rr += 1.1 * k;
         }
-        b.add(knob, draw::path("spun light rings", 0.0, 0.0, side, side, rings, draw::solid("#0000001a")));
+        b.add(
+            knob,
+            draw::path(
+                "spun light rings",
+                0.0,
+                0.0,
+                side,
+                side,
+                rings,
+                draw::solid("#0000001a"),
+            ),
+        );
     }
     // The rim: lit on the upper left, dark on the lower right.
     let bevel_w = (d * 0.05 * look.bevel).max(0.6);
@@ -524,17 +868,62 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
     };
     let rim = draw::linear(
         light::sheen_angle(),
-        &[(0.0, &alpha(&lit_edge, 0.9)), (0.35, &alpha(&lit_edge, 0.25)), (0.55, "#00000000"), (1.0, &alpha(&dark_edge, 0.8))],
+        &[
+            (0.0, &alpha(&lit_edge, 0.9)),
+            (0.35, &alpha(&lit_edge, 0.25)),
+            (0.55, "#00000000"),
+            (1.0, &alpha(&dark_edge, 0.8)),
+        ],
     );
-    b.add(knob, draw::path("rim light", 0.0, 0.0, side, side, ring(c, c, rim_outer - bevel_w, rim_outer), rim));
+    b.add(
+        knob,
+        draw::path(
+            "rim light",
+            0.0,
+            0.0,
+            side,
+            side,
+            ring(c, c, rim_outer - bevel_w, rim_outer),
+            rim,
+        ),
+    );
     if matches!(look.cap, Cap::Fluted | Cap::Knurled) {
         // Light across the flutes' tops: over the band inside the valleys.
-        let valley = if look.cap == Cap::Fluted { cap_r * 0.87 } else { cap_r * 0.95 };
-        b.add(knob, draw::path("flute light", 0.0, 0.0, side, side, ring(c, c, face_r, valley), light::sheen(0.28, 0.45)));
+        let valley = if look.cap == Cap::Fluted {
+            cap_r * 0.87
+        } else {
+            cap_r * 0.95
+        };
+        b.add(
+            knob,
+            draw::path(
+                "flute light",
+                0.0,
+                0.0,
+                side,
+                side,
+                ring(c, c, face_r, valley),
+                light::sheen(0.28, 0.45),
+            ),
+        );
     }
     if has_skirt && look.skirt != Skirt::Ridged {
-        let sr = draw::linear(light::sheen_angle(), &[(0.0, "#ffffff55"), (0.4, "#ffffff00"), (1.0, "#00000066")]);
-        b.add(knob, draw::path("skirt rim light", 0.0, 0.0, side, side, ring(c, c, r - bevel_w * 0.7, r), sr));
+        let sr = draw::linear(
+            light::sheen_angle(),
+            &[(0.0, "#ffffff55"), (0.4, "#ffffff00"), (1.0, "#00000066")],
+        );
+        b.add(
+            knob,
+            draw::path(
+                "skirt rim light",
+                0.0,
+                0.0,
+                side,
+                side,
+                ring(c, c, r - bevel_w * 0.7, r),
+                sr,
+            ),
+        );
     }
     if spec > 0.0 {
         let gloss = match look.material {
@@ -544,20 +933,61 @@ pub fn build_with(b: &mut Builder<'_>, parent: NodeId, p: &Place, look: &Look, s
             _ => 0.85,
         };
         let a = (0.75 * spec * gloss).min(1.0);
-        let (sx, sy) = (c + (hx - 0.5) * 2.0 * face_r * 0.9, c + (hy - 0.5) * 2.0 * face_r * 0.9);
+        let (sx, sy) = (
+            c + (hx - 0.5) * 2.0 * face_r * 0.9,
+            c + (hy - 0.5) * 2.0 * face_r * 0.9,
+        );
         let sr = face_r * if look.cap == Cap::Domed { 0.42 } else { 0.3 };
-        b.add(knob, draw::circle("specular light", sx, sy, sr, rad(0.5, 0.5, 0.5, &[(0.0, alpha("#ffffff", a)), (0.35, alpha("#ffffff", a * 0.35)), (1.0, "#ffffff00".into())])));
+        b.add(
+            knob,
+            draw::circle(
+                "specular light",
+                sx,
+                sy,
+                sr,
+                rad(
+                    0.5,
+                    0.5,
+                    0.5,
+                    &[
+                        (0.0, alpha("#ffffff", a)),
+                        (0.35, alpha("#ffffff", a * 0.35)),
+                        (1.0, "#ffffff00".into()),
+                    ],
+                ),
+            ),
+        );
         if look.cap == Cap::ChickenHead || look.cap == Cap::Pointer {
             // The beak's ridge catches a line of light along its left flank.
-            let hl = draw::path("ridge light", 0.0, 0.0, side, side, draw::sector(c, c, face_r * 0.86, face_r, -150.0, -20.0), draw::solid(&alpha("#ffffff", 0.3 * spec)));
+            let hl = draw::path(
+                "ridge light",
+                0.0,
+                0.0,
+                side,
+                side,
+                draw::sector(c, c, face_r * 0.86, face_r, -150.0, -20.0),
+                draw::solid(&alpha("#ffffff", 0.3 * spec)),
+            );
             b.add(knob, hl);
         }
     }
 
     // ── legend ──
-    let ly = if look.legend_top { lsize * 0.95 } else { top + side - (half - ring_r - dot) * 0.2 + lsize * 0.4 };
-    let legend_node = b.add(root, caption(legend, c, ly, side * 1.4, lsize, &ink, p.case()));
-    let ctl = p.control(ControlKind::Knob { sweep_degrees: sweep }).slot(SlotRole::Needle, body.0).slot(SlotRole::Label, legend_node.0);
+    let ly = if look.legend_top {
+        lsize * 0.95
+    } else {
+        top + side - (half - ring_r - dot) * 0.2 + lsize * 0.4
+    };
+    let legend_node = b.add(
+        root,
+        caption(legend, c, ly, side * 1.4, lsize, &ink, p.case()),
+    );
+    let ctl = p
+        .control(ControlKind::Knob {
+            sweep_degrees: sweep,
+        })
+        .slot(SlotRole::Needle, body.0)
+        .slot(SlotRole::Label, legend_node.0);
     b.controls.insert(root, ctl);
     if let Some(touch) = p.touch {
         crate::registry::tighten(b, root, (c, c + top), d, touch);
@@ -575,7 +1005,14 @@ pub(crate) fn defs() -> Vec<ComponentDef> {
         family: Family::Knob,
         title: "Rendered knob",
         description: "A 3D-rendered plugin knob seen from above: a cap (variant: `flat`, `domed`, `fluted`, `knurled`, `chicken_head`, `pointer` teardrop) on an optional skirt, with soft occlusion under it, a rim catching the upper-left light, a fixed gloss hotspot, and the pointer turning. Options: `material=plastic|rubber|metal|chrome|bakelite`, `color=#hex`, `skirt=none|plain|flared|ridged|chrome`, `skirt_color=#hex`, `pointer=#hex`, `bevel=`/`spec=`/`shadow=` (0..2), `ticks=dots|lines|none`, `legend=top`. For pedal and amp faces in the Neural-render style. Size = knob diameter.",
-        variants: &["flat", "domed", "fluted", "knurled", "chicken_head", "pointer"],
+        variants: &[
+            "flat",
+            "domed",
+            "fluted",
+            "knurled",
+            "chicken_head",
+            "pointer",
+        ],
         default_size: 48.0,
         binds: "param",
         build: render,

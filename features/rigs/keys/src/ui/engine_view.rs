@@ -1,9 +1,9 @@
 //! **Engine zoom** — one engine fullscreen: its lanes with room to breathe,
 //! each opening into the layer zoom.
 
-use dioxus::prelude::*;
 use crate::proto::KeysEngineModel;
 use crate::proto::keys::KeysRigClient;
+use dioxus::prelude::*;
 
 use crate::ui::control::engine_color;
 use crate::ui::fader::{Fader, fmt_db};

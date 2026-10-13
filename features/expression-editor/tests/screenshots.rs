@@ -31,10 +31,10 @@ use std::path::PathBuf;
 
 use dioxus::prelude::*;
 use dioxus_test::DocumentTester;
-use expression_editor::{Editor, Viewport};
 use expression_editor::ui::demo::{self, Scene};
 use expression_editor::ui::theme;
 use expression_editor::ui::{ExpressionEditor, ModDrawer, MultiTool};
+use expression_editor::{Editor, Viewport};
 
 const W: u32 = 1100;
 /// The viewport a seeded document is built with.
@@ -747,8 +747,7 @@ async fn shoot_stack() {
 #[tokio::test]
 #[ignore = "picture generator, not an assertion — `just ee-shots`"]
 async fn real_guitar_pro_file() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/Effects.gp3");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/Effects.gp3");
     if !path.exists() {
         return;
     }

@@ -28,14 +28,13 @@
 // even though they are allowed workspace-wide off the audio thread.
 #![deny(clippy::disallowed_methods)]
 
+#[cfg(feature = "analyzer")]
+pub mod analyzer;
 #[cfg(feature = "profiles")]
 pub mod profiles;
 #[cfg(feature = "ui")]
 pub mod ui;
-#[cfg(feature = "analyzer")]
-pub mod analyzer;
 pub use crate as dsp;
-
 
 // ── The layers, outermost first ──────────────────────────────────────────
 //

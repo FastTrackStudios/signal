@@ -240,10 +240,7 @@ fn render(patch: &RigPatch, di: &[f32]) -> Option<f64> {
         .zip(&r)
         .map(|(a, b)| f64::from(a + b) * 0.5)
         .collect();
-    Some(sampler::loudness::integrated_lufs(
-        &mono,
-        f64::from(SR),
-    ))
+    Some(sampler::loudness::integrated_lufs(&mono, f64::from(SR)))
 }
 
 fn main() {

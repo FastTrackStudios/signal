@@ -67,7 +67,16 @@ pub fn render_checked(
     antialiasing: AaConfig,
 ) -> Result<u32, String> {
     let (width, height) = (target.width(), target.height());
-    if render_band(renderer, device, queue, scene, target, 0, base, antialiasing)? {
+    if render_band(
+        renderer,
+        device,
+        queue,
+        scene,
+        target,
+        0,
+        base,
+        antialiasing,
+    )? {
         return Ok(1);
     }
     let mut bands = 0;
@@ -77,7 +86,11 @@ pub fn render_checked(
     while let Some((top, h)) = todo.pop() {
         let band = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("frame-band"),
-            size: wgpu::Extent3d { width, height: h, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height: h,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -85,12 +98,32 @@ pub fn render_checked(
             usage: CHECKED_TARGET_USAGES,
             view_formats: &[],
         });
-        if render_band(renderer, device, queue, scene, &band, top, base, antialiasing)? {
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("frame-band-copy") });
+        if render_band(
+            renderer,
+            device,
+            queue,
+            scene,
+            &band,
+            top,
+            base,
+            antialiasing,
+        )? {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("frame-band-copy"),
+            });
             encoder.copy_texture_to_texture(
                 band.as_image_copy(),
-                wgpu::TexelCopyTextureInfo { texture: target, mip_level: 0, origin: wgpu::Origin3d { x: 0, y: top, z: 0 }, aspect: wgpu::TextureAspect::All },
-                wgpu::Extent3d { width, height: h, depth_or_array_layers: 1 },
+                wgpu::TexelCopyTextureInfo {
+                    texture: target,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x: 0, y: top, z: 0 },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
             );
             queue.submit([encoder.finish()]);
             bands += 1;
@@ -126,7 +159,10 @@ fn render_band(
         scene
     } else {
         let mut s = vello::Scene::new();
-        s.append(scene, Some(kurbo::Affine::translate((0.0, -f64::from(top)))));
+        s.append(
+            scene,
+            Some(kurbo::Affine::translate((0.0, -f64::from(top)))),
+        );
         shifted = s;
         &shifted
     };
@@ -138,7 +174,12 @@ fn render_band(
             queue,
             scene,
             &view,
-            &RenderParams { base_color: base, width: target.width(), height: target.height(), antialiasing_method: antialiasing },
+            &RenderParams {
+                base_color: base,
+                width: target.width(),
+                height: target.height(),
+                antialiasing_method: antialiasing,
+            },
         )
         .map_err(|e| format!("render_to_texture failed: {e}"))?;
     Ok(!is_untouched(&read_rows(device, queue, target, 0, 1)?))
@@ -147,7 +188,9 @@ fn render_band(
 /// Fill `view` with [`SENTINEL`].
 fn clear_to_sentinel(device: &wgpu::Device, queue: &wgpu::Queue, view: &wgpu::TextureView) {
     let c = |v: u8| f64::from(v) / 255.0;
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("frame-sentinel") });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("frame-sentinel"),
+    });
     drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("frame-sentinel"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -155,7 +198,12 @@ fn clear_to_sentinel(device: &wgpu::Device, queue: &wgpu::Queue, view: &wgpu::Te
             depth_slice: None,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color { r: c(SENTINEL[0]), g: c(SENTINEL[1]), b: c(SENTINEL[2]), a: c(SENTINEL[3]) }),
+                load: wgpu::LoadOp::Clear(wgpu::Color {
+                    r: c(SENTINEL[0]),
+                    g: c(SENTINEL[1]),
+                    b: c(SENTINEL[2]),
+                    a: c(SENTINEL[3]),
+                }),
                 store: wgpu::StoreOp::Store,
             },
         })],
@@ -195,7 +243,12 @@ pub fn render_deferred(
             queue,
             scene,
             &view,
-            &RenderParams { base_color: base, width: target.width(), height: target.height(), antialiasing_method: antialiasing },
+            &RenderParams {
+                base_color: base,
+                width: target.width(),
+                height: target.height(),
+                antialiasing_method: antialiasing,
+            },
         )
         .map_err(|e| format!("render_to_texture failed: {e}"))?;
     Ok(PendingCheck(Readback::start(device, queue, target, 0, 1)))
@@ -212,7 +265,9 @@ impl PendingCheck {
     /// When the readback failed.
     pub fn poll(&self, device: &wgpu::Device) -> Option<Result<bool, String>> {
         let _ = device.poll(wgpu::PollType::Poll);
-        self.0.try_take().map(|rows| rows.map(|rgba| is_untouched(&rgba)))
+        self.0
+            .try_take()
+            .map(|rows| rows.map(|rgba| is_untouched(&rgba)))
     }
 }
 
@@ -227,7 +282,13 @@ struct Readback {
 
 impl Readback {
     /// Copy rows `top..top + rows` of `texture` out and ask for them mapped.
-    fn start(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture, top: u32, rows: u32) -> Self {
+    fn start(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
+        top: u32,
+        rows: u32,
+    ) -> Self {
         let width = texture.width();
         let unpadded = width * 4;
         let padded = unpadded.div_ceil(256) * 256;
@@ -237,21 +298,42 @@ impl Readback {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("frame-offscreen-copy") });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("frame-offscreen-copy"),
+        });
         encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo { texture, mip_level: 0, origin: wgpu::Origin3d { x: 0, y: top, z: 0 }, aspect: wgpu::TextureAspect::All },
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d { x: 0, y: top, z: 0 },
+                aspect: wgpu::TextureAspect::All,
+            },
             wgpu::TexelCopyBufferInfo {
                 buffer: &buffer,
-                layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(rows) },
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(rows),
+                },
             },
-            wgpu::Extent3d { width, height: rows, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width,
+                height: rows,
+                depth_or_array_layers: 1,
+            },
         );
         queue.submit([encoder.finish()]);
         let (tx, mapped) = std::sync::mpsc::channel();
         buffer.slice(..).map_async(wgpu::MapMode::Read, move |v| {
             let _ = tx.send(v);
         });
-        Self { buffer, mapped, unpadded, padded, rows }
+        Self {
+            buffer,
+            mapped,
+            unpadded,
+            padded,
+            rows,
+        }
     }
 
     /// The rows (straight RGBA8, no padding) once mapped; `None` before.
@@ -260,13 +342,16 @@ impl Readback {
             Ok(Ok(())) => {}
             Ok(Err(e)) => return Some(Err(format!("map_async failed: {e}"))),
             Err(std::sync::mpsc::TryRecvError::Empty) => return None,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => return Some(Err("map_async channel disconnected".into())),
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                return Some(Err("map_async channel disconnected".into()));
+            }
         }
         let mapped = self.buffer.slice(..).get_mapped_range();
         let (unpadded, padded) = (self.unpadded as usize, self.padded as usize);
         let mut rgba = vec![0_u8; unpadded * self.rows as usize];
         for row in 0..self.rows as usize {
-            rgba[row * unpadded..(row + 1) * unpadded].copy_from_slice(&mapped[row * padded..row * padded + unpadded]);
+            rgba[row * unpadded..(row + 1) * unpadded]
+                .copy_from_slice(&mapped[row * padded..row * padded + unpadded]);
         }
         drop(mapped);
         self.buffer.unmap();
@@ -276,7 +361,13 @@ impl Readback {
 
 /// Copy rows `top..top + rows` of an `Rgba8Unorm` texture back to the CPU
 /// (straight RGBA8, no padding), waiting for them.
-fn read_rows(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture, top: u32, rows: u32) -> Result<Vec<u8>, String> {
+fn read_rows(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+    top: u32,
+    rows: u32,
+) -> Result<Vec<u8>, String> {
     let readback = Readback::start(device, queue, texture, top, rows);
     loop {
         let _ = device.poll(wgpu::PollType::Poll);
@@ -300,8 +391,9 @@ impl Offscreen {
     /// When no GPU adapter/device is available.
     pub fn new() -> Result<Self, String> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-            .map_err(|e| format!("request_adapter failed: {e}"))?;
+        let adapter =
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+                .map_err(|e| format!("request_adapter failed: {e}"))?;
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("frame-offscreen"),
             required_features: wgpu::Features::empty(),
@@ -321,7 +413,13 @@ impl Offscreen {
             },
         )
         .map_err(|e| format!("failed to create renderer: {e}"))?;
-        Ok(Self { device, queue, renderer, fx: None, last_bands: 0 })
+        Ok(Self {
+            device,
+            queue,
+            renderer,
+            fx: None,
+            last_bands: 0,
+        })
     }
 
     /// Render `scene` at `width × height` over `base`, splitting it into
@@ -331,11 +429,21 @@ impl Offscreen {
     /// # Errors
     /// On GPU failures, and when the scene overflows vello's buffers even
     /// in the thinnest band (never a blank frame).
-    pub fn render(&mut self, scene: &vello::Scene, width: u32, height: u32, base: peniko::Color) -> Result<Pixels, String> {
+    pub fn render(
+        &mut self,
+        scene: &vello::Scene,
+        width: u32,
+        height: u32,
+        base: peniko::Color,
+    ) -> Result<Pixels, String> {
         let (width, height) = (width.clamp(1, 8192), height.clamp(1, 8192));
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("frame-offscreen-target"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -343,17 +451,34 @@ impl Offscreen {
             usage: CHECKED_TARGET_USAGES,
             view_formats: &[],
         });
-        self.last_bands = render_checked(&mut self.renderer, &self.device, &self.queue, scene, &texture, base, AaConfig::Msaa8)?;
+        self.last_bands = render_checked(
+            &mut self.renderer,
+            &self.device,
+            &self.queue,
+            scene,
+            &texture,
+            base,
+            AaConfig::Msaa8,
+        )?;
         self.read_back(&texture)
     }
 
     /// Render `scene` with a deferred check ([`render_deferred`]) and
     /// poll it until the GPU answers: whether it overflowed.
     #[cfg(test)]
-    pub(crate) fn deferred_overflow(&mut self, scene: &vello::Scene, width: u32, height: u32) -> bool {
+    pub(crate) fn deferred_overflow(
+        &mut self,
+        scene: &vello::Scene,
+        width: u32,
+        height: u32,
+    ) -> bool {
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("frame-offscreen-target"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -362,7 +487,16 @@ impl Offscreen {
             view_formats: &[],
         });
         let base = peniko::Color::from_rgba8(255, 255, 255, 255);
-        let check = render_deferred(&mut self.renderer, &self.device, &self.queue, scene, &texture, base, AaConfig::Area).expect("render");
+        let check = render_deferred(
+            &mut self.renderer,
+            &self.device,
+            &self.queue,
+            scene,
+            &texture,
+            base,
+            AaConfig::Area,
+        )
+        .expect("render");
         loop {
             if let Some(answer) = check.poll(&self.device) {
                 return answer.expect("readback");
@@ -384,8 +518,13 @@ impl Offscreen {
     /// # Errors
     /// On GPU failures.
     pub fn render_with_effects(&mut self, frame: &crate::fx::Frame<'_>) -> Result<Pixels, String> {
-        let frame = crate::fx::Frame { antialiasing: AaConfig::Msaa8, ..*frame };
-        let stage = self.fx.get_or_insert_with(|| crate::fx::Stage::new(&self.device));
+        let frame = crate::fx::Frame {
+            antialiasing: AaConfig::Msaa8,
+            ..*frame
+        };
+        let stage = self
+            .fx
+            .get_or_insert_with(|| crate::fx::Stage::new(&self.device));
         let texture = stage.render(&self.device, &self.queue, &mut self.renderer, &frame)?;
         self.read_back(&texture)
     }
@@ -393,6 +532,10 @@ impl Offscreen {
     /// Copy an `Rgba8Unorm` texture back to the CPU.
     fn read_back(&self, texture: &wgpu::Texture) -> Result<Pixels, String> {
         let rgba = read_rows(&self.device, &self.queue, texture, 0, texture.height())?;
-        Ok(Pixels { width: texture.width(), height: texture.height(), rgba })
+        Ok(Pixels {
+            width: texture.width(),
+            height: texture.height(),
+            rgba,
+        })
     }
 }

@@ -8,10 +8,10 @@
 
 use std::sync::Arc;
 
-use signal_plugin_host::{PluginEvents, PluginInstance};
 use sampler::RigBlock;
 use sampler::amp_blend::{self, Role};
 use sampler::rig::prepare_chain_with;
+use signal_plugin_host::{PluginEvents, PluginInstance};
 
 use crate::plan::{self, Model, Place, Plan};
 use crate::remote::{Lag, Link, Prefetch, RemoteBlock, RemoteStats, Standby};

@@ -42,7 +42,10 @@ impl Scope for BoxScope<'_> {
     }
 
     fn field(&self, slot: u32) -> Value {
-        self.layout.iter().find(|(s, _)| *s == slot).map_or(Value::Missing, |(_, v)| v.clone())
+        self.layout
+            .iter()
+            .find(|(s, _)| *s == slot)
+            .map_or(Value::Missing, |(_, v)| v.clone())
     }
 }
 
@@ -61,7 +64,13 @@ pub(crate) fn lay_out(
         by_node.entry(b.node).or_default().push(b);
     }
     let mut parents = HashMap::new();
-    let mut cx = Cx { scene, size, layout, by_node, parents: &mut parents };
+    let mut cx = Cx {
+        scene,
+        size,
+        layout,
+        by_node,
+        parents: &mut parents,
+    };
     // The root's box is the instance's, whatever it was drawn at.
     cx.place(root, size);
     parents.insert(root, size);
@@ -80,14 +89,25 @@ impl Cx<'_, '_> {
     /// Whether `id` has a size binding on `prop` (which then wins over
     /// its constraint on that axis).
     fn binds(&self, id: NodeId, prop: Prop) -> bool {
-        self.by_node.get(&id).is_some_and(|bs| bs.iter().any(|b| b.prop == prop))
+        self.by_node
+            .get(&id)
+            .is_some_and(|bs| bs.iter().any(|b| b.prop == prop))
     }
 
     /// Apply `id`'s size bindings, with `parent` as its parent's box.
     fn size_binds(&mut self, id: NodeId, parent: (f64, f64)) {
-        let Some(binds) = self.by_node.get(&id) else { return };
-        let scope = BoxScope { size: self.size, parent, layout: self.layout };
-        let values: Vec<(Prop, Value)> = binds.iter().map(|b| (b.prop, b.expr.eval(&scope))).collect();
+        let Some(binds) = self.by_node.get(&id) else {
+            return;
+        };
+        let scope = BoxScope {
+            size: self.size,
+            parent,
+            layout: self.layout,
+        };
+        let values: Vec<(Prop, Value)> = binds
+            .iter()
+            .map(|b| (b.prop, b.expr.eval(&scope)))
+            .collect();
         if let Some(n) = self.scene.node_mut(id) {
             for (prop, v) in &values {
                 apply(n, *prop, v);
@@ -98,7 +118,9 @@ impl Cx<'_, '_> {
     /// `id` now has the box `new` (its `size` is still the authored one):
     /// resize it and place its children.
     fn place(&mut self, id: NodeId, new: (f64, f64)) {
-        let Some(node) = self.scene.node_mut(id) else { return };
+        let Some(node) = self.scene.node_mut(id) else {
+            return;
+        };
         let old = (node.size.width, node.size.height);
         node.size.width = new.0;
         node.size.height = new.1;
@@ -116,9 +138,23 @@ impl Cx<'_, '_> {
             None => {
                 for &c in &children {
                     let bound = [Prop::X, Prop::W, Prop::Y, Prop::H].map(|p| self.binds(c, p));
-                    let Some(child) = self.scene.node_mut(c) else { continue };
-                    let (x, w) = follow_x(child.layout_child.resize_x, old.0, new.0, child.transform.tx, child.size.width);
-                    let (y, h) = follow_y(child.layout_child.resize_y, old.1, new.1, child.transform.ty, child.size.height);
+                    let Some(child) = self.scene.node_mut(c) else {
+                        continue;
+                    };
+                    let (x, w) = follow_x(
+                        child.layout_child.resize_x,
+                        old.0,
+                        new.0,
+                        child.transform.tx,
+                        child.size.width,
+                    );
+                    let (y, h) = follow_y(
+                        child.layout_child.resize_y,
+                        old.1,
+                        new.1,
+                        child.transform.ty,
+                        child.size.height,
+                    );
                     // A bound axis is where the binding put it.
                     if !bound[0] {
                         child.transform.tx = x;
@@ -139,9 +175,19 @@ impl Cx<'_, '_> {
         let row = al.direction == LayoutDirection::Horizontal;
         let (main_size, cross_size) = if row { size } else { (size.1, size.0) };
         let (pad_main0, pad_main1, pad_cross0, pad_cross1) = if row {
-            (al.padding_left, al.padding_right, al.padding_top, al.padding_bottom)
+            (
+                al.padding_left,
+                al.padding_right,
+                al.padding_top,
+                al.padding_bottom,
+            )
         } else {
-            (al.padding_top, al.padding_bottom, al.padding_left, al.padding_right)
+            (
+                al.padding_top,
+                al.padding_bottom,
+                al.padding_left,
+                al.padding_right,
+            )
         };
         let inner_cross = (cross_size - pad_cross0 - pad_cross1).max(0.0);
 
@@ -149,21 +195,35 @@ impl Cx<'_, '_> {
         let flowing: Vec<NodeId> = children
             .iter()
             .copied()
-            .filter(|c| self.scene.node(*c).is_some_and(|n| n.visible && !n.layout_child.absolute))
+            .filter(|c| {
+                self.scene
+                    .node(*c)
+                    .is_some_and(|n| n.visible && !n.layout_child.absolute)
+            })
             .collect();
         let main_of = |n: &document_proto::Node| if row { n.size.width } else { n.size.height };
 
         let gaps = al.gap * (flowing.len().saturating_sub(1)) as f64;
-        let fixed: f64 = flowing.iter().filter_map(|c| self.scene.node(*c)).map(main_of).sum();
+        let fixed: f64 = flowing
+            .iter()
+            .filter_map(|c| self.scene.node(*c))
+            .map(main_of)
+            .sum();
         let free = main_size - pad_main0 - pad_main1 - gaps - fixed;
-        let grow_total: f64 =
-            flowing.iter().filter_map(|c| self.scene.node(*c)).filter_map(|n| n.layout_child.grow).filter(|g| *g > 0.0).sum();
+        let grow_total: f64 = flowing
+            .iter()
+            .filter_map(|c| self.scene.node(*c))
+            .filter_map(|n| n.layout_child.grow)
+            .filter(|g| *g > 0.0)
+            .sum();
 
         // Each child's main size: its own, plus its share of what is free.
         let mut mains = Vec::with_capacity(flowing.len());
         let mut used = 0.0;
         for &c in &flowing {
-            let Some(n) = self.scene.node(c) else { continue };
+            let Some(n) = self.scene.node(c) else {
+                continue;
+            };
             let lc = &n.layout_child;
             let mut m = main_of(n);
             if free > 0.0
@@ -172,7 +232,11 @@ impl Cx<'_, '_> {
             {
                 m += free * g / grow_total;
             }
-            let (lo, hi) = if row { (lc.min_width, lc.max_width) } else { (lc.min_height, lc.max_height) };
+            let (lo, hi) = if row {
+                (lc.min_width, lc.max_width)
+            } else {
+                (lc.min_height, lc.max_height)
+            };
             m = m.max(lo.unwrap_or(0.0)).min(hi.unwrap_or(f64::INFINITY));
             used += m;
             mains.push(m);
@@ -189,7 +253,9 @@ impl Cx<'_, '_> {
         };
 
         for (&c, &m) in flowing.iter().zip(&mains) {
-            let Some(n) = self.scene.node_mut(c) else { continue };
+            let Some(n) = self.scene.node_mut(c) else {
+                continue;
+            };
             let own_cross = if row { n.size.height } else { n.size.width };
             let align = n.layout_child.align_self.map_or_else(
                 || match al.cross_align.unwrap_or(CrossAxisAlign::Start) {
@@ -210,7 +276,11 @@ impl Cx<'_, '_> {
                 Cross::End => (pad_cross0 + inner_cross - own_cross, own_cross),
                 Cross::Stretch => (pad_cross0, inner_cross),
             };
-            let (x, y, w, h) = if row { (cursor, cross_at, m, cross) } else { (cross_at, cursor, cross, m) };
+            let (x, y, w, h) = if row {
+                (cursor, cross_at, m, cross)
+            } else {
+                (cross_at, cursor, cross, m)
+            };
             n.transform.tx = x;
             n.transform.ty = y;
             cursor += m + between;
@@ -219,7 +289,9 @@ impl Cx<'_, '_> {
 
         // Out of flow: absolute children keep their place, by constraints.
         for &c in children {
-            let Some(n) = self.scene.node(c) else { continue };
+            let Some(n) = self.scene.node(c) else {
+                continue;
+            };
             if n.layout_child.absolute || !n.visible {
                 let b = (n.size.width, n.size.height);
                 self.place(c, b);

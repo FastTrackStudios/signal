@@ -455,8 +455,14 @@ pub fn ReverbViz(
     #[cfg(not(target_arch = "wasm32"))]
     let fresh = use_hook(fts_audio_ui::widget::Fresh::default);
     #[cfg(not(target_arch = "wasm32"))]
-    let attr =
-        use_hook(|| dioxus_native_dom::CustomWidgetAttr::new(fts_audio_ui::widget::Rasterized::new(fts_audio_ui::widget::Freshened::new(ReverbWidget::new(Rc::clone(&view)), fresh.clone()))));
+    let attr = use_hook(|| {
+        dioxus_native_dom::CustomWidgetAttr::new(fts_audio_ui::widget::Rasterized::new(
+            fts_audio_ui::widget::Freshened::new(
+                ReverbWidget::new(Rc::clone(&view)),
+                fresh.clone(),
+            ),
+        ))
+    });
 
     *view.borrow_mut() = ReverbView {
         decay,

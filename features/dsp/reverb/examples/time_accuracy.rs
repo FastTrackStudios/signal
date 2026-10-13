@@ -12,13 +12,18 @@
 //! Arguments: `--size 0.5` for one size only, `--only room` for one engine.
 
 use dsp_core::audio::Processor as _;
-use reverb::chain::ReverbChain;
 use reverb::AlgorithmType;
+use reverb::chain::ReverbChain;
 
 const SR: f64 = 48_000.0;
 
 /// What it rang, and the times it can reach at that size.
-fn measured(algorithm: AlgorithmType, variant: usize, size: f64, seconds: f64) -> Option<(f64, (f64, f64))> {
+fn measured(
+    algorithm: AlgorithmType,
+    variant: usize,
+    size: f64,
+    seconds: f64,
+) -> Option<(f64, (f64, f64))> {
     let mut c = ReverbChain::new();
     c.set_algorithm_variant(algorithm, variant);
     c.mix = 1.0;
@@ -28,7 +33,9 @@ fn measured(algorithm: AlgorithmType, variant: usize, size: f64, seconds: f64) -
     // Diagnosis: `TA_SET=diffusion=0,modulation=0,extra_a=0` overrides.
     if let Ok(set) = std::env::var("TA_SET") {
         for kv in set.split(',') {
-            let Some((k, v)) = kv.split_once('=') else { continue };
+            let Some((k, v)) = kv.split_once('=') else {
+                continue;
+            };
             let v: f64 = v.parse().unwrap_or(0.0);
             match k {
                 "diffusion" => c.params.diffusion = v,
@@ -117,7 +124,11 @@ fn main() {
                     println!(
                         "{algorithm:?}\t{variant}\t{size:.2}\t{want:.2}\t{got:.2}\t{:+.0}\t{}",
                         (got / held - 1.0) * 100.0,
-                        if (held - want).abs() > 1e-9 { format!("held to {held:.2}") } else { String::new() }
+                        if (held - want).abs() > 1e-9 {
+                            format!("held to {held:.2}")
+                        } else {
+                            String::new()
+                        }
                     );
                 }
             }

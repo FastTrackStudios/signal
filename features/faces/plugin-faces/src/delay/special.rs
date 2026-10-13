@@ -47,7 +47,13 @@ fn smear(b: &mut Builder<'_>, win: NodeId, (x, y, w, h): (f64, f64, f64, f64)) {
         let amp = env * (0.55 + 0.45 * jitter) * (h / 2.0 - 4.0);
         let bx = x + w * t;
         let bw = w / f64::from(bars) * 0.62;
-        art::bar(b, win, (bx, mid - amp, bw, 2.0 * amp.max(0.5)), PINK, 0.35 + 0.6 * env);
+        art::bar(
+            b,
+            win,
+            (bx, mid - amp, bw, 2.0 * amp.max(0.5)),
+            PINK,
+            0.35 + 0.6 * env,
+        );
     }
 }
 
@@ -55,36 +61,145 @@ pub fn face() -> Face {
     let scene = canvas("Special Delay", |b, root| {
         parts::fit_root(b, root, W, H);
         let panel = parts::panel(b, root, "panel.painted", "black", W, H, "ears");
-        parts::repaint(b, panel, &[(0.0, "#1d1d20"), (0.5, "#141416"), (1.0, "#0b0b0d")]);
+        parts::repaint(
+            b,
+            panel,
+            &[(0.0, "#1d1d20"), (0.5, "#141416"), (1.0, "#0b0b0d")],
+        );
 
         // ── Model line, with the accent stripe ────────────────────────
-        b.add(panel, draw::rect("stripe", 50.0, 22.0, 4.0, 40.0, draw::linear(180.0, &[(0.0, PINK), (1.0, "#a3305e")])));
-        parts::silk_left(b, panel, "Special", 62.0, 32.0, Ink::new(15.0, INK).weight(800.0).track(0.1));
-        parts::silk_left(b, panel, "Delay · reverse / spectral / diffuse", 62.0, 52.0, Ink::new(6.5, DIM).weight(600.0).track(0.16));
-        let modes = Place::new("Machine").size(50.0).variant("red").bind(bind(&a("mode"))).options(MODES);
+        b.add(
+            panel,
+            draw::rect(
+                "stripe",
+                50.0,
+                22.0,
+                4.0,
+                40.0,
+                draw::linear(180.0, &[(0.0, PINK), (1.0, "#a3305e")]),
+            ),
+        );
+        parts::silk_left(
+            b,
+            panel,
+            "Special",
+            62.0,
+            32.0,
+            Ink::new(15.0, INK).weight(800.0).track(0.1),
+        );
+        parts::silk_left(
+            b,
+            panel,
+            "Delay · reverse / spectral / diffuse",
+            62.0,
+            52.0,
+            Ink::new(6.5, DIM).weight(600.0).track(0.16),
+        );
+        let modes = Place::new("Machine")
+            .size(50.0)
+            .variant("red")
+            .bind(bind(&a("mode")))
+            .options(MODES);
         parts::put(b, panel, "button.illuminated_bank", &modes, 142.0, 100.0);
-        parts::silk(b, panel, "Machine", 142.0, 136.0, Ink::new(6.5, DIM).weight(700.0).track(0.2));
+        parts::silk(
+            b,
+            panel,
+            "Machine",
+            142.0,
+            136.0,
+            Ink::new(6.5, DIM).weight(700.0).track(0.2),
+        );
 
         // ── Scope ──────────────────────────────────────────────────────
-        let win = parts::screen(b, panel, "Scope", (268.0, 24.0, 460.0, 112.0), Screen { glass: ("#12060b", "#1a0810"), ink: PINK, mesh: false });
+        let win = parts::screen(
+            b,
+            panel,
+            "Scope",
+            (268.0, 24.0, 460.0, 112.0),
+            Screen {
+                glass: ("#12060b", "#1a0810"),
+                ink: PINK,
+                mesh: false,
+            },
+        );
         parts::shader(b, win, "crt", &[("strength", 0.45), ("scale", 3.0)]);
         smear(b, win, (12.0, 20.0, 312.0, 82.0));
         art::tag(b, win, "Repeat, reversed", (14.0, 11.0), 6.5, PINK_DIM);
-        parts::readout(b, win, "Time", bind(&a("time")), (336.0, 30.0, 112.0), 22.0, PINK, TextAlign::Right);
-        parts::note_picker(b, win, "Note", &a("div"), (382.0, 58.0, 66.0), 11.0, PINK, PINK_DIM);
+        parts::readout(
+            b,
+            win,
+            "Time",
+            bind(&a("time")),
+            (336.0, 30.0, 112.0),
+            22.0,
+            PINK,
+            TextAlign::Right,
+        );
+        parts::note_picker(
+            b,
+            win,
+            "Note",
+            &a("div"),
+            (382.0, 58.0, 66.0),
+            11.0,
+            PINK,
+            PINK_DIM,
+        );
         art::tag(b, win, "Window", (340.0, 84.0), 6.5, PINK_DIM);
-        parts::readout(b, win, "Window readout", bind(&a("window")), (380.0, 84.0, 68.0), 9.0, PINK, TextAlign::Right);
+        parts::readout(
+            b,
+            win,
+            "Window readout",
+            bind(&a("window")),
+            (380.0, 84.0, 68.0),
+            9.0,
+            PINK,
+            TextAlign::Right,
+        );
         art::tag(b, win, "Overlap", (340.0, 98.0), 6.5, PINK_DIM);
-        parts::readout(b, win, "Overlap readout", bind(&a("overlap")), (380.0, 98.0, 68.0), 9.0, PINK, TextAlign::Right);
+        parts::readout(
+            b,
+            win,
+            "Overlap readout",
+            bind(&a("overlap")),
+            (380.0, 98.0, 68.0),
+            9.0,
+            PINK,
+            TextAlign::Right,
+        );
 
-        let sync = Place::new("Time mode").size(38.0).bind(bind(&a("sync"))).options(parts::TIME_MODES);
+        let sync = Place::new("Time mode")
+            .size(38.0)
+            .bind(bind(&a("sync")))
+            .options(parts::TIME_MODES);
         parts::put(b, panel, "button.square_bank", &sync, 790.0, 58.0);
-        let tap = Place::new("Tap").size(38.0).variant("red").legend("Tap").options(&["momentary"]).bind(bind(&a("tap")));
+        let tap = Place::new("Tap")
+            .size(38.0)
+            .variant("red")
+            .legend("Tap")
+            .options(&["momentary"])
+            .bind(bind(&a("tap")));
         parts::put(b, panel, "button.illuminated", &tap, 790.0, 108.0);
         for (i, x) in [874.0, 890.0].into_iter().enumerate() {
-            parts::led_column(b, panel, if i == 0 { "Wet L" } else { "Wet R" }, &a("wet"), i as u8, (x, 28.0, 12.0, 100.0), 13, (-36.0, 3.0));
+            parts::led_column(
+                b,
+                panel,
+                if i == 0 { "Wet L" } else { "Wet R" },
+                &a("wet"),
+                i as u8,
+                (x, 28.0, 12.0, 100.0),
+                13,
+                (-36.0, 3.0),
+            );
         }
-        parts::silk(b, panel, "Wet", 888.0, 140.0, Ink::new(6.5, DIM).weight(700.0).track(0.2));
+        parts::silk(
+            b,
+            panel,
+            "Wet",
+            888.0,
+            140.0,
+            Ink::new(6.5, DIM).weight(700.0).track(0.2),
+        );
 
         // ── Knob row ───────────────────────────────────────────────────
         parts::groove(b, panel, 40.0, W - 40.0, 156.0);
@@ -104,7 +219,16 @@ pub fn face() -> Face {
             ("mix", "Mix", 852.0, 50.0, parts::PCT_MARKS),
         ];
         for (addr, name, x, d, marks) in knobs {
-            let k = parts::knob(b, panel, "knob.metal_fluted", "", &a(addr), name, (x, row), d);
+            let k = parts::knob(
+                b,
+                panel,
+                "knob.metal_fluted",
+                "",
+                &a(addr),
+                name,
+                (x, row),
+                d,
+            );
             let sweep = parts::sweep_of(b, k);
             parts::marks(b, panel, (x, row), d / 2.0 + 5.0, sweep, marks, 11, scale);
             parts::legend_at(b, k, name, 266.0, legend);
@@ -131,5 +255,11 @@ pub fn face() -> Face {
         parts::choice(&a("mode"), "Machine", MODES, 0).featured(),
     ];
     let streams = vec![parts::level_stream(&a("wet"), "Wet Level", 2)];
-    Face { file: "06-special", plugin: "delay", scene, params, streams }
+    Face {
+        file: "06-special",
+        plugin: "delay",
+        scene,
+        params,
+        streams,
+    }
 }

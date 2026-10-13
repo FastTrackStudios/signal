@@ -5,10 +5,10 @@
 //! picker are a right-rail panel. Before the chrome, this was a bar widget
 //! with a popover hanging off it.
 
+use crate::proto::keys::KeysRigClient;
 use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
-use crate::proto::keys::KeysRigClient;
 
 use crate::ui::state::held_notes;
 

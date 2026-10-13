@@ -17,11 +17,10 @@
 //! it was a multi-hour bug first. The measured screenshots the layout is
 //! converged against live in `features/daw-ui/reference/`.
 
-pub mod theme;
 pub mod art;
 #[cfg(feature = "reaper-theme")]
 pub mod reaper_theme;
-
+pub mod theme;
 
 // ── DAW-wired panels (poll a live `daw_control::Daw`) ──
 pub mod components;

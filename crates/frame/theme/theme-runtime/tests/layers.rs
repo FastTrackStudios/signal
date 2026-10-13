@@ -57,12 +57,22 @@ fn schema() -> Schema {
 struct Fills(Vec<(String, Rect)>);
 
 impl Canvas for Fills {
-    fn fill(&mut self, transform: Affine, _: Fill, brush: &Brush, _: Option<Affine>, shape: &BezPath) {
+    fn fill(
+        &mut self,
+        transform: Affine,
+        _: Fill,
+        brush: &Brush,
+        _: Option<Affine>,
+        shape: &BezPath,
+    ) {
         if let Brush::Solid(c) = brush {
             let [r, g, bl, _] = c.to_rgba8().to_u8_array();
             // To the pixel: an ellipse's bounds come out a hair short.
             let b = (transform * shape.clone()).bounding_box();
-            self.0.push((format!("#{r:02x}{g:02x}{bl:02x}"), Rect::new(b.x0.round(), b.y0.round(), b.x1.round(), b.y1.round())));
+            self.0.push((
+                format!("#{r:02x}{g:02x}{bl:02x}"),
+                Rect::new(b.x0.round(), b.y0.round(), b.x1.round(), b.y1.round()),
+            ));
         }
     }
     fn stroke(&mut self, _: Affine, _: &Stroke, _: &Brush, _: &BezPath) {}
@@ -88,7 +98,10 @@ fn one_layer_is_the_theme_itself() {
     let t = theme(&[BASE]);
     assert_eq!(t.roles().collect::<Vec<_>>(), ["mcp.strip"]);
     let d = drawn(&t, true);
-    assert!(d.contains(&("#d04040".into(), Rect::new(10.0, 10.0, 30.0, 30.0))), "{d:?}");
+    assert!(
+        d.contains(&("#d04040".into(), Rect::new(10.0, 10.0, 30.0, 30.0))),
+        "{d:?}"
+    );
     assert!(d.iter().any(|(h, _)| h == "#00ff00"));
 }
 
@@ -97,7 +110,10 @@ fn a_component_layered_over_changes_every_place_it_is_used_and_nothing_else() {
     let t = theme(&[BASE, BUTTON]);
     let d = drawn(&t, true);
     // The new button's own token, where the base strip put it.
-    assert!(d.contains(&("#ff8800".into(), Rect::new(10.0, 10.0, 30.0, 30.0))), "{d:?}");
+    assert!(
+        d.contains(&("#ff8800".into(), Rect::new(10.0, 10.0, 30.0, 30.0))),
+        "{d:?}"
+    );
     assert!(!d.iter().any(|(h, _)| h == "#d04040"));
     // The lamp is still the base's.
     assert!(d.iter().any(|(h, _)| h == "#00ff00"));
@@ -111,14 +127,28 @@ fn a_page_layered_over_replaces_that_role_and_keeps_the_controls() {
     let d = drawn(&t, true);
     // The strip is the new one (the button lower, no lamp), drawn with the
     // base's button.
-    assert_eq!(d, [("#d04040".to_owned(), Rect::new(10.0, 70.0, 30.0, 90.0))]);
+    assert_eq!(
+        d,
+        [("#d04040".to_owned(), Rect::new(10.0, 70.0, 30.0, 90.0))]
+    );
     // And layers stack: the new strip with the new button.
     let d = drawn(&theme(&[BASE, STRIP, BUTTON]), true);
-    assert_eq!(d, [("#ff8800".to_owned(), Rect::new(10.0, 70.0, 30.0, 90.0))]);
+    assert_eq!(
+        d,
+        [("#ff8800".to_owned(), Rect::new(10.0, 70.0, 30.0, 90.0))]
+    );
 }
 
 #[test]
 fn a_parse_error_names_its_layer() {
-    let e = Theme::from_sources(&[("base.frame", BASE), ("broken.frame", "<Document><Frame")], schema(), None).unwrap_err();
-    assert!(e.iter().any(|d| d.message.starts_with("broken.frame:")), "{e:?}");
+    let e = Theme::from_sources(
+        &[("base.frame", BASE), ("broken.frame", "<Document><Frame")],
+        schema(),
+        None,
+    )
+    .unwrap_err();
+    assert!(
+        e.iter().any(|d| d.message.starts_with("broken.frame:")),
+        "{e:?}"
+    );
 }

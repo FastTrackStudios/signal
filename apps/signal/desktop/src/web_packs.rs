@@ -808,10 +808,7 @@ pub(crate) async fn read_range_to_vec(
     // dedicated `read_range` method from wasm).
     let (tx, mut rx) = vox::channel::<PackChunk>();
     let call = client.read(
-        format!(
-            "range:{}:{name}",
-            sampler::packs::PackRange { start, len }
-        ),
+        format!("range:{}:{name}", sampler::packs::PackRange { start, len }),
         variant.to_string(),
         0,
         tx,

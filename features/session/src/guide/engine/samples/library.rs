@@ -157,7 +157,8 @@ mod tests {
         // Every section note finds its cue under the key its trigger asks
         // for.
         for note in SECTION_NOTES {
-            let Some(crate::guide::engine::GuideTrigger::Guide(key)) = crate::guide::engine::midi::trigger_for_midi_note(note)
+            let Some(crate::guide::engine::GuideTrigger::Guide(key)) =
+                crate::guide::engine::midi::trigger_for_midi_note(note)
             else {
                 continue;
             };
@@ -203,7 +204,9 @@ mod tests {
             "English Female",
             48_000,
         );
-        let Some(crate::guide::engine::GuideTrigger::Guide(key)) = crate::guide::engine::midi::trigger_for_midi_note(85) else {
+        let Some(crate::guide::engine::GuideTrigger::Guide(key)) =
+            crate::guide::engine::midi::trigger_for_midi_note(85)
+        else {
             panic!("note 85 is a section cue");
         };
         let cue = bank

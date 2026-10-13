@@ -31,14 +31,54 @@ pub(crate) struct Finish {
 /// The metal finishes the family shares.
 pub(crate) fn finish(variant: Option<&str>) -> Finish {
     match variant {
-        Some("rose") => Finish { hi: "#ffeccd", mid: "#d6a276", lo: "#7a4234", mark: "#2a1712" },
-        Some("black") => Finish { hi: "#9a9aa0", mid: "#2c2c30", lo: "#060607", mark: "#f4f4f2" },
-        Some("pearl") => Finish { hi: "#ffffff", mid: "#e2e2de", lo: "#8e8f8b", mark: "#2b2b2b" },
-        Some("magenta") => Finish { hi: "#f7b3cf", mid: "#b33c6c", lo: "#420c24", mark: "#1a050e" },
-        Some("chrome") => Finish { hi: "#ffffff", mid: "#b9babc", lo: "#4b4d50", mark: "#1d1d1f" },
-        Some("pink") => Finish { hi: "#f7c9d7", mid: "#d98fa8", lo: "#8d4a60", mark: "#2a0f19" },
-        Some("white") => Finish { hi: "#ffffff", mid: "#e6e6e4", lo: "#a2a2a0", mark: "#3a3a3a" },
-        _ => Finish { hi: "#fff2cc", mid: "#d6a95c", lo: "#6d4617", mark: "#2a2118" },
+        Some("rose") => Finish {
+            hi: "#ffeccd",
+            mid: "#d6a276",
+            lo: "#7a4234",
+            mark: "#2a1712",
+        },
+        Some("black") => Finish {
+            hi: "#9a9aa0",
+            mid: "#2c2c30",
+            lo: "#060607",
+            mark: "#f4f4f2",
+        },
+        Some("pearl") => Finish {
+            hi: "#ffffff",
+            mid: "#e2e2de",
+            lo: "#8e8f8b",
+            mark: "#2b2b2b",
+        },
+        Some("magenta") => Finish {
+            hi: "#f7b3cf",
+            mid: "#b33c6c",
+            lo: "#420c24",
+            mark: "#1a050e",
+        },
+        Some("chrome") => Finish {
+            hi: "#ffffff",
+            mid: "#b9babc",
+            lo: "#4b4d50",
+            mark: "#1d1d1f",
+        },
+        Some("pink") => Finish {
+            hi: "#f7c9d7",
+            mid: "#d98fa8",
+            lo: "#8d4a60",
+            mark: "#2a0f19",
+        },
+        Some("white") => Finish {
+            hi: "#ffffff",
+            mid: "#e6e6e4",
+            lo: "#a2a2a0",
+            mark: "#3a3a3a",
+        },
+        _ => Finish {
+            hi: "#fff2cc",
+            mid: "#d6a95c",
+            lo: "#6d4617",
+            mark: "#2a2118",
+        },
     }
 }
 

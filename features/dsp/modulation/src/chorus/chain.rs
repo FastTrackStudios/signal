@@ -200,12 +200,18 @@ impl ChorusChain {
 
     /// Whether `engine` has been built (it plays only once it has).
     fn has(&self, engine: EngineType) -> bool {
-        self.engines.get(engine.index()).is_some_and(Option::is_some)
+        self.engines
+            .get(engine.index())
+            .is_some_and(Option::is_some)
     }
 
     /// One frame from `engine`, or silence if it was never built.
     fn tick_engine(&mut self, engine: EngineType, l: f64, r: f64, f: &Frame) -> (f64, f64) {
-        match self.engines.get_mut(engine.index()).and_then(Option::as_deref_mut) {
+        match self
+            .engines
+            .get_mut(engine.index())
+            .and_then(Option::as_deref_mut)
+        {
             Some(e) => e.tick(l, r, f),
             None => (0.0, 0.0),
         }
@@ -314,7 +320,11 @@ impl Processor for ChorusChain {
                     from: self.playing,
                     effect: self.playing_effect,
                 };
-                if let Some(e) = self.engines.get_mut(self.engine.index()).and_then(Option::as_deref_mut) {
+                if let Some(e) = self
+                    .engines
+                    .get_mut(self.engine.index())
+                    .and_then(Option::as_deref_mut)
+                {
                     e.reset();
                 }
                 self.playing = self.engine;
@@ -374,7 +384,11 @@ impl Processor for ChorusChain {
                     wr = er * g;
                     self.fade += self.fade_step;
                     if !switched && self.fade >= 0.5 {
-                        if let Some(e) = self.engines.get_mut(self.playing.index()).and_then(Option::as_deref_mut) {
+                        if let Some(e) = self
+                            .engines
+                            .get_mut(self.playing.index())
+                            .and_then(Option::as_deref_mut)
+                        {
                             e.reset();
                         }
                         self.playing_effect = self.effect_type;
@@ -529,7 +543,10 @@ mod tests {
                         c.process(bl, br);
                     }
                     let (lo, ro) = (rms(&l[4800..]), rms(&r[4800..]));
-                    assert!(lo > 0.01, "{engine:?} {effect:?} w{width}: the left plays ({lo})");
+                    assert!(
+                        lo > 0.01,
+                        "{engine:?} {effect:?} w{width}: the left plays ({lo})"
+                    );
                     assert!(
                         ro < lo * 0.01,
                         "{engine:?} {effect:?} w{width}: the right should stay silent — {ro:.5} vs {lo:.5}"
@@ -551,7 +568,10 @@ mod tests {
             let (l, r) = run(&mut c, &input);
             let (lo, ro) = (rms(&l[4800..]), rms(&r[4800..]));
             assert!(lo > 0.01 && ro > 0.01, "{engine:?}: {lo} {ro}");
-            assert!((20.0 * (lo / ro).log10()).abs() < 3.0, "{engine:?}: sides {lo} vs {ro}");
+            assert!(
+                (20.0 * (lo / ro).log10()).abs() < 3.0,
+                "{engine:?}: sides {lo} vs {ro}"
+            );
         }
     }
 

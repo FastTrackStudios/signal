@@ -26,7 +26,6 @@
 //! 5. **MIDI Filter Masks** — which MIDI events to intercept/delete
 //! 6. **Event Subscriptions** — request specific events written to guest ring buffer
 
-
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 // ============================================================================

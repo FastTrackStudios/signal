@@ -15,16 +15,16 @@
 use std::sync::Arc;
 use std::sync::OnceLock;
 
+use crate::proto::{AdvanceMode, Setlist, Song};
 use architect::action::ActionBackend;
 use daw::service::ProjectContext;
 use daw::service::transport::service::Transport as TransportService;
 use daw::service::{Markers, Projects, Regions, TempoMap};
-use crate::proto::{AdvanceMode, Setlist, Song};
 use tokio::sync::RwLock;
 
+use crate::proto::setlist_actions::{SetlistActions, register_setlist_actions};
 use crate::setlist::service::SetlistServiceImpl;
 use crate::song::builder::SongBuilder;
-use crate::proto::setlist_actions::{SetlistActions, register_setlist_actions};
 
 /// The setlist storage cell shared with `SetlistServiceImpl`.
 static SETLIST_STORE: OnceLock<Arc<RwLock<Option<Setlist>>>> = OnceLock::new();

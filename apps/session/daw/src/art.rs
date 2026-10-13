@@ -10,8 +10,8 @@
 //! it is wrong in `paint`, and fixing it there fixes both surfaces.
 
 use anyrender::{PaintScene, Scene};
-use daw_ui::theme::Color as ThemeColor;
 use daw_ui::art::paint::{Align, Brush, Drawing, Op, Shape};
+use daw_ui::theme::Color as ThemeColor;
 use vello::kurbo::{
     Affine, Arc, BezPath, Ellipse, Line, Point, Rect, RoundedRect, Shape as _, Stroke as KStroke,
     Vec2,

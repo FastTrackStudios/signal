@@ -215,7 +215,9 @@ fn build_default(block_type: BlockType, param: &str) -> Option<f64> {
     if no_default(block_type, param) {
         return None;
     }
-    live_param_defaults(block_type)?.get(&param.to_ascii_lowercase()).copied()
+    live_param_defaults(block_type)?
+        .get(&param.to_ascii_lowercase())
+        .copied()
 }
 
 fn structural(block_type: BlockType, param: &str) -> bool {
@@ -476,7 +478,8 @@ pub fn block_delta(old: &RigBlock, new: &RigBlock) -> BlockDelta {
             // default a fresh build does not hold, build again. Stepping
             // presets that set different params rebuilt every chain that
             // shared the block.
-            let has = |w: &[(String, f64)], n: &str| w.iter().any(|(m, _)| m.eq_ignore_ascii_case(n));
+            let has =
+                |w: &[(String, f64)], n: &str| w.iter().any(|(m, _)| m.eq_ignore_ascii_case(n));
             let mut dropped = Vec::new();
             for (n, _) in &a {
                 if has(&b, n) {

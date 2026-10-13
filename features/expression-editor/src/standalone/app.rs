@@ -13,9 +13,9 @@
 
 use std::sync::Mutex;
 
-use dioxus::prelude::*;
-use crate::{Editor, ExpressionDoc, TimeBase, Viewport};
 use crate::ui::{ExpressionEditor, theme};
+use crate::{Editor, ExpressionDoc, TimeBase, Viewport};
+use dioxus::prelude::*;
 
 use crate::standalone::drum_host::SharedDrumHost;
 

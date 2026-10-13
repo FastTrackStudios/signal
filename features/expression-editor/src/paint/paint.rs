@@ -34,9 +34,9 @@
 //! past both and clipped to what is left, which is exactly what the
 //! `<g transform=… clip-path=…>` did.
 
-use anyrender::{PaintScene, Scene};
 use crate::razor::RazorArea;
 use crate::{Dimension, Editor};
+use anyrender::{PaintScene, Scene};
 use kurbo::{Affine, BezPath, Line, Point, Rect, Stroke};
 use peniko::{Color, Fill};
 
@@ -1039,8 +1039,7 @@ fn handles(scene: &mut Scene, look: &Look, ed: &Editor, at: Affine) {
             // shape is faster to read than one anyway.
             let (cx, cy) = (h.x + h.w * 0.5, h.y + h.h * 0.5);
             let half = h.w.min(h.h) * 0.5;
-            let hollow =
-                matches!(h.handle, crate::Handle::Amplitude) && ed.sibilant_scope;
+            let hollow = matches!(h.handle, crate::Handle::Amplitude) && ed.sibilant_scope;
             if let Ok(mark) =
                 kurbo::BezPath::from_svg(&crate::paint::handle_mark(h.handle, cx, cy, half, hollow))
             {

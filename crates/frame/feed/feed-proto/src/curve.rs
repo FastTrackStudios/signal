@@ -104,7 +104,11 @@ fn piecewise(points: &[CurvePoint], x: f64) -> f64 {
                 let (a, b) = (w[0], w[1]);
                 if x <= b.x {
                     let span = b.x - a.x;
-                    return if span <= 0.0 { b.y } else { a.y + (b.y - a.y) * (x - a.x) / span };
+                    return if span <= 0.0 {
+                        b.y
+                    } else {
+                        a.y + (b.y - a.y) * (x - a.x) / span
+                    };
                 }
             }
             points[points.len() - 1].y
@@ -130,7 +134,11 @@ mod tests {
     use super::*;
 
     fn monotone(c: &Curve) -> bool {
-        (0..=100).map(|i| c.apply(f64::from(i) / 100.0)).collect::<Vec<_>>().windows(2).all(|w| w[1] >= w[0] - 1e-12)
+        (0..=100)
+            .map(|i| c.apply(f64::from(i) / 100.0))
+            .collect::<Vec<_>>()
+            .windows(2)
+            .all(|w| w[1] >= w[0] - 1e-12)
     }
 
     #[test]
@@ -143,8 +151,16 @@ mod tests {
             Curve::Logarithmic,
             Curve::SmoothStep,
             Curve::Stepped { steps: 5 },
-            Curve::Points { points: vec![CurvePoint { x: 0.0, y: 0.2 }, CurvePoint { x: 0.5, y: 0.9 }, CurvePoint { x: 1.0, y: 1.0 }] },
-            Curve::Inverted { inner: Box::new(Curve::Exponential) },
+            Curve::Points {
+                points: vec![
+                    CurvePoint { x: 0.0, y: 0.2 },
+                    CurvePoint { x: 0.5, y: 0.9 },
+                    CurvePoint { x: 1.0, y: 1.0 },
+                ],
+            },
+            Curve::Inverted {
+                inner: Box::new(Curve::Exponential),
+            },
         ];
         for c in &curves {
             assert!(monotone(c), "{c:?} not monotone");
@@ -162,7 +178,9 @@ mod tests {
             Curve::Exponential,
             Curve::Logarithmic,
             Curve::SmoothStep,
-            Curve::Inverted { inner: Box::new(Curve::Logarithmic) },
+            Curve::Inverted {
+                inner: Box::new(Curve::Logarithmic),
+            },
         ] {
             for i in 0..=20 {
                 let x = f64::from(i) / 20.0;

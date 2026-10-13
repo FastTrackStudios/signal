@@ -16,18 +16,17 @@
 //! `no_std`, no dependencies, no allocation: these must work on native, in an
 //! `AudioWorklet`, and on an embedded target alike.
 
-
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(feature = "audio")]
 pub mod audio;
-#[cfg(feature = "modulation")]
-pub mod modulation;
-#[cfg(feature = "meter")]
-pub mod meter;
-pub mod time;
 #[cfg(feature = "golden")]
 pub mod golden;
+#[cfg(feature = "meter")]
+pub mod meter;
+#[cfg(feature = "modulation")]
+pub mod modulation;
+pub mod time;
 
 pub mod channel;
 pub mod num;

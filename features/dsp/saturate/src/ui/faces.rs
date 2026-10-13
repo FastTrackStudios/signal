@@ -150,7 +150,13 @@ const DELUXE_KNOBS: &[KnobSpec] = &[
 const BLUEBOX_KNOBS: &[KnobSpec] = &[
     knob("drive", "Pentode", 120.0, 58.0, KnobStyle::Bakelite),
     knob("character_a", "Triode", 232.0, 58.0, KnobStyle::Bakelite),
-    knob("character_b", "Saturation", 344.0, 50.0, KnobStyle::Bakelite),
+    knob(
+        "character_b",
+        "Saturation",
+        344.0,
+        50.0,
+        KnobStyle::Bakelite,
+    ),
     knob("bias", "Density", 452.0, 42.0, KnobStyle::Bakelite),
     knob("tilt", "Air", 556.0, 42.0, KnobStyle::Bakelite),
     knob("sag", "Cal", 660.0, 42.0, KnobStyle::Bakelite),
@@ -296,9 +302,8 @@ pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
         "clip" => ("Ceiling", "Knee"),
         "crush" => ("Bits", "Rate"),
         "deluxe" => ("Crunch", "Darkness"),
-        "bluebox" | "bluebox_low" | "bluebox_high" | "bluebox_alt" | "bluebox_alt_low" | "bluebox_alt_high" => {
-            ("Triode", "Saturation")
-        }
+        "bluebox" | "bluebox_low" | "bluebox_high" | "bluebox_alt" | "bluebox_alt_low"
+        | "bluebox_alt_high" => ("Triode", "Saturation"),
         _ => ("Character", "Colour"),
     }
 }
@@ -314,8 +319,8 @@ pub fn SatFace(
     let _ = frame;
     let design = design_for(&profile_id);
     // An unknown id draws the first profile; an empty table draws nothing.
-    let Some(profile) = crate::profiles::profile_by_id(&profile_id)
-        .or_else(|| crate::profiles::PROFILES.first())
+    let Some(profile) =
+        crate::profiles::profile_by_id(&profile_id).or_else(|| crate::profiles::PROFILES.first())
     else {
         return rsx! {};
     };
@@ -481,8 +486,8 @@ fn CurveView(
     let body = accent;
 
     // An unknown id draws the first profile; an empty table draws nothing.
-    let Some(profile) = crate::profiles::profile_by_id(&profile_id)
-        .or_else(|| crate::profiles::PROFILES.first())
+    let Some(profile) =
+        crate::profiles::profile_by_id(&profile_id).or_else(|| crate::profiles::PROFILES.first())
     else {
         return rsx! {};
     };
@@ -508,11 +513,15 @@ fn CurveView(
         let y = match profile.engine {
             // the measured models draw their own stages
             crate::profiles::Engine::Deluxe => {
-                crate::deluxe::static_curve(&crate::profiles::deluxe_params(&controls), x).clamp(-1.0, 1.0)
+                crate::deluxe::static_curve(&crate::profiles::deluxe_params(&controls), x)
+                    .clamp(-1.0, 1.0)
             }
             crate::profiles::Engine::Bluebox { sat_freq, alt_tube } => {
-                crate::bluebox::static_curve(&crate::profiles::bluebox_params(&controls, sat_freq, alt_tube), x)
-                    .clamp(-1.0, 1.0)
+                crate::bluebox::static_curve(
+                    &crate::profiles::bluebox_params(&controls, sat_freq, alt_tube),
+                    x,
+                )
+                .clamp(-1.0, 1.0)
             }
             crate::profiles::Engine::Preamp => {
                 let shaped = pre.transfer(dsp_core::num::f64_to_f32(x)) * makeup;

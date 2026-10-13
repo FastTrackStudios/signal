@@ -178,8 +178,7 @@ impl Analysis {
         }
         // No timing edits: skip the warp path, which remaps every frame
         // even when the map is the identity.
-        let mut out =
-            tune::render::render_world(&self.pitch, audio, self.pitch.sample_rate as u32);
+        let mut out = tune::render::render_world(&self.pitch, audio, self.pitch.sample_rate as u32);
         out.resize(audio.len(), 0.0);
         out
     }

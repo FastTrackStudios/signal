@@ -57,12 +57,23 @@ const ARG: &str = "arg.";
 
 pub(crate) fn expand(source: &Scene, diags: &mut Vec<Diagnostic>) -> Expanded {
     let mut components: HashMap<&str, NodeId> = HashMap::new();
-    for n in source.nodes.values().filter(|n| n.kind == NodeKind::Component) {
+    for n in source
+        .nodes
+        .values()
+        .filter(|n| n.kind == NodeKind::Component)
+    {
         if components.insert(n.name.as_str(), n.id).is_some() {
-            diags.push(Diagnostic { role: None, node: Some(n.name.clone()), message: "two components with this name".into() });
+            diags.push(Diagnostic {
+                role: None,
+                node: Some(n.name.clone()),
+                message: "two components with this name".into(),
+            });
         }
     }
-    let mut out = Expanded { scene: source.clone(), parsed: HashMap::new() };
+    let mut out = Expanded {
+        scene: source.clone(),
+        parsed: HashMap::new(),
+    };
     // The instances outside any component: those inside one are placed as
     // that component is.
     let top: Vec<NodeId> = source
@@ -71,7 +82,12 @@ pub(crate) fn expand(source: &Scene, diags: &mut Vec<Diagnostic>) -> Expanded {
         .filter(|n| n.of.is_some() && !inside_component(source, n))
         .map(|n| n.id)
         .collect();
-    let mut cx = Cx { source, components: &components, out: &mut out, diags };
+    let mut cx = Cx {
+        source,
+        components: &components,
+        out: &mut out,
+        diags,
+    };
     for id in top {
         cx.place(id, None, 0);
     }
@@ -81,7 +97,9 @@ pub(crate) fn expand(source: &Scene, diags: &mut Vec<Diagnostic>) -> Expanded {
 fn inside_component(scene: &Scene, node: &Node) -> bool {
     let mut at = node.parent;
     while let Some(id) = at {
-        let Some(n) = scene.node(id) else { return false };
+        let Some(n) = scene.node(id) else {
+            return false;
+        };
         if n.kind == NodeKind::Component {
             return true;
         }
@@ -99,26 +117,42 @@ struct Cx<'a> {
 
 impl Cx<'_> {
     fn err(&mut self, node: &str, message: String) {
-        self.diags.push(Diagnostic { role: None, node: Some(node.to_owned()), message });
+        self.diags.push(Diagnostic {
+            role: None,
+            node: Some(node.to_owned()),
+            message,
+        });
     }
 
     /// Replace the instance `id` (in the output scene) by a copy of its
     /// component. `outer` is the scope the instance itself sits in, when
     /// it is inside another component.
     fn place(&mut self, id: NodeId, outer: Option<&Scope>, depth: usize) {
-        let Some(instance) = self.out.scene.node(id).cloned() else { return };
-        let Some(of) = instance.of.clone() else { return };
+        let Some(instance) = self.out.scene.node(id).cloned() else {
+            return;
+        };
+        let Some(of) = instance.of.clone() else {
+            return;
+        };
         if depth > DEPTH {
-            self.err(&instance.name, format!("components nest more than {DEPTH} deep — does `{of}` place itself?"));
+            self.err(
+                &instance.name,
+                format!("components nest more than {DEPTH} deep — does `{of}` place itself?"),
+            );
             return;
         }
         let Some(&comp_id) = self.components.get(of.as_str()) else {
             let mut known: Vec<&str> = self.components.keys().copied().collect();
             known.sort_unstable();
-            self.err(&instance.name, format!("no component `{of}` (components: {})", known.join(", ")));
+            self.err(
+                &instance.name,
+                format!("no component `{of}` (components: {})", known.join(", ")),
+            );
             return;
         };
-        let Some(component) = self.source.node(comp_id).cloned() else { return };
+        let Some(component) = self.source.node(comp_id).cloned() else {
+            return;
+        };
 
         // The scope: the component's defaults, then what this instance
         // passes, read where the instance is.
@@ -134,10 +168,20 @@ impl Cx<'_> {
         for a in &instance.args {
             if !component.args.iter().any(|c| c.name == a.name) {
                 let takes: Vec<&str> = component.args.iter().map(|c| c.name.as_str()).collect();
-                self.err(&instance.name, format!("`{of}` takes no argument `{}` (it takes: {})", a.name, takes.join(", ")));
+                self.err(
+                    &instance.name,
+                    format!(
+                        "`{of}` takes no argument `{}` (it takes: {})",
+                        a.name,
+                        takes.join(", ")
+                    ),
+                );
                 continue;
             }
-            match theme_expr::parse(&a.expr).map_err(|e| e.to_string()).and_then(|e| substitute(e, outer)) {
+            match theme_expr::parse(&a.expr)
+                .map_err(|e| e.to_string())
+                .and_then(|e| substitute(e, outer))
+            {
                 Ok(e) => {
                     scope.insert(a.name.clone(), e);
                 }
@@ -148,13 +192,21 @@ impl Cx<'_> {
         // The copy: the component's subtree under fresh ids, its root on
         // the instance's id so the instance's parent still holds it.
         let subtree = self.source.walk(comp_id);
-        let ids: HashMap<NodeId, NodeId> =
-            subtree.iter().map(|&old| (old, if old == comp_id { id } else { NodeId::new() })).collect();
+        let ids: HashMap<NodeId, NodeId> = subtree
+            .iter()
+            .map(|&old| (old, if old == comp_id { id } else { NodeId::new() }))
+            .collect();
         let mut nested = Vec::new();
         for &old in &subtree {
-            let Some(mut n) = self.source.node(old).cloned() else { continue };
+            let Some(mut n) = self.source.node(old).cloned() else {
+                continue;
+            };
             n.id = ids[&old];
-            n.children = n.children.iter().filter_map(|c| ids.get(c).copied()).collect();
+            n.children = n
+                .children
+                .iter()
+                .filter_map(|c| ids.get(c).copied())
+                .collect();
             if old == comp_id {
                 n.kind = NodeKind::Frame;
                 n.name.clone_from(&instance.name);
@@ -177,7 +229,9 @@ impl Cx<'_> {
                 let mut parsed: Vec<Parsed> = binds
                     .into_iter()
                     .map(|b| Parsed {
-                        expr: theme_expr::parse(&b.expr).map_err(|e| e.to_string()).and_then(|e| substitute(e, Some(&scope))),
+                        expr: theme_expr::parse(&b.expr)
+                            .map_err(|e| e.to_string())
+                            .and_then(|e| substitute(e, Some(&scope))),
                         prop: b.prop,
                     })
                     .collect();
@@ -185,9 +239,13 @@ impl Cx<'_> {
                     // The instance's own bindings (where it is, whether it
                     // shows), read where the instance is; after the
                     // component's, so they win.
-                    parsed.extend(instance.bind.iter().map(|b| Parsed {
-                        prop: b.prop.clone(),
-                        expr: theme_expr::parse(&b.expr).map_err(|e| e.to_string()).and_then(|e| substitute(e, outer)),
+                    parsed.extend(instance.bind.iter().map(|b| {
+                        Parsed {
+                            prop: b.prop.clone(),
+                            expr: theme_expr::parse(&b.expr)
+                                .map_err(|e| e.to_string())
+                                .and_then(|e| substitute(e, outer)),
+                        }
                     }));
                 }
                 if !parsed.is_empty() {

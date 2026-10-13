@@ -3,10 +3,10 @@
 
 use dsp_core::num;
 
+use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use dsp_core::audio::biquad::{Biquad, FilterType};
 use dsp_core::audio::delay_line::DelayLine;
 use dsp_core::audio::{AudioConfig, Processor};
-use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 use crate::algorithm::{
     AlgorithmParams, AlgorithmType, BloomParams, ChamberParams, ChoraleParams, CloudParams,
@@ -2195,7 +2195,10 @@ mod tests {
             c.mix = 1.0;
             c.predelay_ms = 0.0;
             c.update(config());
-            assert!(c.set_decay_seconds(seconds).is_some(), "Non-Linear takes a time");
+            assert!(
+                c.set_decay_seconds(seconds).is_some(),
+                "Non-Linear takes a time"
+            );
             let total = num::f64_to_index(SR * total_s);
             let mut l = vec![0.0; total];
             for &h in hits {
@@ -2212,18 +2215,27 @@ mod tests {
             let (a, b) = (num::f64_to_index(SR * from), num::f64_to_index(SR * to));
             let span = out.get(a..b).unwrap_or(&[]);
             let peak = span.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
-            let last = span.iter().rposition(|v| v.abs() > peak * 0.01).unwrap_or(0);
+            let last = span
+                .iter()
+                .rposition(|v| v.abs() > peak * 0.01)
+                .unwrap_or(0);
             from + num::count_to_f64(last) / SR
         };
         for seconds in [0.15, 0.3, 0.6, 1.2, 1.9] {
             let out = render(seconds, &[0.0], seconds + 1.5);
             let end = ends(&out, 0.0, seconds + 1.5);
-            assert!((end / seconds - 1.0).abs() < 0.05, "{seconds} s shut at {end} s");
+            assert!(
+                (end / seconds - 1.0).abs() < 0.05,
+                "{seconds} s shut at {end} s"
+            );
         }
         // Two hits a second apart: two bursts, silence between.
         let out = render(0.3, &[0.0, 1.0], 2.0);
         assert!((ends(&out, 0.0, 0.9) - 0.3).abs() < 0.02, "the first burst");
-        assert!((ends(&out, 1.0, 2.0) - 1.3).abs() < 0.02, "the second burst");
+        assert!(
+            (ends(&out, 1.0, 2.0) - 1.3).abs() < 0.02,
+            "the second burst"
+        );
         let gap = out
             .get(num::f64_to_index(SR * 0.4)..num::f64_to_index(SR * 0.95))
             .unwrap_or(&[]);

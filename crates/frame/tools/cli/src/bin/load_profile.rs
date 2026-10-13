@@ -99,7 +99,8 @@ fn run() -> Result<(), String> {
         let run_start = Instant::now();
 
         let t = Instant::now();
-        let doc = figma_import::import_bytes(&bytes).map_err(|e| format!("import failed for {input}: {e}"))?;
+        let doc = figma_import::import_bytes(&bytes)
+            .map_err(|e| format!("import failed for {input}: {e}"))?;
         let import_ms = t.elapsed().as_secs_f64() * 1000.0;
 
         let root = doc.pages().first().copied().unwrap_or(doc.root);

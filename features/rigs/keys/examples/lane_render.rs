@@ -8,17 +8,25 @@
 //!     cargo run --release -p signal-keys --example lane_render -- <lane> [note] [hold_s] [out.wav]
 //! ```
 
-use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use sampler::node_render::RenderNode;
+use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 
 fn ev(on: bool, key: u8, vel: u8) -> PluginMidiEvent {
     use daw::service::{Channel, KeyNumber, MidiEvent, Velocity};
     PluginMidiEvent {
         offset: 0,
         message: if on {
-            MidiEvent::NoteOn { channel: Channel::new(0), key: KeyNumber::new(key), velocity: Velocity::new(vel) }
+            MidiEvent::NoteOn {
+                channel: Channel::new(0),
+                key: KeyNumber::new(key),
+                velocity: Velocity::new(vel),
+            }
         } else {
-            MidiEvent::NoteOff { channel: Channel::new(0), key: KeyNumber::new(key), velocity: Velocity::new(0) }
+            MidiEvent::NoteOff {
+                channel: Channel::new(0),
+                key: KeyNumber::new(key),
+                velocity: Velocity::new(0),
+            }
         },
     }
 }
@@ -34,7 +42,10 @@ fn main() {
     let hold: f32 = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(8.0);
     let backend = keys::KeysRigBackend::new();
     let program = backend.debug_profile_program().expect("profile program");
-    let tree = program.find(&lane).unwrap_or_else(|| panic!("no lane {lane}")).clone();
+    let tree = program
+        .find(&lane)
+        .unwrap_or_else(|| panic!("no lane {lane}"))
+        .clone();
     if std::env::var_os("LANE_DUMP").is_some() {
         eprintln!("{}", tree.dump());
     }
@@ -42,7 +53,10 @@ fn main() {
     // LANE_BLOCK / LANE_BPM: the app's buffer and tempo (`LANE_BPM=none`
     // leaves the render graph's default tempo alone, as a host without a
     // tempo would).
-    let block: usize = std::env::var("LANE_BLOCK").ok().and_then(|v| v.parse().ok()).unwrap_or(256);
+    let block: usize = std::env::var("LANE_BLOCK")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(256);
     let mut rn = RenderNode::compile(&tree, sr);
     rn.prepare(f64::from(sr), block as u32);
     match std::env::var("LANE_BPM").as_deref() {
@@ -55,7 +69,11 @@ fn main() {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     let (mut l, mut r) = (vec![0.0f32; block], vec![0.0f32; block]);
-    let none = PluginEvents { params: &[], midi: &[], note_expressions: &[] };
+    let none = PluginEvents {
+        params: &[],
+        midi: &[],
+        note_expressions: &[],
+    };
     for _ in 0..100 {
         rn.render(&mut l, &mut r, &none);
     }
@@ -88,7 +106,15 @@ fn main() {
         }
         l.fill(0.0);
         r.fill(0.0);
-        rn.render(&mut l, &mut r, &PluginEvents { params: &[], midi: &midi, note_expressions: &[] });
+        rn.render(
+            &mut l,
+            &mut r,
+            &PluginEvents {
+                params: &[],
+                midi: &midi,
+                note_expressions: &[],
+            },
+        );
         ol.extend_from_slice(&l);
         or.extend_from_slice(&r);
         // Voices sounding, every half second (sampler sources).
@@ -111,7 +137,11 @@ fn main() {
     println!("{lane} note {note}: dB per 0.5 s: {}", levels.join(" "));
     println!(
         "{lane} note {note}: voices per 0.5 s: {}",
-        voice_log.iter().map(ToString::to_string).collect::<Vec<_>>().join(" ")
+        voice_log
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" ")
     );
     if let Some(out) = args.get(3) {
         let n = ol.len();

@@ -35,9 +35,6 @@
 
 use anyrender::PaintScene;
 use expression_editor::mouse::{Action, Context, Gesture};
-use expression_editor::rows::DrumMap;
-use expression_editor::tools::{self, Hit};
-use expression_editor::{Edit, Editor, Mode, RowSpace, StripLane, Tool, Viewport, memagic};
 use expression_editor::paint::chrome::{
     self, Button, Choice, Control, Menu, Pending, STATUS_H, TOOLBAR_H,
 };
@@ -46,6 +43,9 @@ use expression_editor::paint::paint::{self, Look, Overlay};
 use expression_editor::paint::stack::{self, HitGesture, Stack, interact::ViewKey};
 use expression_editor::paint::text::Labeller;
 use expression_editor::paint::{canvas, demo, keys};
+use expression_editor::rows::DrumMap;
+use expression_editor::tools::{self, Hit};
+use expression_editor::{Edit, Editor, Mode, RowSpace, StripLane, Tool, Viewport, memagic};
 use input::InputCommand;
 use vello::kurbo::Affine;
 

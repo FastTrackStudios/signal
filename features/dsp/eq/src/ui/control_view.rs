@@ -66,13 +66,13 @@ pub fn resize_hint() -> ResizeHint {
         Some(LogicalSize::new(max_w, max_h)),
     )
 }
+use crate::analyzer::AnalyzerSettings;
+use crate::analyzer::ui::AnalyzerSettingsPanel;
 use crate::ui::param_adapter::param_handle;
 use crate::ui::params::{EqUiState, NUM_BANDS, SPECTRUM_BINS};
 use crate::ui::profile_view::{
     Api550aProfileView, Neve1073ProfileView, PultecProfileView, SslEProfileView, SslGProfileView,
 };
-use crate::analyzer::AnalyzerSettings;
-use crate::analyzer::ui::AnalyzerSettingsPanel;
 
 /// A cheat-sheet [`TrackInfoProvider`](crate::ui::cheatsheet::TrackInfoProvider)
 /// backed by the editor's shared state. In the plugin this surfaces the track
@@ -179,7 +179,8 @@ fn AppShell() -> Element {
     // provider (the standalone injects a `StaticTrackProvider` for env-based
     // testing), leave it; otherwise back it with the host `GuiContext` so the
     // plugin's CLAP track-info drives the EQ overlay's Auto mode.
-    if try_consume_context::<std::sync::Arc<dyn crate::ui::cheatsheet::TrackInfoProvider>>().is_none()
+    if try_consume_context::<std::sync::Arc<dyn crate::ui::cheatsheet::TrackInfoProvider>>()
+        .is_none()
         && let Some(state) = try_consume_context::<std::sync::Arc<DioxusState>>()
     {
         let provider: std::sync::Arc<dyn crate::ui::cheatsheet::TrackInfoProvider> =

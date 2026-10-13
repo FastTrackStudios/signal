@@ -33,6 +33,9 @@ tracing = { workspace = true }
 vox = { workspace = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+dynamic-template = { path = ".", features = ["reaper"] }
 daw-standalone = { workspace = true, features = ["audio"] }
 facet-json = { workspace = true }
 facet-styx = { workspace = true }

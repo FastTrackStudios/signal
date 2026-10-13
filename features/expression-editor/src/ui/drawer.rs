@@ -9,11 +9,11 @@
 //! preview into one undoable edit; Cancel restores the exact captured
 //! curve, byte-for-byte.
 
-use dioxus::prelude::*;
 use crate::doc::{Dimension, NoteId, Point};
 use crate::edit::Edit;
 use crate::modulation::{CurveTarget, Row, Stack, Wave};
 use crate::{Editor, Shape};
+use dioxus::prelude::*;
 
 use crate::ui::theme;
 use crate::ui::widgets::Slider;

@@ -1412,11 +1412,7 @@ pub fn explain(
         .find_map(|m| take.by_track.get(m))
         .and_then(|r| read.get(&r.path))
         .map(|(samples, rate)| {
-            let at = hits::attack_start(
-                samples,
-                *rate,
-                hits::samples(time - take.origin, *rate),
-            );
+            let at = hits::attack_start(samples, *rate, hits::samples(time - take.origin, *rate));
             (
                 take.origin + hits::seconds(at, *rate),
                 hits::db(f64::from(hits::attack_peak(samples, *rate, at))),

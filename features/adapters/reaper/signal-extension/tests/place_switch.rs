@@ -51,8 +51,7 @@ async fn build_test_setlist(tracks: &daw::rpc::Tracks) -> eyre::Result<TestSetli
     let rig_folder = tracks.add("Guitar Rig", None).await?;
     rig_folder.set_folder_depth(1).await?;
     rig_folder.set_color(0x009C_A3AF).await?;
-    TrackHandleCompat::set_ext_state(&rig_folder, "fts_signal", "scene_count", "2")
-        .await?;
+    TrackHandleCompat::set_ext_state(&rig_folder, "fts_signal", "scene_count", "2").await?;
     settle().await;
 
     // Guitar Input — audio source, no special routing
@@ -63,8 +62,7 @@ async fn build_test_setlist(tracks: &daw::rpc::Tracks) -> eyre::Result<TestSetli
     let belief_folder = tracks.add("Belief", None).await?;
     belief_folder.set_folder_depth(1).await?;
     belief_folder.set_color(0x0022_C55E).await?;
-    TrackHandleCompat::set_ext_state(&belief_folder, "fts_signal", "scene_count", "3")
-        .await?;
+    TrackHandleCompat::set_ext_state(&belief_folder, "fts_signal", "scene_count", "3").await?;
     settle().await;
 
     let mut belief_sections = Vec::new();
@@ -81,8 +79,7 @@ async fn build_test_setlist(tracks: &daw::rpc::Tracks) -> eyre::Result<TestSetli
     let vienna_folder = tracks.add("Vienna", None).await?;
     vienna_folder.set_folder_depth(1).await?;
     vienna_folder.set_color(0x003B_82F6).await?;
-    TrackHandleCompat::set_ext_state(&vienna_folder, "fts_signal", "scene_count", "2")
-        .await?;
+    TrackHandleCompat::set_ext_state(&vienna_folder, "fts_signal", "scene_count", "2").await?;
     settle().await;
 
     let mut vienna_sections = Vec::new();

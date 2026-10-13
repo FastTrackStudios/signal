@@ -19,7 +19,13 @@ use crate::face::{Face, canvas};
 use crate::rigkit::{self as rk, Enclosure, KnobStyle, lcd};
 
 pub fn faces() -> Vec<Face> {
-    vec![compressor(), tape_drift(), twin_octave(), tight_drive(), havoc()]
+    vec![
+        compressor(),
+        tape_drift(),
+        twin_octave(),
+        tight_drive(),
+        havoc(),
+    ]
 }
 
 /// The pedals' knob, 38 across (the Micro's is bigger).
@@ -40,7 +46,14 @@ const RULE_Y: f64 = 233.0;
 /// The maker's mark, as the silver and navy boxes print it: a heavy
 /// geometric word over a second line spread letter by letter to its width.
 fn maker_mark(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, w: f64, color: &str) {
-    let (_, size) = rk::letter_fit(b, parent, "AZIMUTH", (cx, cy), w, mark(20.0, color).track(0.01));
+    let (_, size) = rk::letter_fit(
+        b,
+        parent,
+        "AZIMUTH",
+        (cx, cy),
+        w,
+        mark(20.0, color).track(0.01),
+    );
     let l = mark(5.0, color).weight(500.0);
     let chars: Vec<char> = "CIRCUITS".chars().collect();
     let n = chars.len() as f64;
@@ -52,16 +65,54 @@ fn maker_mark(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, w: f64, col
 
 /// The LED over the stomp switch every box shares.
 fn stomp_band(b: &mut Builder<'_>, parent: NodeId, w: f64, addr: &str, d: f64) {
-    rk::stomp(b, parent, "Bypass", addr, (w / 2.0, SWITCH_Y), d, LED_BLUE, (0.0, LED_Y - SWITCH_Y), 17.0, "bezel", false);
+    rk::stomp(
+        b,
+        parent,
+        "Bypass",
+        addr,
+        (w / 2.0, SWITCH_Y),
+        d,
+        LED_BLUE,
+        (0.0, LED_Y - SWITCH_Y),
+        17.0,
+        "bezel",
+        false,
+    );
 }
 
 /// The printed rule with a small notch over the "designed by" line (the
 /// green and champagne boxes).
-fn rule_and_line(b: &mut Builder<'_>, parent: NodeId, w: f64, y: f64, color: &str, notch_down: bool) {
+fn rule_and_line(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    w: f64,
+    y: f64,
+    color: &str,
+    notch_down: bool,
+) {
     let (x0, x1, cx) = (w * 0.2, w * 0.8, w / 2.0);
     let k = if notch_down { 1.0 } else { -1.0 };
-    rk::line(b, parent, &[(x0, y), (cx - 7.0, y), (cx, y + 5.0 * k), (cx + 7.0, y), (x1, y)], 0.8, color);
-    rk::letter_fit(b, parent, "DESIGNED IN THE FORGE", (cx, y + 16.0), w * 0.7, fine(4.6, color));
+    rk::line(
+        b,
+        parent,
+        &[
+            (x0, y),
+            (cx - 7.0, y),
+            (cx, y + 5.0 * k),
+            (cx + 7.0, y),
+            (x1, y),
+        ],
+        0.8,
+        color,
+    );
+    rk::letter_fit(
+        b,
+        parent,
+        "DESIGNED IN THE FORGE",
+        (cx, y + 16.0),
+        w * 0.7,
+        fine(4.6, color),
+    );
 }
 
 // ── 01 · Skyline Compressor ──────────────────────────────────────────────
@@ -78,23 +129,55 @@ fn compressor() -> Face {
         let p = rk::pedal_body(b, root, &e);
         let (w, _) = e.size();
         let lg = legend(7.4, BLUE);
-        let knob_at = [("detail", "Detail", (30.0, 35.0), LEGEND_TOP), ("mix", "Mix", (w - 30.0, 35.0), LEGEND_TOP), ("volume", "Volume", (30.0, 89.0), LEGEND_LOW), ("comp", "Comp", (w - 30.0, 89.0), LEGEND_LOW)];
+        let knob_at = [
+            ("detail", "Detail", (30.0, 35.0), LEGEND_TOP),
+            ("mix", "Mix", (w - 30.0, 35.0), LEGEND_TOP),
+            ("volume", "Volume", (30.0, 89.0), LEGEND_LOW),
+            ("comp", "Comp", (w - 30.0, 89.0), LEGEND_LOW),
+        ];
         for (addr, label, at, ly) in knob_at {
             rk::knob_l(b, p, &KNOB, &a(addr), label, at, ly, lg);
         }
         // The GR meter: a black slot with ten lamps, printed thresholds over it.
         let (mx0, mx1, my) = (46.0, 112.0, 17.5);
         draw_slot(b, p, (mx0 - 2.0, my - 4.4, mx1 - mx0 + 4.0, 8.8));
-        rk::gr_dots(b, p, "Compression", &a("gr"), (mx0, mx1, my), 4.8, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 10.0, 15.0, 20.0], LED_BLUE, true);
+        rk::gr_dots(
+            b,
+            p,
+            "Compression",
+            &a("gr"),
+            (mx0, mx1, my),
+            4.8,
+            &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 10.0, 15.0, 20.0],
+            LED_BLUE,
+            true,
+        );
         for (i, l) in ["-20", "-10", "-7", "-5", "-3", "-1"].iter().enumerate() {
-            rk::letter(b, p, l, (mx0 + 4.0 + (mx1 - mx0 - 8.0) * i as f64 / 5.0, 8.6), legend(5.2, BLUE));
+            rk::letter(
+                b,
+                p,
+                l,
+                (mx0 + 4.0 + (mx1 - mx0 - 8.0) * i as f64 / 5.0, 8.6),
+                legend(5.2, BLUE),
+            );
         }
         rk::letter(b, p, "COMPRESSION", (w / 2.0, 26.6), lg);
-        let dome = Place::new("Intensity").size(22.0).variant("chrome").bind(rk::bind(&a("intensity"))).touch(surface_kit::TOUCH_MIN);
+        let dome = Place::new("Intensity")
+            .size(22.0)
+            .variant("chrome")
+            .bind(rk::bind(&a("intensity")))
+            .touch(surface_kit::TOUCH_MIN);
         let dome = parts::put(b, p, "switch.push_dome", &dome, w / 2.0, 62.0);
         rk::label_l(b, dome, "INTENSITY", (w / 2.0, 81.0), lg);
 
-        rk::letter_fit(b, p, "COMPRESSOR", (w / 2.0, NAME_Y), 117.0, name(11.0, BLUE));
+        rk::letter_fit(
+            b,
+            p,
+            "COMPRESSOR",
+            (w / 2.0, NAME_Y),
+            117.0,
+            name(11.0, BLUE),
+        );
         stomp_band(b, p, w, &a("on"), 40.0);
         maker_mark(b, p, w / 2.0, MARK_Y, w * 0.76, BLUE);
     });
@@ -106,7 +189,13 @@ fn compressor() -> Face {
         rk::toggle(&a("intensity"), "Intensity", false),
         rk::toggle(&a("on"), "Bypass", true).featured(),
     ];
-    Face { file: "01-pre-standard-compressor", plugin: PLUGIN, scene, params, streams: vec![rk::gr_stream(&a("gr"), "Compression")] }
+    Face {
+        file: "01-pre-standard-compressor",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: vec![rk::gr_stream(&a("gr"), "Compression")],
+    }
 }
 
 /// A recessed black slot (the GR meter's window).
@@ -144,33 +233,86 @@ fn tape_drift() -> Face {
         rk::knob_l(b, p, &KNOB, &a("mix"), "Mix", TOP_L, LEGEND_TOP, lg);
         rk::knob_l(b, p, &KNOB, &a("feedback"), "Feed", TOP_R, LEGEND_TOP, lg);
         rk::knob_l(b, p, &KNOB, &a("time"), "Time", LOW_L, LEGEND_LOW, lg);
-        rk::knob_l(b, p, &KNOB.touch(38.0), &a("mod"), "Mod", LOW_M, LEGEND_LOW, lg);
+        rk::knob_l(
+            b,
+            p,
+            &KNOB.touch(38.0),
+            &a("mod"),
+            "Mod",
+            LOW_M,
+            LEGEND_LOW,
+            lg,
+        );
         rk::knob_l(b, p, &KNOB, &a("tone"), "Tone", LOW_R, LEGEND_LOW, lg);
         // The time readout: a small dark LCD, 14-segment characters.
-        let win = parts::screen(b, p, "Time display", (53.0, 9.5, 50.0, 19.0), parts::Screen { glass: ("#0a0b0c", "#17181a"), ink: "#9a9c9e", mesh: false });
+        let win = parts::screen(
+            b,
+            p,
+            "Time display",
+            (53.0, 9.5, 50.0, 19.0),
+            parts::Screen {
+                glass: ("#0a0b0c", "#17181a"),
+                ink: "#9a9c9e",
+                mesh: false,
+            },
+        );
         let seg = lcd::seg14(7.4, "#d2d4d6").track(0.04);
-        lcd::readout(b, win, "Time", rk::bind(&a("time")), (1.0, 9.5, 48.0), seg, TextAlign::Center, None, surface_proto::ValueFormat::decimals(0).unit(" MS"));
+        lcd::readout(
+            b,
+            win,
+            "Time",
+            rk::bind(&a("time")),
+            (1.0, 9.5, 48.0),
+            seg,
+            TextAlign::Center,
+            None,
+            surface_proto::ValueFormat::decimals(0).unit(" MS"),
+        );
         // MS / NOTE: the time runs free or locks to a note.
-        let tm = Place::new("Time mode").size(9.0).variant("black").bind(rk::bind(&a("sync"))).legend("").touch(18.0);
+        let tm = Place::new("Time mode")
+            .size(9.0)
+            .variant("black")
+            .bind(rk::bind(&a("sync")))
+            .legend("")
+            .touch(18.0);
         let tm = parts::put(b, p, "switch.toggle_nut", &tm, 78.0, 49.0);
         parts::strip_legend(b, tm);
         let small = legend(5.8, WHITE);
         rk::letter_aligned(b, p, "• MS", (87.0, 42.0), small, TextAlign::Left);
         rk::letter_aligned(b, p, "• NOTE", (87.0, 58.0), small, TextAlign::Left);
-        rk::letter_fit(b, p, "TAPE DRIFT", (w / 2.0, NAME_Y), 96.0, name(11.0, WHITE));
+        rk::letter_fit(
+            b,
+            p,
+            "TAPE DRIFT",
+            (w / 2.0, NAME_Y),
+            96.0,
+            name(11.0, WHITE),
+        );
         stomp_band(b, p, w, &a("on"), 40.0);
         rule_and_line(b, p, w, RULE_Y, "#eef0ea", false);
     });
     let params = vec![
         rk::percent(&a("mix"), "Mix", 50.0).featured(),
         rk::percent(&a("feedback"), "Feed", 50.0).featured(),
-        parts::param(&a("time"), "Time", surface_proto::Range::linear(40.0, 3960.0, surface_proto::Unit::Milliseconds), 2000.0).featured(),
+        parts::param(
+            &a("time"),
+            "Time",
+            surface_proto::Range::linear(40.0, 3960.0, surface_proto::Unit::Milliseconds),
+            2000.0,
+        )
+        .featured(),
         rk::percent(&a("mod"), "Mod", 50.0),
         rk::percent(&a("tone"), "Tone", 50.0),
         rk::toggle(&a("sync"), "Note Sync", false),
         rk::toggle(&a("on"), "Bypass", true).featured(),
     ];
-    Face { file: "02-pre-standard-tape-drift", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "02-pre-standard-tape-drift",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }
 
 // ── 03 · Twin Octave ─────────────────────────────────────────────────────
@@ -189,7 +331,14 @@ fn twin_octave() -> Face {
         rk::knob_l(b, p, &KNOB, &a("sub"), "Oct-1", TOP_L, LEGEND_TOP, lg);
         rk::knob_l(b, p, &KNOB, &a("up"), "Oct+1", TOP_R, LEGEND_TOP, lg);
         rk::knob_l(b, p, &KNOB, &a("direct"), "Direct", LOW_M, LEGEND_LOW, lg);
-        rk::letter_fit(b, p, "TWIN OCTAVE", (w / 2.0, NAME_Y), 128.0, name(11.0, WHITE));
+        rk::letter_fit(
+            b,
+            p,
+            "TWIN OCTAVE",
+            (w / 2.0, NAME_Y),
+            128.0,
+            name(11.0, WHITE),
+        );
         stomp_band(b, p, w, &a("on"), 40.0);
         rule_and_line(b, p, w, RULE_Y, "#f6f2ea", true);
     });
@@ -199,7 +348,13 @@ fn twin_octave() -> Face {
         rk::percent(&a("direct"), "Direct", 50.0).featured(),
         rk::toggle(&a("on"), "Bypass", true).featured(),
     ];
-    Face { file: "03-pre-standard-twin-octave", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "03-pre-standard-twin-octave",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }
 
 // ── 04 · Tight Drive ─────────────────────────────────────────────────────
@@ -223,9 +378,38 @@ fn tight_drive() -> Face {
         rk::knob_l(b, p, &KNOB, &a("attack"), "Attack", (29.0, 76.0), 104.0, lg);
         rk::knob_l(b, p, &KNOB, &a("drive"), "Drive", (126.0, 74.0), 104.0, lg);
         // The gate: a small translucent knob with a blue lamp under it.
-        let glow = surface_kit::draw::circle("gate glow", 78.0, 88.5, 14.0, surface_kit::draw::radial(&[(0.0, "#8fd0ffcc"), (0.55, "#3f8fe066"), (1.0, "#3f8fe000")]));
+        let glow = surface_kit::draw::circle(
+            "gate glow",
+            78.0,
+            88.5,
+            14.0,
+            surface_kit::draw::radial(&[
+                (0.0, "#8fd0ffcc"),
+                (0.55, "#3f8fe066"),
+                (1.0, "#3f8fe000"),
+            ]),
+        );
         b.add(p, parts::emit(glow, "#6fb8ff", 0.8, 14.0));
-        let gate = super::knob("fluted", 21.0, "#ffffff", &["color=#e9f1ff", "pointer=#1a2a44", "ticks=none", "ribs=9", "rib_depth=0.1", "cap_r=0.96", "height=0.6", "rough=0.3", "coat=0.5", "spec=1.4", "index=line", "index_in=0.3", "index_out=0.9"]);
+        let gate = super::knob(
+            "fluted",
+            21.0,
+            "#ffffff",
+            &[
+                "color=#e9f1ff",
+                "pointer=#1a2a44",
+                "ticks=none",
+                "ribs=9",
+                "rib_depth=0.1",
+                "cap_r=0.96",
+                "height=0.6",
+                "rough=0.3",
+                "coat=0.5",
+                "spec=1.4",
+                "index=line",
+                "index_in=0.3",
+                "index_out=0.9",
+            ],
+        );
         rk::knob_l(b, p, &gate, &a("gate"), "Gate", (78.0, 88.5), 71.0, lg);
         let title = name(9.6, ink).track(0.2);
         rk::letter(b, p, "TIGHT", (w / 2.0, 124.5), title);
@@ -241,7 +425,13 @@ fn tight_drive() -> Face {
         rk::percent(&a("gate"), "Gate", 0.0),
         rk::toggle(&a("on"), "Bypass", true).featured(),
     ];
-    Face { file: "04-pre-standard-tight-drive", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "04-pre-standard-tight-drive",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }
 
 // ── 05 · Havoc ───────────────────────────────────────────────────────────
@@ -256,7 +446,16 @@ fn havoc() -> Face {
         let e = Enclosure::new("micro", "#7a3531", "powder").base("#4f2320");
         let p = rk::pedal_body(b, root, &e);
         let (w, _) = e.size();
-        rk::knob_l(b, p, &pedal_knob(58.0), &a("mix"), "Mix", (w / 2.0, 42.0), 94.0, legend(8.4, WHITE));
+        rk::knob_l(
+            b,
+            p,
+            &pedal_knob(58.0),
+            &a("mix"),
+            "Mix",
+            (w / 2.0, 42.0),
+            94.0,
+            legend(8.4, WHITE),
+        );
         rk::letter_fit(b, p, "HAVOC", (w / 2.0, NAME_Y), 58.0, name(11.0, WHITE));
         stomp_band(b, p, w, &a("on"), 36.0);
         // The squiggle: a flat line that breaks into a few jagged teeth.
@@ -271,6 +470,15 @@ fn havoc() -> Face {
         rk::letter(b, p, "DESIGNED", (w / 2.0, y + 12.0), small);
         rk::letter(b, p, "IN THE FORGE", (w / 2.0, y + 20.5), small);
     });
-    let params = vec![rk::percent(&a("mix"), "Mix", 50.0).featured(), rk::toggle(&a("on"), "Bypass", true).featured()];
-    Face { file: "05-pre-micro-havoc", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    let params = vec![
+        rk::percent(&a("mix"), "Mix", 50.0).featured(),
+        rk::toggle(&a("on"), "Bypass", true).featured(),
+    ];
+    Face {
+        file: "05-pre-micro-havoc",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }

@@ -35,10 +35,16 @@ fn piece_color(id: &str) -> LightColor {
     } else if s.contains("china") {
         LightColor::PINK
     } else if s.contains("splash") {
-        LightColor::new(LightColor::BLUE_BASE, control_surfaces::kontrol::Intensity::Bright)
+        LightColor::new(
+            LightColor::BLUE_BASE,
+            control_surfaces::kontrol::Intensity::Bright,
+        )
     } else {
         // Any other mapped note: dim white, so it's visibly "mapped".
-        LightColor::new(LightColor::WHITE_BASE, control_surfaces::kontrol::Intensity::Low)
+        LightColor::new(
+            LightColor::WHITE_BASE,
+            control_surfaces::kontrol::Intensity::Low,
+        )
     }
 }
 

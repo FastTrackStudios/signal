@@ -13,7 +13,9 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
-use peniko::{Blob, ImageAlphaType, ImageBrush, ImageData, ImageFormat, ImageQuality, ImageSampler};
+use peniko::{
+    Blob, ImageAlphaType, ImageBrush, ImageData, ImageFormat, ImageQuality, ImageSampler,
+};
 
 use super::types::Rgba;
 
@@ -48,7 +50,14 @@ struct Baked {
 /// Paint `soft` for the union of `shapes` (filled, non-zero), in `colour`,
 /// blurred by `radius` (a CSS/Figma blur radius, σ = radius / 2).
 /// `transform` maps shape space to the target.
-pub(super) fn paint<S: super::target::PaintTarget>(scene: &mut S, transform: Affine, shapes: &[&BezPath], colour: &Rgba, radius: f64, soft: Soft) {
+pub(super) fn paint<S: super::target::PaintTarget>(
+    scene: &mut S,
+    transform: Affine,
+    shapes: &[&BezPath],
+    colour: &Rgba,
+    radius: f64,
+    soft: Soft,
+) {
     if colour.a <= 0.0 || shapes.iter().all(|s| s.elements().is_empty()) {
         return;
     }
@@ -57,7 +66,9 @@ pub(super) fn paint<S: super::target::PaintTarget>(scene: &mut S, transform: Aff
     if !device_scale.is_finite() || device_scale < 1e-6 {
         return;
     }
-    let Some(baked) = bake(shapes, colour, radius.max(0.0), soft, device_scale) else { return };
+    let Some(baked) = bake(shapes, colour, radius.max(0.0), soft, device_scale) else {
+        return;
+    };
     let offset = match soft {
         Soft::Outer { dx, dy, .. } => (dx, dy),
         Soft::Inner { .. } => (0.0, 0.0),
@@ -68,8 +79,15 @@ pub(super) fn paint<S: super::target::PaintTarget>(scene: &mut S, transform: Aff
     scene.draw_image(&baked.brush, at);
 }
 
-fn bake(shapes: &[&BezPath], colour: &Rgba, radius: f64, soft: Soft, device_scale: f64) -> Option<Arc<Baked>> {
-    static CACHE: LazyLock<Mutex<HashMap<u64, Arc<Baked>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+fn bake(
+    shapes: &[&BezPath],
+    colour: &Rgba,
+    radius: f64,
+    soft: Soft,
+    device_scale: f64,
+) -> Option<Arc<Baked>> {
+    static CACHE: LazyLock<Mutex<HashMap<u64, Arc<Baked>>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
 
     let sigma = radius * 0.5;
     let key = {
@@ -83,7 +101,9 @@ fn bake(shapes: &[&BezPath], colour: &Rgba, radius: f64, soft: Soft, device_scal
         }
         match soft {
             Soft::Outer { spread, .. } => (0_u8, spread.to_bits(), 0_u64, 0_u64).hash(&mut h),
-            Soft::Inner { dx, dy, spread } => (1_u8, spread.to_bits(), dx.to_bits(), dy.to_bits()).hash(&mut h),
+            Soft::Inner { dx, dy, spread } => {
+                (1_u8, spread.to_bits(), dx.to_bits(), dy.to_bits()).hash(&mut h)
+            }
         }
         h.finish()
     };
@@ -91,15 +111,24 @@ fn bake(shapes: &[&BezPath], colour: &Rgba, radius: f64, soft: Soft, device_scal
         return Some(hit);
     }
 
-    let bounds = shapes.iter().map(|s| s.bounding_box()).reduce(|a, b| a.union(b))?;
-    if !(bounds.x0.is_finite() && bounds.y0.is_finite() && bounds.x1.is_finite() && bounds.y1.is_finite()) {
+    let bounds = shapes
+        .iter()
+        .map(|s| s.bounding_box())
+        .reduce(|a, b| a.union(b))?;
+    if !(bounds.x0.is_finite()
+        && bounds.y0.is_finite()
+        && bounds.x1.is_finite()
+        && bounds.y1.is_finite())
+    {
         return None;
     }
     let (spread, margin) = match soft {
         Soft::Outer { spread, .. } => (spread, 3.0 * sigma + spread.max(0.0)),
         // The inner canvas covers the shape; the hole's blur reaches in
         // from up to 3σ (plus the offset) outside it.
-        Soft::Inner { dx, dy, spread } => (spread, 3.0 * sigma + dx.abs().max(dy.abs()) + spread.abs()),
+        Soft::Inner { dx, dy, spread } => {
+            (spread, 3.0 * sigma + dx.abs().max(dy.abs()) + spread.abs())
+        }
     };
     let area = bounds.inflate(margin + 1.0, margin + 1.0);
     let mut scale = device_scale;
@@ -110,9 +139,13 @@ fn bake(shapes: &[&BezPath], colour: &Rgba, radius: f64, soft: Soft, device_scal
     if side > MAX_SIDE {
         scale *= MAX_SIDE / side;
     }
-    let (w, h) = ((area.width() * scale).ceil().max(1.0) as usize, (area.height() * scale).ceil().max(1.0) as usize);
+    let (w, h) = (
+        (area.width() * scale).ceil().max(1.0) as usize,
+        (area.height() * scale).ceil().max(1.0) as usize,
+    );
     let origin = Point::new(area.x0, area.y0);
-    let to_mask = |dx: f64, dy: f64| Affine::scale(scale) * Affine::translate((dx - origin.x, dy - origin.y));
+    let to_mask =
+        |dx: f64, dy: f64| Affine::scale(scale) * Affine::translate((dx - origin.x, dy - origin.y));
 
     let alpha: Vec<f32> = match soft {
         Soft::Outer { .. } => {
@@ -124,7 +157,11 @@ fn bake(shapes: &[&BezPath], colour: &Rgba, radius: f64, soft: Soft, device_scal
             let inside = grown(shapes, 0.0, to_mask(0.0, 0.0), w, h);
             let mut hole = grown(shapes, -spread, to_mask(dx, dy), w, h);
             blur(&mut hole, w, h, sigma * scale);
-            inside.iter().zip(&hole).map(|(a, b)| a * (1.0 - b)).collect()
+            inside
+                .iter()
+                .zip(&hole)
+                .map(|(a, b)| a * (1.0 - b))
+                .collect()
         }
     };
 
@@ -148,7 +185,11 @@ fn bake(shapes: &[&BezPath], colour: &Rgba, radius: f64, soft: Soft, device_scal
             alpha: 1.0,
         },
     };
-    let baked = Arc::new(Baked { brush, origin, scale });
+    let baked = Arc::new(Baked {
+        brush,
+        origin,
+        scale,
+    });
     if let Ok(mut cache) = CACHE.lock() {
         if cache.len() >= CACHE_CAP {
             cache.clear();
@@ -208,8 +249,15 @@ fn grown(shapes: &[&BezPath], spread: f64, to_mask: Affine, w: usize, h: usize) 
     for shape in shapes {
         let mut m = coverage(shape, to_mask, w, h);
         if spread.abs() * scale > 1e-3 {
-            let style = kurbo::Stroke::new(2.0 * spread.abs()).with_join(kurbo::Join::Round).with_caps(kurbo::Cap::Round);
-            let edge = kurbo::stroke(shape.elements().iter().copied(), &style, &kurbo::StrokeOpts::default(), tolerance);
+            let style = kurbo::Stroke::new(2.0 * spread.abs())
+                .with_join(kurbo::Join::Round)
+                .with_caps(kurbo::Cap::Round);
+            let edge = kurbo::stroke(
+                shape.elements().iter().copied(),
+                &style,
+                &kurbo::StrokeOpts::default(),
+                tolerance,
+            );
             let e = coverage(&edge, to_mask, w, h);
             if spread > 0.0 {
                 m.iter_mut().zip(&e).for_each(|(a, b)| *a = a.max(*b));
@@ -230,24 +278,28 @@ pub(super) fn coverage(path: &BezPath, to_mask: Affine, w: usize, h: usize) -> V
     let mut start = Point::ZERO;
     let mut last = Point::ZERO;
     let mut line = |a: Point, b: Point| accumulate_line(&mut acc, stride, w, h, a, b);
-    kurbo::flatten(path.elements().iter().map(|el| to_mask * *el), 0.05, |el| match el {
-        PathEl::MoveTo(p) => {
-            if last != start {
-                line(last, start);
+    kurbo::flatten(
+        path.elements().iter().map(|el| to_mask * *el),
+        0.05,
+        |el| match el {
+            PathEl::MoveTo(p) => {
+                if last != start {
+                    line(last, start);
+                }
+                start = p;
+                last = p;
             }
-            start = p;
-            last = p;
-        }
-        PathEl::LineTo(p) => {
-            line(last, p);
-            last = p;
-        }
-        PathEl::ClosePath => {
-            line(last, start);
-            last = start;
-        }
-        _ => {}
-    });
+            PathEl::LineTo(p) => {
+                line(last, p);
+                last = p;
+            }
+            PathEl::ClosePath => {
+                line(last, start);
+                last = start;
+            }
+            _ => {}
+        },
+    );
     if last != start {
         line(last, start);
     }
@@ -270,7 +322,11 @@ fn accumulate_line(acc: &mut [f32], stride: usize, w: usize, h: usize, p0: Point
     if (y0 - y1).abs() <= f32::EPSILON {
         return;
     }
-    let (dir, x0, y0, x1, y1) = if y0 < y1 { (1.0, x0, y0, x1, y1) } else { (-1.0, x1, y1, x0, y0) };
+    let (dir, x0, y0, x1, y1) = if y0 < y1 {
+        (1.0, x0, y0, x1, y1)
+    } else {
+        (-1.0, x1, y1, x0, y0)
+    };
     let dxdy = (x1 - x0) / (y1 - y0);
     let top = y0.max(0.0);
     let mut x = x0 + (top - y0) * dxdy;
@@ -324,7 +380,9 @@ fn blur(m: &mut [f32], w: usize, h: usize, sigma: f64) {
     }
     let r = (3.0 * sigma).ceil() as usize;
     let kernel: Vec<f32> = {
-        let k: Vec<f64> = (0..=2 * r).map(|i| (-0.5 * ((i as f64 - r as f64) / sigma).powi(2)).exp()).collect();
+        let k: Vec<f64> = (0..=2 * r)
+            .map(|i| (-0.5 * ((i as f64 - r as f64) / sigma).powi(2)).exp())
+            .collect();
         let sum: f64 = k.iter().sum();
         k.iter().map(|v| (v / sum) as f32).collect()
     };
@@ -360,7 +418,12 @@ fn blur(m: &mut [f32], w: usize, h: usize, sigma: f64) {
 pub(super) fn rounded_rect_path(rect: Rect, radii: &document_proto::CornerRadii) -> BezPath {
     kurbo::RoundedRect::from_rect(
         rect,
-        kurbo::RoundedRectRadii::new(radii.top_left, radii.top_right, radii.bottom_right, radii.bottom_left),
+        kurbo::RoundedRectRadii::new(
+            radii.top_left,
+            radii.top_right,
+            radii.bottom_right,
+            radii.bottom_left,
+        ),
     )
     .to_path(0.1)
 }
@@ -378,7 +441,11 @@ mod tests {
         let m = coverage(&square(2.0, 2.5, 4.0), Affine::IDENTITY, 10, 10);
         assert!((m[4 * 10 + 4] - 1.0).abs() < 1e-5, "inside");
         assert!(m[10 + 4] < 1e-5, "outside");
-        assert!((m[2 * 10 + 4] - 0.5).abs() < 1e-4, "half-covered row: {}", m[2 * 10 + 4]);
+        assert!(
+            (m[2 * 10 + 4] - 0.5).abs() < 1e-4,
+            "half-covered row: {}",
+            m[2 * 10 + 4]
+        );
         let total: f32 = m.iter().sum();
         assert!((total - 16.0).abs() < 1e-3, "area {total}");
     }
@@ -386,7 +453,9 @@ mod tests {
     #[test]
     fn opposite_windings_cut_holes() {
         let mut ring = kurbo::Circle::new((10.0, 10.0), 8.0).to_path(0.01);
-        let hole = kurbo::Circle::new((10.0, 10.0), 4.0).to_path(0.01).reverse_subpaths();
+        let hole = kurbo::Circle::new((10.0, 10.0), 4.0)
+            .to_path(0.01)
+            .reverse_subpaths();
         ring.extend(hole);
         let m = coverage(&ring, Affine::IDENTITY, 20, 20);
         assert!(m[10 * 20 + 10] < 1e-4, "the hole is empty");

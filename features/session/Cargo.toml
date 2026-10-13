@@ -71,6 +71,9 @@ vox-core = { workspace = true, optional = true }
 vox-types = { workspace = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+session = { path = ".", features = ["engine", "net", "tts", "ui"] }
 architect = { workspace = true, features = ["local", "platform", "vox"] }
 crdt = { workspace = true, features = ["vox"] }
 daw = { workspace = true, features = ["file", "standalone", "test-harness"] }

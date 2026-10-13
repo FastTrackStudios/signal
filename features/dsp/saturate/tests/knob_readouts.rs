@@ -57,8 +57,7 @@ async fn the_face_prints_a_value_beside_every_knob_it_draws() -> dioxus_test::Re
     fx.tester.relayout();
 
     for param in TUBE_PARAMS {
-        let text = readout(&fx, param)
-            .unwrap_or_else(|| panic!("no readout element for {param}"));
+        let text = readout(&fx, param).unwrap_or_else(|| panic!("no readout element for {param}"));
         assert!(
             text.chars().any(|c| c.is_ascii_digit()),
             "the {param} readout should print a number, got {text:?}"
@@ -79,10 +78,7 @@ async fn the_readouts_are_not_all_the_same_value() -> dioxus_test::Result<()> {
     let _ = fx.tester.pump().await;
     fx.tester.relayout();
 
-    let values: Vec<String> = TUBE_PARAMS
-        .iter()
-        .filter_map(|p| readout(&fx, p))
-        .collect();
+    let values: Vec<String> = TUBE_PARAMS.iter().filter_map(|p| readout(&fx, p)).collect();
     assert_eq!(values.len(), TUBE_PARAMS.len(), "a readout went missing");
 
     let distinct: std::collections::BTreeSet<&String> = values.iter().collect();

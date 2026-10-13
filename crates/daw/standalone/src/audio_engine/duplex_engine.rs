@@ -89,7 +89,11 @@ impl PhonesBus {
     /// `right`, both, or (neither) off.
     pub fn set_test_tone(&self, output: u32, left: bool, right: bool) {
         let sides = u32::from(left) | u32::from(right) << 1;
-        let v = if sides == 0 || output == 0 { 0 } else { output << 2 | sides };
+        let v = if sides == 0 || output == 0 {
+            0
+        } else {
+            output << 2 | sides
+        };
         self.tone.store(v, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -287,7 +291,11 @@ impl DuplexAudioEngine {
                 // With one pair (routing off, or the phones on the main
                 // pair) the phones' check plays there.
                 let one_pair = !routing || (ph_l == main_l && ph_r == main_r);
-                let (tm_l, tm_r) = if one_pair { (tm_l.max(tp_l), tm_r.max(tp_r)) } else { (tm_l, tm_r) };
+                let (tm_l, tm_r) = if one_pair {
+                    (tm_l.max(tp_l), tm_r.max(tp_r))
+                } else {
+                    (tm_l, tm_r)
+                };
                 for f in 0..frames {
                     let l = block.samples.get(f * 2).copied().unwrap_or(0.0);
                     let rr = block.samples.get(f * 2 + 1).copied().unwrap_or(0.0);

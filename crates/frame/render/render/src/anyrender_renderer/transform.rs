@@ -78,7 +78,10 @@ impl AffineTransform2D {
     ///
     /// `x' = a*u + b*v + tx`, `y' = c*u + d*v + ty`
     pub fn transform_point(&self, u: f64, v: f64) -> (f64, f64) {
-        (self.a * u + self.b * v + self.tx, self.c * u + self.d * v + self.ty)
+        (
+            self.a * u + self.b * v + self.tx,
+            self.c * u + self.d * v + self.ty,
+        )
     }
 
     /// Determinant of the 2×2 linear part: `a*d - b*c`.
@@ -237,7 +240,10 @@ mod tests {
             let recovered = r.decompose_rotation().to_degrees();
             let diff = (recovered - deg).abs();
             // Allow wrap-around for ±180°
-            assert!(diff < 1e-9 || (180.0 - diff).abs() < 1e-9, "deg={deg} recovered={recovered}");
+            assert!(
+                diff < 1e-9 || (180.0 - diff).abs() < 1e-9,
+                "deg={deg} recovered={recovered}"
+            );
         }
     }
 
@@ -250,7 +256,14 @@ mod tests {
         assert_eq!(s.determinant(), 6.0);
 
         // Reflection: det should be -1
-        let reflect = AffineTransform2D { a: -1.0, b: 0.0, tx: 0.0, c: 0.0, d: 1.0, ty: 0.0 };
+        let reflect = AffineTransform2D {
+            a: -1.0,
+            b: 0.0,
+            tx: 0.0,
+            c: 0.0,
+            d: 1.0,
+            ty: 0.0,
+        };
         assert_eq!(reflect.determinant(), -1.0);
     }
 
@@ -287,7 +300,10 @@ mod tests {
         let t = AffineTransform2D::translation(5.0, -3.0);
         let inv = t.inverse().unwrap();
         let composed = t * inv;
-        assert!(transform_approx_eq(&composed, &AffineTransform2D::identity()));
+        assert!(transform_approx_eq(
+            &composed,
+            &AffineTransform2D::identity()
+        ));
     }
 
     #[test]
@@ -295,7 +311,10 @@ mod tests {
         let s = AffineTransform2D::scale(2.0, 4.0);
         let inv = s.inverse().unwrap();
         let composed = s * inv;
-        assert!(transform_approx_eq(&composed, &AffineTransform2D::identity()));
+        assert!(transform_approx_eq(
+            &composed,
+            &AffineTransform2D::identity()
+        ));
     }
 
     #[test]
@@ -303,23 +322,47 @@ mod tests {
         let r = AffineTransform2D::rotation(37.5);
         let inv = r.inverse().unwrap();
         let composed = r * inv;
-        assert!(transform_approx_eq(&composed, &AffineTransform2D::identity()));
+        assert!(transform_approx_eq(
+            &composed,
+            &AffineTransform2D::identity()
+        ));
     }
 
     #[test]
     fn test_inverse_singular() {
-        let singular = AffineTransform2D { a: 1.0, b: 2.0, tx: 0.0, c: 2.0, d: 4.0, ty: 0.0 };
+        let singular = AffineTransform2D {
+            a: 1.0,
+            b: 2.0,
+            tx: 0.0,
+            c: 2.0,
+            d: 4.0,
+            ty: 0.0,
+        };
         assert!(singular.inverse().is_none());
     }
 
     #[test]
     fn test_inverse_near_zero_det() {
         // det = 1e-14 < 1e-12 threshold — treated as singular
-        let t = AffineTransform2D { a: 1e-7, b: 0.0, tx: 0.0, c: 0.0, d: 1e-7, ty: 0.0 };
+        let t = AffineTransform2D {
+            a: 1e-7,
+            b: 0.0,
+            tx: 0.0,
+            c: 0.0,
+            d: 1e-7,
+            ty: 0.0,
+        };
         assert!(t.inverse().is_none());
 
         // det = 1e-11 > 1e-12 threshold — invertible despite being small
-        let t2 = AffineTransform2D { a: 1e-5, b: 0.0, tx: 0.0, c: 0.0, d: 1e-6, ty: 0.0 };
+        let t2 = AffineTransform2D {
+            a: 1e-5,
+            b: 0.0,
+            tx: 0.0,
+            c: 0.0,
+            d: 1e-6,
+            ty: 0.0,
+        };
         assert!(t2.inverse().is_some());
     }
 
@@ -340,13 +383,27 @@ mod tests {
         // SVG matrix(a,b,c,d,e,f) = column-major: x' = a*x + c*y + e, y' = b*x + d*y + f
         // Our fields: x' = a*x + b*y + tx, y' = c*x + d*y + ty
         // Mapping: svg_a=a, svg_b=c, svg_c=b, svg_d=d, svg_e=tx, svg_f=ty
-        let t = AffineTransform2D { a: 1.0, b: 2.0, tx: 5.0, c: 3.0, d: 4.0, ty: 6.0 };
+        let t = AffineTransform2D {
+            a: 1.0,
+            b: 2.0,
+            tx: 5.0,
+            c: 3.0,
+            d: 4.0,
+            ty: 6.0,
+        };
         assert_eq!(t.to_svg_matrix_coeffs(), (1.0, 3.0, 2.0, 4.0, 5.0, 6.0));
     }
 
     #[test]
     fn test_display() {
-        let t = AffineTransform2D { a: 1.0, b: 0.0, tx: 10.0, c: 0.0, d: 1.0, ty: 20.0 };
+        let t = AffineTransform2D {
+            a: 1.0,
+            b: 0.0,
+            tx: 10.0,
+            c: 0.0,
+            d: 1.0,
+            ty: 20.0,
+        };
         let s = t.to_string();
         assert_eq!(s, "matrix(1 0 0 1 10 20)");
     }
@@ -354,9 +411,19 @@ mod tests {
     #[test]
     fn test_reflection_inverse() {
         // Reflection across x-axis: det = -1
-        let reflect = AffineTransform2D { a: 1.0, b: 0.0, tx: 0.0, c: 0.0, d: -1.0, ty: 0.0 };
+        let reflect = AffineTransform2D {
+            a: 1.0,
+            b: 0.0,
+            tx: 0.0,
+            c: 0.0,
+            d: -1.0,
+            ty: 0.0,
+        };
         let inv = reflect.inverse().unwrap();
         let composed = reflect * inv;
-        assert!(transform_approx_eq(&composed, &AffineTransform2D::identity()));
+        assert!(transform_approx_eq(
+            &composed,
+            &AffineTransform2D::identity()
+        ));
     }
 }

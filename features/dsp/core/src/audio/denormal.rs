@@ -13,11 +13,7 @@ pub const FLUSH_THRESHOLD: f64 = 1.0e-100;
 /// Flush a single value to zero if it is inaudibly small.
 #[inline]
 pub fn flush(x: f64) -> f64 {
-    if x.abs() < FLUSH_THRESHOLD {
-        0.0
-    } else {
-        x
-    }
+    if x.abs() < FLUSH_THRESHOLD { 0.0 } else { x }
 }
 
 #[cfg(test)]

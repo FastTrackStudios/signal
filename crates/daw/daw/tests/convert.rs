@@ -6,7 +6,7 @@ fn ptx_to_rpp() {
     // A real PT fixture from the dawfile-protools crate.
     let input = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../../features/formats/dawfile-protools/tests/fixtures/HeyLady.ptx"
+        "/../../../features/formats/tests/fixtures/protools/HeyLady.ptx"
     );
     let out = std::env::temp_dir().join("daw_convert_test_heylady.rpp");
     daw::file::convert(input, &out).expect("convert ptx -> rpp");
@@ -25,7 +25,7 @@ fn ptx_to_rpp() {
 fn unsupported_output_errors() {
     let input = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../../features/formats/dawfile-protools/tests/fixtures/HeyLady.ptx"
+        "/../../../features/formats/tests/fixtures/protools/HeyLady.ptx"
     );
     let err = daw::file::convert(input, "out.als").unwrap_err();
     assert!(matches!(err, daw::file::ConvertError::UnsupportedOutput(_)));

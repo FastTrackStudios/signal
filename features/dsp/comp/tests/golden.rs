@@ -19,8 +19,8 @@ use comp::chain::CompChain;
 use comp::multiband::MultiBandCompressor;
 use comp::styles::CompressionStyle;
 use comp::{ProC3Compressor, gain_curve::GainCurve};
-use dsp_core::golden::{Golden, signal};
 use dsp_core::golden;
+use dsp_core::golden::{Golden, signal};
 
 dsp_core::install_counting_allocator!();
 

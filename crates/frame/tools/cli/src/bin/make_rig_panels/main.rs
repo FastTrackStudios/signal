@@ -71,7 +71,11 @@ fn envelope(t: f32) -> f32 {
 fn gain_reduction_db(env: f32) -> f32 {
     let db = 20.0 * env.max(1e-5).log10();
     let over = db + 18.0;
-    if over <= 0.0 { 0.0 } else { over * (1.0 - 1.0 / 4.0) }
+    if over <= 0.0 {
+        0.0
+    } else {
+        over * (1.0 - 1.0 / 4.0)
+    }
 }
 
 fn spectrum(t: f32, bins: usize) -> Vec<f32> {
@@ -79,9 +83,17 @@ fn spectrum(t: f32, bins: usize) -> Vec<f32> {
     let level = 20.0 * env.max(1e-5).log10();
     (0..bins)
         .map(|i| {
-            let frac = if bins > 1 { i as f32 / (bins - 1) as f32 } else { 0.0 };
+            let frac = if bins > 1 {
+                i as f32 / (bins - 1) as f32
+            } else {
+                0.0
+            };
             let hz = 20.0 * 1000f32.powf(frac);
-            let roll = if hz > 4000.0 { -24.0 * (hz / 4000.0).log10() } else { 0.0 };
+            let roll = if hz > 4000.0 {
+                -24.0 * (hz / 4000.0).log10()
+            } else {
+                0.0
+            };
             let mut shape = -6.0 * ((hz / 120.0).log10()).abs();
             for n in 1..=6 {
                 let partial = 82.41 * n as f32;
@@ -133,7 +145,9 @@ fn rig_spectrum(t: f32) -> Vec<f32> {
 
 fn smooth3(v: &[f32]) -> Vec<f32> {
     let n = v.len();
-    (0..n).map(|k| (2.0f32.mul_add(v[k], v[k.saturating_sub(1)]) + v[(k + 1).min(n - 1)]) / 4.0).collect()
+    (0..n)
+        .map(|k| (2.0f32.mul_add(v[k], v[k.saturating_sub(1)]) + v[(k + 1).min(n - 1)]) / 4.0)
+        .collect()
 }
 
 /// The feeds at `t`, as `id=v,v,…` lines (`render_surface --stream-file`).
@@ -144,7 +158,16 @@ pub fn feeds(t: f32) -> Vec<(String, Vec<f64>)> {
     // The compressor surface's display: input linear → dB over its 60 dB,
     // the GR ring (0..1 of 30 dB) onto the same 60. The component reads
     // dB (input) and dB ≤ 0 (reduction) and maps them the same way.
-    let in_db: Vec<f64> = input.iter().map(|&p| if p <= 0.0 { -120.0 } else { f64::from(20.0 * p.log10()) }).collect();
+    let in_db: Vec<f64> = input
+        .iter()
+        .map(|&p| {
+            if p <= 0.0 {
+                -120.0
+            } else {
+                f64::from(20.0 * p.log10())
+            }
+        })
+        .collect();
     let gr_db: Vec<f64> = gr.iter().map(|&g| -f64::from(g) * 30.0).collect();
     let now = f64::from(20.0 * envelope(t).max(1e-5).log10());
     let spectrum: Vec<f64> = rig_spectrum(t).into_iter().map(f64::from).collect();
@@ -196,7 +219,13 @@ pub fn catalog() -> Catalog {
     eq.extend(viz::catalog::eq_view_params("eq"));
     // `Amp EQ`: a 12 dB/oct low cut at 80 Hz, bells at 212, 420 (+1.6),
     // 1.4 k and 5.5 k.
-    for (n, f, g, shape) in [(1, 80.0, 0.0, 3.0), (2, 212.0, 0.0, 0.0), (3, 420.09, 1.6225, 0.0), (4, 1400.0, 0.0, 0.0), (5, 5500.0, 0.0, 0.0)] {
+    for (n, f, g, shape) in [
+        (1, 80.0, 0.0, 3.0),
+        (2, 212.0, 0.0, 0.0),
+        (3, 420.09, 1.6225, 0.0),
+        (4, 1400.0, 0.0, 0.0),
+        (5, 5500.0, 0.0, 0.0),
+    ] {
         set_real(&mut eq, &format!("eq/b{n}_used"), 1.0);
         set_real(&mut eq, &format!("eq/b{n}_on"), 1.0);
         set_real(&mut eq, &format!("eq/b{n}_freq"), f);
@@ -223,11 +252,18 @@ pub fn catalog() -> Catalog {
 
     // `DLY 1`: Tape, ¼ both sides, 223.6 ms, fb 0.28, −9.1 dB.
     // `DLY 2`: Shimmer (Pitch), dotted ⅛ both sides, 600 ms, fb 0.62, −20 dB.
-    for (ns, time, fb, level, div, family) in [("dly1", 223.6, 0.28, -9.118_637, 0.0, 1.0), ("dly2", 600.0, 0.62, -20.0, 1.0, 3.0)] {
+    for (ns, time, fb, level, div, family) in [
+        ("dly1", 223.6, 0.28, -9.118_637, 0.0, 1.0),
+        ("dly2", 600.0, 0.62, -20.0, 1.0, 3.0),
+    ] {
         let mut d = viz::lit_catalog::delay_params(ns);
         set_real(&mut d, &format!("{ns}/time"), time);
         set_real(&mut d, &format!("{ns}/feedback"), fb);
-        set_real(&mut d, &format!("{ns}/mix"), level_gain(level).clamp(0.02, 1.0));
+        set_real(
+            &mut d,
+            &format!("{ns}/mix"),
+            level_gain(level).clamp(0.02, 1.0),
+        );
         set_real(&mut d, &format!("{ns}/tap_div_l"), div);
         set_real(&mut d, &format!("{ns}/tap_div_r"), div);
         set_real(&mut d, &format!("{ns}/family"), family);
@@ -244,17 +280,40 @@ pub fn catalog() -> Catalog {
         set_real(&mut r, &format!("{ns}/predelay"), 0.0);
         set_real(&mut r, &format!("{ns}/density"), size);
         set_real(&mut r, &format!("{ns}/damp"), 0.0);
-        set_real(&mut r, &format!("{ns}/mix"), level_gain(level).clamp(0.02, 1.0).max(0.15));
+        set_real(
+            &mut r,
+            &format!("{ns}/mix"),
+            level_gain(level).clamp(0.02, 1.0).max(0.15),
+        );
         set_real(&mut r, &format!("{ns}/family"), 1.0);
         set_real(&mut r, &format!("{ns}/bpm"), BPM);
         params.extend(r);
     }
 
     let mut streams = viz::catalog::comp_streams("comp", 120);
-    streams.push(FeedInfo::new("eq/spectrum", "Spectrum", FeedKind::spectrum(96)));
-    streams.push(FeedInfo::new("eq/spectrum_pre", "Spectrum (pre)", FeedKind::spectrum(96)));
-    streams.push(FeedInfo::new("eq/sidechain", "Sidechain", FeedKind::spectrum(96)));
-    Catalog { id: "rig-panels".into(), version: 1, params, actions: Vec::new(), streams, collections: Vec::new() }
+    streams.push(FeedInfo::new(
+        "eq/spectrum",
+        "Spectrum",
+        FeedKind::spectrum(96),
+    ));
+    streams.push(FeedInfo::new(
+        "eq/spectrum_pre",
+        "Spectrum (pre)",
+        FeedKind::spectrum(96),
+    ));
+    streams.push(FeedInfo::new(
+        "eq/sidechain",
+        "Sidechain",
+        FeedKind::spectrum(96),
+    ));
+    Catalog {
+        id: "rig-panels".into(),
+        version: 1,
+        params,
+        actions: Vec::new(),
+        streams,
+        collections: Vec::new(),
+    }
 }
 
 // ── the surface ─────────────────────────────────────────────────────────
@@ -274,19 +333,48 @@ pub mod chrome_types {
     /// One thing the rig paints, in its paint order (rig px).
     pub enum Item {
         /// A visualizer widget's box (the next of [`super::WIDGETS`]).
-        Widget { x: f64, y: f64, w: f64, h: f64, opacity: f64 },
+        Widget {
+            x: f64,
+            y: f64,
+            w: f64,
+            h: f64,
+            opacity: f64,
+        },
         /// An element's background and border (`shadow`: a knob body's
         /// drop shadow and bevel), clipped to `clip`.
-        Box { x: f64, y: f64, w: f64, h: f64, r: f64, fill: Fill, stroke: Option<(&'static str, f64)>, shadow: bool, opacity: f64, clip: (f64, f64, f64, f64) },
+        Box {
+            x: f64,
+            y: f64,
+            w: f64,
+            h: f64,
+            r: f64,
+            fill: Fill,
+            stroke: Option<(&'static str, f64)>,
+            shadow: bool,
+            opacity: f64,
+            clip: (f64, f64, f64, f64),
+        },
         /// An SVG shape or a run of text as outlines, in rig px.
-        Path { d: &'static str, fill: &'static str, stroke: &'static str, weight: f64, round: bool, opacity: f64, clip: (f64, f64, f64, f64) },
+        Path {
+            d: &'static str,
+            fill: &'static str,
+            stroke: &'static str,
+            weight: f64,
+            round: bool,
+            opacity: f64,
+            clip: (f64, f64, f64, f64),
+        },
     }
 }
 
 /// The visualizers, in the rig's paint order: kit id, name, options.
 pub const WIDGETS: [(&str, &str, &[&str]); 8] = [
     ("viz.comp_scope", "Comp", &["ns=comp", "len=120", "on"]),
-    ("viz.eq_graph", "EQ", &["ns=eq", "bands=24", "f_max=24000", "no_range"]),
+    (
+        "viz.eq_graph",
+        "EQ",
+        &["ns=eq", "bands=24", "f_max=24000", "no_range"],
+    ),
     ("viz.mod_lfo", "Mod", &["ns=mod", "color=#7dd3fc"]),
     ("viz.mod_lfo", "Motion", &["ns=motion", "color=#ec4899"]),
     ("viz.delay_taps", "DLY 1", &["ns=dly1", "color=#3b82f6"]),
@@ -307,14 +395,25 @@ struct Doc {
 
 impl Doc {
     fn add(&mut self, parent: NodeId, node: document_proto::Node) -> NodeId {
-        Builder { scene: &mut self.scene, controls: &mut self.controls, theme: &self.theme }.add(parent, node)
+        Builder {
+            scene: &mut self.scene,
+            controls: &mut self.controls,
+            theme: &self.theme,
+        }
+        .add(parent, node)
     }
 
     /// Kit component `id` at the rig's absolute (x, y).
     fn place(&mut self, id: &str, (x, y): (f64, f64), p: &Place) -> NodeId {
-        let mut b = Builder { scene: &mut self.scene, controls: &mut self.controls, theme: &self.theme };
-        let node = surface_kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
-        self.scene.node_mut(node).expect("placed").transform = Transform::translate(x - ORIGIN.0, y - ORIGIN.1);
+        let mut b = Builder {
+            scene: &mut self.scene,
+            controls: &mut self.controls,
+            theme: &self.theme,
+        };
+        let node =
+            surface_kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
+        self.scene.node_mut(node).expect("placed").transform =
+            Transform::translate(x - ORIGIN.0, y - ORIGIN.1);
         node
     }
 
@@ -346,8 +445,19 @@ pub fn surface() -> Surface {
     root.fills = vec![draw::solid("#0a0a0a")];
     root.clips_content = true;
     let root_id = root.id;
-    scene.apply(document_proto::Op::Insert { node: root, parent: page, index: 0 }).expect("page exists");
-    let mut d = Doc { scene, controls: BTreeMap::new(), root: root_id, theme: Theme::stage_dark() };
+    scene
+        .apply(document_proto::Op::Insert {
+            node: root,
+            parent: page,
+            index: 0,
+        })
+        .expect("page exists");
+    let mut d = Doc {
+        scene,
+        controls: BTreeMap::new(),
+        root: root_id,
+        theme: Theme::stage_dark(),
+    };
 
     let mut widgets = WIDGETS.iter();
     // The open clipping group: consecutive items under one clip share it.
@@ -362,9 +472,17 @@ pub fn surface() -> Surface {
     };
     for item in chrome::ITEMS {
         match item {
-            Item::Widget { x, y, w, h, opacity } => {
+            Item::Widget {
+                x,
+                y,
+                w,
+                h,
+                opacity,
+            } => {
                 open = None;
-                let Some((id, name, options)) = widgets.next() else { continue };
+                let Some((id, name, options)) = widgets.next() else {
+                    continue;
+                };
                 let hopt = format!("h={h}");
                 let mut opts: Vec<&str> = options.to_vec();
                 opts.push(&hopt);
@@ -373,12 +491,35 @@ pub fn surface() -> Surface {
                     n.opacity = *opacity;
                 }
             }
-            Item::Box { x, y, w, h, r, fill, stroke, shadow, opacity, clip } => {
+            Item::Box {
+                x,
+                y,
+                w,
+                h,
+                r,
+                fill,
+                stroke,
+                shadow,
+                opacity,
+                clip,
+            } => {
                 let g = group(&mut d, &mut open, *clip);
-                let mut n = draw::rect("box", x - clip.0, y - clip.1, *w, *h, draw::solid("#00000000"));
+                let mut n = draw::rect(
+                    "box",
+                    x - clip.0,
+                    y - clip.1,
+                    *w,
+                    *h,
+                    draw::solid("#00000000"),
+                );
                 n.fills = paint_of(fill).into_iter().collect();
                 if let Some((c, weight)) = stroke {
-                    n.stroke = Stroke { paints: vec![draw::solid(c)], weight: *weight, align: StrokeAlign::Inside, ..Stroke::default() };
+                    n.stroke = Stroke {
+                        paints: vec![draw::solid(c)],
+                        weight: *weight,
+                        align: StrokeAlign::Inside,
+                        ..Stroke::default()
+                    };
                 }
                 let mut n = draw::rounded(n, *r);
                 if *shadow {
@@ -393,20 +534,54 @@ pub fn surface() -> Surface {
                 n.opacity = *opacity;
                 d.add(g, n);
             }
-            Item::Path { d: path, fill, stroke, weight, round, opacity, clip } => {
+            Item::Path {
+                d: path,
+                fill,
+                stroke,
+                weight,
+                round,
+                opacity,
+                clip,
+            } => {
                 let g = group(&mut d, &mut open, *clip);
-                let mut n = draw::path("shape", -clip.0, -clip.1, 1600.0, 1000.0, (*path).to_string(), draw::solid("#00000000"));
-                n.fills = if fill.is_empty() { Vec::new() } else { vec![draw::solid(fill)] };
+                let mut n = draw::path(
+                    "shape",
+                    -clip.0,
+                    -clip.1,
+                    1600.0,
+                    1000.0,
+                    (*path).to_string(),
+                    draw::solid("#00000000"),
+                );
+                n.fills = if fill.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![draw::solid(fill)]
+                };
                 if !stroke.is_empty() {
-                    let cap = if *round { StrokeCap::Round } else { StrokeCap::None };
-                    n.stroke = Stroke { paints: vec![draw::solid(stroke)], weight: *weight, cap, join: StrokeJoin::Round, align: StrokeAlign::Center, ..Stroke::default() };
+                    let cap = if *round {
+                        StrokeCap::Round
+                    } else {
+                        StrokeCap::None
+                    };
+                    n.stroke = Stroke {
+                        paints: vec![draw::solid(stroke)],
+                        weight: *weight,
+                        cap,
+                        join: StrokeJoin::Round,
+                        align: StrokeAlign::Center,
+                        ..Stroke::default()
+                    };
                 }
                 n.opacity = *opacity;
                 d.add(g, n);
             }
         }
     }
-    Surface { scene: d.scene, controls: d.controls }
+    Surface {
+        scene: d.scene,
+        controls: d.controls,
+    }
 }
 
 fn main() {
@@ -426,7 +601,18 @@ fn main() {
     let surface = surface();
     let text = document_text::print(&surface.to_scene());
     let json = serde_json::to_string_pretty(&catalog()).expect("catalogs serialize");
-    let lines: Vec<String> = feeds(t).into_iter().map(|(id, v)| format!("{id}={}", v.iter().map(|x| format!("{x:.3}")).collect::<Vec<_>>().join(","))).collect();
+    let lines: Vec<String> = feeds(t)
+        .into_iter()
+        .map(|(id, v)| {
+            format!(
+                "{id}={}",
+                v.iter()
+                    .map(|x| format!("{x:.3}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        })
+        .collect();
     let write = |name: &str, body: String| {
         let path = dir.join(name);
         if let Err(e) = std::fs::write(&path, body) {
@@ -452,14 +638,25 @@ mod tests {
     /// round-trips through markup and lints clean.
     #[test]
     fn the_row_round_trips_and_lints_clean() {
-        let chrome_widgets = chrome::ITEMS.iter().filter(|i| matches!(i, chrome_types::Item::Widget { .. })).count();
-        assert_eq!(chrome_widgets, WIDGETS.len(), "one kit component per rig widget");
+        let chrome_widgets = chrome::ITEMS
+            .iter()
+            .filter(|i| matches!(i, chrome_types::Item::Widget { .. }))
+            .count();
+        assert_eq!(
+            chrome_widgets,
+            WIDGETS.len(),
+            "one kit component per rig widget"
+        );
         let scene = surface().to_scene();
         let text = document_text::print(&scene);
         let back = document_text::parse(&text, scene.assets.clone()).expect("parses");
         assert_eq!(back, scene);
         let issues = design_lint::lint(&scene, &catalog(), &design_lint::Config::default());
-        let errors: Vec<String> = issues.iter().filter(|i| i.severity == design_lint::Severity::Error).map(ToString::to_string).collect();
+        let errors: Vec<String> = issues
+            .iter()
+            .filter(|i| i.severity == design_lint::Severity::Error)
+            .map(ToString::to_string)
+            .collect();
         assert!(errors.is_empty(), "{}", errors.join("\n"));
     }
 
@@ -467,29 +664,55 @@ mod tests {
     /// and every lit shader's inputs resolve from the checked-in feeds.
     #[test]
     fn the_checked_in_row_plays_against_its_catalog_and_feeds() {
-        let text = std::fs::read_to_string(dir().join("13-rig-panels.frame")).expect("run make_rig_panels");
+        let text = std::fs::read_to_string(dir().join("13-rig-panels.frame"))
+            .expect("run make_rig_panels");
         let json = std::fs::read_to_string(dir().join("rig-panels.catalog.json")).unwrap();
         let catalog: Catalog = serde_json::from_str(&json).unwrap();
         let surface = Surface::from_scene(document_text::parse(&text, BTreeMap::new()).unwrap());
-        assert_eq!(surface.controls.len(), super::surface().controls.len(), "13-rig-panels.frame is stale: run make_rig_panels");
+        assert_eq!(
+            surface.controls.len(),
+            super::surface().controls.len(),
+            "13-rig-panels.frame is stale: run make_rig_panels"
+        );
         for (id, c) in &surface.controls {
             let issues = c.validate(&catalog);
-            assert!(issues.is_empty(), "{}: {issues:?}", surface.scene.node(*id).map_or("?", |n| n.name.as_str()));
+            assert!(
+                issues.is_empty(),
+                "{}: {issues:?}",
+                surface.scene.node(*id).map_or("?", |n| n.name.as_str())
+            );
         }
         let mut rt = surface_runtime::Runtime::new(surface, catalog);
         let feeds = std::fs::read_to_string(dir().join("rig-panels.feeds")).unwrap();
         for line in feeds.lines().filter(|l| !l.is_empty()) {
             let (id, v) = line.split_once('=').unwrap();
             let values = v.split(',').map(|x| x.parse::<f64>().unwrap()).collect();
-            rt.apply_frame(surface_proto::StreamFrame { id: surface_proto::EntryId::new(id), values }, 0.0);
+            rt.apply_frame(
+                surface_proto::StreamFrame {
+                    id: surface_proto::EntryId::new(id),
+                    values,
+                },
+                0.0,
+            );
         }
         rt.set_clock(1.0);
         let inputs = rt.shader_inputs();
-        let shaders: Vec<_> = rt.surface().scene.nodes.values().filter_map(|n| n.shader.as_ref().map(|s| (n.id, s))).collect();
+        let shaders: Vec<_> = rt
+            .surface()
+            .scene
+            .nodes
+            .values()
+            .filter_map(|n| n.shader.as_ref().map(|s| (n.id, s)))
+            .collect();
         assert_eq!(shaders.len(), 8, "a light per visualizer");
         for (id, fx) in shaders {
             for i in &fx.inputs {
-                assert!(inputs[&id].contains_key(&i.name), "{}: input `{}` has no data", fx.shader, i.name);
+                assert!(
+                    inputs[&id].contains_key(&i.name),
+                    "{}: input `{}` has no data",
+                    fx.shader,
+                    i.name
+                );
             }
         }
     }
@@ -499,11 +722,20 @@ mod tests {
     #[test]
     fn the_feeds_are_the_design_rigs() {
         let f = feeds(T);
-        let get = |id: &str| f.iter().find(|(k, _)| k == id).map(|(_, v)| v.clone()).unwrap();
+        let get = |id: &str| {
+            f.iter()
+                .find(|(k, _)| k == id)
+                .map(|(_, v)| v.clone())
+                .unwrap()
+        };
         assert_eq!(get("eq/spectrum").len(), 96);
         assert!(get("eq/spectrum").iter().all(|v| (-90.0..=0.0).contains(v)));
         assert_eq!(get("comp/in_history").len(), 120);
-        assert!(get("comp/gr_history").iter().all(|v| (-30.0..=0.0).contains(v)));
+        assert!(
+            get("comp/gr_history")
+                .iter()
+                .all(|v| (-30.0..=0.0).contains(v))
+        );
         // Before the first pluck the instrument sits at its −28 dB floor.
         assert!((get("comp/in_history")[0] - 20.0 * 0.04f64.log10()).abs() < 0.5);
     }

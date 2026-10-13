@@ -38,11 +38,11 @@
 
 use std::fmt::Write as _;
 
-use daw_ui::theme::Color as Tc;
 use daw_ui::art::geometry::mcp as g;
 use daw_ui::art::mixer_controls::Interaction;
 use daw_ui::art::paint::tcp as art;
 use daw_ui::art::paint::{Align, Brush, Drawing, Op, Shape};
+use daw_ui::theme::Color as Tc;
 use vello::kurbo::Shape as _;
 
 use crate::arrangement::Palette;

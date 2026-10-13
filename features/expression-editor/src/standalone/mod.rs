@@ -46,15 +46,15 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::audio::{AudioSession, TakeConfig};
+use crate::daw::Session;
+use crate::ui::demo::{self, Scene};
+use crate::ui::workflow::Workflow;
+use crate::{Editor, Mode, Viewport};
 use daw::service::midi::MidiTakeLocation;
 use daw::service::{ItemRef, Items, ProjectContext, TakeRef, Takes, Tracks};
 use daw::standalone::Standalone;
 use daw::standalone::project_loader::load_rpp_text;
-use crate::audio::{AudioSession, TakeConfig};
-use crate::{Editor, Mode, Viewport};
-use crate::daw::Session;
-use crate::ui::demo::{self, Scene};
-use crate::ui::workflow::Workflow;
 
 pub mod app;
 pub mod cli;
@@ -575,7 +575,14 @@ impl Runner {
         opened: &OpenProject,
         kit_folder: Option<&str>,
         viewport: Viewport,
-    ) -> Result<(String, Editor, std::sync::Arc<crate::standalone::drum_host::DrumHost>), LoadError> {
+    ) -> Result<
+        (
+            String,
+            Editor,
+            std::sync::Arc<crate::standalone::drum_host::DrumHost>,
+        ),
+        LoadError,
+    > {
         let built = drum_workspace(
             &opened.daw,
             opened.ctx.clone(),
@@ -751,9 +758,7 @@ fn candidate_items(
 }
 
 // Compatibility exports: applications should use expression-editor-host directly.
-pub use crate::host::{
-    DrumWorkspace, attach_timeline, bar_grid, read_take_mono, track_timeline,
-};
+pub use crate::host::{DrumWorkspace, attach_timeline, bar_grid, read_take_mono, track_timeline};
 
 pub fn drum_workspace<D: crate::audio::daw_bound::DrumDaw>(
     daw: &D,
@@ -763,16 +768,15 @@ pub fn drum_workspace<D: crate::audio::daw_bound::DrumDaw>(
     viewport: Viewport,
     cache_in: Option<&std::path::Path>,
 ) -> Result<DrumWorkspace<D>, LoadError> {
-    crate::host::drum_workspace(daw, ctx, name, kit_folder, viewport, cache_in).map_err(
-        |e| match e {
-            crate::host::WorkspaceError::NoKitFolder { project, wanted } => {
-                LoadError::NoKitFolder { project, wanted }
-            }
-            crate::host::WorkspaceError::NoEditableItem { project, items } => {
-                LoadError::NoEditableItem { project, items }
-            }
-        },
-    )
+    crate::host::drum_workspace(daw, ctx, name, kit_folder, viewport, cache_in).map_err(|e| match e
+    {
+        crate::host::WorkspaceError::NoKitFolder { project, wanted } => {
+            LoadError::NoKitFolder { project, wanted }
+        }
+        crate::host::WorkspaceError::NoEditableItem { project, items } => {
+            LoadError::NoEditableItem { project, items }
+        }
+    })
 }
 
 /// A project with nothing in it, so a file-backed session has a context

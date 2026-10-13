@@ -20,6 +20,9 @@ keyflow = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+chords = { path = ".", features = ["daw"] }
 daw = { workspace = true, features = ["test-harness", "reaper"] }
 dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
 eyre = { workspace = true }

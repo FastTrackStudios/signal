@@ -78,11 +78,46 @@ fn main() {
         }
     }
 
-    merge!(ModuleLib, "modules.styx", presets, |p: &guitar::compose::ModulePresetDef| format!("{}\t{}", p.module, p.name), src, dst);
-    merge!(PresetLib, "presets.styx", presets, |p: &guitar::compose::RigPresetDef| p.name.clone(), src, dst);
-    merge!(BlockLib, "blocks.styx", presets, |p: &guitar::compose::BlockPresetDef| format!("{}\t{}", p.block_type, p.name), src, dst);
-    merge!(ToneLib, "tones.styx", tones, |t: &guitar::compose::ToneDef| t.name.clone(), src, dst);
-    merge!(DrivePresetLib, "drive-presets.styx", presets, |p: &guitar::profiles::DrivePresetDef| p.name.clone(), src, dst);
+    merge!(
+        ModuleLib,
+        "modules.styx",
+        presets,
+        |p: &guitar::compose::ModulePresetDef| format!("{}\t{}", p.module, p.name),
+        src,
+        dst
+    );
+    merge!(
+        PresetLib,
+        "presets.styx",
+        presets,
+        |p: &guitar::compose::RigPresetDef| p.name.clone(),
+        src,
+        dst
+    );
+    merge!(
+        BlockLib,
+        "blocks.styx",
+        presets,
+        |p: &guitar::compose::BlockPresetDef| format!("{}\t{}", p.block_type, p.name),
+        src,
+        dst
+    );
+    merge!(
+        ToneLib,
+        "tones.styx",
+        tones,
+        |t: &guitar::compose::ToneDef| t.name.clone(),
+        src,
+        dst
+    );
+    merge!(
+        DrivePresetLib,
+        "drive-presets.styx",
+        presets,
+        |p: &guitar::profiles::DrivePresetDef| p.name.clone(),
+        src,
+        dst
+    );
     // Songs: the library's are the player's own — their sections and the
     // patches they play — so its version of a song replaces the shipped one.
     {
@@ -91,7 +126,11 @@ fn main() {
         if let (Some(from), Some(mut to)) = (from, read::<SongLib>(&to_path)) {
             let mut taken = 0;
             for song in &from.songs {
-                match to.songs.iter_mut().find(|x| x.name.eq_ignore_ascii_case(&song.name)) {
+                match to
+                    .songs
+                    .iter_mut()
+                    .find(|x| x.name.eq_ignore_ascii_case(&song.name))
+                {
                     Some(x) => *x = song.clone(),
                     None => to.songs.push(song.clone()),
                 }
@@ -101,24 +140,50 @@ fn main() {
             println!("{:<20} {taken} from the library", "songs.styx");
         }
     }
-    merge!(SetlistLib, "setlists.styx", setlists, |s: &guitar::profiles::SetlistDef| s.name.clone(), src, dst);
+    merge!(
+        SetlistLib,
+        "setlists.styx",
+        setlists,
+        |s: &guitar::profiles::SetlistDef| s.name.clone(),
+        src,
+        dst
+    );
 
     // Profiles: new ones added; `--take` ones replace the shipped copy.
     let shipped: Vec<String> = std::fs::read_dir(dst.join("profiles"))
-        .map(|rd| rd.filter_map(Result::ok).filter_map(|e| read::<ProfileDef>(&e.path())).map(|p| p.name.to_lowercase()).collect())
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .filter_map(|e| read::<ProfileDef>(&e.path()))
+                .map(|p| p.name.to_lowercase())
+                .collect()
+        })
         .unwrap_or_default();
-    for entry in std::fs::read_dir(src.join("profiles")).expect("the library's profiles").filter_map(Result::ok) {
+    for entry in std::fs::read_dir(src.join("profiles"))
+        .expect("the library's profiles")
+        .filter_map(Result::ok)
+    {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("styx") {
             continue;
         }
-        let Some(p) = read::<ProfileDef>(&path) else { continue };
+        let Some(p) = read::<ProfileDef>(&path) else {
+            continue;
+        };
         let name = p.name.to_lowercase();
         if shipped.contains(&name) && !take.contains(&name) {
             println!("profile {:<12} kept", p.name);
             continue;
         }
-        std::fs::copy(&path, dst.join("profiles").join(entry.file_name())).expect("copy the profile");
-        println!("profile {:<12} {}", p.name, if shipped.contains(&name) { "taken" } else { "added" });
+        std::fs::copy(&path, dst.join("profiles").join(entry.file_name()))
+            .expect("copy the profile");
+        println!(
+            "profile {:<12} {}",
+            p.name,
+            if shipped.contains(&name) {
+                "taken"
+            } else {
+                "added"
+            }
+        );
     }
 }

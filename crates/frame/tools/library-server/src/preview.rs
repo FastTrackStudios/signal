@@ -17,7 +17,9 @@ pub fn previewer() -> Option<Previewer> {
         Ok(gpu) => {
             let gpu = Arc::new(Mutex::new(gpu));
             Some(Arc::new(move |scene: &Scene| {
-                let mut gpu = gpu.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                let mut gpu = gpu
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 match thumbnail(&mut gpu, scene) {
                     Ok(png) => Some(png),
                     Err(e) => {
@@ -38,13 +40,19 @@ pub fn previewer() -> Option<Previewer> {
 fn thumbnail(gpu: &mut Offscreen, scene: &Scene) -> Result<Vec<u8>, String> {
     let page = *scene.pages().first().ok_or("no page")?;
     let boxes = render::build_scene_layout_boxes(scene, page);
-    let top = scene.node(page).and_then(|p| p.children.first().copied()).ok_or("empty page")?;
+    let top = scene
+        .node(page)
+        .and_then(|p| p.children.first().copied())
+        .ok_or("empty page")?;
     let b = boxes.get(&top).ok_or("no layout for the top node")?;
     if b.width <= 0.0 || b.height <= 0.0 {
         return Err("empty design".into());
     }
     let scale = WIDTH / b.width;
-    let (w, h) = ((b.width * scale).ceil() as u32, (b.height * scale).ceil().min(WIDTH * 2.0) as u32);
+    let (w, h) = (
+        (b.width * scale).ceil() as u32,
+        (b.height * scale).ceil().min(WIDTH * 2.0) as u32,
+    );
     let base = scene
         .node(top)
         .and_then(|n| n.fills.iter().rev().find(|p| p.visible))
@@ -64,6 +72,7 @@ fn thumbnail(gpu: &mut Offscreen, scene: &Scene) -> Result<Vec<u8>, String> {
     })?;
     let img = image::RgbaImage::from_raw(px.width, px.height, px.rgba).ok_or("bad pixel buffer")?;
     let mut out = std::io::Cursor::new(Vec::new());
-    img.write_to(&mut out, image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    img.write_to(&mut out, image::ImageFormat::Png)
+        .map_err(|e| e.to_string())?;
     Ok(out.into_inner())
 }

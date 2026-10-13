@@ -22,7 +22,12 @@ use surface_widgets::Builder;
 use crate::face::Face;
 
 pub fn faces() -> Vec<Face> {
-    vec![program::face(), console::face(), proportional::face(), classa::face()]
+    vec![
+        program::face(),
+        console::face(),
+        proportional::face(),
+        classa::face(),
+    ]
 }
 
 /// Repaint a placed panel: the unit's own paint, top to bottom.
@@ -34,7 +39,34 @@ fn paint(b: &mut Builder<'_>, panel: NodeId, stops: &[(f64, &str)]) {
 
 /// A slotted round-head panel screw of diameter `d`, the slot at `angle`.
 fn screw(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, d: f64, angle: f64) {
-    let head = draw::circle("screw", cx, cy, d / 2.0, draw::radial_at(0.36, 0.3, 0.85, &[(0.0, "#f1f1ed"), (0.45, "#b9bab5"), (1.0, "#5d5e5a")]));
-    b.add(parent, draw::with_effects(head, vec![draw::drop_shadow("#00000080", 0.6, 1.2, 1.6)]));
-    b.add(parent, draw::rotated(draw::rect("slot", cx - d * 0.38, cy - d * 0.07, d * 0.76, d * 0.14, draw::solid("#2b2b29d0")), angle));
+    let head = draw::circle(
+        "screw",
+        cx,
+        cy,
+        d / 2.0,
+        draw::radial_at(
+            0.36,
+            0.3,
+            0.85,
+            &[(0.0, "#f1f1ed"), (0.45, "#b9bab5"), (1.0, "#5d5e5a")],
+        ),
+    );
+    b.add(
+        parent,
+        draw::with_effects(head, vec![draw::drop_shadow("#00000080", 0.6, 1.2, 1.6)]),
+    );
+    b.add(
+        parent,
+        draw::rotated(
+            draw::rect(
+                "slot",
+                cx - d * 0.38,
+                cy - d * 0.07,
+                d * 0.76,
+                d * 0.14,
+                draw::solid("#2b2b29d0"),
+            ),
+            angle,
+        ),
+    );
 }

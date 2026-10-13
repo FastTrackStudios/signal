@@ -1,11 +1,12 @@
 use formats::ableton::*;
 
 fn farmhouse() -> AbletonLiveSet {
-    read_live_set("tests/ableton_fixtures/Farmhouse.als").expect("failed to parse Farmhouse.als")
+    read_live_set("tests/fixtures/ableton/Farmhouse.als").expect("failed to parse Farmhouse.als")
 }
 
 fn lucid_dreaming() -> AbletonLiveSet {
-    read_live_set("tests/ableton_fixtures/LucidDreaming.als").expect("failed to parse LucidDreaming.als")
+    read_live_set("tests/fixtures/ableton/LucidDreaming.als")
+        .expect("failed to parse LucidDreaming.als")
 }
 
 // ─── Version detection ──────────────────────────────────────────────────────
@@ -391,7 +392,7 @@ fn round_trip_farmhouse() {
 
 #[test]
 fn invalid_file_returns_error() {
-    let result = read_live_set("tests/fixtures/nonexistent.als");
+    let result = read_live_set("tests/fixtures/ableton/nonexistent.als");
     assert!(result.is_err());
 }
 

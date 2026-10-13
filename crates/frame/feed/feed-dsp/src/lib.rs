@@ -72,5 +72,9 @@ pub const FLOOR_DB: f64 = -120.0;
 #[must_use]
 #[inline]
 pub fn amp_to_db(amp: f64) -> f64 {
-    if amp > 1e-6 { (20.0 * amp.log10()).max(FLOOR_DB) } else { FLOOR_DB }
+    if amp > 1e-6 {
+        (20.0 * amp.log10()).max(FLOOR_DB)
+    } else {
+        FLOOR_DB
+    }
 }

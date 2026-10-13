@@ -18,7 +18,11 @@ fn emission_and_shader_round_trip() {
     let mut ops = Vec::new();
     for n in nodes {
         let parent = n.parent.unwrap_or(page);
-        ops.push(document_proto::Op::Insert { node: n, parent, index: u32::MAX });
+        ops.push(document_proto::Op::Insert {
+            node: n,
+            parent,
+            index: u32::MAX,
+        });
     }
     scene.transact(ops).unwrap();
     let back = document_text::parse(&document_text::print(&scene), scene.assets.clone()).unwrap();

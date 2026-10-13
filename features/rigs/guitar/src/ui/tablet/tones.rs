@@ -6,10 +6,10 @@
 //! TONE3000 link, so this device needs no TONE3000 authorization of its
 //! own); its page opens through the shell's `UrlOpener`.
 
-use dioxus::prelude::*;
-use signal_account_proto::account::AccountAuthClient;
 use crate::proto::rig::RigClient;
 use crate::proto::{CaptureImport, ImportOutcome};
+use dioxus::prelude::*;
+use signal_account_proto::account::AccountAuthClient;
 use signal_tone3000_proto::tone3000::Tone3000Client;
 use signal_tone3000_proto::{PickedTone, ToneQuery, ToneSummary};
 use signal_tone3000_ui::{ToneArt, UrlOpener, use_art_cache, use_tone3000_state};
@@ -34,7 +34,9 @@ pub fn slot_of(block: &str, block_type: &str) -> Option<String> {
     // The Drive module: the drive block it was opened from, else its first.
     if t == "module:drive" {
         let b = block.to_lowercase();
-        let slot = (b.starts_with("drive ") || b.starts_with("boost")).then(|| block.to_string()).unwrap_or_else(|| "Drive 1".into());
+        let slot = (b.starts_with("drive ") || b.starts_with("boost"))
+            .then(|| block.to_string())
+            .unwrap_or_else(|| "Drive 1".into());
         return Some(slot);
     }
     None
@@ -86,7 +88,19 @@ pub fn TonesPanel(slot: String) -> Element {
             searching.set(true);
             spawn(async move {
                 if let Some(c) = client {
-                    let q = ToneQuery { text, gears, format: "nam".into(), sort: if query.peek().trim().is_empty() { "trending".into() } else { String::new() }, page: 1, page_size: 30, architecture: String::new() };
+                    let q = ToneQuery {
+                        text,
+                        gears,
+                        format: "nam".into(),
+                        sort: if query.peek().trim().is_empty() {
+                            "trending".into()
+                        } else {
+                            String::new()
+                        },
+                        page: 1,
+                        page_size: 30,
+                        architecture: String::new(),
+                    };
                     match c.search(q).await {
                         Ok(page) => {
                             error.set(page.error.clone());
@@ -133,30 +147,48 @@ pub fn TonesPanel(slot: String) -> Element {
     // The download asked for landed: load it into the slot.
     use_effect(move || {
         let map = downloads.read();
-        let Some((tone, model_id, model_name)) = wanted.peek().clone() else { return };
+        let Some((tone, model_id, model_name)) = wanted.peek().clone() else {
+            return;
+        };
         let Some(p) = map.get(&model_id) else { return };
         if !p.done {
             return;
         }
         wanted.set(None);
         if !p.error.is_empty() {
-            outcome.set(Some(ImportOutcome { ok: false, message: p.error.clone(), ..ImportOutcome::default() }));
+            outcome.set(Some(ImportOutcome {
+                ok: false,
+                message: p.error.clone(),
+                ..ImportOutcome::default()
+            }));
             return;
         }
-        let import = CaptureImport { name: model_name, path: p.path.clone(), gear: tone.gear.clone(), group: tone.name.clone(), slot: slot.clone() };
+        let import = CaptureImport {
+            name: model_name,
+            path: p.path.clone(),
+            gear: tone.gear.clone(),
+            group: tone.name.clone(),
+            slot: slot.clone(),
+        };
         let rig = rig.clone();
         spawn(async move {
             if let Some(r) = rig {
                 match r.load_capture(import).await {
                     Ok(o) => outcome.set(Some(o)),
-                    Err(e) => outcome.set(Some(ImportOutcome { ok: false, message: format!("{e:?}"), ..ImportOutcome::default() })),
+                    Err(e) => outcome.set(Some(ImportOutcome {
+                        ok: false,
+                        message: format!("{e:?}"),
+                        ..ImportOutcome::default()
+                    })),
                 }
             }
         });
     });
 
     let signed_in = status.read().signed_in;
-    let row = format!("width: 100%; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px; border: none; border-bottom: 1px solid {RULE}; background: transparent; color: {INK}; text-align: left; font-family: inherit; cursor: pointer;");
+    let row = format!(
+        "width: 100%; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px; border: none; border-bottom: 1px solid {RULE}; background: transparent; color: {INK}; text-align: left; font-family: inherit; cursor: pointer;"
+    );
 
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column; font-family: {FONT}; color: {INK};",

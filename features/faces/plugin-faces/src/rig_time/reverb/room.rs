@@ -805,7 +805,13 @@ pub fn tall(dark: bool) -> Face {
     let l = if dark { &DARK } else { &LIGHT };
     let scene = kit::tall_lane(NAME, |b, root| {
         let panel = ground(b, root, (kit::TALL_W, kit::TALL_H), l);
-        picture(b, panel, (10.0, 10.0, kit::TALL_W - 20.0, ROWS.split - 16.0), 50.0, l);
+        picture(
+            b,
+            panel,
+            (10.0, 10.0, kit::TALL_W - 20.0, ROWS.split - 16.0),
+            50.0,
+            l,
+        );
         let t = kit::Tall {
             ns: VERB,
             main: &[

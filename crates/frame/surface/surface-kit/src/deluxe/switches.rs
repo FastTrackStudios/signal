@@ -26,28 +26,148 @@ fn hex_stomp(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let w = (2.0 * nr + 6.0 * k + led_w).max(p.touch.unwrap_or(0.0));
     let h = (2.0 * nr + drop + 6.0 * k).max(p.touch.unwrap_or(0.0));
     let root = b.add(parent, draw::frame(&p.name, 0.0, 0.0, w, h));
-    let x0 = if side == "left" { w - nr - 3.0 * k } else { nr + 3.0 * k };
+    let x0 = if side == "left" {
+        w - nr - 3.0 * k
+    } else {
+        nr + 3.0 * k
+    };
     let y0 = nr + 3.0 * k;
     let ny = y0 + drop;
-    let mut c = p.control(if p.flag("momentary") { ControlKind::Button { mode: ButtonMode::Momentary } } else { ControlKind::footswitch() });
+    let mut c = p.control(if p.flag("momentary") {
+        ControlKind::Button {
+            mode: ButtonMode::Momentary,
+        }
+    } else {
+        ControlKind::footswitch()
+    });
 
-    let sh = draw::path("shadow", 0.0, 0.0, w, h, ellipse_d(x0, ny + 3.0 * k, nr, nr * 0.9), draw::solid("#00000073"));
-    b.add(root, draw::with_effects(sh, vec![draw::drop_shadow("#00000059", 0.0, 3.0 * k, 5.0 * k)]));
-    let nut = draw::path("nut", 0.0, 0.0, w, h, draw::regular(x0, ny, nr, 6, 0.0), draw::linear(150.0, &[(0.0, f.hi), (0.4, f.mid), (0.62, f.lo), (1.0, f.mid)]));
-    b.add(root, draw::with_effects(draw::stroked(nut, &alpha(f.lo, 0.9), 0.6 * k), vec![draw::inner_shadow("#ffffff55", 0.0, 1.0 * k, 1.0 * k)]));
-    let washer = draw::circle("washer", x0, ny, nr * 0.74, draw::conic(0.0, &[(0.0, f.hi), (0.22, f.lo), (0.45, f.hi), (0.72, f.lo), (1.0, f.hi)]));
+    let sh = draw::path(
+        "shadow",
+        0.0,
+        0.0,
+        w,
+        h,
+        ellipse_d(x0, ny + 3.0 * k, nr, nr * 0.9),
+        draw::solid("#00000073"),
+    );
+    b.add(
+        root,
+        draw::with_effects(
+            sh,
+            vec![draw::drop_shadow("#00000059", 0.0, 3.0 * k, 5.0 * k)],
+        ),
+    );
+    let nut = draw::path(
+        "nut",
+        0.0,
+        0.0,
+        w,
+        h,
+        draw::regular(x0, ny, nr, 6, 0.0),
+        draw::linear(
+            150.0,
+            &[(0.0, f.hi), (0.4, f.mid), (0.62, f.lo), (1.0, f.mid)],
+        ),
+    );
+    b.add(
+        root,
+        draw::with_effects(
+            draw::stroked(nut, &alpha(f.lo, 0.9), 0.6 * k),
+            vec![draw::inner_shadow("#ffffff55", 0.0, 1.0 * k, 1.0 * k)],
+        ),
+    );
+    let washer = draw::circle(
+        "washer",
+        x0,
+        ny,
+        nr * 0.74,
+        draw::conic(
+            0.0,
+            &[
+                (0.0, f.hi),
+                (0.22, f.lo),
+                (0.45, f.hi),
+                (0.72, f.lo),
+                (1.0, f.hi),
+            ],
+        ),
+    );
     b.add(root, draw::stroked(washer, &alpha(f.lo, 0.8), 0.5 * k));
     // The locking slot at the nut's front.
-    b.add(root, draw::rounded(draw::rect("slot", x0 - d * 0.12, ny + nr * 0.6, d * 0.24, d * 0.13, draw::solid("#0d0b09")), 1.0 * k));
+    b.add(
+        root,
+        draw::rounded(
+            draw::rect(
+                "slot",
+                x0 - d * 0.12,
+                ny + nr * 0.6,
+                d * 0.24,
+                d * 0.13,
+                draw::solid("#0d0b09"),
+            ),
+            1.0 * k,
+        ),
+    );
     // The barrel rising to the dome.
-    let barrel = draw::rect("barrel", x0 - d * 0.47, y0, d * 0.94, drop, draw::linear(90.0, &[(0.0, f.lo), (0.3, f.hi), (0.55, f.mid), (1.0, f.lo)]));
+    let barrel = draw::rect(
+        "barrel",
+        x0 - d * 0.47,
+        y0,
+        d * 0.94,
+        drop,
+        draw::linear(
+            90.0,
+            &[(0.0, f.lo), (0.3, f.hi), (0.55, f.mid), (1.0, f.lo)],
+        ),
+    );
     b.add(root, barrel);
-    b.add(root, draw::path("barrel foot", 0.0, 0.0, w, h, ellipse_d(x0, ny, d * 0.47, d * 0.16), draw::solid(&alpha(f.lo, 0.9))));
-    let cap = draw::circle("cap", x0, y0, d / 2.0, draw::radial_at(0.36, 0.3, 0.85, &[(0.0, "#ffffff"), (0.2, f.hi), (0.6, f.mid), (1.0, f.lo)]));
-    b.add(root, draw::with_effects(draw::stroked(cap, &alpha(f.lo, 0.9), 0.7 * k), vec![draw::inner_shadow("#00000059", 0.0, -1.5 * k, 3.0 * k)]));
-    b.add(root, draw::circle("spec", x0 - d * 0.15, y0 - d * 0.17, d * 0.13, draw::solid("#ffffffb0")));
+    b.add(
+        root,
+        draw::path(
+            "barrel foot",
+            0.0,
+            0.0,
+            w,
+            h,
+            ellipse_d(x0, ny, d * 0.47, d * 0.16),
+            draw::solid(&alpha(f.lo, 0.9)),
+        ),
+    );
+    let cap = draw::circle(
+        "cap",
+        x0,
+        y0,
+        d / 2.0,
+        draw::radial_at(
+            0.36,
+            0.3,
+            0.85,
+            &[(0.0, "#ffffff"), (0.2, f.hi), (0.6, f.mid), (1.0, f.lo)],
+        ),
+    );
+    b.add(
+        root,
+        draw::with_effects(
+            draw::stroked(cap, &alpha(f.lo, 0.9), 0.7 * k),
+            vec![draw::inner_shadow("#00000059", 0.0, -1.5 * k, 3.0 * k)],
+        ),
+    );
+    b.add(
+        root,
+        draw::circle(
+            "spec",
+            x0 - d * 0.15,
+            y0 - d * 0.17,
+            d * 0.13,
+            draw::solid("#ffffffb0"),
+        ),
+    );
     if let Some(color) = led {
-        let lx = if side == "left" { x0 - led_off } else { x0 + led_off };
+        let lx = if side == "left" {
+            x0 - led_off
+        } else {
+            x0 + led_off
+        };
         let lens = lamp(b, root, lx, ny - d * 0.08, d * 0.26, &color);
         c = c.slot(SlotRole::Led, lens.0);
     }
@@ -82,21 +202,86 @@ fn mini_lever(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let h = (d * 2.3).max(p.touch.unwrap_or(0.0));
     let root = b.add(parent, draw::frame(&p.name, 0.0, 0.0, w, h));
     let vertical = p.flag("vertical");
-    let (px, py) = if vertical { (w / 2.0, h / 2.0) } else { (w / 2.0, h / 2.0 + d * 0.3) };
-    let sh = draw::circle("shadow", px + 0.5 * k, py + 2.0 * k, d * 0.52, draw::solid("#00000066"));
-    b.add(root, draw::with_effects(sh, vec![draw::drop_shadow("#00000059", 0.0, 1.5 * k, 3.0 * k)]));
-    let nut = draw::path("nut", 0.0, 0.0, w, h, draw::regular(px, py, d * 0.5, 6, 0.0), draw::linear(150.0, &[(0.0, f.hi), (0.45, f.mid), (1.0, f.lo)]));
+    let (px, py) = if vertical {
+        (w / 2.0, h / 2.0)
+    } else {
+        (w / 2.0, h / 2.0 + d * 0.3)
+    };
+    let sh = draw::circle(
+        "shadow",
+        px + 0.5 * k,
+        py + 2.0 * k,
+        d * 0.52,
+        draw::solid("#00000066"),
+    );
+    b.add(
+        root,
+        draw::with_effects(
+            sh,
+            vec![draw::drop_shadow("#00000059", 0.0, 1.5 * k, 3.0 * k)],
+        ),
+    );
+    let nut = draw::path(
+        "nut",
+        0.0,
+        0.0,
+        w,
+        h,
+        draw::regular(px, py, d * 0.5, 6, 0.0),
+        draw::linear(150.0, &[(0.0, f.hi), (0.45, f.mid), (1.0, f.lo)]),
+    );
     b.add(root, draw::stroked(nut, &alpha(f.lo, 0.9), 0.5 * k));
-    b.add(root, draw::circle("bushing", px, py, d * 0.3, draw::radial_at(0.4, 0.35, 0.8, &[(0.0, f.hi), (1.0, f.lo)])));
-    b.add(root, draw::circle("hole", px, py, d * 0.16, draw::solid("#0c0a08")));
-    let (angles, len) = if vertical { ([180.0, 0.0], d * 0.62) } else { ([-30.0, 30.0], d * 0.95) };
+    b.add(
+        root,
+        draw::circle(
+            "bushing",
+            px,
+            py,
+            d * 0.3,
+            draw::radial_at(0.4, 0.35, 0.8, &[(0.0, f.hi), (1.0, f.lo)]),
+        ),
+    );
+    b.add(
+        root,
+        draw::circle("hole", px, py, d * 0.16, draw::solid("#0c0a08")),
+    );
+    let (angles, len) = if vertical {
+        ([180.0, 0.0], d * 0.62)
+    } else {
+        ([-30.0, 30.0], d * 0.95)
+    };
     let mut poses = Vec::new();
     let mut tips = Vec::new();
     for (name, deg) in [("off", angles[0]), ("on", angles[1])] {
         let pose = b.add(root, draw::frame(name, 0.0, 0.0, w, h));
         let (shape, tip) = bat(px, py, len, d * 0.2, d * 0.14, deg);
-        b.add(pose, draw::path("bat shadow", 1.0 * k, 2.0 * k, w, h, shape.clone(), draw::solid("#00000055")));
-        b.add(pose, draw::path("bat", 0.0, 0.0, w, h, shape, draw::linear(90.0 + deg, &[(0.0, "#6d6e70"), (0.4, "#f4f4f2"), (1.0, "#8a8b8d")])));
+        b.add(
+            pose,
+            draw::path(
+                "bat shadow",
+                1.0 * k,
+                2.0 * k,
+                w,
+                h,
+                shape.clone(),
+                draw::solid("#00000055"),
+            ),
+        );
+        b.add(
+            pose,
+            draw::path(
+                "bat",
+                0.0,
+                0.0,
+                w,
+                h,
+                shape,
+                draw::linear(
+                    90.0 + deg,
+                    &[(0.0, "#6d6e70"), (0.4, "#f4f4f2"), (1.0, "#8a8b8d")],
+                ),
+            ),
+        );
         poses.push(pose);
         tips.push(tip);
     }
@@ -107,10 +292,18 @@ fn mini_lever(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let lane = b.add(root, draw::frame("lane", x0, y0, x1 - x0, y1 - y0));
     let (bx, by) = (tips[0].0 - br - x0, tips[0].1 - br - y0);
     let thumb = b.add(lane, draw::frame("tip", bx, by, 2.0 * br, 2.0 * br));
-    let ball = draw::circle("ball", br, br, br, draw::radial_at(0.35, 0.3, 0.8, &[(0.0, "#ffffff"), (1.0, "#77787a")]));
+    let ball = draw::circle(
+        "ball",
+        br,
+        br,
+        br,
+        draw::radial_at(0.35, 0.3, 0.8, &[(0.0, "#ffffff"), (1.0, "#77787a")]),
+    );
     b.add(thumb, draw::stroked(ball, "#00000055", 0.4 * k));
     let c = p
-        .control(ControlKind::Button { mode: ButtonMode::Toggle })
+        .control(ControlKind::Button {
+            mode: ButtonMode::Toggle,
+        })
         .slot(SlotRole::Off, poses[0].0)
         .slot(SlotRole::On, poses[1].0)
         .slot(SlotRole::Thumb, thumb.0);
@@ -128,20 +321,62 @@ fn slot_lever(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let root = b.add(parent, draw::frame(&p.name, 0.0, 0.0, w, h));
     let (cx, cy) = (w / 2.0, h * 0.62);
     let sh = w * 0.22;
-    let slot = draw::rect("slot", 0.0, cy - sh / 2.0, w, sh, draw::linear(180.0, &[(0.0, "#050505"), (1.0, "#1b1b1c")]));
+    let slot = draw::rect(
+        "slot",
+        0.0,
+        cy - sh / 2.0,
+        w,
+        sh,
+        draw::linear(180.0, &[(0.0, "#050505"), (1.0, "#1b1b1c")]),
+    );
     let slot = draw::stroked(draw::rounded(slot, sh / 2.0), "#ffffff1f", 0.6 * k);
-    b.add(root, draw::with_effects(slot, vec![draw::inner_shadow("#000000", 0.0, k, 3.0 * k)]));
+    b.add(
+        root,
+        draw::with_effects(slot, vec![draw::inner_shadow("#000000", 0.0, k, 3.0 * k)]),
+    );
     let len = w * 0.36;
     let side = 2.0 * (len + w * 0.1);
-    let knob = b.add(root, draw::frame("knob", cx - side / 2.0, cy - side / 2.0, side, side));
+    let knob = b.add(
+        root,
+        draw::frame("knob", cx - side / 2.0, cy - side / 2.0, side, side),
+    );
     let c = side / 2.0;
-    b.add(knob, draw::circle("pivot", c, c, sh * 0.3, draw::solid("#3a3a3c")));
+    b.add(
+        knob,
+        draw::circle("pivot", c, c, sh * 0.3, draw::solid("#3a3a3c")),
+    );
     let body = b.add(knob, draw::frame("body", 0.0, 0.0, side, side));
-    b.add(body, draw::rounded(draw::rect("stem", c - w * 0.035, c - len, w * 0.07, len, draw::linear(90.0, &[(0.0, "#555658"), (0.5, "#e7e7e5"), (1.0, "#555658")])), w * 0.03));
-    let ball = draw::circle("ball", c, c - len, w * 0.085, draw::radial(&[(0.0, "#ffffff"), (0.5, "#bdbebf"), (1.0, "#4a4b4d")]));
+    b.add(
+        body,
+        draw::rounded(
+            draw::rect(
+                "stem",
+                c - w * 0.035,
+                c - len,
+                w * 0.07,
+                len,
+                draw::linear(
+                    90.0,
+                    &[(0.0, "#555658"), (0.5, "#e7e7e5"), (1.0, "#555658")],
+                ),
+            ),
+            w * 0.03,
+        ),
+    );
+    let ball = draw::circle(
+        "ball",
+        c,
+        c - len,
+        w * 0.085,
+        draw::radial(&[(0.0, "#ffffff"), (0.5, "#bdbebf"), (1.0, "#4a4b4d")]),
+    );
     b.add(body, draw::stroked(ball, "#00000066", 0.4 * k));
     let sweep = p.sweep.unwrap_or(120.0);
-    let ctl = p.control(ControlKind::Knob { sweep_degrees: sweep }).slot(SlotRole::Needle, body.0);
+    let ctl = p
+        .control(ControlKind::Knob {
+            sweep_degrees: sweep,
+        })
+        .slot(SlotRole::Needle, body.0);
     b.controls.insert(root, ctl);
     root
 }
@@ -156,18 +391,85 @@ fn glow_cap(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let glow = p.lamp_color(0).unwrap_or_else(|| "#ffffff".into());
     let root = b.add(parent, draw::frame(&p.name, 0.0, 0.0, w, h));
     let sw = 17.0 * k;
-    let slot = draw::rect("slot", (w - sw) / 2.0, 0.0, sw, h, draw::linear(90.0, &[(0.0, "#050304"), (0.5, "#1c1416"), (1.0, "#050304")]));
+    let slot = draw::rect(
+        "slot",
+        (w - sw) / 2.0,
+        0.0,
+        sw,
+        h,
+        draw::linear(
+            90.0,
+            &[(0.0, "#050304"), (0.5, "#1c1416"), (1.0, "#050304")],
+        ),
+    );
     let slot = draw::stroked(draw::rounded(slot, sw / 2.0), "#00000099", 0.8 * k);
-    b.add(root, draw::with_effects(slot, vec![draw::inner_shadow("#000000", 0.0, 2.0 * k, 4.0 * k), draw::drop_shadow("#ffffff30", 0.0, 1.0 * k, 0.5 * k)]));
-    b.add(root, draw::rect("slit", w / 2.0 - 1.2 * k, ch * 0.3, 2.4 * k, h - ch * 0.6, draw::solid("#000000")));
+    b.add(
+        root,
+        draw::with_effects(
+            slot,
+            vec![
+                draw::inner_shadow("#000000", 0.0, 2.0 * k, 4.0 * k),
+                draw::drop_shadow("#ffffff30", 0.0, 1.0 * k, 0.5 * k),
+            ],
+        ),
+    );
+    b.add(
+        root,
+        draw::rect(
+            "slit",
+            w / 2.0 - 1.2 * k,
+            ch * 0.3,
+            2.4 * k,
+            h - ch * 0.6,
+            draw::solid("#000000"),
+        ),
+    );
     let lane = b.add(root, draw::frame("lane", 0.0, 0.0, w, h));
     let thumb = b.add(lane, draw::frame("thumb", (w - cw) / 2.0, 0.0, cw, ch));
-    let body = draw::rect("cap", 0.0, 0.0, cw, ch, draw::linear(90.0, &[(0.0, "#5c5c5e"), (0.3, "#d9d9d7"), (0.7, "#a9a9a7"), (1.0, "#4c4c4e")]));
-    b.add(thumb, draw::with_effects(draw::rounded(body, 3.0 * k), vec![draw::drop_shadow("#000000aa", 0.0, 2.0 * k, 3.0 * k)]));
-    let core = draw::rounded(draw::rect("core", 3.0 * k, 5.0 * k, cw - 6.0 * k, ch - 10.0 * k, draw::linear(90.0, &[(0.0, "#d8d8d8"), (0.5, &glow), (1.0, "#d8d8d8")])), 2.0 * k);
-    let core = draw::with_effects(core, vec![draw::drop_shadow(&alpha(&glow, 0.8), 0.0, 0.0, 6.0 * k)]);
+    let body = draw::rect(
+        "cap",
+        0.0,
+        0.0,
+        cw,
+        ch,
+        draw::linear(
+            90.0,
+            &[
+                (0.0, "#5c5c5e"),
+                (0.3, "#d9d9d7"),
+                (0.7, "#a9a9a7"),
+                (1.0, "#4c4c4e"),
+            ],
+        ),
+    );
+    b.add(
+        thumb,
+        draw::with_effects(
+            draw::rounded(body, 3.0 * k),
+            vec![draw::drop_shadow("#000000aa", 0.0, 2.0 * k, 3.0 * k)],
+        ),
+    );
+    let core = draw::rounded(
+        draw::rect(
+            "core",
+            3.0 * k,
+            5.0 * k,
+            cw - 6.0 * k,
+            ch - 10.0 * k,
+            draw::linear(90.0, &[(0.0, "#d8d8d8"), (0.5, &glow), (1.0, "#d8d8d8")]),
+        ),
+        2.0 * k,
+    );
+    let core = draw::with_effects(
+        core,
+        vec![draw::drop_shadow(&alpha(&glow, 0.8), 0.0, 0.0, 6.0 * k)],
+    );
     b.add(thumb, draw::emissive(core, draw::hex(&glow), 0.7, 14.0 * k));
-    let c = p.control(ControlKind::Fader { orientation: Orientation::Vertical }).slot(SlotRole::Thumb, thumb.0);
+    let c = p
+        .control(ControlKind::Fader {
+            orientation: Orientation::Vertical,
+        })
+        .slot(SlotRole::Thumb, thumb.0);
     b.controls.insert(root, c);
     root
 }

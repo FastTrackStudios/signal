@@ -98,7 +98,9 @@ impl Card {
     #[must_use]
     pub const fn curve(self) -> Curve {
         match self {
-            Self::Vu => Curve::Power { exponent: VU_EXPONENT },
+            Self::Vu => Curve::Power {
+                exponent: VU_EXPONENT,
+            },
             Self::Decibels => Curve::Linear,
         }
     }
@@ -151,13 +153,18 @@ mod tests {
         assert!(c.fraction(-10.0) - c.fraction(-20.0) < c.fraction(0.0) - c.fraction(-10.0));
         let zero = c.fraction(0.0);
         assert!((0.7..0.8).contains(&zero), "0 VU at {zero}");
-        assert!((c.angle(-20.0) + SWEEP_DEG).abs() < 1e-9 && (c.angle(3.0) - SWEEP_DEG).abs() < 1e-9);
+        assert!(
+            (c.angle(-20.0) + SWEEP_DEG).abs() < 1e-9 && (c.angle(3.0) - SWEEP_DEG).abs() < 1e-9
+        );
     }
 
     #[test]
     fn a_decibel_card_is_evenly_spaced() {
         let c = Card::Decibels;
-        assert!(((c.fraction(-30.0) - c.fraction(-40.0)) - (c.fraction(10.0) - c.fraction(0.0))).abs() < 1e-9);
+        assert!(
+            ((c.fraction(-30.0) - c.fraction(-40.0)) - (c.fraction(10.0) - c.fraction(0.0))).abs()
+                < 1e-9
+        );
         assert!(c.hot_from().is_none());
     }
 

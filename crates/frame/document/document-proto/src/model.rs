@@ -18,7 +18,9 @@ use uuid::Uuid;
 // ── ids ──────────────────────────────────────────────────────────────────
 
 /// A node's identity. Stable across saves, edits and replicas.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Facet)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Facet,
+)]
 #[facet(transparent)]
 #[serde(transparent)]
 pub struct NodeId(pub Uuid);
@@ -77,11 +79,25 @@ pub struct Transform {
 }
 
 impl Transform {
-    pub const IDENTITY: Self = Self { a: 1.0, b: 0.0, tx: 0.0, c: 0.0, d: 1.0, ty: 0.0 };
+    pub const IDENTITY: Self = Self {
+        a: 1.0,
+        b: 0.0,
+        tx: 0.0,
+        c: 0.0,
+        d: 1.0,
+        ty: 0.0,
+    };
 
     #[must_use]
     pub const fn translate(tx: f64, ty: f64) -> Self {
-        Self { a: 1.0, b: 0.0, tx, c: 0.0, d: 1.0, ty }
+        Self {
+            a: 1.0,
+            b: 0.0,
+            tx,
+            c: 0.0,
+            d: 1.0,
+            ty,
+        }
     }
 
     /// Rotation in radians, from the matrix columns (`atan2(c, a)`).
@@ -123,12 +139,20 @@ pub struct CornerRadii {
 impl CornerRadii {
     #[must_use]
     pub const fn uniform(r: f64) -> Self {
-        Self { top_left: r, top_right: r, bottom_right: r, bottom_left: r }
+        Self {
+            top_left: r,
+            top_right: r,
+            bottom_right: r,
+            bottom_left: r,
+        }
     }
 
     #[must_use]
     pub fn is_zero(&self) -> bool {
-        self.top_left == 0.0 && self.top_right == 0.0 && self.bottom_right == 0.0 && self.bottom_left == 0.0
+        self.top_left == 0.0
+            && self.top_right == 0.0
+            && self.bottom_right == 0.0
+            && self.bottom_left == 0.0
     }
 }
 
@@ -195,10 +219,21 @@ pub enum ImageScaleMode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 #[repr(u8)]
 pub enum PaintKind {
-    Solid { color: Color },
-    LinearGradient { stops: Vec<GradientStop>, transform: Option<Transform> },
-    RadialGradient { stops: Vec<GradientStop>, transform: Option<Transform> },
-    AngularGradient { stops: Vec<GradientStop>, transform: Option<Transform> },
+    Solid {
+        color: Color,
+    },
+    LinearGradient {
+        stops: Vec<GradientStop>,
+        transform: Option<Transform>,
+    },
+    RadialGradient {
+        stops: Vec<GradientStop>,
+        transform: Option<Transform>,
+    },
+    AngularGradient {
+        stops: Vec<GradientStop>,
+        transform: Option<Transform>,
+    },
     Image {
         /// The image bytes, in the scene's asset table.
         asset: AssetId,
@@ -222,7 +257,12 @@ pub struct Paint {
 impl Paint {
     #[must_use]
     pub const fn solid(color: Color) -> Self {
-        Self { kind: PaintKind::Solid { color }, opacity: 1.0, blend: BlendMode::Normal, visible: true }
+        Self {
+            kind: PaintKind::Solid { color },
+            opacity: 1.0,
+            blend: BlendMode::Normal,
+            visible: true,
+        }
     }
 }
 
@@ -560,12 +600,16 @@ pub enum NodeKind {
     Polygon,
     Star,
     Vector,
-    BooleanOperation { op: Option<BooleanOp> },
+    BooleanOperation {
+        op: Option<BooleanOp>,
+    },
     Text(TextData),
     /// Non-rendering helpers (slices, embeds, widgets).
     Utility,
     /// A node type this model has no dedicated kind for yet; `tag` names it.
-    Other { tag: String },
+    Other {
+        tag: String,
+    },
 }
 
 /// Light a node emits (see [`Node::emission`]).
@@ -767,7 +811,9 @@ impl Variable {
     /// The expression this variable has in `mode`.
     #[must_use]
     pub fn in_mode(&self, mode: &str) -> &str {
-        self.modes.get(mode).map_or(self.value.as_str(), String::as_str)
+        self.modes
+            .get(mode)
+            .map_or(self.value.as_str(), String::as_str)
     }
 }
 
@@ -831,7 +877,11 @@ pub struct Asset {
 impl Asset {
     #[must_use]
     pub fn new(mime: impl Into<String>, bytes: Vec<u8>) -> Self {
-        Self { id: AssetId::of(&bytes), mime: mime.into(), bytes }
+        Self {
+            id: AssetId::of(&bytes),
+            mime: mime.into(),
+            bytes,
+        }
     }
 }
 
@@ -853,7 +903,9 @@ impl Scene {
     /// does to fit a surface to a box of other proportions without
     /// distorting it.
     pub fn resize_width(&mut self, node: NodeId, width: f64) {
-        let Some(n) = self.nodes.get_mut(&node) else { return };
+        let Some(n) = self.nodes.get_mut(&node) else {
+            return;
+        };
         let old = n.size.width;
         if old <= 0.0 || (width - old).abs() < 1e-6 {
             return;
@@ -863,13 +915,23 @@ impl Scene {
     }
 
     fn follow_width(&mut self, parent: NodeId, old: f64, new: f64) {
-        let kids = self.nodes.get(&parent).map(|p| p.children.clone()).unwrap_or_default();
+        let kids = self
+            .nodes
+            .get(&parent)
+            .map(|p| p.children.clone())
+            .unwrap_or_default();
         let (dw, ratio) = (new - old, new / old);
         for id in kids {
-            let Some(n) = self.nodes.get_mut(&id) else { continue };
+            let Some(n) = self.nodes.get_mut(&id) else {
+                continue;
+            };
             let (x, w) = (n.transform.tx, n.size.width);
             let spans = w >= old * 0.95 && x <= old * 0.03;
-            let rule = n.layout_child.resize_x.unwrap_or(if spans { ResizeX::Stretch } else { ResizeX::Center });
+            let rule = n.layout_child.resize_x.unwrap_or(if spans {
+                ResizeX::Stretch
+            } else {
+                ResizeX::Center
+            });
             let proportional = n.layout_child.resize_x.is_none() && !spans;
             let (nx, nw) = match rule {
                 ResizeX::Left => (x, w),
@@ -907,7 +969,12 @@ impl Scene {
         let mut nodes = BTreeMap::new();
         nodes.insert(root.id, root);
         nodes.insert(page.id, page);
-        Self { root: root_id, nodes, assets: BTreeMap::new(), variables: Variables::default() }
+        Self {
+            root: root_id,
+            nodes,
+            assets: BTreeMap::new(),
+            variables: Variables::default(),
+        }
     }
 
     #[must_use]
@@ -953,6 +1020,8 @@ impl Scene {
     /// Find a node by its import source id (e.g. a Figma node id).
     #[must_use]
     pub fn by_source_id(&self, source_id: &str) -> Option<&Node> {
-        self.nodes.values().find(|n| n.source.as_ref().is_some_and(|s| s.id == source_id))
+        self.nodes
+            .values()
+            .find(|n| n.source.as_ref().is_some_and(|s| s.id == source_id))
     }
 }

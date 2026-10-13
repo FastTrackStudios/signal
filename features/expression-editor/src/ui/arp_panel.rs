@@ -10,9 +10,9 @@
 
 use std::sync::Arc;
 
-use dioxus::prelude::*;
 use crate::ops::arp::{ArpNote, ArpSession, Direction, PPQ};
 use crate::ops::{ArpSink, DemoArpSink};
+use dioxus::prelude::*;
 
 use crate::ui::drag::Slider;
 use crate::ui::velocity_panel::{BUTTON, Chip, PanelStyles, Section};

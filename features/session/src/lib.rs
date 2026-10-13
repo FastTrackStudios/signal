@@ -19,13 +19,12 @@
 //! let router = SessionServices.into_router();
 //! ```
 
-pub mod proto;
-pub mod sync;
 #[cfg(feature = "library")]
 pub mod library;
+pub mod proto;
+pub mod sync;
 #[cfg(feature = "ui")]
 pub mod ui;
-
 
 // Re-export session-proto so app crates can use `crate::` instead of
 // `crate::proto::` directly. `setlist` / `song` are NOT re-exported here:
@@ -328,6 +327,9 @@ pub mod daw_services {
     #[cfg(feature = "reaper")]
     #[must_use]
     pub fn layer_control_surfaces(mut handler: daw::LayerRouter) -> daw::LayerRouter {
+        use crate::proto::services::{
+            serve_session_mode_service, session_mode_service_service_descriptor,
+        };
         use crate::rpc_services::SessionModeServiceImpl;
         use daw::service::{
             record_control_service_service_descriptor, serve_record_control_service,
@@ -335,9 +337,6 @@ pub mod daw_services {
         };
         use daw_actions::record::RecordControlServiceImpl;
         use daw_actions::take_ranking::TakeRankingServiceImpl;
-        use crate::proto::services::{
-            serve_session_mode_service, session_mode_service_service_descriptor,
-        };
         handler = handler.merge(daw::Mounted::new(
             session_mode_service_service_descriptor(),
             serve_session_mode_service(SessionModeServiceImpl::default()),

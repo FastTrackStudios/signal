@@ -2166,7 +2166,9 @@ mod fader_scale_tests {
             fader_scale(20.0, 124.0, ink, zones, 8.0, level)
                 .ops
                 .iter()
-                .filter(|op| matches!(op, crate::art::paint::Op::Text { color, .. } if *color != ink))
+                .filter(
+                    |op| matches!(op, crate::art::paint::Op::Text { color, .. } if *color != ink),
+                )
                 .count()
         };
         assert_eq!(count(0.0), 0, "silence lit a mark");

@@ -30,8 +30,8 @@ use comp::ui::limiter::control_view::App;
 use comp::ui::limiter::gr_trace_svg::{GR_RANGE_DB, TRACE_H, TRACE_W, gr_area_path, gr_to_y};
 use comp::ui::limiter::params::{LimiterParams, LimiterUiState};
 
-use plugin_core::prelude::Param;
 use nice_plug_dioxus::{ParamContext, SharedState};
+use plugin_core::prelude::Param;
 
 mod support {
     use super::*;
@@ -65,10 +65,9 @@ mod support {
     }
 
     impl GuiContextInner for RecordingGuiContext {
-
-    /// Upstream nice-plug added this to `GuiContextInner`. Nothing in a test
-    /// harness or the standalone shell has a host to restart, so it is a no-op.
-    fn request_restart(&self) {}
+        /// Upstream nice-plug added this to `GuiContextInner`. Nothing in a test
+        /// harness or the standalone shell has a host to restart, so it is a no-op.
+        fn request_restart(&self) {}
         fn plugin_api(&self) -> PluginApi {
             PluginApi::Clap
         }

@@ -17,7 +17,11 @@ pub(crate) fn blend(shapes: &[String], v: f64) -> Option<String> {
     let f = v - i as f64;
     let (a, b) = (split(&shapes[i]), split(&shapes[i + 1]));
     if a.0 != b.0 || a.1.len() != b.1.len() {
-        return Some(if f < 0.5 { shapes[i].clone() } else { shapes[i + 1].clone() });
+        return Some(if f < 0.5 {
+            shapes[i].clone()
+        } else {
+            shapes[i + 1].clone()
+        });
     }
     let mut out = String::new();
     for (k, word) in a.0.iter().enumerate() {
@@ -43,7 +47,9 @@ fn split(d: &str) -> (Vec<String>, Vec<f64>) {
         let c = b[i];
         let starts_num = c.is_ascii_digit()
             || c == b'.'
-            || ((c == b'-' || c == b'+') && b.get(i + 1).is_some_and(|n| n.is_ascii_digit() || *n == b'.'));
+            || ((c == b'-' || c == b'+')
+                && b.get(i + 1)
+                    .is_some_and(|n| n.is_ascii_digit() || *n == b'.'));
         if starts_num {
             let s = i;
             i += 1;
@@ -55,7 +61,10 @@ fn split(d: &str) -> (Vec<String>, Vec<f64>) {
                 } else if d == b'.' && !dot {
                     dot = true;
                     i += 1;
-                } else if (d == b'e' || d == b'E') && b.get(i + 1).is_some_and(|n| n.is_ascii_digit() || *n == b'-' || *n == b'+') {
+                } else if (d == b'e' || d == b'E')
+                    && b.get(i + 1)
+                        .is_some_and(|n| n.is_ascii_digit() || *n == b'-' || *n == b'+')
+                {
                     i += 2;
                 } else {
                     break;
@@ -77,7 +86,11 @@ fn normal(w: &str) -> String {
     let t: String = w.chars().map(|c| if c == ',' { ' ' } else { c }).collect();
     let parts: Vec<&str> = t.split_whitespace().collect();
     if parts.is_empty() {
-        if w.is_empty() { String::new() } else { " ".into() }
+        if w.is_empty() {
+            String::new()
+        } else {
+            " ".into()
+        }
     } else {
         let mut s = parts.join(" ");
         if w.starts_with([' ', ',']) {
@@ -105,7 +118,11 @@ mod tests {
 
     #[test]
     fn different_commands_switch_at_the_middle() {
-        let s = ["M0 0 L10 0".to_string(), "M0 0 C1 1 2 2 3 3".to_string(), "M1 1 C1 1 2 2 5 5".to_string()];
+        let s = [
+            "M0 0 L10 0".to_string(),
+            "M0 0 C1 1 2 2 3 3".to_string(),
+            "M1 1 C1 1 2 2 5 5".to_string(),
+        ];
         assert_eq!(blend(&s, 0.4).unwrap(), s[0]);
         assert_eq!(blend(&s, 0.6).unwrap(), s[1]);
         assert!(blend(&s, 1.5).unwrap().starts_with("M0.500 0.500 C"));

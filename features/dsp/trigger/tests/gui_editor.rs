@@ -39,8 +39,8 @@ use trigger::ui::params::{TriggerParams, TriggerUiState};
 use trigger::ui::trigger_waveform::GRAPH_H;
 use trigger::ui::trigger_waveform_svg::db_to_y;
 
-use plugin_core::prelude::Param;
 use nice_plug_dioxus::{ParamContext, SharedState};
+use plugin_core::prelude::Param;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Fixture
@@ -81,10 +81,9 @@ mod support {
     }
 
     impl GuiContextInner for RecordingGuiContext {
-
-    /// Upstream nice-plug added this to `GuiContextInner`. Nothing in a test
-    /// harness or the standalone shell has a host to restart, so it is a no-op.
-    fn request_restart(&self) {}
+        /// Upstream nice-plug added this to `GuiContextInner`. Nothing in a test
+        /// harness or the standalone shell has a host to restart, so it is a no-op.
+        fn request_restart(&self) {}
         fn plugin_api(&self) -> PluginApi {
             PluginApi::Clap
         }

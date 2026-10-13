@@ -13,8 +13,8 @@
 //! section says what the modules currently hold ("0.4 – 2.1 kHz"), so a
 //! centred knob is never a mystery.
 
-use dioxus::prelude::*;
 use crate::proto::{KeysLayerDetail, KeysMacro};
+use dioxus::prelude::*;
 
 use crate::ui::fader::{Fader, fmt_db};
 use crate::ui::graphs::{Adsr, ModuleCurve, module_color};

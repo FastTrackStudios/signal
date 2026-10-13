@@ -391,8 +391,8 @@ pub fn BandPopup(
     // Where the panel is pinned while it is being used. Set from the panel's
     // own pointer handlers — never during render — and consulted here.
     let mut pinned_x = use_signal(|| None::<f64>);
-    let in_use =
-        drag.read().active || crate::ui::eq_graph::now_ms() - *popup_activity.read() < PANEL_HOLD_MS;
+    let in_use = drag.read().active
+        || crate::ui::eq_graph::now_ms() - *popup_activity.read() < PANEL_HOLD_MS;
     let popup_x = held_panel_x(live_x, *pinned_x.read(), in_use);
 
     rsx! {

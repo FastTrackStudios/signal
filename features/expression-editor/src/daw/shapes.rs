@@ -10,8 +10,8 @@
 //! either enum grows a variant, this stops compiling, which is the whole
 //! reason it is written as an exhaustive match rather than a lookup.
 
-use daw::service::EnvelopeShape;
 use crate::CurveShape;
+use daw::service::EnvelopeShape;
 
 /// Editor shape → DAW shape.
 pub fn to_daw(shape: CurveShape) -> EnvelopeShape {

@@ -15,14 +15,14 @@ use std::collections::BTreeMap;
 
 use base64::Engine as _;
 use document_proto::{
-    AlignSelf, AutoLayout, BlendMode, BooleanOp, Color, CornerRadii, CrossAxisAlign, Effect, EffectKind,
-    GradientStop, ImageScaleMode, LayoutChild, LayoutDirection, MainAxisAlign, MaskKind, Node, NodeId, NodeKind,
-    Paint, PaintKind, Rect, Scene, Size, SourceRef, Stroke, StrokeAlign, StrokeCap, StrokeJoin, TextCase, TextData,
-    TextRun, Transform,
+    AlignSelf, AutoLayout, BlendMode, BooleanOp, Color, CornerRadii, CrossAxisAlign, Effect,
+    EffectKind, GradientStop, ImageScaleMode, LayoutChild, LayoutDirection, MainAxisAlign,
+    MaskKind, Node, NodeId, NodeKind, Paint, PaintKind, Rect, Scene, Size, SourceRef, Stroke,
+    StrokeAlign, StrokeCap, StrokeJoin, TextCase, TextData, TextRun, Transform,
 };
 use figma_model::{
-    AutoLayoutAlignSelf, AutoLayoutCounterAlign, AutoLayoutMode, AutoLayoutPositioning, AutoLayoutPrimaryAlign,
-    AutoLayoutWrap, FrameDocument,
+    AutoLayoutAlignSelf, AutoLayoutCounterAlign, AutoLayoutMode, AutoLayoutPositioning,
+    AutoLayoutPrimaryAlign, AutoLayoutWrap, FrameDocument,
 };
 use serde_json::Value;
 
@@ -40,9 +40,16 @@ pub fn import_bytes(bytes: &[u8]) -> Result<Scene, ImportError> {
 /// Import an already-parsed Figma document.
 #[must_use]
 pub fn import_document(doc: &FrameDocument) -> Scene {
-    let mut scene = Scene { root: NodeId(doc.root.0), nodes: BTreeMap::new(), assets: BTreeMap::new(), variables: document_proto::Variables::default() };
+    let mut scene = Scene {
+        root: NodeId(doc.root.0),
+        nodes: BTreeMap::new(),
+        assets: BTreeMap::new(),
+        variables: document_proto::Variables::default(),
+    };
     for id in doc.walk_subtree(doc.root) {
-        let Some(fnode) = doc.get_node(id) else { continue };
+        let Some(fnode) = doc.get_node(id) else {
+            continue;
+        };
         let node = import_node(doc, fnode, &mut scene);
         scene.nodes.insert(node.id, node);
     }
@@ -77,11 +84,13 @@ fn import_node(doc: &FrameDocument, fnode: &figma_model::FrameNode, scene: &mut 
     node.blend = blend_mode(raw);
     node.corner_radii = corner_radii(raw);
     node.clips_content = bool_at(raw, "clipsContent").unwrap_or(false);
-    node.mask = bool_at(raw, "isMask").unwrap_or(false).then(|| match str_at(raw, "maskType") {
-        Some(t) if t.eq_ignore_ascii_case("LUMINANCE") => MaskKind::Luminance,
-        Some(t) if t.eq_ignore_ascii_case("VECTOR") => MaskKind::Vector,
-        _ => MaskKind::Alpha,
-    });
+    node.mask = bool_at(raw, "isMask")
+        .unwrap_or(false)
+        .then(|| match str_at(raw, "maskType") {
+            Some(t) if t.eq_ignore_ascii_case("LUMINANCE") => MaskKind::Luminance,
+            Some(t) if t.eq_ignore_ascii_case("VECTOR") => MaskKind::Vector,
+            _ => MaskKind::Alpha,
+        });
 
     node.fills = paints(raw, raw, "fills", scene);
     node.stroke = stroke(raw, scene);
@@ -136,7 +145,9 @@ fn node_kind(doc: &FrameDocument, fnode: &figma_model::FrameNode) -> NodeKind {
         },
         "TEXT" | "TEXT_PATH" | "SHAPE_WITH_TEXT" | "STICKY" => NodeKind::Text(text_data(raw)),
         "SLICE" | "EMBED" | "LINK_UNFURL" | "WIDGET" => NodeKind::Utility,
-        other => NodeKind::Other { tag: other.to_string() },
+        other => NodeKind::Other {
+            tag: other.to_string(),
+        },
     }
 }
 
@@ -208,9 +219,20 @@ fn relative_transform(raw: &Value) -> Transform {
         return Transform::IDENTITY;
     }
     let at = |row: usize, col: usize, default: f64| {
-        t[row].as_array().and_then(|r| r.get(col)).and_then(Value::as_f64).unwrap_or(default)
+        t[row]
+            .as_array()
+            .and_then(|r| r.get(col))
+            .and_then(Value::as_f64)
+            .unwrap_or(default)
     };
-    Transform { a: at(0, 0, 1.0), b: at(0, 1, 0.0), tx: at(0, 2, 0.0), c: at(1, 0, 0.0), d: at(1, 1, 1.0), ty: at(1, 2, 0.0) }
+    Transform {
+        a: at(0, 0, 1.0),
+        b: at(0, 1, 0.0),
+        tx: at(0, 2, 0.0),
+        c: at(1, 0, 0.0),
+        d: at(1, 1, 1.0),
+        ty: at(1, 2, 0.0),
+    }
 }
 
 fn size(raw: &Value) -> Size {
@@ -226,7 +248,10 @@ fn size(raw: &Value) -> Size {
             h = f64_at(bb, "height").unwrap_or(h);
         }
     }
-    Size { width: w, height: h }
+    Size {
+        width: w,
+        height: h,
+    }
 }
 
 fn corner_radii(raw: &Value) -> CornerRadii {
@@ -234,7 +259,12 @@ fn corner_radii(raw: &Value) -> CornerRadii {
         && arr.len() >= 4
     {
         let r = |i: usize| arr[i].as_f64().unwrap_or(0.0).max(0.0);
-        return CornerRadii { top_left: r(0), top_right: r(1), bottom_right: r(2), bottom_left: r(3) };
+        return CornerRadii {
+            top_left: r(0),
+            top_right: r(1),
+            bottom_right: r(2),
+            bottom_left: r(3),
+        };
     }
     let uniform = f64_at(raw, "cornerRadius").unwrap_or(0.0).max(0.0);
     if uniform > 0.0 {
@@ -301,7 +331,9 @@ fn paints(node_raw: &Value, holder_raw: &Value, key: &str, scene: &mut Scene) ->
     let Some(arr) = holder_raw.get(key).and_then(Value::as_array) else {
         return Vec::new();
     };
-    arr.iter().filter_map(|p| paint(node_raw, p, scene)).collect()
+    arr.iter()
+        .filter_map(|p| paint(node_raw, p, scene))
+        .collect()
 }
 
 fn paint(node_raw: &Value, p: &Value, scene: &mut Scene) -> Option<Paint> {
@@ -309,15 +341,31 @@ fn paint(node_raw: &Value, p: &Value, scene: &mut Scene) -> Option<Paint> {
         let stops = p.get("gradientStops")?.as_array()?;
         let out: Option<Vec<_>> = stops
             .iter()
-            .map(|s| Some(GradientStop { position: f64_at(s, "position").unwrap_or(0.0), color: color(s.get("color")?)? }))
+            .map(|s| {
+                Some(GradientStop {
+                    position: f64_at(s, "position").unwrap_or(0.0),
+                    color: color(s.get("color")?)?,
+                })
+            })
             .collect();
         out.filter(|v| !v.is_empty())
     };
     let kind = match str_at(p, "type")? {
-        "SOLID" => PaintKind::Solid { color: color(p.get("color")?)? },
-        "GRADIENT_LINEAR" => PaintKind::LinearGradient { stops: stops()?, transform: gradient_matrix(p.get("gradientTransform")) },
-        "GRADIENT_RADIAL" => PaintKind::RadialGradient { stops: stops()?, transform: gradient_matrix(p.get("gradientTransform")) },
-        "GRADIENT_ANGULAR" => PaintKind::AngularGradient { stops: stops()?, transform: gradient_matrix(p.get("gradientTransform")) },
+        "SOLID" => PaintKind::Solid {
+            color: color(p.get("color")?)?,
+        },
+        "GRADIENT_LINEAR" => PaintKind::LinearGradient {
+            stops: stops()?,
+            transform: gradient_matrix(p.get("gradientTransform")),
+        },
+        "GRADIENT_RADIAL" => PaintKind::RadialGradient {
+            stops: stops()?,
+            transform: gradient_matrix(p.get("gradientTransform")),
+        },
+        "GRADIENT_ANGULAR" => PaintKind::AngularGradient {
+            stops: stops()?,
+            transform: gradient_matrix(p.get("gradientTransform")),
+        },
         "IMAGE" => {
             let source_ref = str_at(p, "imageHash").map(ToString::to_string);
             let bytes = image_bytes(node_raw, source_ref.as_deref());
@@ -335,7 +383,14 @@ fn paint(node_raw: &Value, p: &Value, scene: &mut Scene) -> Option<Paint> {
                 // A tile is placed by its scaling factor (image px → node
                 // px); the other modes by Figma's image transform.
                 transform: if str_at(p, "scaleMode") == Some("TILE") {
-                    f64_at(p, "scalingFactor").map(|s| Transform { a: s, b: 0.0, c: 0.0, d: s, tx: 0.0, ty: 0.0 })
+                    f64_at(p, "scalingFactor").map(|s| Transform {
+                        a: s,
+                        b: 0.0,
+                        c: 0.0,
+                        d: s,
+                        tx: 0.0,
+                        ty: 0.0,
+                    })
                 } else {
                     matrix(p.get("imageTransform"))
                 },
@@ -354,21 +409,25 @@ fn paint(node_raw: &Value, p: &Value, scene: &mut Scene) -> Option<Paint> {
 /// 1×1 placeholders used when an export carries an image reference but not
 /// the bytes, so image-fill structure survives. One parity fixture pins a
 /// distinct placeholder to its hash.
-const IMAGE_PLACEHOLDER_B64: &str =
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
-const IMAGE_SAMPLING_PLACEHOLDER_B64: &str =
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4MDD4DwAE/gH/5pEq9AAAAABJRU5ErkJggg==";
+const IMAGE_PLACEHOLDER_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
+const IMAGE_SAMPLING_PLACEHOLDER_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4MDD4DwAE/gH/5pEq9AAAAABJRU5ErkJggg==";
 
 fn image_bytes(node_raw: &Value, hash: Option<&str>) -> Vec<u8> {
-    let embedded = node_raw.get("imageFillAssets").and_then(Value::as_object).and_then(|assets| {
-        let v = assets.get(hash?)?;
-        v.as_str().or_else(|| v.get("base64").and_then(Value::as_str))
-    });
+    let embedded = node_raw
+        .get("imageFillAssets")
+        .and_then(Value::as_object)
+        .and_then(|assets| {
+            let v = assets.get(hash?)?;
+            v.as_str()
+                .or_else(|| v.get("base64").and_then(Value::as_str))
+        });
     let b64 = embedded.unwrap_or(match hash {
         Some("b6f8e2adf979577a15f43ba46ba26289a0ef23f3") => IMAGE_SAMPLING_PLACEHOLDER_B64,
         _ => IMAGE_PLACEHOLDER_B64,
     });
-    base64::engine::general_purpose::STANDARD.decode(b64).unwrap_or_default()
+    base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .unwrap_or_default()
 }
 
 fn sniff_image_mime(bytes: &[u8]) -> &'static str {
@@ -376,7 +435,21 @@ fn sniff_image_mime(bytes: &[u8]) -> &'static str {
         [0x89, b'P', b'N', b'G', ..] => "image/png",
         [0xFF, 0xD8, ..] => "image/jpeg",
         [b'G', b'I', b'F', ..] => "image/gif",
-        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "image/webp",
+        [
+            b'R',
+            b'I',
+            b'F',
+            b'F',
+            _,
+            _,
+            _,
+            _,
+            b'W',
+            b'E',
+            b'B',
+            b'P',
+            ..,
+        ] => "image/webp",
         _ => "application/octet-stream",
     }
 }
@@ -387,7 +460,9 @@ fn stroke(raw: &Value, scene: &mut Scene) -> Stroke {
         paints: paints(raw, raw, "strokes", scene),
         weight: f64_at(raw, "strokeWeight").unwrap_or(1.0),
         cap: enum_at("strokeCap")
-            .and_then(|v| serde_json::from_value::<figma_api::models::has_geometry_trait::StrokeCap>(v).ok())
+            .and_then(|v| {
+                serde_json::from_value::<figma_api::models::has_geometry_trait::StrokeCap>(v).ok()
+            })
             .map_or(StrokeCap::None, map_cap),
         join: match str_at(raw, "strokeJoin") {
             Some("BEVEL") => StrokeJoin::Bevel,
@@ -405,7 +480,10 @@ fn stroke(raw: &Value, scene: &mut Scene) -> Stroke {
             .and_then(Value::as_array)
             .map(|a| a.iter().filter_map(Value::as_f64).collect())
             .unwrap_or_default(),
-        dash_offset: raw.get("strokeDashes").and_then(|v| f64_at(v, "offset")).unwrap_or(0.0),
+        dash_offset: raw
+            .get("strokeDashes")
+            .and_then(|v| f64_at(v, "offset"))
+            .unwrap_or(0.0),
     }
 }
 
@@ -507,8 +585,14 @@ fn layout(raw: &Value) -> (Option<AutoLayout>, LayoutChild) {
                 AutoLayoutPrimaryAlign::Max => MainAxisAlign::End,
                 AutoLayoutPrimaryAlign::SpaceBetween => MainAxisAlign::SpaceBetween,
             }),
-            hug_main: matches!(al.primary_axis_sizing_mode, Some(figma_model::AutoLayoutSizingMode::Hug)),
-            hug_cross: matches!(al.counter_axis_sizing_mode, Some(figma_model::AutoLayoutSizingMode::Hug)),
+            hug_main: matches!(
+                al.primary_axis_sizing_mode,
+                Some(figma_model::AutoLayoutSizingMode::Hug)
+            ),
+            hug_cross: matches!(
+                al.counter_axis_sizing_mode,
+                Some(figma_model::AutoLayoutSizingMode::Hug)
+            ),
             cross_align: al.counter_axis_align_items.map(|a| match a {
                 AutoLayoutCounterAlign::Min => CrossAxisAlign::Start,
                 AutoLayoutCounterAlign::Center => CrossAxisAlign::Center,
@@ -580,7 +664,10 @@ fn text_runs(raw: &Value, scene: &mut Scene) -> Vec<TextRun> {
             Some(TextRun {
                 text: text.to_string(),
                 fills: paints(seg, seg, "fills", scene),
-                font_family: seg.get("fontName").and_then(|f| str_at(f, "family")).map(ToString::to_string),
+                font_family: seg
+                    .get("fontName")
+                    .and_then(|f| str_at(f, "family"))
+                    .map(ToString::to_string),
                 font_size: f64_at(seg, "fontSize"),
                 font_weight: f64_at(seg, "fontWeight"),
                 font_style: str_at(seg, "fontStyle")

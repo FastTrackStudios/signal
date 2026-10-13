@@ -12,7 +12,11 @@ fn main() {
         Some(i) => (args[i + 1..].to_vec(), args[..i].to_vec()),
         None => (Vec::new(), args),
     };
-    let out = std::path::PathBuf::from(rest.first().cloned().unwrap_or_else(|| "examples/plugins".into()));
+    let out = std::path::PathBuf::from(
+        rest.first()
+            .cloned()
+            .unwrap_or_else(|| "examples/plugins".into()),
+    );
     let n = plugin_faces::write_only(&out, &only);
     println!("wrote {n} faces to {}", out.display());
 }

@@ -21,14 +21,16 @@
 //! than layering a second copy on top — which matters because these are
 //! actions people will hit repeatedly while arranging.
 
+use crate::guide::engine::midi::{
+    ClickSubdivision, GuideMidiNote, TempoSegment, click_notes, cue_notes,
+};
+use crate::guide::engine::{CueSchedule, GuideSongTiming, ScheduleOptions, sections_from_song};
+use crate::proto::GuideTrackRole;
 use daw::service::{
     Effects, FxChainContext, ItemRef, Items, Markers, Midi, MidiNoteCreate, PositionConversion,
     PositionInSeconds, ProjectContext, Projects, Regions, Takes, TempoMap, TrackRef, Tracks,
 };
 use daw_proto::{DawError, DawResult};
-use crate::guide::engine::midi::{ClickSubdivision, GuideMidiNote, TempoSegment, click_notes, cue_notes};
-use crate::guide::engine::{CueSchedule, GuideSongTiming, ScheduleOptions, sections_from_song};
-use crate::proto::GuideTrackRole;
 
 use crate::song::SongBuilder;
 

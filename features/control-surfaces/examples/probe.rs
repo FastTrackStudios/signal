@@ -27,9 +27,9 @@
 use std::{thread::sleep, time::Duration};
 
 use control_surfaces::kontrol::{
-    output::{ports, MidiOut},
-    usb::{self, KontrolUsb},
     Encoding, LightColor, S88_HIGHEST_NOTE, S88_LOWEST_NOTE,
+    output::{MidiOut, ports},
+    usb::{self, KontrolUsb},
 };
 
 fn banner(msg: &str) {
@@ -125,7 +125,10 @@ fn main() {
                 banner("USB Light Guide: walk a green key up the keybed");
                 for note in S88_LOWEST_NOTE..=S88_HIGHEST_NOTE {
                     kk.clear();
-                    kk.set_key(control_surfaces::kontrol::note_to_key(note), LightColor::GREEN);
+                    kk.set_key(
+                        control_surfaces::kontrol::note_to_key(note),
+                        LightColor::GREEN,
+                    );
                     match kk.flush() {
                         Ok(()) => println!("  lit key {note} (green)"),
                         Err(e) => {
@@ -189,7 +192,10 @@ fn main() {
                 for _ in 0..2 {
                     for note in S88_LOWEST_NOTE..=S88_HIGHEST_NOTE {
                         kk.clear();
-                        kk.set_key(control_surfaces::kontrol::note_to_key(note), LightColor::GREEN);
+                        kk.set_key(
+                            control_surfaces::kontrol::note_to_key(note),
+                            LightColor::GREEN,
+                        );
                         if kk.flush().is_err() {
                             break;
                         }

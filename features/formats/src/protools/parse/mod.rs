@@ -987,7 +987,10 @@ pub fn parse_session(data: &mut [u8], target_sample_rate: u32) -> PtResult<ProTo
 /// (= magic + `0x24`) and a 6-byte routing UID at payload `+0x29..+0x2e`
 /// (= magic + `0x32..+0x37`). The kind (Aux / Internal Bus / Master
 /// Fader / Click) is not yet decoded.
-fn parse_internal_tracks(blocks: &[Block], data: &[u8]) -> Vec<crate::protools::types::InternalTrack> {
+fn parse_internal_tracks(
+    blocks: &[Block],
+    data: &[u8],
+) -> Vec<crate::protools::types::InternalTrack> {
     let mut out = Vec::new();
     for b in collect_blocks_recursive(blocks, ContentType::InternalTrackEntry) {
         let magic = b.offset.saturating_sub(7);

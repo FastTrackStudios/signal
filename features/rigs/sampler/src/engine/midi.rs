@@ -87,7 +87,8 @@ impl SampleEngine {
                 // note plays at, its velocity table and key term.
                 let law = crate::piano_note_law::NoteOnLaw::of(pv.offsets.piano, pv.snapshot);
                 let (played, law_db) = law.play(note, shift.velocity);
-                let levels = crate::piano_release::SnapshotLevels::of(pv.offsets.piano, pv.snapshot);
+                let levels =
+                    crate::piano_release::SnapshotLevels::of(pv.offsets.piano, pv.snapshot);
                 self.piano_trim_db = law_db
                     + shift.trim_db
                     + crate::piano_release::DRY_GROUP_DB
@@ -577,7 +578,6 @@ impl SampleEngine {
         trigger: ZoneTrigger,
         record_empty_miss: bool,
     ) {
-
         // Bucket matching zones by mic id so each mic gets its own
         // round-robin within the candidate set.
         let mut pairs = std::mem::take(&mut self.zoned_pairs);
@@ -1580,7 +1580,8 @@ impl SampleEngine {
             return true;
         };
         // The Release group's volume is the snapshot's.
-        let group_db = crate::piano_release::kontakt_volume_db(levels.release_volume) + levels.instrument_db;
+        let group_db =
+            crate::piano_release::kontakt_volume_db(levels.release_volume) + levels.instrument_db;
         let picks = self.piano_release_zones(note, rel.layer_velocity);
         let rr = self.zone_rr_counter;
         self.zone_rr_counter = rr.wrapping_add(1);
@@ -1588,11 +1589,19 @@ impl SampleEngine {
         // The release script adds the struck note's Dynamic Range volume
         // (`%EVENT_PAR[3]` = script 0's absolute `$DynamicRange`, from the
         // shifted velocity) — not the note's whole voicing.
-        let dyn_db = pv.dynamic_mdb_absolute(velocity, levels.dynamics + pv.dynamic_range) as f32 / 1000.0;
+        let dyn_db =
+            pv.dynamic_mdb_absolute(velocity, levels.dynamics + pv.dynamic_range) as f32 / 1000.0;
         let saved = std::mem::replace(&mut self.piano_trim_db, dyn_db);
         for (_, zones) in picks {
             let idx = zones[rr % zones.len()];
-            if self.spawn_zone_voice(idx, note, VoiceKind::Release, db_to_gain(rel.gain_db + group_db), None, 0.0) {
+            if self.spawn_zone_voice(
+                idx,
+                note,
+                VoiceKind::Release,
+                db_to_gain(rel.gain_db + group_db),
+                None,
+                0.0,
+            ) {
                 if let Some(v) = self.voices.last_spawned_mut() {
                     v.start_fade_in(fade);
                 }
@@ -1619,7 +1628,11 @@ impl SampleEngine {
 
     /// The Release zones covering `note` at `layer_velocity`, grouped by mic
     /// (each group is one round-robin set).
-    pub(crate) fn piano_release_zones(&self, note: u8, layer_velocity: u8) -> Vec<(String, Vec<usize>)> {
+    pub(crate) fn piano_release_zones(
+        &self,
+        note: u8,
+        layer_velocity: u8,
+    ) -> Vec<(String, Vec<usize>)> {
         self.piano_zones("Release", note, layer_velocity)
     }
 
@@ -1943,7 +1956,7 @@ impl SampleEngine {
         // "why did it play THAT sample" needs answering from a running rig,
         // not just a test harness.
         tracing::debug!(
-            target: "crate::trigger",
+            target: "sampler::trigger",
             note,
             velocity = self.last_velocity,
             zone = idx,
@@ -2694,51 +2707,58 @@ impl SampleEngine {
             // and pan (an Omnisphere sample layer's Harmonia).
             let (stack, n_stack) = self.harmonia_stack();
             for &(h_semis, h_level, h_pan) in &stack[..n_stack] {
-            for k in 0..copies {
-                let off = if copies == 1 {
-                    0.0
-                } else {
-                    (k as f32 / (copies - 1) as f32) * 2.0 - 1.0
-                };
-                // Source-vs-output sample-rate compensation (see Voice::with_rate_scale).
-                let sr_scale = data.sample_rate as f64 / self.sample_rate as f64;
-                let h_cents = f64::from(h_semis) * 100.0;
-                let (h_rate, h_shift) = if self.resample_transpose { (h_cents, 0.0) } else { (0.0, h_cents) };
-                let u_rate = rate * 2f64.powf(((off * det_cents * 0.5) as f64 + h_rate) / 1200.0) * sr_scale;
-                let u_pan = (z.pan + off * width + h_pan).clamp(-1.0, 1.0);
-                let mut voice = Voice::with_rate(
-                    data.clone(),
-                    note,
-                    voice_kind.clone(),
-                    u_rate,
-                    gain * comp * h_level,
-                    self.release_frames,
-                )
-                .with_mic_index(mic_index)
-                .with_line(line)
-                .with_artic_class(artic_class)
-                .with_choke_group(choke_group)
-                .with_pan(u_pan)
-                .with_attack(self.attack_frames)
-                .with_decay(self.decay_frames, self.sustain_level)
-                .with_amp_points(self.amp_points.clone(), self.sample_rate)
-                .with_filter_env(self.new_voice_filter(note))
-                .with_vibrato(self.vibrato)
-                .with_pitch_cents(transpose_cents + h_shift)
-                .with_sample_window(
-                    z.sample_start as usize,
-                    (z.sample_end > 0).then_some(z.sample_end as usize),
-                );
-                if z.playback_mode.eq_ignore_ascii_case("reverse") {
-                    voice = voice.reversed();
-                } else if zone_is_alternating_loop(z) {
-                    voice = voice.with_alternating_loop(z.loop_start as usize, z.loop_end as usize);
-                } else {
-                    voice = voice.with_forward_loop(z.loop_start as usize, z.loop_end as usize);
+                for k in 0..copies {
+                    let off = if copies == 1 {
+                        0.0
+                    } else {
+                        (k as f32 / (copies - 1) as f32) * 2.0 - 1.0
+                    };
+                    // Source-vs-output sample-rate compensation (see Voice::with_rate_scale).
+                    let sr_scale = data.sample_rate as f64 / self.sample_rate as f64;
+                    let h_cents = f64::from(h_semis) * 100.0;
+                    let (h_rate, h_shift) = if self.resample_transpose {
+                        (h_cents, 0.0)
+                    } else {
+                        (0.0, h_cents)
+                    };
+                    let u_rate = rate
+                        * 2f64.powf(((off * det_cents * 0.5) as f64 + h_rate) / 1200.0)
+                        * sr_scale;
+                    let u_pan = (z.pan + off * width + h_pan).clamp(-1.0, 1.0);
+                    let mut voice = Voice::with_rate(
+                        data.clone(),
+                        note,
+                        voice_kind.clone(),
+                        u_rate,
+                        gain * comp * h_level,
+                        self.release_frames,
+                    )
+                    .with_mic_index(mic_index)
+                    .with_line(line)
+                    .with_artic_class(artic_class)
+                    .with_choke_group(choke_group)
+                    .with_pan(u_pan)
+                    .with_attack(self.attack_frames)
+                    .with_decay(self.decay_frames, self.sustain_level)
+                    .with_amp_points(self.amp_points.clone(), self.sample_rate)
+                    .with_filter_env(self.new_voice_filter(note))
+                    .with_vibrato(self.vibrato)
+                    .with_pitch_cents(transpose_cents + h_shift)
+                    .with_sample_window(
+                        z.sample_start as usize,
+                        (z.sample_end > 0).then_some(z.sample_end as usize),
+                    );
+                    if z.playback_mode.eq_ignore_ascii_case("reverse") {
+                        voice = voice.reversed();
+                    } else if zone_is_alternating_loop(z) {
+                        voice =
+                            voice.with_alternating_loop(z.loop_start as usize, z.loop_end as usize);
+                    } else {
+                        voice = voice.with_forward_loop(z.loop_start as usize, z.loop_end as usize);
+                    }
+                    voice.prime_pitch_shifters();
+                    self.voices.spawn(voice);
                 }
-                voice.prime_pitch_shifters();
-                self.voices.spawn(voice);
-            }
             }
         }
     }

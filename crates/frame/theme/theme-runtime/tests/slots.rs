@@ -21,7 +21,8 @@ const THEME: &str = r##"<Document>
 "##;
 
 fn theme() -> Theme {
-    Theme::from_markup(THEME, Schema::new().field("has.icon"), None).unwrap_or_else(|d| panic!("{d:?}"))
+    Theme::from_markup(THEME, Schema::new().field("has.icon"), None)
+        .unwrap_or_else(|d| panic!("{d:?}"))
 }
 
 fn slots(t: &Theme, size: (f64, f64), icon: bool) -> Vec<(String, Rect)> {
@@ -44,13 +45,19 @@ fn slots_are_where_the_theme_puts_them_in_paint_order() {
     );
     // Moved by its binding at another size.
     let tall = slots(&t, (44.0, 400.0), true);
-    assert_eq!(tall.last().map(|(_, r)| *r), Some(Rect::new(2.0, 330.0, 42.0, 390.0)));
+    assert_eq!(
+        tall.last().map(|(_, r)| *r),
+        Some(Rect::new(2.0, 330.0, 42.0, 390.0))
+    );
 }
 
 #[test]
 fn a_hidden_slot_is_not_offered() {
     let t = theme();
-    let names: Vec<String> = slots(&t, (44.0, 200.0), false).into_iter().map(|(n, _)| n).collect();
+    let names: Vec<String> = slots(&t, (44.0, 200.0), false)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
     assert_eq!(names, ["under", "graph"]);
     // And a slot is not a hit target.
     let f: &dyn Fields = &vec![Value::Bool(true)];
@@ -75,13 +82,27 @@ const PANEL: &str = r##"<Document>
 struct Order(Vec<String>);
 
 impl theme_runtime::Canvas for Order {
-    fn fill(&mut self, _: kurbo::Affine, _: peniko::Fill, brush: &peniko::Brush, _: Option<kurbo::Affine>, _: &kurbo::BezPath) {
+    fn fill(
+        &mut self,
+        _: kurbo::Affine,
+        _: peniko::Fill,
+        brush: &peniko::Brush,
+        _: Option<kurbo::Affine>,
+        _: &kurbo::BezPath,
+    ) {
         if let peniko::Brush::Solid(c) = brush {
             let [r, g, b, _] = c.to_rgba8().to_u8_array();
             self.0.push(format!("#{r:02x}{g:02x}{b:02x}"));
         }
     }
-    fn stroke(&mut self, _: kurbo::Affine, _: &kurbo::Stroke, _: &peniko::Brush, _: &kurbo::BezPath) {}
+    fn stroke(
+        &mut self,
+        _: kurbo::Affine,
+        _: &kurbo::Stroke,
+        _: &peniko::Brush,
+        _: &kurbo::BezPath,
+    ) {
+    }
     fn push_clip(&mut self, _: kurbo::Affine, _: &kurbo::BezPath) {}
     fn push_opacity(&mut self, _: kurbo::Affine, _: f32, _: &kurbo::BezPath) {}
     fn pop(&mut self) {}
@@ -89,18 +110,35 @@ impl theme_runtime::Canvas for Order {
 
 #[test]
 fn the_host_draws_its_slot_between_what_the_theme_paints_under_and_over_it() {
-    let t = Theme::from_markup(PANEL, Schema::new().field("has.icon"), None).unwrap_or_else(|d| panic!("{d:?}"));
+    let t = Theme::from_markup(PANEL, Schema::new().field("has.icon"), None)
+        .unwrap_or_else(|d| panic!("{d:?}"));
     let f: &dyn Fields = &vec![Value::Bool(true)];
     let mut canvas = Order::default();
-    t.record_with("panel", (200.0, 60.0), f, &mut canvas, kurbo::Affine::IDENTITY, &mut |c, name, at| {
-        c.0.push(format!("{name} {} {} {} {}", at.x0, at.y0, at.x1, at.y1));
-    });
+    t.record_with(
+        "panel",
+        (200.0, 60.0),
+        f,
+        &mut canvas,
+        kurbo::Affine::IDENTITY,
+        &mut |c, name, at| {
+            c.0.push(format!("{name} {} {} {} {}", at.x0, at.y0, at.x1, at.y1));
+        },
+    );
     // Ground under the body, the scrim and the title over it; the hidden
     // slot is not offered.
-    assert_eq!(canvas.0, ["#101010", "body 4 16 196 56", "#202020", "#e0e0e0"]);
+    assert_eq!(
+        canvas.0,
+        ["#101010", "body 4 16 196 56", "#202020", "#e0e0e0"]
+    );
 
     // The plain recording paints the theme alone.
     let mut plain = Order::default();
-    t.record("panel", (200.0, 60.0), f, &mut plain, kurbo::Affine::IDENTITY);
+    t.record(
+        "panel",
+        (200.0, 60.0),
+        f,
+        &mut plain,
+        kurbo::Affine::IDENTITY,
+    );
     assert_eq!(plain.0, ["#101010", "#202020", "#e0e0e0"]);
 }

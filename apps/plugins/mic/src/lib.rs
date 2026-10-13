@@ -19,11 +19,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crossbeam_channel::{Receiver, Sender, bounded};
+pub use mic::ui::params::MicParams;
+use mic::ui::params::MicUiState;
 use mic::{DualMic, DualSettings, MicChain, Settings, Solo, StereoMic, StereoSettings, latency};
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{DioxusState, create_dioxus_editor_with_state};
-pub use mic::ui::params::MicParams;
-use mic::ui::params::MicUiState;
 
 const PLUGIN_NAME: &str = "FTS Mic";
 
@@ -31,7 +31,6 @@ const PLUGIN_NAME: &str = "FTS Mic";
 mod common;
 pub use common::MICS;
 use common::{index, load_model_or_default};
-
 
 /// Which models a chain needs, and at what rate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,20 +53,38 @@ enum Loaded {
 
 /// The loader thread: builds chains off the audio thread, and drops the
 /// ones the audio thread retires.
-fn loader(requests: &Receiver<Want>, ready: &Sender<(Want, Loaded)>, trash: &Receiver<Loaded>, alive: &AtomicBool) {
+fn loader(
+    requests: &Receiver<Want>,
+    ready: &Sender<(Want, Loaded)>,
+    trash: &Receiver<Loaded>,
+    alive: &AtomicBool,
+) {
     while alive.load(Ordering::Relaxed) {
         while trash.try_recv().is_ok() {}
-        let Ok(mut want) = requests.recv_timeout(std::time::Duration::from_millis(50)) else { continue };
+        let Ok(mut want) = requests.recv_timeout(std::time::Duration::from_millis(50)) else {
+            continue;
+        };
         // Only the newest request matters.
         while let Ok(newer) = requests.try_recv() {
             want = newer;
         }
-        let Some(m1) = load_model_or_default(want.mic1, want.source, want.sample_rate, "") else { continue };
+        let Some(m1) = load_model_or_default(want.mic1, want.source, want.sample_rate, "") else {
+            continue;
+        };
         let loaded = if want.stereo {
-            let Some(m2) = load_model_or_default(want.mic2, want.source, want.sample_rate, "-180") else { continue };
-            Loaded::Stereo(Box::new(StereoMic::new(MicChain::new(m1), MicChain::new(m2))))
+            let Some(m2) = load_model_or_default(want.mic2, want.source, want.sample_rate, "-180")
+            else {
+                continue;
+            };
+            Loaded::Stereo(Box::new(StereoMic::new(
+                MicChain::new(m1),
+                MicChain::new(m2),
+            )))
         } else if want.dual {
-            let Some(m2) = load_model_or_default(want.mic2, want.source, want.sample_rate, "") else { continue };
+            let Some(m2) = load_model_or_default(want.mic2, want.source, want.sample_rate, "")
+            else {
+                continue;
+            };
             Loaded::Dual(Box::new(DualMic::new(MicChain::new(m1), MicChain::new(m2))))
         } else {
             Loaded::Single(Box::new(MicChain::new(m1)))
@@ -101,12 +118,15 @@ impl Default for FtsMic {
         let flag = alive.clone();
         // The thread lives as long as the plugin; a failed spawn leaves the
         // plugin silent rather than crashing the host.
-        let _ = std::thread::Builder::new().name("fts-mic-loader".into()).spawn(move || loader(&req_rx, &ready_tx, &trash_rx, &flag));
+        let _ = std::thread::Builder::new()
+            .name("fts-mic-loader".into())
+            .spawn(move || loader(&req_rx, &ready_tx, &trash_rx, &flag));
         let params = Arc::new(MicParams::default());
         Self {
             params: params.clone(),
             ui_state: Arc::new(MicUiState::new(params)),
-            editor_state: DioxusState::new(|| (mic::ui::view::EDITOR_W, mic::ui::view::EDITOR_H)).with_resize_hint(mic::ui::view::resize_hint()),
+            editor_state: DioxusState::new(|| (mic::ui::view::EDITOR_W, mic::ui::view::EDITOR_H))
+                .with_resize_hint(mic::ui::view::resize_hint()),
             engine: None,
             have: None,
             asked: None,
@@ -134,7 +154,11 @@ impl FtsMic {
     fn want(&self) -> Want {
         Want {
             mic1: index(&self.params.type1),
-            mic2: if self.linked() { index(&self.params.type1) } else { index(&self.params.type2) },
+            mic2: if self.linked() {
+                index(&self.params.type1)
+            } else {
+                index(&self.params.type2)
+            },
             dual: self.params.dual.value(),
             stereo: self.params.stereo180.value(),
             source: index(&self.params.source),
@@ -144,7 +168,11 @@ impl FtsMic {
 
     fn settings(&self, second: bool) -> Settings {
         let p = &self.params;
-        let (pattern, filter, axis) = if second && !self.linked() { (&p.pattern2, &p.filter2, &p.axis2) } else { (&p.pattern1, &p.filter1, &p.axis1) };
+        let (pattern, filter, axis) = if second && !self.linked() {
+            (&p.pattern2, &p.filter2, &p.axis2)
+        } else {
+            (&p.pattern1, &p.filter1, &p.axis1)
+        };
         Settings {
             pattern: index(pattern),
             axis_deg: f64::from(axis.value()),
@@ -237,13 +265,24 @@ impl Plugin for FtsMic {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
-        create_dioxus_editor_with_state(self.editor_state.clone(), self.ui_state.clone(), mic::ui::view::App)
+        create_dioxus_editor_with_state(
+            self.editor_state.clone(),
+            self.ui_state.clone(),
+            mic::ui::view::App,
+        )
     }
 
-    fn activate(&mut self, _layout: &AudioIOLayout, buffer_config: &BufferConfig, context: &mut impl ActivateContext<Self>) -> bool {
+    fn activate(
+        &mut self,
+        _layout: &AudioIOLayout,
+        buffer_config: &BufferConfig,
+        context: &mut impl ActivateContext<Self>,
+    ) -> bool {
         // The sample rate is a whole number of hertz in every host.
-        self.sample_rate = u32::try_from(dsp_core::f32_to_index(buffer_config.sample_rate.round())).unwrap_or(48_000);
-        context.set_latency_samples(u32::try_from(latency(f64::from(self.sample_rate))).unwrap_or(24));
+        self.sample_rate = u32::try_from(dsp_core::f32_to_index(buffer_config.sample_rate.round()))
+            .unwrap_or(48_000);
+        context
+            .set_latency_samples(u32::try_from(latency(f64::from(self.sample_rate))).unwrap_or(24));
         self.asked = None;
         true
     }
@@ -263,12 +302,19 @@ impl Plugin for FtsMic {
         }
     }
 
-    fn process(&mut self, buffer: &mut Buffer, _aux: &mut AuxiliaryBuffers, _context: &mut impl ProcessContext<Self>) -> ProcessStatus {
+    fn process(
+        &mut self,
+        buffer: &mut Buffer,
+        _aux: &mut AuxiliaryBuffers,
+        _context: &mut impl ProcessContext<Self>,
+    ) -> ProcessStatus {
         self.sync();
         let ready = self.have.is_some_and(|h| h.sample_rate == self.sample_rate);
         for mut frame in buffer.iter_samples() {
             let mut it = frame.iter_mut();
-            let (Some(l), Some(r)) = (it.next(), it.next()) else { continue };
+            let (Some(l), Some(r)) = (it.next(), it.next()) else {
+                continue;
+            };
             let (a, b) = if ready {
                 match self.engine.as_mut() {
                     Some(Loaded::Single(c)) => {
@@ -302,7 +348,8 @@ impl ClapPlugin for FtsMic {
 
 impl Vst3Plugin for FtsMic {
     const VST3_CLASS_ID: [u8; 16] = *b"FtsMicModeller01";
-    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[Vst3SubCategory::Fx, Vst3SubCategory::Tools];
+    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
+        &[Vst3SubCategory::Fx, Vst3SubCategory::Tools];
 }
 
 #[cfg(feature = "export")]

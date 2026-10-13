@@ -1,7 +1,7 @@
 //! Lane layout and time conversion, independent of component state.
 use super::waveform::{columns_polygon, summed_columns};
-use crate::paint::theme;
 use crate::doc::{ExpressionDoc, Note};
+use crate::paint::theme;
 use crate::{Editor, Mode, kit, rows::RowSpace, tracks::StackRow};
 const LANE_PAD: f64 = 3.0;
 /// How far past the view a hit is still laid out — the painter's own
@@ -630,9 +630,7 @@ fn lane_note(
     // the neck rather than up it. Turned off, pitch-class colour reads
     // harmony instead.
     let by_row = match (space, n.string) {
-        (RowSpace::Strings(_), Some(s)) if ed.color_by_string => {
-            Some(crate::rows::string_color(s))
-        }
+        (RowSpace::Strings(_), Some(s)) if ed.color_by_string => Some(crate::rows::string_color(s)),
         (RowSpace::Strings(_), _) => None,
         _ => space.row_color(n.row),
     };
@@ -658,10 +656,8 @@ fn lane_note(
         fill,
         grace: n.grace_of.is_some(),
         flam: doc.is_flam(n.id),
-        triangle: matches!(
-            space.note_shape(),
-            crate::rows::NoteShape::Triangle
-        ) || mode.draws_slices(),
+        triangle: matches!(space.note_shape(), crate::rows::NoteShape::Triangle)
+            || mode.draws_slices(),
         hit_line: false,
     }
 }

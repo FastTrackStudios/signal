@@ -23,7 +23,9 @@
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
-use document_proto::{Asset, AssetId, BlendMode, ImageScaleMode, NodeId, Op, Paint, PaintKind, Transform};
+use document_proto::{
+    Asset, AssetId, BlendMode, ImageScaleMode, NodeId, Op, Paint, PaintKind, Transform,
+};
 use surface_widgets::Builder;
 
 use crate::controls::parts::fixed;
@@ -71,7 +73,10 @@ impl Rng {
 }
 
 fn hash2(x: i64, y: i64, seed: u64) -> u64 {
-    let mut r = Rng::new(seed ^ (x as u64).wrapping_mul(0x51_7cc1_b727_220a) ^ (y as u64).wrapping_mul(0x2545_f491_4f6c_dd1d));
+    let mut r = Rng::new(
+        seed ^ (x as u64).wrapping_mul(0x51_7cc1_b727_220a)
+            ^ (y as u64).wrapping_mul(0x2545_f491_4f6c_dd1d),
+    );
     r.u64()
 }
 
@@ -91,7 +96,10 @@ pub struct Field {
 impl Field {
     #[must_use]
     pub fn new(n: usize) -> Self {
-        Self { n, v: vec![0.0; n * n] }
+        Self {
+            n,
+            v: vec![0.0; n * n],
+        }
     }
 
     #[must_use]
@@ -110,7 +118,12 @@ impl Field {
     /// Rescale to `-1..1` about the mean.
     pub fn normalise(&mut self) {
         let mean = self.v.iter().sum::<f64>() / self.v.len() as f64;
-        let dev = self.v.iter().map(|v| (v - mean).abs()).fold(0.0, f64::max).max(1e-9);
+        let dev = self
+            .v
+            .iter()
+            .map(|v| (v - mean).abs())
+            .fold(0.0, f64::max)
+            .max(1e-9);
         for v in &mut self.v {
             *v = (*v - mean) / dev;
         }
@@ -152,7 +165,10 @@ pub fn fbm(n: usize, cells: usize, octaves: u32, seed: u64) -> Field {
         if c > n {
             break;
         }
-        f.add(&value_noise(n, c, c, seed.wrapping_add(u64::from(o) * 7919)), amp);
+        f.add(
+            &value_noise(n, c, c, seed.wrapping_add(u64::from(o) * 7919)),
+            amp,
+        );
         amp *= 0.5;
     }
     f.normalise();
@@ -252,7 +268,10 @@ impl Relief {
             Self::Pebble { cells } => {
                 let (f1, _) = cellular(n, cells, 0.9, 11);
                 // A bump per cell: high in the middle, falling to the seams.
-                let mut h = Field { n, v: f1.v.iter().map(|d| -(d * d)).collect() };
+                let mut h = Field {
+                    n,
+                    v: f1.v.iter().map(|d| -(d * d)).collect(),
+                };
                 h.normalise();
                 let mut out = shade(&h, 2.2);
                 out.add(&fbm(n, n / 8, 2, 12), 0.25);
@@ -260,7 +279,15 @@ impl Relief {
             }
             Self::Bronco { cells } => {
                 let (f1, f2) = cellular(n, cells, 1.0, 21);
-                let mut h = Field { n, v: f1.v.iter().zip(&f2.v).map(|(a, b)| ((b - a) * 3.0).min(1.0)).collect() };
+                let mut h = Field {
+                    n,
+                    v: f1
+                        .v
+                        .iter()
+                        .zip(&f2.v)
+                        .map(|(a, b)| ((b - a) * 3.0).min(1.0))
+                        .collect(),
+                };
                 h.normalise();
                 let mut out = shade(&h, 1.6);
                 out.add(&fbm(n, n / 4, 1, 22), 0.35);
@@ -280,22 +307,56 @@ impl Relief {
             Self::Leather => {
                 // Soft, irregular pebbling with creases between, and pores.
                 let (f1, f2) = cellular(n, 30, 1.0, 51);
-                let mut h = Field { n, v: f1.v.iter().zip(&f2.v).map(|(a, b)| ((b - a) * 2.5).min(1.0).sqrt()).collect() };
+                let mut h = Field {
+                    n,
+                    v: f1
+                        .v
+                        .iter()
+                        .zip(&f2.v)
+                        .map(|(a, b)| ((b - a) * 2.5).min(1.0).sqrt())
+                        .collect(),
+                };
                 h.add(&fbm(n, 12, 3, 52), 0.5);
                 h.normalise();
                 let mut out = shade(&h, 1.8);
                 let (p1, _) = cellular(n, n / 8, 0.9, 53);
-                out.add(&Field { n, v: p1.v.iter().map(|d| if *d < 0.14 { -0.8 } else { 0.0 }).collect() }, 0.3);
+                out.add(
+                    &Field {
+                        n,
+                        v: p1
+                            .v
+                            .iter()
+                            .map(|d| if *d < 0.14 { -0.8 } else { 0.0 })
+                            .collect(),
+                    },
+                    0.3,
+                );
                 out.add(&fbm(n, 3, 2, 54), 0.12);
                 out
             }
             Self::Scales { cells } => {
                 let (f1, f2) = cellular(n, cells, 0.8, 61);
-                let mut h = Field { n, v: f1.v.iter().zip(&f2.v).map(|(a, b)| ((b - a) * 2.2).min(1.0).sqrt()).collect() };
+                let mut h = Field {
+                    n,
+                    v: f1
+                        .v
+                        .iter()
+                        .zip(&f2.v)
+                        .map(|(a, b)| ((b - a) * 2.2).min(1.0).sqrt())
+                        .collect(),
+                };
                 h.normalise();
                 let mut out = shade(&h, 3.5);
                 // The seams themselves are dark creases.
-                let seams = Field { n, v: f1.v.iter().zip(&f2.v).map(|(a, b)| if b - a < 0.06 { -1.0 } else { 0.0 }).collect() };
+                let seams = Field {
+                    n,
+                    v: f1
+                        .v
+                        .iter()
+                        .zip(&f2.v)
+                        .map(|(a, b)| if b - a < 0.06 { -1.0 } else { 0.0 })
+                        .collect(),
+                };
                 out.add(&seams, 0.6);
                 out
             }
@@ -304,11 +365,27 @@ impl Relief {
                 let mut out = Field::new(n);
                 for v in &mut out.v {
                     let r = rng.f();
-                    *v = if r > 0.93 { 1.0 } else if r < 0.1 { -0.8 } else { (rng.f() - 0.5) * 0.5 };
+                    *v = if r > 0.93 {
+                        1.0
+                    } else if r < 0.1 {
+                        -0.8
+                    } else {
+                        (rng.f() - 0.5) * 0.5
+                    };
                 }
                 if coarse {
                     let (f1, _) = cellular(n, n / 3, 1.0, 73);
-                    out.add(&Field { n, v: f1.v.iter().map(|d| if *d < 0.2 { 0.6 } else { 0.0 }).collect() }, 1.0);
+                    out.add(
+                        &Field {
+                            n,
+                            v: f1
+                                .v
+                                .iter()
+                                .map(|d| if *d < 0.2 { 0.6 } else { 0.0 })
+                                .collect(),
+                        },
+                        1.0,
+                    );
                 }
                 out.add(&shade(&fbm(n, 6, 3, 74), 5.0), 0.4);
                 out
@@ -316,7 +393,10 @@ impl Relief {
             Self::Hammered { cells } => {
                 let (f1, _) = cellular(n, cells, 0.85, 81);
                 // A dimple per cell: lowest in the middle, a sharp rim at the seams.
-                let mut h = Field { n, v: f1.v.iter().map(|d| d.powf(1.5)).collect() };
+                let mut h = Field {
+                    n,
+                    v: f1.v.iter().map(|d| d.powf(1.5)).collect(),
+                };
                 h.normalise();
                 let mut out = shade(&h, 4.0);
                 out.add(&fbm(n, n / 16, 2, 82), 0.25);
@@ -363,13 +443,27 @@ impl Relief {
 pub enum Weave {
     /// Basketweave grille cloth: blocks of `threads` parallel threads
     /// alternating in direction, in two thread colours.
-    Basket { warp: String, weft: String, gap: String, threads: usize },
+    Basket {
+        warp: String,
+        weft: String,
+        gap: String,
+        threads: usize,
+    },
     /// A twill (wheat, oxblood): diagonal ribs of `rib` px, two tones.
-    Twill { a: String, b: String, gap: String, rib: usize },
+    Twill {
+        a: String,
+        b: String,
+        gap: String,
+        rib: usize,
+    },
     /// A fine plain weave (black, silver cloth).
     Plain { thread: String, gap: String },
     /// Round perforations of diameter `hole` on a staggered `pitch`.
-    Perforated { metal: String, hole: f64, pitch: f64 },
+    Perforated {
+        metal: String,
+        hole: f64,
+        pitch: f64,
+    },
     /// Expanded metal: a diamond mesh of strands.
     Expanded { metal: String, pitch: f64 },
 }
@@ -398,11 +492,23 @@ impl Weave {
             let c = draw::hex(c);
             [c.r, c.g, c.b, c.a]
         };
-        let lerp = |a: [f64; 4], b: [f64; 4], t: f64| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t];
+        let lerp = |a: [f64; 4], b: [f64; 4], t: f64| {
+            [
+                a[0] + (b[0] - a[0]) * t,
+                a[1] + (b[1] - a[1]) * t,
+                a[2] + (b[2] - a[2]) * t,
+                a[3] + (b[3] - a[3]) * t,
+            ]
+        };
         let mut out = vec![[0.0; 4]; n * n];
         let jitter = fbm(n, 24, 2, 7);
         match self {
-            Self::Basket { warp, weft, gap, threads } => {
+            Self::Basket {
+                warp,
+                weft,
+                gap,
+                threads,
+            } => {
                 let (wa, wb, g) = (rgba(warp), rgba(weft), rgba(gap));
                 let t = (*threads).max(2);
                 // Threads 2 design px wide; a block is `t` threads square.
@@ -435,7 +541,11 @@ impl Weave {
                         let d = (dx + dy) / r;
                         let prof = (d.fract() * std::f64::consts::PI).sin();
                         let float = ((dx - dy) / 1.6).rem_euclid(1.0);
-                        let tone = if (d.floor() as i64).rem_euclid(4) == 0 { cb } else { ca };
+                        let tone = if (d.floor() as i64).rem_euclid(4) == 0 {
+                            cb
+                        } else {
+                            ca
+                        };
                         let lit = prof * (0.75 + 0.25 * (float * std::f64::consts::PI).sin());
                         let j = jitter.v[y * n + x] * 0.1;
                         out[y * n + x] = lerp(g, tone, (lit + j).clamp(0.0, 1.0).powf(0.6));
@@ -448,7 +558,11 @@ impl Weave {
                     for x in 0..n {
                         let (dx, dy) = (x as f64 * px / 1.5, y as f64 * px / 1.5);
                         let over = ((dx.floor() + dy.floor()) as i64) % 2 == 0;
-                        let prof = if over { (dy.fract() * std::f64::consts::PI).sin() } else { (dx.fract() * std::f64::consts::PI).sin() };
+                        let prof = if over {
+                            (dy.fract() * std::f64::consts::PI).sin()
+                        } else {
+                            (dx.fract() * std::f64::consts::PI).sin()
+                        };
                         let j = jitter.v[y * n + x] * 0.12;
                         out[y * n + x] = lerp(g, c, (prof * 0.9 + j).clamp(0.0, 1.0));
                     }
@@ -463,7 +577,11 @@ impl Weave {
                     for x in 0..n {
                         let (dx, dy) = ((x as f64 + 0.5) * px, (y as f64 + 0.5) * px);
                         let row = (dy / row_h).floor();
-                        let off = if (row as i64) % 2 == 0 { 0.0 } else { pitch / 2.0 };
+                        let off = if (row as i64) % 2 == 0 {
+                            0.0
+                        } else {
+                            pitch / 2.0
+                        };
                         let cx = ((dx - off) / pitch).floor() * pitch + off + pitch / 2.0;
                         let cy = row * row_h + row_h / 2.0;
                         let (ox, oy) = (dx - cx, dy - cy);
@@ -472,8 +590,17 @@ impl Weave {
                         let aa = (px * 0.7).max(0.3);
                         let t = ((d - r) / aa + 0.5).clamp(0.0, 1.0);
                         // The hole's far wall (away from the light) catches it.
-                        let wall = if d < r && d > r - 0.9 { ((-(ox * lx + oy * ly) / d.max(1e-6)).max(0.0)) * 0.55 } else { 0.0 };
-                        let inside = [0.02 + wall * m[0], 0.02 + wall * m[1], 0.02 + wall * m[2], 0.92];
+                        let wall = if d < r && d > r - 0.9 {
+                            ((-(ox * lx + oy * ly) / d.max(1e-6)).max(0.0)) * 0.55
+                        } else {
+                            0.0
+                        };
+                        let inside = [
+                            0.02 + wall * m[0],
+                            0.02 + wall * m[1],
+                            0.02 + wall * m[2],
+                            0.92,
+                        ];
                         out[y * n + x] = lerp(inside, m, t);
                     }
                 }
@@ -491,7 +618,13 @@ impl Weave {
                         let s = du.max(dv);
                         let strand = ((s - 0.36) / 0.06).clamp(0.0, 1.0);
                         // Strands are tilted: the face toward the light is lit.
-                        let face = if du > dv { if u > 0.5 { 1.0 } else { 0.55 } } else if v > 0.5 { 0.8 } else { 0.45 };
+                        let face = if du > dv {
+                            if u > 0.5 { 1.0 } else { 0.55 }
+                        } else if v > 0.5 {
+                            0.8
+                        } else {
+                            0.45
+                        };
                         let lit = [m[0] * face, m[1] * face, m[2] * face, 1.0];
                         out[y * n + x] = lerp([0.0, 0.0, 0.0, 0.9], lit, strand);
                     }
@@ -510,7 +643,11 @@ fn crc32(bytes: &[u8]) -> u32 {
         for (i, e) in t.iter_mut().enumerate() {
             let mut c = i as u32;
             for _ in 0..8 {
-                c = if c & 1 == 1 { 0xedb8_8320 ^ (c >> 1) } else { c >> 1 };
+                c = if c & 1 == 1 {
+                    0xedb8_8320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
             }
             *e = c;
         }
@@ -545,7 +682,10 @@ pub fn png(w: usize, h: usize, channels: usize, px: &[u8]) -> Vec<u8> {
     ihdr.extend_from_slice(&(h as u32).to_be_bytes());
     ihdr.extend_from_slice(&[8, color_type, 0, 0, 0]);
     chunk(b"IHDR", &ihdr);
-    chunk(b"IDAT", &miniz_oxide::deflate::compress_to_vec_zlib(&raw, 9));
+    chunk(
+        b"IDAT",
+        &miniz_oxide::deflate::compress_to_vec_zlib(&raw, 9),
+    );
     chunk(b"IEND", &[]);
     out
 }
@@ -604,7 +744,9 @@ pub fn put_png(b: &mut Builder<'_>, bytes: Vec<u8>) -> AssetId {
     let asset = Asset::new("image/png", bytes);
     let id = asset.id.clone();
     if b.scene.asset(&id).is_none() {
-        b.scene.apply(Op::PutAsset { asset }).expect("putting an asset cannot fail");
+        b.scene
+            .apply(Op::PutAsset { asset })
+            .expect("putting an asset cannot fail");
     }
     id
 }
@@ -613,7 +755,12 @@ pub fn put_png(b: &mut Builder<'_>, bytes: Vec<u8>) -> AssetId {
 #[must_use]
 pub fn image_paint(asset: AssetId, opacity: f64) -> Paint {
     Paint {
-        kind: PaintKind::Image { asset, source_ref: None, scale_mode: ImageScaleMode::Stretch, transform: None },
+        kind: PaintKind::Image {
+            asset,
+            source_ref: None,
+            scale_mode: ImageScaleMode::Stretch,
+            transform: None,
+        },
         opacity,
         blend: BlendMode::Normal,
         visible: true,
@@ -623,8 +770,25 @@ pub fn image_paint(asset: AssetId, opacity: f64) -> Paint {
 /// Cover `(x, y, w, h)` under `parent` with `asset` as tiles of `tile`
 /// design px, rounded by `radius` — as one repeating fill
 /// ([`TileFill::Repeat`]). Returns the textured node.
-pub fn tiles(b: &mut Builder<'_>, parent: NodeId, rect: (f64, f64, f64, f64), radius: f64, asset: &AssetId, tile: f64, opacity: f64) -> NodeId {
-    tiles_with(b, parent, rect, radius, asset, tile, opacity, TileFill::default())
+pub fn tiles(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    rect: (f64, f64, f64, f64),
+    radius: f64,
+    asset: &AssetId,
+    tile: f64,
+    opacity: f64,
+) -> NodeId {
+    tiles_with(
+        b,
+        parent,
+        rect,
+        radius,
+        asset,
+        tile,
+        opacity,
+        TileFill::default(),
+    )
 }
 
 /// [`tiles`], laid as `fill` says. [`TileFill::Grid`] grows the tile so no
@@ -651,13 +815,26 @@ pub fn tiles_with(
                 asset: asset.clone(),
                 source_ref: None,
                 scale_mode: ImageScaleMode::Tile,
-                transform: Some(Transform { a: sx, b: 0.0, c: 0.0, d: sy, tx: 0.0, ty: 0.0 }),
+                transform: Some(Transform {
+                    a: sx,
+                    b: 0.0,
+                    c: 0.0,
+                    d: sy,
+                    tx: 0.0,
+                    ty: 0.0,
+                }),
             },
             opacity,
             blend: BlendMode::Normal,
             visible: true,
         };
-        return b.add(parent, fixed(draw::rounded(draw::rect("texture", x, y, w, h, paint), radius)));
+        return b.add(
+            parent,
+            fixed(draw::rounded(
+                draw::rect("texture", x, y, w, h, paint),
+                radius,
+            )),
+        );
     }
     let mut t = t;
     while ((w / t).ceil() * (h / t).ceil()) as usize > MAX_TILES {
@@ -669,7 +846,14 @@ pub fn tiles_with(
     let (cols, rows) = ((w / t).ceil() as usize, (h / t).ceil() as usize);
     for j in 0..rows {
         for i in 0..cols {
-            let mut n = draw::rect("tile", i as f64 * t, j as f64 * t, t, t, image_paint(asset.clone(), opacity));
+            let mut n = draw::rect(
+                "tile",
+                i as f64 * t,
+                j as f64 * t,
+                t,
+                t,
+                image_paint(asset.clone(), opacity),
+            );
             n.layout_child.absolute = true;
             b.add(clip, n);
         }
@@ -680,18 +864,41 @@ pub fn tiles_with(
 /// A PNG's pixel size, from its header.
 fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
     let be = |i: usize| Some(u32::from_be_bytes(bytes.get(i..i + 4)?.try_into().ok()?));
-    (bytes.starts_with(b"\x89PNG\r\n\x1a\n") && bytes.get(12..16) == Some(b"IHDR")).then(|| Some((be(16)?, be(20)?)))?
+    (bytes.starts_with(b"\x89PNG\r\n\x1a\n") && bytes.get(12..16) == Some(b"IHDR"))
+        .then(|| Some((be(16)?, be(20)?)))?
 }
 
 /// [`tiles`] of a relief texture: `gain` its strength, `scale` its size.
-pub fn relief(b: &mut Builder<'_>, parent: NodeId, rect: (f64, f64, f64, f64), radius: f64, r: Relief, gain: f64, scale: f64) -> NodeId {
+pub fn relief(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    rect: (f64, f64, f64, f64),
+    radius: f64,
+    r: Relief,
+    gain: f64,
+    scale: f64,
+) -> NodeId {
     let (bytes, design) = relief_png(r, 1.0);
     let id = put_png(b, bytes);
-    tiles(b, parent, rect, radius, &id, design * scale, gain.clamp(0.0, 1.0))
+    tiles(
+        b,
+        parent,
+        rect,
+        radius,
+        &id,
+        design * scale,
+        gain.clamp(0.0, 1.0),
+    )
 }
 
 /// [`tiles`] of a colour texture.
-pub fn weave(b: &mut Builder<'_>, parent: NodeId, rect: (f64, f64, f64, f64), radius: f64, w: &Weave) -> NodeId {
+pub fn weave(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    rect: (f64, f64, f64, f64),
+    radius: f64,
+    w: &Weave,
+) -> NodeId {
     let (bytes, design) = weave_png(w);
     let id = put_png(b, bytes);
     tiles(b, parent, rect, radius, &id, design, 1.0)
@@ -705,8 +912,12 @@ mod tests {
     fn fields_wrap_at_the_tile_edge() {
         let f = fbm(64, 8, 3, 1);
         // Neighbours across the seam differ no more than inside the tile.
-        let seam: f64 = (0..64).map(|y| (f.at(63, y) - f.at(0, y)).abs()).fold(0.0, f64::max);
-        let inner: f64 = (0..64).map(|y| (f.at(31, y) - f.at(32, y)).abs()).fold(0.0, f64::max);
+        let seam: f64 = (0..64)
+            .map(|y| (f.at(63, y) - f.at(0, y)).abs())
+            .fold(0.0, f64::max);
+        let inner: f64 = (0..64)
+            .map(|y| (f.at(31, y) - f.at(32, y)).abs())
+            .fold(0.0, f64::max);
         assert!(seam < inner * 2.5 + 0.05, "seam {seam} vs inner {inner}");
     }
 
@@ -726,7 +937,12 @@ mod tests {
 
     #[test]
     fn tiles_are_small() {
-        for r in [Relief::Pebble { cells: 40 }, Relief::Hammered { cells: 16 }, Relief::Brushed, Relief::Powder { coarse: false }] {
+        for r in [
+            Relief::Pebble { cells: 40 },
+            Relief::Hammered { cells: 16 },
+            Relief::Brushed,
+            Relief::Powder { coarse: false },
+        ] {
             let (bytes, _) = relief_png(r, 1.0);
             assert!(bytes.len() < 140_000, "{r:?}: {} bytes", bytes.len());
         }

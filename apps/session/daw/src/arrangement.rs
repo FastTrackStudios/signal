@@ -4745,8 +4745,7 @@ mod dial_tests {
 
     #[test]
     fn a_hit_marker_wears_its_drums_colour() {
-        let colour =
-            |piece: &str| super::kit_color(expression_editor::kit::kit_role(piece, &[]));
+        let colour = |piece: &str| super::kit_color(expression_editor::kit::kit_role(piece, &[]));
         assert_eq!(colour("Kick"), super::kit_color(super::LaneRole::Kick));
         assert_eq!(colour("Snare"), super::kit_color(super::LaneRole::Snare));
         assert_eq!(colour("Tom 1"), super::kit_color(super::LaneRole::Toms));

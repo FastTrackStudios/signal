@@ -54,7 +54,10 @@ funcs! {
 impl Func {
     #[must_use]
     pub fn named(name: &str) -> Option<Func> {
-        Self::ALL.iter().find(|(_, n, ..)| *n == name).map(|(f, ..)| *f)
+        Self::ALL
+            .iter()
+            .find(|(_, n, ..)| *n == name)
+            .map(|(f, ..)| *f)
     }
 
     #[must_use]
@@ -64,13 +67,19 @@ impl Func {
 
     #[must_use]
     pub fn name(self) -> &'static str {
-        Self::ALL.iter().find(|(f, ..)| *f == self).map_or("?", |(_, n, ..)| n)
+        Self::ALL
+            .iter()
+            .find(|(f, ..)| *f == self)
+            .map_or("?", |(_, n, ..)| n)
     }
 
     /// Fewest and most arguments.
     #[must_use]
     pub fn arity(self) -> (usize, usize) {
-        Self::ALL.iter().find(|(f, ..)| *f == self).map_or((0, 0), |(_, _, lo, hi)| (*lo, *hi))
+        Self::ALL
+            .iter()
+            .find(|(f, ..)| *f == self)
+            .map_or((0, 0), |(_, _, lo, hi)| (*lo, *hi))
     }
 
     /// Apply to evaluated arguments. `If` and `Or` are lazy and handled by
@@ -87,7 +96,11 @@ impl Func {
             Func::Min | Func::Max => {
                 let xs: Option<Vec<f64>> = a.iter().map(Value::num).collect();
                 num(xs.and_then(|xs| {
-                    let pick = if self == Func::Min { f64::min } else { f64::max };
+                    let pick = if self == Func::Min {
+                        f64::min
+                    } else {
+                        f64::max
+                    };
                     xs.into_iter().reduce(pick)
                 }))
             }
@@ -100,7 +113,11 @@ impl Func {
             Func::Step => num((|| Some(f64::from(u8::from(n(1)? >= n(0)?))))()),
             Func::Smoothstep => num((|| {
                 let (e0, e1, x) = (n(0)?, n(1)?, n(2)?);
-                let t = if (e1 - e0).abs() < f64::EPSILON { f64::from(u8::from(x >= e1)) } else { ((x - e0) / (e1 - e0)).clamp(0.0, 1.0) };
+                let t = if (e1 - e0).abs() < f64::EPSILON {
+                    f64::from(u8::from(x >= e1))
+                } else {
+                    ((x - e0) / (e1 - e0)).clamp(0.0, 1.0)
+                };
                 Some(t * t * (3.0 - 2.0 * t))
             })()),
             Func::Pow => num((|| Some(n(0)?.powf(n(1)?)))()),
@@ -112,21 +129,40 @@ impl Func {
             Func::Amp => num(n(0).map(|db| 10f64.powf(db / 20.0))),
             Func::Rgb => col((|| {
                 let ch = |i| n(i).map(|v| v.clamp(0.0, 1.0) as f32);
-                Some(Rgba::new(ch(0)?, ch(1)?, ch(2)?, if a.len() > 3 { ch(3)? } else { 1.0 }))
+                Some(Rgba::new(
+                    ch(0)?,
+                    ch(1)?,
+                    ch(2)?,
+                    if a.len() > 3 { ch(3)? } else { 1.0 },
+                ))
             })()),
             Func::Mix => col((|| Some(c(0)?.mix(c(1)?, n(2)?)))()),
-            Func::Alpha => col((|| Some(Rgba { a: n(1)?.clamp(0.0, 1.0) as f32, ..c(0)? }))()),
+            Func::Alpha => col((|| {
+                Some(Rgba {
+                    a: n(1)?.clamp(0.0, 1.0) as f32,
+                    ..c(0)?
+                })
+            })()),
             Func::Fade => col((|| {
                 let base = c(0)?;
-                Some(Rgba { a: (f64::from(base.a) * n(1)?).clamp(0.0, 1.0) as f32, ..base })
+                Some(Rgba {
+                    a: (f64::from(base.a) * n(1)?).clamp(0.0, 1.0) as f32,
+                    ..base
+                })
             })()),
             Func::Lighten => col((|| {
                 let base = c(0)?;
-                Some(Rgba { a: base.a, ..base.mix(Rgba::WHITE, n(1)?) })
+                Some(Rgba {
+                    a: base.a,
+                    ..base.mix(Rgba::WHITE, n(1)?)
+                })
             })()),
             Func::Darken => col((|| {
                 let base = c(0)?;
-                Some(Rgba { a: base.a, ..base.mix(Rgba::BLACK, n(1)?) })
+                Some(Rgba {
+                    a: base.a,
+                    ..base.mix(Rgba::BLACK, n(1)?)
+                })
             })()),
             // Each channel scaled up by `k` and clamped: a lit control's
             // hover, red running into the ceiling while green and blue
@@ -134,13 +170,26 @@ impl Func {
             Func::Lift => col((|| {
                 let (base, k) = (c(0)?, n(1)? as f32);
                 let up = |v: f32| (v * (1.0 + k)).clamp(0.0, 1.0);
-                Some(Rgba { r: up(base.r), g: up(base.g), b: up(base.b), a: base.a })
+                Some(Rgba {
+                    r: up(base.r),
+                    g: up(base.g),
+                    b: up(base.b),
+                    a: base.a,
+                })
             })()),
             Func::Luma => num(c(0).map(Rgba::luma)),
             Func::Ink => col((|| {
                 let ground = c(0)?;
-                let dark = if a.len() > 1 { c(1)? } else { Rgba::from_hex("#141414")? };
-                let light = if a.len() > 2 { c(2)? } else { Rgba::from_hex("#f2f2f2")? };
+                let dark = if a.len() > 1 {
+                    c(1)?
+                } else {
+                    Rgba::from_hex("#141414")?
+                };
+                let light = if a.len() > 2 {
+                    c(2)?
+                } else {
+                    Rgba::from_hex("#f2f2f2")?
+                };
                 Some(if ground.luma() > 0.5 { dark } else { light })
             })()),
             Func::Upper => txt(t(0).map(|s| s.to_uppercase())),
@@ -158,12 +207,22 @@ impl Func {
                 Some(false) => a.get(2).cloned().unwrap_or(Value::Missing),
                 None => Value::Missing,
             },
-            Func::Or => a.iter().find(|v| !v.is_missing()).cloned().unwrap_or(Value::Missing),
+            Func::Or => a
+                .iter()
+                .find(|v| !v.is_missing())
+                .cloned()
+                .unwrap_or(Value::Missing),
             // Degrees clockwise from twelve o'clock, as knobs are drawn;
             // flattened as finely as a 9 px ring needs.
             Func::Arc => txt((|| {
                 use kurbo::Shape as _;
-                let arc = kurbo::Arc::new((n(0)?, n(1)?), (n(2)?, n(2)?), (n(3)? - 90.0).to_radians(), n(4)?.to_radians(), 0.0);
+                let arc = kurbo::Arc::new(
+                    (n(0)?, n(1)?),
+                    (n(2)?, n(2)?),
+                    (n(3)? - 90.0).to_radians(),
+                    n(4)?.to_radians(),
+                    0.0,
+                );
                 Some(arc.to_path(0.05).to_svg())
             })()),
         }

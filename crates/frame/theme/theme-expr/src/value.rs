@@ -13,8 +13,18 @@ pub struct Rgba {
 }
 
 impl Rgba {
-    pub const BLACK: Rgba = Rgba { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
-    pub const WHITE: Rgba = Rgba { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
+    pub const BLACK: Rgba = Rgba {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    pub const WHITE: Rgba = Rgba {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0,
+    };
 
     #[must_use]
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
@@ -33,9 +43,19 @@ impl Rgba {
         let (r, g, b, a) = match h.len() {
             3 | 4 => {
                 let one = |i| digit(i).map(|d| d * 17);
-                (one(0)?, one(1)?, one(2)?, if h.len() == 4 { one(3)? } else { 255 })
+                (
+                    one(0)?,
+                    one(1)?,
+                    one(2)?,
+                    if h.len() == 4 { one(3)? } else { 255 },
+                )
             }
-            6 | 8 => (pair(0)?, pair(2)?, pair(4)?, if h.len() == 8 { pair(6)? } else { 255 }),
+            6 | 8 => (
+                pair(0)?,
+                pair(2)?,
+                pair(4)?,
+                if h.len() == 8 { pair(6)? } else { 255 },
+            ),
             _ => return None,
         };
         Some(Self::from_rgba8(r, g, b, a))
@@ -44,7 +64,12 @@ impl Rgba {
     #[must_use]
     pub fn from_rgba8(r: u8, g: u8, b: u8, a: u8) -> Self {
         let c = |v: u8| f32::from(v) / 255.0;
-        Self { r: c(r), g: c(g), b: c(b), a: c(a) }
+        Self {
+            r: c(r),
+            g: c(g),
+            b: c(b),
+            a: c(a),
+        }
     }
 
     /// Channels as bytes, rounded.
@@ -59,7 +84,11 @@ impl Rgba {
     #[must_use]
     pub fn to_hex(self) -> String {
         let [r, g, b, a] = self.to_rgba8();
-        if a == 255 { format!("#{r:02x}{g:02x}{b:02x}") } else { format!("#{r:02x}{g:02x}{b:02x}{a:02x}") }
+        if a == 255 {
+            format!("#{r:02x}{g:02x}{b:02x}")
+        } else {
+            format!("#{r:02x}{g:02x}{b:02x}{a:02x}")
+        }
     }
 
     /// Linear interpolation, channel by channel (`t` clamped to 0..1).
@@ -67,7 +96,12 @@ impl Rgba {
     pub fn mix(self, other: Rgba, t: f64) -> Rgba {
         let t = t.clamp(0.0, 1.0) as f32;
         let l = |a: f32, b: f32| a + (b - a) * t;
-        Rgba { r: l(self.r, other.r), g: l(self.g, other.g), b: l(self.b, other.b), a: l(self.a, other.a) }
+        Rgba {
+            r: l(self.r, other.r),
+            g: l(self.g, other.g),
+            b: l(self.b, other.b),
+            a: l(self.a, other.a),
+        }
     }
 
     /// Relative luminance (sRGB coefficients over the encoded channels —

@@ -408,7 +408,11 @@ fn main() {
         let bytes = std::fs::read(&path).expect("read OMNI_STATE");
         set_component_state(&mut plugin, &bytes);
         pump_run_loop(1.0);
-        eprintln!("[{:>6.2?}] setState from {}", t0.elapsed(), std::path::Path::new(&path).display());
+        eprintln!(
+            "[{:>6.2?}] setState from {}",
+            t0.elapsed(),
+            std::path::Path::new(&path).display()
+        );
     } else if a.patch.is_none() {
         // Round-trip the untouched default multi through setState so
         // both renders take the same path through the plugin.
@@ -431,11 +435,15 @@ fn main() {
         st.xml.replace_range(s..e, &engine);
         // OMNI_PLEVEL=0.44: the part's mixer fader (`pLevelN`, 0.75 at
         // init), for measuring its law.
-        if let Some(level) = std::env::var("OMNI_PLEVEL").ok().and_then(|v| v.parse::<f32>().ok()) {
+        if let Some(level) = std::env::var("OMNI_PLEVEL")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+        {
             let key = format!("pLevel{part}=\"");
             let at = st.xml.find(&key).expect("multi has no part level") + key.len();
             let end = at + st.xml[at..].find('"').expect("unterminated pLevel");
-            st.xml.replace_range(at..end, &format!("{:08x}", level.to_bits()));
+            st.xml
+                .replace_range(at..end, &format!("{:08x}", level.to_bits()));
         }
         set_component_state(&mut plugin, &st.to_bytes());
         pump_run_loop(0.5);
@@ -452,18 +460,17 @@ fn main() {
     // Pre-roll: let the engine (and any sample streaming) settle,
     // pumping the run loop between blocks.
     let pre_frames = (a.preroll * sr) as usize;
-    let ccs: Vec<PluginMidiEvent> = a
-        .cc
-        .iter()
-        .map(|&(n, v)| PluginMidiEvent {
-            offset: 0,
-            message: MidiEvent::ControlChange {
-                channel: Channel::new((a.part - 1) as u8),
-                controller: ControllerNumber::new(n),
-                value: ControllerValue::new(v),
-            },
-        })
-        .collect();
+    let ccs: Vec<PluginMidiEvent> =
+        a.cc.iter()
+            .map(|&(n, v)| PluginMidiEvent {
+                offset: 0,
+                message: MidiEvent::ControlChange {
+                    channel: Channel::new((a.part - 1) as u8),
+                    controller: ControllerNumber::new(n),
+                    value: ControllerValue::new(v),
+                },
+            })
+            .collect();
     let prev_ch = Channel::new((a.part - 1) as u8);
     let mut done = 0;
     while done < pre_frames {
@@ -552,13 +559,21 @@ fn main() {
             if (pos..pos + BLOCK).contains(&at) {
                 ev.push(PluginMidiEvent {
                     offset: (at - pos) as u32,
-                    message: MidiEvent::NoteOn { channel: ch, key: KeyNumber::new(*k), velocity: Velocity::new(vel) },
+                    message: MidiEvent::NoteOn {
+                        channel: ch,
+                        key: KeyNumber::new(*k),
+                        velocity: Velocity::new(vel),
+                    },
                 });
             }
             if (pos..pos + BLOCK).contains(&hold_frames) {
                 ev.push(PluginMidiEvent {
                     offset: (hold_frames - pos) as u32,
-                    message: MidiEvent::NoteOff { channel: ch, key: KeyNumber::new(*k), velocity: Velocity::new(0) },
+                    message: MidiEvent::NoteOff {
+                        channel: ch,
+                        key: KeyNumber::new(*k),
+                        velocity: Velocity::new(0),
+                    },
                 });
             }
         }

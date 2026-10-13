@@ -10,10 +10,10 @@
 //! state the track model cannot express, and input monitoring cycles rather
 //! than toggles.
 
-use daw_proto::track::InputMonitoringMode;
 use crate::art::dress::Panel;
 use crate::art::slice;
 use crate::art::vector_controls as art;
+use daw_proto::track::InputMonitoringMode;
 
 use crate::controls::reach::write_track;
 use crate::controls::use_track;

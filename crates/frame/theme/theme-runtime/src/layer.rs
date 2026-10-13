@@ -25,7 +25,12 @@ const COMPONENTS: &str = "components";
 #[must_use]
 pub fn layer(scenes: &[Scene]) -> Scene {
     let mut root = Node::new(NodeKind::Document, "Document");
-    let mut out = Scene { root: root.id, nodes: BTreeMap::new(), assets: BTreeMap::new(), variables: document_proto::Variables::default() };
+    let mut out = Scene {
+        root: root.id,
+        nodes: BTreeMap::new(),
+        assets: BTreeMap::new(),
+        variables: document_proto::Variables::default(),
+    };
 
     // What each name resolves to: the last file's, in first-met order.
     let mut roles: Vec<(String, usize, NodeId)> = Vec::new();
@@ -39,14 +44,23 @@ pub fn layer(scenes: &[Scene]) -> Scene {
         for (name, var) in &scene.variables.vars {
             out.variables.vars.insert(name.clone(), var.clone());
         }
-        out.assets.extend(scene.assets.iter().map(|(k, v)| (k.clone(), v.clone())));
+        out.assets
+            .extend(scene.assets.iter().map(|(k, v)| (k.clone(), v.clone())));
         for &page in scene.pages() {
             let Some(p) = scene.node(page) else { continue };
-            if p.children.iter().any(|c| scene.node(*c).is_some_and(|n| n.kind != NodeKind::Component)) {
+            if p.children.iter().any(|c| {
+                scene
+                    .node(*c)
+                    .is_some_and(|n| n.kind != NodeKind::Component)
+            }) {
                 set(&mut roles, &p.name, i, page);
             }
         }
-        for n in scene.nodes.values().filter(|n| n.kind == NodeKind::Component) {
+        for n in scene
+            .nodes
+            .values()
+            .filter(|n| n.kind == NodeKind::Component)
+        {
             set(&mut components, &n.name, i, n.id);
         }
     }
@@ -79,10 +93,13 @@ fn set(list: &mut Vec<(String, usize, NodeId)>, name: &str, file: usize, id: Nod
 /// `id`'s subtree from `from` into `out`, under `parent` — leaving out any
 /// component in it: those are layered on their own.
 fn copy(from: &Scene, id: NodeId, parent: NodeId, out: &mut Scene) {
-    let Some(mut n) = from.node(id).cloned() else { return };
+    let Some(mut n) = from.node(id).cloned() else {
+        return;
+    };
     n.parent = Some(parent);
     let top = n.kind == NodeKind::Component;
-    n.children.retain(|c| top || from.node(*c).is_some_and(|c| c.kind != NodeKind::Component));
+    n.children
+        .retain(|c| top || from.node(*c).is_some_and(|c| c.kind != NodeKind::Component));
     let children = n.children.clone();
     out.nodes.insert(id, n);
     for c in children {

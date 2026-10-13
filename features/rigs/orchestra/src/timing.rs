@@ -102,18 +102,19 @@ pub fn render_click(
     sr: u32,
     count_in: Option<CountIn>,
 ) -> Vec<f32> {
-    let mut engine = session::guide::engine::GuideEngine::new(session::guide::engine::GuideConfig {
-        // Every beat with the downbeat accented, no subdivisions.
-        // (subdivisions default to off.)
-        click: session::guide::engine::ClickSubdivisions {
-            beat: true,
-            measure_accent: true,
+    let mut engine =
+        session::guide::engine::GuideEngine::new(session::guide::engine::GuideConfig {
+            // Every beat with the downbeat accented, no subdivisions.
+            // (subdivisions default to off.)
+            click: session::guide::engine::ClickSubdivisions {
+                beat: true,
+                measure_accent: true,
+                ..Default::default()
+            },
+            enable_count: count_in.is_some(),
+            enable_guide: false,
             ..Default::default()
-        },
-        enable_count: count_in.is_some(),
-        enable_guide: false,
-        ..Default::default()
-    });
+        });
     engine.bank_mut().beat = Some(click_sample(1000.0, 0.045, 0.7, sr));
     engine.bank_mut().measure_accent = Some(click_sample(1600.0, 0.055, 0.85, sr));
     if let Some(ci) = count_in {

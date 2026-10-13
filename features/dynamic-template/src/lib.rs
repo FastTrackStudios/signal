@@ -1,4 +1,3 @@
-
 pub mod proto;
 
 use daw_proto::{FolderDepthChange, TrackHierarchy, TrackNode};

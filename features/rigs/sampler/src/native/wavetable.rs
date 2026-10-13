@@ -309,7 +309,11 @@ impl NoiseCfg {
             10_500.0 * (2_800.0f32 / 10_500.0).powf((s - 0.5) / 0.5)
         };
         // The level the plugin plays at beyond what the lowpass removes.
-        let extra_db = if s <= 0.5 { -1.8 * s / 0.5 } else { -1.8 - 3.0 * (s - 0.5) / 0.5 };
+        let extra_db = if s <= 0.5 {
+            -1.8 * s / 0.5
+        } else {
+            -1.8 - 3.0 * (s - 0.5) / 0.5
+        };
         let hp_mix = 1.0 - (2.0 * symmetry.clamp(0.0, 1.0) - 1.0).abs();
         Self {
             lp_hz,
@@ -333,7 +337,10 @@ impl NoiseVoice {
         let q = [0.541, 1.307]; // 4-pole Butterworth
         Self {
             rng: seed | 1,
-            lp: [Bq::new(sr, cfg.lp_hz, q[0], false), Bq::new(sr, cfg.lp_hz, q[1], false)],
+            lp: [
+                Bq::new(sr, cfg.lp_hz, q[0], false),
+                Bq::new(sr, cfg.lp_hz, q[1], false),
+            ],
             hp: Bq::new(sr, 15_000.0, 0.707, true),
         }
     }
@@ -670,10 +677,13 @@ impl NativeWavetable {
                 None => VoiceEnv::Adsr(Adsr::new(self.sample_rate, self.cfg.env)),
             };
             env.note_on();
-            let noise = self
-                .noise
-                .as_ref()
-                .map(|c| NoiseVoice::new(self.sample_rate, c, 0x9E37_79B9 ^ (u32::from(note) << 16) ^ self.voices.len() as u32));
+            let noise = self.noise.as_ref().map(|c| {
+                NoiseVoice::new(
+                    self.sample_rate,
+                    c,
+                    0x9E37_79B9 ^ (u32::from(note) << 16) ^ self.voices.len() as u32,
+                )
+            });
             self.voices.push(Voice {
                 released: false,
                 noise,

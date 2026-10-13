@@ -7,9 +7,9 @@
 //! ```
 
 use daw::service::{Channel, KeyNumber, MidiEvent, Velocity};
-use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use sampler::node_render::RenderNode;
 use sampler::rig_node::Container;
+use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use synth::Source;
 use synth::engine::{ModuleSettings, signal_module_with};
 

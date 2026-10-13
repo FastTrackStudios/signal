@@ -48,7 +48,10 @@ impl Default for FtsEqPlugin {
             params,
             ui_state,
             editor_state: DioxusState::new(|| {
-                (eq::ui::control_view::EDITOR_W, eq::ui::control_view::EDITOR_H)
+                (
+                    eq::ui::control_view::EDITOR_W,
+                    eq::ui::control_view::EDITOR_H,
+                )
             })
             .with_resize_hint(eq::ui::control_view::resize_hint()),
             engine,

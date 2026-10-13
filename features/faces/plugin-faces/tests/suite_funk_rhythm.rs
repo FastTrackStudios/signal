@@ -10,11 +10,18 @@ use surface_proto::{Catalog, Source};
 const PLUGIN: &str = "suite-funk-rhythm";
 
 fn catalog() -> Catalog {
-    catalogs(&plugin_faces::all()).remove(PLUGIN).expect("suite catalog")
+    catalogs(&plugin_faces::all())
+        .remove(PLUGIN)
+        .expect("suite catalog")
 }
 
 fn controls(scene: &Scene) -> Vec<(&document_proto::Node, &surface_proto::Control)> {
-    scene.walk(scene.root).into_iter().filter_map(|id| scene.node(id)).filter_map(|n| n.control.as_ref().map(|c| (n, c))).collect()
+    scene
+        .walk(scene.root)
+        .into_iter()
+        .filter_map(|id| scene.node(id))
+        .filter_map(|n| n.control.as_ref().map(|c| (n, c)))
+        .collect()
 }
 
 /// What a control binds: a handle's two axes, else its binding.
@@ -27,8 +34,18 @@ fn bindings(c: &surface_proto::Control) -> Vec<Option<&surface_proto::Binding>> 
 
 fn lint_errors(face: &Face, scene: &Scene, catalog: &Catalog) {
     let issues = design_lint::lint(scene, catalog, &design_lint::Config::default());
-    let errors: Vec<String> = issues.iter().filter(|i| i.severity == design_lint::Severity::Error).map(ToString::to_string).collect();
-    assert!(errors.is_empty(), "{}: {} lint errors:\n{}", face.file, errors.len(), errors.join("\n"));
+    let errors: Vec<String> = issues
+        .iter()
+        .filter(|i| i.severity == design_lint::Severity::Error)
+        .map(ToString::to_string)
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "{}: {} lint errors:\n{}",
+        face.file,
+        errors.len(),
+        errors.join("\n")
+    );
 }
 
 #[test]
@@ -38,7 +55,11 @@ fn thirteen_units_in_signal_order() {
     let mut sorted = files.clone();
     sorted.sort_unstable();
     assert_eq!(files, sorted, "file names carry the signal order");
-    assert!(suite_funk_rhythm::faces().iter().all(|f| f.plugin == PLUGIN));
+    assert!(
+        suite_funk_rhythm::faces()
+            .iter()
+            .all(|f| f.plugin == PLUGIN)
+    );
 }
 
 #[test]
@@ -47,7 +68,8 @@ fn every_unit_lints_without_errors() {
     for face in suite_funk_rhythm::faces() {
         lint_errors(&face, &face.scene, &catalog);
         let text = document_text::print(&face.scene);
-        let parsed = document_text::parse(&text, Default::default()).unwrap_or_else(|e| panic!("{}: {e}", face.file));
+        let parsed = document_text::parse(&text, Default::default())
+            .unwrap_or_else(|e| panic!("{}: {e}", face.file));
         lint_errors(&face, &parsed, &catalog);
     }
 }
@@ -64,7 +86,10 @@ fn every_binding_exists_and_every_param_is_bound() {
             for binding in bindings(c) {
                 match binding.map(|b| &b.source) {
                     Some(Source::Param { addr }) => {
-                        assert!(face.params.iter().any(|p| &p.addr == addr), "{f}: {addr} is not this unit's");
+                        assert!(
+                            face.params.iter().any(|p| &p.addr == addr),
+                            "{f}: {addr} is not this unit's"
+                        );
                         bound.insert(addr.0.clone());
                     }
                     other => panic!("{f}: \"{}\" has binding {other:?}", node.name),
@@ -81,28 +106,64 @@ fn every_binding_exists_and_every_param_is_bound() {
 #[test]
 fn every_unit_is_its_form_factors_size() {
     for face in suite_funk_rhythm::faces() {
-        let root = face.scene.node(face.scene.pages()[0]).and_then(|p| p.children.first().copied()).and_then(|r| face.scene.node(r)).expect("root");
+        let root = face
+            .scene
+            .node(face.scene.pages()[0])
+            .and_then(|p| p.children.first().copied())
+            .and_then(|r| face.scene.node(r))
+            .expect("root");
         let (w, h) = (root.size.width, root.size.height);
         // The file name says `<form>-<w>x<h>`.
         let size = face.file.rsplit('-').next().expect("size");
         let (fw, fh) = size.split_once('x').expect("WxH");
-        assert_eq!((w, h), (fw.parse().expect("w"), fh.parse().expect("h")), "{}", face.file);
+        assert_eq!(
+            (w, h),
+            (fw.parse().expect("w"), fh.parse().expect("h")),
+            "{}",
+            face.file
+        );
         if face.file.contains("standard") || face.file.contains("bigbox") {
-            assert!((h - 286.0).abs() < 1e-9, "{}: every pedal is 286 tall", face.file);
+            assert!(
+                (h - 286.0).abs() < 1e-9,
+                "{}: every pedal is 286 tall",
+                face.file
+            );
         }
     }
 }
 
 #[test]
 fn no_maker_artist_or_product_is_printed() {
-    let banned = ["cory", "wong", "neural", "archetype", "postal", "4th position", "tuber", "big rig", "amp snob", "clean machine", "d.i. funk", "funk console", "delay-y-y", "the 80s", "the wash"];
+    let banned = [
+        "cory",
+        "wong",
+        "neural",
+        "archetype",
+        "postal",
+        "4th position",
+        "tuber",
+        "big rig",
+        "amp snob",
+        "clean machine",
+        "d.i. funk",
+        "funk console",
+        "delay-y-y",
+        "the 80s",
+        "the wash",
+    ];
     for face in suite_funk_rhythm::faces() {
         let scene = &face.scene;
         let text: String = scene
             .walk(scene.root)
             .into_iter()
             .filter_map(|id| scene.node(id))
-            .map(|n| format!("{} {}\n", n.name, n.text().map(|t| t.characters.as_str()).unwrap_or_default()))
+            .map(|n| {
+                format!(
+                    "{} {}\n",
+                    n.name,
+                    n.text().map(|t| t.characters.as_str()).unwrap_or_default()
+                )
+            })
             .collect::<String>()
             .to_lowercase();
         for word in banned {
@@ -110,7 +171,14 @@ fn no_maker_artist_or_product_is_printed() {
             assert!(!face.file.contains(word), "{} is named {word}", face.file);
         }
         for p in &face.params {
-            assert!(!banned.iter().any(|w| p.name.to_lowercase().contains(w) || p.addr.0.contains(w)), "{}: {}", face.file, p.addr);
+            assert!(
+                !banned
+                    .iter()
+                    .any(|w| p.name.to_lowercase().contains(w) || p.addr.0.contains(w)),
+                "{}: {}",
+                face.file,
+                p.addr
+            );
         }
     }
 }
@@ -118,13 +186,20 @@ fn no_maker_artist_or_product_is_printed() {
 #[test]
 fn every_hardware_knob_is_a_gpu_knob() {
     // The cab's mic knobs are the plugin's flat UI knobs, not hardware.
-    for face in suite_funk_rhythm::faces().iter().filter(|f| !f.file.contains("cab")) {
+    for face in suite_funk_rhythm::faces()
+        .iter()
+        .filter(|f| !f.file.contains("cab"))
+    {
         let s = &face.scene;
         for (n, c) in controls(s) {
             if !matches!(c.kind, surface_proto::ControlKind::Knob { .. }) {
                 continue;
             }
-            let gpu = s.walk(n.id).into_iter().filter_map(|id| s.node(id)).any(|k| k.shader.as_ref().is_some_and(|f| f.shader == "knob.3d"));
+            let gpu = s
+                .walk(n.id)
+                .into_iter()
+                .filter_map(|id| s.node(id))
+                .any(|k| k.shader.as_ref().is_some_and(|f| f.shader == "knob.3d"));
             assert!(gpu, "{}: {} isn't a knob.3d", face.file, n.name);
         }
     }
@@ -134,13 +209,20 @@ fn every_hardware_knob_is_a_gpu_knob() {
 fn the_eq_reads_off_at_its_stops_and_signs_its_gains() {
     let cat = catalog();
     let faces = suite_funk_rhythm::faces();
-    let eq = faces.iter().find(|f| f.file.starts_with("10-eq")).expect("eq");
+    let eq = faces
+        .iter()
+        .find(|f| f.file.starts_with("10-eq"))
+        .expect("eq");
     let read = |addr: &str, n: f64| {
         let (_, c) = controls(&eq.scene)
             .into_iter()
             .find(|(_, c)| matches!(c.kind, surface_proto::ControlKind::Readout) && matches!(c.binding.as_ref().map(|b| &b.source), Some(Source::Param { addr: a }) if a.0 == addr))
             .unwrap_or_else(|| panic!("{addr} readout"));
-        cat.params.iter().find(|p| p.addr.0 == addr).expect("param").display_as(n, c.format.as_ref())
+        cat.params
+            .iter()
+            .find(|p| p.addr.0 == addr)
+            .expect("param")
+            .display_as(n, c.format.as_ref())
     };
     assert_eq!(read("eq/hpf", 0.0), "OFF");
     assert_eq!(read("eq/lpf", 1.0), "OFF");

@@ -307,7 +307,7 @@ mod meter_ebur128 {
 
 #[cfg(not(feature = "loudness"))]
 mod meter_fallback {
-    use super::{ms_to_lufs, KWeightingFilter};
+    use super::{KWeightingFilter, ms_to_lufs};
 
     /// Lightweight stereo loudness meter (no external dependencies).
     ///

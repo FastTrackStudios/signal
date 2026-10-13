@@ -16,8 +16,8 @@ use std::cell::RefCell;
 
 use dioxus::prelude::*;
 use dioxus_test::{by_testid, render};
-use expression_editor::{Editor, ExpressionDoc, Note, NoteId, TimeBase, Viewport};
 use expression_editor::ui::ExpressionEditor;
+use expression_editor::{Editor, ExpressionDoc, Note, NoteId, TimeBase, Viewport};
 
 thread_local! {
     static STAGED: RefCell<Option<Editor>> = const { RefCell::new(None) };

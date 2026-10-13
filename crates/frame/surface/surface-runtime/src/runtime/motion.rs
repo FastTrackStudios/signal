@@ -43,7 +43,9 @@ impl Runtime {
 
     /// Advance the motions to `t` (ms) and write them into `scene`.
     pub(super) fn animate(&self, scene: &mut document_proto::Scene, t: f64) {
-        let Ok(mut a) = self.motion.lock() else { return };
+        let Ok(mut a) = self.motion.lock() else {
+            return;
+        };
         if a.is_empty() {
             return;
         }
@@ -83,8 +85,16 @@ impl Inputs for Sampler<'_> {
             Source::Param { addr, normalized } => {
                 let addr = ParamAddr::new(addr.clone());
                 let info = rt.catalog.param(&addr);
-                let norm = rt.values.get(&addr).copied().or_else(|| info.map(|p| p.default))?;
-                if *normalized { Some(norm) } else { Some(info.map_or(norm, |p| p.range.to_real(norm))) }
+                let norm = rt
+                    .values
+                    .get(&addr)
+                    .copied()
+                    .or_else(|| info.map(|p| p.default))?;
+                if *normalized {
+                    Some(norm)
+                } else {
+                    Some(info.map_or(norm, |p| p.range.to_real(norm)))
+                }
             }
             Source::Feed { id, read } => {
                 let id = EntryId::new(id.clone());
@@ -97,9 +107,13 @@ impl Inputs for Sampler<'_> {
                             Some(c) => *values.get(usize::from(*c))?,
                             None => values.iter().copied().fold(f64::NEG_INFINITY, f64::max),
                         };
-                        db.is_finite().then(|| ((db - LEVEL_FLOOR_DB) / -LEVEL_FLOOR_DB).clamp(0.0, 1.0)).or(Some(0.0))
+                        db.is_finite()
+                            .then(|| ((db - LEVEL_FLOOR_DB) / -LEVEL_FLOOR_DB).clamp(0.0, 1.0))
+                            .or(Some(0.0))
                     }
-                    FeedRead::Gr => values.first().map(|db| (db.abs() / GR_SPAN_DB).clamp(0.0, 1.0)),
+                    FeedRead::Gr => values
+                        .first()
+                        .map(|db| (db.abs() / GR_SPAN_DB).clamp(0.0, 1.0)),
                     FeedRead::Scalar => {
                         let v = *values.first()?;
                         Some(match kind {
@@ -108,12 +122,21 @@ impl Inputs for Sampler<'_> {
                         })
                     }
                     FeedRead::Band(lo, hi) => {
-                        let Some(StreamKind::Spectrum { bins, f_min, f_max, floor_db }) = kind else { return None };
+                        let Some(StreamKind::Spectrum {
+                            bins,
+                            f_min,
+                            f_max,
+                            floor_db,
+                        }) = kind
+                        else {
+                            return None;
+                        };
                         let n = usize::from(*bins).min(values.len());
                         if n == 0 {
                             return None;
                         }
-                        let centre = |i: usize| f_min * (f_max / f_min).powf((i as f64 + 0.5) / n as f64);
+                        let centre =
+                            |i: usize| f_min * (f_max / f_min).powf((i as f64 + 0.5) / n as f64);
                         let (lo, hi) = (f64::from(*lo), f64::from(*hi));
                         let inside = (0..n).filter(|i| (lo..=hi).contains(&centre(*i)));
                         let db = inside.map(|i| values[i]).fold(f64::NEG_INFINITY, f64::max);
@@ -122,7 +145,12 @@ impl Inputs for Sampler<'_> {
                             db
                         } else {
                             let mid = (lo * hi).sqrt().max(1e-9);
-                            let i = (0..n).min_by(|a, b| (centre(*a) / mid).ln().abs().total_cmp(&(centre(*b) / mid).ln().abs()))?;
+                            let i = (0..n).min_by(|a, b| {
+                                (centre(*a) / mid)
+                                    .ln()
+                                    .abs()
+                                    .total_cmp(&(centre(*b) / mid).ln().abs())
+                            })?;
                             values[i]
                         };
                         let floor = floor_db.min(-1.0);

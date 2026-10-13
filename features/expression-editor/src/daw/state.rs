@@ -36,10 +36,10 @@
 //! The number exists for the one change tolerant parsing cannot survive:
 //! a field that keeps its name and changes its meaning.
 
+use crate::{CcDisplay, Dimension, Editor, Mode, StripLane, Tuning, tuning};
 use daw::service::ExtState;
 use daw::service::ProjectContext;
 use daw::service::ext_state::side_store;
-use crate::{CcDisplay, Dimension, Editor, Mode, StripLane, Tuning, tuning};
 use facet::Facet;
 
 /// The namespace the expression editor stores under.

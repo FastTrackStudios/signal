@@ -20,16 +20,33 @@ const LCD_BG: (&str, &str) = ("#2d3a33", "#23302a");
 const LCD_INK: &str = "#d6e4d8";
 
 fn black(class: &'static str) -> Enclosure<'static> {
-    Enclosure::new(class, BLACK, "satin").base("#0b0b0b").jacks("top")
+    Enclosure::new(class, BLACK, "satin")
+        .base("#0b0b0b")
+        .jacks("top")
 }
 
 /// A hexagram (two interlaced triangles) printed at (`cx`, `cy`).
 fn hexagram(b: &mut Builder<'_>, p: NodeId, size: (f64, f64), (cx, cy): (f64, f64), r: f64) {
     for rot in [0.0, 180.0] {
-        let pts: Vec<(f64, f64)> = (0..3).map(|i| draw::polar(cx, cy, r, rot + 120.0 * f64::from(i))).collect();
-        let mut n = draw::path("hexagram", 0.0, 0.0, size.0, size.1, draw::polygon(&pts), draw::solid(INK));
+        let pts: Vec<(f64, f64)> = (0..3)
+            .map(|i| draw::polar(cx, cy, r, rot + 120.0 * f64::from(i)))
+            .collect();
+        let mut n = draw::path(
+            "hexagram",
+            0.0,
+            0.0,
+            size.0,
+            size.1,
+            draw::polygon(&pts),
+            draw::solid(INK),
+        );
         n.fills = Vec::new();
-        n.stroke = document_proto::Stroke { paints: vec![draw::solid(INK)], weight: 1.6, join: document_proto::StrokeJoin::Miter, ..document_proto::Stroke::default() };
+        n.stroke = document_proto::Stroke {
+            paints: vec![draw::solid(INK)],
+            weight: 1.6,
+            join: document_proto::StrokeJoin::Miter,
+            ..document_proto::Stroke::default()
+        };
         b.add(p, n);
     }
 }
@@ -77,27 +94,95 @@ fn delay() -> Face {
             let t = rk::mini_toggle(b, p, name, &a(addr), (x, 38.0), 14.0, "chrome");
             art::label_letter(b, t, name, (x, 22.0), art::knob_letter(6.8));
             for dx in [-6.0, 6.0] {
-                b.add(p, draw::circle("position dot", x + dx, 50.0, 1.2, draw::solid(INK)));
+                b.add(
+                    p,
+                    draw::circle("position dot", x + dx, 50.0, 1.2, draw::solid(INK)),
+                );
             }
         }
         // The LCD.
-        let win = parts::screen(b, p, "LCD", (80.0, 58.0, 126.0, 34.0), Screen { glass: LCD_BG, ink: LCD_INK, mesh: false });
+        let win = parts::screen(
+            b,
+            p,
+            "LCD",
+            (80.0, 58.0, 126.0, 34.0),
+            Screen {
+                glass: LCD_BG,
+                ink: LCD_INK,
+                mesh: false,
+            },
+        );
         let small = Ink::new(5.0, "#9fb0a3").weight(600.0).track(0.04);
         parts::silk_left(b, win, "FREE / DAW / TAP", 4.0, 7.0, small);
         parts::silk_right(b, win, "P-P: OFF / ON", 122.0, 7.0, small);
         let seg = rk::lcd::dots(10.0, LCD_INK);
-        rk::lcd::readout(b, win, "Note", rk::bind(&a("div")), (3.0, 22.5, 48.0), seg, TextAlign::Left, None, surface_proto::ValueFormat::labels(rk::DIVISIONS));
-        rk::lcd::readout(b, win, "Tempo", rk::bind(&a("tempo")), (50.0, 22.5, 72.0), seg, TextAlign::Right, None, surface_proto::ValueFormat::decimals(1).unit("BPM"));
+        rk::lcd::readout(
+            b,
+            win,
+            "Note",
+            rk::bind(&a("div")),
+            (3.0, 22.5, 48.0),
+            seg,
+            TextAlign::Left,
+            None,
+            surface_proto::ValueFormat::labels(rk::DIVISIONS),
+        );
+        rk::lcd::readout(
+            b,
+            win,
+            "Tempo",
+            rk::bind(&a("tempo")),
+            (50.0, 22.5, 72.0),
+            seg,
+            TextAlign::Right,
+            None,
+            surface_proto::ValueFormat::decimals(1).unit("BPM"),
+        );
 
         art::title_max(b, p, "DELAY", (w / 2.0, 186.0), 92.0, 40.0);
-        rk::silk(b, p, "HANDMADE IN THE DARK", w / 2.0, 209.0, Ink::new(4.6, INK).weight(700.0).track(0.12));
+        rk::silk(
+            b,
+            p,
+            "HANDMADE IN THE DARK",
+            w / 2.0,
+            209.0,
+            Ink::new(4.6, INK).weight(700.0).track(0.12),
+        );
         // The bottom corners: ENGAGE and TAP TEMPO, LEDs inboard of them.
         art::switch_ring(b, p, (30.0, 228.0), 19.0);
         art::switch_ring(b, p, (w - 30.0, 228.0), 19.0);
-        let on = art::stomp(b, p, "Engage", &a("on"), (30.0, 228.0), 30.0, GREEN, (39.0, 5.0), 14.0, false);
+        let on = art::stomp(
+            b,
+            p,
+            "Engage",
+            &a("on"),
+            (30.0, 228.0),
+            30.0,
+            GREEN,
+            (39.0, 5.0),
+            14.0,
+            false,
+        );
         art::label_letter(b, on, "ENGAGE", (66.0, 252.0), art::knob_letter(7.0));
-        let tap = art::stomp(b, p, "Tap Tempo", &a("tap"), (w - 30.0, 228.0), 30.0, GREEN, (-39.0, 5.0), 14.0, true);
-        art::label_letter(b, tap, "TAP TEMPO", (w - 66.0, 252.0), art::knob_letter(7.0));
+        let tap = art::stomp(
+            b,
+            p,
+            "Tap Tempo",
+            &a("tap"),
+            (w - 30.0, 228.0),
+            30.0,
+            GREEN,
+            (-39.0, 5.0),
+            14.0,
+            true,
+        );
+        art::label_letter(
+            b,
+            tap,
+            "TAP TEMPO",
+            (w - 66.0, 252.0),
+            art::knob_letter(7.0),
+        );
         art::badge(b, p, size, (w / 2.0, 247.0), 96.0);
     });
     let params = vec![
@@ -108,11 +193,22 @@ fn delay() -> Face {
         rk::percent(&a("mix"), "Mix", 50.0).featured(),
         rk::percent(&a("feedback"), "Feedback", 50.0).featured(),
         rk::percent(&a("tone"), "Tone", 50.0),
-        crate::delay::parts::param(&a("tempo"), "Tempo", surface_proto::Range::linear(40.0, 240.0, surface_proto::Unit::Bpm), 120.0),
+        crate::delay::parts::param(
+            &a("tempo"),
+            "Tempo",
+            surface_proto::Range::linear(40.0, 240.0, surface_proto::Unit::Bpm),
+            120.0,
+        ),
         rk::toggle(&a("on"), "Engage", true).featured(),
         rk::toggle(&a("tap"), "Tap Tempo", false),
     ];
-    Face { file: "07-post-large-crypt-delay", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "07-post-large-crypt-delay",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }
 
 // ── 08 · Tomb Verb ───────────────────────────────────────────────────────
@@ -140,16 +236,38 @@ fn reverb() -> Face {
         let small = KNOB.size(38.0);
         let legend = art::knob_letter(10.0);
         let none = Ink::new(6.0, INK);
-        for (addr, name, at, ly) in [("mix", "MIX", (35.0, 42.0), 70.0), ("decay", "DECAY", (w - 35.0, 42.0), 70.0), ("tone", "TONE", (w / 2.0, 88.0), 117.0)] {
+        for (addr, name, at, ly) in [
+            ("mix", "MIX", (35.0, 42.0), 70.0),
+            ("decay", "DECAY", (w - 35.0, 42.0), 70.0),
+            ("tone", "TONE", (w / 2.0, 88.0), 117.0),
+        ] {
             let k = rk::knob(b, p, &small, &a(addr), "", at, 0.0, none);
             art::label_letter(b, k, name, (at.0, ly), legend);
         }
         art::title(b, p, "REVERB", (w / 2.0, 172.0), 96.0);
-        rk::silk(b, p, "HANDMADE IN THE DARK", w / 2.0, 187.0, Ink::new(4.2, INK).weight(700.0).track(0.1));
+        rk::silk(
+            b,
+            p,
+            "HANDMADE IN THE DARK",
+            w / 2.0,
+            187.0,
+            Ink::new(4.2, INK).weight(700.0).track(0.1),
+        );
         art::flourish(b, p, size, (w / 2.0 - 26.0, 204.0), 22.0, true);
         art::flourish(b, p, size, (w / 2.0 + 26.0, 204.0), 22.0, false);
         art::switch_ring(b, p, (w / 2.0, 235.0), 21.0);
-        art::stomp(b, p, "Bypass", &a("on"), (w / 2.0, 235.0), 34.0, GREEN, (0.0, -31.0), 17.0, false);
+        art::stomp(
+            b,
+            p,
+            "Bypass",
+            &a("on"),
+            (w / 2.0, 235.0),
+            34.0,
+            GREEN,
+            (0.0, -31.0),
+            17.0,
+            false,
+        );
         art::badge(b, p, size, (w / 2.0, 265.0), 100.0);
     });
     let params = vec![
@@ -158,5 +276,11 @@ fn reverb() -> Face {
         rk::percent(&a("tone"), "Tone", 50.0),
         rk::toggle(&a("on"), "Bypass", true).featured(),
     ];
-    Face { file: "08-post-standard-tomb-verb", plugin: PLUGIN, scene, params, streams: Vec::new() }
+    Face {
+        file: "08-post-standard-tomb-verb",
+        plugin: PLUGIN,
+        scene,
+        params,
+        streams: Vec::new(),
+    }
 }

@@ -36,7 +36,9 @@ impl Template {
     /// The `used` address of item `n`.
     #[must_use]
     pub fn used_addr(&self, n: u32) -> Option<ParamAddr> {
-        self.used.as_ref().map(|u| ParamAddr::new(substitute(&u.0, n)))
+        self.used
+            .as_ref()
+            .map(|u| ParamAddr::new(substitute(&u.0, n)))
     }
 
     /// The prefix every param of item `n` shares (`eq/b3_`): the `used`
@@ -45,7 +47,11 @@ impl Template {
     pub fn family_prefix(&self, n: u32) -> Option<String> {
         let used = &self.used.as_ref()?.0;
         let at = used.find(surface_proto::INDEX)? + surface_proto::INDEX.len();
-        let sep = used[at..].chars().next().filter(|c| matches!(c, '_' | '/' | '.' | '-')).map_or(0, char::len_utf8);
+        let sep = used[at..]
+            .chars()
+            .next()
+            .filter(|c| matches!(c, '_' | '/' | '.' | '-'))
+            .map_or(0, char::len_utf8);
         Some(substitute(&used[..at + sep], n))
     }
 }
@@ -99,7 +105,9 @@ pub fn expand(mut surface: Surface) -> (Surface, Expansion) {
     let repeats: Vec<(NodeId, u32, u32, Option<ParamAddr>)> = order
         .iter()
         .filter_map(|id| match surface.controls.get(id).map(|c| &c.kind) {
-            Some(ControlKind::Repeat { first, count, used }) => Some((*id, *first, *count, used.clone())),
+            Some(ControlKind::Repeat { first, count, used }) => {
+                Some((*id, *first, *count, used.clone()))
+            }
             _ => None,
         })
         .collect();
@@ -121,7 +129,12 @@ pub fn expand(mut surface: Surface) -> (Surface, Expansion) {
             json
         };
         let parent = surface.scene.node(root).and_then(|n| n.parent);
-        let mut template = Template { first, count, used, instances: BTreeMap::new() };
+        let mut template = Template {
+            first,
+            count,
+            used,
+            instances: BTreeMap::new(),
+        };
         let mut at = parent
             .and_then(|p| surface.scene.node(p))
             .and_then(|p| p.children.iter().position(|c| *c == root))
@@ -129,10 +142,16 @@ pub fn expand(mut surface: Surface) -> (Surface, Expansion) {
         for n in first..first.saturating_add(count) {
             let inst_root = instance_id(root, n);
             for id in &nodes {
-                let Some(src) = surface.scene.node(*id) else { continue };
+                let Some(src) = surface.scene.node(*id) else {
+                    continue;
+                };
                 let mut node: Node = src.clone();
                 node.id = instance_id(*id, n);
-                node.parent = if *id == root { parent } else { src.parent.map(|p| instance_id(p, n)) };
+                node.parent = if *id == root {
+                    parent
+                } else {
+                    src.parent.map(|p| instance_id(p, n))
+                };
                 node.children = src.children.iter().map(|c| instance_id(*c, n)).collect();
                 node.name = substitute(&src.name, n);
                 if let NodeKind::Text(t) = &mut node.kind {
@@ -144,7 +163,10 @@ pub fn expand(mut surface: Surface) -> (Surface, Expansion) {
                 if *id == root {
                     node.visible = src.visible;
                 }
-                let control = surface.controls.get(id).filter(|c| !matches!(c.kind, ControlKind::Repeat { .. }));
+                let control = surface
+                    .controls
+                    .get(id)
+                    .filter(|c| !matches!(c.kind, ControlKind::Repeat { .. }));
                 node.control = control.map(|c| c.instantiate(n, |j| remap(j, n)));
                 if let Some(c) = &node.control {
                     surface.controls.insert(node.id, c.clone());
@@ -174,12 +196,22 @@ pub fn expand(mut surface: Surface) -> (Surface, Expansion) {
         .controls
         .iter()
         .filter_map(|(id, c)| match &c.kind {
-            ControlKind::Popover { context: Some(r), .. } | ControlKind::Menu { context: Some(r), .. } => Some((*id, NodeId(*r))),
+            ControlKind::Popover {
+                context: Some(r), ..
+            }
+            | ControlKind::Menu {
+                context: Some(r), ..
+            } => Some((*id, NodeId(*r))),
             _ => None,
         })
         .collect();
     for (root, repeat) in roots {
-        let mut ctx = Context { repeat, controls: BTreeMap::new(), texts: BTreeMap::new(), bound: None };
+        let mut ctx = Context {
+            repeat,
+            controls: BTreeMap::new(),
+            texts: BTreeMap::new(),
+            bound: None,
+        };
         for id in surface.scene.walk(root) {
             if let Some(c) = surface.controls.get(&id) {
                 ctx.controls.insert(id, c.clone());
@@ -192,8 +224,11 @@ pub fn expand(mut surface: Surface) -> (Surface, Expansion) {
         }
         ex.contexts.insert(root, ctx);
     }
-    let firsts: Vec<(NodeId, u32)> =
-        ex.contexts.iter().map(|(root, c)| (*root, ex.templates.get(&c.repeat).map_or(1, |t| t.first))).collect();
+    let firsts: Vec<(NodeId, u32)> = ex
+        .contexts
+        .iter()
+        .map(|(root, c)| (*root, ex.templates.get(&c.repeat).map_or(1, |t| t.first)))
+        .collect();
     for (root, n) in firsts {
         bind_context(&mut surface, &mut ex, root, n);
     }
@@ -203,13 +238,19 @@ pub fn expand(mut surface: Surface) -> (Surface, Expansion) {
 /// Bind context `root` to item `n`: its controls resolve `{n}` (and point
 /// at item `n`'s instance of any template node they name).
 pub fn bind_context(surface: &mut Surface, ex: &mut Expansion, root: NodeId, n: u32) -> bool {
-    let Some(ctx) = ex.contexts.get_mut(&root) else { return false };
+    let Some(ctx) = ex.contexts.get_mut(&root) else {
+        return false;
+    };
     if ctx.bound == Some(n) {
         return false;
     }
     ctx.bound = Some(n);
-    let template_ids: Vec<(String, NodeId)> =
-        ex.template_nodes.iter().filter(|id| !ex.owner.contains_key(id)).map(|id| (id.0.to_string(), *id)).collect();
+    let template_ids: Vec<(String, NodeId)> = ex
+        .template_nodes
+        .iter()
+        .filter(|id| !ex.owner.contains_key(id))
+        .map(|id| (id.0.to_string(), *id))
+        .collect();
     for (id, c) in &ctx.controls {
         let bound = c.instantiate(n, |mut json| {
             for (s, tid) in &template_ids {

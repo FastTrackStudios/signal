@@ -37,16 +37,16 @@ fn dump_session(path: &str, label: &str) {
 
 fn main() {
     let fixtures = [
-        "crates/dawfile-protools/tests/fixtures/wonder-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/studio-session-2.ptx",
-        "crates/dawfile-protools/tests/fixtures/studio-comp-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/orchestral-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/choir-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/studio-tracking-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/worship-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/live-concert-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/GodnessOfGod.ptx",
-        "crates/dawfile-protools/tests/fixtures/goodplaylists2.ptf",
+        "features/formats/tests/fixtures/protools/wonder-session.ptx",
+        "features/formats/tests/fixtures/protools/studio-session-2.ptx",
+        "features/formats/tests/fixtures/protools/studio-comp-session.ptx",
+        "features/formats/tests/fixtures/protools/orchestral-session.ptx",
+        "features/formats/tests/fixtures/protools/choir-session.ptx",
+        "features/formats/tests/fixtures/protools/studio-tracking-session.ptx",
+        "features/formats/tests/fixtures/protools/worship-session.ptx",
+        "features/formats/tests/fixtures/protools/live-concert-session.ptx",
+        "features/formats/tests/fixtures/protools/GodnessOfGod.ptx",
+        "features/formats/tests/fixtures/protools/goodplaylists2.ptf",
     ];
     for path in &fixtures {
         let label = std::path::Path::new(path)

@@ -8,7 +8,7 @@
 //! now lives in `midicore`, so this crate no longer re-rolls it.
 
 use eyre::Result;
-use midicore::{midir::MidiOutput, PortSelector};
+use midicore::{PortSelector, midir::MidiOutput};
 
 use crate::kontrol::LightColor;
 

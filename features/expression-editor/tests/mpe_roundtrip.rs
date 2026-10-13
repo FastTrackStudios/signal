@@ -12,8 +12,8 @@ use daw::service::midi::{Midi, MidiNoteCreate, MidiTakeLocation};
 use daw::service::project::ProjectInfo;
 use daw::service::{ProjectContext, TrackRef, Tracks};
 use daw::standalone::Standalone;
-use expression_editor::{Dimension, Point, Viewport};
 use expression_editor::daw::Session;
+use expression_editor::{Dimension, Point, Viewport};
 
 const PPQ: f64 = 960.0;
 /// The editor's own default, and the number that has to reach the
@@ -100,10 +100,8 @@ fn channel_pressure_survives_the_facade() {
         .doc
         .note_mut(id)
         .unwrap()
-        .curve_mut(Dimension::Pressure) = expression_editor::Curve::from_points(vec![
-        Point::new(0.0, 0.2),
-        Point::new(PPQ, 0.9),
-    ]);
+        .curve_mut(Dimension::Pressure) =
+        expression_editor::Curve::from_points(vec![Point::new(0.0, 0.2), Point::new(PPQ, 0.9)]);
 
     let back = round_trip(&daw, &location, s);
     let curve = back.editor.doc.notes[0].curve(Dimension::Pressure);
@@ -121,10 +119,8 @@ fn cc74_timbre_survives_the_facade() {
         .doc
         .note_mut(id)
         .unwrap()
-        .curve_mut(Dimension::Timbre) = expression_editor::Curve::from_points(vec![
-        Point::new(0.0, 0.1),
-        Point::new(PPQ, 0.8),
-    ]);
+        .curve_mut(Dimension::Timbre) =
+        expression_editor::Curve::from_points(vec![Point::new(0.0, 0.1), Point::new(PPQ, 0.8)]);
 
     let back = round_trip(&daw, &location, s);
     let curve = back.editor.doc.notes[0].curve(Dimension::Timbre);

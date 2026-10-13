@@ -23,7 +23,11 @@ fn worst_after_round_trip(section: Biquad) -> f64 {
     let mut h: Vec<f64> = original.iter().map(|&x| run.process(x)).collect();
     section.divide(&mut h);
     let peak = original.iter().fold(0.0f64, |m, x| m.max(x.abs()));
-    original.iter().zip(&h).fold(0.0f64, |m, (a, b)| m.max((a - b).abs())) / peak
+    original
+        .iter()
+        .zip(&h)
+        .fold(0.0f64, |m, (a, b)| m.max((a - b).abs()))
+        / peak
 }
 
 #[test]

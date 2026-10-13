@@ -25,9 +25,12 @@ fn scenarios() -> Vec<(String, PathBuf)> {
         .expect("parity scenarios dir")
         .filter_map(|e| {
             let d = e.ok()?.path();
-            let json = [d.join("latest-bridge-export.json"), d.join("export/latest-bridge-export.json")]
-                .into_iter()
-                .find(|p| p.exists())?;
+            let json = [
+                d.join("latest-bridge-export.json"),
+                d.join("export/latest-bridge-export.json"),
+            ]
+            .into_iter()
+            .find(|p| p.exists())?;
             Some((d.file_name()?.to_string_lossy().to_string(), json))
         })
         .collect();
@@ -36,7 +39,9 @@ fn scenarios() -> Vec<(String, PathBuf)> {
 }
 
 fn fnv1a(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3))
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+        (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3)
+    })
 }
 
 /// A float rounded to 12 significant digits: the JSON importer's last-bit
@@ -93,7 +98,12 @@ fn canonicalize(s: &str) -> String {
         }
         let body = &s[i + 1..j.min(bytes.len())];
         if body.len() > 256 {
-            let _ = write!(out, "\"<len {} fnv {:016x}>\"", body.len(), fnv1a(body.as_bytes()));
+            let _ = write!(
+                out,
+                "\"<len {} fnv {:016x}>\"",
+                body.len(),
+                fnv1a(body.as_bytes())
+            );
         } else {
             out.push('"');
             out.push_str(body);
@@ -111,7 +121,10 @@ fn render_golden(json: &Path) -> String {
         .nodes
         .values()
         .map(|n| {
-            let src = n.source.as_ref().map_or_else(|| "?".to_string(), |s| s.id.clone());
+            let src = n
+                .source
+                .as_ref()
+                .map_or_else(|| "?".to_string(), |s| s.id.clone());
             (format!("NodeId({})", n.id.0), format!("NodeId({src:?})"))
         })
         .collect();
@@ -121,7 +134,9 @@ fn render_golden(json: &Path) -> String {
         while let Some(start) = line.find("NodeId(") {
             let end = start + line[start..].find(')').unwrap() + 1;
             let key = &line[start..end];
-            let Some(name) = names.get(key) else { panic!("unknown node id {key}") };
+            let Some(name) = names.get(key) else {
+                panic!("unknown node id {key}")
+            };
             line.replace_range(start..end, &name.replacen("NodeId(", "NodeID(", 1));
         }
         out.push_str(&canonicalize(&line.replace("NodeID(", "NodeId(")));
@@ -133,7 +148,11 @@ fn render_golden(json: &Path) -> String {
 #[test]
 fn scene_primitives_match_golden() {
     let all = scenarios();
-    assert!(all.len() >= 20, "expected the parity corpus, found {} scenarios", all.len());
+    assert!(
+        all.len() >= 20,
+        "expected the parity corpus, found {} scenarios",
+        all.len()
+    );
     let golden_dir = parity_dir().join("golden");
     let update = std::env::var_os("UPDATE_GOLDEN").is_some();
     let mut failures = Vec::new();
@@ -145,9 +164,13 @@ fn scene_primitives_match_golden() {
             std::fs::write(&path, &actual).unwrap();
             continue;
         }
-        let expected = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("missing golden {}: {e}", path.display()));
+        let expected = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("missing golden {}: {e}", path.display()));
         if actual != expected {
-            let at = actual.lines().zip(expected.lines()).position(|(a, b)| a != b);
+            let at = actual
+                .lines()
+                .zip(expected.lines())
+                .position(|(a, b)| a != b);
             failures.push(format!(
                 "{name}: primitives differ (actual {} / golden {} lines) at line {}\n  golden: {:?}\n  actual: {:?}",
                 actual.lines().count(),
@@ -158,5 +181,11 @@ fn scene_primitives_match_golden() {
             ));
         }
     }
-    assert!(failures.is_empty(), "{} of {} scenarios differ:\n{}", failures.len(), all.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} of {} scenarios differ:\n{}",
+        failures.len(),
+        all.len(),
+        failures.join("\n")
+    );
 }

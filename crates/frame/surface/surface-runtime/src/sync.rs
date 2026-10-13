@@ -33,7 +33,10 @@ pub trait Engine {
     async fn call(&self, call: EngineCall) -> Result<(), EngineError>;
     /// Ask for feeds shaped for the surface (a plot's bins, a history's
     /// length). An engine that can't reshape keeps its catalog's shapes.
-    async fn request_feeds(&self, requests: Vec<FeedRequest>) -> Result<Vec<FeedInfo>, EngineError> {
+    async fn request_feeds(
+        &self,
+        requests: Vec<FeedRequest>,
+    ) -> Result<Vec<FeedInfo>, EngineError> {
         let _ = requests;
         Ok(Vec::new())
     }
@@ -65,8 +68,13 @@ impl<E: SurfaceEngine> Engine for Local<'_, E> {
         r.map_err(|e| EngineError(e.to_string()))
     }
 
-    async fn request_feeds(&self, requests: Vec<FeedRequest>) -> Result<Vec<FeedInfo>, EngineError> {
-        self.0.request_feeds(requests).map_err(|e| EngineError(e.to_string()))
+    async fn request_feeds(
+        &self,
+        requests: Vec<FeedRequest>,
+    ) -> Result<Vec<FeedInfo>, EngineError> {
+        self.0
+            .request_feeds(requests)
+            .map_err(|e| EngineError(e.to_string()))
     }
 
     async fn texts(&self) -> Result<Vec<TextValue>, EngineError> {
@@ -77,11 +85,15 @@ impl<E: SurfaceEngine> Engine for Local<'_, E> {
 #[cfg(feature = "vox")]
 impl Engine for SurfaceEngineClient {
     async fn catalog(&self) -> Result<Catalog, EngineError> {
-        SurfaceEngineClient::catalog(self).await.map_err(|e| EngineError(format!("{e:?}")))
+        SurfaceEngineClient::catalog(self)
+            .await
+            .map_err(|e| EngineError(format!("{e:?}")))
     }
 
     async fn values(&self) -> Result<Vec<ParamValue>, EngineError> {
-        SurfaceEngineClient::values(self).await.map_err(|e| EngineError(format!("{e:?}")))
+        SurfaceEngineClient::values(self)
+            .await
+            .map_err(|e| EngineError(format!("{e:?}")))
     }
 
     async fn call(&self, call: EngineCall) -> Result<(), EngineError> {
@@ -94,12 +106,19 @@ impl Engine for SurfaceEngineClient {
         r.map_err(|e| EngineError(format!("{e:?}")))
     }
 
-    async fn request_feeds(&self, requests: Vec<FeedRequest>) -> Result<Vec<FeedInfo>, EngineError> {
-        SurfaceEngineClient::request_feeds(self, requests).await.map_err(|e| EngineError(format!("{e:?}")))
+    async fn request_feeds(
+        &self,
+        requests: Vec<FeedRequest>,
+    ) -> Result<Vec<FeedInfo>, EngineError> {
+        SurfaceEngineClient::request_feeds(self, requests)
+            .await
+            .map_err(|e| EngineError(format!("{e:?}")))
     }
 
     async fn texts(&self) -> Result<Vec<TextValue>, EngineError> {
-        SurfaceEngineClient::texts(self).await.map_err(|e| EngineError(format!("{e:?}")))
+        SurfaceEngineClient::texts(self)
+            .await
+            .map_err(|e| EngineError(format!("{e:?}")))
     }
 }
 
@@ -110,10 +129,17 @@ impl Engine for SurfaceEngineClient {
 /// # Errors
 /// When the socket can't be opened or the vox handshake fails.
 #[cfg(feature = "remote")]
-pub async fn connect_ws(url: &str, scope: Option<&str>) -> Result<SurfaceEngineClient, EngineError> {
-    let link = vox_websocket::WsLink::connect(url).await.map_err(|e| EngineError(format!("ws connect {url}: {e:?}")))?;
-    let client: SurfaceEngineClient =
-        vox_core::initiator_on(link).establish().await.map_err(|e| EngineError(format!("vox handshake: {e:?}")))?;
+pub async fn connect_ws(
+    url: &str,
+    scope: Option<&str>,
+) -> Result<SurfaceEngineClient, EngineError> {
+    let link = vox_websocket::WsLink::connect(url)
+        .await
+        .map_err(|e| EngineError(format!("ws connect {url}: {e:?}")))?;
+    let client: SurfaceEngineClient = vox_core::initiator_on(link)
+        .establish()
+        .await
+        .map_err(|e| EngineError(format!("vox handshake: {e:?}")))?;
     Ok(match scope {
         Some(s) => architect::scope_client!(client, s.to_string()),
         None => client,
@@ -127,10 +153,17 @@ pub async fn connect_ws(url: &str, scope: Option<&str>) -> Result<SurfaceEngineC
 /// # Errors
 /// When the socket can't be opened or the vox handshake fails.
 #[cfg(feature = "remote")]
-pub async fn connect_ws_stream(url: &str, scope: Option<&str>) -> Result<SurfaceEngineStreamClient, EngineError> {
-    let link = vox_websocket::WsLink::connect(url).await.map_err(|e| EngineError(format!("ws connect {url}: {e:?}")))?;
-    let client: SurfaceEngineStreamClient =
-        vox_core::initiator_on(link).establish().await.map_err(|e| EngineError(format!("vox handshake: {e:?}")))?;
+pub async fn connect_ws_stream(
+    url: &str,
+    scope: Option<&str>,
+) -> Result<SurfaceEngineStreamClient, EngineError> {
+    let link = vox_websocket::WsLink::connect(url)
+        .await
+        .map_err(|e| EngineError(format!("ws connect {url}: {e:?}")))?;
+    let client: SurfaceEngineStreamClient = vox_core::initiator_on(link)
+        .establish()
+        .await
+        .map_err(|e| EngineError(format!("vox handshake: {e:?}")))?;
     Ok(match scope {
         Some(s) => architect::scope_client!(client, s.to_string()),
         None => client,
@@ -147,9 +180,13 @@ pub async fn serve_ws(listener: tokio::net::TcpListener, router: architect::Laye
     while let Ok((tcp, _)) = listener.accept().await {
         let router = router.clone();
         tokio::spawn(async move {
-            let Ok(link) = vox_websocket::WsLink::server(tcp).await else { return };
-            if let Ok(connection) =
-                vox_core::acceptor_on(link).on_lane(router.acceptor()).establish_connection().await
+            let Ok(link) = vox_websocket::WsLink::server(tcp).await else {
+                return;
+            };
+            if let Ok(connection) = vox_core::acceptor_on(link)
+                .on_lane(router.acceptor())
+                .establish_connection()
+                .await
             {
                 let _connection = connection;
                 std::future::pending::<()>().await;
@@ -199,7 +236,9 @@ pub struct Telemetry<T = Incoming> {
 #[cfg(feature = "remote")]
 impl<T> Clone for Telemetry<T> {
     fn clone(&self) -> Self {
-        Self { tx: self.tx.clone() }
+        Self {
+            tx: self.tx.clone(),
+        }
     }
 }
 
@@ -312,7 +351,10 @@ mod tests {
     use surface_proto::{EntryId, ParamAddr};
 
     fn frame() -> StreamFrame {
-        StreamFrame { id: EntryId::new("out_level"), values: vec![-12.0, -18.0] }
+        StreamFrame {
+            id: EntryId::new("out_level"),
+            values: vec![-12.0, -18.0],
+        }
     }
 
     #[test]
@@ -320,7 +362,12 @@ mod tests {
         let (t, rx) = Telemetry::channel();
         let t2 = t.clone();
         t.tx.send(Incoming::Frame(frame())).unwrap();
-        t2.tx.send(Incoming::Param(ParamValue { addr: ParamAddr::new("a"), value: 0.25 })).unwrap();
+        t2.tx
+            .send(Incoming::Param(ParamValue {
+                addr: ParamAddr::new("a"),
+                value: 0.25,
+            }))
+            .unwrap();
         let got: Vec<Incoming> = rx.try_iter().collect();
         assert_eq!(got.len(), 2);
         assert!(matches!(&got[0], Incoming::Frame(f) if f.values == [-12.0, -18.0]));
@@ -343,8 +390,12 @@ mod tests {
     fn forwards_into_a_host_event_channel() {
         let (tx, rx) = std::sync::mpsc::channel::<HostEvent>();
         let t = Telemetry::new(tx);
-        t.tx.send(HostEvent::from(Incoming::Frame(frame()))).unwrap();
-        assert_eq!(rx.try_recv().unwrap(), HostEvent::Engine(Incoming::Frame(frame())));
+        t.tx.send(HostEvent::from(Incoming::Frame(frame())))
+            .unwrap();
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            HostEvent::Engine(Incoming::Frame(frame()))
+        );
     }
 
     #[test]
@@ -352,15 +403,29 @@ mod tests {
         let catalog = Catalog {
             id: "t".into(),
             version: 1,
-            params: vec![surface_proto::ParamInfo::new("a", "A", surface_proto::Range::default())],
+            params: vec![surface_proto::ParamInfo::new(
+                "a",
+                "A",
+                surface_proto::Range::default(),
+            )],
             actions: vec![],
             streams: vec![],
             collections: vec![],
         };
         let surface = Surface::from_scene(document_proto::Scene::new("S"));
         let mut rt = Runtime::new(surface, catalog);
-        Incoming::Param(ParamValue { addr: ParamAddr::new("a"), value: 0.75 }).apply(&mut rt, 0.0);
+        Incoming::Param(ParamValue {
+            addr: ParamAddr::new("a"),
+            value: 0.75,
+        })
+        .apply(&mut rt, 0.0);
         Incoming::Frame(frame()).apply(&mut rt, 0.0);
-        assert_eq!(rt.values(), vec![ParamValue { addr: ParamAddr::new("a"), value: 0.75 }]);
+        assert_eq!(
+            rt.values(),
+            vec![ParamValue {
+                addr: ParamAddr::new("a"),
+                value: 0.75
+            }]
+        );
     }
 }

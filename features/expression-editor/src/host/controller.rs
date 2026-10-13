@@ -1,8 +1,6 @@
 //! Application operations shared by every host surface.
+use crate::audio::{apply_quantize::GroupError, daw_bound::DrumDaw, quantize::SplitConfig};
 use crate::host::DrumHost;
-use crate::audio::{
-    apply_quantize::GroupError, daw_bound::DrumDaw, quantize::SplitConfig,
-};
 use crate::{Editor, drum::HitGesture};
 
 impl<D: DrumDaw> DrumHost<D> {
@@ -98,9 +96,7 @@ fn add_hit_note(ed: &mut Editor, lane: &str, at: f64) {
         .map(|n| n.start)
         .filter(|&s| s > start + 1e-6)
         .fold(ed.doc.end, f64::min);
-    let id = crate::doc::NoteId(
-        ed.doc.notes.iter().map(|n| n.id.0).max().unwrap_or(0) + 1,
-    );
+    let id = crate::doc::NoteId(ed.doc.notes.iter().map(|n| n.id.0).max().unwrap_or(0) + 1);
     let mut note = crate::Note::new(id, start, end.max(start + 1.0), 1);
     // A hand-placed hit is intent — full weight, like the host's list.
     note.velocity = 1.0;

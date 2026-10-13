@@ -12,12 +12,12 @@
 //! narrower box drops whole segments from the right rather than
 //! squeezing every button.
 
-use anyrender::{PaintScene, Scene};
 use crate::doc::{Dimension, NoteId};
 use crate::menu::{self, Command, MenuItem};
 use crate::razor::RazorAxis;
 use crate::zoom::ZoomModes;
 use crate::{Edit, Editor, Mode, Shape, StripLane, Tool, tuning};
+use anyrender::{PaintScene, Scene};
 use kurbo::{Affine, Line, Point, Rect};
 use peniko::Fill;
 use std::fmt::Write as _;
@@ -736,8 +736,8 @@ impl Menu {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::paint::demo;
     use crate::Viewport;
+    use crate::paint::demo;
 
     fn editor() -> Editor {
         demo::editor(demo::Scene::Drums, Viewport::new(800.0, 400.0))

@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 
 use document_proto::Scene;
 pub use render_fonts::{
-    BUNDLED, BundledFamily, Chain, DEFAULT_FAMILY, Face, FontBook, FontBytes, FontQuery, FontSpec, Resolved, StyleHints,
-    parse_style,
+    BUNDLED, BundledFamily, Chain, DEFAULT_FAMILY, Face, FontBook, FontBytes, FontQuery, FontSpec,
+    Resolved, StyleHints, parse_style,
 };
 
 pub use crate::anyrender_renderer::text_font;
@@ -20,7 +20,10 @@ pub fn is_font_mime(mime: &str) -> bool {
     m.starts_with("font/")
         || matches!(
             m.as_str(),
-            "application/font-sfnt" | "application/x-font-ttf" | "application/x-font-otf" | "application/vnd.ms-opentype"
+            "application/font-sfnt"
+                | "application/x-font-ttf"
+                | "application/x-font-otf"
+                | "application/vnd.ms-opentype"
         )
 }
 
@@ -52,7 +55,11 @@ fn doc_faces(id: &str, bytes: &[u8]) -> Faces {
 /// when the document has none.
 #[must_use]
 pub fn book_for_scene<'a>(base: &'a FontBook, scene: &Scene) -> Cow<'a, FontBook> {
-    let mut fonts = scene.assets.values().filter(|a| is_font_mime(&a.mime)).peekable();
+    let mut fonts = scene
+        .assets
+        .values()
+        .filter(|a| is_font_mime(&a.mime))
+        .peekable();
     if fonts.peek().is_none() {
         return Cow::Borrowed(base);
     }
@@ -70,8 +77,16 @@ pub fn book_for_scene<'a>(base: &'a FontBook, scene: &Scene) -> Cow<'a, FontBook
 /// sets it (the resolved face's instance, per-glyph fallback, synthetic
 /// bold) — so a host puts a caret exactly where the painted glyphs end.
 #[must_use]
-pub fn text_advance(fonts: &FontBook, font: &FontSpec, text: &str, size: f64, letter_spacing: f64) -> f64 {
-    fonts.chain(&font.query()).advance(text, size.max(1.0), letter_spacing)
+pub fn text_advance(
+    fonts: &FontBook,
+    font: &FontSpec,
+    text: &str,
+    size: f64,
+    letter_spacing: f64,
+) -> f64 {
+    fonts
+        .chain(&font.query())
+        .advance(text, size.max(1.0), letter_spacing)
 }
 
 #[cfg(test)]
@@ -79,7 +94,11 @@ mod tests {
     use super::*;
 
     fn spec(family: Option<&str>, weight: Option<f64>) -> FontSpec {
-        FontSpec { family: family.map(Into::into), weight, ..FontSpec::default() }
+        FontSpec {
+            family: family.map(Into::into),
+            weight,
+            ..FontSpec::default()
+        }
     }
 
     #[test]
@@ -89,12 +108,30 @@ mod tests {
         let bold = text_advance(book, &spec(None, Some(900.0)), "Gain 12 dB", 14.0, 0.0);
         assert!(bold > regular + 1.0, "black {bold} vs regular {regular}");
         // A static face asked for bold is emboldened, and sets wider for it.
-        assert!(text_advance(book, &spec(Some("Michroma"), Some(800.0)), "RACK", 14.0, 0.0) > text_advance(book, &spec(Some("Michroma"), None), "RACK", 14.0, 0.0));
+        assert!(
+            text_advance(
+                book,
+                &spec(Some("Michroma"), Some(800.0)),
+                "RACK",
+                14.0,
+                0.0
+            ) > text_advance(book, &spec(Some("Michroma"), None), "RACK", 14.0, 0.0)
+        );
         let mono = text_advance(book, &spec(Some("JetBrains Mono"), None), "iiii", 14.0, 0.0);
         let mono_w = text_advance(book, &spec(Some("JetBrains Mono"), None), "WWWW", 14.0, 0.0);
-        assert!((mono - mono_w).abs() < 1e-6, "monospace: {mono} vs {mono_w}");
-        let narrow = FontSpec { family: Some("Saira".into()), width: Some(62.5), ..FontSpec::default() };
-        assert!(text_advance(book, &narrow, "RACK", 14.0, 0.0) < text_advance(book, &spec(Some("Saira"), None), "RACK", 14.0, 0.0));
+        assert!(
+            (mono - mono_w).abs() < 1e-6,
+            "monospace: {mono} vs {mono_w}"
+        );
+        let narrow = FontSpec {
+            family: Some("Saira".into()),
+            width: Some(62.5),
+            ..FontSpec::default()
+        };
+        assert!(
+            text_advance(book, &narrow, "RACK", 14.0, 0.0)
+                < text_advance(book, &spec(Some("Saira"), None), "RACK", 14.0, 0.0)
+        );
         // Letter spacing is added after every character.
         let spaced = text_advance(book, &spec(None, None), "Gain 12 dB", 14.0, 1.0);
         assert!((spaced - regular - 10.0).abs() < 1e-9);
@@ -103,7 +140,11 @@ mod tests {
     #[test]
     fn documents_bring_their_own_fonts() {
         let mut scene = Scene::new("Page");
-        let oswald = render_fonts::BUNDLED.iter().find(|f| f.name == "Oswald").unwrap().files[0];
+        let oswald = render_fonts::BUNDLED
+            .iter()
+            .find(|f| f.name == "Oswald")
+            .unwrap()
+            .files[0];
         let host = FontBook::single(render_fonts::INTER);
         assert!(!host.has_family("Oswald"));
         assert!(matches!(book_for_scene(&host, &scene), Cow::Borrowed(_)));
@@ -114,6 +155,10 @@ mod tests {
         // Read once: the same faces (ids) every frame.
         let id = |b: &FontBook| b.resolve(&FontQuery::family("Oswald")).map(|r| r.face.id());
         assert_eq!(id(&book), id(&book_for_scene(&host, &scene)));
-        assert!(is_font_mime("font/otf") && is_font_mime("application/font-sfnt") && !is_font_mime("image/png"));
+        assert!(
+            is_font_mime("font/otf")
+                && is_font_mime("application/font-sfnt")
+                && !is_font_mime("image/png")
+        );
     }
 }

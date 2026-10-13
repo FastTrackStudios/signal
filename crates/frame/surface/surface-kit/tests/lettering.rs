@@ -41,9 +41,14 @@ fn lettering_sets_family_weight_italic_and_width() {
         40.0,
         "#ffffff",
         TextAlign::Center,
-        &Lettering::family(family::SAIRA).weight(800.0).italic().width(62.5),
+        &Lettering::family(family::SAIRA)
+            .weight(800.0)
+            .italic()
+            .width(62.5),
     );
-    let NodeKind::Text(t) = &n.kind else { panic!("text") };
+    let NodeKind::Text(t) = &n.kind else {
+        panic!("text")
+    };
     assert_eq!(t.font_family.as_deref(), Some("Saira"));
     assert_eq!(t.font_weight, Some(800.0));
     assert_eq!(t.font_style.as_deref(), Some("italic"));
@@ -61,8 +66,18 @@ fn lettering_sets_family_weight_italic_and_width() {
     scene.node_mut(page).unwrap().children.push(id);
     scene.nodes.insert(id, n);
     let text = document_text::print(&scene);
-    assert!(text.contains("font=\"Saira\"") && text.contains("style=\"italic\"") && text.contains("stretch=62.5"), "{text}");
+    assert!(
+        text.contains("font=\"Saira\"")
+            && text.contains("style=\"italic\"")
+            && text.contains("stretch=62.5"),
+        "{text}"
+    );
     let back = document_text::parse(&text, std::collections::BTreeMap::new()).expect("parses");
-    let NodeKind::Text(t2) = &back.nodes.values().find(|n| n.name == "logo").unwrap().kind else { panic!() };
-    assert_eq!((t2.font_weight, t2.font_width, t2.font_style.as_deref()), (Some(800.0), Some(62.5), Some("italic")));
+    let NodeKind::Text(t2) = &back.nodes.values().find(|n| n.name == "logo").unwrap().kind else {
+        panic!()
+    };
+    assert_eq!(
+        (t2.font_weight, t2.font_width, t2.font_style.as_deref()),
+        (Some(800.0), Some(62.5), Some("italic"))
+    );
 }

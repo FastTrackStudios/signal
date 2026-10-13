@@ -211,7 +211,10 @@ pub fn set_track_mix_state(
     true
 }
 
-fn find_track_index(session: &crate::protools::raw_block::RawSession, track_name: &str) -> Option<usize> {
+fn find_track_index(
+    session: &crate::protools::raw_block::RawSession,
+    track_name: &str,
+) -> Option<usize> {
     let track_list = collect_blocks_ref(&session.blocks, ContentType::MidiTrackList)
         .into_iter()
         .next()?;
@@ -336,7 +339,10 @@ fn find_2619_name(b: &crate::protools::raw_block::RawBlock, data: &[u8]) -> Opti
 
 /// Read the color byte for a track. Returns `None` if no `0x261c` /
 /// `0x200b` exists for the named track.
-pub fn get_track_color(session: &crate::protools::raw_block::RawSession, track_name: &str) -> Option<u8> {
+pub fn get_track_color(
+    session: &crate::protools::raw_block::RawSession,
+    track_name: &str,
+) -> Option<u8> {
     let containers = collect_blocks_ref_raw(&session.blocks, 0x261c);
     for c in containers {
         let name_in_block = find_2619_name(c, &session.data);
@@ -465,7 +471,10 @@ fn collect_blocks_ref(
 }
 
 /// Collect the `start` positions of all blocks with a given content type.
-fn collect_content_type(blocks: &[crate::protools::raw_block::RawBlock], ct: ContentType) -> Vec<usize> {
+fn collect_content_type(
+    blocks: &[crate::protools::raw_block::RawBlock],
+    ct: ContentType,
+) -> Vec<usize> {
     let mut result = Vec::new();
     collect_ct_recursive(blocks, ct, &mut result);
     result

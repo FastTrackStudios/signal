@@ -1,8 +1,8 @@
 //! A delay's or reverb's `level` is a gain on the wet: with `mix` pinned at
 //! 1, `level = 20·log10(m)` plays exactly what `mix = m` did.
 
-use daw::plugin::{PluginEvents, PluginInstance};
 use builtin::{NativeDelay, NativeReverb};
+use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 256;
@@ -17,7 +17,8 @@ fn render(fx: &mut dyn PluginInstance) -> Vec<f32> {
             input[0] = 1.0;
         }
         let (mut ol, mut or) = (vec![0.0f32; BLOCK], vec![0.0f32; BLOCK]);
-        fx.process_block(&input, &input, &mut ol, &mut or, &ev).unwrap();
+        fx.process_block(&input, &input, &mut ol, &mut or, &ev)
+            .unwrap();
         out.extend_from_slice(&ol);
     }
     out
@@ -25,7 +26,10 @@ fn render(fx: &mut dyn PluginInstance) -> Vec<f32> {
 
 fn assert_same(a: &[f32], b: &[f32]) {
     let peak = a.iter().fold(0.0f32, |m, s| m.max(s.abs()));
-    let diff = a.iter().zip(b).fold(0.0f32, |m, (x, y)| m.max((x - y).abs()));
+    let diff = a
+        .iter()
+        .zip(b)
+        .fold(0.0f32, |m, (x, y)| m.max((x - y).abs()));
     assert!(peak > 0.01, "the effect made sound");
     assert!(diff < 1e-4 * peak.max(1.0), "max diff {diff}");
 }
@@ -63,15 +67,25 @@ fn gain_pan_is_a_4_5_db_law() {
         g.prepare(SR, BLOCK as u32).unwrap();
         let x = vec![0.5f32; BLOCK];
         let (mut l, mut r) = (vec![0.0f32; BLOCK], vec![0.0f32; BLOCK]);
-        g.process_block(&x, &x, &mut l, &mut r, &PluginEvents::EMPTY).unwrap();
+        g.process_block(&x, &x, &mut l, &mut r, &PluginEvents::EMPTY)
+            .unwrap();
         (l[BLOCK - 1], r[BLOCK - 1])
     };
     let (l, r) = run(0.0);
-    assert!((l - 0.5).abs() < 1e-5 && (r - 0.5).abs() < 1e-5, "centre: unity");
+    assert!(
+        (l - 0.5).abs() < 1e-5 && (r - 0.5).abs() < 1e-5,
+        "centre: unity"
+    );
     let (l, r) = run(1.0);
     let db = 20.0 * (r / 0.5).log10();
-    assert!((db - 4.5).abs() < 0.05, "hard right: +4.5 dB (4.52, the law exactly), got {db:+.2}");
+    assert!(
+        (db - 4.5).abs() < 0.05,
+        "hard right: +4.5 dB (4.52, the law exactly), got {db:+.2}"
+    );
     assert!(l.abs() < 1e-6, "hard right: the left silent");
     let (l, r) = run(-1.0);
-    assert!((20.0 * (l / 0.5).log10() - 4.5).abs() < 0.05 && r.abs() < 1e-6, "hard left mirrors it");
+    assert!(
+        (20.0 * (l / 0.5).log10() - 4.5).abs() < 0.05 && r.abs() < 1e-6,
+        "hard left mirrors it"
+    );
 }

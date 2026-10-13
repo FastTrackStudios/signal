@@ -15,8 +15,8 @@
 //! dataset's masked windows, `weight·(ours − ref)/√n`, concatenated.
 
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use dsp_core::num::count_to_f64;
 use saturate::deluxe::{Deluxe, DeluxeParams, DetectorParams};
@@ -32,7 +32,10 @@ struct Dataset {
 
 fn read_f64(path: &str) -> Result<Vec<f64>, String> {
     let raw = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
-    Ok(raw.chunks_exact(8).map(|c| f64::from_le_bytes(c.try_into().unwrap_or([0; 8]))).collect())
+    Ok(raw
+        .chunks_exact(8)
+        .map(|c| f64::from_le_bytes(c.try_into().unwrap_or([0; 8])))
+        .collect())
 }
 
 fn parse_pack(path: &str) -> Result<Vec<Dataset>, String> {
@@ -41,12 +44,30 @@ fn parse_pack(path: &str) -> Result<Vec<Dataset>, String> {
         .filter(|l| !l.trim().is_empty())
         .map(|line| {
             let f: Vec<&str> = line.split_whitespace().collect();
-            let [_, crush, crunch, rel, dark, weight, window, input, env, mask] = f.as_slice() else {
+            let [
+                _,
+                crush,
+                crunch,
+                rel,
+                dark,
+                weight,
+                window,
+                input,
+                env,
+                mask,
+            ] = f.as_slice()
+            else {
                 return Err(format!("bad pack line: {line}"));
             };
             let num = |s: &str| s.parse::<f64>().map_err(|e| format!("{s}: {e}"));
             Ok(Dataset {
-                settings: DeluxeParams { crush: num(crush)?, crunch: num(crunch)?, darkness_hz: num(dark)?, mix: 100.0, release_on: num(rel)? != 0.0 },
+                settings: DeluxeParams {
+                    crush: num(crush)?,
+                    crunch: num(crunch)?,
+                    darkness_hz: num(dark)?,
+                    mix: 100.0,
+                    release_on: num(rel)? != 0.0,
+                },
                 weight: num(weight)?,
                 window: window.parse().map_err(|e| format!("{window}: {e}"))?,
                 input: read_f64(input)?,
@@ -62,7 +83,11 @@ fn parse_params(path: &str) -> Result<Vec<DetectorParams>, String> {
     text.lines()
         .filter(|l| !l.trim().is_empty())
         .map(|line| {
-            let v: Vec<f64> = line.split_whitespace().map(str::parse).collect::<Result<_, _>>().map_err(|e| format!("{line}: {e}"))?;
+            let v: Vec<f64> = line
+                .split_whitespace()
+                .map(str::parse)
+                .collect::<Result<_, _>>()
+                .map_err(|e| format!("{line}: {e}"))?;
             if v.len() != 22 {
                 return Err(format!("expected 22 values: {line}"));
             }
@@ -103,7 +128,10 @@ fn residuals(d: &Dataset, p: DetectorParams) -> Vec<f64> {
     let mut out = Vec::new();
     let ys: Vec<f64> = d.input.iter().map(|&x| fx.process(x, x).0).collect();
     let window = count_to_f64(d.window.max(1));
-    let env: Vec<f64> = ys.chunks_exact(d.window.max(1)).map(|w| 10.0 * (w.iter().map(|y| y * y).sum::<f64>() / window + 1e-18).log10()).collect();
+    let env: Vec<f64> = ys
+        .chunks_exact(d.window.max(1))
+        .map(|w| 10.0 * (w.iter().map(|y| y * y).sum::<f64>() / window + 1e-18).log10())
+        .collect();
     let used = d.mask.iter().zip(&env).filter(|&(&m, _)| m).count().max(1);
     let scale = d.weight / count_to_f64(used).sqrt();
     for ((&m, &ours), &reference) in d.mask.iter().zip(&env).zip(&d.env_ref) {
@@ -120,19 +148,28 @@ fn run(args: &[String]) -> Result<(), String> {
     };
     let data = parse_pack(pack)?;
     let sets = parse_params(params)?;
-    let threads = rest.first().and_then(|t| t.parse().ok()).unwrap_or_else(|| std::thread::available_parallelism().map_or(4, std::num::NonZero::get));
-    let jobs: Vec<(usize, usize)> = (0..sets.len()).flat_map(|s| (0..data.len()).map(move |d| (s, d))).collect();
+    let threads = rest
+        .first()
+        .and_then(|t| t.parse().ok())
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(4, std::num::NonZero::get));
+    let jobs: Vec<(usize, usize)> = (0..sets.len())
+        .flat_map(|s| (0..data.len()).map(move |d| (s, d)))
+        .collect();
     let results: Vec<Mutex<Vec<f64>>> = jobs.iter().map(|_| Mutex::new(Vec::new())).collect();
     let next = AtomicUsize::new(0);
     std::thread::scope(|scope| {
         for _ in 0..threads {
-            scope.spawn(|| loop {
-                let i = next.fetch_add(1, Ordering::Relaxed);
-                let Some(&(s, d)) = jobs.get(i) else { break };
-                if let (Some(set), Some(ds), Some(slot)) = (sets.get(s), data.get(d), results.get(i)) {
-                    let r = residuals(ds, *set);
-                    if let Ok(mut guard) = slot.lock() {
-                        *guard = r;
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(&(s, d)) = jobs.get(i) else { break };
+                    if let (Some(set), Some(ds), Some(slot)) =
+                        (sets.get(s), data.get(d), results.get(i))
+                    {
+                        let r = residuals(ds, *set);
+                        if let Ok(mut guard) = slot.lock() {
+                            *guard = r;
+                        }
                     }
                 }
             });

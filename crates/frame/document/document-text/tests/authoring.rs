@@ -37,7 +37,13 @@ fn authored_panel() {
     assert_eq!(page.name, "Surface");
     let panel = s.node(page.children[0]).unwrap();
     assert_eq!(panel.kind, NodeKind::Frame);
-    assert_eq!(panel.size, Size { width: 320.0, height: 200.0 });
+    assert_eq!(
+        panel.size,
+        Size {
+            width: 320.0,
+            height: 200.0
+        }
+    );
     assert_eq!(panel.corner_radii, CornerRadii::uniform(8.0));
     let l = panel.layout.as_ref().unwrap();
     assert_eq!(l.direction, LayoutDirection::Horizontal);
@@ -45,7 +51,15 @@ fn authored_panel() {
     assert_eq!(l.cross_align, Some(CrossAxisAlign::Center));
     let knob = s.node(panel.children[0]).unwrap();
     assert_eq!(knob.parent, Some(panel.id));
-    assert_eq!(knob.fills, vec![Paint::solid(Color::rgba(1.0, 90.0 / 255.0, 54.0 / 255.0, 1.0))]);
+    assert_eq!(
+        knob.fills,
+        vec![Paint::solid(Color::rgba(
+            1.0,
+            90.0 / 255.0,
+            54.0 / 255.0,
+            1.0
+        ))]
+    );
     assert_eq!(knob.stroke.weight, 2.0);
     let label = s.node(panel.children[1]).unwrap();
     let t = label.text().unwrap();
@@ -67,9 +81,18 @@ fn default_names_and_lenient_values() {
     let page = s.node(s.pages()[0]).unwrap();
     let rect = s.node(page.children[0]).unwrap();
     assert_eq!(rect.name, "Rectangle");
-    assert_eq!(rect.size, Size { width: 10.0, height: 20.0 });
+    assert_eq!(
+        rect.size,
+        Size {
+            width: 10.0,
+            height: 20.0
+        }
+    );
     assert!(rect.locked);
-    assert_eq!(rect.fills, vec![Paint::solid(Color::rgba(1.0, 0.0, 0.0, 1.0))]);
+    assert_eq!(
+        rect.fills,
+        vec![Paint::solid(Color::rgba(1.0, 0.0, 0.0, 1.0))]
+    );
     let text = s.node(page.children[1]).unwrap();
     assert_eq!(text.text().unwrap().characters, "Hello world");
 }
@@ -93,7 +116,11 @@ fn json_values_accept_shorthand() {
 fn unknown_attribute_suggests() {
     let e = err("<Document>\n  <Page>\n    <Rectangle colour=\"#fff\" />\n  </Page>\n</Document>");
     assert_eq!((e.line, e.col), (3, 16));
-    assert!(e.message.contains("unknown attribute `colour` on <Rectangle> — did you mean `fill`?"), "{e}");
+    assert!(
+        e.message
+            .contains("unknown attribute `colour` on <Rectangle> — did you mean `fill`?"),
+        "{e}"
+    );
     let e = err("<Document><Page><Frame widht=4 /></Page></Document>");
     assert!(e.message.contains("did you mean `w`?"), "{e}");
     let e = err("<Document><Page><Frame border-radius=4 /></Page></Document>");
@@ -111,7 +138,11 @@ fn element_specific_attributes() {
 #[test]
 fn unknown_element_suggests() {
     let e = err("<Document><Page><Rect w=4 /></Page></Document>");
-    assert!(e.message.contains("unknown element <Rect> — did you mean <Rectangle>?"), "{e}");
+    assert!(
+        e.message
+            .contains("unknown element <Rect> — did you mean <Rectangle>?"),
+        "{e}"
+    );
     let e = err("<Document><Page><Circle /></Page></Document>");
     assert!(e.message.contains("<Ellipse>"), "{e}");
 }
@@ -120,7 +151,11 @@ fn unknown_element_suggests() {
 fn structural_errors() {
     let e = err("<Document>\n<Page>\n</Frame>\n</Document>");
     assert_eq!(e.line, 3);
-    assert!(e.message.contains("</Frame> doesn't match <Page> opened at 2:1"), "{e}");
+    assert!(
+        e.message
+            .contains("</Frame> doesn't match <Page> opened at 2:1"),
+        "{e}"
+    );
     let e = err("<Document><Page>");
     assert!(e.message.contains("never closed"), "{e}");
     let e = err("<Document><Frame>Hi</Frame></Document>");
@@ -146,7 +181,9 @@ fn json_error_is_positioned() {
 #[test]
 fn duplicate_ids() {
     let id = NodeId::new();
-    let e = err(&format!("<Document><Frame id=\"{id}\" /><Frame id=\"{id}\" /></Document>"));
+    let e = err(&format!(
+        "<Document><Frame id=\"{id}\" /><Frame id=\"{id}\" /></Document>"
+    ));
     assert!(e.message.contains("duplicate id"), "{e}");
     let e = err("<Document id=\"nope\" />");
     assert!(e.message.contains("not a UUID"), "{e}");

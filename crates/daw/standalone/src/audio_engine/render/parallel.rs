@@ -85,7 +85,8 @@ impl Shared {
             // A panic must still count the job done, or the render thread
             // waits forever; jobs catch their plugins' panics themselves.
             if let Some(f) = unsafe { *self.job.get() } {
-                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { (*f)(i) }));
+                let _ =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { (*f)(i) }));
             }
             self.done.fetch_add(1, Ordering::Release);
         }

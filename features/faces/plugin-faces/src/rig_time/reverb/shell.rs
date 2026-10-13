@@ -65,7 +65,11 @@ pub struct Unit {
 }
 
 /// The tall faces' rows: a shorter picture, bigger knobs under it.
-pub const ROWS: kit::TallRows = kit::TallRows { split: 134.0, main: (30.0, 50.0), more: (126.0, 40.0) };
+pub const ROWS: kit::TallRows = kit::TallRows {
+    split: 134.0,
+    main: (30.0, 50.0),
+    more: (126.0, 40.0),
+};
 
 fn a(id: &str) -> String {
     format!("{VERB}/{id}")
@@ -74,7 +78,14 @@ fn a(id: &str) -> String {
 /// A well for a picture in (x, y, w, h) on `panel`: clipped, rounded,
 /// shaded in, filled top to bottom with `fill`. The caller draws into it
 /// and puts the glass over it last.
-pub fn well(b: &mut Builder<'_>, panel: NodeId, name: &str, (x, y, w, h): (f64, f64, f64, f64), fill: &[(f64, &str)], r: f64) -> NodeId {
+pub fn well(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    name: &str,
+    (x, y, w, h): (f64, f64, f64, f64),
+    fill: &[(f64, &str)],
+    r: f64,
+) -> NodeId {
     let mut s = draw::frame(name, x, y, w, h);
     s.fills = vec![draw::linear(180.0, fill)];
     s.clips_content = true;
@@ -86,8 +97,18 @@ pub fn well(b: &mut Builder<'_>, panel: NodeId, name: &str, (x, y, w, h): (f64, 
 /// A handle on `verb/decay` riding along x in `parent`: its centre travels
 /// from `x0` to `x1` at `y` (its top), `hw × hh`; `build` draws it in its
 /// own box. Returns the travel (the frame to stretch with the picture).
-pub fn decay_handle(b: &mut Builder<'_>, parent: NodeId, name: &str, (x0, x1, y): (f64, f64, f64), (hw, hh): (f64, f64), build: impl FnOnce(&mut Builder<'_>, NodeId)) -> NodeId {
-    let travel = b.add(parent, draw::frame(&format!("{name} travel"), x0, y, x1 - x0, hh));
+pub fn decay_handle(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    (x0, x1, y): (f64, f64, f64),
+    (hw, hh): (f64, f64),
+    build: impl FnOnce(&mut Builder<'_>, NodeId),
+) -> NodeId {
+    let travel = b.add(
+        parent,
+        draw::frame(&format!("{name} travel"), x0, y, x1 - x0, hh),
+    );
     let h = b.add(travel, draw::frame(name, 0.0, 0.0, hw, hh));
     build(b, h);
     let kind = ControlKind::Handle {
@@ -97,7 +118,8 @@ pub fn decay_handle(b: &mut Builder<'_>, parent: NodeId, name: &str, (x0, x1, y)
         x_map: HandleAxis::new(Axis::Linear { min: 0.0, max: 1.0 }),
         y_map: HandleAxis::new(Axis::Linear { min: 0.0, max: 1.0 }),
     };
-    b.controls.insert(h, Control::new(kind).bound(ui::bind(&a("decay"))));
+    b.controls
+        .insert(h, Control::new(kind).bound(ui::bind(&a("decay"))));
     if let Some(n) = b.scene.node_mut(travel) {
         n.layout_child.resize_x = Some(document_proto::ResizeX::Stretch);
     }
@@ -112,28 +134,96 @@ pub fn face_at(u: &Unit, dark: bool, tier: kit::Tier) -> Face {
     let w = tier.lane_w();
     let scene = kit::tier_lane(u.name, tier, |b, root| {
         let panel = (u.ground)(b, root, (w, kit::H), dark);
-        let pw = if small_room { kit::PHONE_PICTURE_R - 10.0 } else { 560.0 };
-        let stretch = (u.picture)(b, panel, (10.0, 10.0, pw, kit::H - 20.0), if small_room { Room::Phone } else { Room::Lane }, dark);
+        let pw = if small_room {
+            kit::PHONE_PICTURE_R - 10.0
+        } else {
+            560.0
+        };
+        let stretch = (u.picture)(
+            b,
+            panel,
+            (10.0, 10.0, pw, kit::H - 20.0),
+            if small_room { Room::Phone } else { Room::Lane },
+            dark,
+        );
         let lit = ui::alpha(kit::PURPLE_LAMP, 0.55);
         if small_room {
-            kit::nameplate_top_right(b, panel, VERB, tier, (6.0, 30.0), u.title_w + 4.0, 220.0, 12.0, (l.accent, l.dim), |b, t| (u.title)(b, t, 30.0, 22.0, dark));
+            kit::nameplate_top_right(
+                b,
+                panel,
+                VERB,
+                tier,
+                (6.0, 30.0),
+                u.title_w + 4.0,
+                220.0,
+                12.0,
+                (l.accent, l.dim),
+                |b, t| (u.title)(b, t, 30.0, 22.0, dark),
+            );
             let (tx, ty, td) = kit::PHONE_TIME;
-            kit::time_knob(b, panel, VERB, (tx, ty, td), 11.0, (l.ink, l.dim, &lit), |b, p, addr| {
-                kit::knob3d_bare(b, p, addr, td, (tx, ty), &l.wheel);
-            });
+            kit::time_knob(
+                b,
+                panel,
+                VERB,
+                (tx, ty, td),
+                11.0,
+                (l.ink, l.dim, &lit),
+                |b, p, addr| {
+                    kit::knob3d_bare(b, p, addr, td, (tx, ty), &l.wheel);
+                },
+            );
             let (xs, ky, kd) = kit::PHONE_KNOBS;
             for (i, (id, legend)) in [u.lane[0], ("level", "Level")].iter().enumerate() {
-                kit::knob3d(b, panel, &a(id), legend, kd, (xs[i], ky), &l.knob, l.ink, l.dim);
+                kit::knob3d(
+                    b,
+                    panel,
+                    &a(id),
+                    legend,
+                    kd,
+                    (xs[i], ky),
+                    &l.knob,
+                    l.ink,
+                    l.dim,
+                );
             }
         } else {
-            kit::nameplate_top_right(b, panel, VERB, tier, (10.0, 28.0), u.title_w, 200.0, 10.0, (l.accent, l.dim), |b, t| (u.title)(b, t, 28.0, 20.0, dark));
+            kit::nameplate_top_right(
+                b,
+                panel,
+                VERB,
+                tier,
+                (10.0, 28.0),
+                u.title_w,
+                200.0,
+                10.0,
+                (l.accent, l.dim),
+                |b, t| (u.title)(b, t, 28.0, 20.0, dark),
+            );
             let x0 = 10.0 + pw + 20.0;
             let (tx, ty, td) = (x0 + 40.0, 78.0, 52.0);
-            kit::time_knob(b, panel, VERB, (tx, ty, td), 8.5, (l.ink, l.dim, &lit), |b, p, addr| {
-                kit::knob3d_bare(b, p, addr, td, (tx, ty), &l.wheel);
-            });
+            kit::time_knob(
+                b,
+                panel,
+                VERB,
+                (tx, ty, td),
+                8.5,
+                (l.ink, l.dim, &lit),
+                |b, p, addr| {
+                    kit::knob3d_bare(b, p, addr, td, (tx, ty), &l.wheel);
+                },
+            );
             for (i, (id, legend)) in u.lane.iter().enumerate() {
-                kit::knob3d(b, panel, &a(id), legend, 34.0, (x0 + 116.0 + 60.0 * i as f64, 90.0), &l.knob, l.ink, l.dim);
+                kit::knob3d(
+                    b,
+                    panel,
+                    &a(id),
+                    legend,
+                    34.0,
+                    (x0 + 116.0 + 60.0 * i as f64, 90.0),
+                    &l.knob,
+                    l.ink,
+                    l.dim,
+                );
             }
         }
         kit::face_bypass(b, panel, VERB, tier, "purple", u.legend);
@@ -156,17 +246,46 @@ pub fn back_at(u: &Unit, dark: bool, tier: kit::Tier) -> Face {
     let w = tier.lane_w();
     let scene = kit::tier_lane(u.name, tier, |b, root| {
         let panel = (u.ground)(b, root, (w, kit::H), dark);
-        kit::back_knobs(b, panel, tier, &kit::VERB_MORE, l.ink, |b, p, id, legend, d, at| {
-            kit::knob3d(b, p, &a(id), legend, d, at, &l.knob, l.ink, l.dim);
-        });
-        let (np, title_w, preset_w, size, ts) = if small_room { ((6.0, 30.0), u.title_w + 4.0, 220.0, 12.0, 22.0) } else { ((10.0, 28.0), u.title_w, 200.0, 10.0, 20.0) };
+        kit::back_knobs(
+            b,
+            panel,
+            tier,
+            &kit::VERB_MORE,
+            l.ink,
+            |b, p, id, legend, d, at| {
+                kit::knob3d(b, p, &a(id), legend, d, at, &l.knob, l.ink, l.dim);
+            },
+        );
+        let (np, title_w, preset_w, size, ts) = if small_room {
+            ((6.0, 30.0), u.title_w + 4.0, 220.0, 12.0, 22.0)
+        } else {
+            ((10.0, 28.0), u.title_w, 200.0, 10.0, 20.0)
+        };
         kit::head(b, panel, VERB, true, |b, head| {
-            kit::nameplate_top_right(b, head, VERB, tier, np, title_w, preset_w, size, (l.accent, l.dim), |b, t| (u.title)(b, t, np.1, ts, dark));
+            kit::nameplate_top_right(
+                b,
+                head,
+                VERB,
+                tier,
+                np,
+                title_w,
+                preset_w,
+                size,
+                (l.accent, l.dim),
+                |b, t| (u.title)(b, t, np.1, ts, dark),
+            );
             kit::face_bypass(b, head, VERB, tier, "purple", u.legend);
         });
         kit::flip_arrow(b, panel, VERB, tier, true, (l.ink, &ui::alpha(l.dim, 0.3)));
     });
-    let mut f = kit::reverb_face(kit::tier_file(Box::leak(format!("{}-back", u.base).into_boxed_str()), tier, dark), scene);
+    let mut f = kit::reverb_face(
+        kit::tier_file(
+            Box::leak(format!("{}-back", u.base).into_boxed_str()),
+            tier,
+            dark,
+        ),
+        scene,
+    );
     f.params.extend(kit::nameplate_params(VERB));
     f.params.extend(kit::flip_params(VERB));
     f
@@ -179,8 +298,21 @@ pub fn tall(u: &Unit, dark: bool) -> Face {
     let l = (u.look)(dark);
     let scene = kit::tall_lane(u.name, |b, root| {
         let panel = (u.ground)(b, root, (kit::TALL_W, kit::TALL_H), dark);
-        (u.picture)(b, panel, (10.0, 10.0, kit::TALL_W - 20.0, ROWS.split - 16.0), Room::Tall, dark);
-        let t = kit::Tall { ns: VERB, main: &u.tall, inks: (l.ink, l.dim, &ui::alpha(kit::PURPLE_LAMP, 0.55), l.accent), scrim: l.scrim, bypass: ("purple", u.legend), title_w: u.title_w + 4.0 };
+        (u.picture)(
+            b,
+            panel,
+            (10.0, 10.0, kit::TALL_W - 20.0, ROWS.split - 16.0),
+            Room::Tall,
+            dark,
+        );
+        let t = kit::Tall {
+            ns: VERB,
+            main: &u.tall,
+            inks: (l.ink, l.dim, &ui::alpha(kit::PURPLE_LAMP, 0.55), l.accent),
+            scrim: l.scrim,
+            bypass: ("purple", u.legend),
+            title_w: u.title_w + 4.0,
+        };
         kit::tall_chrome_rows(
             b,
             panel,
@@ -202,9 +334,24 @@ pub fn tall(u: &Unit, dark: bool) -> Face {
 
 /// A panel `w × h` on `root` filled with `fill`, lit along its top edge and
 /// shaded along its bottom. Returns it.
-pub fn panel(b: &mut Builder<'_>, root: NodeId, (w, h): (f64, f64), fill: &[(f64, &str)], r: f64) -> NodeId {
+pub fn panel(
+    b: &mut Builder<'_>,
+    root: NodeId,
+    (w, h): (f64, f64),
+    fill: &[(f64, &str)],
+    r: f64,
+) -> NodeId {
     let mut p = draw::frame("Panel", 0.0, 0.0, w, h);
     p.fills = vec![draw::linear(180.0, fill)];
     p.corner_radii = document_proto::CornerRadii::uniform(r);
-    b.add(root, draw::with_effects(p, vec![draw::inner_shadow("#ffffff2a", 0.0, 1.0, 0.0), draw::inner_shadow("#00000050", 0.0, -2.0, 3.0)]))
+    b.add(
+        root,
+        draw::with_effects(
+            p,
+            vec![
+                draw::inner_shadow("#ffffff2a", 0.0, 1.0, 0.0),
+                draw::inner_shadow("#00000050", 0.0, -2.0, 3.0),
+            ],
+        ),
+    )
 }

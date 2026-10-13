@@ -9,8 +9,8 @@ use expression_editor::cc;
 use expression_editor::doc::{ExpressionDoc, TimeBase};
 use expression_editor::mouse::{Context, Gesture};
 use expression_editor::tools::Mods;
-use expression_editor::{Editor, Viewport};
 use expression_editor::ui::interaction::{self, Drag};
+use expression_editor::{Editor, Viewport};
 
 const PPQ: f64 = 960.0;
 const W: f64 = 900.0;

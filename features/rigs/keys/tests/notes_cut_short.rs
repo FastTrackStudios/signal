@@ -50,10 +50,10 @@ fn normal_playing_cuts_no_note_short() {
     // 72 BPM: a bar is 3.33 s, an eighth 0.417 s. Four bars, played twice.
     let eighth = 60.0 / 72.0 / 2.0;
     let chords: [&[u8]; 4] = [
-        &[36, 48, 55, 60, 64],   // C
-        &[35, 47, 55, 59, 62],   // G/B
-        &[33, 45, 52, 57, 60],   // Am
-        &[29, 41, 53, 57, 60],   // F
+        &[36, 48, 55, 60, 64], // C
+        &[35, 47, 55, 59, 62], // G/B
+        &[33, 45, 52, 57, 60], // Am
+        &[29, 41, 53, 57, 60], // F
     ];
     let melody: [u8; 8] = [72, 74, 76, 79, 76, 74, 72, 67];
     // (time s, event) — 0 note-off, 1 note-on, 2 pedal.
@@ -106,11 +106,19 @@ fn normal_playing_cuts_no_note_short() {
         l.sort_by(f32::total_cmp);
         let pct = |p: f64| l[((l.len() - 1) as f64 * p) as usize];
         let over = l.iter().filter(|&&x| x > 1.0).count();
-        let busiest = loads.iter().max_by_key(|x| x.1).copied().unwrap_or_default();
+        let busiest = loads
+            .iter()
+            .max_by_key(|x| x.1)
+            .copied()
+            .unwrap_or_default();
         eprintln!(
             "render load: median {:.2}, p99 {:.2}, max {:.2}; {over} blocks over the deadline; \
              most voices {} (load {:.2} that block)",
-            pct(0.5), pct(0.99), pct(1.0), busiest.1, busiest.0
+            pct(0.5),
+            pct(0.99),
+            pct(1.0),
+            busiest.1,
+            busiest.0
         );
     }
     let lanes = sampler::lane_health::reports();
@@ -124,8 +132,14 @@ fn normal_playing_cuts_no_note_short() {
     eprintln!("rig peak (sum of lane peaks): {rig_peak} voices");
     let faded: Vec<&sampler::lane_health::LaneReport> =
         lanes.iter().filter(|l| l.faded > 0).collect();
-    assert!(faded.is_empty(), "normal playing had voices faded by the CPU guard: {faded:?}");
-    let dolceola = lanes.iter().find(|l| l.name == "Synth 1").expect("the Dolceola lane");
+    assert!(
+        faded.is_empty(),
+        "normal playing had voices faded by the CPU guard: {faded:?}"
+    );
+    let dolceola = lanes
+        .iter()
+        .find(|l| l.name == "Synth 1")
+        .expect("the Dolceola lane");
     assert!(dolceola.peak_voices > 0, "the Dolceola played");
 
     let _ = std::fs::remove_dir_all(dir);

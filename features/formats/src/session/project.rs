@@ -213,10 +213,12 @@ impl DawProject {
         // `objects/` — which is where the autosave win comes from.
         let seq = self.document.saves.last().map(|s| s.seq).unwrap_or(0) + 1;
         let referenced = self.document.referenced_objects();
-        self.document.saves.push(crate::session::document::SaveEntry {
-            seq,
-            objects: referenced,
-        });
+        self.document
+            .saves
+            .push(crate::session::document::SaveEntry {
+                seq,
+                objects: referenced,
+            });
 
         // The staleness hash covers the manifest *without* its own
         // oplog ref. A manifest cannot contain a hash of itself — that

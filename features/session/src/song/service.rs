@@ -1,9 +1,9 @@
 //! `SongService` implementation — builds songs from the current DAW project.
 
+use crate::proto::{SessionServiceError, Song, SongService};
 use crate::song::builder::SongBuilder;
 use daw::reaper::Reaper;
 use daw::service::{ProjectContext, Projects};
-use crate::proto::{SessionServiceError, Song, SongService};
 use tracing::{debug, info, warn};
 
 /// Implementation of `SongService`

@@ -10,9 +10,9 @@
 //! "save it" are two unrelated operations that can disagree about which
 //! take they mean.
 
+use crate::{Editor, ExpressionDoc, Viewport};
 use daw::service::midi::{Midi, MidiTakeLocation, PpqRange};
 use daw::service::{ItemRef, Items, ProjectContext, TakeRef};
-use crate::{Editor, ExpressionDoc, Viewport};
 
 use crate::daw::{to_content, to_doc, write_warnings};
 

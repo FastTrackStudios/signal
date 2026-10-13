@@ -25,8 +25,6 @@ pub mod profiles;
 #[cfg(feature = "ui")]
 pub mod ui;
 
-
-
 use dsp_core::num;
 
 pub mod bluebox;
@@ -262,7 +260,6 @@ mod tests {
         assert!((db_to_gain(-6.0) - 0.501).abs() < 1e-2);
     }
 }
-
 
 // ── from the saturate facade ──
 /// Stereo (or N-channel) saturator: one memoryless [`Saturator`] per channel

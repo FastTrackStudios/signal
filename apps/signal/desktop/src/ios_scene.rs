@@ -141,7 +141,10 @@ fn open_island_right(mtm: MainThreadMarker) {
         return;
     }
     let scenes = UIApplication::sharedApplication(mtm).connectedScenes();
-    let Some(scene) = scenes.iter().find_map(|scene| scene.downcast::<UIWindowScene>().ok()) else {
+    let Some(scene) = scenes
+        .iter()
+        .find_map(|scene| scene.downcast::<UIWindowScene>().ok())
+    else {
         return;
     };
     // SAFETY: plain UIKit messages on the main thread; the geometry
@@ -152,7 +155,9 @@ fn open_island_right(mtm: MainThreadMarker) {
         if held == 3 || held == 4 {
             return;
         }
-        let Some(prefs_class) = objc2::runtime::AnyClass::get(c"UIWindowSceneGeometryPreferencesIOS") else {
+        let Some(prefs_class) =
+            objc2::runtime::AnyClass::get(c"UIWindowSceneGeometryPreferencesIOS")
+        else {
             return;
         };
         let prefs: *mut AnyObject = msg_send![prefs_class, alloc];
@@ -189,4 +194,3 @@ pub fn island_on_left() -> Option<bool> {
         None
     }
 }
-

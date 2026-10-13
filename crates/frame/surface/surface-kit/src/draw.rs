@@ -8,8 +8,8 @@
 //! angle are both described.
 
 use document_proto::{
-    BlendMode, Color, CornerRadii, Effect, EffectKind, Emission, GradientStop, Node, NodeKind, Paint, PaintKind, Size, Stroke,
-    StrokeAlign, TextAlign, TextData, Transform,
+    BlendMode, Color, CornerRadii, Effect, EffectKind, Emission, GradientStop, Node, NodeKind,
+    Paint, PaintKind, Size, Stroke, StrokeAlign, TextAlign, TextData, Transform,
 };
 
 // ── colour ───────────────────────────────────────────────────────────────
@@ -26,7 +26,12 @@ pub fn hex(s: &str) -> Color {
         8 => (p(0, 2), p(2, 2), p(4, 2), p(6, 2)),
         _ => panic!("bad hex colour {s}"),
     };
-    Color { r: f64::from(r) / 255.0, g: f64::from(g) / 255.0, b: f64::from(b) / 255.0, a: f64::from(a) / 255.0 }
+    Color {
+        r: f64::from(r) / 255.0,
+        g: f64::from(g) / 255.0,
+        b: f64::from(b) / 255.0,
+        a: f64::from(a) / 255.0,
+    }
 }
 
 #[must_use]
@@ -37,7 +42,12 @@ pub fn with_alpha(c: Color, a: f64) -> Color {
 /// Mix `a` toward `b` by `t` (0..1).
 #[must_use]
 pub fn mix(a: Color, b: Color, t: f64) -> Color {
-    Color { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t, a: a.a + (b.a - a.a) * t }
+    Color {
+        r: a.r + (b.r - a.r) * t,
+        g: a.g + (b.g - a.g) * t,
+        b: a.b + (b.b - a.b) * t,
+        a: a.a + (b.a - a.a) * t,
+    }
 }
 
 // ── paints ───────────────────────────────────────────────────────────────
@@ -48,11 +58,21 @@ pub fn solid(c: &str) -> Paint {
 }
 
 fn stops(s: &[(f64, &str)]) -> Vec<GradientStop> {
-    s.iter().map(|(p, c)| GradientStop { position: *p, color: hex(c) }).collect()
+    s.iter()
+        .map(|(p, c)| GradientStop {
+            position: *p,
+            color: hex(c),
+        })
+        .collect()
 }
 
 fn paint(kind: PaintKind) -> Paint {
-    Paint { kind, opacity: 1.0, blend: BlendMode::Normal, visible: true }
+    Paint {
+        kind,
+        opacity: 1.0,
+        blend: BlendMode::Normal,
+        visible: true,
+    }
 }
 
 /// A linear gradient at `angle_deg` (CSS convention: 0 = to top, 90 = to
@@ -68,8 +88,18 @@ pub fn linear(angle_deg: f64, s: &[(f64, &str)]) -> Paint {
     // The renderer runs a linear gradient from T(0, .5) to T(1, .5) in the
     // node's unit square; build T so those land on start and end.
     let (ax, ay) = (ex - sx, ey - sy);
-    let t = Transform { a: ax, b: -ay, tx: sx + 0.5 * ay, c: ay, d: ax, ty: sy - 0.5 * ax };
-    paint(PaintKind::LinearGradient { stops: stops(s), transform: Some(t) })
+    let t = Transform {
+        a: ax,
+        b: -ay,
+        tx: sx + 0.5 * ay,
+        c: ay,
+        d: ax,
+        ty: sy - 0.5 * ax,
+    };
+    paint(PaintKind::LinearGradient {
+        stops: stops(s),
+        transform: Some(t),
+    })
 }
 
 /// A radial gradient centred at (`cx`, `cy`) in the node's unit square with
@@ -77,14 +107,27 @@ pub fn linear(angle_deg: f64, s: &[(f64, &str)]) -> Paint {
 #[must_use]
 pub fn radial_at(cx: f64, cy: f64, r: f64, s: &[(f64, &str)]) -> Paint {
     // Unit-square radial: centre T(.5,.5), radius along T's columns.
-    let t = Transform { a: 2.0 * r, b: 0.0, tx: cx - r, c: 0.0, d: 2.0 * r, ty: cy - r };
-    paint(PaintKind::RadialGradient { stops: stops(s), transform: Some(t) })
+    let t = Transform {
+        a: 2.0 * r,
+        b: 0.0,
+        tx: cx - r,
+        c: 0.0,
+        d: 2.0 * r,
+        ty: cy - r,
+    };
+    paint(PaintKind::RadialGradient {
+        stops: stops(s),
+        transform: Some(t),
+    })
 }
 
 /// A centred radial gradient filling the box.
 #[must_use]
 pub fn radial(s: &[(f64, &str)]) -> Paint {
-    paint(PaintKind::RadialGradient { stops: stops(s), transform: None })
+    paint(PaintKind::RadialGradient {
+        stops: stops(s),
+        transform: None,
+    })
 }
 
 /// A conic (sweep) gradient around the box centre, starting at `start_deg`
@@ -94,20 +137,46 @@ pub fn conic(start_deg: f64, s: &[(f64, &str)]) -> Paint {
     // The renderer's sweep starts at +x; kit angles start at up.
     let a = (start_deg - 90.0).to_radians();
     let (c, sn) = (a.cos(), a.sin());
-    let t = Transform { a: c, b: -sn, tx: 0.5 - 0.5 * c + 0.5 * sn, c: sn, d: c, ty: 0.5 - 0.5 * sn - 0.5 * c };
-    paint(PaintKind::AngularGradient { stops: stops(s), transform: Some(t) })
+    let t = Transform {
+        a: c,
+        b: -sn,
+        tx: 0.5 - 0.5 * c + 0.5 * sn,
+        c: sn,
+        d: c,
+        ty: 0.5 - 0.5 * sn - 0.5 * c,
+    };
+    paint(PaintKind::AngularGradient {
+        stops: stops(s),
+        transform: Some(t),
+    })
 }
 
 // ── effects ──────────────────────────────────────────────────────────────
 
 #[must_use]
 pub fn drop_shadow(color: &str, dx: f64, dy: f64, radius: f64) -> Effect {
-    Effect { kind: EffectKind::DropShadow, visible: true, color: hex(color), offset_x: dx, offset_y: dy, radius, spread: 0.0 }
+    Effect {
+        kind: EffectKind::DropShadow,
+        visible: true,
+        color: hex(color),
+        offset_x: dx,
+        offset_y: dy,
+        radius,
+        spread: 0.0,
+    }
 }
 
 #[must_use]
 pub fn inner_shadow(color: &str, dx: f64, dy: f64, radius: f64) -> Effect {
-    Effect { kind: EffectKind::InnerShadow, visible: true, color: hex(color), offset_x: dx, offset_y: dy, radius, spread: 0.0 }
+    Effect {
+        kind: EffectKind::InnerShadow,
+        visible: true,
+        color: hex(color),
+        offset_x: dx,
+        offset_y: dy,
+        radius,
+        spread: 0.0,
+    }
 }
 
 // ── nodes ────────────────────────────────────────────────────────────────
@@ -115,7 +184,10 @@ pub fn inner_shadow(color: &str, dx: f64, dy: f64, radius: f64) -> Effect {
 fn placed(kind: NodeKind, name: &str, x: f64, y: f64, w: f64, h: f64) -> Node {
     let mut n = Node::new(kind, name);
     n.transform = Transform::translate(x, y);
-    n.size = Size { width: w, height: h };
+    n.size = Size {
+        width: w,
+        height: h,
+    };
     n
 }
 
@@ -149,9 +221,23 @@ pub fn path(name: &str, x: f64, y: f64, w: f64, h: f64, d: String, fill: Paint) 
 }
 
 #[must_use]
-pub fn text(name: &str, s: &str, x: f64, y: f64, w: f64, size: f64, color: &str, align: TextAlign) -> Node {
+pub fn text(
+    name: &str,
+    s: &str,
+    x: f64,
+    y: f64,
+    w: f64,
+    size: f64,
+    color: &str,
+    align: TextAlign,
+) -> Node {
     let mut n = placed(
-        NodeKind::Text(TextData { characters: s.to_string(), font_size: size, align, ..TextData::default() }),
+        NodeKind::Text(TextData {
+            characters: s.to_string(),
+            font_size: size,
+            align,
+            ..TextData::default()
+        }),
         name,
         x,
         y,
@@ -225,7 +311,10 @@ pub struct Lettering {
 impl Lettering {
     #[must_use]
     pub fn family(family: &str) -> Self {
-        Self { family: Some(family.to_string()), ..Self::default() }
+        Self {
+            family: Some(family.to_string()),
+            ..Self::default()
+        }
     }
 
     #[must_use]
@@ -281,7 +370,17 @@ pub fn lettered(mut n: Node, l: &Lettering) -> Node {
 /// [`text`] in a family, weight, italic and width.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-pub fn styled_text(name: &str, s: &str, x: f64, y: f64, w: f64, size: f64, color: &str, align: TextAlign, l: &Lettering) -> Node {
+pub fn styled_text(
+    name: &str,
+    s: &str,
+    x: f64,
+    y: f64,
+    w: f64,
+    size: f64,
+    color: &str,
+    align: TextAlign,
+    l: &Lettering,
+) -> Node {
     lettered(text(name, s, x, y, w, size, color, align), l)
 }
 
@@ -289,14 +388,26 @@ pub fn styled_text(name: &str, s: &str, x: f64, y: f64, w: f64, size: f64, color
 #[must_use]
 pub fn label_at(name: &str, s: &str, cx: f64, cy: f64, size: f64, color: &str) -> Node {
     let w = (s.chars().count() as f64 * size * 0.62).max(size * 1.4) + 6.0;
-    text(name, s, cx - w / 2.0, cy - size * 0.68, w, size, color, TextAlign::Center)
+    text(
+        name,
+        s,
+        cx - w / 2.0,
+        cy - size * 0.68,
+        w,
+        size,
+        color,
+        TextAlign::Center,
+    )
 }
 
 /// Rough set width of `s` at `size` (bold, untracked) — for placing labels.
 /// Pass the string as it will show (upper-cased, if it will be).
 #[must_use]
 pub fn text_width(s: &str, size: f64) -> f64 {
-    s.chars().map(|c| if c.is_uppercase() { 0.68 } else { 0.58 }).sum::<f64>() * size
+    s.chars()
+        .map(|c| if c.is_uppercase() { 0.68 } else { 0.58 })
+        .sum::<f64>()
+        * size
 }
 
 /// Smallest type a printed scale is set at, px: the numerals and position
@@ -329,7 +440,15 @@ pub fn radial_extent(s: &str, r: f64, deg: f64, size: f64) -> (f64, f64, f64, f6
 /// wider than estimated grows away from the knob, never back over its tick.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-pub fn radial_label(name: &str, s: &str, (cx, cy): (f64, f64), r: f64, deg: f64, size: f64, color: &str) -> Node {
+pub fn radial_label(
+    name: &str,
+    s: &str,
+    (cx, cy): (f64, f64),
+    r: f64,
+    deg: f64,
+    size: f64,
+    color: &str,
+) -> Node {
     let (w, h) = (text_width(s, size), size * 0.9);
     let ((x, y), _) = radial_centre(cx, cy, r, deg, w, h);
     let bw = w * 1.4 + size;
@@ -346,7 +465,12 @@ pub fn radial_label(name: &str, s: &str, (cx, cy): (f64, f64), r: f64, deg: f64,
 
 #[must_use]
 pub fn stroked(mut n: Node, color: &str, weight: f64) -> Node {
-    n.stroke = Stroke { paints: vec![solid(color)], weight, align: StrokeAlign::Inside, ..Stroke::default() };
+    n.stroke = Stroke {
+        paints: vec![solid(color)],
+        weight,
+        align: StrokeAlign::Inside,
+        ..Stroke::default()
+    };
     n
 }
 
@@ -374,7 +498,11 @@ pub fn with_opacity(mut n: Node, o: f64) -> Node {
 /// node's opacity, so put it on the node an `Led` slot dims.
 #[must_use]
 pub fn emissive(mut n: Node, color: Color, intensity: f64, radius: f64) -> Node {
-    n.emission = Some(Emission { color: Color { a: 1.0, ..color }, intensity, radius });
+    n.emission = Some(Emission {
+        color: Color { a: 1.0, ..color },
+        intensity,
+        radius,
+    });
     n
 }
 
@@ -389,7 +517,14 @@ pub fn rotated(mut n: Node, deg: f64) -> Node {
     // Place the rotated box so its centre stays at (cx, cy).
     let tx = cx - (c * w / 2.0 - s * h / 2.0);
     let ty = cy - (s * w / 2.0 + c * h / 2.0);
-    n.transform = Transform { a: c, b: -s, tx, c: s, d: c, ty };
+    n.transform = Transform {
+        a: c,
+        b: -s,
+        tx,
+        c: s,
+        d: c,
+        ty,
+    };
     n
 }
 
@@ -420,7 +555,10 @@ pub fn sector(cx: f64, cy: f64, r_in: f64, r_out: f64, a0: f64, a1: f64) -> Stri
 pub fn polygon(points: &[(f64, f64)]) -> String {
     let mut d = String::new();
     for (i, (x, y)) in points.iter().enumerate() {
-        d.push_str(&format!("{} {x:.3} {y:.3} ", if i == 0 { "M" } else { "L" }));
+        d.push_str(&format!(
+            "{} {x:.3} {y:.3} ",
+            if i == 0 { "M" } else { "L" }
+        ));
     }
     d.push('Z');
     d
@@ -434,7 +572,8 @@ pub fn lobed(cx: f64, cy: f64, r: f64, lobes: u32, depth: f64) -> String {
     let pts: Vec<(f64, f64)> = (0..n)
         .map(|i| {
             let t = i as f64 / n as f64;
-            let rr = r - depth * 0.5 + depth * 0.5 * (t * f64::from(lobes) * std::f64::consts::TAU).cos();
+            let rr = r - depth * 0.5
+                + depth * 0.5 * (t * f64::from(lobes) * std::f64::consts::TAU).cos();
             polar(cx, cy, rr, t * 360.0)
         })
         .collect();
@@ -444,7 +583,8 @@ pub fn lobed(cx: f64, cy: f64, r: f64, lobes: u32, depth: f64) -> String {
 /// A regular polygon (hex nut, chicken-head base) of `sides` on radius `r`.
 #[must_use]
 pub fn regular(cx: f64, cy: f64, r: f64, sides: u32, rot_deg: f64) -> String {
-    let pts: Vec<(f64, f64)> =
-        (0..sides).map(|i| polar(cx, cy, r, rot_deg + 360.0 * f64::from(i) / f64::from(sides))).collect();
+    let pts: Vec<(f64, f64)> = (0..sides)
+        .map(|i| polar(cx, cy, r, rot_deg + 360.0 * f64::from(i) / f64::from(sides)))
+        .collect();
     polygon(&pts)
 }

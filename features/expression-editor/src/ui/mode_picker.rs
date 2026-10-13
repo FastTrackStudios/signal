@@ -16,8 +16,8 @@
 //! dropdown behind it, so a native one renders as a box that does
 //! nothing. This is a button and an absolutely-positioned list.
 
-use dioxus::prelude::*;
 use crate::{Editor, Mode, ModeFamily};
+use dioxus::prelude::*;
 
 use crate::ui::theme;
 

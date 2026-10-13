@@ -11,7 +11,9 @@ use crate::guide::engine::audio::{
     ClickPlayer, ClickPlayerState, CountPlayer, CountPlayerState, GuidePlayer, GuidePlayerState,
 };
 use crate::guide::engine::samples::SampleBank;
-use crate::guide::engine::schedule::{CueEvent, CueSchedule, GuideSection, GuideSongTiming, ScheduleOptions};
+use crate::guide::engine::schedule::{
+    CueEvent, CueSchedule, GuideSection, GuideSongTiming, ScheduleOptions,
+};
 
 /// Transport snapshot at the start of a render block.
 #[derive(Debug, Clone, Copy)]
@@ -355,7 +357,8 @@ impl GuideEngine {
                 }
                 if *last_idx == i64::MIN {
                     let base_idx = ((beats_start / interval) - 1e-6).ceil();
-                    *last_idx = crate::guide::engine::cast::i64_from_f64_round(base_idx).saturating_sub(1);
+                    *last_idx =
+                        crate::guide::engine::cast::i64_from_f64_round(base_idx).saturating_sub(1);
                 }
                 while let Some(k) = (*last_idx).checked_add(1) {
                     // k is a beat grid index; convert to f64 for beat time calculation.
@@ -367,9 +370,11 @@ impl GuideEngine {
                     }
                     let sample_offset = (t - beats_start) * samples_per_quarter;
                     let offset = if sample_offset.is_finite() && sample_offset >= 0.0 {
-                        let offset_nonneg = crate::guide::engine::cast::i64_from_f64_round(sample_offset).max(0);
+                        let offset_nonneg =
+                            crate::guide::engine::cast::i64_from_f64_round(sample_offset).max(0);
                         // offset_nonneg is guaranteed non-negative, safe to cast to usize
-                        crate::guide::engine::cast::usize_from_i64_nonneg(offset_nonneg).min(n.saturating_sub(1))
+                        crate::guide::engine::cast::usize_from_i64_nonneg(offset_nonneg)
+                            .min(n.saturating_sub(1))
                     } else {
                         0
                     };
@@ -454,9 +459,11 @@ impl GuideEngine {
             let time_delta = cue.time_seconds - sec_start;
             let sample_offset = time_delta * clock.sample_rate;
             let offset = if sample_offset.is_finite() && sample_offset >= 0.0 {
-                let offset_nonneg = crate::guide::engine::cast::i64_from_f64_round(sample_offset).max(0);
+                let offset_nonneg =
+                    crate::guide::engine::cast::i64_from_f64_round(sample_offset).max(0);
                 // offset_nonneg is guaranteed non-negative, safe to cast to usize
-                crate::guide::engine::cast::usize_from_i64_nonneg(offset_nonneg).min(n.saturating_sub(1))
+                crate::guide::engine::cast::usize_from_i64_nonneg(offset_nonneg)
+                    .min(n.saturating_sub(1))
             } else {
                 0
             };

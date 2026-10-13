@@ -1849,9 +1849,7 @@ fn edits_are_distinguished_from_navigation_for_undo_grouping() {
 
 // ── contextual zoom (MeMagic) ────────────────────────────────────────
 
-use expression_editor::zoom::{
-    self, HorizontalMode, SmartZoom, Span, VerticalMode, ZoomModes,
-};
+use expression_editor::zoom::{self, HorizontalMode, SmartZoom, Span, VerticalMode, ZoomModes};
 
 fn spans_at(starts: &[f64], len: f64, row: i32) -> Vec<Span> {
     starts
@@ -5033,12 +5031,8 @@ fn every_declared_action_is_wired_up() {
             ExpressionDoc::new(TimeBase::Ppq { ppq: PPQ }, 0.0, PPQ * 4.0),
         ));
         ed.selection.notes = ed.doc.notes.iter().map(|n| n.id).collect();
-        ed.razor.add(expression_editor::RazorArea::new(
-            0.0,
-            PPQ * 4.0,
-            0,
-            127,
-        ));
+        ed.razor
+            .add(expression_editor::RazorArea::new(0.0, PPQ * 4.0, 0, 127));
         assert!(
             actions::run(&mut ed, meta.id),
             "`{}` ({}) is declared and does nothing",
@@ -5052,8 +5046,5 @@ fn every_declared_action_is_wired_up() {
 #[test]
 fn an_unknown_action_falls_through() {
     let mut ed = grid_editor();
-    assert!(!expression_editor::actions::run(
-        &mut ed,
-        "FTS_EDITOR_NOPE"
-    ));
+    assert!(!expression_editor::actions::run(&mut ed, "FTS_EDITOR_NOPE"));
 }

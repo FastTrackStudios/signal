@@ -35,8 +35,8 @@ mod review;
 
 use crate::cache::Cache;
 use crate::event_bus::{EventBus, WatchBus};
-use architect::platform::Instant;
 use crate::proto::{ActiveIndices, QueuedTarget, Setlist, Song, SongChartHydration};
+use architect::platform::Instant;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};

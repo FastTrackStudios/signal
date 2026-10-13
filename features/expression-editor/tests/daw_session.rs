@@ -9,8 +9,8 @@ use daw::service::midi::{Midi, MidiTakeLocation};
 use daw::service::project::ProjectInfo;
 use daw::service::{ProjectContext, TrackRef, Tracks};
 use daw::standalone::Standalone;
-use expression_editor::{Edit, Viewport};
 use expression_editor::daw::Session;
+use expression_editor::{Edit, Viewport};
 
 const PPQ: f64 = 960.0;
 

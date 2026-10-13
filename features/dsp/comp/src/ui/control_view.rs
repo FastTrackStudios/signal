@@ -24,10 +24,10 @@
 //! [`crate::ui::sections`].
 
 use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
-use plugin_core::prelude::*;
 use fts_audio_ui::prelude::*;
 use nice_plug::editor::ResizeHint;
 use nice_plug::editor::dpi::LogicalSize;
+use plugin_core::prelude::*;
 
 use crate::ui::faces::{Face, profile_id_for_index};
 use crate::ui::param_adapter::param_handle;
@@ -259,7 +259,8 @@ fn AppShell() -> Element {
         // (headless tests): nothing to resize, so nothing to do.
         if let Some(state) = try_consume_context::<std::sync::Arc<nice_plug_dioxus::DioxusState>>()
         {
-            let (w, h) = crate::ui::faces::stack_editor_size_rows(params, &rows, form, sidecar_mask);
+            let (w, h) =
+                crate::ui::faces::stack_editor_size_rows(params, &rows, form, sidecar_mask);
             if state.size() != (w, h) {
                 state.request_resize(w, h);
             }

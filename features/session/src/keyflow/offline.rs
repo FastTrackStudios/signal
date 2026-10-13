@@ -16,12 +16,12 @@
 
 use std::cell::RefCell;
 
+use crate::proto::ruler_lanes::CoreLane;
 use daw::service::{DawError, DawResult, Marker, Position, ProjectContext, ProjectInfo, Region};
 use daw::service::{Markers, Projects, Regions};
 use dawfile_reaper::types::ReaperProject;
 use dawfile_reaper::types::marker_region::MarkerRegion;
 use dawfile_reaper::types::project::RulerLane;
-use crate::proto::ruler_lanes::CoreLane;
 
 use super::actions::{
     convert_markers_to_session_format, ensure_core_lanes, hide_stray_lanes, normalize_marker_lanes,

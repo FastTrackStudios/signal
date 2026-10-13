@@ -61,7 +61,9 @@ impl LaneHealth {
             name: name.to_string(),
             ..Self::default()
         });
-        let mut all = REGISTRY.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut all = REGISTRY
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         all.retain(|w| w.strong_count() > 0);
         all.push(Arc::downgrade(&h));
         h
@@ -105,8 +107,13 @@ static REGISTRY: Mutex<Vec<Weak<LaneHealth>>> = Mutex::new(Vec::new());
 /// Every live lane's window, taken (control side).
 #[must_use]
 pub fn reports() -> Vec<LaneReport> {
-    let all = REGISTRY.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    all.iter().filter_map(Weak::upgrade).map(|h| h.take()).collect()
+    let all = REGISTRY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    all.iter()
+        .filter_map(Weak::upgrade)
+        .map(|h| h.take())
+        .collect()
 }
 
 thread_local! {

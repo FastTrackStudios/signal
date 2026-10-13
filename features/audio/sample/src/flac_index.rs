@@ -366,7 +366,13 @@ mod tests {
         }
         let idx = FlacIndex::build(&b).expect("index");
         idx.scan_to(&b, 20_000);
-        let firsts: Vec<u32> = idx.points.lock().unwrap().iter().map(|p| p.first_frame).collect();
+        let firsts: Vec<u32> = idx
+            .points
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|p| p.first_frame)
+            .collect();
         assert_eq!(firsts, vec![0, 4096, 8192, 12288]);
     }
 

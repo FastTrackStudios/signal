@@ -55,7 +55,13 @@ pub trait Canvas {
     /// … `fallback_at` is what to replay them under) when the canvas does
     /// not draw text. A [`Recording`] keeps both, so a host that draws text
     /// gets the run back when the recording is replayed into it.
-    fn text_with_fallback(&mut self, transform: Affine, run: &TextRun, fallback: &Recording, fallback_at: Affine) {
+    fn text_with_fallback(
+        &mut self,
+        transform: Affine,
+        run: &TextRun,
+        fallback: &Recording,
+        fallback_at: Affine,
+    ) {
         if !self.text(transform, run) {
             fallback.replay(self, fallback_at);
         }
@@ -205,7 +211,11 @@ impl Recording {
                     shape,
                 } => canvas.push_opacity(transform * *t, *alpha, shape),
                 Cmd::Pop => canvas.pop(),
-                Cmd::Text { transform: t, run, fallback } => {
+                Cmd::Text {
+                    transform: t,
+                    run,
+                    fallback,
+                } => {
                     canvas.text_with_fallback(transform * *t, run, fallback, transform);
                 }
             }
@@ -286,12 +296,22 @@ impl Canvas for Recording {
         self.cmds.push(Cmd::Pop);
     }
 
-    fn text_with_fallback(&mut self, transform: Affine, run: &TextRun, fallback: &Recording, fallback_at: Affine) {
+    fn text_with_fallback(
+        &mut self,
+        transform: Affine,
+        run: &TextRun,
+        fallback: &Recording,
+        fallback_at: Affine,
+    ) {
         // Kept in recording space: the outlines under `fallback_at`, the
         // run under `transform`, both relative to this recording.
         let mut outlines = Recording::new();
         fallback.replay(&mut outlines, fallback_at);
-        self.cmds.push(Cmd::Text { transform, run: run.clone(), fallback: outlines });
+        self.cmds.push(Cmd::Text {
+            transform,
+            run: run.clone(),
+            fallback: outlines,
+        });
     }
 }
 

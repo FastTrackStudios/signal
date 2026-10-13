@@ -201,7 +201,10 @@ pub fn paint_filtered(
                         }
                     } else {
                         // Stroke geometry is the stroke's own outline.
-                        let paint = s.gradient.clone().unwrap_or_else(|| FillPaint::Solid(s.color.clone()));
+                        let paint = s
+                            .gradient
+                            .clone()
+                            .unwrap_or_else(|| FillPaint::Solid(s.color.clone()));
                         for g in &stroke_geo {
                             fill_paint(canvas, t, g, box_rect, &paint);
                         }
@@ -261,22 +264,29 @@ pub fn paint_filtered(
                 let lh = line_height.unwrap_or(font_size * 1.2).max(1.0);
                 // Styled spans (the whole text as one without runs), each in
                 // its own family, weight, size and colour, split into lines.
-                let runs: Vec<(String, render::fonts::FontSpec, f64, f64, &Rgba)> = if style_runs.is_empty() {
-                    vec![(cased(text, text_case), spec.clone(), *font_size, *letter_spacing, c)]
-                } else {
-                    style_runs
-                        .iter()
-                        .map(|r| {
-                            (
-                                cased(&r.text, text_case),
-                                r.font().over(spec),
-                                r.font_size.unwrap_or(*font_size),
-                                r.letter_spacing.unwrap_or(*letter_spacing),
-                                r.color.as_ref().unwrap_or(c),
-                            )
-                        })
-                        .collect()
-                };
+                let runs: Vec<(String, render::fonts::FontSpec, f64, f64, &Rgba)> =
+                    if style_runs.is_empty() {
+                        vec![(
+                            cased(text, text_case),
+                            spec.clone(),
+                            *font_size,
+                            *letter_spacing,
+                            c,
+                        )]
+                    } else {
+                        style_runs
+                            .iter()
+                            .map(|r| {
+                                (
+                                    cased(&r.text, text_case),
+                                    r.font().over(spec),
+                                    r.font_size.unwrap_or(*font_size),
+                                    r.letter_spacing.unwrap_or(*letter_spacing),
+                                    r.color.as_ref().unwrap_or(c),
+                                )
+                            })
+                            .collect()
+                    };
                 // Per line: (pieces placed from the line's pen start, width).
                 let mut lines: Vec<Line<'_>> = vec![(Vec::new(), 0.0)];
                 for (s, run_spec, size, spacing, run_color) in &runs {
@@ -301,7 +311,13 @@ pub fn paint_filtered(
                     };
                     let at = Affine::translate((x + 1.0 + dx, y + 1.0 + i as f64 * lh));
                     for (path, run_color) in pieces {
-                        target.fill(t * at, Fill::NonZero, &Brush::Solid(color(run_color)), None, path);
+                        target.fill(
+                            t * at,
+                            Fill::NonZero,
+                            &Brush::Solid(color(run_color)),
+                            None,
+                            path,
+                        );
                     }
                 }
                 match &run {
@@ -403,11 +419,22 @@ fn uv(t: Option<&AffineTransform2D>, u: f64, v: f64) -> (f64, f64) {
 
 /// Stroke `shape` with `s`: a solid stroke directly, a gradient one as its
 /// outline filled with the gradient laid across the node's box `b`.
-fn stroke_shape(canvas: &mut (impl Canvas + ?Sized), t: Affine, shape: &BezPath, b: Rect, s: &StrokeStyle) {
+fn stroke_shape(
+    canvas: &mut (impl Canvas + ?Sized),
+    t: Affine,
+    shape: &BezPath,
+    b: Rect,
+    s: &StrokeStyle,
+) {
     let style = kurbo_stroke(s);
     match &s.gradient {
         Some(g) => {
-            let outline = kurbo::stroke(shape.elements().iter().copied(), &style, &kurbo::StrokeOpts::default(), 0.05);
+            let outline = kurbo::stroke(
+                shape.elements().iter().copied(),
+                &style,
+                &kurbo::StrokeOpts::default(),
+                0.05,
+            );
             fill_paint(canvas, t, &outline, b, g);
         }
         None => canvas.stroke(t, &style, &Brush::Solid(color(&s.color)), shape),

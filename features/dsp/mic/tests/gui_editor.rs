@@ -33,7 +33,11 @@ impl GuiContextInner for Host {
     }
     unsafe fn raw_end_set_parameter(&self, _param: ParamPtr) {}
     fn get_state(&self) -> PluginState {
-        PluginState { version: String::new(), params: BTreeMap::new(), fields: BTreeMap::new() }
+        PluginState {
+            version: String::new(),
+            params: BTreeMap::new(),
+            fields: BTreeMap::new(),
+        }
     }
     fn set_state(&self, _state: PluginState) {}
 }
@@ -48,16 +52,21 @@ fn MicHarness() -> Element {
     }
 }
 
-
 fn context() -> ParamContext {
-    ParamContext::new(GuiContext::new(Arc::new(Host)), Arc::new(AtomicBool::new(true)))
+    ParamContext::new(
+        GuiContext::new(Arc::new(Host)),
+        Arc::new(AtomicBool::new(true)),
+    )
 }
 
 fn mount(w: u32, h: u32) -> DocumentTester {
     let ui = Arc::new(MicUiState::new(Arc::new(MicParams::default())));
-    render(MicHarness).with_window_size(w, h).with_root_context(context()).with_root_context(SharedState::new(ui)).build()
+    render(MicHarness)
+        .with_window_size(w, h)
+        .with_root_context(context())
+        .with_root_context(SharedState::new(ui))
+        .build()
 }
-
 
 fn laid_out(t: &DocumentTester, ids: &[&str]) -> Vec<String> {
     let mut missing = Vec::new();
@@ -76,11 +85,27 @@ fn laid_out(t: &DocumentTester, ids: &[&str]) -> Vec<String> {
 }
 
 const MIC: [&str; 20] = [
-    "section-mic-1", "section-dual", "section-180", "section-mic-2", "section-proximity", "section-capsules", "section-output",
-    "select-type1", "select-pattern1", "knob-axis1", "select-type2", "knob-mix", "knob-align",
-    "knob-proximity", "knob-reartrim", "knob-output", "toggle-phase", "toggle-stereo180", "knob-pan", "knob-width",
+    "section-mic-1",
+    "section-dual",
+    "section-180",
+    "section-mic-2",
+    "section-proximity",
+    "section-capsules",
+    "section-output",
+    "select-type1",
+    "select-pattern1",
+    "knob-axis1",
+    "select-type2",
+    "knob-mix",
+    "knob-align",
+    "knob-proximity",
+    "knob-reartrim",
+    "knob-output",
+    "toggle-phase",
+    "toggle-stereo180",
+    "knob-pan",
+    "knob-width",
 ];
-
 
 fn sizes() -> [(u32, u32); 2] {
     // the minimum is declared in logical f32 pixels; whole pixels here
@@ -92,10 +117,13 @@ fn sizes() -> [(u32, u32); 2] {
 async fn fts_mic_editor_lays_out_every_control() {
     for (w, h) in sizes() {
         let t = mount(w, h);
-        let html = t.query(":root").immediately().map(|e| e.inner_html()).unwrap_or_default();
+        let html = t
+            .query(":root")
+            .immediately()
+            .map(|e| e.inner_html())
+            .unwrap_or_default();
         assert!(html.contains("FTS Mic"), "title missing at {w}x{h}");
         let bad = laid_out(&t, &MIC);
         assert!(bad.is_empty(), "at {w}x{h}:\n  {}", bad.join("\n  "));
     }
 }
-

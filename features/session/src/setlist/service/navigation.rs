@@ -1,9 +1,9 @@
 //! Navigation methods: `go_to_song`, next/previous song/section, seeking
 
 use super::SetlistServiceImpl;
+use crate::proto::{QueuedTarget, SessionServiceError, Song};
 use daw::service::transport::service::Transport;
 use daw::service::{AudioEngine, ProjectContext, Projects, TempoMap};
-use crate::proto::{QueuedTarget, SessionServiceError, Song};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 

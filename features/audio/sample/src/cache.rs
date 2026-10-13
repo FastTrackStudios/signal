@@ -705,7 +705,9 @@ impl SampleData {
             Pcm::I16(v) => Some((Span::I16(v.as_slice()), 0)),
             Pcm::Streamed(stream) => {
                 let a = frame_idx * ch;
-                let covered = cursor.held().is_some_and(|(d, lo)| a >= lo && a < lo + d.len());
+                let covered = cursor
+                    .held()
+                    .is_some_and(|(d, lo)| a >= lo && a < lo + d.len());
                 if !covered && !cursor.seek(stream, a) {
                     return None;
                 }

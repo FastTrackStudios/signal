@@ -82,14 +82,27 @@ impl CabinetSpec {
             kind,
             w,
             h,
-            covering: Material::Tolex { grain: super::paint::Grain::Levant, color: "#1c1b1a".into(), scale: 1.0 },
-            grille: Material::GrilleCloth { cloth: super::paint::Cloth::Wheat },
-            face: Material::Brushed { color: "#b8babc".into(), dir: super::paint::Dir::Horizontal },
+            covering: Material::Tolex {
+                grain: super::paint::Grain::Levant,
+                color: "#1c1b1a".into(),
+                scale: 1.0,
+            },
+            grille: Material::GrilleCloth {
+                cloth: super::paint::Cloth::Wheat,
+            },
+            face: Material::Brushed {
+                color: "#b8babc".into(),
+                dir: super::paint::Dir::Horizontal,
+            },
             face_at_top: true,
             face_frac: if kind == Kind::Head { 0.36 } else { 0.24 },
             piping: Some("#d8cfb8".into()),
             corners: Some("chrome".into()),
-            handle: if kind == Kind::Head { Handle::Leather } else { Handle::Strap },
+            handle: if kind == Kind::Head {
+                Handle::Leather
+            } else {
+                Handle::Strap
+            },
             handle_color: "#6e4128".into(),
             feet: true,
         }
@@ -99,7 +112,11 @@ impl CabinetSpec {
     #[must_use]
     pub fn from_place(kind: Kind, p: &Place) -> Self {
         let num = |k: &str| p.opt(k).and_then(|v| v.parse::<f64>().ok());
-        let (dw, aspect) = if kind == Kind::Head { (900.0, 0.44) } else { (900.0, 0.7) };
+        let (dw, aspect) = if kind == Kind::Head {
+            (900.0, 0.44)
+        } else {
+            (900.0, 0.7)
+        };
         let w = num("w").or(p.size).unwrap_or(dw);
         let h = num("h").unwrap_or(w * aspect);
         let mut s = Self::new(kind, w, h);
@@ -107,10 +124,16 @@ impl CabinetSpec {
         if let Some(m) = Material::parse(p.opt("tolex").unwrap_or("tolex:levant"), color) {
             s.covering = m;
         }
-        if let Some(m) = p.opt("grille").and_then(|g| Material::parse(g, p.opt("grille_color"))) {
+        if let Some(m) = p
+            .opt("grille")
+            .and_then(|g| Material::parse(g, p.opt("grille_color")))
+        {
             s.grille = m;
         }
-        if let Some(m) = Material::parse(p.opt("face").unwrap_or("brushed"), p.opt("face_color").or(Some("#b8babc"))) {
+        if let Some(m) = Material::parse(
+            p.opt("face").unwrap_or("brushed"),
+            p.opt("face_color").or(Some("#b8babc")),
+        ) {
             s.face = m;
         }
         s.face_at_top = p.opt("face_at") != Some("bottom");
@@ -161,7 +184,15 @@ fn metal(kind: &str) -> [&'static str; 4] {
 
 /// A corner protector over the box's corner at (`x`, `y`), `s` px, facing
 /// `(fx, fy)` (−1 = left/top, +1 = right/bottom), rounded `r` outside.
-fn corner(b: &mut Builder<'_>, parent: NodeId, (x, y): (f64, f64), s: f64, r: f64, (fx, fy): (f64, f64), kind: &str) {
+fn corner(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    (x, y): (f64, f64),
+    s: f64,
+    r: f64,
+    (fx, fy): (f64, f64),
+    kind: &str,
+) {
     let m = metal(kind);
     let mut n = draw::rect(
         "corner",
@@ -169,7 +200,10 @@ fn corner(b: &mut Builder<'_>, parent: NodeId, (x, y): (f64, f64), s: f64, r: f6
         y,
         s,
         s,
-        draw::linear(light::sheen_angle(), &[(0.0, m[0]), (0.35, m[1]), (0.7, m[2]), (1.0, m[3])]),
+        draw::linear(
+            light::sheen_angle(),
+            &[(0.0, m[0]), (0.35, m[1]), (0.7, m[2]), (1.0, m[3])],
+        ),
     );
     let (o, i) = (r.max(s * 0.3), s * 0.18);
     n.corner_radii = CornerRadii {
@@ -178,7 +212,10 @@ fn corner(b: &mut Builder<'_>, parent: NodeId, (x, y): (f64, f64), s: f64, r: f6
         bottom_right: if fx > 0.0 && fy > 0.0 { o } else { i },
         bottom_left: if fx < 0.0 && fy > 0.0 { o } else { i },
     };
-    b.add(parent, fixed(draw::with_effects(n.clone(), light::stand(s * 0.18, 1.0))));
+    b.add(
+        parent,
+        fixed(draw::with_effects(n.clone(), light::stand(s * 0.18, 1.0))),
+    );
     for mut e in light::edge("corner edge", (x, y, s, s), 0.0, s * 0.08, 1.2, true) {
         e.corner_radii = n.corner_radii;
         b.add(parent, e);
@@ -186,22 +223,63 @@ fn corner(b: &mut Builder<'_>, parent: NodeId, (x, y): (f64, f64), s: f64, r: f6
     // The rivet: toward the corner.
     let (cx, cy) = (x + s * (0.5 - fx * 0.12), y + s * (0.5 - fy * 0.12));
     let (hx, hy) = light::hotspot();
-    let rivet = draw::circle("rivet", cx, cy, s * 0.12, draw::radial_at(hx, hy, 0.8, &[(0.0, m[0]), (0.6, m[1]), (1.0, m[2])]));
-    b.add(parent, fixed(draw::with_effects(rivet, light::stand(s * 0.05, 0.9))));
+    let rivet = draw::circle(
+        "rivet",
+        cx,
+        cy,
+        s * 0.12,
+        draw::radial_at(hx, hy, 0.8, &[(0.0, m[0]), (0.6, m[1]), (1.0, m[2])]),
+    );
+    b.add(
+        parent,
+        fixed(draw::with_effects(rivet, light::stand(s * 0.05, 0.9))),
+    );
 }
 
 /// Piping round `(x, y, w, h)`: a cord `t` px thick, with its shadow on the
 /// baffle and a lit line along its top.
-fn piping(b: &mut Builder<'_>, parent: NodeId, (x, y, w, h): (f64, f64, f64, f64), r: f64, t: f64, color: &str) {
+fn piping(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    (x, y, w, h): (f64, f64, f64, f64),
+    r: f64,
+    t: f64,
+    color: &str,
+) {
     let (sx, sy) = light::shadow_offset(t * 1.2);
     let (lx, ly) = light::toward_light();
     let ring = |name: &str, dx: f64, dy: f64, c: &str, wt: f64| {
-        let n = draw::rounded(draw::rect(name, x + dx - t / 2.0, y + dy - t / 2.0, w + t, h + t, draw::solid("#00000000")), r);
+        let n = draw::rounded(
+            draw::rect(
+                name,
+                x + dx - t / 2.0,
+                y + dy - t / 2.0,
+                w + t,
+                h + t,
+                draw::solid("#00000000"),
+            ),
+            r,
+        );
         draw::stroked(n, c, wt)
     };
-    b.add(parent, fixed(ring("piping shadow", sx, sy, &alpha("#000000", 0.55), t)));
-    b.add(parent, fixed(ring("piping", 0.0, 0.0, &shade(color, 0.15), t)));
-    b.add(parent, fixed(ring("piping lit", lx * t * 0.2, ly * t * 0.2, &alpha(&tint(color, 0.5), 0.7), (t * 0.4).max(0.6))));
+    b.add(
+        parent,
+        fixed(ring("piping shadow", sx, sy, &alpha("#000000", 0.55), t)),
+    );
+    b.add(
+        parent,
+        fixed(ring("piping", 0.0, 0.0, &shade(color, 0.15), t)),
+    );
+    b.add(
+        parent,
+        fixed(ring(
+            "piping lit",
+            lx * t * 0.2,
+            ly * t * 0.2,
+            &alpha(&tint(color, 0.5), 0.7),
+            (t * 0.4).max(0.6),
+        )),
+    );
 }
 
 /// Build a cabinet under `parent`.
@@ -222,8 +300,21 @@ pub fn cabinet(b: &mut Builder<'_>, parent: NodeId, name: &str, s: &CabinetSpec)
     if s.feet {
         let fw = (w * 0.1).max(24.0);
         for fx in [w * 0.08, w * 0.92 - fw] {
-            let foot = draw::rounded(draw::rect("foot", fx, by + bh - feet_h, fw, feet_h * 2.0, lin(180.0, &[(0.0, "#2a2a2c".into()), (1.0, "#060607".into())])), feet_h * 0.5);
-            b.add(root, fixed(draw::with_effects(foot, light::stand(feet_h, 1.0))));
+            let foot = draw::rounded(
+                draw::rect(
+                    "foot",
+                    fx,
+                    by + bh - feet_h,
+                    fw,
+                    feet_h * 2.0,
+                    lin(180.0, &[(0.0, "#2a2a2c".into()), (1.0, "#060607".into())]),
+                ),
+                feet_h * 0.5,
+            );
+            b.add(
+                root,
+                fixed(draw::with_effects(foot, light::stand(feet_h, 1.0))),
+            );
         }
     }
     let hc = s.handle_color.as_str();
@@ -245,34 +336,101 @@ pub fn cabinet(b: &mut Builder<'_>, parent: NodeId, name: &str, s: &CabinetSpec)
                 top + t,
                 x0 + t
             );
-            let strap = draw::path("handle", 0.0, 0.0, w, h, d.clone(), lin(180.0, &[(0.0, tint(hc, 0.25)), (0.5, hc.to_string()), (1.0, shade(hc, 0.45))]));
-            b.add(root, fixed(draw::with_effects(strap, light::stand(handle_h * 0.3, 0.9))));
-            b.add(root, fixed(draw::path("handle grain", 0.0, 0.0, w, h, d, light::sheen(0.18, 0.25))));
+            let strap = draw::path(
+                "handle",
+                0.0,
+                0.0,
+                w,
+                h,
+                d.clone(),
+                lin(
+                    180.0,
+                    &[
+                        (0.0, tint(hc, 0.25)),
+                        (0.5, hc.to_string()),
+                        (1.0, shade(hc, 0.45)),
+                    ],
+                ),
+            );
+            b.add(
+                root,
+                fixed(draw::with_effects(strap, light::stand(handle_h * 0.3, 0.9))),
+            );
+            b.add(
+                root,
+                fixed(draw::path(
+                    "handle grain",
+                    0.0,
+                    0.0,
+                    w,
+                    h,
+                    d,
+                    light::sheen(0.18, 0.25),
+                )),
+            );
         }
         Handle::Strap => {
             let (x0, sw) = (w * 0.4, w * 0.2);
-            let strap = draw::rounded(draw::rect("handle", x0, by - handle_h * 0.9, sw, handle_h * 1.6, lin(180.0, &[(0.0, tint(hc, 0.2)), (1.0, shade(hc, 0.4))])), handle_h * 0.6);
-            b.add(root, fixed(draw::with_effects(strap, light::stand(handle_h * 0.6, 0.9))));
+            let strap = draw::rounded(
+                draw::rect(
+                    "handle",
+                    x0,
+                    by - handle_h * 0.9,
+                    sw,
+                    handle_h * 1.6,
+                    lin(180.0, &[(0.0, tint(hc, 0.2)), (1.0, shade(hc, 0.4))]),
+                ),
+                handle_h * 0.6,
+            );
+            b.add(
+                root,
+                fixed(draw::with_effects(strap, light::stand(handle_h * 0.6, 0.9))),
+            );
         }
         Handle::None => {}
     }
 
     // ── the box ──
-    let shadow = draw::rounded(draw::rect("box shadow", bx, by, bw, bh, draw::solid("#0c0c0c")), r);
-    b.add(root, fixed(draw::with_effects(shadow, light::stand(h * 0.03, 1.1))));
+    let shadow = draw::rounded(
+        draw::rect("box shadow", bx, by, bw, bh, draw::solid("#0c0c0c")),
+        r,
+    );
+    b.add(
+        root,
+        fixed(draw::with_effects(shadow, light::stand(h * 0.03, 1.1))),
+    );
     fill(b, root, (bx, by, bw, bh), r, &s.covering);
     // The covering wrapping round the box's edges: lit top-left, dark bottom-right.
     for n in light::edge("box edge", (bx, by, bw, bh), r, r * 0.7, 1.2, true) {
         b.add(root, n);
     }
-    b.add(root, fixed(draw::stroked(draw::rounded(draw::rect("box outline", bx, by, bw, bh, draw::solid("#00000000")), r), "#00000080", 1.0)));
+    b.add(
+        root,
+        fixed(draw::stroked(
+            draw::rounded(
+                draw::rect("box outline", bx, by, bw, bh, draw::solid("#00000000")),
+                r,
+            ),
+            "#00000080",
+            1.0,
+        )),
+    );
 
     // ── the baffle: faceplate and grille ──
     let border = (bh * 0.075).clamp(10.0, 44.0);
-    let (ix, iy, iw, ih) = (bx + border, by + border, bw - 2.0 * border, bh - 2.0 * border);
+    let (ix, iy, iw, ih) = (
+        bx + border,
+        by + border,
+        bw - 2.0 * border,
+        bh - 2.0 * border,
+    );
     let gap = (ih * 0.03).clamp(4.0, 14.0);
     let fh = ih * s.face_frac;
-    let (face_y, grille_y) = if s.face_at_top { (iy, iy + fh + gap) } else { (iy + ih - fh, iy) };
+    let (face_y, grille_y) = if s.face_at_top {
+        (iy, iy + fh + gap)
+    } else {
+        (iy + ih - fh, iy)
+    };
     let gh = ih - fh - gap;
     let fr = (r * 0.4).max(2.0);
 
@@ -281,22 +439,44 @@ pub fn cabinet(b: &mut Builder<'_>, parent: NodeId, name: &str, s: &CabinetSpec)
     g.clips_content = true;
     let grille = b.add(root, g);
     fill(b, grille, (0.0, 0.0, iw, gh), fr, &s.grille);
-    for n in light::edge("grille recess", (0.0, 0.0, iw, gh), fr, border * 0.25, 1.2, false) {
+    for n in light::edge(
+        "grille recess",
+        (0.0, 0.0, iw, gh),
+        fr,
+        border * 0.25,
+        1.2,
+        false,
+    ) {
         b.add(grille, n);
     }
     if let Some(c) = &s.piping {
-        piping(b, root, (ix, grille_y, iw, gh), fr, (bh * 0.012).clamp(1.5, 5.0), c);
+        piping(
+            b,
+            root,
+            (ix, grille_y, iw, gh),
+            fr,
+            (bh * 0.012).clamp(1.5, 5.0),
+            c,
+        );
     }
 
     // The faceplate stands proud of the baffle.
-    let face = draw::with_effects(draw::rounded(draw::frame("faceplate", ix, face_y, iw, fh), fr), light::stand(border * 0.12, 0.9));
+    let face = draw::with_effects(
+        draw::rounded(draw::frame("faceplate", ix, face_y, iw, fh), fr),
+        light::stand(border * 0.12, 0.9),
+    );
     let faceplate = b.add(root, face);
     fill(b, faceplate, (0.0, 0.0, iw, fh), fr, &s.face);
     for n in light::edge("faceplate bevel", (0.0, 0.0, iw, fh), fr, 2.0, 1.0, true) {
         b.add(faceplate, n);
     }
     let sr = (fh * 0.025).clamp(2.5, 5.0);
-    for (sx, sy) in [(sr * 2.2, sr * 2.2), (iw - sr * 2.2, sr * 2.2), (sr * 2.2, fh - sr * 2.2), (iw - sr * 2.2, fh - sr * 2.2)] {
+    for (sx, sy) in [
+        (sr * 2.2, sr * 2.2),
+        (iw - sr * 2.2, sr * 2.2),
+        (sr * 2.2, fh - sr * 2.2),
+        (iw - sr * 2.2, fh - sr * 2.2),
+    ] {
         screw(b, faceplate, sx, sy, sr);
     }
 
@@ -304,8 +484,16 @@ pub fn cabinet(b: &mut Builder<'_>, parent: NodeId, name: &str, s: &CabinetSpec)
     if let Some(kind) = &s.corners {
         let cs = (bh * 0.075).clamp(14.0, 44.0);
         for (fx, fy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
-            let x = if fx < 0.0 { bx - 1.0 } else { bx + bw - cs + 1.0 };
-            let y = if fy < 0.0 { by - 1.0 } else { by + bh - cs + 1.0 };
+            let x = if fx < 0.0 {
+                bx - 1.0
+            } else {
+                bx + bw - cs + 1.0
+            };
+            let y = if fy < 0.0 {
+                by - 1.0
+            } else {
+                by + bh - cs + 1.0
+            };
             corner(b, root, (x, y), cs, r + 1.0, (fx, fy), kind);
         }
     }
@@ -313,11 +501,31 @@ pub fn cabinet(b: &mut Builder<'_>, parent: NodeId, name: &str, s: &CabinetSpec)
         let bs = handle_h * 0.55;
         for cx in [w * 0.38 + handle_h * 0.15, w * 0.62 - handle_h * 0.15] {
             let m = metal("chrome");
-            let br = draw::rounded(draw::rect("handle bracket", cx - bs * 0.6, by - bs * 0.55, bs * 1.2, bs * 0.9, draw::linear(light::sheen_angle(), &[(0.0, m[0]), (0.5, m[1]), (1.0, m[2])])), bs * 0.25);
-            b.add(root, fixed(draw::with_effects(br, light::stand(bs * 0.3, 1.0))));
+            let br = draw::rounded(
+                draw::rect(
+                    "handle bracket",
+                    cx - bs * 0.6,
+                    by - bs * 0.55,
+                    bs * 1.2,
+                    bs * 0.9,
+                    draw::linear(
+                        light::sheen_angle(),
+                        &[(0.0, m[0]), (0.5, m[1]), (1.0, m[2])],
+                    ),
+                ),
+                bs * 0.25,
+            );
+            b.add(
+                root,
+                fixed(draw::with_effects(br, light::stand(bs * 0.3, 1.0))),
+            );
         }
     }
-    Cabinet { root, faceplate, grille }
+    Cabinet {
+        root,
+        faceplate,
+        grille,
+    }
 }
 
 fn head(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {

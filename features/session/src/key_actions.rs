@@ -5,11 +5,11 @@
 //! gives every key its own REAPER action, so they can be bound to keys
 //! and put on a toolbar.
 
+use crate::proto::key::{KeyActions, register_key_actions};
 use daw::service::{
     Items, ProjectContext, Projects, TempoMap, Tracks, transport::service::Transport,
 };
 use daw_proto::{DawError, DawResult};
-use crate::proto::key::{KeyActions, register_key_actions};
 
 use crate::key;
 

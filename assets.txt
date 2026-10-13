@@ -9,21 +9,21 @@
 rig-models  guitar  features/rigs/guitar/default-config/models
 rig-models  bass    features/rigs/guitar/default-config-bass/models
 
-studio-assets  features/formats/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/000/ProjectData
-studio-assets  features/formats/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/001/ProjectData
-studio-assets  features/formats/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/002/ProjectData
-studio-assets  features/formats/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/003/ProjectData
-studio-assets  features/formats/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/004/ProjectData
-studio-assets  features/formats/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/005/ProjectData
-studio-assets  features/formats/dawfile-logic/tests/fixtures/Fire.logicx/Alternatives/006/ProjectData
-studio-assets  features/formats/dawfile-protools/tests/fixtures/aaf/lord-of-the-fight.aaf
-studio-assets  features/formats/dawfile-protools/tests/fixtures/choir-session.ptx
-studio-assets  features/formats/dawfile-protools/tests/fixtures/color-testing.ptx
-studio-assets  features/formats/dawfile-protools/tests/fixtures/GodnessOfGod.ptx
-studio-assets  features/formats/dawfile-protools/tests/fixtures/live-concert-session.ptx
-studio-assets  features/formats/dawfile-protools/tests/fixtures/orchestral-session.ptx
-studio-assets  features/formats/dawfile-protools/tests/fixtures/studio-tracking-session.ptx
-studio-assets  features/formats/dawfile-protools/tests/fixtures/worship-session.ptx
+studio-assets  features/formats/tests/fixtures/logic/Fire.logicx/Alternatives/000/ProjectData
+studio-assets  features/formats/tests/fixtures/logic/Fire.logicx/Alternatives/001/ProjectData
+studio-assets  features/formats/tests/fixtures/logic/Fire.logicx/Alternatives/002/ProjectData
+studio-assets  features/formats/tests/fixtures/logic/Fire.logicx/Alternatives/003/ProjectData
+studio-assets  features/formats/tests/fixtures/logic/Fire.logicx/Alternatives/004/ProjectData
+studio-assets  features/formats/tests/fixtures/logic/Fire.logicx/Alternatives/005/ProjectData
+studio-assets  features/formats/tests/fixtures/logic/Fire.logicx/Alternatives/006/ProjectData
+studio-assets  features/formats/tests/fixtures/protools/aaf/lord-of-the-fight.aaf
+studio-assets  features/formats/tests/fixtures/protools/choir-session.ptx
+studio-assets  features/formats/tests/fixtures/protools/color-testing.ptx
+studio-assets  features/formats/tests/fixtures/protools/GodnessOfGod.ptx
+studio-assets  features/formats/tests/fixtures/protools/live-concert-session.ptx
+studio-assets  features/formats/tests/fixtures/protools/orchestral-session.ptx
+studio-assets  features/formats/tests/fixtures/protools/studio-tracking-session.ptx
+studio-assets  features/formats/tests/fixtures/protools/worship-session.ptx
 studio-assets  features/formats/dawfile-reaper/tests/fixtures/tempo_advanced_curve_samples.tsv
 studio-assets  features/formats/dawfile-reaper/tests/fixtures/tempo_calibration_curve_samples.tsv
 studio-assets  features/formats/dawfile-reaper/tests/fixtures/tempo_curve_samples.tsv

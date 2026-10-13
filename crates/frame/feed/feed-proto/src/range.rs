@@ -22,7 +22,9 @@ pub enum Unit {
     Degrees,
     Beats,
     Bpm,
-    Custom { suffix: String },
+    Custom {
+        suffix: String,
+    },
 }
 
 impl Unit {
@@ -74,19 +76,37 @@ pub struct Range {
 impl Default for Range {
     /// The unit interval: normalized in, normalized out.
     fn default() -> Self {
-        Self { min: 0.0, max: 1.0, scale: Scale::Linear, unit: Unit::None, steps: None }
+        Self {
+            min: 0.0,
+            max: 1.0,
+            scale: Scale::Linear,
+            unit: Unit::None,
+            steps: None,
+        }
     }
 }
 
 impl Range {
     #[must_use]
     pub fn linear(min: f64, max: f64, unit: Unit) -> Self {
-        Self { min, max, scale: Scale::Linear, unit, steps: None }
+        Self {
+            min,
+            max,
+            scale: Scale::Linear,
+            unit,
+            steps: None,
+        }
     }
 
     #[must_use]
     pub fn log(min: f64, max: f64, unit: Unit) -> Self {
-        Self { min, max, scale: Scale::Logarithmic, unit, steps: None }
+        Self {
+            min,
+            max,
+            scale: Scale::Logarithmic,
+            unit,
+            steps: None,
+        }
     }
 
     /// Snap a normalized value (0..1) to this range's steps, if it has any.
@@ -104,9 +124,15 @@ impl Range {
     /// Control position (0..1) → engineering value.
     #[must_use]
     pub fn to_real(&self, normalized: f64) -> f64 {
-        let n = self.quantize(if normalized.is_nan() { 0.0 } else { normalized.clamp(0.0, 1.0) });
+        let n = self.quantize(if normalized.is_nan() {
+            0.0
+        } else {
+            normalized.clamp(0.0, 1.0)
+        });
         match &self.scale {
-            Scale::Logarithmic if self.min > 0.0 && self.max > 0.0 => self.min * (self.max / self.min).powf(n),
+            Scale::Logarithmic if self.min > 0.0 && self.max > 0.0 => {
+                self.min * (self.max / self.min).powf(n)
+            }
             Scale::Curve { curve } => self.min + (self.max - self.min) * curve.apply(n),
             _ => self.min + (self.max - self.min) * n,
         }
@@ -140,9 +166,16 @@ impl Range {
     #[must_use]
     pub fn format_as(&self, real: f64, f: &ValueFormat) -> String {
         if !f.marks.is_empty() {
-            let plain = ValueFormat { marks: Vec::new(), ..f.clone() };
+            let plain = ValueFormat {
+                marks: Vec::new(),
+                ..f.clone()
+            };
             let text = self.format_as(real, &plain);
-            return f.marks.iter().find(|m| self.format_as(m.at, &plain) == text).map_or(text, |m| m.label.clone());
+            return f
+                .marks
+                .iter()
+                .find(|m| self.format_as(m.at, &plain) == text)
+                .map_or(text, |m| m.label.clone());
         }
         match &f.style {
             FormatStyle::Labels { labels } if !labels.is_empty() => {
@@ -165,7 +198,13 @@ impl Range {
             (None, Unit::Seconds) if real.abs() < 1.0 => (real * 1000.0, "ms".to_string(), true),
             (None, u) => (real, u.suffix().to_string(), false),
         };
-        let decimals = f.decimals.map(usize::from).or_else(|| if converted { None } else { self.step_decimals() });
+        let decimals = f.decimals.map(usize::from).or_else(|| {
+            if converted {
+                None
+            } else {
+                self.step_decimals()
+            }
+        });
         let text = match decimals {
             Some(d) => format!("{value:.d$}"),
             None if self.steps.is_some() => format!("{value:.0}"),
@@ -178,8 +217,19 @@ impl Range {
             Some(rest) if rest.chars().all(|c| c == '0' || c == '.') => rest.to_string(),
             _ => text,
         };
-        let text = if f.sign && !text.starts_with('-') && text.chars().any(|c| c.is_ascii_digit() && c != '0') { format!("+{text}") } else { text };
-        if unit.is_empty() { text } else { format!("{text} {unit}") }
+        let text = if f.sign
+            && !text.starts_with('-')
+            && text.chars().any(|c| c.is_ascii_digit() && c != '0')
+        {
+            format!("+{text}")
+        } else {
+            text
+        };
+        if unit.is_empty() {
+            text
+        } else {
+            format!("{text} {unit}")
+        }
     }
 
     /// Decimals a stepped range's step needs (`None` = not stepped). Only a
@@ -201,9 +251,15 @@ impl Range {
 /// `"A4"`, `"C#3"` for a MIDI note number (rounded to the nearest note).
 #[must_use]
 pub fn note_name(midi: f64) -> String {
-    const NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const NAMES: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+    ];
     let n = midi.round() as i64;
-    format!("{}{}", NAMES[n.rem_euclid(12) as usize], n.div_euclid(12) - 1)
+    format!(
+        "{}{}",
+        NAMES[n.rem_euclid(12) as usize],
+        n.div_euclid(12) - 1
+    )
 }
 
 /// How a readout prints a value. Carried on a surface control
@@ -254,17 +310,28 @@ pub enum FormatStyle {
 impl ValueFormat {
     #[must_use]
     pub fn decimals(d: u8) -> Self {
-        Self { decimals: Some(d), ..Self::default() }
+        Self {
+            decimals: Some(d),
+            ..Self::default()
+        }
     }
 
     #[must_use]
     pub fn note() -> Self {
-        Self { style: FormatStyle::Note, ..Self::default() }
+        Self {
+            style: FormatStyle::Note,
+            ..Self::default()
+        }
     }
 
     #[must_use]
     pub fn labels(labels: &[&str]) -> Self {
-        Self { style: FormatStyle::Labels { labels: labels.iter().map(ToString::to_string).collect() }, ..Self::default() }
+        Self {
+            style: FormatStyle::Labels {
+                labels: labels.iter().map(ToString::to_string).collect(),
+            },
+            ..Self::default()
+        }
     }
 
     /// Print `unit` instead of the range's own (`""` = none).
@@ -291,7 +358,10 @@ impl ValueFormat {
     /// filter's stop, `C` at a pan's centre).
     #[must_use]
     pub fn mark(mut self, at: f64, label: impl Into<String>) -> Self {
-        self.marks.push(FormatMark { at, label: label.into() });
+        self.marks.push(FormatMark {
+            at,
+            label: label.into(),
+        });
         self
     }
 
@@ -299,7 +369,13 @@ impl ValueFormat {
     /// format's unit (default `dB`).
     #[must_use]
     pub fn db(&self, db: f64) -> String {
-        let f = Self { decimals: Some(self.decimals.unwrap_or(1)), style: FormatStyle::Number, unit: self.unit.clone(), sign: self.sign, marks: Vec::new() };
+        let f = Self {
+            decimals: Some(self.decimals.unwrap_or(1)),
+            style: FormatStyle::Number,
+            unit: self.unit.clone(),
+            sign: self.sign,
+            marks: Vec::new(),
+        };
         Range::linear(-1.0e9, 1.0e9, Unit::Db).format_as(db, &f)
     }
 }

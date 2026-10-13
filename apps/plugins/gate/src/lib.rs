@@ -331,7 +331,11 @@ impl FtsGate {
     /// Latency the current style needs, samples.
     fn wanted_latency(&self) -> u32 {
         if self.drum_style() {
-            u32::try_from(DrumGate::latency_for(self.drum_settings().mode, self.sample_rate)).unwrap_or(0)
+            u32::try_from(DrumGate::latency_for(
+                self.drum_settings().mode,
+                self.sample_rate,
+            ))
+            .unwrap_or(0)
         } else {
             0
         }
@@ -452,7 +456,11 @@ impl Plugin for FtsGate {
             // Advance detector + envelope once per frame, then apply the one
             // resulting gain to every channel.
             let _ = gate.process_sample_keyed(0.0, f64::from(key));
-            #[expect(clippy::cast_possible_truncation, clippy::as_conversions, reason = "f64 gain to the host's f32 samples")]
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::as_conversions,
+                reason = "f64 gain to the host's f32 samples"
+            )]
             let gain = gate.gain() as f32;
             for sample in frame.iter_mut() {
                 *sample *= gain;
@@ -497,7 +505,11 @@ impl FtsGate {
             });
             drum.process_frame(&mut io, key.as_ref().map(<[f64; 2]>::as_slice));
             for (sample, v) in frame.iter_mut().zip(io) {
-                #[expect(clippy::cast_possible_truncation, clippy::as_conversions, reason = "f64 engine back to the host's f32 buffer")]
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    clippy::as_conversions,
+                    reason = "f64 engine back to the host's f32 buffer"
+                )]
                 {
                     *sample = v as f32;
                 }
@@ -508,8 +520,9 @@ impl FtsGate {
 
 impl ClapPlugin for FtsGate {
     const CLAP_ID: &'static str = "com.fasttrackstudio.gate";
-    const CLAP_DESCRIPTION: Option<&'static str> =
-        Some("Noise gate and drum gate: classic attack/hold/release, or drum modes with look-ahead, shaped release and HF de-bleed");
+    const CLAP_DESCRIPTION: Option<&'static str> = Some(
+        "Noise gate and drum gate: classic attack/hold/release, or drum modes with look-ahead, shaped release and HF de-bleed",
+    );
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[

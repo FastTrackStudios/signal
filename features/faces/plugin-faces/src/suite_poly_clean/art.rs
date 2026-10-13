@@ -29,7 +29,10 @@ impl Rng {
     }
     /// 0..1.
     pub fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         ((self.0 >> 11) as f64) / ((1_u64 << 53) as f64)
     }
     /// `lo..hi`.
@@ -49,7 +52,15 @@ fn shape(name: &str, pts: &[(f64, f64)], fill: document_proto::Paint) -> Node {
         y1 = y1.max(*y);
     }
     let local: Vec<(f64, f64)> = pts.iter().map(|(x, y)| (x - x0, y - y0)).collect();
-    draw::path(name, x0, y0, (x1 - x0).max(1.0), (y1 - y0).max(1.0), draw::polygon(&local), fill)
+    draw::path(
+        name,
+        x0,
+        y0,
+        (x1 - x0).max(1.0),
+        (y1 - y0).max(1.0),
+        draw::polygon(&local),
+        fill,
+    )
 }
 
 /// An ellipse's outline, turned `rot` degrees about its centre.
@@ -88,15 +99,22 @@ fn acanthus(x: f64, y: f64, len: f64, wid: f64, deg: f64) -> Vec<(f64, f64)> {
     let a = deg.to_radians();
     let (ux, uy) = (a.sin(), -a.cos());
     let (nx, ny) = (-uy, ux);
-    let half = |t: f64| wid / 2.0 * (PI * t).sin().powf(0.7) * (0.72 + 0.28 * (t * 7.0 * PI).cos().abs());
+    let half =
+        |t: f64| wid / 2.0 * (PI * t).sin().powf(0.7) * (0.72 + 0.28 * (t * 7.0 * PI).cos().abs());
     let mut pts = Vec::new();
     for i in 0..=24 {
         let t = f64::from(i) / 24.0;
-        pts.push((x + ux * len * t + nx * half(t), y + uy * len * t + ny * half(t)));
+        pts.push((
+            x + ux * len * t + nx * half(t),
+            y + uy * len * t + ny * half(t),
+        ));
     }
     for i in (0..=24).rev() {
         let t = f64::from(i) / 24.0;
-        pts.push((x + ux * len * t - nx * half(t), y + uy * len * t - ny * half(t)));
+        pts.push((
+            x + ux * len * t - nx * half(t),
+            y + uy * len * t - ny * half(t),
+        ));
     }
     pts
 }
@@ -118,24 +136,97 @@ pub fn hammered_glass(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
             0.0,
             w,
             h,
-            draw::linear(180.0, &[(0.0, "#c43ccc"), (0.12, "#8d2fb0"), (0.38, "#58288e"), (0.66, "#4a3597"), (0.88, "#6f55cc"), (1.0, "#b89cff")]),
+            draw::linear(
+                180.0,
+                &[
+                    (0.0, "#c43ccc"),
+                    (0.12, "#8d2fb0"),
+                    (0.38, "#58288e"),
+                    (0.66, "#4a3597"),
+                    (0.88, "#6f55cc"),
+                    (1.0, "#b89cff"),
+                ],
+            ),
         ),
     );
     // Deeper at the ends, as the light falls off away from the valves.
-    b.add(parent, draw::rect("falloff", 0.0, 0.0, w, h, draw::linear(90.0, &[(0.0, "#1a0a3a66"), (0.25, "#1a0a3a00"), (0.75, "#1a0a3a00"), (1.0, "#1a0a3a66")])));
+    b.add(
+        parent,
+        draw::rect(
+            "falloff",
+            0.0,
+            0.0,
+            w,
+            h,
+            draw::linear(
+                90.0,
+                &[
+                    (0.0, "#1a0a3a66"),
+                    (0.25, "#1a0a3a00"),
+                    (0.75, "#1a0a3a00"),
+                    (1.0, "#1a0a3a66"),
+                ],
+            ),
+        ),
+    );
     // The valves' light: a flame per valve, rising from the bottom.
     let mut rng = Rng::new(7);
     for i in 0..4 {
         let cx = w * (0.355 + 0.1 * f64::from(i)) + rng.range(-8.0, 8.0);
         let fw = rng.range(130.0, 160.0);
         let top = h * rng.range(0.3, 0.4);
-        let col = draw::rect("valve light", cx - fw / 2.0, top, fw, (h - top) * 1.3, draw::radial_at(0.5, 0.62, 0.5, &[(0.0, "#f8f2ffee"), (0.3, "#dcc8ffa0"), (0.65, "#a78bff30"), (1.0, "#9d7cff00")]));
+        let col = draw::rect(
+            "valve light",
+            cx - fw / 2.0,
+            top,
+            fw,
+            (h - top) * 1.3,
+            draw::radial_at(
+                0.5,
+                0.62,
+                0.5,
+                &[
+                    (0.0, "#f8f2ffee"),
+                    (0.3, "#dcc8ffa0"),
+                    (0.65, "#a78bff30"),
+                    (1.0, "#9d7cff00"),
+                ],
+            ),
+        );
         let col = b.add(parent, col);
         // The flame's hot core, higher and narrower.
-        b.add(parent, draw::rect("valve core", cx - fw * 0.28, top + (h - top) * 0.12, fw * 0.56, (h - top) * 0.9, draw::radial_at(0.5, 0.55, 0.5, &[(0.0, "#fbf8ffb0"), (0.5, "#e6d8ff40"), (1.0, "#e6d8ff00")])));
+        b.add(
+            parent,
+            draw::rect(
+                "valve core",
+                cx - fw * 0.28,
+                top + (h - top) * 0.12,
+                fw * 0.56,
+                (h - top) * 0.9,
+                draw::radial_at(
+                    0.5,
+                    0.55,
+                    0.5,
+                    &[(0.0, "#fbf8ffb0"), (0.5, "#e6d8ff40"), (1.0, "#e6d8ff00")],
+                ),
+            ),
+        );
         motion::add(b, col, motion::flicker(0.05));
     }
-    b.add(parent, draw::rect("valve glow", 0.0, h * 0.6, w, h * 0.4, draw::linear(180.0, &[(0.0, "#c2a6ff00"), (0.75, "#c9b0ff55"), (1.0, "#e6d9ffc0")])));
+    b.add(
+        parent,
+        draw::rect(
+            "valve glow",
+            0.0,
+            h * 0.6,
+            w,
+            h * 0.4,
+            draw::linear(
+                180.0,
+                &[(0.0, "#c2a6ff00"), (0.75, "#c9b0ff55"), (1.0, "#e6d9ffc0")],
+            ),
+        ),
+    );
 
     // The dimples: overlapping hammer cups on a jittered grid, each shaded
     // as a hollow lit from behind — its upper rim in shadow, its lower lip
@@ -147,11 +238,25 @@ pub fn hammered_glass(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
     for j in 0..rows {
         for i in 0..cols {
             let off = if j % 2 == 0 { 0.0 } else { cw / 2.0 };
-            let (cx, cy) = (f64::from(i) * cw + off + rng.range(-cw * 0.3, cw * 0.3), f64::from(j) * ch + rng.range(-ch * 0.3, ch * 0.3));
+            let (cx, cy) = (
+                f64::from(i) * cw + off + rng.range(-cw * 0.3, cw * 0.3),
+                f64::from(j) * ch + rng.range(-ch * 0.3, ch * 0.3),
+            );
             let (rx, ry) = (cw * rng.range(0.55, 0.8), ch * rng.range(0.55, 0.8));
             let k = rng.range(0.6, 1.0);
-            let cup = draw::linear(180.0 + rng.range(-20.0, 20.0), &[(0.0, &format!("#12053a{:02x}", (90.0 * k) as u8)), (0.45, "#12053a10"), (0.75, "#f4e8ff08"), (1.0, &format!("#f4e8ff{:02x}", (70.0 * k) as u8))]);
-            b.add(parent, shape("dimple", &oval(cx, cy, rx, ry, rng.range(-25.0, 25.0)), cup));
+            let cup = draw::linear(
+                180.0 + rng.range(-20.0, 20.0),
+                &[
+                    (0.0, &format!("#12053a{:02x}", (90.0 * k) as u8)),
+                    (0.45, "#12053a10"),
+                    (0.75, "#f4e8ff08"),
+                    (1.0, &format!("#f4e8ff{:02x}", (70.0 * k) as u8)),
+                ],
+            );
+            b.add(
+                parent,
+                shape("dimple", &oval(cx, cy, rx, ry, rng.range(-25.0, 25.0)), cup),
+            );
         }
     }
     // Frost: a fine speckle of lit and dark grains over the glass.
@@ -160,30 +265,101 @@ pub fn hammered_glass(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
         let (x, y) = (rng.range(0.0, w), rng.range(0.0, h));
         let r = rng.range(0.5, 1.3);
         let d = format!("M {:.1} {:.1} h {r:.1} v {r:.1} h -{r:.1} Z ", x, y);
-        if rng.next() < 0.5 { lit.push_str(&d) } else { dark.push_str(&d) }
+        if rng.next() < 0.5 {
+            lit.push_str(&d)
+        } else {
+            dark.push_str(&d)
+        }
     }
-    b.add(parent, draw::path("frost lit", 0.0, 0.0, w, h, lit, draw::solid("#f6ecff26")));
-    b.add(parent, draw::path("frost dark", 0.0, 0.0, w, h, dark, draw::solid("#12053a2e")));
+    b.add(
+        parent,
+        draw::path("frost lit", 0.0, 0.0, w, h, lit, draw::solid("#f6ecff26")),
+    );
+    b.add(
+        parent,
+        draw::path("frost dark", 0.0, 0.0, w, h, dark, draw::solid("#12053a2e")),
+    );
     // The hammered surface's own ripple and the frosting on the glass.
     let full = (0.0, 0.0, w, h);
-    surface_kit::materials::texture::relief(b, parent, full, 0.0, surface_kit::materials::texture::Relief::Hammered { cells: 10 }, 0.35, 1.2);
-    surface_kit::materials::texture::relief(b, parent, full, 0.0, surface_kit::materials::texture::Relief::Powder { coarse: true }, 0.4, 0.8);
+    surface_kit::materials::texture::relief(
+        b,
+        parent,
+        full,
+        0.0,
+        surface_kit::materials::texture::Relief::Hammered { cells: 10 },
+        0.35,
+        1.2,
+    );
+    surface_kit::materials::texture::relief(
+        b,
+        parent,
+        full,
+        0.0,
+        surface_kit::materials::texture::Relief::Powder { coarse: true },
+        0.4,
+        0.8,
+    );
     // Glass sheen and the shadow the tolex casts into the opening.
-    b.add(parent, draw::rect("sheen", 0.0, 0.0, w, h, draw::linear(110.0, &[(0.0, "#ffffff00"), (0.4, "#ffffff0c"), (0.6, "#ffffff00")])));
-    b.add(parent, draw::rect("top shade", 0.0, 0.0, w, 14.0, draw::linear(180.0, &[(0.0, "#2a0a3a99"), (1.0, "#2a0a3a00")])));
-    b.add(parent, draw::rect("left shade", 0.0, 0.0, 10.0, h, draw::linear(90.0, &[(0.0, "#2a0a3a80"), (1.0, "#2a0a3a00")])));
+    b.add(
+        parent,
+        draw::rect(
+            "sheen",
+            0.0,
+            0.0,
+            w,
+            h,
+            draw::linear(
+                110.0,
+                &[(0.0, "#ffffff00"), (0.4, "#ffffff0c"), (0.6, "#ffffff00")],
+            ),
+        ),
+    );
+    b.add(
+        parent,
+        draw::rect(
+            "top shade",
+            0.0,
+            0.0,
+            w,
+            14.0,
+            draw::linear(180.0, &[(0.0, "#2a0a3a99"), (1.0, "#2a0a3a00")]),
+        ),
+    );
+    b.add(
+        parent,
+        draw::rect(
+            "left shade",
+            0.0,
+            0.0,
+            10.0,
+            h,
+            draw::linear(90.0, &[(0.0, "#2a0a3a80"), (1.0, "#2a0a3a00")]),
+        ),
+    );
 }
 
 // ── the rhythm head's white relief ───────────────────────────────────────
 
 fn plaster(n: Node, depth: f64) -> Node {
-    draw::with_effects(n, vec![draw::drop_shadow("#0000007a", depth * 0.6, depth * 1.2, depth * 1.5), draw::inner_shadow("#00000045", -depth * 0.35, -depth * 0.6, depth * 0.7), draw::inner_shadow("#ffffffe6", depth * 0.25, depth * 0.35, depth * 0.3)])
+    draw::with_effects(
+        n,
+        vec![
+            draw::drop_shadow("#0000007a", depth * 0.6, depth * 1.2, depth * 1.5),
+            draw::inner_shadow("#00000045", -depth * 0.35, -depth * 0.6, depth * 0.7),
+            draw::inner_shadow("#ffffffe6", depth * 0.25, depth * 0.35, depth * 0.3),
+        ],
+    )
 }
 
 const WHITE: &str = "#eeeeec";
 
 fn white_fill() -> document_proto::Paint {
-    draw::radial_at(0.35, 0.3, 0.9, &[(0.0, "#fbfbfa"), (0.6, "#ececea"), (1.0, "#d2d2d0")])
+    draw::radial_at(
+        0.35,
+        0.3,
+        0.9,
+        &[(0.0, "#fbfbfa"), (0.6, "#ececea"), (1.0, "#d2d2d0")],
+    )
 }
 
 /// A spiral scroll about (`cx`, `cy`): `turns` turns from `r0` out to `r1`,
@@ -201,13 +377,36 @@ fn scroll(cx: f64, cy: f64, r0: f64, r1: f64, turns: f64, start: f64, dir: f64) 
 
 /// A spray of leaflets along a quadratic curve `p0 → p2` bowed through `p1`.
 #[allow(clippy::too_many_arguments)]
-fn spray(b: &mut Builder<'_>, parent: NodeId, (p0, p1, p2): ((f64, f64), (f64, f64), (f64, f64)), n: usize, size: f64, rng: &mut Rng, depth: f64, name: &str) {
+fn spray(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    (p0, p1, p2): ((f64, f64), (f64, f64), (f64, f64)),
+    n: usize,
+    size: f64,
+    rng: &mut Rng,
+    depth: f64,
+    name: &str,
+) {
     let q = |t: f64| {
         let u = 1.0 - t;
-        (u * u * p0.0 + 2.0 * u * t * p1.0 + t * t * p2.0, u * u * p0.1 + 2.0 * u * t * p1.1 + t * t * p2.1)
+        (
+            u * u * p0.0 + 2.0 * u * t * p1.0 + t * t * p2.0,
+            u * u * p0.1 + 2.0 * u * t * p1.1 + t * t * p2.1,
+        )
     };
     let stem: Vec<(f64, f64)> = (0..=24).map(|i| q(f64::from(i) / 24.0)).collect();
-    b.add(parent, draw::with_effects(ui::line_node("stem", &stem, size * 0.18, "#dcdcda"), vec![draw::drop_shadow("#00000040", depth * 0.4, depth * 0.8, depth)]));
+    b.add(
+        parent,
+        draw::with_effects(
+            ui::line_node("stem", &stem, size * 0.18, "#dcdcda"),
+            vec![draw::drop_shadow(
+                "#00000040",
+                depth * 0.4,
+                depth * 0.8,
+                depth,
+            )],
+        ),
+    );
     let mut d = String::new();
     for k in 0..n {
         let t = (k as f64 + 0.5) / n as f64;
@@ -216,11 +415,26 @@ fn spray(b: &mut Builder<'_>, parent: NodeId, (p0, p1, p2): ((f64, f64), (f64, f
         let along = (x2 - x).atan2(-(y2 - y)).to_degrees();
         let side = if k % 2 == 0 { 1.0 } else { -1.0 };
         let s = size * (1.0 - 0.45 * t) * rng.range(0.8, 1.15);
-        d.push_str(&draw::polygon(&acanthus(x, y, s, s * 0.55, along + side * rng.range(35.0, 60.0))));
+        d.push_str(&draw::polygon(&acanthus(
+            x,
+            y,
+            s,
+            s * 0.55,
+            along + side * rng.range(35.0, 60.0),
+        )));
         d.push(' ');
     }
-    let (w, h) = b.scene.node(parent).map_or((0.0, 0.0), |p| (p.size.width, p.size.height));
-    b.add(parent, plaster(draw::path(name, 0.0, 0.0, w, h, d, draw::solid(WHITE)), depth));
+    let (w, h) = b
+        .scene
+        .node(parent)
+        .map_or((0.0, 0.0), |p| (p.size.width, p.size.height));
+    b.add(
+        parent,
+        plaster(
+            draw::path(name, 0.0, 0.0, w, h, d, draw::solid(WHITE)),
+            depth,
+        ),
+    );
 }
 
 /// A small five-petal rosette.
@@ -228,11 +442,33 @@ fn rosette(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, r: f64, dark: 
     for i in 0..5 {
         let a = f64::from(i) * 72.0;
         let (px, py) = draw::polar(cx, cy, r * 0.55, a);
-        let n = shape("petal", &oval(px, py, r * 0.5, r * 0.36, a - 90.0), if dark { black_fill() } else { white_fill() });
-        b.add(parent, if dark { lacquer(n, r * 0.15) } else { plaster(n, r * 0.15) });
+        let n = shape(
+            "petal",
+            &oval(px, py, r * 0.5, r * 0.36, a - 90.0),
+            if dark { black_fill() } else { white_fill() },
+        );
+        b.add(
+            parent,
+            if dark {
+                lacquer(n, r * 0.15)
+            } else {
+                plaster(n, r * 0.15)
+            },
+        );
     }
-    let n = shape("heart", &oval(cx, cy, r * 0.3, r * 0.3, 0.0), if dark { black_fill() } else { white_fill() });
-    b.add(parent, if dark { lacquer(n, r * 0.1) } else { plaster(n, r * 0.1) });
+    let n = shape(
+        "heart",
+        &oval(cx, cy, r * 0.3, r * 0.3, 0.0),
+        if dark { black_fill() } else { white_fill() },
+    );
+    b.add(
+        parent,
+        if dark {
+            lacquer(n, r * 0.1)
+        } else {
+            plaster(n, r * 0.1)
+        },
+    );
 }
 
 /// A cherub: head, curls, a raised arm, a drape, and (`devil`) horns and a
@@ -254,7 +490,10 @@ fn cherub(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, s: f64, dir: f6
         // Leading edge: bowed up.
         for k in 1..=8 {
             let t = f64::from(k) / 8.0;
-            let (x, y) = (sx + (tips[0].0 - sx) * t, sy + (tips[0].1 - sy) * t - s * 0.18 * (PI * t).sin());
+            let (x, y) = (
+                sx + (tips[0].0 - sx) * t,
+                sy + (tips[0].1 - sy) * t - s * 0.18 * (PI * t).sin(),
+            );
             pts.push((x, y));
         }
         // Trailing edge: a scallop between each pair of finger tips.
@@ -270,33 +509,141 @@ fn cherub(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, s: f64, dir: f6
         pts.push((cx, cy + s * 0.3));
         b.add(parent, plaster(shape("bat wing", &pts, white_fill()), 3.0));
         let ribs: Vec<Vec<(f64, f64)>> = tips.iter().map(|t| vec![(sx, sy), *t]).collect();
-        b.add(parent, plaster(ui::strokes("wing bones", &ribs, s * 0.035, draw::solid(WHITE)), 1.5));
+        b.add(
+            parent,
+            plaster(
+                ui::strokes("wing bones", &ribs, s * 0.035, draw::solid(WHITE)),
+                1.5,
+            ),
+        );
     } else {
         for i in 0..5 {
             let a = -dir * (100.0 + 14.0 * f64::from(i));
             let len = s * (1.0 - 0.1 * f64::from(i));
-            b.add(parent, plaster(shape("feather", &leaf(cx - dir * s * 0.15, cy - s * 0.05, len, s * 0.3, a), white_fill()), 2.0));
+            b.add(
+                parent,
+                plaster(
+                    shape(
+                        "feather",
+                        &leaf(cx - dir * s * 0.15, cy - s * 0.05, len, s * 0.3, a),
+                        white_fill(),
+                    ),
+                    2.0,
+                ),
+            );
         }
     }
     // Body and drape.
-    b.add(parent, plaster(shape("body", &oval(cx, cy + s * 0.35, s * 0.36, s * 0.5, dir * 15.0), white_fill()), 3.0));
-    b.add(parent, plaster(shape("drape", &leaf(cx - dir * s * 0.1, cy + s * 0.9, s * 1.1, s * 0.5, -dir * 20.0), white_fill()), 2.5));
-    b.add(parent, plaster(shape("leg", &oval(cx + dir * s * 0.15, cy + s * 0.85, s * 0.14, s * 0.3, -dir * 25.0), white_fill()), 2.5));
+    b.add(
+        parent,
+        plaster(
+            shape(
+                "body",
+                &oval(cx, cy + s * 0.35, s * 0.36, s * 0.5, dir * 15.0),
+                white_fill(),
+            ),
+            3.0,
+        ),
+    );
+    b.add(
+        parent,
+        plaster(
+            shape(
+                "drape",
+                &leaf(
+                    cx - dir * s * 0.1,
+                    cy + s * 0.9,
+                    s * 1.1,
+                    s * 0.5,
+                    -dir * 20.0,
+                ),
+                white_fill(),
+            ),
+            2.5,
+        ),
+    );
+    b.add(
+        parent,
+        plaster(
+            shape(
+                "leg",
+                &oval(
+                    cx + dir * s * 0.15,
+                    cy + s * 0.85,
+                    s * 0.14,
+                    s * 0.3,
+                    -dir * 25.0,
+                ),
+                white_fill(),
+            ),
+            2.5,
+        ),
+    );
     // The raised arm, reaching toward the centre.
-    b.add(parent, plaster(shape("arm", &leaf(cx + dir * s * 0.2, cy + s * 0.05, s * 0.8, s * 0.2, dir * 55.0), white_fill()), 2.5));
+    b.add(
+        parent,
+        plaster(
+            shape(
+                "arm",
+                &leaf(
+                    cx + dir * s * 0.2,
+                    cy + s * 0.05,
+                    s * 0.8,
+                    s * 0.2,
+                    dir * 55.0,
+                ),
+                white_fill(),
+            ),
+            2.5,
+        ),
+    );
     // Head with curls.
     let (hx, hy) = (cx + dir * s * 0.05, cy - s * 0.32);
-    b.add(parent, plaster(shape("head", &oval(hx, hy, s * 0.3, s * 0.3, 0.0), white_fill()), 3.0));
+    b.add(
+        parent,
+        plaster(
+            shape("head", &oval(hx, hy, s * 0.3, s * 0.3, 0.0), white_fill()),
+            3.0,
+        ),
+    );
     for i in 0..6 {
         let (x, y) = draw::polar(hx, hy, s * 0.26, -80.0 + 32.0 * f64::from(i));
-        b.add(parent, plaster(shape("curl", &oval(x, y, s * 0.08, s * 0.08, 0.0), white_fill()), 1.2));
+        b.add(
+            parent,
+            plaster(
+                shape("curl", &oval(x, y, s * 0.08, s * 0.08, 0.0), white_fill()),
+                1.2,
+            ),
+        );
     }
     if devil {
         for sx in [-1.0, 1.0] {
-            b.add(parent, plaster(shape("horn", &leaf(hx + sx * s * 0.14, hy - s * 0.2, s * 0.26, s * 0.1, sx * 25.0), white_fill()), 1.5));
+            b.add(
+                parent,
+                plaster(
+                    shape(
+                        "horn",
+                        &leaf(
+                            hx + sx * s * 0.14,
+                            hy - s * 0.2,
+                            s * 0.26,
+                            s * 0.1,
+                            sx * 25.0,
+                        ),
+                        white_fill(),
+                    ),
+                    1.5,
+                ),
+            );
         }
     } else {
-        let mut pts = oval(hx - dir * s * 0.05, hy - s * 0.4, s * 0.3, s * 0.08, -dir * 10.0);
+        let mut pts = oval(
+            hx - dir * s * 0.05,
+            hy - s * 0.4,
+            s * 0.3,
+            s * 0.08,
+            -dir * 10.0,
+        );
         pts.push(pts[0]);
         let ring = ui::strokes("halo", &[pts], s * 0.05, draw::solid(WHITE));
         b.add(parent, plaster(ring, 1.5));
@@ -305,11 +652,37 @@ fn cherub(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, s: f64, dir: f6
 
 /// A white plaster relief filling `w × h` of `parent`.
 pub fn relief_white(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
-    b.add(parent, draw::rect("ground", 0.0, 0.0, w, h, draw::linear(180.0, &[(0.0, "#d9d9d7"), (1.0, "#e6e6e4")])));
+    b.add(
+        parent,
+        draw::rect(
+            "ground",
+            0.0,
+            0.0,
+            w,
+            h,
+            draw::linear(180.0, &[(0.0, "#d9d9d7"), (1.0, "#e6e6e4")]),
+        ),
+    );
     // The moulded frame: a stepped bevel, then the recessed field.
     let m = 14.0;
-    let outer = draw::rect("moulding", m * 0.4, m * 0.4, w - m * 0.8, h - m * 0.8, draw::solid("#e9e9e7"));
-    b.add(parent, draw::with_effects(outer, vec![draw::inner_shadow("#ffffff", 1.5, 1.5, 1.0), draw::inner_shadow("#0000004d", -1.5, -1.5, 2.0)]));
+    let outer = draw::rect(
+        "moulding",
+        m * 0.4,
+        m * 0.4,
+        w - m * 0.8,
+        h - m * 0.8,
+        draw::solid("#e9e9e7"),
+    );
+    b.add(
+        parent,
+        draw::with_effects(
+            outer,
+            vec![
+                draw::inner_shadow("#ffffff", 1.5, 1.5, 1.0),
+                draw::inner_shadow("#0000004d", -1.5, -1.5, 2.0),
+            ],
+        ),
+    );
     let mut field = draw::frame("field", m, m, w - 2.0 * m, h - 2.0 * m);
     field.fills = vec![draw::linear(180.0, &[(0.0, "#dededc"), (1.0, "#e8e8e6")])];
     field.effects = vec![draw::inner_shadow("#00000059", 2.0, 4.0, 6.0)];
@@ -332,14 +705,44 @@ pub fn relief_white(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
         .iter()
         .enumerate()
         {
-            spray(b, field, ((cx + dir * dx0, cy + dy0), (cx + dir * dx1, cy + dy1), (cx + dir * dx2, cy + dy2)), 16 + 2 * k, 30.0, &mut rng, 2.4, "acanthus");
+            spray(
+                b,
+                field,
+                (
+                    (cx + dir * dx0, cy + dy0),
+                    (cx + dir * dx1, cy + dy1),
+                    (cx + dir * dx2, cy + dy2),
+                ),
+                16 + 2 * k,
+                30.0,
+                &mut rng,
+                2.4,
+                "acanthus",
+            );
         }
         // The C-scrolls either side of the shield.
-        for (x, y, r, turns, start) in [(150.0, 30.0, 40.0, 1.4, 0.0), (290.0, -30.0, 28.0, 1.2, PI), (95.0, -50.0, 20.0, 1.1, PI / 2.0), (400.0, 10.0, 24.0, 1.3, 0.0)] {
+        for (x, y, r, turns, start) in [
+            (150.0, 30.0, 40.0, 1.4, 0.0),
+            (290.0, -30.0, 28.0, 1.2, PI),
+            (95.0, -50.0, 20.0, 1.1, PI / 2.0),
+            (400.0, 10.0, 24.0, 1.3, 0.0),
+        ] {
             let pts = scroll(cx + dir * x, cy + y, 3.0, r, turns, start, dir);
-            b.add(field, plaster(ui::line_node("scroll", &pts, 10.0, WHITE), 3.0));
+            b.add(
+                field,
+                plaster(ui::line_node("scroll", &pts, 10.0, WHITE), 3.0),
+            );
         }
-        for (x, y, r) in [(220.0, -60.0, 11.0), (360.0, 55.0, 10.0), (120.0, 70.0, 9.0), (250.0, 62.0, 9.5), (420.0, -55.0, 9.0), (200.0, 20.0, 8.0), (330.0, -75.0, 8.0), (440.0, 70.0, 8.0)] {
+        for (x, y, r) in [
+            (220.0, -60.0, 11.0),
+            (360.0, 55.0, 10.0),
+            (120.0, 70.0, 9.0),
+            (250.0, 62.0, 9.5),
+            (420.0, -55.0, 9.0),
+            (200.0, 20.0, 8.0),
+            (330.0, -75.0, 8.0),
+            (440.0, 70.0, 8.0),
+        ] {
             rosette(b, field, cx + dir * x, cy + y, r, false);
         }
     }
@@ -357,12 +760,25 @@ pub fn relief_white(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
         shield.push((cx + half, top + (bot - top) * u));
     }
     b.add(field, plaster(shape("shield", &shield, white_fill()), 4.0));
-    b.add(field, plaster(shape("shield boss", &oval(cx, cy + 5.0, 26.0, 40.0, 0.0), white_fill()), 2.0));
+    b.add(
+        field,
+        plaster(
+            shape(
+                "shield boss",
+                &oval(cx, cy + 5.0, 26.0, 40.0, 0.0),
+                white_fill(),
+            ),
+            2.0,
+        ),
+    );
     for i in 0..13 {
         let t = f64::from(i) / 12.0;
         let a = PI * (0.1 + 0.8 * t);
         let (x, y) = (cx - 34.0 * a.cos(), cy - 30.0 + 38.0 * a.sin());
-        b.add(field, plaster(shape("bead", &oval(x, y, 3.2, 3.2, 0.0), white_fill()), 1.0));
+        b.add(
+            field,
+            plaster(shape("bead", &oval(x, y, 3.2, 3.2, 0.0), white_fill()), 1.0),
+        );
     }
     rosette(b, field, cx, cy - 78.0, 12.0, false);
     // The cherubs at either end, reaching in.
@@ -373,11 +789,23 @@ pub fn relief_white(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
 // ── the acoustic head's black floral relief ──────────────────────────────
 
 fn black_fill() -> document_proto::Paint {
-    draw::radial_at(0.32, 0.25, 0.95, &[(0.0, "#56565a"), (0.5, "#2a2a2c"), (1.0, "#101011")])
+    draw::radial_at(
+        0.32,
+        0.25,
+        0.95,
+        &[(0.0, "#56565a"), (0.5, "#2a2a2c"), (1.0, "#101011")],
+    )
 }
 
 fn lacquer(n: Node, depth: f64) -> Node {
-    draw::with_effects(n, vec![draw::drop_shadow("#000000e0", depth * 0.5, depth, depth * 1.6), draw::inner_shadow("#ffffff40", depth * 0.25, depth * 0.35, depth * 0.3), draw::inner_shadow("#00000080", -depth * 0.3, -depth * 0.5, depth * 0.8)])
+    draw::with_effects(
+        n,
+        vec![
+            draw::drop_shadow("#000000e0", depth * 0.5, depth, depth * 1.6),
+            draw::inner_shadow("#ffffff40", depth * 0.25, depth * 0.35, depth * 0.3),
+            draw::inner_shadow("#00000080", -depth * 0.3, -depth * 0.5, depth * 0.8),
+        ],
+    )
 }
 
 /// A crescent petal round (`cx`, `cy`): an arc band from `a0` through
@@ -388,7 +816,12 @@ fn crescent(cx: f64, cy: f64, r: f64, t: f64, a0: f64, span: f64) -> Vec<(f64, f
     let mut pts = Vec::new();
     for i in 0..=n {
         let u = f64::from(i) / f64::from(n);
-        pts.push(draw::polar(cx, cy, r + t * 0.15 * (PI * u).sin(), a0 + span * u));
+        pts.push(draw::polar(
+            cx,
+            cy,
+            r + t * 0.15 * (PI * u).sin(),
+            a0 + span * u,
+        ));
     }
     for i in (0..=n).rev() {
         let u = f64::from(i) / f64::from(n);
@@ -405,8 +838,28 @@ fn rose(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, r: f64, rng: &mut
     for i in 0..5 {
         let a = off + 72.0 * f64::from(i);
         let (px, py) = draw::polar(cx, cy, r * 0.55, a);
-        b.add(parent, lacquer(shape("outer petal", &oval(px, py, r * 0.5, r * 0.42, a + 90.0), black_fill()), (r * 0.07).max(2.0)));
-        b.add(parent, lacquer(shape("petal lip", &crescent(px, py, r * 0.42, r * 0.1, a - 70.0, 140.0), black_fill()), (r * 0.03).max(1.0)));
+        b.add(
+            parent,
+            lacquer(
+                shape(
+                    "outer petal",
+                    &oval(px, py, r * 0.5, r * 0.42, a + 90.0),
+                    black_fill(),
+                ),
+                (r * 0.07).max(2.0),
+            ),
+        );
+        b.add(
+            parent,
+            lacquer(
+                shape(
+                    "petal lip",
+                    &crescent(px, py, r * 0.42, r * 0.1, a - 70.0, 140.0),
+                    black_fill(),
+                ),
+                (r * 0.03).max(1.0),
+            ),
+        );
     }
     // The wrapped petals: crescents spiralling inward.
     for ring in 0..5 {
@@ -416,24 +869,79 @@ fn rose(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, r: f64, rng: &mut
         let off = rng.range(0.0, 120.0) + k * 47.0;
         for i in 0..n {
             let a = off + 360.0 * f64::from(i) / f64::from(n);
-            let c = crescent(cx + rng.range(-1.0, 1.0), cy + rng.range(-1.0, 1.0), rr, rr * 0.34, a, 170.0 + k * 10.0);
-            b.add(parent, lacquer(shape("petal", &c, black_fill()), (rr * 0.08).max(1.2)));
+            let c = crescent(
+                cx + rng.range(-1.0, 1.0),
+                cy + rng.range(-1.0, 1.0),
+                rr,
+                rr * 0.34,
+                a,
+                170.0 + k * 10.0,
+            );
+            b.add(
+                parent,
+                lacquer(shape("petal", &c, black_fill()), (rr * 0.08).max(1.2)),
+            );
         }
     }
     let bud = scroll(cx, cy, 1.0, r * 0.14, 1.4, rng.range(0.0, TAU), 1.0);
-    b.add(parent, lacquer(ui::line_node("bud", &bud, (r * 0.04).max(1.2), "#3a3a3d"), 1.2));
+    b.add(
+        parent,
+        lacquer(
+            ui::line_node("bud", &bud, (r * 0.04).max(1.2), "#3a3a3d"),
+            1.2,
+        ),
+    );
 }
 
 /// A heart, as the body has it: a lopsided muscle, its vessels rising from
 /// the top, a vein running down its face.
 fn heart(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, s: f64, rot: f64) {
-    for (dx, dy, w, l, a) in [(-0.12, -0.55, 0.13, 0.42, -10.0), (0.08, -0.6, 0.12, 0.5, 8.0), (0.28, -0.45, 0.1, 0.36, 30.0)] {
+    for (dx, dy, w, l, a) in [
+        (-0.12, -0.55, 0.13, 0.42, -10.0),
+        (0.08, -0.6, 0.12, 0.5, 8.0),
+        (0.28, -0.45, 0.1, 0.36, 30.0),
+    ] {
         let (x, y) = (cx + dx * s, cy + dy * s);
-        b.add(parent, lacquer(shape("vessel", &oval(x, y, w * s, l * s * 0.5, rot + a), black_fill()), s * 0.04));
+        b.add(
+            parent,
+            lacquer(
+                shape(
+                    "vessel",
+                    &oval(x, y, w * s, l * s * 0.5, rot + a),
+                    black_fill(),
+                ),
+                s * 0.04,
+            ),
+        );
     }
-    b.add(parent, lacquer(shape("atrium", &oval(cx - s * 0.22, cy - s * 0.18, s * 0.32, s * 0.28, rot - 20.0), black_fill()), s * 0.05));
-    b.add(parent, lacquer(shape("ventricle", &leaf(cx + s * 0.05, cy - s * 0.3, s * 1.05, s * 0.85, rot + 170.0), black_fill()), s * 0.07));
-    let vein = [(cx + s * 0.02, cy - s * 0.2), (cx + s * 0.1, cy + s * 0.1), (cx + s * 0.05, cy + s * 0.4), (cx + s * 0.14, cy + s * 0.55)];
+    b.add(
+        parent,
+        lacquer(
+            shape(
+                "atrium",
+                &oval(cx - s * 0.22, cy - s * 0.18, s * 0.32, s * 0.28, rot - 20.0),
+                black_fill(),
+            ),
+            s * 0.05,
+        ),
+    );
+    b.add(
+        parent,
+        lacquer(
+            shape(
+                "ventricle",
+                &leaf(cx + s * 0.05, cy - s * 0.3, s * 1.05, s * 0.85, rot + 170.0),
+                black_fill(),
+            ),
+            s * 0.07,
+        ),
+    );
+    let vein = [
+        (cx + s * 0.02, cy - s * 0.2),
+        (cx + s * 0.1, cy + s * 0.1),
+        (cx + s * 0.05, cy + s * 0.4),
+        (cx + s * 0.14, cy + s * 0.55),
+    ];
     b.add(parent, ui::line_node("vein", &vein, s * 0.03, "#3c3c40"));
 }
 
@@ -441,10 +949,19 @@ fn heart(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, s: f64, rot: f64
 fn blossom(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, r: f64, rot: f64) {
     for i in 0..5 {
         let a = rot + f64::from(i) * 72.0;
-        b.add(parent, lacquer(shape("petal", &leaf(cx, cy, r, r * 0.7, a), black_fill()), r * 0.06));
+        b.add(
+            parent,
+            lacquer(
+                shape("petal", &leaf(cx, cy, r, r * 0.7, a), black_fill()),
+                r * 0.06,
+            ),
+        );
         // The petal's crease.
         let (ex, ey) = draw::polar(cx, cy, r * 0.7, a);
-        b.add(parent, ui::line_node("crease", &[(cx, cy), (ex, ey)], 0.9, "#0b0b0c"));
+        b.add(
+            parent,
+            ui::line_node("crease", &[(cx, cy), (ex, ey)], 0.9, "#0b0b0c"),
+        );
     }
     rosette(b, parent, cx, cy, r * 0.22, true);
 }
@@ -453,12 +970,39 @@ fn blossom(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, r: f64, rot: f
 fn wheat(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, len: f64, deg: f64) {
     let a = deg.to_radians();
     let (ux, uy) = (a.sin(), -a.cos());
-    b.add(parent, lacquer(ui::line_node("straw", &[(x, y), (x + ux * len, y + uy * len)], 3.0, "#2a2a2c"), 1.5));
+    b.add(
+        parent,
+        lacquer(
+            ui::line_node(
+                "straw",
+                &[(x, y), (x + ux * len, y + uy * len)],
+                3.0,
+                "#2a2a2c",
+            ),
+            1.5,
+        ),
+    );
     for k in 0..14 {
         let t = 0.3 + 0.7 * f64::from(k) / 14.0;
         let (gx, gy) = (x + ux * len * t, y + uy * len * t);
         for side in [-1.0, 1.0] {
-            b.add(parent, lacquer(shape("grain", &oval(gx + side * ux.abs() * 0.0, gy, len * 0.06, len * 0.028, deg + 90.0 + side * 35.0), black_fill()), 1.2));
+            b.add(
+                parent,
+                lacquer(
+                    shape(
+                        "grain",
+                        &oval(
+                            gx + side * ux.abs() * 0.0,
+                            gy,
+                            len * 0.06,
+                            len * 0.028,
+                            deg + 90.0 + side * 35.0,
+                        ),
+                        black_fill(),
+                    ),
+                    1.2,
+                ),
+            );
         }
     }
 }
@@ -466,7 +1010,17 @@ fn wheat(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, len: f64, deg: f64
 /// A black floral relief filling `w × h` of `parent`: packed so no ground
 /// shows — leaves behind, then sweeping wheat, blossoms, hearts, roses.
 pub fn floral_black(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
-    b.add(parent, draw::rect("ground", 0.0, 0.0, w, h, draw::linear(180.0, &[(0.0, "#1b1b1c"), (1.0, "#121213")])));
+    b.add(
+        parent,
+        draw::rect(
+            "ground",
+            0.0,
+            0.0,
+            w,
+            h,
+            draw::linear(180.0, &[(0.0, "#1b1b1c"), (1.0, "#121213")]),
+        ),
+    );
     let mut rng = Rng::new(23);
     // Leaves everywhere behind, in two layers.
     for layer in 0..2 {
@@ -475,13 +1029,24 @@ pub fn floral_black(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
             let len = rng.range(40.0, 84.0) * if layer == 0 { 1.2 } else { 1.0 };
             let deg = rng.range(0.0, 360.0);
             let pts = acanthus(x, y, len, len * 0.5, deg);
-            b.add(parent, lacquer(shape("leaf", &pts, black_fill()), 2.0 + f64::from(layer)));
+            b.add(
+                parent,
+                lacquer(shape("leaf", &pts, black_fill()), 2.0 + f64::from(layer)),
+            );
             let a = deg.to_radians();
             let rib = [(x, y), (x + a.sin() * len * 0.85, y - a.cos() * len * 0.85)];
             b.add(parent, ui::line_node("rib", &rib, 0.9, "#0a0a0a"));
         }
     }
-    for (x, y, len, deg) in [(0.12, 0.62, 180.0, 62.0), (0.36, 0.98, 210.0, 68.0), (0.72, 0.28, 170.0, -66.0), (0.6, 1.05, 190.0, 55.0), (0.0, 0.95, 150.0, 42.0), (0.9, 0.95, 160.0, -60.0), (0.2, 0.05, 150.0, 115.0)] {
+    for (x, y, len, deg) in [
+        (0.12, 0.62, 180.0, 62.0),
+        (0.36, 0.98, 210.0, 68.0),
+        (0.72, 0.28, 170.0, -66.0),
+        (0.6, 1.05, 190.0, 55.0),
+        (0.0, 0.95, 150.0, 42.0),
+        (0.9, 0.95, 160.0, -60.0),
+        (0.2, 0.05, 150.0, 115.0),
+    ] {
         wheat(b, parent, w * x, h * y, len, deg);
     }
     for (x, y, r, rot) in [
@@ -507,8 +1072,28 @@ pub fn floral_black(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
     rose(b, parent, w * 0.84, h * 0.6, 90.0, &mut rng);
     rose(b, parent, w * 0.5, h * 0.9, 34.0, &mut rng);
     // The shadow the tolex casts into the opening.
-    b.add(parent, draw::rect("top shade", 0.0, 0.0, w, 16.0, draw::linear(180.0, &[(0.0, "#000000c0"), (1.0, "#00000000")])));
-    b.add(parent, draw::rect("left shade", 0.0, 0.0, 12.0, h, draw::linear(90.0, &[(0.0, "#000000a0"), (1.0, "#00000000")])));
+    b.add(
+        parent,
+        draw::rect(
+            "top shade",
+            0.0,
+            0.0,
+            w,
+            16.0,
+            draw::linear(180.0, &[(0.0, "#000000c0"), (1.0, "#00000000")]),
+        ),
+    );
+    b.add(
+        parent,
+        draw::rect(
+            "left shade",
+            0.0,
+            0.0,
+            12.0,
+            h,
+            draw::linear(90.0, &[(0.0, "#000000a0"), (1.0, "#00000000")]),
+        ),
+    );
 }
 
 /// The maker's mark: a quick looped scribble `w` wide from (`x`, `cy`).
@@ -517,16 +1102,30 @@ pub fn flourish(b: &mut Builder<'_>, parent: NodeId, x: f64, cy: f64, w: f64, in
     for i in 0..=60 {
         let t = f64::from(i) / 60.0;
         let a = t * TAU * 1.5;
-        pts.push((x + w * 0.05 + w * 0.3 * t + w * 0.06 * a.cos(), cy - w * 0.12 * a.sin() + w * 0.05 * t));
+        pts.push((
+            x + w * 0.05 + w * 0.3 * t + w * 0.06 * a.cos(),
+            cy - w * 0.12 * a.sin() + w * 0.05 * t,
+        ));
     }
     for i in 0..=30 {
         let t = f64::from(i) / 30.0;
-        pts.push((x + w * 0.35 + w * 0.2 * t, cy + w * 0.03 - w * 0.25 * (PI * t).sin()));
+        pts.push((
+            x + w * 0.35 + w * 0.2 * t,
+            cy + w * 0.03 - w * 0.25 * (PI * t).sin(),
+        ));
     }
     for i in 0..=20 {
         let t = f64::from(i) / 20.0;
         pts.push((x + w * 0.55 + w * 0.45 * t, cy - w * 0.02 * t));
     }
     b.add(parent, ui::line_node("mark", &pts, 1.1, ink));
-    b.add(parent, ui::line_node("mark stroke", &[(x + w * 0.25, cy + w * 0.12), (x + w * 0.55, cy - w * 0.22)], 1.0, ink));
+    b.add(
+        parent,
+        ui::line_node(
+            "mark stroke",
+            &[(x + w * 0.25, cy + w * 0.12), (x + w * 0.55, cy - w * 0.22)],
+            1.0,
+            ink,
+        ),
+    );
 }

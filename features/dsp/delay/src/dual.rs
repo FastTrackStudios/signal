@@ -137,8 +137,13 @@ impl DualDelay {
     /// Chain B, built (with its kept settings, and prepared if this is) if
     /// it was not — an allocation.
     pub fn b_mut(&mut self) -> &mut DelayChain {
-        let (style, time, feedback, mix, config) =
-            (self.b_style, self.b_time_ms, self.b_feedback, self.b_mix, self.config);
+        let (style, time, feedback, mix, config) = (
+            self.b_style,
+            self.b_time_ms,
+            self.b_feedback,
+            self.b_mix,
+            self.config,
+        );
         self.b.get_or_insert_with(|| {
             let mut c = Box::new(DelayChain::new());
             if let Some(s) = style {

@@ -7,7 +7,9 @@ use dsp_core::num::{count_to_f64, f64_to_index};
 use saturate::deluxe::{Deluxe, DeluxeParams};
 
 fn sine(hz: f64, amp: f64, secs: f64, sr: f64) -> Vec<f64> {
-    (0..f64_to_index(secs * sr)).map(|i| amp * (2.0 * std::f64::consts::PI * hz * count_to_f64(i) / sr).sin()).collect()
+    (0..f64_to_index(secs * sr))
+        .map(|i| amp * (2.0 * std::f64::consts::PI * hz * count_to_f64(i) / sr).sin())
+        .collect()
 }
 
 fn run(p: DeluxeParams, x: &[f64], sr: f64) -> Vec<f64> {
@@ -27,14 +29,31 @@ fn tail(x: &[f64]) -> &[f64] {
 
 #[test]
 fn silence_in_silence_out() {
-    let y = run(DeluxeParams { crush: 10.0, crunch: 10.0, ..DeluxeParams::default() }, &vec![0.0; 48_000], 48_000.0);
+    let y = run(
+        DeluxeParams {
+            crush: 10.0,
+            crunch: 10.0,
+            ..DeluxeParams::default()
+        },
+        &vec![0.0; 48_000],
+        48_000.0,
+    );
     assert!(y.iter().all(|v| v.abs() < 1e-9));
 }
 
 #[test]
 fn mix_zero_is_the_dry_signal() {
     let x = sine(440.0, 0.5, 0.5, 48_000.0);
-    let y = run(DeluxeParams { crush: 10.0, crunch: 10.0, mix: 0.0, ..DeluxeParams::default() }, &x, 48_000.0);
+    let y = run(
+        DeluxeParams {
+            crush: 10.0,
+            crunch: 10.0,
+            mix: 0.0,
+            ..DeluxeParams::default()
+        },
+        &x,
+        48_000.0,
+    );
     assert!(x.iter().zip(&y).all(|(a, b)| (a - b).abs() < 1e-12));
 }
 
@@ -49,7 +68,10 @@ fn quiet_signals_get_the_measured_colour_and_loud_ones_are_held_near_minus_twent
     for amp in [1.0, 2.0] {
         let loud = run(DeluxeParams::default(), &sine(1000.0, amp, 1.0, sr), sr);
         let level = rms_db(tail(&loud));
-        assert!((-24.0..-17.0).contains(&level), "{amp}: held at {level:.1} dBFS");
+        assert!(
+            (-24.0..-17.0).contains(&level),
+            "{amp}: held at {level:.1} dBFS"
+        );
     }
 }
 
@@ -58,12 +80,23 @@ fn crunch_distorts_instead_of_compressing() {
     let sr = 48_000.0;
     let x = sine(1000.0, 0.01, 1.0, sr); // −40 dBFS
     let clean = run(DeluxeParams::default(), &x, sr);
-    let crunched = run(DeluxeParams { crunch: 10.0, ..DeluxeParams::default() }, &x, sr);
+    let crunched = run(
+        DeluxeParams {
+            crunch: 10.0,
+            ..DeluxeParams::default()
+        },
+        &x,
+        sr,
+    );
     // 30 dB more into the curve, which starts to rail: the reference comes out
     // 26.7 dB louder here, with its third harmonic up near −14 dB
     let more = rms_db(tail(&crunched)) - rms_db(tail(&clean));
-    assert!((24.0..29.0).contains(&more), "crunch raised the level by {more:.1} dB");
-    let h3 = harmonic_db(tail(&crunched), 3, 1000.0, sr) - harmonic_db(tail(&crunched), 1, 1000.0, sr);
+    assert!(
+        (24.0..29.0).contains(&more),
+        "crunch raised the level by {more:.1} dB"
+    );
+    let h3 =
+        harmonic_db(tail(&crunched), 3, 1000.0, sr) - harmonic_db(tail(&crunched), 1, 1000.0, sr);
     assert!(h3 > -20.0, "third harmonic {h3:.1} dB");
 }
 
@@ -83,11 +116,21 @@ fn darkness_takes_the_top_off() {
     let sr = 48_000.0;
     let gain = |hz: f64, dark: f64| {
         let x = sine(hz, 1e-3, 0.5, sr);
-        rms_db(tail(&run(DeluxeParams { darkness_hz: dark, ..DeluxeParams::default() }, &x, sr))) - rms_db(tail(&x))
+        rms_db(tail(&run(
+            DeluxeParams {
+                darkness_hz: dark,
+                ..DeluxeParams::default()
+            },
+            &x,
+            sr,
+        ))) - rms_db(tail(&x))
     };
     let open = gain(8000.0, 20_000.0) - gain(1000.0, 20_000.0);
     let dark = gain(8000.0, 2000.0) - gain(1000.0, 2000.0);
-    assert!(dark < open - 15.0, "8 kHz re 1 kHz: open {open:.1} dB, dark {dark:.1} dB");
+    assert!(
+        dark < open - 15.0,
+        "8 kHz re 1 kHz: open {open:.1} dB, dark {dark:.1} dB"
+    );
 }
 
 #[test]
@@ -101,9 +144,26 @@ fn stays_finite_at_every_rate_and_extreme() {
                 (f64::from(seed) / f64::from(u32::MAX) - 0.5) * 4.0
             })
             .collect();
-        for (crush, crunch, dark, rel) in [(10.0, 10.0, 500.0, true), (10.0, 0.0, 20_000.0, false), (0.0, 10.0, 1100.0, true)] {
-            let y = run(DeluxeParams { crush, crunch, darkness_hz: dark, mix: 100.0, release_on: rel }, &noise, sr);
-            assert!(y.iter().all(|v| v.is_finite() && v.abs() < 4.0), "sr {sr} crush {crush} crunch {crunch} dark {dark}");
+        for (crush, crunch, dark, rel) in [
+            (10.0, 10.0, 500.0, true),
+            (10.0, 0.0, 20_000.0, false),
+            (0.0, 10.0, 1100.0, true),
+        ] {
+            let y = run(
+                DeluxeParams {
+                    crush,
+                    crunch,
+                    darkness_hz: dark,
+                    mix: 100.0,
+                    release_on: rel,
+                },
+                &noise,
+                sr,
+            );
+            assert!(
+                y.iter().all(|v| v.is_finite() && v.abs() < 4.0),
+                "sr {sr} crush {crush} crunch {crunch} dark {dark}"
+            );
         }
     }
 }

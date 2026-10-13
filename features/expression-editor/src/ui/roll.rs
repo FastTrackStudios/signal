@@ -22,11 +22,11 @@
 //! plain gestures it claims, and falls through to the tool-driven path
 //! only where the map says nothing.
 
-use dioxus::prelude::*;
-use dioxus_elements::input_data::MouseButton;
 use crate::Editor;
 use crate::memagic;
 use crate::tools::Mods;
+use dioxus::prelude::*;
+use dioxus_elements::input_data::MouseButton;
 use input::InputCommand;
 use keyboard_types::Modifiers;
 
@@ -1073,7 +1073,8 @@ fn velocity_action(
             live.revert(&mut editor.write());
         }
         let notes = editor.read().selection.notes.clone();
-        let opened = crate::ui::velocity_ramp::VelocityRamp::open(&mut editor.write(), preset, &notes);
+        let opened =
+            crate::ui::velocity_ramp::VelocityRamp::open(&mut editor.write(), preset, &notes);
         let ok = opened.is_some();
         ramp.set(opened);
         return Some(ok);

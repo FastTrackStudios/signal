@@ -163,7 +163,8 @@ impl MultitapDelay {
         let total_gain = self.total_gain;
         let mut output = 0.0;
         for tap in self.taps.iter().take(self.count) {
-            output += self.buffer.read(tap.read_offset) * tap.gain * tap.decay_effective * total_gain;
+            output +=
+                self.buffer.read(tap.read_offset) * tap.gain * tap.decay_effective * total_gain;
         }
         output
     }

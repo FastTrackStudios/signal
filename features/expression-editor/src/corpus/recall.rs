@@ -36,8 +36,8 @@
 //! is left. That encodes the thing we know independently of the data —
 //! a lone detection of a loud strike and a quiet one is the loud one.
 
-use crate::corpus::flam::{FlamCase, Side};
 use crate::audio::onsets::{OnsetConfig, detect, onset_seconds};
+use crate::corpus::flam::{FlamCase, Side};
 
 /// How generously a detection is matched to a strike, in each
 /// direction.

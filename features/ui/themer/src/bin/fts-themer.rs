@@ -285,9 +285,10 @@ fn main() -> Result<()> {
                     .split_once('=')
                     .with_context(|| format!("expected KEY=#rrggbb, got {pair:?}"))?;
                 let rgb = Rgb::parse_hex(value).with_context(|| format!("colour for {key}"))?;
-                source
-                    .overrides
-                    .insert(key.to_string(), daw_ui::theme::Color::rgb(rgb.r, rgb.g, rgb.b));
+                source.overrides.insert(
+                    key.to_string(),
+                    daw_ui::theme::Color::rgb(rgb.r, rgb.g, rgb.b),
+                );
             }
 
             let report =

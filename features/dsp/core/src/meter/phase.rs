@@ -71,7 +71,7 @@ impl PhaseCorrelation {
     /// Create a new phase correlator for the given sample rate.
     pub fn new(sample_rate: f32) -> Self {
         let window = (sample_rate * 0.300) as usize; // 300 ms
-                                                     // Decimate goniometer to ~60 fps worth of points in GONIO_HISTORY.
+        // Decimate goniometer to ~60 fps worth of points in GONIO_HISTORY.
         let decimate = ((sample_rate / 60.0) as usize).max(1);
         Self {
             window,

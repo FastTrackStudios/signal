@@ -121,7 +121,11 @@ impl Func {
             Func::Abs => x.abs(),
             Func::Lerp => x + (y - x) * z,
             Func::Smoothstep => {
-                let t = if (y - x).abs() < f64::EPSILON { f64::from(u8::from(z >= y)) } else { ((z - x) / (y - x)).clamp(0.0, 1.0) };
+                let t = if (y - x).abs() < f64::EPSILON {
+                    f64::from(u8::from(z >= y))
+                } else {
+                    ((z - x) / (y - x)).clamp(0.0, 1.0)
+                };
                 t * t * (3.0 - 2.0 * t)
             }
             Func::Step => f64::from(u8::from(y >= x)),
@@ -168,7 +172,11 @@ impl std::error::Error for ExprError {}
 /// # Errors
 /// Where and why the text isn't an expression.
 pub fn parse(src: &str) -> Result<Expr, ExprError> {
-    let mut p = Parser { s: src.as_bytes(), src, i: 0 };
+    let mut p = Parser {
+        s: src.as_bytes(),
+        src,
+        i: 0,
+    };
     let e = p.sum()?;
     p.ws();
     if p.i < p.s.len() {
@@ -243,7 +251,10 @@ struct Parser<'a> {
 
 impl Parser<'_> {
     fn err<T>(&self, message: impl Into<String>) -> Result<T, ExprError> {
-        Err(ExprError { at: self.i, message: message.into() })
+        Err(ExprError {
+            at: self.i,
+            message: message.into(),
+        })
     }
 
     fn ws(&mut self) {
@@ -303,7 +314,9 @@ impl Parser<'_> {
 
     fn atom(&mut self) -> Result<Expr, ExprError> {
         self.ws();
-        let Some(&c) = self.s.get(self.i) else { return self.err("expected a value, found the end") };
+        let Some(&c) = self.s.get(self.i) else {
+            return self.err("expected a value, found the end");
+        };
         if c == b'(' {
             self.i += 1;
             let e = self.sum()?;
@@ -317,7 +330,9 @@ impl Parser<'_> {
         }
         if c.is_ascii_alphabetic() || c == b'_' {
             let start = self.i;
-            while self.i < self.s.len() && (self.s[self.i].is_ascii_alphanumeric() || self.s[self.i] == b'_') {
+            while self.i < self.s.len()
+                && (self.s[self.i].is_ascii_alphanumeric() || self.s[self.i] == b'_')
+            {
                 self.i += 1;
             }
             let name = &self.src[start..self.i];
@@ -327,7 +342,12 @@ impl Parser<'_> {
                     "hover" => Ok(Expr::Hover),
                     "press" => Ok(Expr::Press),
                     "pi" => Ok(Expr::Num(std::f64::consts::PI)),
-                    _ => Err(ExprError { at: start, message: format!("unknown name `{name}` (sources are calls: norm(addr), level(id), …; also time, hover, press, pi)") }),
+                    _ => Err(ExprError {
+                        at: start,
+                        message: format!(
+                            "unknown name `{name}` (sources are calls: norm(addr), level(id), …; also time, hover, press, pi)"
+                        ),
+                    }),
                 };
             }
             return self.call(name, start);
@@ -355,7 +375,12 @@ impl Parser<'_> {
                 self.i = save;
             }
         }
-        self.src[start..self.i].parse::<f64>().map_err(|_| ExprError { at: start, message: format!("bad number `{}`", &self.src[start..self.i]) })
+        self.src[start..self.i]
+            .parse::<f64>()
+            .map_err(|_| ExprError {
+                at: start,
+                message: format!("bad number `{}`", &self.src[start..self.i]),
+            })
     }
 
     /// A bare or quoted address up to `,` or `)`.
@@ -382,13 +407,20 @@ impl Parser<'_> {
         }
         let a = self.src[start..self.i].trim();
         if a.is_empty() {
-            return Err(ExprError { at: start, message: "expected an address".into() });
+            return Err(ExprError {
+                at: start,
+                message: "expected an address".into(),
+            });
         }
         Ok(a.to_string())
     }
 
     fn close(&mut self, name: &str) -> Result<(), ExprError> {
-        if self.eat(b')') { Ok(()) } else { self.err(format!("expected `)` to close {name}(…)")) }
+        if self.eat(b')') {
+            Ok(())
+        } else {
+            self.err(format!("expected `)` to close {name}(…)"))
+        }
     }
 
     fn int_arg(&mut self, name: &str) -> Result<f64, ExprError> {
@@ -404,7 +436,10 @@ impl Parser<'_> {
             "param" | "norm" => {
                 let addr = self.address()?;
                 self.close(name)?;
-                Ok(Expr::Src(Source::Param { addr, normalized: name == "norm" }))
+                Ok(Expr::Src(Source::Param {
+                    addr,
+                    normalized: name == "norm",
+                }))
             }
             "motion" => {
                 let m = self.address()?;
@@ -413,18 +448,33 @@ impl Parser<'_> {
             }
             "level" => {
                 let id = self.address()?;
-                let ch = if self.eat(b',') { Some(self.number()? as u8) } else { None };
+                let ch = if self.eat(b',') {
+                    Some(self.number()? as u8)
+                } else {
+                    None
+                };
                 self.close(name)?;
                 Ok(feed(id, FeedRead::Level(ch)))
             }
             "gr" | "scalar" => {
                 let id = self.address()?;
                 self.close(name)?;
-                Ok(feed(id, if name == "gr" { FeedRead::Gr } else { FeedRead::Scalar }))
+                Ok(feed(
+                    id,
+                    if name == "gr" {
+                        FeedRead::Gr
+                    } else {
+                        FeedRead::Scalar
+                    },
+                ))
             }
             "feed" => {
                 let id = self.address()?;
-                let i = if self.eat(b',') { self.number()? as u32 } else { 0 };
+                let i = if self.eat(b',') {
+                    self.number()? as u32
+                } else {
+                    0
+                };
                 self.close(name)?;
                 Ok(feed(id, FeedRead::Raw(i)))
             }
@@ -434,13 +484,20 @@ impl Parser<'_> {
                 let hi = self.int_arg(name)?;
                 self.close(name)?;
                 if !(lo >= 0.0 && hi > lo) {
-                    return Err(ExprError { at: start, message: format!("band(…) needs 0 ≤ lo < hi, got {lo}, {hi}") });
+                    return Err(ExprError {
+                        at: start,
+                        message: format!("band(…) needs 0 ≤ lo < hi, got {lo}, {hi}"),
+                    });
                 }
                 Ok(feed(id, FeedRead::Band(lo as u32, hi as u32)))
             }
             _ => {
-                let Some((_, f, min, max)) = Func::ALL.iter().find(|(n, ..)| *n == name).copied() else {
-                    return Err(ExprError { at: start, message: format!("unknown function `{name}`") });
+                let Some((_, f, min, max)) = Func::ALL.iter().find(|(n, ..)| *n == name).copied()
+                else {
+                    return Err(ExprError {
+                        at: start,
+                        message: format!("unknown function `{name}`"),
+                    });
                 };
                 let mut args = Vec::new();
                 if !self.eat(b')') {
@@ -455,8 +512,17 @@ impl Parser<'_> {
                     }
                 }
                 if args.len() < min || args.len() > max {
-                    let want = if min == max { format!("{min}") } else if max == usize::MAX { format!("at least {min}") } else { format!("{min}–{max}") };
-                    return Err(ExprError { at: start, message: format!("{name}(…) takes {want} argument(s), got {}", args.len()) });
+                    let want = if min == max {
+                        format!("{min}")
+                    } else if max == usize::MAX {
+                        format!("at least {min}")
+                    } else {
+                        format!("{min}–{max}")
+                    };
+                    return Err(ExprError {
+                        at: start,
+                        message: format!("{name}(…) takes {want} argument(s), got {}", args.len()),
+                    });
                 }
                 Ok(Expr::Call(f, args))
             }
@@ -475,8 +541,17 @@ mod tests {
         assert_eq!(**b, Expr::Num(-1.0));
         let Expr::Add(_, m) = &**a else { panic!() };
         assert!(matches!(&**m, Expr::Mul(..)));
-        assert_eq!(e.sources(), [&Source::Param { addr: "room/size".into(), normalized: true }]);
-        let e = parse("clamp(level(spring/in, 1) + band('eq/spec', 60, 250), 0, 1) * motion(ring) + time").unwrap();
+        assert_eq!(
+            e.sources(),
+            [&Source::Param {
+                addr: "room/size".into(),
+                normalized: true
+            }]
+        );
+        let e = parse(
+            "clamp(level(spring/in, 1) + band('eq/spec', 60, 250), 0, 1) * motion(ring) + time",
+        )
+        .unwrap();
         assert_eq!(e.sources().len(), 2);
         assert_eq!(e.motions(), ["ring"]);
         assert!(e.uses_time());
@@ -486,10 +561,25 @@ mod tests {
 
     #[test]
     fn errors_point_at_the_problem() {
-        assert!(parse("norm(a/b").unwrap_err().message.contains("close norm"));
+        assert!(
+            parse("norm(a/b")
+                .unwrap_err()
+                .message
+                .contains("close norm")
+        );
         assert!(parse("foo").unwrap_err().message.contains("unknown name"));
-        assert!(parse("wobble(1)").unwrap_err().message.contains("unknown function"));
-        assert!(parse("clamp(1, 2)").unwrap_err().message.contains("takes 3"));
+        assert!(
+            parse("wobble(1)")
+                .unwrap_err()
+                .message
+                .contains("unknown function")
+        );
+        assert!(
+            parse("clamp(1, 2)")
+                .unwrap_err()
+                .message
+                .contains("takes 3")
+        );
         assert!(parse("1 2").unwrap_err().message.contains("unexpected"));
         assert!(parse("").is_err());
     }

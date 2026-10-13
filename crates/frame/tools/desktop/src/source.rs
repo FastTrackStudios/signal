@@ -22,7 +22,11 @@ pub enum Source {
 impl Source {
     #[must_use]
     pub fn from_path(path: PathBuf) -> Self {
-        if document_io::Format::of(&path) == Some(document_io::Format::Bundle) { Self::Bundle(path) } else { Self::Markup(path) }
+        if document_io::Format::of(&path) == Some(document_io::Format::Bundle) {
+            Self::Bundle(path)
+        } else {
+            Self::Markup(path)
+        }
     }
 
     #[must_use]
@@ -40,7 +44,10 @@ impl Source {
         let Some(path) = self.path() else {
             return error.to_owned();
         };
-        let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
+        let name = path.file_name().map_or_else(
+            || path.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
         error
             .strip_prefix(&*path.display().to_string())
             .map_or_else(|| error.to_owned(), |rest| format!("{name}{rest}"))
@@ -54,12 +61,16 @@ impl Source {
     /// Unreadable file, markup parse error, or a broken bundle.
     pub fn load(&self, catalog: &Catalog) -> Result<Surface, String> {
         match self {
-            Self::Generated { theme } => {
-                Ok(surface_for_catalog(catalog, &Options { theme: (**theme).clone(), ..Options::default() }))
-            }
-            Self::Markup(path) | Self::Bundle(path) => {
-                document_io::load_surface(path).map(Surface::from_scene).map_err(|e| e.to_string())
-            }
+            Self::Generated { theme } => Ok(surface_for_catalog(
+                catalog,
+                &Options {
+                    theme: (**theme).clone(),
+                    ..Options::default()
+                },
+            )),
+            Self::Markup(path) | Self::Bundle(path) => document_io::load_surface(path)
+                .map(Surface::from_scene)
+                .map_err(|e| e.to_string()),
         }
     }
 }
@@ -69,7 +80,9 @@ impl Source {
 #[must_use]
 pub fn placeholder() -> Surface {
     const SRC: &str = r##"<Document><Page><Frame w=960 h=360 fill="#0e0f12" /></Page></Document>"##;
-    Surface::from_scene(document_text::parse(SRC, BTreeMap::new()).expect("placeholder markup is valid"))
+    Surface::from_scene(
+        document_text::parse(SRC, BTreeMap::new()).expect("placeholder markup is valid"),
+    )
 }
 
 /// How often to look at the file.
@@ -96,7 +109,10 @@ pub struct Watch {
 impl Watch {
     #[must_use]
     pub fn new(initial: Stamp, now: Instant) -> Self {
-        Self { last: initial, next: now + POLL }
+        Self {
+            last: initial,
+            next: now + POLL,
+        }
     }
 
     /// When the next check is due.
@@ -140,7 +156,10 @@ mod tests {
         assert!(!w.observe(at(1, 10), t0 + POLL));
         assert!(w.observe(at(2, 10), t0 + POLL * 2), "new mtime");
         assert!(!w.observe(at(2, 10), t0 + POLL * 3), "reported once");
-        assert!(w.observe(at(2, 11), t0 + POLL * 4), "same mtime, new length");
+        assert!(
+            w.observe(at(2, 11), t0 + POLL * 4),
+            "same mtime, new length"
+        );
     }
 
     #[test]
@@ -182,7 +201,9 @@ mod tests {
         let mut scene = placeholder().scene;
         scene.add_asset("font/ttf", b"font one".to_vec());
         document_io::save_surface(&f, &scene).unwrap();
-        let loaded = Source::from_path(f.clone()).load(&surface_memory::demo_catalog()).unwrap();
+        let loaded = Source::from_path(f.clone())
+            .load(&surface_memory::demo_catalog())
+            .unwrap();
         assert_eq!(loaded.scene.assets, scene.assets);
 
         let t0 = Instant::now();
@@ -203,16 +224,24 @@ mod tests {
 
     #[test]
     fn picks_loader_by_content() {
-        let dir = std::env::temp_dir().join(format!("frame-desktop-src-kind-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("frame-desktop-src-kind-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let bundle = dir.join("b.frame");
-        document_io::save_surface_as(&bundle, &placeholder().scene, document_io::Format::Bundle).unwrap();
+        document_io::save_surface_as(&bundle, &placeholder().scene, document_io::Format::Bundle)
+            .unwrap();
         assert!(matches!(Source::from_path(bundle), Source::Bundle(_)));
         let text = dir.join("t.frame");
         std::fs::write(&text, "<Document/>").unwrap();
         assert!(matches!(Source::from_path(text), Source::Markup(_)));
-        assert!(matches!(Source::from_path("a/new.frame".into()), Source::Markup(_)), "not written yet: markup");
-        assert!(matches!(Source::from_path("a/b.fm".into()), Source::Markup(_)));
+        assert!(
+            matches!(Source::from_path("a/new.frame".into()), Source::Markup(_)),
+            "not written yet: markup"
+        );
+        assert!(matches!(
+            Source::from_path("a/b.fm".into()),
+            Source::Markup(_)
+        ));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -222,10 +251,22 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("bad.frame");
         std::fs::write(&f, "<Document>\n  <Page>\n</Document>").unwrap();
-        let err = Source::Markup(f.clone()).load(&surface_memory::demo_catalog()).unwrap_err();
+        let err = Source::Markup(f.clone())
+            .load(&surface_memory::demo_catalog())
+            .unwrap_err();
         assert!(err.starts_with(&format!("{}:", f.display())), "{err}");
-        assert!(err.split(':').nth(1).is_some_and(|l| l.parse::<usize>().is_ok()), "{err}");
-        assert!(Source::Markup(f).short_error(&err).starts_with("bad.frame:"), "{err}");
+        assert!(
+            err.split(':')
+                .nth(1)
+                .is_some_and(|l| l.parse::<usize>().is_ok()),
+            "{err}"
+        );
+        assert!(
+            Source::Markup(f)
+                .short_error(&err)
+                .starts_with("bad.frame:"),
+            "{err}"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

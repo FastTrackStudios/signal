@@ -53,7 +53,9 @@ pub const LEGACY_EXTENSION: &str = "fm";
 /// the legacy `.fm`.
 #[must_use]
 pub fn is_frame_document(path: &Path) -> bool {
-    path.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e, EXTENSION | LEGACY_EXTENSION))
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| matches!(e, EXTENSION | LEGACY_EXTENSION))
 }
 
 /// Appended to a markup file's name for its assets folder (`a.frame.assets`).
@@ -66,12 +68,21 @@ pub const MANIFEST_FORMAT: u32 = 1;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{}: {source}", path.display())]
-    Io { path: PathBuf, source: std::io::Error },
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// Displays as `path:line:col: message`.
     #[error("{}:{error}", path.display())]
-    Parse { path: PathBuf, error: document_text::ParseError },
+    Parse {
+        path: PathBuf,
+        error: document_text::ParseError,
+    },
     #[error("{}: {error}", path.display())]
-    Bundle { path: PathBuf, error: document_bundle::Error },
+    Bundle {
+        path: PathBuf,
+        error: document_bundle::Error,
+    },
     #[error("{}: {message}", path.display())]
     Manifest { path: PathBuf, message: String },
     #[error("{}: asset {id} is missing", path.display())]
@@ -83,7 +94,10 @@ pub enum Error {
 }
 
 fn io(path: &Path) -> impl FnOnce(std::io::Error) -> Error + '_ {
-    move |source| Error::Io { path: path.to_owned(), source }
+    move |source| Error::Io {
+        path: path.to_owned(),
+        source,
+    }
 }
 
 /// A surface file's format. Markup and bundles share the `.frame`
@@ -105,7 +119,11 @@ impl Format {
     pub fn of(path: &Path) -> Option<Self> {
         match path.extension()?.to_str()? {
             LEGACY_EXTENSION => Some(Self::Markup),
-            EXTENSION => Some(if is_zip(path) { Self::Bundle } else { Self::Markup }),
+            EXTENSION => Some(if is_zip(path) {
+                Self::Bundle
+            } else {
+                Self::Markup
+            }),
             _ => None,
         }
     }
@@ -124,7 +142,10 @@ pub fn is_bundle_bytes(bytes: &[u8]) -> bool {
 fn is_zip(path: &Path) -> bool {
     use std::io::Read as _;
     let mut magic = [0u8; 4];
-    std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut magic)).is_ok() && is_bundle_bytes(&magic)
+    std::fs::File::open(path)
+        .and_then(|mut f| f.read_exact(&mut magic))
+        .is_ok()
+        && is_bundle_bytes(&magic)
 }
 
 /// Markup text and the assets it names, as stored.
@@ -144,12 +165,20 @@ pub fn load_surface(path: impl AsRef<Path>) -> Result<Scene, Error> {
     match Format::of(path) {
         Some(Format::Bundle) => document_bundle::load(path)
             .map(|(_, doc)| doc.scene())
-            .map_err(|error| Error::Bundle { path: path.to_owned(), error }),
+            .map_err(|error| Error::Bundle {
+                path: path.to_owned(),
+                error,
+            }),
         Some(Format::Markup) => {
             let Markup { text, assets } = read_markup(path)?;
-            document_text::parse(&text, assets).map_err(|error| Error::Parse { path: path.to_owned(), error })
+            document_text::parse(&text, assets).map_err(|error| Error::Parse {
+                path: path.to_owned(),
+                error,
+            })
         }
-        None => Err(Error::UnknownFormat { path: path.to_owned() }),
+        None => Err(Error::UnknownFormat {
+            path: path.to_owned(),
+        }),
     }
 }
 
@@ -166,7 +195,9 @@ pub fn load_surface(path: impl AsRef<Path>) -> Result<Scene, Error> {
 /// I/O, an unknown extension, or a bundle that can't be written.
 pub fn save_surface(path: impl AsRef<Path>, scene: &Scene) -> Result<(), Error> {
     let path = path.as_ref();
-    let format = Format::of(path).ok_or_else(|| Error::UnknownFormat { path: path.to_owned() })?;
+    let format = Format::of(path).ok_or_else(|| Error::UnknownFormat {
+        path: path.to_owned(),
+    })?;
     save_surface_as(path, scene, format)
 }
 
@@ -179,12 +210,17 @@ pub fn save_surface(path: impl AsRef<Path>, scene: &Scene) -> Result<(), Error> 
 pub fn save_surface_as(path: impl AsRef<Path>, scene: &Scene, format: Format) -> Result<(), Error> {
     let path = path.as_ref();
     if !is_frame_document(path) {
-        return Err(Error::UnknownFormat { path: path.to_owned() });
+        return Err(Error::UnknownFormat {
+            path: path.to_owned(),
+        });
     }
     match format {
         Format::Markup => write_markup(path, &document_text::print(scene), scene.assets.values()),
         Format::Bundle => {
-            let bundle = |error| Error::Bundle { path: path.to_owned(), error };
+            let bundle = |error| Error::Bundle {
+                path: path.to_owned(),
+                error,
+            };
             let manifest = match document_bundle::load(path) {
                 Ok((mut m, _)) => {
                     m.touch();
@@ -209,7 +245,11 @@ fn title_of(scene: &Scene, path: &Path) -> String {
         .and_then(|n| scene.node(*n))
         .map(|n| n.name.trim().to_owned())
         .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default())
+        .unwrap_or_else(|| {
+            path.file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
 }
 
 /// Read markup text and its sidecar assets, without parsing the text.
@@ -219,7 +259,10 @@ fn title_of(scene: &Scene, path: &Path) -> String {
 pub fn read_markup(path: impl AsRef<Path>) -> Result<Markup, Error> {
     let path = path.as_ref();
     let text = std::fs::read_to_string(path).map_err(io(path))?;
-    Ok(Markup { text, assets: read_assets(path)? })
+    Ok(Markup {
+        text,
+        assets: read_assets(path)?,
+    })
 }
 
 /// Write markup text and its assets: the sidecar's new files and manifest
@@ -227,7 +270,11 @@ pub fn read_markup(path: impl AsRef<Path>) -> Result<Markup, Error> {
 ///
 /// # Errors
 /// I/O.
-pub fn write_markup<'a>(path: impl AsRef<Path>, text: &str, assets: impl IntoIterator<Item = &'a Asset>) -> Result<(), Error> {
+pub fn write_markup<'a>(
+    path: impl AsRef<Path>,
+    text: &str,
+    assets: impl IntoIterator<Item = &'a Asset>,
+) -> Result<(), Error> {
     let path = path.as_ref();
     let assets: Vec<&Asset> = assets.into_iter().collect();
     let keep = put_assets(path, &assets)?;
@@ -250,26 +297,50 @@ pub fn read_assets(path: impl AsRef<Path>) -> Result<BTreeMap<AssetId, Asset>, E
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
         Err(e) => return Err(io(&manifest_path)(e)),
     };
-    let bad = |message: String| Error::Manifest { path: manifest_path.clone(), message };
+    let bad = |message: String| Error::Manifest {
+        path: manifest_path.clone(),
+        message,
+    };
     let manifest: Manifest = serde_json::from_str(&text).map_err(|e| bad(e.to_string()))?;
     if manifest.format > MANIFEST_FORMAT {
-        return Err(bad(format!("sidecar format {} (this build reads {MANIFEST_FORMAT})", manifest.format)));
+        return Err(bad(format!(
+            "sidecar format {} (this build reads {MANIFEST_FORMAT})",
+            manifest.format
+        )));
     }
     let mut out = BTreeMap::new();
     for entry in manifest.assets {
         if !plain_name(&entry.file) {
-            return Err(bad(format!("`{}` isn't a file name in the assets folder", entry.file)));
+            return Err(bad(format!(
+                "`{}` isn't a file name in the assets folder",
+                entry.file
+            )));
         }
         let file = dir.join(&entry.file);
         let bytes = match std::fs::read(&file) {
             Ok(b) => b,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(Error::MissingAsset { path: file, id: entry.id }),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::MissingAsset {
+                    path: file,
+                    id: entry.id,
+                });
+            }
             Err(e) => return Err(io(&file)(e)),
         };
         if AssetId::of(&bytes) != entry.id {
-            return Err(Error::CorruptAsset { path: file, id: entry.id });
+            return Err(Error::CorruptAsset {
+                path: file,
+                id: entry.id,
+            });
         }
-        out.insert(entry.id.clone(), Asset { id: entry.id, mime: entry.mime, bytes });
+        out.insert(
+            entry.id.clone(),
+            Asset {
+                id: entry.id,
+                mime: entry.mime,
+                bytes,
+            },
+        );
     }
     Ok(out)
 }
@@ -312,7 +383,11 @@ pub fn is_assets_dir(dir: &Path) -> bool {
 #[must_use]
 pub fn fingerprint(path: impl AsRef<Path>) -> Option<u64> {
     let path = path.as_ref();
-    let stamp = |p: &Path| std::fs::metadata(p).ok().map(|m| (m.modified().ok(), m.len()));
+    let stamp = |p: &Path| {
+        std::fs::metadata(p)
+            .ok()
+            .map(|m| (m.modified().ok(), m.len()))
+    };
     let mut h = std::collections::hash_map::DefaultHasher::new();
     stamp(path)?.hash(&mut h);
     if Format::of(path) == Some(Format::Markup)
@@ -384,11 +459,21 @@ fn put_assets(path: &Path, assets: &[&Asset]) -> Result<BTreeSet<String>, Error>
         if std::fs::read(&file).ok().as_deref() != Some(asset.bytes.as_slice()) {
             write_atomic(&file, &asset.bytes)?;
         }
-        entries.push(ManifestEntry { id: asset.id.clone(), mime: asset.mime.clone(), file: name.clone() });
+        entries.push(ManifestEntry {
+            id: asset.id.clone(),
+            mime: asset.mime.clone(),
+            file: name.clone(),
+        });
         keep.insert(name);
     }
-    let manifest = Manifest { format: MANIFEST_FORMAT, assets: entries };
-    let mut text = serde_json::to_string_pretty(&manifest).map_err(|e| Error::Manifest { path: dir.join(MANIFEST), message: e.to_string() })?;
+    let manifest = Manifest {
+        format: MANIFEST_FORMAT,
+        assets: entries,
+    };
+    let mut text = serde_json::to_string_pretty(&manifest).map_err(|e| Error::Manifest {
+        path: dir.join(MANIFEST),
+        message: e.to_string(),
+    })?;
     text.push('\n');
     let manifest_path = dir.join(MANIFEST);
     if std::fs::read_to_string(&manifest_path).ok().as_deref() != Some(text.as_str()) {
@@ -412,7 +497,9 @@ pub fn prune_assets(path: &Path) -> Result<(), Error> {
 
 fn prune(path: &Path, keep: &BTreeSet<String>) -> Result<(), Error> {
     let dir = assets_dir(path);
-    let Ok(read) = std::fs::read_dir(&dir) else { return Ok(()) };
+    let Ok(read) = std::fs::read_dir(&dir) else {
+        return Ok(());
+    };
     for entry in read.filter_map(Result::ok) {
         let name = entry.file_name().to_string_lossy().into_owned();
         if keep.contains(&name) {
@@ -437,7 +524,9 @@ fn prune(path: &Path, keep: &BTreeSet<String>) -> Result<(), Error> {
 
 /// A blake3 hex id.
 fn is_asset_id(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn plain_name(name: &str) -> bool {

@@ -73,7 +73,11 @@ struct History {
 
 impl History {
     const fn new(len: usize) -> Self {
-        Self { buf: [0.0; 4 * MAX_K], pos: 0, len }
+        Self {
+            buf: [0.0; 4 * MAX_K],
+            pos: 0,
+            len,
+        }
     }
 
     #[inline]
@@ -92,7 +96,9 @@ impl History {
     #[inline]
     fn window(&self) -> &[f64] {
         let from = self.pos.saturating_add(1);
-        self.buf.get(from..from.saturating_add(self.len)).unwrap_or(&[])
+        self.buf
+            .get(from..from.saturating_add(self.len))
+            .unwrap_or(&[])
     }
 
     const fn clear(&mut self) {
@@ -106,7 +112,11 @@ impl History {
 fn fold(taps: &[f64], w: &[f64]) -> f64 {
     let k = taps.len();
     let (lo, hi) = w.split_at(k.min(w.len()));
-    taps.iter().zip(lo.iter().rev()).zip(hi.iter()).map(|((h, a), b)| h * (a + b)).sum()
+    taps.iter()
+        .zip(lo.iter().rev())
+        .zip(hi.iter())
+        .map(|((h, a), b)| h * (a + b))
+        .sum()
 }
 
 /// One 2× stage: interpolator and decimator sharing a design.
@@ -128,7 +138,15 @@ impl Stage {
     fn new(k: usize, beta: f64, lean: bool) -> Self {
         let k = k.clamp(1, MAX_K);
         let span = k.saturating_mul(2);
-        Self { taps: design(k, beta), k, lean, up: History::new(span), down_odd: History::new(span), down_even: [0.0; MAX_K + 1], even_pos: 0 }
+        Self {
+            taps: design(k, beta),
+            k,
+            lean,
+            up: History::new(span),
+            down_odd: History::new(span),
+            down_even: [0.0; MAX_K + 1],
+            even_pos: 0,
+        }
     }
 
     fn taps(&self) -> &[f64] {
@@ -149,7 +167,11 @@ impl Stage {
     /// `K` (lean: `K − 1`) low-rate samples.
     #[inline]
     fn down(&mut self, [even, odd]: [f64; 2]) -> f64 {
-        let len = if self.lean { self.k } else { self.k.saturating_add(1) };
+        let len = if self.lean {
+            self.k
+        } else {
+            self.k.saturating_add(1)
+        };
         let next = self.even_pos.saturating_add(1);
         self.even_pos = if next >= len { 0 } else { next };
         if let Some(s) = self.down_even.get_mut(self.even_pos) {
@@ -195,7 +217,11 @@ impl Oversampler {
         };
         // the inner round trip must be a whole number of base-rate samples
         let inner = Stage::new(INNER_K, 8.0, false);
-        Self { factor, outer: Stage::new(OUTER_K, 8.0, true), inner }
+        Self {
+            factor,
+            outer: Stage::new(OUTER_K, 8.0, true),
+            inner,
+        }
     }
 
     #[must_use]
@@ -259,11 +285,16 @@ mod tests {
         for factor in [1, 2, 4] {
             let h = impulse(factor);
             let lat = Oversampler::new(factor).latency();
-            let peak = h.iter().enumerate().fold((0, 0.0_f64), |(bi, bv), (i, v)| if v.abs() > bv { (i, v.abs()) } else { (bi, bv) });
+            let peak = h.iter().enumerate().fold((0, 0.0_f64), |(bi, bv), (i, v)| {
+                if v.abs() > bv { (i, v.abs()) } else { (bi, bv) }
+            });
             assert_eq!(peak.0, lat, "factor {factor}");
             for d in 1..lat {
                 let (a, b) = (h[lat - d], h[lat + d]);
-                assert!((a - b).abs() < 1e-12, "factor {factor} asymmetric at ±{d}: {a} {b}");
+                assert!(
+                    (a - b).abs() < 1e-12,
+                    "factor {factor} asymmetric at ±{d}: {a} {b}"
+                );
             }
             let dc: f64 = h.iter().sum();
             assert!((dc - 1.0).abs() < 1e-9, "factor {factor} dc {dc}");

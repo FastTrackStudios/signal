@@ -18,7 +18,6 @@
 //! // Render: Launcher { state, on_close: ... }
 //! ```
 
-
 pub mod engine;
 #[cfg(feature = "installer")]
 pub mod installer;

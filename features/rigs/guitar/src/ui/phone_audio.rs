@@ -17,10 +17,10 @@
 //! interface is two channels each way, and the mixer is its own process,
 //! which iOS does not run.
 
-use dioxus::prelude::*;
 use crate::proto::audio::AudioSettingsClient;
 use crate::proto::rig::RigClient;
 use crate::proto::{AudioDevices, AudioPrefs, RigStatus};
+use dioxus::prelude::*;
 
 use crate::ui::state::RigViewState;
 
@@ -37,7 +37,11 @@ const RED: &str = "#ef4444";
 const ROW_H: u32 = 56;
 
 /// The buffer sizes offered: iOS's audio unit takes 256 frames and up.
-const BUFFERS: &[u32] = if cfg!(target_os = "ios") { &[256, 512, 1024] } else { &[64, 128, 256, 512] };
+const BUFFERS: &[u32] = if cfg!(target_os = "ios") {
+    &[256, 512, 1024]
+} else {
+    &[64, 128, 256, 512]
+};
 
 /// The sample rates offered: Automatic (0 — whatever the interface runs at,
 /// asked for nothing) and the two an interface commonly runs. An interface
@@ -76,7 +80,11 @@ impl AudioTab {
 
 /// The tabs, with their names: Log where the shell gives a log.
 fn tab_list(log: bool) -> Vec<(Tab, &'static str)> {
-    let mut tabs = vec![(Tab::Status, "Status"), (Tab::Interface, "Interface"), (Tab::Di, "DI player")];
+    let mut tabs = vec![
+        (Tab::Status, "Status"),
+        (Tab::Interface, "Interface"),
+        (Tab::Di, "DI player"),
+    ];
     if log {
         tabs.push((Tab::Log, "Log"));
     }
@@ -249,13 +257,24 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     // "Audio stopped" is a state, not a fault.
     let fault = !error.is_empty() && error != "Audio stopped";
     let (dot, headline) = if running {
-        (GREEN, if st.di_playing { "Playing the DI" } else { "Playing" })
+        (
+            GREEN,
+            if st.di_playing {
+                "Playing the DI"
+            } else {
+                "Playing"
+            },
+        )
     } else if fault {
         (RED, "Audio error")
     } else {
         (AMBER, "No audio")
     };
-    let in_name = if p.input_device.is_empty() { "Automatic".to_string() } else { p.input_device.clone() };
+    let in_name = if p.input_device.is_empty() {
+        "Automatic".to_string()
+    } else {
+        p.input_device.clone()
+    };
     let out_names: Vec<String> = d.outputs.iter().map(|o| o.name.clone()).collect();
     let out_name = if !p.output_device.is_empty() {
         p.output_device.clone()
@@ -269,8 +288,15 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     } else if running {
         let rate = st.perf.sample_rate;
         let frames = st.perf.block_frames;
-        let ms = if rate > 0 { f64::from(frames) * 1000.0 / f64::from(rate) } else { 0.0 };
-        format!("{in_name} → {out_name} · {:.1} kHz · {frames} frames ({ms:.1} ms)", f64::from(rate) / 1000.0)
+        let ms = if rate > 0 {
+            f64::from(frames) * 1000.0 / f64::from(rate)
+        } else {
+            0.0
+        };
+        format!(
+            "{in_name} → {out_name} · {:.1} kHz · {frames} frames ({ms:.1} ms)",
+            f64::from(rate) / 1000.0
+        )
     } else if fault {
         error.clone()
     } else if d.inputs.is_empty() {
@@ -291,7 +317,11 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     let offered = if d.inputs.is_empty() {
         String::new()
     } else {
-        let names: Vec<String> = d.inputs.iter().map(|i| format!("{} ({} in)", i.name, i.channels)).collect();
+        let names: Vec<String> = d
+            .inputs
+            .iter()
+            .map(|i| format!("{} ({} in)", i.name, i.channels))
+            .collect();
         format!("Inputs iOS offers: {}", names.join(", "))
     };
     // The guitar input's choices: the chosen input's channels.
@@ -304,14 +334,27 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
     // Outputs are the system's to choose on iOS (it routes to the
     // interface itself); elsewhere, a list.
     let pick_output = !cfg!(target_os = "ios") && d.outputs.len() > 1;
-    let rate = if st.perf.sample_rate > 0 { st.perf.sample_rate } else { 48_000 };
+    let rate = if st.perf.sample_rate > 0 {
+        st.perf.sample_rate
+    } else {
+        48_000
+    };
 
-    let row = format!("min-height: {ROW_H}px; display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid {RULE};");
+    let row = format!(
+        "min-height: {ROW_H}px; display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid {RULE};"
+    );
 
     let button = |tone: &str| {
-        format!("flex: 1 1 0%; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; background: {tone}; color: #0a0b0d;")
+        format!(
+            "flex: 1 1 0%; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 15px; font-weight: 800; cursor: pointer; background: {tone}; color: #0a0b0d;"
+        )
     };
-    let (go, light, quiet, halt) = (button(GREEN), button("#f4f4f5"), format!("{} color: {TEXT};", button("#3f3f46")), button(RED));
+    let (go, light, quiet, halt) = (
+        button(GREEN),
+        button("#f4f4f5"),
+        format!("{} color: {TEXT};", button("#3f3f46")),
+        button(RED),
+    );
     let meter = |level: f64, color: &str| {
         let pct = (level.clamp(0.0, 1.0) * 100.0).round();
         rsx! {
@@ -321,7 +364,9 @@ pub fn PhoneAudio(state: RigViewState) -> Element {
         }
     };
 
-    let card = format!("display: flex; flex-direction: column; border-radius: 14px; background: {CARD}; border: 1px solid {RULE};");
+    let card = format!(
+        "display: flex; flex-direction: column; border-radius: 14px; background: {CARD}; border: 1px solid {RULE};"
+    );
     // The Log tab, where the shell gives the app's log.
     let feed = try_use_context::<LogFeed>();
     let tabs = tab_list(feed.is_some());

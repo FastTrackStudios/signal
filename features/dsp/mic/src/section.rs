@@ -34,7 +34,13 @@ impl CornerShift {
     /// Identity until [`Self::set`] is called.
     #[must_use]
     pub const fn identity() -> Self {
-        Self { b0: 1.0, b1: 0.0, a1: 0.0, x1: 0.0, y1: 0.0 }
+        Self {
+            b0: 1.0,
+            b1: 0.0,
+            a1: 0.0,
+            x1: 0.0,
+            y1: 0.0,
+        }
     }
 
     /// Move a corner from `from_hz` to `to_hz`: a zero cancels the old
@@ -61,7 +67,9 @@ impl CornerShift {
     }
 
     pub fn process(&mut self, x: f64) -> f64 {
-        let y = self.a1.mul_add(self.y1, self.b1.mul_add(self.x1, self.b0 * x));
+        let y = self
+            .a1
+            .mul_add(self.y1, self.b1.mul_add(self.x1, self.b0 * x));
         self.x1 = x;
         self.y1 = y;
         y
@@ -86,7 +94,12 @@ impl Default for Biquad {
 impl Biquad {
     #[must_use]
     pub const fn identity() -> Self {
-        Self { b: [1.0, 0.0, 0.0], a: [0.0, 0.0], s1: 0.0, s2: 0.0 }
+        Self {
+            b: [1.0, 0.0, 0.0],
+            a: [0.0, 0.0],
+            s1: 0.0,
+            s2: 0.0,
+        }
     }
 
     /// First-order high-pass, prewarped: `(1+p)/2 · (1 − z⁻¹)/(1 − p z⁻¹)`.
@@ -94,7 +107,12 @@ impl Biquad {
     pub fn high_pass(corner_hz: f64, sample_rate: f64) -> Self {
         let p = pole(corner_hz, sample_rate);
         let g = f64::midpoint(1.0, p);
-        Self { b: [g, -g, 0.0], a: [-p, 0.0], s1: 0.0, s2: 0.0 }
+        Self {
+            b: [g, -g, 0.0],
+            a: [-p, 0.0],
+            s1: 0.0,
+            s2: 0.0,
+        }
     }
 
     /// Second-order high-pass, bilinear prewarped to the corner, with `q`.
@@ -102,7 +120,9 @@ impl Biquad {
     pub fn high_pass2(corner_hz: f64, q: f64, sample_rate: f64) -> Self {
         // H(s) = s² / (s² + s·w/q + w²) with s = (1 − z⁻¹)/(1 + z⁻¹),
         // w = tan(π f / fs).
-        let w = (core::f64::consts::PI * corner_hz.max(0.0) / sample_rate).min(1.5).tan();
+        let w = (core::f64::consts::PI * corner_hz.max(0.0) / sample_rate)
+            .min(1.5)
+            .tan();
         let k = w / q.abs().max(1e-6);
         let ww = w * w;
         let a0 = 1.0 + k + ww;
@@ -121,7 +141,12 @@ impl Biquad {
         let warp = |hz: f64| (PI * hz.max(0.0) / sample_rate).min(1.5).tan();
         let (wz, wp) = (warp(zero_hz), warp(pole_hz));
         let a0 = 1.0 + wp;
-        Self { b: [(1.0 + wz) / a0, -(1.0 - wz) / a0, 0.0], a: [-(1.0 - wp) / a0, 0.0], s1: 0.0, s2: 0.0 }
+        Self {
+            b: [(1.0 + wz) / a0, -(1.0 - wz) / a0, 0.0],
+            a: [-(1.0 - wp) / a0, 0.0],
+            s1: 0.0,
+            s2: 0.0,
+        }
     }
 
     /// Analog peaking section `(s² + s·√g·ω/q + ω²) / (s² + s·ω/(√g·q) + ω²)`,
@@ -137,7 +162,11 @@ impl Biquad {
         // s = (1 − z⁻¹)/(1 + z⁻¹): s² + b s + ω² → (1 + b + ω²) + 2(ω² − 1) z⁻¹ + (1 − b + ω²) z⁻²
         let a0 = 1.0 + bd + ww;
         Self {
-            b: [(1.0 + bn + ww) / a0, 2.0 * (ww - 1.0) / a0, (1.0 - bn + ww) / a0],
+            b: [
+                (1.0 + bn + ww) / a0,
+                2.0 * (ww - 1.0) / a0,
+                (1.0 - bn + ww) / a0,
+            ],
             a: [2.0 * (ww - 1.0) / a0, (1.0 - bd + ww) / a0],
             s1: 0.0,
             s2: 0.0,
@@ -147,7 +176,12 @@ impl Biquad {
     /// A flat gain.
     #[must_use]
     pub const fn gain(g: f64) -> Self {
-        Self { b: [g, 0.0, 0.0], a: [0.0, 0.0], s1: 0.0, s2: 0.0 }
+        Self {
+            b: [g, 0.0, 0.0],
+            a: [0.0, 0.0],
+            s1: 0.0,
+            s2: 0.0,
+        }
     }
 
     /// Divide an impulse response by this section, in place: `h · a(z)/b(z)`.
@@ -162,8 +196,16 @@ impl Biquad {
         let [a1, a2] = self.a;
         // × a(z), back to front so each step reads unchanged input
         for n in (0..h.len()).rev() {
-            let x1 = n.checked_sub(1).and_then(|i| h.get(i)).copied().unwrap_or(0.0);
-            let x2 = n.checked_sub(2).and_then(|i| h.get(i)).copied().unwrap_or(0.0);
+            let x1 = n
+                .checked_sub(1)
+                .and_then(|i| h.get(i))
+                .copied()
+                .unwrap_or(0.0);
+            let x2 = n
+                .checked_sub(2)
+                .and_then(|i| h.get(i))
+                .copied()
+                .unwrap_or(0.0);
             if let Some(v) = h.get_mut(n) {
                 *v = a2.mul_add(x2, a1.mul_add(x1, *v));
             }
@@ -208,7 +250,11 @@ impl Biquad {
         let cos = w0.cos();
         let a0 = alpha.mul_add(1.0 / amp, 1.0);
         Self {
-            b: [alpha.mul_add(amp, 1.0) / a0, -2.0 * cos / a0, alpha.mul_add(-amp, 1.0) / a0],
+            b: [
+                alpha.mul_add(amp, 1.0) / a0,
+                -2.0 * cos / a0,
+                alpha.mul_add(-amp, 1.0) / a0,
+            ],
             a: [-2.0 * cos / a0, alpha.mul_add(-1.0 / amp, 1.0) / a0],
             s1: 0.0,
             s2: 0.0,
@@ -227,14 +273,21 @@ impl Biquad {
         // b0 + b1 + b2 = 0 for one, and b1 = −2 b0, b2 = b0 for two) need
         // moving; replace each by 1 − leak.
         let r = 1.0 - leak;
-        let (d1, d2) = if (b2 - b0).abs() < 1e-12 * b0.abs() && 2.0f64.mul_add(b0, b1).abs() < 1e-12 * b0.abs() {
+        let (d1, d2) = if (b2 - b0).abs() < 1e-12 * b0.abs()
+            && 2.0f64.mul_add(b0, b1).abs() < 1e-12 * b0.abs()
+        {
             (-2.0 * r, r * r)
         } else if b2 == 0.0 && (b0 + b1).abs() < 1e-12 * b0.abs() {
             (-r, 0.0)
         } else {
             (b1 / b0, b2 / b0)
         };
-        Self { b: [1.0 / b0, a1 / b0, a2 / b0], a: (d1, d2).into(), s1: 0.0, s2: 0.0 }
+        Self {
+            b: [1.0 / b0, a1 / b0, a2 / b0],
+            a: (d1, d2).into(),
+            s1: 0.0,
+            s2: 0.0,
+        }
     }
 
     pub const fn reset(&mut self) {

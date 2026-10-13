@@ -74,10 +74,7 @@ fn build_doc(
     doc
 }
 
-pub(crate) fn percussion_doc(
-    samples: &[f64],
-    sample_rate: f64,
-) -> crate::ExpressionDoc {
+pub(crate) fn percussion_doc(samples: &[f64], sample_rate: f64) -> crate::ExpressionDoc {
     let (doc, _) = percussion_analysis(samples, sample_rate);
     doc
 }
@@ -87,10 +84,7 @@ pub(crate) fn percussion_doc(
 pub(crate) fn percussion_analysis(
     samples: &[f64],
     sample_rate: f64,
-) -> (
-    crate::ExpressionDoc,
-    crate::host::analysis_cache::Analysis,
-) {
+) -> (crate::ExpressionDoc, crate::host::analysis_cache::Analysis) {
     use crate::audio::{DetectConfig, transients};
 
     let frame_rate = sample_rate / DRUM_HOP as f64;

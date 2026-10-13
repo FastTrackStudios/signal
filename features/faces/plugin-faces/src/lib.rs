@@ -17,22 +17,22 @@ pub mod face;
 pub mod lane;
 pub mod modulation;
 pub mod reverb;
-pub mod rig_blues;
-pub mod rig_faces;
 pub mod rig_amp;
-pub mod rig_mod;
+pub mod rig_blues;
 pub mod rig_cells;
-pub mod rig_units;
+pub mod rig_faces;
+pub mod rig_mod;
 pub mod rig_time;
-pub mod saturate;
-pub mod suite_boutique_clean;
-pub mod suite_funk_rhythm;
-pub mod suite_studio_blues;
-pub mod suite_poly_clean;
+pub mod rig_units;
 pub mod rigkit;
+pub mod saturate;
 pub mod suite_blackout_gain;
+pub mod suite_boutique_clean;
 pub mod suite_djent_forge;
+pub mod suite_funk_rhythm;
 pub mod suite_modern_rhythm;
+pub mod suite_poly_clean;
+pub mod suite_studio_blues;
 
 pub use face::{Face, canvas, catalogs};
 
@@ -98,8 +98,13 @@ pub fn write_only(out: &std::path::Path, only: &[String]) -> usize {
     }
     for (plugin, catalog) in catalogs(&faces) {
         let path = out.join(plugin).join(format!("{plugin}.catalog.json"));
-        std::fs::write(&path, serde_json::to_string_pretty(&catalog).expect("json")).expect("write catalog");
+        std::fs::write(&path, serde_json::to_string_pretty(&catalog).expect("json"))
+            .expect("write catalog");
     }
-    std::fs::write(out.join(rig_faces::PLUGIN).join("faces.json"), rig_faces::manifest()).expect("write faces.json");
+    std::fs::write(
+        out.join(rig_faces::PLUGIN).join("faces.json"),
+        rig_faces::manifest(),
+    )
+    .expect("write faces.json");
     faces.iter().filter(|f| chosen(f.file)).count()
 }

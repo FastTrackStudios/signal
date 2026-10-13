@@ -1472,7 +1472,8 @@ fn reaper_config_dir() -> std::path::PathBuf {
     std::env::var("FTS_REAPER_CONFIG_REPO")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../legacy/daw/nix/reaper-config")
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../legacy/daw/nix/reaper-config")
         })
 }
 

@@ -26,6 +26,9 @@ nice-plug-dioxus = { workspace = true, optional = true }
 rustfft = { version = "6.2" }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+trigger = { path = ".", features = ["native"] }
 approx = { workspace = true }
 dioxus = { workspace = true }
 dioxus-test = { workspace = true }

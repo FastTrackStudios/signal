@@ -30,7 +30,15 @@ pub struct Letter<'a> {
 impl<'a> Letter<'a> {
     #[must_use]
     pub const fn new(size: f64, weight: f64, color: &'a str) -> Self {
-        Self { size, weight, italic: false, track: 0.0, color, stretch: 1.0, family: family::INTER }
+        Self {
+            size,
+            weight,
+            italic: false,
+            track: 0.0,
+            color,
+            stretch: 1.0,
+            family: family::INTER,
+        }
     }
     #[must_use]
     pub const fn italic(mut self) -> Self {
@@ -75,7 +83,11 @@ impl<'a> Letter<'a> {
     }
 
     fn width_pct(&self) -> f64 {
-        if self.axis_width() { (self.stretch * 100.0).clamp(50.0, 125.0) } else { 100.0 }
+        if self.axis_width() {
+            (self.stretch * 100.0).clamp(50.0, 125.0)
+        } else {
+            100.0
+        }
     }
 
     /// The horizontal scale left to the node's transform.
@@ -84,7 +96,12 @@ impl<'a> Letter<'a> {
     }
 
     fn chain(&self) -> Chain {
-        FontBook::bundled().chain(&FontQuery::family(self.family).weight(self.weight as f32).italic(self.italic).width(self.width_pct() as f32))
+        FontBook::bundled().chain(
+            &FontQuery::family(self.family)
+                .weight(self.weight as f32)
+                .italic(self.italic)
+                .width(self.width_pct() as f32),
+        )
     }
 
     fn lettering(&self) -> Lettering {
@@ -115,7 +132,8 @@ fn measure(s: &str, l: &Letter<'_>) -> Measure {
     let (ascent, cap) = chain.primary().map_or((l.size * 0.8, l.size * 0.7), |f| {
         let cap = f.font().and_then(|font| {
             use skrifa::MetadataProvider;
-            font.metrics(skrifa::instance::Size::new(l.size as f32), f.location()).cap_height
+            font.metrics(skrifa::instance::Size::new(l.size as f32), f.location())
+                .cap_height
         });
         (f.ascent(l.size), cap.map_or(l.size * 0.7, f64::from))
     });
@@ -130,7 +148,17 @@ const ANCHOR: f64 = 1.0;
 fn node(s: &str, l: &Letter<'_>, m: &Measure) -> (document_proto::Node, (f64, f64)) {
     let spacing = l.track * l.size;
     let w = m.width + spacing + 2.0 * ANCHOR + 1.0;
-    let mut n = draw::styled_text("lettering", s, 0.0, 0.0, w, l.size, l.color, TextAlign::Left, &l.lettering());
+    let mut n = draw::styled_text(
+        "lettering",
+        s,
+        0.0,
+        0.0,
+        w,
+        l.size,
+        l.color,
+        TextAlign::Left,
+        &l.lettering(),
+    );
     if let document_proto::NodeKind::Text(t) = &mut n.kind {
         t.letter_spacing = spacing;
     }
@@ -149,7 +177,12 @@ pub fn cap_middle(l: &Letter<'_>) -> f64 {
 /// A text node in `l`'s family, weight and spacing (no transform): what a
 /// readout's `Value` slot or a static line of lettering is made of.
 #[must_use]
-pub fn text_in(s: &str, (x, y, w): (f64, f64, f64), l: &Letter<'_>, align: TextAlign) -> document_proto::Node {
+pub fn text_in(
+    s: &str,
+    (x, y, w): (f64, f64, f64),
+    l: &Letter<'_>,
+    align: TextAlign,
+) -> document_proto::Node {
     let m = measure("0", l);
     let mut n = draw::styled_text("text", s, x, y, w, l.size, l.color, align, &l.lettering());
     if let document_proto::NodeKind::Text(t) = &mut n.kind {
@@ -166,14 +199,27 @@ pub fn set_width(s: &str, l: &Letter<'_>) -> f64 {
 }
 
 /// Display lettering centred on (`cx`, `cy`) — `cy` the middle of the caps.
-pub fn letter(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f64, f64), l: Letter<'_>) -> NodeId {
+pub fn letter(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    (cx, cy): (f64, f64),
+    l: Letter<'_>,
+) -> NodeId {
     letter_aligned(b, parent, s, (cx, cy), l, TextAlign::Center)
 }
 
 /// Display lettering turned by `deg` (clockwise) about its own centre,
 /// which lands on (`cx`, `cy`) — a legend printed along a knob's slot,
 /// a vertical label.
-pub fn letter_turned(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f64, f64), deg: f64, l: Letter<'_>) -> NodeId {
+pub fn letter_turned(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    (cx, cy): (f64, f64),
+    deg: f64,
+    l: Letter<'_>,
+) -> NodeId {
     // Renderers set a text run level, so a turned line is drawn as the
     // family's own glyph outlines, turned (the node keeps its characters).
     let m = measure(s, &l);
@@ -187,7 +233,16 @@ pub fn letter_turned(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f6
         (r + cs * dx - sn * dy, r + sn * dx + cs * dy)
     };
     let d = map_path(&d, turn);
-    let mut n = draw::text("lettering", s, cx - r, cy - r, 2.0 * r, l.size, l.color, TextAlign::Center);
+    let mut n = draw::text(
+        "lettering",
+        s,
+        cx - r,
+        cy - r,
+        2.0 * r,
+        l.size,
+        l.color,
+        TextAlign::Center,
+    );
     l.lettering().apply(&mut n);
     n.name = format!("lettering {s}");
     n.size.height = 2.0 * r;
@@ -223,7 +278,14 @@ fn map_path(d: &str, f: impl Fn(f64, f64) -> (f64, f64)) -> String {
 
 /// Display lettering sized so it sets `width` wide, centred on (`cx`, `cy`);
 /// returns the node and the size it was set at.
-pub fn letter_fit(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f64, f64), width: f64, l: Letter<'_>) -> (NodeId, f64) {
+pub fn letter_fit(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    (cx, cy): (f64, f64),
+    width: f64,
+    l: Letter<'_>,
+) -> (NodeId, f64) {
     let probe = Letter { size: 100.0, ..l };
     let w = set_width(s, &probe);
     let size = if w > 0.0 { 100.0 * width / w } else { l.size };
@@ -231,7 +293,14 @@ pub fn letter_fit(b: &mut Builder<'_>, parent: NodeId, s: &str, (cx, cy): (f64, 
 }
 
 /// Display lettering anchored at `x` by `align`, the caps centred on `cy`.
-pub fn letter_aligned(b: &mut Builder<'_>, parent: NodeId, s: &str, (x, cy): (f64, f64), l: Letter<'_>, align: TextAlign) -> NodeId {
+pub fn letter_aligned(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    (x, cy): (f64, f64),
+    l: Letter<'_>,
+    align: TextAlign,
+) -> NodeId {
     let m = measure(s, &l);
     let k = l.scale();
     let w = m.width * k;
@@ -245,7 +314,16 @@ pub fn letter_aligned(b: &mut Builder<'_>, parent: NodeId, s: &str, (x, cy): (f6
         // the family's own glyph outlines, stretched (characters kept).
         let (d, ow) = outline(s, &l);
         let top = cy - (l.size * 0.78 - m.cap / 2.0);
-        let mut n = draw::text("lettering", s, x0, top, ow.max(1.0), l.size, l.color, TextAlign::Left);
+        let mut n = draw::text(
+            "lettering",
+            s,
+            x0,
+            top,
+            ow.max(1.0),
+            l.size,
+            l.color,
+            TextAlign::Left,
+        );
         l.lettering().apply(&mut n);
         n.name = format!("lettering {s}");
         n.size.height = l.size;

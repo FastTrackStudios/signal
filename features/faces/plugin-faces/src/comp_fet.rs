@@ -34,7 +34,8 @@
 use document_proto::{Node, NodeId, NodeKind, TextAlign, TextCase, Transform};
 use surface_kit::{Ink, Place, TOUCH_MIN, draw, place};
 use surface_proto::{
-    Binding, EntryId, MeterTap, ParamInfo, Range, SlotRole, SourceSelect, StreamInfo, StreamKind, Unit,
+    Binding, EntryId, MeterTap, ParamInfo, Range, SlotRole, SourceSelect, StreamInfo, StreamKind,
+    Unit,
 };
 use surface_widgets::Builder;
 
@@ -68,23 +69,57 @@ pub const OUT_LEVEL: &str = "fet/out";
 fn params(power: bool) -> Vec<ParamInfo> {
     let grp = "FET";
     let mut v = vec![
-        ParamInfo::new(INPUT, "Input", Range::linear(-48.0, 0.0, Unit::Db)).with_default_real(-24.0).in_group(grp).featured(),
-        ParamInfo::new(OUTPUT, "Output", Range::linear(-48.0, 0.0, Unit::Db)).with_default_real(-18.0).in_group(grp).featured(),
-        ParamInfo::new(ATTACK, "Attack", Range::linear(1.0, 7.0, Unit::None)).with_default_real(3.0).in_group(grp).featured(),
-        ParamInfo::new(RELEASE, "Release", Range::linear(1.0, 7.0, Unit::None)).with_default_real(5.0).in_group(grp).featured(),
-        ParamInfo::new(RATIO, "Ratio", Range::default()).choice(RATIOS).in_group(grp).featured(),
-        ParamInfo::new(METER_SRC, "Meter", Range::default()).choice(METER).in_group(grp).featured(),
+        ParamInfo::new(INPUT, "Input", Range::linear(-48.0, 0.0, Unit::Db))
+            .with_default_real(-24.0)
+            .in_group(grp)
+            .featured(),
+        ParamInfo::new(OUTPUT, "Output", Range::linear(-48.0, 0.0, Unit::Db))
+            .with_default_real(-18.0)
+            .in_group(grp)
+            .featured(),
+        ParamInfo::new(ATTACK, "Attack", Range::linear(1.0, 7.0, Unit::None))
+            .with_default_real(3.0)
+            .in_group(grp)
+            .featured(),
+        ParamInfo::new(RELEASE, "Release", Range::linear(1.0, 7.0, Unit::None))
+            .with_default_real(5.0)
+            .in_group(grp)
+            .featured(),
+        ParamInfo::new(RATIO, "Ratio", Range::default())
+            .choice(RATIOS)
+            .in_group(grp)
+            .featured(),
+        ParamInfo::new(METER_SRC, "Meter", Range::default())
+            .choice(METER)
+            .in_group(grp)
+            .featured(),
     ];
     if power {
-        v.push(ParamInfo::new(POWER, "Power", Range::default()).toggle().with_default_real(1.0).in_group(grp).featured());
+        v.push(
+            ParamInfo::new(POWER, "Power", Range::default())
+                .toggle()
+                .with_default_real(1.0)
+                .in_group(grp)
+                .featured(),
+        );
     }
     v
 }
 
 fn streams() -> Vec<StreamInfo> {
     vec![
-        StreamInfo { id: EntryId::new(GR), name: "Gain Reduction".into(), kind: StreamKind::GainReduction, rate_hz: 30.0 },
-        StreamInfo { id: EntryId::new(OUT_LEVEL), name: "Output Level".into(), kind: StreamKind::Level { channels: 2 }, rate_hz: 30.0 },
+        StreamInfo {
+            id: EntryId::new(GR),
+            name: "Gain Reduction".into(),
+            kind: StreamKind::GainReduction,
+            rate_hz: 30.0,
+        },
+        StreamInfo {
+            id: EntryId::new(OUT_LEVEL),
+            name: "Output Level".into(),
+            kind: StreamKind::Level { channels: 2 },
+            rate_hz: 30.0,
+        },
     ]
 }
 
@@ -192,7 +227,11 @@ const LATE: Layout = Layout {
     meter_keys_x: 0.83,
     keys: (0.2, 0.87),
     meter: (0.708, 0.45, 0.166),
-    holes: &[(0.233, 0.5, 0.0042), (0.073, 0.5, 0.0017), (0.869, 0.5, 0.0017)],
+    holes: &[
+        (0.233, 0.5, 0.0042),
+        (0.073, 0.5, 0.0017),
+        (0.869, 0.5, 0.0017),
+    ],
     screws: [(0.056, 0.2), (0.056, 0.78), (0.93, 0.2), (0.93, 0.78)],
 };
 
@@ -225,14 +264,29 @@ fn at((fx, fy): (f64, f64)) -> (f64, f64) {
 
 fn unit(b: &mut Builder<'_>, root: NodeId, f: &Layout) {
     if let Some(n) = b.scene.node_mut(root) {
-        n.size = document_proto::Size { width: W, height: H };
+        n.size = document_proto::Size {
+            width: W,
+            height: H,
+        };
     }
     // The plate is its own rack ears: no separate ear, slots in the corners.
-    let panel = kit(b, root, "panel.brushed", &Place::new("Faceplate").variant(f.panel).options(&[&format!("w={W}"), &format!("h={H}"), "ends=none"]));
+    let panel = kit(
+        b,
+        root,
+        "panel.brushed",
+        &Place::new("Faceplate").variant(f.panel).options(&[
+            &format!("w={W}"),
+            &format!("h={H}"),
+            "ends=none",
+        ]),
+    );
     if f.plate != Plate::Black {
         // Clear-anodised aluminium reads lighter than the kit's natural plate.
         if let Some(n) = b.scene.node_mut(panel) {
-            n.fills = vec![draw::linear(178.0, &[(0.0, "#dddedc"), (0.48, "#d1d2d0"), (1.0, "#c2c3c1")])];
+            n.fills = vec![draw::linear(
+                178.0,
+                &[(0.0, "#dddedc"), (0.48, "#d1d2d0"), (1.0, "#c2c3c1")],
+            )];
         }
     }
     hardware(b, panel, f);
@@ -245,15 +299,33 @@ fn unit(b: &mut Builder<'_>, root: NodeId, f: &Layout) {
 
     big_knob(b, panel, f, "Input", INPUT, at(f.input));
     big_knob(b, panel, f, "Output", OUTPUT, at(f.output));
-    time_knob(b, panel, f, "Attack", ATTACK, at(f.attack), f.time_legends.0);
-    time_knob(b, panel, f, "Release", RELEASE, at(f.release), f.time_legends.1);
+    time_knob(
+        b,
+        panel,
+        f,
+        "Attack",
+        ATTACK,
+        at(f.attack),
+        f.time_legends.0,
+    );
+    time_knob(
+        b,
+        panel,
+        f,
+        "Release",
+        RELEASE,
+        at(f.release),
+        f.time_legends.1,
+    );
 
     // The ratio keys, numbers to their left, 20 at the top under "All".
     let ratio = keys(b, panel, f, "Ratio", RATIO, RATIOS, true, "left", None);
     place_keys(b, panel, ratio, (f, "Ratio"), f.ratio_x * W, true);
     // The meter keys, labels to their right; the late unit's OFF is red.
     let colors = (f.plate == Plate::Late).then_some("colors=#1c1c1e,#1c1c1e,#1c1c1e,#c3281c");
-    let meter = keys(b, panel, f, "Meter", METER_SRC, METER, false, "right", colors);
+    let meter = keys(
+        b, panel, f, "Meter", METER_SRC, METER, false, "right", colors,
+    );
     place_keys(b, panel, meter, (f, "Meter"), f.meter_keys_x * W, false);
 
     let (mx, my, mw) = f.meter;
@@ -269,7 +341,9 @@ fn kit(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place) -> NodeId {
 }
 
 fn size_of(b: &Builder<'_>, id: NodeId) -> (f64, f64) {
-    b.scene.node(id).map_or((0.0, 0.0), |n| (n.size.width, n.size.height))
+    b.scene
+        .node(id)
+        .map_or((0.0, 0.0), |n| (n.size.width, n.size.height))
 }
 
 fn move_to(b: &mut Builder<'_>, id: NodeId, x: f64, y: f64) {
@@ -279,9 +353,25 @@ fn move_to(b: &mut Builder<'_>, id: NodeId, x: f64, y: f64) {
 }
 
 /// Silkscreen: uppercase, tracked, a stated weight, centred on (`cx`, `cy`).
-fn ink(name: &str, s: &str, (cx, cy): (f64, f64), size: f64, color: &str, (weight, track): (f64, f64)) -> Node {
+fn ink(
+    name: &str,
+    s: &str,
+    (cx, cy): (f64, f64),
+    size: f64,
+    color: &str,
+    (weight, track): (f64, f64),
+) -> Node {
     let w = s.chars().count() as f64 * size * (0.78 + track) + 8.0;
-    let mut n = draw::text(name, s, cx - w / 2.0, cy - size * 0.68, w, size, color, TextAlign::Center);
+    let mut n = draw::text(
+        name,
+        s,
+        cx - w / 2.0,
+        cy - size * 0.68,
+        w,
+        size,
+        color,
+        TextAlign::Center,
+    );
     if let NodeKind::Text(t) = &mut n.kind {
         t.font_weight = Some(weight);
         t.text_case = TextCase::Upper;
@@ -295,28 +385,59 @@ fn centre_knob(b: &mut Builder<'_>, k: NodeId, (cx, cy): (f64, f64)) {
     let (ax, ay) = b
         .scene
         .node(k)
-        .and_then(|n| n.children.iter().filter_map(|c| b.scene.node(*c)).find(|c| c.name == "knob"))
-        .map_or((0.0, 0.0), |n| (n.transform.tx + n.size.width / 2.0, n.transform.ty + n.size.height / 2.0));
+        .and_then(|n| {
+            n.children
+                .iter()
+                .filter_map(|c| b.scene.node(*c))
+                .find(|c| c.name == "knob")
+        })
+        .map_or((0.0, 0.0), |n| {
+            (
+                n.transform.tx + n.size.width / 2.0,
+                n.transform.ty + n.size.height / 2.0,
+            )
+        });
     move_to(b, k, cx - ax, cy - ay);
 }
 
 /// Move a placed knob's legend so it is centred on panel `y`.
 fn legend_to(b: &mut Builder<'_>, k: NodeId, y: f64) {
     let ty = b.scene.node(k).map_or(0.0, |n| n.transform.ty);
-    let label = b.controls.get(&k).and_then(|c| c.slots_of(SlotRole::Label).next());
+    let label = b
+        .controls
+        .get(&k)
+        .and_then(|c| c.slots_of(SlotRole::Label).next());
     if let Some(n) = label.and_then(|l| b.scene.node_mut(NodeId(l))) {
-        let size = if let NodeKind::Text(t) = &n.kind { t.font_size } else { 9.0 };
+        let size = if let NodeKind::Text(t) = &n.kind {
+            t.font_size
+        } else {
+            9.0
+        };
         n.transform = Transform::translate(n.transform.tx, y - ty - size * 0.68);
     }
 }
 
 /// INPUT / OUTPUT: the big knob on its dial disc, legend under it.
-fn big_knob(b: &mut Builder<'_>, panel: NodeId, f: &Layout, legend: &str, addr: &str, c: (f64, f64)) {
+fn big_knob(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    f: &Layout,
+    legend: &str,
+    addr: &str,
+    c: (f64, f64),
+) {
     let k = kit(
         b,
         panel,
         "knob.knurled_cap",
-        &Place::new(legend).size(BIG).legend(legend).scale(ATTEN).variant(f.disc).ink(Ink::Color(f.ink.into())).touch(TOUCH_MIN).bind(Binding::param(addr)),
+        &Place::new(legend)
+            .size(BIG)
+            .legend(legend)
+            .scale(ATTEN)
+            .variant(f.disc)
+            .ink(Ink::Color(f.ink.into()))
+            .touch(TOUCH_MIN)
+            .bind(Binding::param(addr)),
     );
     centre_knob(b, k, c);
     legend_to(b, k, f.big_legend * H);
@@ -324,7 +445,15 @@ fn big_knob(b: &mut Builder<'_>, panel: NodeId, f: &Layout, legend: &str, addr: 
 
 /// ATTACK / RELEASE: no disc, a ring on the cap, 270° of travel; the legend
 /// where the unit prints it (over ATTACK; over or under RELEASE).
-fn time_knob(b: &mut Builder<'_>, panel: NodeId, f: &Layout, legend: &str, addr: &str, c: (f64, f64), legend_y: f64) {
+fn time_knob(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    f: &Layout,
+    legend: &str,
+    addr: &str,
+    c: (f64, f64),
+    legend_y: f64,
+) {
     let k = kit(
         b,
         panel,
@@ -346,7 +475,17 @@ fn time_knob(b: &mut Builder<'_>, panel: NodeId, f: &Layout, legend: &str, addr:
 
 /// A key column over a choice param, its title printed over it.
 #[allow(clippy::too_many_arguments)]
-fn keys(b: &mut Builder<'_>, panel: NodeId, f: &Layout, title: &str, addr: &str, options: &[&str], reverse: bool, labels: &str, colors: Option<&str>) -> NodeId {
+fn keys(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    f: &Layout,
+    title: &str,
+    addr: &str,
+    options: &[&str],
+    reverse: bool,
+    labels: &str,
+    colors: Option<&str>,
+) -> NodeId {
     let label_opt = format!("labels={labels}");
     let aspect = format!("aspect={:.3}", 1.85 * 4.0 / options.len() as f64);
     let mut opts: Vec<&str> = options.to_vec();
@@ -358,7 +497,12 @@ fn keys(b: &mut Builder<'_>, panel: NodeId, f: &Layout, title: &str, addr: &str,
     if let Some(c) = colors {
         opts.push(c);
     }
-    let mut p = Place::new(title).size(KEY).options(&opts).variant("black").ink(Ink::Color(f.ink.into())).bind(Binding::param(addr));
+    let mut p = Place::new(title)
+        .size(KEY)
+        .options(&opts)
+        .variant("black")
+        .ink(Ink::Color(f.ink.into()))
+        .bind(Binding::param(addr));
     p.reverse = reverse;
     let id = kit(b, panel, "button.push_in_key_bank", &p);
     let _ = title;
@@ -366,39 +510,95 @@ fn keys(b: &mut Builder<'_>, panel: NodeId, f: &Layout, title: &str, addr: &str,
 }
 
 /// Put a key column's keys on `cx`, spanning `top..bottom`, its title over it.
-fn place_keys(b: &mut Builder<'_>, panel: NodeId, id: NodeId, (f, title): (&Layout, &str), cx: f64, labels_left: bool) {
+fn place_keys(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    id: NodeId,
+    (f, title): (&Layout, &str),
+    cx: f64,
+    labels_left: bool,
+) {
     let (top, bottom) = f.keys;
     let (w, h) = size_of(b, id);
     let slot = KEY + 3.0;
-    let x = if labels_left { cx + slot / 2.0 - w } else { cx - slot / 2.0 };
+    let x = if labels_left {
+        cx + slot / 2.0 - w
+    } else {
+        cx - slot / 2.0
+    };
     let y = (top + bottom) / 2.0 * H - h / 2.0;
     move_to(b, id, x, y);
-    b.add(panel, ink("title", title, (cx, y - 11.0), 9.5, f.ink, (700.0, 0.04)));
+    b.add(
+        panel,
+        ink("title", title, (cx, y - 11.0), 9.5, f.ink, (700.0, 0.04)),
+    );
 }
 
 /// The plate's hardware: rack slots in the corners, the four panel screws,
 /// the holes the unit has (a screwdriver adjustment, a lamp that isn't).
 fn hardware(b: &mut Builder<'_>, panel: NodeId, f: &Layout) {
-    let behind = if f.plate == Plate::Black { "#050506" } else { "#2a2b2d" };
+    let behind = if f.plate == Plate::Black {
+        "#050506"
+    } else {
+        "#2a2b2d"
+    };
     for (x, y) in [(0.017, 0.1), (0.017, 0.9), (0.983, 0.1), (0.983, 0.9)] {
         let (w, h) = (0.016 * W, 0.058 * H);
-        let slot = draw::rect("rack slot", x * W - w / 2.0, y * H - h / 2.0, w, h, draw::solid(behind));
-        b.add(panel, draw::with_effects(draw::rounded(slot, h / 2.0), vec![draw::inner_shadow("#000000", 0.0, 1.5, 2.5), draw::drop_shadow("#ffffff2e", 0.0, 1.0, 0.0)]));
+        let slot = draw::rect(
+            "rack slot",
+            x * W - w / 2.0,
+            y * H - h / 2.0,
+            w,
+            h,
+            draw::solid(behind),
+        );
+        b.add(
+            panel,
+            draw::with_effects(
+                draw::rounded(slot, h / 2.0),
+                vec![
+                    draw::inner_shadow("#000000", 0.0, 1.5, 2.5),
+                    draw::drop_shadow("#ffffff2e", 0.0, 1.0, 0.0),
+                ],
+            ),
+        );
     }
     for (x, y) in f.screws {
         screw(b, panel, at((x, y)), 0.0072 * W, f.plate == Plate::Black);
     }
     for (x, y, r) in f.holes {
         let hole = draw::circle("hole", x * W, y * H, r * W, draw::solid("#060607"));
-        b.add(panel, draw::with_effects(hole, vec![draw::inner_shadow("#000000", 0.0, 1.0, 2.0), draw::drop_shadow("#ffffff26", 0.0, 0.8, 0.0)]));
+        b.add(
+            panel,
+            draw::with_effects(
+                hole,
+                vec![
+                    draw::inner_shadow("#000000", 0.0, 1.0, 2.0),
+                    draw::drop_shadow("#ffffff26", 0.0, 0.8, 0.0),
+                ],
+            ),
+        );
     }
 }
 
 /// A pan-head Phillips screw, black on the black plate.
 fn screw(b: &mut Builder<'_>, panel: NodeId, (cx, cy): (f64, f64), r: f64, black: bool) {
-    let (hi, lo) = if black { ("#3a3a3d", "#050506") } else { ("#f4f4f2", "#8a8b8c") };
-    let head = draw::circle("screw", cx, cy, r, draw::radial_at(0.36, 0.3, 0.85, &[(0.0, hi), (1.0, lo)]));
-    b.add(panel, draw::with_effects(head, vec![draw::drop_shadow("#00000080", 0.0, 1.0, 1.6)]));
+    let (hi, lo) = if black {
+        ("#3a3a3d", "#050506")
+    } else {
+        ("#f4f4f2", "#8a8b8c")
+    };
+    let head = draw::circle(
+        "screw",
+        cx,
+        cy,
+        r,
+        draw::radial_at(0.36, 0.3, 0.85, &[(0.0, hi), (1.0, lo)]),
+    );
+    b.add(
+        panel,
+        draw::with_effects(head, vec![draw::drop_shadow("#00000080", 0.0, 1.0, 1.6)]),
+    );
     let cross = draw::polygon(&[
         (cx - r * 0.52, cy - r * 0.085),
         (cx - r * 0.085, cy - r * 0.085),
@@ -419,32 +619,89 @@ fn screw(b: &mut Builder<'_>, panel: NodeId, (cx, cy): (f64, f64), r: f64, black
 
 /// The late plate's two printed fields: a lighter, finer-grained grey.
 fn fields(b: &mut Builder<'_>, panel: NodeId) {
-    for (name, x0, x1, y0, y1) in [("left field", 0.072, 0.399, 0.15, 0.94), ("right field", 0.406, 0.876, 0.07, 0.94)] {
-        let r = draw::rect(name, x0 * W, y0 * H, (x1 - x0) * W, (y1 - y0) * H, draw::linear(180.0, &[(0.0, "#dcdedd8c"), (1.0, "#cfd1d08c")]));
+    for (name, x0, x1, y0, y1) in [
+        ("left field", 0.072, 0.399, 0.15, 0.94),
+        ("right field", 0.406, 0.876, 0.07, 0.94),
+    ] {
+        let r = draw::rect(
+            name,
+            x0 * W,
+            y0 * H,
+            (x1 - x0) * W,
+            (y1 - y0) * H,
+            draw::linear(180.0, &[(0.0, "#dcdedd8c"), (1.0, "#cfd1d08c")]),
+        );
         b.add(panel, draw::rounded(r, 7.0));
     }
-    b.add(panel, ink("model", "Peak Limiter", (0.30 * W, 0.085 * H), 10.5, "#26272a", (700.0, 0.10)));
+    b.add(
+        panel,
+        ink(
+            "model",
+            "Peak Limiter",
+            (0.30 * W, 0.085 * H),
+            10.5,
+            "#26272a",
+            (700.0, 0.10),
+        ),
+    );
     // The blue enamel badge at the right, blank of any maker's name.
     let (bx, by, bw, bh) = (0.944 * W, 0.5 * H, 0.03 * W, 0.075 * H);
-    let badge = draw::rect("badge", bx - bw / 2.0, by - bh / 2.0, bw, bh, draw::linear(180.0, &[(0.0, "#4f8fcf"), (1.0, "#245f9e")]));
-    b.add(panel, draw::with_effects(draw::stroked(draw::rounded(badge, 2.0), "#ffffffb3", 1.2), vec![draw::drop_shadow("#00000059", 0.0, 1.0, 1.5)]));
-    b.add(panel, ink("badge", "FET", (bx, by), 8.5, "#ffffff", (800.0, 0.12)));
+    let badge = draw::rect(
+        "badge",
+        bx - bw / 2.0,
+        by - bh / 2.0,
+        bw,
+        bh,
+        draw::linear(180.0, &[(0.0, "#4f8fcf"), (1.0, "#245f9e")]),
+    );
+    b.add(
+        panel,
+        draw::with_effects(
+            draw::stroked(draw::rounded(badge, 2.0), "#ffffffb3", 1.2),
+            vec![draw::drop_shadow("#00000059", 0.0, 1.0, 1.5)],
+        ),
+    );
+    b.add(
+        panel,
+        ink("badge", "FET", (bx, by), 8.5, "#ffffff", (800.0, 0.12)),
+    );
 }
 
 /// The early plate's blue band behind the meter, jewel and lettering.
 fn blue_band(b: &mut Builder<'_>, panel: NodeId, f: &Layout) {
     let (x0, x1) = (0.659 * W, 0.843 * W);
-    let band = kit(b, panel, "panel.section", &Place::new("Meter band").variant("fet_blue").options(&[&format!("w={}", x1 - x0), &format!("h={H}")]));
+    let band = kit(
+        b,
+        panel,
+        "panel.section",
+        &Place::new("Meter band")
+            .variant("fet_blue")
+            .options(&[&format!("w={}", x1 - x0), &format!("h={H}")]),
+    );
     if let Some(n) = b.scene.node_mut(band) {
-        n.fills = vec![draw::linear(90.0, &[(0.0, "#1f6a92"), (0.5, "#2675a0"), (1.0, "#1f6a92")])];
+        n.fills = vec![draw::linear(
+            90.0,
+            &[(0.0, "#1f6a92"), (0.5, "#2675a0"), (1.0, "#1f6a92")],
+        )];
     }
     move_to(b, band, x0, 0.0);
     for x in [0.0, x1 - x0 - 1.0] {
-        b.add(band, draw::rect("seam", x, 0.0, 1.0, H, draw::solid("#0000004d")));
+        b.add(
+            band,
+            draw::rect("seam", x, 0.0, 1.0, H, draw::solid("#0000004d")),
+        );
     }
     // The pilot jewel: the power switch, lit when on.
     let d = 0.018 * W;
-    let jewel = kit(b, band, "button.jewel", &Place::new("Power").size(d).variant("red").bind(Binding::param(POWER)));
+    let jewel = kit(
+        b,
+        band,
+        "button.jewel",
+        &Place::new("Power")
+            .size(d)
+            .variant("red")
+            .bind(Binding::param(POWER)),
+    );
     move_to(b, jewel, 0.75 * W - x0 - d / 2.0, 0.15 * H - d / 2.0);
     let _ = f;
 }
@@ -464,7 +721,12 @@ fn gr_meter(b: &mut Builder<'_>, panel: NodeId, f: &Layout, w: f64) -> NodeId {
             // on its +8 or +4 range, or off (at rest).
             .select(SourceSelect::new(
                 METER_SRC,
-                vec![Some(MeterTap::new(GR)), Some(MeterTap::new(OUT_LEVEL).offset(-8.0)), Some(MeterTap::new(OUT_LEVEL).offset(-4.0)), None],
+                vec![
+                    Some(MeterTap::new(GR)),
+                    Some(MeterTap::new(OUT_LEVEL).offset(-8.0)),
+                    Some(MeterTap::new(OUT_LEVEL).offset(-4.0)),
+                    None,
+                ],
             )),
     )
 }
@@ -474,12 +736,52 @@ fn gr_meter(b: &mut Builder<'_>, panel: NodeId, f: &Layout, w: f64) -> NodeId {
 fn lettering(b: &mut Builder<'_>, panel: NodeId, f: &Layout, (cx, bottom): (f64, f64)) {
     match f.plate {
         Plate::Black => {
-            b.add(panel, ink("model", "Peak Limiter", (cx, 0.835 * H), 9.5, f.ink, (700.0, 0.32)));
-            b.add(panel, ink("maker", "Limiting Amplifier", (cx, 0.925 * H), 13.5, f.ink, (800.0, 0.06)));
+            b.add(
+                panel,
+                ink(
+                    "model",
+                    "Peak Limiter",
+                    (cx, 0.835 * H),
+                    9.5,
+                    f.ink,
+                    (700.0, 0.32),
+                ),
+            );
+            b.add(
+                panel,
+                ink(
+                    "maker",
+                    "Limiting Amplifier",
+                    (cx, 0.925 * H),
+                    13.5,
+                    f.ink,
+                    (800.0, 0.06),
+                ),
+            );
         }
         Plate::Silver => {
-            b.add(panel, ink("model", "Limiting Amplifier", (cx, 0.815 * H), 8.5, "#e6f0f5", (600.0, 0.30)));
-            b.add(panel, ink("maker", "Peak Limiter", (cx, 0.9 * H), 13.0, "#ffffff", (800.0, 0.05)));
+            b.add(
+                panel,
+                ink(
+                    "model",
+                    "Limiting Amplifier",
+                    (cx, 0.815 * H),
+                    8.5,
+                    "#e6f0f5",
+                    (600.0, 0.30),
+                ),
+            );
+            b.add(
+                panel,
+                ink(
+                    "maker",
+                    "Peak Limiter",
+                    (cx, 0.9 * H),
+                    13.0,
+                    "#ffffff",
+                    (800.0, 0.05),
+                ),
+            );
         }
         Plate::Late => {}
     }

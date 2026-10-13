@@ -237,18 +237,27 @@ mod attack_law_tests {
     #[test]
     fn snare_ring_450hz_30pct_pins_to_the_law() {
         let ms = attack_ms_for(450.0, 30.0);
-        assert!((ms - 0.382_0).abs() < 0.001, "expected ~0.3820 ms, got {ms}");
+        assert!(
+            (ms - 0.382_0).abs() < 0.001,
+            "expected ~0.3820 ms, got {ms}"
+        );
     }
 
     #[test]
     fn lowest_cymbal_3500hz_95pct_pins_to_the_law() {
         let ms = attack_ms_for(3500.0, 95.0);
-        assert!((ms - 3.565_2).abs() < 0.001, "expected ~3.5652 ms, got {ms}");
+        assert!(
+            (ms - 3.565_2).abs() < 0.001,
+            "expected ~3.5652 ms, got {ms}"
+        );
     }
 
     #[test]
     fn highest_cymbal_6500hz_95pct_pins_to_the_law() {
         let ms = attack_ms_for(6500.0, 95.0);
-        assert!((ms - 3.419_2).abs() < 0.001, "expected ~3.4192 ms, got {ms}");
+        assert!(
+            (ms - 3.419_2).abs() < 0.001,
+            "expected ~3.4192 ms, got {ms}"
+        );
     }
 }

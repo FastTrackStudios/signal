@@ -5,7 +5,7 @@
 
 use formats::protools::read_session;
 
-const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
+const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/protools");
 
 fn fixture_path(name: &str) -> String {
     format!("{FIXTURES}/{name}")

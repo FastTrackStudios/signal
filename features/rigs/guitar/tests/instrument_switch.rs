@@ -27,19 +27,31 @@ fn the_rig_switches_between_the_guitar_and_the_bass() {
     rig.open_blocking();
     assert_eq!(Rig::perf(&rig).instrument, "guitar");
     let guitar = stacks(&rig);
-    assert!(guitar.iter().any(|s| s == "Lead"), "the guitar's Worship: {guitar:?}");
+    assert!(
+        guitar.iter().any(|s| s == "Lead"),
+        "the guitar's Worship: {guitar:?}"
+    );
 
     // To the bass: its own library, its own stacks.
     Rig::set_instrument(&rig, "bass".into());
     let perf = Rig::perf(&rig);
     assert_eq!(perf.instrument, "bass");
     assert_eq!(perf.profile_name, "Worship");
-    assert_eq!(stacks(&rig), ["Clean", "Crunch", "Drive", "Synth", "Fuzz", "Ambient"]);
-    assert!(!Rig::chain(&rig).is_empty(), "the bass's chain is on screen");
+    assert_eq!(
+        stacks(&rig),
+        ["Clean", "Crunch", "Drive", "Synth", "Fuzz", "Ambient"]
+    );
+    assert!(
+        !Rig::chain(&rig).is_empty(),
+        "the bass's chain is on screen"
+    );
     // The bass's chain: no Pre-FX, no Motion — Modulation and Time kept.
     let names: Vec<String> = Rig::chain(&rig).into_iter().map(|b| b.name).collect();
     for gone in ["Pre Verb", "Pre Delay", "Tremolo", "Rotary"] {
-        assert!(!names.iter().any(|n| n == gone), "{gone} on a bass: {names:?}");
+        assert!(
+            !names.iter().any(|n| n == gone),
+            "{gone} on a bass: {names:?}"
+        );
     }
     for kept in ["Chorus", "DLY 1", "VERB 1"] {
         assert!(names.iter().any(|n| n == kept), "{kept} kept: {names:?}");
@@ -47,22 +59,53 @@ fn the_rig_switches_between_the_guitar_and_the_bass() {
     // It opens on the profile, its fifth switch the fifth stack.
     let perf = Rig::perf(&rig);
     assert_eq!(perf.perform_mode, 1, "the bass opens in Profile mode");
-    assert_eq!(perf.switch_actions.get(4).map(String::as_str), Some("stack"), "switch 5 is the fifth stack");
+    assert_eq!(
+        perf.switch_actions.get(4).map(String::as_str),
+        Some("stack"),
+        "switch 5 is the fifth stack"
+    );
     // Nothing of the guitar's carried over: every stack shows the bass's own
     // patches.
     // (A patch named like its stack shows as "Default".)
-    let bass_patches = ["Amp", "DI", "Crunch", "Drive", "Moog", "Env", "Fuzz", "Ambient", "Default"];
-    let all: Vec<String> = Rig::perf(&rig).stacks.iter().map(|s| format!("{}: {} {:?}", s.name, s.current_patch, s.patches)).collect();
+    let bass_patches = [
+        "Amp", "DI", "Crunch", "Drive", "Moog", "Env", "Fuzz", "Ambient", "Default",
+    ];
+    let all: Vec<String> = Rig::perf(&rig)
+        .stacks
+        .iter()
+        .map(|s| format!("{}: {} {:?}", s.name, s.current_patch, s.patches))
+        .collect();
     for st in Rig::perf(&rig).stacks {
-        assert!(bass_patches.contains(&st.current_patch.as_str()), "{}: a guitar patch carried over: {} — {all:?}", st.name, st.current_patch);
+        assert!(
+            bass_patches.contains(&st.current_patch.as_str()),
+            "{}: a guitar patch carried over: {} — {all:?}",
+            st.name,
+            st.current_patch
+        );
         for p in &st.patches {
-            assert!(bass_patches.contains(&p.as_str()), "{}: a guitar patch carried over: {p}", st.name);
+            assert!(
+                bass_patches.contains(&p.as_str()),
+                "{}: a guitar patch carried over: {p}",
+                st.name
+            );
         }
     }
     let config = root.join("xdg/signal");
-    assert!(config.join("bass-rig/profiles").is_dir(), "the bass's library is its own directory");
-    assert!(config.join("bass-rig/models/AGS Med- AGS. Gain 5, Bass 5, Mid 5, Treble 5.nam").is_file(), "its captures seeded");
-    assert_eq!(std::fs::read_to_string(config.join("instrument")).unwrap(), "bass", "remembered for next time");
+    assert!(
+        config.join("bass-rig/profiles").is_dir(),
+        "the bass's library is its own directory"
+    );
+    assert!(
+        config
+            .join("bass-rig/models/AGS Med- AGS. Gain 5, Bass 5, Mid 5, Treble 5.nam")
+            .is_file(),
+        "its captures seeded"
+    );
+    assert_eq!(
+        std::fs::read_to_string(config.join("instrument")).unwrap(),
+        "bass",
+        "remembered for next time"
+    );
 
     // And back: the guitar as it was.
     Rig::set_instrument(&rig, "guitar".into());

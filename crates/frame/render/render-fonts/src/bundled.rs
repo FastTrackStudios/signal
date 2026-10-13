@@ -134,7 +134,11 @@ pub static BUNDLED: &[BundledFamily] = &[
         weights: (400, 700),
         widths: (100, 100),
         italic: true,
-        files: &[font!("dseg/DSEG14Classic-Regular.ttf"), font!("dseg/DSEG14Classic-Bold.ttf"), font!("dseg/DSEG14Classic-Italic.ttf")],
+        files: &[
+            font!("dseg/DSEG14Classic-Regular.ttf"),
+            font!("dseg/DSEG14Classic-Bold.ttf"),
+            font!("dseg/DSEG14Classic-Italic.ttf"),
+        ],
     },
     BundledFamily {
         name: "Doto",

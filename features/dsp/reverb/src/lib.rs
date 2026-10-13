@@ -33,7 +33,6 @@ pub mod profiles;
 pub mod ui;
 pub use crate as dsp;
 
-
 pub mod algorithm;
 pub mod algorithms;
 pub mod analysis;

@@ -64,9 +64,11 @@ impl Expr {
                 Some(Some(false)) => args.get(2).map_or(Value::Missing, |a| a.eval(scope)),
                 _ => Value::Missing,
             },
-            Expr::Call(Func::Or, args) => {
-                args.iter().map(|a| a.eval(scope)).find(|v| !v.is_missing()).unwrap_or(Value::Missing)
-            }
+            Expr::Call(Func::Or, args) => args
+                .iter()
+                .map(|a| a.eval(scope))
+                .find(|v| !v.is_missing())
+                .unwrap_or(Value::Missing),
             Expr::Call(f, args) => {
                 let vals: Vec<Value> = args.iter().map(|a| a.eval(scope)).collect();
                 f.apply(&vals)
@@ -111,7 +113,9 @@ fn binary(op: BinOp, a: &Expr, b: &Expr, scope: &dyn Scope) -> Value {
         }
         _ => {}
     }
-    let (Some(x), Some(y)) = (a.num(), b.num()) else { return Value::Missing };
+    let (Some(x), Some(y)) = (a.num(), b.num()) else {
+        return Value::Missing;
+    };
     match op {
         BinOp::Add => Value::Num(x + y),
         BinOp::Sub => Value::Num(x - y),

@@ -9,15 +9,15 @@
 
 use std::fmt::Write;
 
-use dioxus::prelude::*;
-use midicore_proto::MidiEvent;
-use midicore_ui::MidiMonitorPanel;
-use signal_proto::tagging::{StructuredTag, TagCategory, TagSet};
 use crate::proto::synth::{SynthEvent, SynthRigClient, SynthRigStreamClient};
 use crate::proto::{
     BrowseItem, SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer, SynthMapping, SynthNode,
     SynthPreset, SynthStatus, SynthZone,
 };
+use dioxus::prelude::*;
+use midicore_proto::MidiEvent;
+use midicore_ui::MidiMonitorPanel;
+use signal_proto::tagging::{StructuredTag, TagCategory, TagSet};
 use signal_ui::components::Piano;
 
 /// Which top-level view the remote is showing.

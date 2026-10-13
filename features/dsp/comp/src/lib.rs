@@ -27,7 +27,6 @@ pub mod profiles;
 pub mod ui;
 pub use crate as dsp;
 
-
 pub mod components;
 pub mod model;
 pub use model::{
@@ -57,7 +56,6 @@ pub use styles::{CompressionStyle, StyleCoefficients};
 
 pub mod pro_c;
 pub use pro_c::{CHANNELS, ProC3Compressor};
-
 
 // ── from the comp facade ──
 /// Limiter engine surface for the FTS Limiter shell (`apps/plugins/limiter`).

@@ -16,9 +16,25 @@ pub const MENU_W: f64 = 300.0;
 pub enum Item {
     Head(String),
     Sep,
-    Run { id: String, label: String, detail: String, disabled: Option<String>, checked: bool },
-    Name { id: String, label: String, initial: String, confirm: String, taken: Vec<String> },
-    Delete { id: String, label: String, disabled: Option<String> },
+    Run {
+        id: String,
+        label: String,
+        detail: String,
+        disabled: Option<String>,
+        checked: bool,
+    },
+    Name {
+        id: String,
+        label: String,
+        initial: String,
+        confirm: String,
+        taken: Vec<String>,
+    },
+    Delete {
+        id: String,
+        label: String,
+        disabled: Option<String>,
+    },
 }
 
 impl Item {
@@ -26,13 +42,35 @@ impl Item {
         Self::Head(label.into())
     }
     pub fn run(id: impl Into<String>, label: impl Into<String>) -> Self {
-        Self::Run { id: id.into(), label: label.into(), detail: String::new(), disabled: None, checked: false }
+        Self::Run {
+            id: id.into(),
+            label: label.into(),
+            detail: String::new(),
+            disabled: None,
+            checked: false,
+        }
     }
-    pub fn name(id: impl Into<String>, label: impl Into<String>, initial: impl Into<String>, confirm: impl Into<String>, taken: Vec<String>) -> Self {
-        Self::Name { id: id.into(), label: label.into(), initial: initial.into(), confirm: confirm.into(), taken }
+    pub fn name(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        initial: impl Into<String>,
+        confirm: impl Into<String>,
+        taken: Vec<String>,
+    ) -> Self {
+        Self::Name {
+            id: id.into(),
+            label: label.into(),
+            initial: initial.into(),
+            confirm: confirm.into(),
+            taken,
+        }
     }
     pub fn delete(id: impl Into<String>, label: impl Into<String>) -> Self {
-        Self::Delete { id: id.into(), label: label.into(), disabled: None }
+        Self::Delete {
+            id: id.into(),
+            label: label.into(),
+            disabled: None,
+        }
     }
     #[must_use]
     pub fn detail(mut self, d: impl Into<String>) -> Self {
@@ -67,31 +105,62 @@ pub struct Picked {
 }
 
 /// Open `items` with the menu's top-left at client `(x, y)`.
-pub fn open_menu(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, on_pick: EventHandler<Picked>) {
+pub fn open_menu(
+    host: Option<PopupHost>,
+    x: f64,
+    y: f64,
+    items: Vec<Item>,
+    on_pick: EventHandler<Picked>,
+) {
     open_at(host, x, y, None, items, None, on_pick, || {});
 }
 
 /// Open `items` under an opener whose top is at `above`: below it when the
 /// menu fits there, else above it — never over it.
-pub fn open_menu_by(host: Option<PopupHost>, x: f64, y: f64, above: f64, items: Vec<Item>, on_pick: EventHandler<Picked>) {
+pub fn open_menu_by(
+    host: Option<PopupHost>,
+    x: f64,
+    y: f64,
+    above: f64,
+    items: Vec<Item>,
+    on_pick: EventHandler<Picked>,
+) {
     open_at(host, x, y, Some(above), items, None, on_pick, || {});
 }
 
 /// As [`open_menu`], with `on_close` run however it closes — for an opener
 /// that shows itself open while its menu is.
-pub fn open_menu_closing(host: Option<PopupHost>, x: f64, y: f64, items: Vec<Item>, on_pick: EventHandler<Picked>, on_close: impl Fn() + 'static) {
+pub fn open_menu_closing(
+    host: Option<PopupHost>,
+    x: f64,
+    y: f64,
+    items: Vec<Item>,
+    on_pick: EventHandler<Picked>,
+    on_close: impl Fn() + 'static,
+) {
     open_at(host, x, y, None, items, None, on_pick, on_close);
 }
 
 /// Open straight into naming: a "+ Add…" button's field, its name filled
 /// in, without the one-item menu in front of it.
-pub fn open_naming(host: Option<PopupHost>, x: f64, y: f64, item: Item, on_pick: EventHandler<Picked>) {
+pub fn open_naming(
+    host: Option<PopupHost>,
+    x: f64,
+    y: f64,
+    item: Item,
+    on_pick: EventHandler<Picked>,
+) {
     open_at(host, x, y, None, vec![item], Some(0), on_pick, || {});
 }
 
 /// Open straight into naming, anchored under `el` as a ⋯ menu is: its
 /// right edge at the element's, 4pt below it — a "+ Add…" row's field.
-pub fn open_naming_under(host: Option<PopupHost>, el: Option<std::rc::Rc<MountedData>>, item: Item, on_pick: EventHandler<Picked>) {
+pub fn open_naming_under(
+    host: Option<PopupHost>,
+    el: Option<std::rc::Rc<MountedData>>,
+    item: Item,
+    on_pick: EventHandler<Picked>,
+) {
     let Some(el) = el else { return };
     spawn(async move {
         if let Ok(r) = el.get_client_rect().await {
@@ -105,18 +174,35 @@ fn window_size() -> (f64, f64) {
     try_consume_context::<crate::ui::control::WindowSize>().map_or((0.0, 0.0), |s| *s.0.peek())
 }
 
-fn open_at(host: Option<PopupHost>, x: f64, y: f64, above: Option<f64>, items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>, on_close: impl Fn() + 'static) {
+fn open_at(
+    host: Option<PopupHost>,
+    x: f64,
+    y: f64,
+    above: Option<f64>,
+    items: Vec<Item>,
+    start: Option<usize>,
+    on_pick: EventHandler<Picked>,
+    on_close: impl Fn() + 'static,
+) {
     let Some(host) = host else { return };
     if items.is_empty() {
         return;
     }
     // Keep it on screen: left of the point when it would run off the right.
     let (w, h) = window_size();
-    let x = if w > 0.0 && x + MENU_W > w - 8.0 { (x - MENU_W).max(8.0) } else { x };
+    let x = if w > 0.0 && x + MENU_W > w - 8.0 {
+        (x - MENU_W).max(8.0)
+    } else {
+        x
+    };
     // And above the point when it would run off the bottom (a menu opened
     // from the foot bar): its height estimated from its rows — above its
     // opener when there is one, so the menu never covers what opened it.
-    let tall = items.iter().map(|i| if matches!(i, Item::Sep) { 9.0 } else { 50.0 }).sum::<f64>() + 10.0;
+    let tall = items
+        .iter()
+        .map(|i| if matches!(i, Item::Sep) { 9.0 } else { 50.0 })
+        .sum::<f64>()
+        + 10.0;
     let y = if h > 0.0 && y + tall > h - 8.0 {
         match above {
             Some(top) => (top - 6.0 - tall).max(8.0),
@@ -173,7 +259,12 @@ pub fn MoreButton(label: String, items: Vec<Item>, on_pick: EventHandler<Picked>
 /// The menu's contents: its items, or — once a naming item is chosen — the
 /// name field in their place.
 #[component]
-fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>, on_close: EventHandler<()>) -> Element {
+fn MenuPanel(
+    items: Vec<Item>,
+    start: Option<usize>,
+    on_pick: EventHandler<Picked>,
+    on_close: EventHandler<()>,
+) -> Element {
     let initial = start.and_then(|i| match items.get(i) {
         Some(Item::Name { initial, .. }) => Some(initial.clone()),
         _ => None,
@@ -188,28 +279,46 @@ fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picke
     let place = move |e: MountedEvent| {
         let el = e.data();
         spawn(async move {
-            let Ok(r) = el.get_client_rect().await else { return };
+            let Ok(r) = el.get_client_rect().await else {
+                return;
+            };
             if win_h <= 0.0 {
                 return;
             }
             let top = r.min_y() + *lift.peek();
             let bottom = top + r.height();
-            let up = if bottom > win_h - 8.0 { (bottom - (win_h - 8.0)).min(top - 8.0).max(0.0) } else { 0.0 };
+            let up = if bottom > win_h - 8.0 {
+                (bottom - (win_h - 8.0)).min(top - 8.0).max(0.0)
+            } else {
+                0.0
+            };
             if (*lift.peek() - up).abs() > 0.5 {
                 lift.set(up);
             }
         });
     };
-    let max_h = if win_h > 0.0 { format!("{}px", win_h - 16.0) } else { "70vh".to_string() };
+    let max_h = if win_h > 0.0 {
+        format!("{}px", win_h - 16.0)
+    } else {
+        "70vh".to_string()
+    };
     let panel = format!(
         "position: relative; top: {}px; width: {MENU_W}px; max-height: {max_h}; overflow-y: auto; padding: 4px; box-sizing: border-box; background: {SHEET_2}; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; font-family: {FONT}; color: {INK};",
         -lift()
     );
     if let Some(i) = naming()
-        && let Some(Item::Name { id, label, initial, confirm, taken }) = items.get(i).cloned()
+        && let Some(Item::Name {
+            id,
+            label,
+            initial,
+            confirm,
+            taken,
+        }) = items.get(i).cloned()
     {
         let typed = text();
-        let clash = taken.iter().any(|t| t.eq_ignore_ascii_case(typed.trim()) && *t != initial);
+        let clash = taken
+            .iter()
+            .any(|t| t.eq_ignore_ascii_case(typed.trim()) && *t != initial);
         let ok = !typed.trim().is_empty() && !clash;
         let title = label.trim_end_matches('…').to_string();
         let commit = {
@@ -219,7 +328,10 @@ fn MenuPanel(items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picke
                 if t.is_empty() {
                     return;
                 }
-                on_pick.call(Picked { id: id.clone(), text: t });
+                on_pick.call(Picked {
+                    id: id.clone(),
+                    text: t,
+                });
                 on_close.call(());
             }
         };
@@ -349,7 +461,13 @@ fn row(armed: bool) -> String {
 /// it at once). Moving more than 10pt or lifting first lets the press be an
 /// ordinary tap. `off`: no long press (a list being reordered).
 #[component]
-pub fn PressMenu(items: Vec<Item>, on_pick: EventHandler<Picked>, style: String, #[props(default)] off: bool, children: Element) -> Element {
+pub fn PressMenu(
+    items: Vec<Item>,
+    on_pick: EventHandler<Picked>,
+    style: String,
+    #[props(default)] off: bool,
+    children: Element,
+) -> Element {
     let host = PopupHost::try_use();
     // Bumped on every press and every release: a press's timer opens the
     // menu only if nothing came after it.

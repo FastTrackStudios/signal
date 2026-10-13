@@ -21,8 +21,8 @@
 use std::io::Write;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use signal_rig_host::lock::LockExt;
 use sampler::{DropEvent, DropKind, clock_ns};
+use signal_rig_host::lock::LockExt;
 
 /// How long after a switch its drops are counted for its summary.
 const WINDOW_NS: u64 = 10_000_000_000;

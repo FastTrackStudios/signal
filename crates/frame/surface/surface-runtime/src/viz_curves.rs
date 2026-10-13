@@ -41,9 +41,20 @@ pub const DIVISIONS: [(&str, f64); 11] = [
 /// The delay families, in the shader's order.
 pub const DELAY_FAMILIES: [&str; 6] = ["Digital", "Tape", "Analog", "Pitch", "Rhythmic", "Special"];
 /// The reverb families, in the shader's order.
-pub const REVERB_FAMILIES: [&str; 8] = ["Room", "Hall", "Plate", "Spring", "Ambient", "Random", "Special", "Convolution"];
+pub const REVERB_FAMILIES: [&str; 8] = [
+    "Room",
+    "Hall",
+    "Plate",
+    "Spring",
+    "Ambient",
+    "Random",
+    "Special",
+    "Convolution",
+];
 /// The modulation engines, in the shader's order.
-pub const MOD_ENGINES: [&str; 6] = ["Chorus", "Flanger", "Phaser", "Tremolo", "Vibrato", "Rotary"];
+pub const MOD_ENGINES: [&str; 6] = [
+    "Chorus", "Flanger", "Phaser", "Tremolo", "Vibrato", "Rotary",
+];
 
 /// The most taps a delay lane carries (processor's `MAX_TAPS`).
 pub const MAX_TAPS: usize = 32;
@@ -120,7 +131,9 @@ pub struct DelayLane {
 /// Division index → multiple of a quarter (0 = free).
 #[must_use]
 pub fn div_factor(index: f64) -> f64 {
-    DIVISIONS.get(index.max(0.0).round() as usize).map_or(0.0, |d| d.1)
+    DIVISIONS
+        .get(index.max(0.0).round() as usize)
+        .map_or(0.0, |d| d.1)
 }
 
 /// The taps a stereo delay makes (signal's rig lane): each side repeats at
@@ -140,7 +153,10 @@ pub fn delay_lane(inputs: &CurveInputs) -> DelayLane {
         let f = div_factor(div);
         if f > 0.0 { quarter * f } else { time }
     };
-    let (t_l, t_r) = (side(inputs.or("tap_div_l", 7.0)), side(inputs.or("tap_div_r", 7.0)));
+    let (t_l, t_r) = (
+        side(inputs.or("tap_div_l", 7.0)),
+        side(inputs.or("tap_div_r", 7.0)),
+    );
     let stems = |side_t: f64, up: bool| {
         let mut out = Vec::new();
         let (mut amp, mut t) = (mix, side_t);
@@ -156,10 +172,20 @@ pub fn delay_lane(inputs: &CurveInputs) -> DelayLane {
     raw.truncate(MAX_TAPS);
     let peak = raw.iter().map(|t| t.1).fold(0.0_f64, f64::max);
     let scale = if peak > f64::EPSILON { 1.0 / peak } else { 1.0 };
-    let taps: Vec<Tap> =
-        raw.iter().map(|(t, amp, up)| Tap { at: t / 1000.0, level: (amp * scale).clamp(0.0, 1.0), pan: if *up { -0.8 } else { 0.8 } }).collect();
+    let taps: Vec<Tap> = raw
+        .iter()
+        .map(|(t, amp, up)| Tap {
+            at: t / 1000.0,
+            level: (amp * scale).clamp(0.0, 1.0),
+            pan: if *up { -0.8 } else { 0.8 },
+        })
+        .collect();
     let beat = quarter / 1000.0;
-    DelayLane { window: window_for(&taps, win_ms / 1000.0, beat), taps, beat }
+    DelayLane {
+        window: window_for(&taps, win_ms / 1000.0, beat),
+        taps,
+        beat,
+    }
 }
 
 /// Seconds of lane the taps need: a beat of air after the last, whole
@@ -186,7 +212,13 @@ pub fn delay_taps(inputs: &CurveInputs) -> Vec<Series> {
     let lane = delay_lane(inputs);
     let on = inputs.or("on", 1.0) >= 0.5;
     let window = lane.window.max(0.05);
-    let side = |left: bool| lane.taps.iter().filter(|t| (t.pan < 0.0) == left).map(|t| (t.at, t.level)).collect::<Vec<_>>();
+    let side = |left: bool| {
+        lane.taps
+            .iter()
+            .filter(|t| (t.pan < 0.0) == left)
+            .map(|t| (t.at, t.level))
+            .collect::<Vec<_>>()
+    };
     let (beats, bars) = beat_lines(window, lane.beat);
 
     // The tail's envelope, as processor's fallback draws it: through the
@@ -194,7 +226,11 @@ pub fn delay_taps(inputs: &CurveInputs) -> Vec<Series> {
     let env = |dir: f64| {
         let mut pts = vec![(0.0, 0.5)];
         if lane.taps.len() > 1 {
-            pts.extend(lane.taps.iter().map(|t| (t.at / window, 0.5 + dir * t.level * 0.42)));
+            pts.extend(
+                lane.taps
+                    .iter()
+                    .map(|t| (t.at / window, 0.5 + dir * t.level * 0.42)),
+            );
         }
         pts.push((1.0, 0.5));
         if lane.taps.len() > 1 { pts } else { Vec::new() }
@@ -240,7 +276,11 @@ pub fn delay_taps(inputs: &CurveInputs) -> Vec<Series> {
         for t in &lane.taps {
             let since = (h - t.at / window + 1.0).rem_euclid(1.0);
             let over = beat / cycle;
-            let hit = if since < over { (1.0 - since / over).powi(3) } else { 0.0 };
+            let hit = if since < over {
+                (1.0 - since / over).powi(3)
+            } else {
+                0.0
+            };
             if hit > 0.2 {
                 let ang = (t.pan.clamp(-1.0, 1.0) * 0.5 + 0.5) * FRAC_PI_2;
                 for (gain, dir) in [(ang.cos(), 1.0), (ang.sin(), -1.0)] {
@@ -318,7 +358,12 @@ pub fn reverb_tail(inputs: &CurveInputs) -> Vec<Series> {
         let at = t.powf(0.55) * 0.45;
         let x = pre + at * (1.0 - pre);
         let alpha = 0.5 * (1.0 - t).max(0.06);
-        seg(&mut refl[bucket(alpha / 0.5)], x, amp_at(at * window) * 0.88, 0.0);
+        seg(
+            &mut refl[bucket(alpha / 0.5)],
+            x,
+            amp_at(at * window) * 0.88,
+            0.0,
+        );
     }
 
     // The shimmer riding the tail, once a bar: its head (by brightness)
@@ -343,7 +388,11 @@ pub fn reverb_tail(inputs: &CurveInputs) -> Vec<Series> {
             }
         }
     }
-    let pre_rect = if pre > 0.002 { vec![(0.0, 1.0), (pre, 1.0)] } else { Vec::new() };
+    let pre_rect = if pre > 0.002 {
+        vec![(0.0, 1.0), (pre, 1.0)]
+    } else {
+        Vec::new()
+    };
     let [r0, r1, r2] = refl;
     vec![
         Series::new("beats", beats),
@@ -385,7 +434,8 @@ pub fn mod_lfo(inputs: &CurveInputs) -> Vec<Series> {
             for i in 0..teeth {
                 let x = (f64::from(i) + 0.5) / f64::from(teeth);
                 let f = f64::from(i) / f64::from(teeth);
-                let comb = ((f * (4.0 + 12.0 * sweep) * TAU).cos() * 0.5 + 0.5).powf(1.0 + 2.0 * depth);
+                let comb =
+                    ((f * (4.0 + 12.0 * sweep) * TAU).cos() * 0.5 + 0.5).powf(1.0 + 2.0 * depth);
                 let height = comb * 0.82;
                 let half = 0.35 / f64::from(teeth);
                 let dst = if comb > 0.82 {
@@ -438,7 +488,8 @@ pub fn mod_lfo(inputs: &CurveInputs) -> Vec<Series> {
             for px in 0..=200 {
                 let x = f64::from(px) / 200.0;
                 let bend = depth * 0.5 * ((x * 2.0 - phase) * TAU).sin();
-                s.mid.push((x, up(0.5 + ((x * 26.0 + bend * 6.0) * TAU).sin() * 0.36)));
+                s.mid
+                    .push((x, up(0.5 + ((x * 26.0 + bend * 6.0) * TAU).sin() * 0.36)));
             }
             for i in 1..8 {
                 let x0 = f64::from(i) / 8.0;
@@ -463,7 +514,8 @@ pub fn mod_lfo(inputs: &CurveInputs) -> Vec<Series> {
                 let alpha = (1.0 - back / 1.05) * 0.5 * front;
                 s.trail[bucket(alpha / 0.5)].push((0.5 + a.cos() * rx, up(0.5 + a.sin() * ry)));
             }
-            s.dots_bright.push((0.5 + head.cos() * rx, up(0.5 + head.sin() * ry)));
+            s.dots_bright
+                .push((0.5 + head.cos() * rx, up(0.5 + head.sin() * ry)));
         }
         _ => {
             // Chorus: detuned copies drifting around the dry and back.
@@ -540,7 +592,8 @@ pub fn eq_bands(inputs: &CurveInputs) -> Vec<Series> {
     let bands = (1..=24)
         .filter_map(|n| {
             let freq = inputs.get(&format!("b{n}_freq"))?;
-            let on = inputs.or(&format!("b{n}_on"), 1.0) >= 0.5 && inputs.or(&format!("b{n}_used"), 1.0) >= 0.5;
+            let on = inputs.or(&format!("b{n}_on"), 1.0) >= 0.5
+                && inputs.or(&format!("b{n}_used"), 1.0) >= 0.5;
             on.then(|| (freq, inputs.or(&format!("b{n}_gain"), 0.0)))
         })
         .collect();
@@ -568,7 +621,11 @@ pub fn eq_grid(inputs: &CurveInputs) -> Vec<Series> {
     let mut db = -span;
     while db <= span + 1e-9 {
         let y = 0.5 + db / (2.0 * span);
-        let line = if db.abs() < 0.01 { &mut zero } else { &mut minor };
+        let line = if db.abs() < 0.01 {
+            &mut zero
+        } else {
+            &mut minor
+        };
         line.extend([(0.0, y), (1.0, y), gap_at(1.0)]);
         db += step;
     }
@@ -586,24 +643,53 @@ mod tests {
 
     #[test]
     fn a_quarter_note_delay_puts_its_taps_on_the_beats() {
-        let lane = delay_lane(&args().with("bpm", 120.0).with("tap_div_l", 0.0).with("tap_div_r", 0.0).with("feedback", 0.5).with("mix", 1.0));
+        let lane = delay_lane(
+            &args()
+                .with("bpm", 120.0)
+                .with("tap_div_l", 0.0)
+                .with("tap_div_r", 0.0)
+                .with("feedback", 0.5)
+                .with("mix", 1.0),
+        );
         assert!((lane.beat - 0.5).abs() < 1e-9);
-        let left: Vec<f64> = lane.taps.iter().filter(|t| t.pan < 0.0).map(|t| t.at).collect();
+        let left: Vec<f64> = lane
+            .taps
+            .iter()
+            .filter(|t| t.pan < 0.0)
+            .map(|t| t.at)
+            .collect();
         assert_eq!(left[..3], [0.5, 1.0, 1.5]);
-        assert!((lane.taps[0].level - 1.0).abs() < 1e-9, "scaled to the loudest");
-        assert!((lane.window / lane.beat).fract().abs() < 1e-9, "whole beats");
+        assert!(
+            (lane.taps[0].level - 1.0).abs() < 1e-9,
+            "scaled to the loudest"
+        );
+        assert!(
+            (lane.window / lane.beat).fract().abs() < 1e-9,
+            "whole beats"
+        );
     }
 
     #[test]
     fn a_long_tail_is_capped_at_the_shader_array() {
-        let lane = delay_lane(&args().with("delay_ms", 40.0).with("feedback", 0.95).with("mix", 1.0));
+        let lane = delay_lane(
+            &args()
+                .with("delay_ms", 40.0)
+                .with("feedback", 0.95)
+                .with("mix", 1.0),
+        );
         assert!(lane.taps.len() <= MAX_TAPS);
     }
 
     #[test]
     fn the_delay_playhead_needs_the_lane_on() {
         let s = delay_taps(&args().with("time", 0.3).with("on", 0.0));
-        assert!(s.iter().find(|s| s.name == "head").unwrap().points.is_empty());
+        assert!(
+            s.iter()
+                .find(|s| s.name == "head")
+                .unwrap()
+                .points
+                .is_empty()
+        );
         let s = delay_taps(&args().with("time", 0.3));
         assert_eq!(s.iter().find(|s| s.name == "head").unwrap().points.len(), 2);
     }
@@ -630,13 +716,27 @@ mod tests {
         // ±12: every 3 dB, less 0 → 8 minor lines.
         assert_eq!(lines(&eq_grid(&args().with("db_range", 12.0))), 8);
         // ±6 picked by index: every 2 dB → 6.
-        assert_eq!(lines(&eq_grid(&args().with("range", 1.0).with("span_0", 3.0).with("span_1", 6.0))), 6);
+        assert_eq!(
+            lines(&eq_grid(
+                &args()
+                    .with("range", 1.0)
+                    .with("span_0", 3.0)
+                    .with("span_1", 6.0)
+            )),
+            6
+        );
         assert_eq!(eq_grid(&args())[1].points[0].1, 0.5);
     }
 
     #[test]
     fn eq_bands_skip_disabled_ones() {
-        let s = eq_bands(&args().with("b1_freq", 100.0).with("b1_gain", 3.0).with("b2_freq", 1000.0).with("b2_on", 0.0));
+        let s = eq_bands(
+            &args()
+                .with("b1_freq", 100.0)
+                .with("b1_gain", 3.0)
+                .with("b2_freq", 1000.0)
+                .with("b2_on", 0.0),
+        );
         assert_eq!(s[0].points, vec![(100.0, 3.0)]);
     }
 }

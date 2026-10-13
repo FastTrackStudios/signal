@@ -14,9 +14,12 @@ const BLUE: [u8; 4] = [0, 0, 255, 255];
 
 /// A `w × h` PNG of red and blue pixels in a checkerboard.
 fn checker_png(w: u32, h: u32) -> Vec<u8> {
-    let img = image::RgbaImage::from_fn(w, h, |x, y| image::Rgba(if (x + y) % 2 == 0 { RED } else { BLUE }));
+    let img = image::RgbaImage::from_fn(w, h, |x, y| {
+        image::Rgba(if (x + y) % 2 == 0 { RED } else { BLUE })
+    });
     let mut out = std::io::Cursor::new(Vec::new());
-    img.write_to(&mut out, image::ImageFormat::Png).expect("png");
+    img.write_to(&mut out, image::ImageFormat::Png)
+        .expect("png");
     out.into_inner()
 }
 
@@ -31,17 +34,37 @@ fn add(scene: &mut Scene, parent: doc::NodeId, mut n: Node) -> doc::NodeId {
 fn node(kind: NodeKind, x: f64, y: f64, w: f64, h: f64) -> Node {
     let mut n = Node::new(kind, "n");
     n.transform = doc::Transform::translate(x, y);
-    n.size = doc::Size { width: w, height: h };
+    n.size = doc::Size {
+        width: w,
+        height: h,
+    };
     n
 }
 
-fn image_paint(asset: doc::AssetId, scale_mode: doc::ImageScaleMode, transform: Option<doc::Transform>) -> doc::Paint {
-    doc::Paint { kind: doc::PaintKind::Image { asset, source_ref: None, scale_mode, transform }, opacity: 1.0, blend: doc::BlendMode::Normal, visible: true }
+fn image_paint(
+    asset: doc::AssetId,
+    scale_mode: doc::ImageScaleMode,
+    transform: Option<doc::Transform>,
+) -> doc::Paint {
+    doc::Paint {
+        kind: doc::PaintKind::Image {
+            asset,
+            source_ref: None,
+            scale_mode,
+            transform,
+        },
+        opacity: 1.0,
+        blend: doc::BlendMode::Normal,
+        visible: true,
+    }
 }
 
 /// A page with one `64 × 64` rect at (8, 8) filled with a 2×2 checker
 /// PNG in `scale_mode`, placed by `transform`.
-fn checker_page(scale_mode: doc::ImageScaleMode, transform: Option<doc::Transform>) -> (Scene, doc::NodeId) {
+fn checker_page(
+    scale_mode: doc::ImageScaleMode,
+    transform: Option<doc::Transform>,
+) -> (Scene, doc::NodeId) {
     let mut scene = Scene::new("Page");
     let page = scene.pages()[0];
     let asset = scene.add_asset("image/png", checker_png(2, 2));
@@ -73,13 +96,37 @@ fn close(a: [u8; 4], b: [u8; 4]) -> bool {
 #[test]
 fn a_tile_repeats_at_the_size_its_transform_gives_it() {
     // Each image pixel 8 px: a 16 px tile, repeated four times across.
-    let (scene, root) = checker_page(doc::ImageScaleMode::Tile, Some(doc::Transform { a: 8.0, b: 0.0, c: 0.0, d: 8.0, tx: 0.0, ty: 0.0 }));
-    let Some(p) = render(&scene, root) else { return };
+    let (scene, root) = checker_page(
+        doc::ImageScaleMode::Tile,
+        Some(doc::Transform {
+            a: 8.0,
+            b: 0.0,
+            c: 0.0,
+            d: 8.0,
+            tx: 0.0,
+            ty: 0.0,
+        }),
+    );
+    let Some(p) = render(&scene, root) else {
+        return;
+    };
     for tile in 0..4 {
         let x0 = 8 + tile * 16;
-        assert!(close(px(&p, x0 + 4, 12), RED), "tile {tile} first cell: {:?}", px(&p, x0 + 4, 12));
-        assert!(close(px(&p, x0 + 12, 12), BLUE), "tile {tile} second cell: {:?}", px(&p, x0 + 12, 12));
-        assert!(close(px(&p, x0 + 4, 60), RED), "tile {tile}, fourth row: {:?}", px(&p, x0 + 4, 60));
+        assert!(
+            close(px(&p, x0 + 4, 12), RED),
+            "tile {tile} first cell: {:?}",
+            px(&p, x0 + 4, 12)
+        );
+        assert!(
+            close(px(&p, x0 + 12, 12), BLUE),
+            "tile {tile} second cell: {:?}",
+            px(&p, x0 + 12, 12)
+        );
+        assert!(
+            close(px(&p, x0 + 4, 60), RED),
+            "tile {tile}, fourth row: {:?}",
+            px(&p, x0 + 4, 60)
+        );
     }
     // Nothing outside the rect.
     assert!(close(px(&p, 76, 40), [255, 255, 255, 255]));
@@ -88,7 +135,9 @@ fn a_tile_repeats_at_the_size_its_transform_gives_it() {
 #[test]
 fn a_tile_without_a_transform_repeats_at_its_own_size() {
     let (scene, root) = checker_page(doc::ImageScaleMode::Tile, None);
-    let Some(p) = render(&scene, root) else { return };
+    let Some(p) = render(&scene, root) else {
+        return;
+    };
     // One image pixel per px: a checkerboard all the way across (was the
     // tile once, then its edge pixels smeared).
     for x in [8, 9, 40, 41, 70, 71] {
@@ -111,9 +160,17 @@ fn image_data_is_encoded_once_and_shared_across_collects() {
     };
     let a = data(build_scene_primitives(&scene, root)).expect("image fill");
     let b = data(build_scene_primitives(&scene, root)).expect("image fill");
-    assert!(Arc::ptr_eq(&a, &b), "the second collect reuses the first's encoding");
+    assert!(
+        Arc::ptr_eq(&a, &b),
+        "the second collect reuses the first's encoding"
+    );
     use base64::Engine as _;
-    assert_eq!(base64::engine::general_purpose::STANDARD.decode(&*a).unwrap(), checker_png(2, 2));
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD
+            .decode(&*a)
+            .unwrap(),
+        checker_png(2, 2)
+    );
 }
 
 /// Every frame of the GPU effects stage draws the textures: with a shader
@@ -125,21 +182,52 @@ fn textures_draw_in_every_gpu_effects_frame() {
         eprintln!("skipping: no GPU adapter");
         return;
     };
-    let (mut scene, page) = checker_page(doc::ImageScaleMode::Tile, Some(doc::Transform { a: 8.0, b: 0.0, c: 0.0, d: 8.0, tx: 0.0, ty: 0.0 }));
+    let (mut scene, page) = checker_page(
+        doc::ImageScaleMode::Tile,
+        Some(doc::Transform {
+            a: 8.0,
+            b: 0.0,
+            c: 0.0,
+            d: 8.0,
+            tx: 0.0,
+            ty: 0.0,
+        }),
+    );
     let mut panel = node(NodeKind::Frame, 40.0, 40.0, 30.0, 30.0);
     panel.fills = vec![doc::Paint::solid(doc::Color::rgba(0.2, 0.5, 0.9, 1.0))];
-    panel.shader = Some(doc::ShaderFx { shader: "glass".into(), params: BTreeMap::new(), inputs: Vec::new() });
+    panel.shader = Some(doc::ShaderFx {
+        shader: "glass".into(),
+        params: BTreeMap::new(),
+        inputs: Vec::new(),
+    });
     add(&mut scene, page, panel);
     let mut lamp = node(NodeKind::Ellipse, 60.0, 4.0, 6.0, 6.0);
     lamp.fills = vec![doc::Paint::solid(doc::Color::rgba(1.0, 0.8, 0.2, 1.0))];
-    lamp.emission = Some(doc::Emission { color: doc::Color::rgba(1.0, 0.8, 0.2, 1.0), intensity: 1.0, radius: 6.0 });
+    lamp.emission = Some(doc::Emission {
+        color: doc::Color::rgba(1.0, 0.8, 0.2, 1.0),
+        intensity: 1.0,
+        radius: 6.0,
+    });
     add(&mut scene, page, lamp);
-    let frame = crate::fx::Frame { base: peniko::Color::WHITE, ..crate::fx::Frame::new(&scene, page, 80, 80) };
-    let frames: Vec<Pixels> = (0..3).map(|_| o.render_with_effects(&frame).expect("render")).collect();
+    let frame = crate::fx::Frame {
+        base: peniko::Color::WHITE,
+        ..crate::fx::Frame::new(&scene, page, 80, 80)
+    };
+    let frames: Vec<Pixels> = (0..3)
+        .map(|_| o.render_with_effects(&frame).expect("render"))
+        .collect();
     for (i, f) in frames.iter().enumerate() {
-        assert!(close(px(f, 12, 12), RED) && close(px(f, 20, 12), BLUE), "frame {i} lost the texture: {:?} {:?}", px(f, 12, 12), px(f, 20, 12));
+        assert!(
+            close(px(f, 12, 12), RED) && close(px(f, 20, 12), BLUE),
+            "frame {i} lost the texture: {:?} {:?}",
+            px(f, 12, 12),
+            px(f, 20, 12)
+        );
     }
-    assert!(frames[1].rgba == frames[0].rgba && frames[2].rgba == frames[0].rgba, "frames of an unchanged scene are identical");
+    assert!(
+        frames[1].rgba == frames[0].rgba && frames[2].rgba == frames[0].rgba,
+        "frames of an unchanged scene are identical"
+    );
 }
 
 /// A line stroked with a red → blue gradient draws (it used to vanish),
@@ -154,8 +242,14 @@ fn a_gradient_stroke_draws_its_gradient() {
         paints: vec![doc::Paint {
             kind: doc::PaintKind::LinearGradient {
                 stops: vec![
-                    doc::GradientStop { position: 0.0, color: doc::Color::rgba(1.0, 0.0, 0.0, 1.0) },
-                    doc::GradientStop { position: 1.0, color: doc::Color::rgba(0.0, 0.0, 1.0, 1.0) },
+                    doc::GradientStop {
+                        position: 0.0,
+                        color: doc::Color::rgba(1.0, 0.0, 0.0, 1.0),
+                    },
+                    doc::GradientStop {
+                        position: 1.0,
+                        color: doc::Color::rgba(0.0, 0.0, 1.0, 1.0),
+                    },
                 ],
                 transform: None,
             },
@@ -169,11 +263,25 @@ fn a_gradient_stroke_draws_its_gradient() {
     add(&mut scene, page, line);
     let prims = build_scene_primitives(&scene, page);
     assert!(
-        prims.iter().any(|p| matches!(p, PaintPrimitive::Path { stroke: Some(StrokeStyle { gradient: Some(FillPaint::GradientLinear { .. }), .. }), .. })),
+        prims.iter().any(|p| matches!(
+            p,
+            PaintPrimitive::Path {
+                stroke: Some(StrokeStyle {
+                    gradient: Some(FillPaint::GradientLinear { .. }),
+                    ..
+                }),
+                ..
+            }
+        )),
         "the stroke keeps its gradient"
     );
-    let Some(p) = render(&scene, page) else { return };
+    let Some(p) = render(&scene, page) else {
+        return;
+    };
     let (start, end) = (px(&p, 12, 40), px(&p, 68, 40));
-    assert!(start[0] > 200 && start[2] < 60, "red at the start: {start:?}");
+    assert!(
+        start[0] > 200 && start[2] < 60,
+        "red at the start: {start:?}"
+    );
     assert!(end[2] > 200 && end[0] < 60, "blue at the end: {end:?}");
 }

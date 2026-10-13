@@ -89,8 +89,7 @@ async fn scene_switching_named_items(ctx: &ReaperTestContext) -> eyre::Result<()
     assert!(send_lead.is_muted().await?, "send_lead should start muted");
 
     // ── Set P_EXT on controller track ─────────────────────────────────
-    TrackHandleCompat::set_ext_state(&controller, "fts_signal", "scene_count", "3")
-        .await?;
+    TrackHandleCompat::set_ext_state(&controller, "fts_signal", "scene_count", "3").await?;
     settle().await;
 
     // ── Place named items on the controller track ─────────────────────

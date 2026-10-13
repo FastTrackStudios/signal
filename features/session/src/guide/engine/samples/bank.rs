@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::warn;
 
-use super::{load_wav, AudioSample};
+use super::{AudioSample, load_wav};
 
 /// Click sound selection (legacy `ClickSound`, minus the nih-plug derive).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

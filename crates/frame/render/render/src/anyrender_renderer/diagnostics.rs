@@ -20,7 +20,9 @@ pub fn collect_render_diagnostics(scene: &Scene, root: NodeId) -> RenderDiagnost
         if fills().any(|p| {
             matches!(
                 p.kind,
-                PaintKind::LinearGradient { .. } | PaintKind::RadialGradient { .. } | PaintKind::AngularGradient { .. }
+                PaintKind::LinearGradient { .. }
+                    | PaintKind::RadialGradient { .. }
+                    | PaintKind::AngularGradient { .. }
             )
         }) {
             out.gradient_fill_nodes += 1;
@@ -38,7 +40,10 @@ pub fn collect_render_diagnostics(scene: &Scene, root: NodeId) -> RenderDiagnost
         if has(EffectKind::LayerBlur) {
             out.layer_blur_nodes += 1;
             // Layer blur is only approximated on text and non-drawing nodes.
-            if matches!(node.kind, NodeKind::Text(_) | NodeKind::Utility | NodeKind::Other { .. }) {
+            if matches!(
+                node.kind,
+                NodeKind::Text(_) | NodeKind::Utility | NodeKind::Other { .. }
+            ) {
                 out.layer_blur_approx_nodes += 1;
             }
         }

@@ -12,7 +12,7 @@
 
 use dioxus::prelude::*;
 use dioxus_test::{by_testid, render};
-use session::ui::components::{clock, dots, pulse, MOST_DOTS};
+use session::ui::components::{MOST_DOTS, clock, dots, pulse};
 
 #[component]
 fn Harness() -> Element {

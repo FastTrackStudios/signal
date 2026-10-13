@@ -37,7 +37,12 @@ fn add(scene: &mut Scene, parent: NodeId, mut node: Node) -> NodeId {
 }
 
 fn rgb(r: u8, g: u8, b: u8) -> Color {
-    Color::rgba(f64::from(r) / 255.0, f64::from(g) / 255.0, f64::from(b) / 255.0, 1.0)
+    Color::rgba(
+        f64::from(r) / 255.0,
+        f64::from(g) / 255.0,
+        f64::from(b) / 255.0,
+        1.0,
+    )
 }
 
 /// A scene that exercises every NodeKind and every `Prop`, in both compact
@@ -51,7 +56,10 @@ fn kitchen_sink() -> Scene {
     // Frame with auto layout + every compact prop.
     let mut panel = Node::new(NodeKind::Frame, "Panel");
     panel.transform = Transform::translate(10.0, -20.5);
-    panel.size = Size { width: 320.0, height: 200.0 };
+    panel.size = Size {
+        width: 320.0,
+        height: 200.0,
+    };
     panel.opacity = 0.75;
     panel.blend = BlendMode::PassThrough;
     panel.corner_radii = CornerRadii::uniform(8.0);
@@ -100,7 +108,12 @@ fn kitchen_sink() -> Scene {
         hug_main: false,
         hug_cross: false,
     });
-    panel.source = Some(SourceRef { tool: "figma".into(), id: "1:2".into(), node_type: "FRAME".into(), bounds: None });
+    panel.source = Some(SourceRef {
+        tool: "figma".into(),
+        id: "1:2".into(),
+        node_type: "FRAME".into(),
+        bounds: None,
+    });
     let panel = add(&mut s, page, panel);
 
     // Layout child props, odd paddings, rotation, masks.
@@ -129,9 +142,26 @@ fn kitchen_sink() -> Scene {
         resize_x: Some(ResizeX::Stretch),
         resize_y: Some(ResizeY::Bottom),
     };
-    let (a, b, c, d) = (30f64.to_radians().cos(), -(30f64.to_radians().sin()), 30f64.to_radians().sin(), 30f64.to_radians().cos());
-    col.transform = Transform { a, b, tx: 5.0, c, d, ty: 6.0 };
-    col.corner_radii = CornerRadii { top_left: 1.0, top_right: 2.0, bottom_right: 3.0, bottom_left: 4.0 };
+    let (a, b, c, d) = (
+        30f64.to_radians().cos(),
+        -(30f64.to_radians().sin()),
+        30f64.to_radians().sin(),
+        30f64.to_radians().cos(),
+    );
+    col.transform = Transform {
+        a,
+        b,
+        tx: 5.0,
+        c,
+        d,
+        ty: 6.0,
+    };
+    col.corner_radii = CornerRadii {
+        top_left: 1.0,
+        top_right: 2.0,
+        bottom_right: 3.0,
+        bottom_left: 4.0,
+    };
     col.mask = Some(MaskKind::Luminance);
     col.visible = false;
     col.locked = true;
@@ -139,9 +169,19 @@ fn kitchen_sink() -> Scene {
 
     // Every leaf kind.
     let mut knob = Node::new(NodeKind::Ellipse, "Knob");
-    knob.size = Size { width: 64.0, height: 64.0 };
+    knob.size = Size {
+        width: 64.0,
+        height: 64.0,
+    };
     knob.fills = vec![Paint::solid(rgb(0xff, 0x5a, 0x36))];
-    knob.transform = Transform { a: 0.0, b: -1.0, tx: 0.0, c: 1.0, d: 0.0, ty: 0.0 }; // 90°
+    knob.transform = Transform {
+        a: 0.0,
+        b: -1.0,
+        tx: 0.0,
+        c: 1.0,
+        d: 0.0,
+        ty: 0.0,
+    }; // 90°
     add(&mut s, col, knob);
 
     let mut rect = Node::new(NodeKind::Rectangle, "Image");
@@ -158,7 +198,12 @@ fn kitchen_sink() -> Scene {
             visible: false,
         },
         Paint {
-            kind: PaintKind::Image { asset, source_ref: None, scale_mode: ImageScaleMode::Fill, transform: None },
+            kind: PaintKind::Image {
+                asset,
+                source_ref: None,
+                scale_mode: ImageScaleMode::Fill,
+                transform: None,
+            },
             opacity: 1.0,
             blend: BlendMode::Normal,
             visible: true,
@@ -166,29 +211,58 @@ fn kitchen_sink() -> Scene {
         Paint {
             kind: PaintKind::LinearGradient {
                 stops: vec![
-                    GradientStop { position: 0.0, color: rgb(255, 0, 0) },
-                    GradientStop { position: 1.0, color: Color::rgba(0.1, 0.2, 0.3, 0.4) },
+                    GradientStop {
+                        position: 0.0,
+                        color: rgb(255, 0, 0),
+                    },
+                    GradientStop {
+                        position: 1.0,
+                        color: Color::rgba(0.1, 0.2, 0.3, 0.4),
+                    },
                 ],
-                transform: Some(Transform { a: 0.5, b: 0.1, tx: 0.2, c: -0.3, d: 2.0, ty: 1e-9 }),
+                transform: Some(Transform {
+                    a: 0.5,
+                    b: 0.1,
+                    tx: 0.2,
+                    c: -0.3,
+                    d: 2.0,
+                    ty: 1e-9,
+                }),
             },
             opacity: 1.0,
             blend: BlendMode::Normal,
             visible: true,
         },
         Paint {
-            kind: PaintKind::RadialGradient { stops: vec![GradientStop { position: 0.5, color: rgb(0, 0, 0) }], transform: None },
+            kind: PaintKind::RadialGradient {
+                stops: vec![GradientStop {
+                    position: 0.5,
+                    color: rgb(0, 0, 0),
+                }],
+                transform: None,
+            },
             opacity: 0.3,
             blend: BlendMode::Normal,
             visible: true,
         },
         Paint {
-            kind: PaintKind::AngularGradient { stops: vec![], transform: None },
+            kind: PaintKind::AngularGradient {
+                stops: vec![],
+                transform: None,
+            },
             opacity: 1.0,
             blend: BlendMode::Normal,
             visible: true,
         },
     ];
-    rect.transform = Transform { a: 1.5, b: 0.25, tx: 1.0 / 3.0, c: 0.0, d: 0.5, ty: -0.0 };
+    rect.transform = Transform {
+        a: 1.5,
+        b: 0.25,
+        tx: 1.0 / 3.0,
+        c: 0.0,
+        d: 0.5,
+        ty: -0.0,
+    };
     add(&mut s, col, rect);
 
     let mut line = Node::new(NodeKind::Line, "Line");
@@ -203,14 +277,24 @@ fn kitchen_sink() -> Scene {
     add(&mut s, col, poly);
 
     let mut star = Node::new(NodeKind::Star, "Star \"quoted\" <tag> & {brace}\nnewline");
-    star.source = Some(SourceRef { tool: "we/ird".into(), id: "I1:2;3:4".into(), node_type: "STAR".into(), bounds: None });
+    star.source = Some(SourceRef {
+        tool: "we/ird".into(),
+        id: "I1:2;3:4".into(),
+        node_type: "STAR".into(),
+        bounds: None,
+    });
     add(&mut s, col, star);
 
     let mut vector = Node::new(NodeKind::Vector, "Vector");
     vector.fill_geometry = vec![String::new()];
     add(&mut s, col, vector);
 
-    let mut boolean = Node::new(NodeKind::BooleanOperation { op: Some(BooleanOp::Subtract) }, "Bool");
+    let mut boolean = Node::new(
+        NodeKind::BooleanOperation {
+            op: Some(BooleanOp::Subtract),
+        },
+        "Bool",
+    );
     let bid = boolean.id;
     boolean.children.clear();
     let bid = {
@@ -219,28 +303,77 @@ fn kitchen_sink() -> Scene {
     };
     add(&mut s, bid, Node::new(NodeKind::Rectangle, "A"));
     add(&mut s, bid, Node::new(NodeKind::Ellipse, "B"));
-    add(&mut s, col, Node::new(NodeKind::BooleanOperation { op: None }, "BooleanOperation"));
+    add(
+        &mut s,
+        col,
+        Node::new(NodeKind::BooleanOperation { op: None }, "BooleanOperation"),
+    );
 
     // Components.
     let set = add(&mut s, page, Node::new(NodeKind::ComponentSet, "Buttons"));
     let comp = add(&mut s, set, Node::new(NodeKind::Component, "Button"));
-    add(&mut s, page, Node::new(NodeKind::Instance { component: Some(comp) }, "Button 1"));
-    add(&mut s, page, Node::new(NodeKind::Instance { component: None }, "Detached"));
+    add(
+        &mut s,
+        page,
+        Node::new(
+            NodeKind::Instance {
+                component: Some(comp),
+            },
+            "Button 1",
+        ),
+    );
+    add(
+        &mut s,
+        page,
+        Node::new(NodeKind::Instance { component: None }, "Detached"),
+    );
     let group = add(&mut s, page, Node::new(NodeKind::Group, "Group"));
     add(&mut s, group, Node::new(NodeKind::Utility, "Slice"));
-    add(&mut s, group, Node::new(NodeKind::Other { tag: "WIDGET".into() }, "WIDGET"));
-    add(&mut s, group, Node::new(NodeKind::Other { tag: String::new() }, "odd"));
+    add(
+        &mut s,
+        group,
+        Node::new(
+            NodeKind::Other {
+                tag: "WIDGET".into(),
+            },
+            "WIDGET",
+        ),
+    );
+    add(
+        &mut s,
+        group,
+        Node::new(NodeKind::Other { tag: String::new() }, "odd"),
+    );
 
     // Text: body, specials, newline, runs, every text prop.
-    let text = |chars: &str| TextData { characters: chars.into(), ..TextData::default() };
+    let text = |chars: &str| TextData {
+        characters: chars.into(),
+        ..TextData::default()
+    };
     let mut label = Node::new(NodeKind::Text(text("Gain")), "Label");
     label.fills = vec![Paint::solid(rgb(255, 255, 255))];
     add(&mut s, panel, label);
-    add(&mut s, panel, Node::new(NodeKind::Text(text("a < b && {c} > d &amp;")), "Specials"));
-    add(&mut s, panel, Node::new(NodeKind::Text(text("  padded  ")), "Padded"));
-    add(&mut s, panel, Node::new(NodeKind::Text(text("line one\nline two\n")), "Multi"));
+    add(
+        &mut s,
+        panel,
+        Node::new(NodeKind::Text(text("a < b && {c} > d &amp;")), "Specials"),
+    );
+    add(
+        &mut s,
+        panel,
+        Node::new(NodeKind::Text(text("  padded  ")), "Padded"),
+    );
+    add(
+        &mut s,
+        panel,
+        Node::new(NodeKind::Text(text("line one\nline two\n")), "Multi"),
+    );
     add(&mut s, panel, Node::new(NodeKind::Text(text("")), "Empty"));
-    add(&mut s, panel, Node::new(NodeKind::Text(text("\t\r")), "Tabby"));
+    add(
+        &mut s,
+        panel,
+        Node::new(NodeKind::Text(text("\t\r")), "Tabby"),
+    );
     let full = TextData {
         characters: "Mixed".into(),
         font_family: Some("Inter".into()),
@@ -253,10 +386,16 @@ fn kitchen_sink() -> Scene {
         text_case: TextCase::SmallCapsForced,
         align: TextAlign::Justified,
         runs: vec![
-            TextRun { text: "Mi".into(), ..TextRun::default() },
+            TextRun {
+                text: "Mi".into(),
+                ..TextRun::default()
+            },
             TextRun {
                 text: "xed".into(),
-                fills: vec![Paint::solid(rgb(1, 2, 3)), Paint::solid(Color::rgba(0.5, 0.5, 0.5, 1.0))],
+                fills: vec![
+                    Paint::solid(rgb(1, 2, 3)),
+                    Paint::solid(Color::rgba(0.5, 0.5, 0.5, 1.0)),
+                ],
                 font_family: Some("Roboto".into()),
                 font_size: Some(20.0),
                 font_weight: Some(300.0),
@@ -267,7 +406,11 @@ fn kitchen_sink() -> Scene {
         ],
     };
     add(&mut s, panel, Node::new(NodeKind::Text(full), "Full"));
-    let parent_text = add(&mut s, panel, Node::new(NodeKind::Text(text("has kids")), "Parent text"));
+    let parent_text = add(
+        &mut s,
+        panel,
+        Node::new(NodeKind::Text(text("has kids")), "Parent text"),
+    );
     add(&mut s, parent_text, Node::new(NodeKind::Rectangle, "Kid"));
     s
 }
@@ -277,7 +420,12 @@ fn kitchen_sink_round_trips() {
     let text = assert_law(&kitchen_sink());
     // Spot-check compact forms.
     assert!(text.contains("fill=\"#1e1e1e\""), "{text}");
-    assert!(text.contains("layout=\"row\" gap=8 padding=12 wrap=true justify=\"space-between\" align=\"center\""), "{text}");
+    assert!(
+        text.contains(
+            "layout=\"row\" gap=8 padding=12 wrap=true justify=\"space-between\" align=\"center\""
+        ),
+        "{text}"
+    );
     assert!(text.contains("padding=\"3 2 4 1\""), "{text}");
     assert!(text.contains("rotation=30"), "{text}");
     assert!(text.contains("rotation=90"), "{text}");
@@ -293,19 +441,27 @@ fn kitchen_sink_round_trips() {
 #[test]
 fn plots_curves_and_handles_round_trip() {
     use surface_proto::{
-        Axis, Binding, Control, ControlKind, Curve, CurveInput, HandleAxis, InputSource, PlotRange, PlotStyle, SlotRole,
+        Axis, Binding, Control, ControlKind, Curve, CurveInput, HandleAxis, InputSource, PlotRange,
+        PlotStyle, SlotRole,
     };
     let mut s = Scene::new("Viz");
     let page = s.pages()[0];
     let mut area = Node::new(NodeKind::Frame, "area");
-    area.size = Size { width: 400.0, height: 200.0 };
+    area.size = Size {
+        width: 400.0,
+        height: 200.0,
+    };
     let area = add(&mut s, page, area);
     let line = add(&mut s, area, Node::new(NodeKind::Vector, "line"));
     let ball = add(&mut s, area, Node::new(NodeKind::Ellipse, "ball"));
     let plot = Control::new(ControlKind::Plot {
         style: PlotStyle::Area { baseline: -0.5 },
         x: Axis::Time { len: 240 },
-        y: PlotRange { min: -24.0, max: 0.0, curve: Curve::Power { exponent: 0.5 } },
+        y: PlotRange {
+            min: -24.0,
+            max: 0.0,
+            curve: Curve::Power { exponent: 0.5 },
+        },
     })
     .bound(Binding::stream("comp/gr"))
     .slot(SlotRole::Area, line.0);
@@ -314,11 +470,20 @@ fn plots_curves_and_handles_round_trip() {
         inputs: vec![
             CurveInput::param("threshold", "comp/threshold"),
             CurveInput::constant("ratio", 4.0),
-            CurveInput { name: "marker".into(), source: InputSource::Stream { id: surface_proto::EntryId::new("comp/in"), channel: Some(1) } },
+            CurveInput {
+                name: "marker".into(),
+                source: InputSource::Stream {
+                    id: surface_proto::EntryId::new("comp/in"),
+                    channel: Some(1),
+                },
+            },
         ],
         series: Some("transfer".into()),
         style: PlotStyle::Dots,
-        x: Axis::Log { f_min: 20.0, f_max: 20_000.0 },
+        x: Axis::Log {
+            f_min: 20.0,
+            f_max: 20_000.0,
+        },
         y: PlotRange::linear(-60.0, 6.0),
     })
     .slot(SlotRole::Trace, line.0)
@@ -336,7 +501,10 @@ fn plots_curves_and_handles_round_trip() {
         add(&mut s, area, n);
     }
     let text = assert_law(&s);
-    assert!(text.contains("\"Plot\"") && text.contains("\"Curve\"") && text.contains("\"Handle\""), "{text}");
+    assert!(
+        text.contains("\"Plot\"") && text.contains("\"Curve\"") && text.contains("\"Handle\""),
+        "{text}"
+    );
 }
 
 #[test]
@@ -391,7 +559,10 @@ fn scenario_exports() -> Vec<PathBuf> {
     let mut out = Vec::new();
     for entry in std::fs::read_dir(&dir).unwrap() {
         let p = entry.unwrap().path();
-        for candidate in [p.join("latest-bridge-export.json"), p.join("export/latest-bridge-export.json")] {
+        for candidate in [
+            p.join("latest-bridge-export.json"),
+            p.join("export/latest-bridge-export.json"),
+        ] {
             if candidate.is_file() {
                 out.push(candidate);
             }
@@ -408,9 +579,11 @@ fn figma_parity_scenarios_round_trip() {
     let mut passed = 0;
     for path in &exports {
         let bytes = std::fs::read(path).unwrap();
-        let scene = figma_import::import_bytes(&bytes).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let scene = figma_import::import_bytes(&bytes)
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         let text = print(&scene);
-        let back = parse(&text, scene.assets.clone()).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let back = parse(&text, scene.assets.clone())
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         assert!(back == scene, "{} doesn't round-trip", path.display());
         assert_law(&scene);
         passed += 1;
@@ -437,13 +610,13 @@ mod random {
     }
 
     fn unit() -> BoxedStrategy<f64> {
-        prop_oneof![(0u8..=255).prop_map(|n| f64::from(n) / 255.0), 0.0..=1.0f64]
-        .boxed()
+        prop_oneof![(0u8..=255).prop_map(|n| f64::from(n) / 255.0), 0.0..=1.0f64].boxed()
     }
 
     fn color() -> BoxedStrategy<Color> {
-        (unit(), unit(), unit(), unit()).prop_map(|(r, g, b, a)| Color::rgba(r, g, b, a))
-        .boxed()
+        (unit(), unit(), unit(), unit())
+            .prop_map(|(r, g, b, a)| Color::rgba(r, g, b, a))
+            .boxed()
     }
 
     fn transform() -> BoxedStrategy<Transform> {
@@ -451,34 +624,74 @@ mod random {
             (f(), f()).prop_map(|(x, y)| Transform::translate(x, y)),
             (-720.0..720.0f64, f(), f()).prop_map(|(deg, tx, ty)| {
                 let (s, c) = deg.to_radians().sin_cos();
-                Transform { a: c, b: -s, tx, c: s, d: c, ty }
+                Transform {
+                    a: c,
+                    b: -s,
+                    tx,
+                    c: s,
+                    d: c,
+                    ty,
+                }
             }),
-            (f(), f(), f(), f(), f(), f()).prop_map(|(a, b, tx, c, d, ty)| Transform { a, b, tx, c, d, ty }),
+            (f(), f(), f(), f(), f(), f()).prop_map(|(a, b, tx, c, d, ty)| Transform {
+                a,
+                b,
+                tx,
+                c,
+                d,
+                ty
+            }),
         ]
         .boxed()
     }
 
     fn blend() -> BoxedStrategy<BlendMode> {
-        prop_oneof![Just(BlendMode::Normal), Just(BlendMode::Multiply), Just(BlendMode::PassThrough)]
+        prop_oneof![
+            Just(BlendMode::Normal),
+            Just(BlendMode::Multiply),
+            Just(BlendMode::PassThrough)
+        ]
         .boxed()
     }
 
     fn paint() -> BoxedStrategy<Paint> {
         let kind = prop_oneof![
             color().prop_map(|color| PaintKind::Solid { color }),
-            (prop::collection::vec((unit(), color()), 0..3), prop::option::of(transform())).prop_map(|(st, transform)| {
-                PaintKind::LinearGradient {
-                    stops: st.into_iter().map(|(position, color)| GradientStop { position, color }).collect(),
-                    transform,
-                }
-            }),
-            ("[0-9a-f]{8}", prop::option::of(".*"), prop::option::of(transform())).prop_map(|(a, source_ref, transform)| {
-                PaintKind::Image { asset: AssetId(a), source_ref, scale_mode: ImageScaleMode::Tile, transform }
-            }),
+            (
+                prop::collection::vec((unit(), color()), 0..3),
+                prop::option::of(transform())
+            )
+                .prop_map(|(st, transform)| {
+                    PaintKind::LinearGradient {
+                        stops: st
+                            .into_iter()
+                            .map(|(position, color)| GradientStop { position, color })
+                            .collect(),
+                        transform,
+                    }
+                }),
+            (
+                "[0-9a-f]{8}",
+                prop::option::of(".*"),
+                prop::option::of(transform())
+            )
+                .prop_map(|(a, source_ref, transform)| {
+                    PaintKind::Image {
+                        asset: AssetId(a),
+                        source_ref,
+                        scale_mode: ImageScaleMode::Tile,
+                        transform,
+                    }
+                }),
         ];
         (kind, prop_oneof![Just(1.0), unit()], blend(), any::<bool>())
-            .prop_map(|(kind, opacity, blend, visible)| Paint { kind, opacity, blend, visible })
-        .boxed()
+            .prop_map(|(kind, opacity, blend, visible)| Paint {
+                kind,
+                opacity,
+                blend,
+                visible,
+            })
+            .boxed()
     }
 
     fn paints() -> BoxedStrategy<Vec<Paint>> {
@@ -491,8 +704,7 @@ mod random {
     }
 
     fn opt_f() -> BoxedStrategy<Option<f64>> {
-        prop::option::of(f())
-        .boxed()
+        prop::option::of(f()).boxed()
     }
 
     fn text_data() -> BoxedStrategy<TextData> {
@@ -504,32 +716,45 @@ mod random {
             opt_f(),
             f(),
             prop::collection::vec(
-                (".*", paints(), prop::option::of(".*"), opt_f(), opt_f()).prop_map(|(text, fills, font_style, font_size, font_width)| TextRun {
-                    text,
-                    fills,
-                    font_style,
-                    font_size,
-                    font_width,
-                    ..TextRun::default()
-                }),
+                (".*", paints(), prop::option::of(".*"), opt_f(), opt_f()).prop_map(
+                    |(text, fills, font_style, font_size, font_width)| TextRun {
+                        text,
+                        fills,
+                        font_style,
+                        font_size,
+                        font_width,
+                        ..TextRun::default()
+                    },
+                ),
                 0..2,
             ),
             (prop::option::of("[A-Za-z ]{0,12}"), opt_f()),
         )
-            .prop_map(|(characters, font_family, font_size, font_weight, line_height, letter_spacing, runs, (font_style, font_width))| TextData {
-                characters,
-                font_family,
-                font_size,
-                font_weight,
-                font_style,
-                font_width,
-                line_height,
-                letter_spacing,
-                text_case: TextCase::Upper,
-                align: TextAlign::Center,
-                runs,
-            })
-        .boxed()
+            .prop_map(
+                |(
+                    characters,
+                    font_family,
+                    font_size,
+                    font_weight,
+                    line_height,
+                    letter_spacing,
+                    runs,
+                    (font_style, font_width),
+                )| TextData {
+                    characters,
+                    font_family,
+                    font_size,
+                    font_weight,
+                    font_style,
+                    font_width,
+                    line_height,
+                    letter_spacing,
+                    text_case: TextCase::Upper,
+                    align: TextAlign::Center,
+                    runs,
+                },
+            )
+            .boxed()
     }
 
     fn kind() -> BoxedStrategy<NodeKind> {
@@ -540,7 +765,9 @@ mod random {
             Just(NodeKind::Ellipse),
             Just(NodeKind::Vector),
             Just(NodeKind::Instance { component: None }),
-            Just(NodeKind::BooleanOperation { op: Some(BooleanOp::Exclude) }),
+            Just(NodeKind::BooleanOperation {
+                op: Some(BooleanOp::Exclude)
+            }),
             ".*".prop_map(|tag| NodeKind::Other { tag }),
             text_data().prop_map(NodeKind::Text),
         ]
@@ -548,27 +775,42 @@ mod random {
     }
 
     fn layout() -> BoxedStrategy<Option<AutoLayout>> {
-        prop::option::of((any::<bool>(), f(), f(), f(), f(), f(), any::<bool>()).prop_map(|(h, gap, l, r, t, b, wrap)| {
-            AutoLayout {
-                direction: if h { LayoutDirection::Horizontal } else { LayoutDirection::Vertical },
-                gap,
-                padding_left: l,
-                padding_right: r,
-                padding_top: t,
-                padding_bottom: b,
-                wrap,
-                main_align: if wrap { Some(MainAxisAlign::End) } else { None },
-                cross_align: None,
-                hug_main: false,
-                hug_cross: false,
-            }
-        }))
+        prop::option::of(
+            (any::<bool>(), f(), f(), f(), f(), f(), any::<bool>()).prop_map(
+                |(h, gap, l, r, t, b, wrap)| AutoLayout {
+                    direction: if h {
+                        LayoutDirection::Horizontal
+                    } else {
+                        LayoutDirection::Vertical
+                    },
+                    gap,
+                    padding_left: l,
+                    padding_right: r,
+                    padding_top: t,
+                    padding_bottom: b,
+                    wrap,
+                    main_align: if wrap { Some(MainAxisAlign::End) } else { None },
+                    cross_align: None,
+                    hug_main: false,
+                    hug_cross: false,
+                },
+            ),
+        )
         .boxed()
     }
 
     fn node() -> BoxedStrategy<Node> {
         (
-            (kind(), ".*", any::<bool>(), any::<bool>(), transform(), f(), f(), prop_oneof![Just(1.0), unit()]),
+            (
+                kind(),
+                ".*",
+                any::<bool>(),
+                any::<bool>(),
+                transform(),
+                f(),
+                f(),
+                prop_oneof![Just(1.0), unit()],
+            ),
             (f(), f(), f(), f(), any::<bool>(), paints(), paints(), f()),
             (
                 prop::collection::vec(".*", 0..3),
@@ -600,9 +842,17 @@ mod random {
                     n.visible = visible;
                     n.locked = locked;
                     n.transform = transform;
-                    n.size = Size { width: w, height: h };
+                    n.size = Size {
+                        width: w,
+                        height: h,
+                    };
                     n.opacity = opacity;
-                    n.corner_radii = CornerRadii { top_left: r1, top_right: r2, bottom_right: r3, bottom_left: r4 };
+                    n.corner_radii = CornerRadii {
+                        top_left: r1,
+                        top_right: r2,
+                        bottom_right: r3,
+                        bottom_left: r4,
+                    };
                     n.clips_content = clip;
                     n.fills = fills;
                     n.stroke.paints = strokes;
@@ -610,26 +860,32 @@ mod random {
                     n.stroke.dash_pattern = dash;
                     n.effects = effects;
                     n.fill_geometry = geometry;
-                    n.source = source.map(|(tool, id, node_type)| SourceRef { tool, id, node_type, bounds: None });
+                    n.source = source.map(|(tool, id, node_type)| SourceRef {
+                        tool,
+                        id,
+                        node_type,
+                        bounds: None,
+                    });
                     n.layout = layout;
                     n.layout_child.grow = grow;
                     n
                 },
             )
-        .boxed()
+            .boxed()
     }
 
     fn scene() -> BoxedStrategy<Scene> {
-        prop::collection::vec((node(), any::<prop::sample::Index>()), 0..8).prop_map(|nodes| {
-            let mut s = Scene::new("Page");
-            let mut ids = vec![s.pages()[0]];
-            for (n, parent) in nodes {
-                let p = *parent.get(&ids);
-                ids.push(add(&mut s, p, n));
-            }
-            s
-        })
-        .boxed()
+        prop::collection::vec((node(), any::<prop::sample::Index>()), 0..8)
+            .prop_map(|nodes| {
+                let mut s = Scene::new("Page");
+                let mut ids = vec![s.pages()[0]];
+                for (n, parent) in nodes {
+                    let p = *parent.get(&ids);
+                    ids.push(add(&mut s, p, n));
+                }
+                s
+            })
+            .boxed()
     }
 
     proptest! {
@@ -657,7 +913,10 @@ fn assets_pass_through() {
 #[ignore = "debug aid: prints the kitchen sink and a Figma scenario as markup"]
 fn dump() {
     println!("{}", print(&kitchen_sink()));
-    let p = scenario_exports().into_iter().find(|p| p.to_string_lossy().contains("regression.kitchen-sink")).unwrap();
+    let p = scenario_exports()
+        .into_iter()
+        .find(|p| p.to_string_lossy().contains("regression.kitchen-sink"))
+        .unwrap();
     let s = figma_import::import_bytes(&std::fs::read(p).unwrap()).unwrap();
     println!("{}", print(&s));
 }

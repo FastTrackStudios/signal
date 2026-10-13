@@ -33,18 +33,39 @@ use crate::delay::parts;
 use crate::face::Face;
 
 pub fn faces() -> Vec<Face> {
-    vec![tube::face(), tape::face(), transformer::face(), transistor::face(), digital::face(), tube::tall_face(), tape::tall_face(), transformer::tall_face(), transistor::tall_face(), digital::tall_face()]
+    vec![
+        tube::face(),
+        tape::face(),
+        transformer::face(),
+        transistor::face(),
+        digital::face(),
+        tube::tall_face(),
+        tape::tall_face(),
+        transformer::tall_face(),
+        transistor::tall_face(),
+        digital::tall_face(),
+    ]
 }
 
 /// What a trim prints: its ends and noon (the circuit as designed).
 pub(crate) const TRIM_MARKS: &[(f64, &str)] = &[(0.0, "-"), (0.5, "0"), (1.0, "+")];
 /// Output's printed scale over −24 … +12 dB.
-pub(crate) const OUT_MARKS: &[(f64, &str)] = &[(0.0, "-24"), (12.0 / 36.0, "-12"), (24.0 / 36.0, "0"), (1.0, "+12")];
+pub(crate) const OUT_MARKS: &[(f64, &str)] = &[
+    (0.0, "-24"),
+    (12.0 / 36.0, "-12"),
+    (24.0 / 36.0, "0"),
+    (1.0, "+12"),
+];
 
 /// Output: −24 … +12 dB in whole dB, bipolar about unity.
 pub(crate) fn output(addr: &str) -> surface_proto::ParamInfo {
-    let r = surface_proto::Range { steps: Some(37), ..surface_proto::Range::linear(-24.0, 12.0, surface_proto::Unit::Db) };
-    crate::delay::parts::param(addr, "Output", r, 0.0).bipolar().featured()
+    let r = surface_proto::Range {
+        steps: Some(37),
+        ..surface_proto::Range::linear(-24.0, 12.0, surface_proto::Unit::Db)
+    };
+    crate::delay::parts::param(addr, "Output", r, 0.0)
+        .bipolar()
+        .featured()
 }
 
 // ── Emphasis ──────────────────────────────────────────────────────────────
@@ -56,7 +77,6 @@ pub(crate) fn output(addr: &str) -> surface_proto::ParamInfo {
 // face's picture for the curve — `viz.eq_graph`, its six bands fixed, in
 // the face's own colour — while the knobs stay. The bands are
 // `<ns>/emph/b{n}_{shape,freq,gain,q}`, n = 1..=6.
-
 
 /// Emphasis bands per saturator.
 pub(crate) const EMPH_BANDS: usize = 6;
@@ -78,36 +98,108 @@ pub(crate) fn emphasis_params(ns: &str) -> Vec<ParamInfo> {
         let n = i + 1;
         let addr = |k: &str| format!("{ns}/emph/b{n}_{k}");
         let group = format!("Emphasis {n}");
-        v.push(parts::choice(&addr("shape"), &format!("Emph {n} Shape"), EMPH_SHAPES, 0).in_group(group.clone()).short("Shape"));
-        v.push(parts::param(&addr("freq"), &format!("Emph {n} Freq"), Range::log(20.0, 20_000.0, Unit::Hz), *f).in_group(group.clone()).short("Freq"));
-        v.push(parts::param(&addr("gain"), &format!("Emph {n} Gain"), Range::linear(-12.0, 12.0, Unit::Db), 0.0).bipolar().in_group(group.clone()).short("Gain"));
-        v.push(parts::param(&addr("q"), &format!("Emph {n} Q"), Range::log(0.1, 18.0, Unit::None), 0.707).in_group(group).short("Q"));
+        v.push(
+            parts::choice(&addr("shape"), &format!("Emph {n} Shape"), EMPH_SHAPES, 0)
+                .in_group(group.clone())
+                .short("Shape"),
+        );
+        v.push(
+            parts::param(
+                &addr("freq"),
+                &format!("Emph {n} Freq"),
+                Range::log(20.0, 20_000.0, Unit::Hz),
+                *f,
+            )
+            .in_group(group.clone())
+            .short("Freq"),
+        );
+        v.push(
+            parts::param(
+                &addr("gain"),
+                &format!("Emph {n} Gain"),
+                Range::linear(-12.0, 12.0, Unit::Db),
+                0.0,
+            )
+            .bipolar()
+            .in_group(group.clone())
+            .short("Gain"),
+        );
+        v.push(
+            parts::param(
+                &addr("q"),
+                &format!("Emph {n} Q"),
+                Range::log(0.1, 18.0, Unit::None),
+                0.707,
+            )
+            .in_group(group)
+            .short("Q"),
+        );
     }
     v
 }
 
 /// A layer the size of `parent`, drawn only while `when` holds: a frame
 /// carrying the condition on a readout of `addr` whose text is never seen.
-fn layer(b: &mut Builder<'_>, parent: NodeId, name: &str, (x, y, w, h): (f64, f64, f64, f64), addr: &str, when: Condition) -> NodeId {
+fn layer(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    (x, y, w, h): (f64, f64, f64, f64),
+    addr: &str,
+    when: Condition,
+) -> NodeId {
     let layer = b.add(parent, draw::frame(name, x, y, w, h));
     let mut seen = draw::text("seen", "", 0.0, 0.0, 1.0, 1.0, "#00000000", TextAlign::Left);
     seen.opacity = 0.0;
     let seen = b.add(layer, seen);
-    b.controls.insert(layer, Control::new(ControlKind::Readout).slot(SlotRole::Value, seen.0).bound(parts::bind(addr)).shown_if(when));
+    b.controls.insert(
+        layer,
+        Control::new(ControlKind::Readout)
+            .slot(SlotRole::Value, seen.0)
+            .bound(parts::bind(addr))
+            .shown_if(when),
+    );
     layer
 }
 
 /// The layer a face draws its picture (and the meters beside it) into:
 /// the whole panel `(w, h)`, hidden while the emphasis EQ shows.
 pub(crate) fn picture(b: &mut Builder<'_>, panel: NodeId, ns: &str, (w, h): (f64, f64)) -> NodeId {
-    layer(b, panel, "Picture", (0.0, 0.0, w, h), &view(ns), Condition::on(view(ns)).negated())
+    layer(
+        b,
+        panel,
+        "Picture",
+        (0.0, 0.0, w, h),
+        &view(ns),
+        Condition::on(view(ns)).negated(),
+    )
 }
 
 /// The emphasis EQ in `(x, y, w, h)` of `panel`, shown while the view is
 /// on: a recessed well holding the six-band graph in `tint`.
-pub(crate) fn emphasis_eq(b: &mut Builder<'_>, panel: NodeId, ns: &str, (x, y, w, h): (f64, f64, f64, f64), tint: &str) {
-    let shown = layer(b, panel, "Emphasis EQ", (x, y, w, h), &view(ns), Condition::on(view(ns)));
-    let well = parts::well(b, shown, "Emphasis well", (0.0, 0.0, w, h), draw::solid("#050505"), 6.0);
+pub(crate) fn emphasis_eq(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    ns: &str,
+    (x, y, w, h): (f64, f64, f64, f64),
+    tint: &str,
+) {
+    let shown = layer(
+        b,
+        panel,
+        "Emphasis EQ",
+        (x, y, w, h),
+        &view(ns),
+        Condition::on(view(ns)),
+    );
+    let well = parts::well(
+        b,
+        shown,
+        "Emphasis well",
+        (0.0, 0.0, w, h),
+        draw::solid("#050505"),
+        6.0,
+    );
     let inset = 3.0;
     let opts = [
         format!("ns={ns}/emph"),
@@ -119,15 +211,40 @@ pub(crate) fn emphasis_eq(b: &mut Builder<'_>, panel: NodeId, ns: &str, (x, y, w
         format!("tint={tint}"),
         format!("h={}", h - 2.0 * inset),
     ];
-    let p = Place { options: Some(opts.to_vec()), ..Place::new("Emphasis").size(w - 2.0 * inset) };
+    let p = Place {
+        options: Some(opts.to_vec()),
+        ..Place::new("Emphasis").size(w - 2.0 * inset)
+    };
     parts::put_at(b, well, "viz.eq_graph", &p, inset, inset);
-    parts::silk_left(b, well, "Drive emphasis", 10.0, 12.0, parts::Ink::new(6.0, tint).weight(800.0).track(0.2));
+    parts::silk_left(
+        b,
+        well,
+        "Drive emphasis",
+        10.0,
+        12.0,
+        parts::Ink::new(6.0, tint).weight(800.0).track(0.2),
+    );
 }
 
 /// The EMPHASIS key at (`cx`, `cy`), `w` wide: a latching console key
 /// (`variant`) whose lamp lights in `tint` while the EQ shows.
-pub(crate) fn emphasis_key(b: &mut Builder<'_>, panel: NodeId, ns: &str, (cx, cy): (f64, f64), w: f64, variant: &str, tint: &str) -> NodeId {
+pub(crate) fn emphasis_key(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    ns: &str,
+    (cx, cy): (f64, f64),
+    w: f64,
+    variant: &str,
+    tint: &str,
+) -> NodeId {
     let opts = [format!("h={}", (w * 0.36).round()), format!("color={tint}")];
-    let p = Place { options: Some(opts.to_vec()), ..Place::new("Emphasis").size(w).variant(variant).legend("Emphasis").bind(parts::bind(&view(ns))) };
+    let p = Place {
+        options: Some(opts.to_vec()),
+        ..Place::new("Emphasis")
+            .size(w)
+            .variant(variant)
+            .legend("Emphasis")
+            .bind(parts::bind(&view(ns)))
+    };
     parts::put(b, panel, "button.key", &p, cx, cy)
 }

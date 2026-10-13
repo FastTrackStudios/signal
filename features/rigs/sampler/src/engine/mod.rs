@@ -1589,7 +1589,9 @@ impl SampleEngine {
     /// Whether this engine's zones record a mic named `name` (any case).
     #[must_use]
     pub fn has_mic(&self, name: &str) -> bool {
-        self.mic_rank_names.iter().any(|m| m.eq_ignore_ascii_case(name))
+        self.mic_rank_names
+            .iter()
+            .any(|m| m.eq_ignore_ascii_case(name))
     }
 
     /// Attack envelope length in frames for sustained notes (CSS attack
@@ -1798,9 +1800,9 @@ impl SampleEngine {
         self.piano_voice = voice;
         self.piano_key_cents = voice.map_or([0.0; 128], |pv| {
             let law = crate::piano_note_law::NoteOnLaw::of(
-                    pv.offsets.piano,
-                    crate::piano_release::Snapshot::Factory,
-                );
+                pv.offsets.piano,
+                crate::piano_release::Snapshot::Factory,
+            );
             std::array::from_fn(|k| law.tune_cents(k as u8))
         });
     }

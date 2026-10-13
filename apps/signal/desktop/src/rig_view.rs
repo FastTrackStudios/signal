@@ -18,9 +18,9 @@ use guitar::proto::rig::{RigClient, RigStreamClient};
 use guitar::ui::GuitarRigRemote;
 use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
 use keys::ui::KeysRigRemote;
+use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 use synth::proto::synth::{SynthRigClient, SynthRigStreamClient};
 use synth::ui::SynthRigRemote;
-use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// Compiled Tailwind for the signal UI components (built by `just
 /// tailwind` from ../input.css). This is the app's single comprehensive
@@ -301,7 +301,10 @@ fn GuitarRigView(instrument: &'static str) -> Element {
     #[allow(unused_mut)]
     let mut size = use_signal(|| (0.0_f64, 0.0_f64));
     use_context_provider(|| guitar::ui::WindowSize(size));
-    #[cfg(all(not(any(target_arch = "wasm32", target_os = "ios")), not(feature = "webview")))]
+    #[cfg(all(
+        not(any(target_arch = "wasm32", target_os = "ios")),
+        not(feature = "webview")
+    ))]
     {
         let window = dioxus_native::use_window();
         use_future(move || {

@@ -207,8 +207,8 @@ impl KitMic {
         rate: u32,
     ) -> Result<Piece, String> {
         let engine_path = resolve(&er.engine, dir);
-        let spec = sampler::engine_spec::EngineSpec::from_file(&engine_path)
-            .map_err(|e| e.to_string())?;
+        let spec =
+            sampler::engine_spec::EngineSpec::from_file(&engine_path).map_err(|e| e.to_string())?;
         let pack = resolve(
             &spec.block.pack,
             engine_path.parent().unwrap_or_else(|| Path::new("")),

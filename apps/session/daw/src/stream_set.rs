@@ -51,7 +51,9 @@ pub enum Remote {
 /// # Errors
 ///
 /// The library could not be reached, or refused.
-pub fn setlists(library: &session::library::Library) -> eyre::Result<Vec<session::library::Setlist>> {
+pub fn setlists(
+    library: &session::library::Library,
+) -> eyre::Result<Vec<session::library::Setlist>> {
     crate::open::engine_runtime()?.block_on(library.setlists())
 }
 

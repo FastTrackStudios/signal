@@ -450,8 +450,8 @@ fn the_record_arm_and_the_button_column_share_an_axis() {
 /// largest single block of difference the strip comparison had left.
 #[test]
 fn the_band_is_painted_at_reapers_tint() {
-    use daw_ui::theme::Color;
     use daw_ui::art::dress::panel_tint;
+    use daw_ui::theme::Color;
 
     assert_eq!(panel_tint(Color::rgb(0xE0, 0x56, 0x7A)).to_hex(), "#9d3c55");
 

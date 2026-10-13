@@ -9,9 +9,9 @@
 //! One consequence worth keeping: the top bar now fits on a single row
 //! at plugin width, so the canvas no longer loses a wrapped second row.
 
-use dioxus::prelude::*;
 use crate::doc::Dimension;
 use crate::{Editor, Shape, StripLane, Tool, chord};
+use dioxus::prelude::*;
 
 use crate::ui::drawer::ModDrawer;
 use crate::ui::interaction::{self, Drag};

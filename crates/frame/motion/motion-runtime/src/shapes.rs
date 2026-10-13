@@ -34,7 +34,10 @@ impl ShapeCtx<'_> {
     /// Input `name`, or `default`.
     #[must_use]
     pub fn get(&self, name: &str, default: f64) -> f64 {
-        self.args.iter().find(|(k, _)| *k == name).map_or(default, |(_, v)| *v)
+        self.args
+            .iter()
+            .find(|(k, _)| *k == name)
+            .map_or(default, |(_, v)| *v)
     }
 }
 
@@ -98,7 +101,13 @@ fn closed(pts: &[(f64, f64)]) -> String {
 fn circles(cs: &[(f64, f64, f64)]) -> String {
     let mut d = String::new();
     for (cx, cy, r) in cs {
-        let _ = write!(d, "M {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 0 {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 0 {:.3} {cy:.3} Z ", cx - r, cx + r, cx - r);
+        let _ = write!(
+            d,
+            "M {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 0 {:.3} {cy:.3} A {r:.3} {r:.3} 0 1 0 {:.3} {cy:.3} Z ",
+            cx - r,
+            cx + r,
+            cx - r
+        );
     }
     d.truncate(d.trim_end().len());
     d
@@ -155,7 +164,10 @@ fn coil(c: &ShapeCtx<'_>) -> Option<Vec<String>> {
         let pts: Vec<(f64, f64)> = (0..=10)
             .map(|k| {
                 let t = from + (to - from) * f64::from(k) / 10.0;
-                (cx + pitch * 0.55 * t.cos() + pitch * 0.35 * t.sin(), y + dy + r * t.sin() + lift)
+                (
+                    cx + pitch * 0.55 * t.cos() + pitch * 0.35 * t.sin(),
+                    y + dy + r * t.sin() + lift,
+                )
             })
             .collect();
         lines.push(pts);
@@ -185,7 +197,12 @@ impl Room {
         let back = (b0.0, b0.1, b1.0, b1.1);
         let src = (lerp(back.0, back.2, 0.2), back.3 - 10.0 * k.max(0.4) / 0.58);
         let ear = (front.0 + (front.2 - front.0) * 0.6, front.3 - 16.0);
-        Self { front, back, src, ear }
+        Self {
+            front,
+            back,
+            src,
+            ear,
+        }
     }
 
     /// Reflection point `i` on the walls (left, ceiling, right, back in
@@ -244,7 +261,13 @@ fn room(c: &ShapeCtx<'_>) -> Option<Vec<String>> {
     let n = reflections(diffusion);
     let d = match c.part {
         "back" => closed(&[(b.0, b.1), (b.2, b.1), (b.2, b.3), (b.0, b.3)]),
-        "outline" => polylines(&[vec![(b.0, b.1), (b.2, b.1), (b.2, b.3), (b.0, b.3), (b.0, b.1)]]),
+        "outline" => polylines(&[vec![
+            (b.0, b.1),
+            (b.2, b.1),
+            (b.2, b.3),
+            (b.0, b.3),
+            (b.0, b.1),
+        ]]),
         "floor" => closed(&[(b.0, b.3), (b.2, b.3), (f.2, f.3), (f.0, f.3)]),
         "edges" => polylines(&[
             vec![(f.0, f.1), (b.0, b.1)],
@@ -260,33 +283,60 @@ fn room(c: &ShapeCtx<'_>) -> Option<Vec<String>> {
                 })
                 .collect::<Vec<_>>(),
         ),
-        "speaker" => closed(&[(r.src.0 - 7.0, r.src.1 - 12.0), (r.src.0 + 7.0, r.src.1 - 12.0), (r.src.0 + 7.0, r.src.1 + 8.0), (r.src.0 - 7.0, r.src.1 + 8.0)]),
+        "speaker" => closed(&[
+            (r.src.0 - 7.0, r.src.1 - 12.0),
+            (r.src.0 + 7.0, r.src.1 - 12.0),
+            (r.src.0 + 7.0, r.src.1 + 8.0),
+            (r.src.0 - 7.0, r.src.1 + 8.0),
+        ]),
         "cone" => circles(&[(r.src.0, r.src.1 + 1.0, 4.5)]),
         "direct" => polylines(&[vec![r.src, r.ear]]),
-        "rays" => polylines(&(0..n).map(|i| vec![r.src, r.bounce(i), r.ear]).collect::<Vec<_>>()),
+        "rays" => polylines(
+            &(0..n)
+                .map(|i| vec![r.src, r.bounce(i), r.ear])
+                .collect::<Vec<_>>(),
+        ),
         "echoes" => {
             let m = (decay.clamp(0.0, 1.0) * n as f64).round() as usize;
             if m == 0 {
                 String::from("M 0 0")
             } else {
-                polylines(&(0..m).map(|i| vec![r.src, r.bounce(i), r.bounce((i + 2) % n), r.ear]).collect::<Vec<_>>())
+                polylines(
+                    &(0..m)
+                        .map(|i| vec![r.src, r.bounce(i), r.bounce((i + 2) % n), r.ear])
+                        .collect::<Vec<_>>(),
+                )
             }
         }
-        "bounces" => circles(&(0..n).map(|i| {
-            let p = r.bounce(i);
-            (p.0, p.1, 2.2)
-        }).collect::<Vec<_>>()),
+        "bounces" => circles(
+            &(0..n)
+                .map(|i| {
+                    let p = r.bounce(i);
+                    (p.0, p.1, 2.2)
+                })
+                .collect::<Vec<_>>(),
+        ),
         "taps" | "tap_heads" => {
             let (x0, x1, base, top) = (352.0, w - 20.0, h - 30.0, 26.0);
             let taps = room_taps(size, decay, diffusion);
             let at = |ms: f64, a: f64| (x0 + (x1 - x0) * ms / 80.0, base - (base - top) * a);
             if c.part == "taps" {
-                polylines(&taps.iter().map(|(ms, a)| vec![(at(*ms, 0.0).0, base), at(*ms, *a)]).collect::<Vec<_>>())
+                polylines(
+                    &taps
+                        .iter()
+                        .map(|(ms, a)| vec![(at(*ms, 0.0).0, base), at(*ms, *a)])
+                        .collect::<Vec<_>>(),
+                )
             } else {
-                circles(&taps.iter().map(|(ms, a)| {
-                    let p = at(*ms, *a);
-                    (p.0, p.1, 1.8)
-                }).collect::<Vec<_>>())
+                circles(
+                    &taps
+                        .iter()
+                        .map(|(ms, a)| {
+                            let p = at(*ms, *a);
+                            (p.0, p.1, 1.8)
+                        })
+                        .collect::<Vec<_>>(),
+                )
             }
         }
         _ => return None,
@@ -334,19 +384,49 @@ mod tests {
     use super::*;
 
     fn ctx<'a>(part: &'a str, args: &'a [(&'a str, f64)]) -> ShapeCtx<'a> {
-        ShapeCtx { part, width: 560.0, height: 140.0, args }
+        ShapeCtx {
+            part,
+            width: 560.0,
+            height: 140.0,
+            args,
+        }
     }
 
     #[test]
     fn coil_ends_stay_put_and_the_middle_bends() {
-        let still = coil(&ctx("front", &[("x0", 100.0), ("x1", 300.0), ("y", 50.0), ("r", 10.0)])).unwrap();
-        let bent = coil(&ctx("front", &[("x0", 100.0), ("x1", 300.0), ("y", 50.0), ("r", 10.0), ("bend", 6.0)])).unwrap();
+        let still = coil(&ctx(
+            "front",
+            &[("x0", 100.0), ("x1", 300.0), ("y", 50.0), ("r", 10.0)],
+        ))
+        .unwrap();
+        let bent = coil(&ctx(
+            "front",
+            &[
+                ("x0", 100.0),
+                ("x1", 300.0),
+                ("y", 50.0),
+                ("r", 10.0),
+                ("bend", 6.0),
+            ],
+        ))
+        .unwrap();
         assert_ne!(still, bent);
-        let ys = |d: &str| d.split_whitespace().filter_map(|t| t.parse::<f64>().ok()).skip(1).step_by(2).collect::<Vec<_>>();
+        let ys = |d: &str| {
+            d.split_whitespace()
+                .filter_map(|t| t.parse::<f64>().ok())
+                .skip(1)
+                .step_by(2)
+                .collect::<Vec<_>>()
+        };
         let (s, b) = (ys(&still[0]), ys(&bent[0]));
         assert!((s[0] - b[0]).abs() < 0.5, "first loop barely moves");
         let mid = s.len() / 2;
-        assert!((b[mid] - s[mid] - 6.0).abs() < 0.2, "middle bends by `bend`: {} vs {}", b[mid], s[mid]);
+        assert!(
+            (b[mid] - s[mid] - 6.0).abs() < 0.2,
+            "middle bends by `bend`: {} vs {}",
+            b[mid],
+            s[mid]
+        );
         assert!(coil(&ctx("nope", &[])).is_none());
     }
 
@@ -354,15 +434,25 @@ mod tests {
     fn room_follows_its_params() {
         let back = |size: f64| room(&ctx("back", &[("size", size)])).unwrap()[0].clone();
         assert_ne!(back(0.1), back(0.9));
-        let count = |part: &str, diffusion: f64| room(&ctx(part, &[("diffusion", diffusion)])).unwrap()[0].matches('M').count();
+        let count = |part: &str, diffusion: f64| {
+            room(&ctx(part, &[("diffusion", diffusion)])).unwrap()[0]
+                .matches('M')
+                .count()
+        };
         assert_eq!(count("rays", 0.0), 2);
         assert_eq!(count("rays", 1.0), 8);
         assert_eq!(count("bounces", 0.5), 5);
         let taps = |decay: f64| room_taps(0.5, decay, 0.6);
         let (short, long) = (taps(0.0), taps(1.0));
         assert_eq!(short.len(), long.len());
-        assert!(long.iter().zip(&short).skip(1).all(|(l, s)| l.1 > s.1), "longer decay, higher taps");
-        assert!(room_taps(1.0, 0.5, 0.6).last().unwrap().0 > room_taps(0.0, 0.5, 0.6).last().unwrap().0 || room_taps(1.0, 0.5, 0.6).len() < room_taps(0.0, 0.5, 0.6).len());
+        assert!(
+            long.iter().zip(&short).skip(1).all(|(l, s)| l.1 > s.1),
+            "longer decay, higher taps"
+        );
+        assert!(
+            room_taps(1.0, 0.5, 0.6).last().unwrap().0 > room_taps(0.0, 0.5, 0.6).last().unwrap().0
+                || room_taps(1.0, 0.5, 0.6).len() < room_taps(0.0, 0.5, 0.6).len()
+        );
     }
 
     #[test]
@@ -373,6 +463,9 @@ mod tests {
         let mut r = ShapeRegistry::builtin();
         assert_eq!(r.names().collect::<Vec<_>>(), BUILTIN);
         r.register("coil", mine);
-        assert_eq!(r.get("coil").unwrap()(&ctx("front", &[])).unwrap(), ["M0 0"]);
+        assert_eq!(
+            r.get("coil").unwrap()(&ctx("front", &[])).unwrap(),
+            ["M0 0"]
+        );
     }
 }

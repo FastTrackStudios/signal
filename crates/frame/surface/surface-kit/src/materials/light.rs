@@ -56,7 +56,12 @@ pub fn hotspot() -> (f64, f64) {
 pub fn sheen(lit: f64, dark: f64) -> Paint {
     draw::linear(
         sheen_angle(),
-        &[(0.0, &alpha("#ffffff", lit)), (0.42, "#ffffff00"), (0.62, "#00000000"), (1.0, &alpha("#000000", dark))],
+        &[
+            (0.0, &alpha("#ffffff", lit)),
+            (0.42, "#ffffff00"),
+            (0.62, "#00000000"),
+            (1.0, &alpha("#000000", dark)),
+        ],
     )
 }
 
@@ -67,7 +72,12 @@ pub fn bevel(depth: f64, strength: f64) -> Vec<Effect> {
     let (lx, ly) = toward_light();
     let d = depth.max(0.5);
     vec![
-        draw::inner_shadow(&alpha("#ffffff", 0.45 * strength), -lx * d, -ly * d, d * 1.6),
+        draw::inner_shadow(
+            &alpha("#ffffff", 0.45 * strength),
+            -lx * d,
+            -ly * d,
+            d * 1.6,
+        ),
         draw::inner_shadow(&alpha("#000000", 0.55 * strength), lx * d, ly * d, d * 2.0),
     ]
 }
@@ -80,7 +90,12 @@ pub fn recess(depth: f64, strength: f64) -> Vec<Effect> {
     let d = depth.max(0.5);
     vec![
         draw::inner_shadow(&alpha("#000000", 0.7 * strength), -lx * d, -ly * d, d * 2.2),
-        draw::inner_shadow(&alpha("#ffffff", 0.18 * strength), lx * d * 0.4, ly * d * 0.4, d * 0.6),
+        draw::inner_shadow(
+            &alpha("#ffffff", 0.18 * strength),
+            lx * d * 0.4,
+            ly * d * 0.4,
+            d * 0.6,
+        ),
     ]
 }
 
@@ -90,24 +105,49 @@ pub fn recess(depth: f64, strength: f64) -> Vec<Effect> {
 /// soft one — no effect layers, so it costs the same at any size. Prefer it
 /// to [`bevel`] / [`recess`] on large faces.
 #[must_use]
-pub fn edge(name: &str, (x, y, w, h): (f64, f64, f64, f64), radius: f64, depth: f64, strength: f64, raised: bool) -> [Node; 2] {
-    let (near, far) = if raised { ("#ffffff", "#000000") } else { ("#000000", "#ffffff") };
+pub fn edge(
+    name: &str,
+    (x, y, w, h): (f64, f64, f64, f64),
+    radius: f64,
+    depth: f64,
+    strength: f64,
+    raised: bool,
+) -> [Node; 2] {
+    let (near, far) = if raised {
+        ("#ffffff", "#000000")
+    } else {
+        ("#000000", "#ffffff")
+    };
     let (na, fa) = if raised { (0.5, 0.55) } else { (0.65, 0.2) };
     let paint = |k: f64| {
         draw::linear(
             sheen_angle(),
-            &[(0.0, &alpha(near, na * strength * k)), (0.4, &alpha(near, na * strength * k * 0.25)), (0.5, "#00000000"), (0.62, &alpha(far, fa * strength * k * 0.3)), (1.0, &alpha(far, fa * strength * k))],
+            &[
+                (0.0, &alpha(near, na * strength * k)),
+                (0.4, &alpha(near, na * strength * k * 0.25)),
+                (0.5, "#00000000"),
+                (0.62, &alpha(far, fa * strength * k * 0.3)),
+                (1.0, &alpha(far, fa * strength * k)),
+            ],
         )
     };
     let ring = |nm: &str, wt: f64, k: f64| {
         let mut n = draw::rounded(draw::rect(nm, x, y, w, h, draw::solid("#00000000")), radius);
         n.fills.clear();
-        n.stroke = Stroke { paints: vec![paint(k)], weight: wt, align: StrokeAlign::Inside, ..Stroke::default() };
+        n.stroke = Stroke {
+            paints: vec![paint(k)],
+            weight: wt,
+            align: StrokeAlign::Inside,
+            ..Stroke::default()
+        };
         n.layout_child.absolute = true;
         n
     };
     let d = depth.max(0.5);
-    [ring(&format!("{name} soft"), d * 1.8, 0.45), ring(name, (d * 0.55).max(0.6), 1.0)]
+    [
+        ring(&format!("{name} soft"), d * 1.8, 0.45),
+        ring(name, (d * 0.55).max(0.6), 1.0),
+    ]
 }
 
 /// The shadows of a part standing `height` px off the surface: a tight,
@@ -118,8 +158,18 @@ pub fn stand(height: f64, strength: f64) -> Vec<Effect> {
     let (cx, cy) = shadow_offset(height * 0.25);
     let (sx, sy) = shadow_offset(height);
     vec![
-        draw::drop_shadow(&alpha("#000000", 0.55 * strength), cx, cy, (height * 0.35).max(1.0)),
-        draw::drop_shadow(&alpha("#000000", 0.42 * strength), sx, sy, (height * 1.6).max(2.0)),
+        draw::drop_shadow(
+            &alpha("#000000", 0.55 * strength),
+            cx,
+            cy,
+            (height * 0.35).max(1.0),
+        ),
+        draw::drop_shadow(
+            &alpha("#000000", 0.42 * strength),
+            sx,
+            sy,
+            (height * 1.6).max(2.0),
+        ),
     ]
 }
 

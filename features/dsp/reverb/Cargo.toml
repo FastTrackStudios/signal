@@ -40,6 +40,9 @@ vello = { workspace = true, optional = true }
 web-time = { workspace = true, optional = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+reverb = { path = ".", features = ["native", "profiles", "ui", "viz"] }
 bytemuck = { version = "1", features = ["derive"] }
 dioxus = { workspace = true }
 dioxus-test = { workspace = true }

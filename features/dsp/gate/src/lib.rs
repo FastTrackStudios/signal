@@ -20,8 +20,6 @@
 //! `no_std` + `alloc`; allocation happens in [`DrumGate::new`] only.
 
 #![deny(clippy::disallowed_methods)]
-
-
 #![no_std]
 extern crate alloc;
 

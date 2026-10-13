@@ -35,9 +35,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use trigger::detector::DetectAlgorithm;
+use trigger::ui::params::{TriggerParams, TriggerUiState};
 use trigger::velocity::{VelocityCurve, VelocityMapper};
 use trigger::{AudioConfig, Processor, TriggerChain};
-use trigger::ui::params::{TriggerParams, TriggerUiState};
 
 const PLUGIN_NAME: &str = "FTS Trigger";
 

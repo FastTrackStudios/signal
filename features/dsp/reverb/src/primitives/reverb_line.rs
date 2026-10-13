@@ -192,7 +192,11 @@ impl ReverbLine {
     /// in samples (0 when it is out).
     #[must_use]
     pub fn diffuser_delay(&self) -> usize {
-        if self.diffuser_enabled { self.diffuser.total_delay() } else { 0 }
+        if self.diffuser_enabled {
+            self.diffuser.total_delay()
+        } else {
+            0
+        }
     }
 
     pub fn clear_diffuser(&mut self) {

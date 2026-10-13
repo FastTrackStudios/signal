@@ -2,8 +2,8 @@ use formats::ableton::*;
 
 fn main() {
     for path in &[
-        "crates/dawfile-ableton/tests/fixtures/Farmhouse.als",
-        "crates/dawfile-ableton/tests/fixtures/LucidDreaming.als",
+        "crates/dawfile-ableton/tests/fixtures/ableton/Farmhouse.als",
+        "crates/dawfile-ableton/tests/fixtures/ableton/LucidDreaming.als",
     ] {
         println!("\n{}", "=".repeat(60));
         println!("Parsing: {path}");

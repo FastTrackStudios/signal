@@ -22,9 +22,9 @@
 //! additive layer. The mixer strip spent an afternoon learning this the
 //! hard way; see `components::mixer`.
 
-use daw_proto::Track;
 use crate::art::dress::Panel;
 use crate::art::vector_controls as art;
+use daw_proto::Track;
 
 use crate::controls::{
     Caret, EnvelopeButton, FxButton, IoButton, MuteButton, PanKnob, PhaseButton, RecordArmButton,

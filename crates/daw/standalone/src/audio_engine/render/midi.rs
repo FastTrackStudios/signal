@@ -16,7 +16,14 @@ pub(crate) fn collect_midi_events(
     frames: usize,
 ) -> Vec<crate::plugin::PluginMidiEvent> {
     let mut out = Vec::new();
-    collect_midi_events_into(&mut out, track, start_seconds, end_seconds, frames_per_second, frames);
+    collect_midi_events_into(
+        &mut out,
+        track,
+        start_seconds,
+        end_seconds,
+        frames_per_second,
+        frames,
+    );
     out
 }
 

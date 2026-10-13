@@ -105,7 +105,7 @@ impl Default for NativeTrackSpec {
 ///
 /// This is an encrypted PTX. We decrypt → patch → re-encrypt.
 const BASELINE_PTX: &[u8] =
-    include_bytes!("../../../tests/fixtures/native-writer/baseline-single-track.ptx");
+    include_bytes!("../../../tests/fixtures/protools/native-writer/baseline-single-track.ptx");
 
 /// Generate a single-track PTX file from `spec`. Returns the encrypted
 /// PTX bytes ready to write to disk.

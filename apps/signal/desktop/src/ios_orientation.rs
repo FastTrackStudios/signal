@@ -80,4 +80,3 @@ pub fn set_idle_timer_disabled(disabled: bool) {
         let _: () = msg_send![app, setIdleTimerDisabled: disabled];
     }
 }
-

@@ -40,6 +40,9 @@ zip = { version = "2", default-features = false, features = ["deflate"], optiona
 zstd = { version = "0.13", optional = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+formats = { path = ".", features = ["aaf", "ableton", "dawproject", "logic", "protools", "session", "store"] }
 daw-proto = { workspace = true }
 dawfile-reaper = { workspace = true }
 loro = { workspace = true }

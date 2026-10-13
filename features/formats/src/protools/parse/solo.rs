@@ -96,7 +96,8 @@ fn collect_solo_defeat_by_name(blocks: &[Block], data: &[u8]) -> HashMap<String,
     }
 
     let mut out: HashMap<String, bool> = HashMap::new();
-    let aux_blocks = crate::protools::parse::collect_blocks_recursive(blocks, ContentType::TrackAuxState);
+    let aux_blocks =
+        crate::protools::parse::collect_blocks_recursive(blocks, ContentType::TrackAuxState);
     for b in &aux_blocks {
         let p = b.offset + 2 + 268;
         if p >= data.len() {
@@ -142,8 +143,10 @@ pub fn apply_solo_state(
     audio_tracks: &mut [Track],
     midi_tracks: &mut [Track],
 ) {
-    let containers = crate::protools::parse::collect_blocks_recursive(blocks, ContentType::TrackContainer);
-    let mix_blocks = crate::protools::parse::collect_blocks_recursive(blocks, ContentType::TrackMixSettings);
+    let containers =
+        crate::protools::parse::collect_blocks_recursive(blocks, ContentType::TrackContainer);
+    let mix_blocks =
+        crate::protools::parse::collect_blocks_recursive(blocks, ContentType::TrackMixSettings);
     let converter_authored = !containers.is_empty() && mix_blocks.len() >= containers.len() * 8;
     if !converter_authored {
         return; // PT-authored: +162/+268 are unreliable, leave solo state false.

@@ -25,8 +25,8 @@
 //! not mistake it for a fixture that forgot to vary anything.
 
 use dsp_core::audio::{AudioConfig, Processor};
-use dsp_core::golden::{Golden, signal};
 use dsp_core::golden;
+use dsp_core::golden::{Golden, signal};
 use reverb::AlgorithmType;
 use reverb::chain::ReverbChain;
 

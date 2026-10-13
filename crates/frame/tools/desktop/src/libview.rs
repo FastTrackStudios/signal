@@ -65,7 +65,12 @@ impl LibraryView {
     ///
     /// # Errors
     /// When the library can't be reached.
-    pub fn start(url: &str, surface: Option<String>, browse: bool, install_dir: PathBuf) -> Result<Self, String> {
+    pub fn start(
+        url: &str,
+        surface: Option<String>,
+        browse: bool,
+        install_dir: PathBuf,
+    ) -> Result<Self, String> {
         let preview = surface.is_some() && !browse;
         let live = Live::connect(url, if preview { surface.clone() } else { None })?;
         let mut browser = Browser::new(url, None);
@@ -75,7 +80,14 @@ impl LibraryView {
         }
         eprintln!("frame: library {url}: {} surfaces", live.index().len());
         let author = std::env::var("USER").unwrap_or_else(|_| "frame".into());
-        Ok(Self { live, browser, mode: if preview { Mode::Preview } else { Mode::Browse }, toast: None, install_dir, author })
+        Ok(Self {
+            live,
+            browser,
+            mode: if preview { Mode::Preview } else { Mode::Browse },
+            toast: None,
+            install_dir,
+            author,
+        })
     }
 
     /// Only list surfaces that fit `engine` (named `name`).
@@ -109,7 +121,9 @@ impl LibraryView {
     /// # Errors
     /// Unreachable, no such surface, or it doesn't decode.
     pub fn initial(&mut self) -> Result<Option<Surface>, String> {
-        let Some(id) = self.live.following().map(str::to_owned) else { return Ok(None) };
+        let Some(id) = self.live.following().map(str::to_owned) else {
+            return Ok(None);
+        };
         let stored = self.live.get(&id)?;
         let scene = stored.content.decode().map_err(|e| format!("{id}:{e}"))?;
         self.live.shown(&stored);
@@ -132,10 +146,12 @@ impl LibraryView {
                         continue;
                     }
                     let (id, version) = (update.id.clone(), update.version);
-                    match library::accept(&update, player.scene(), player.catalog()).and_then(|(stored, surface)| {
-                        player.swap(surface)?;
-                        Ok(stored)
-                    }) {
+                    match library::accept(&update, player.scene(), player.catalog()).and_then(
+                        |(stored, surface)| {
+                            player.swap(surface)?;
+                            Ok(stored)
+                        },
+                    ) {
                         Ok(stored) => {
                             eprintln!("frame: {id} v{version} live");
                             self.live.shown(&stored);
@@ -155,12 +171,18 @@ impl LibraryView {
     }
 
     fn note(&mut self, text: String, error: bool) {
-        self.toast = Some(Toast { text, error, until: None });
+        self.toast = Some(Toast {
+            text,
+            error,
+            until: None,
+        });
     }
 
     /// Preview the selected surface live.
     pub fn open_selected(&mut self, player: &mut Player) {
-        let Some(id) = self.browser.selected().map(|m| m.id.clone()) else { return };
+        let Some(id) = self.browser.selected().map(|m| m.id.clone()) else {
+            return;
+        };
         self.open(&id, player);
     }
 
@@ -176,7 +198,10 @@ impl LibraryView {
                 self.live.shown(&stored);
                 self.mode = Mode::Preview;
                 self.browser.select(id);
-                eprintln!("frame: previewing {id} v{} (B for the library)", stored.meta.version);
+                eprintln!(
+                    "frame: previewing {id} v{} (B for the library)",
+                    stored.meta.version
+                );
             }
             Err(e) => self.note(format!("can't open {id}: {e}"), true),
         }
@@ -199,7 +224,9 @@ impl LibraryView {
         if self.mode != Mode::Browse {
             return false;
         }
-        let Some(i) = self.browser.hit(at.0, at.1) else { return false };
+        let Some(i) = self.browser.hit(at.0, at.1) else {
+            return false;
+        };
         self.browser.set_selected(i);
         self.open_selected(player);
         true
@@ -217,7 +244,10 @@ impl LibraryView {
 
     /// Copy the current surface into the install folder.
     pub fn install(&mut self) {
-        match self.current().and_then(|s| library::install(&s, &self.install_dir)) {
+        match self
+            .current()
+            .and_then(|s| library::install(&s, &self.install_dir))
+        {
             Ok(path) => {
                 eprintln!("frame: installed {}", path.display());
                 self.note(format!("installed to {}", path.display()), false);
@@ -232,7 +262,12 @@ impl LibraryView {
         let author = self.author.clone();
         match self.current().and_then(|s| self.live.fork(&s, &author)) {
             Ok(p) => {
-                eprintln!("frame: forked to {} — edit it: frame-mcp --library {} --surface {}", p.id, self.live.url(), p.id);
+                eprintln!(
+                    "frame: forked to {} — edit it: frame-mcp --library {} --surface {}",
+                    p.id,
+                    self.live.url(),
+                    p.id
+                );
                 self.open(&p.id, player);
                 self.note(format!("forked to {}", p.id), false);
             }
@@ -258,13 +293,18 @@ impl LibraryView {
     /// "library disconnected …" while it is.
     #[must_use]
     pub fn banner(&self) -> Option<String> {
-        self.live.lost().map(|why| format!("library disconnected — reconnecting… ({why})"))
+        self.live
+            .lost()
+            .map(|why| format!("library disconnected — reconnecting… ({why})"))
     }
 
     #[must_use]
     pub fn title(&self) -> String {
         match (self.mode, self.live.following()) {
-            (Mode::Preview, Some(id)) => format!("frame — {id} — live from {} — B for the library", self.live.url()),
+            (Mode::Preview, Some(id)) => format!(
+                "frame — {id} — live from {} — B for the library",
+                self.live.url()
+            ),
             _ => format!("frame — library {}", self.live.url()),
         }
     }
@@ -273,7 +313,9 @@ impl LibraryView {
     /// size), or `None` once it expired.
     pub fn toast(&mut self, t: f64, width: f64) -> Option<(Scene, NodeId, f64, f64)> {
         let toast = self.toast.as_mut()?;
-        let until = *toast.until.get_or_insert(t + if toast.error { TOAST_MS } else { NOTE_MS });
+        let until = *toast
+            .until
+            .get_or_insert(t + if toast.error { TOAST_MS } else { NOTE_MS });
         if t > until {
             self.toast = None;
             return None;

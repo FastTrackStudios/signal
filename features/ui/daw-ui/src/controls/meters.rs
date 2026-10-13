@@ -24,8 +24,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use daw_proto::peak::TrackLevels;
 use crate::art::vector_controls as art;
+use daw_proto::peak::TrackLevels;
 
 use crate::controls::use_track_store;
 use crate::prelude::*;

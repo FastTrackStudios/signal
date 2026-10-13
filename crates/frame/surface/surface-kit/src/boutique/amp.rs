@@ -9,7 +9,13 @@ use crate::draw;
 use crate::registry::{ComponentDef, Family, Place};
 
 fn dims(p: &Place, w: f64, h: f64) -> (f64, f64) {
-    (p.opt("w").and_then(|v| v.parse().ok()).or(p.size).unwrap_or(w), p.opt("h").and_then(|v| v.parse().ok()).unwrap_or(h))
+    (
+        p.opt("w")
+            .and_then(|v| v.parse().ok())
+            .or(p.size)
+            .unwrap_or(w),
+        p.opt("h").and_then(|v| v.parse().ok()).unwrap_or(h),
+    )
 }
 
 /// `panel.amp_grille`: a speaker grille cloth.
@@ -18,7 +24,8 @@ fn grille(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let v = p.variant.as_deref().unwrap_or("diamond");
     let mut root = draw::frame(&p.name, 0.0, 0.0, w, h);
     root.clips_content = true;
-    root.corner_radii = CornerRadii::uniform(p.opt("r").and_then(|r| r.parse().ok()).unwrap_or(2.0));
+    root.corner_radii =
+        CornerRadii::uniform(p.opt("r").and_then(|r| r.parse().ok()).unwrap_or(2.0));
     root.effects = vec![draw::inner_shadow("#000000c0", 0.0, 3.0, 10.0)];
     let mut rng = Rng::new(&format!("{v}{w}{h}"));
     match v {
@@ -43,7 +50,20 @@ fn grille(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
             }
             b.add(root, strokes("weft", w, h, &a, "#c89a78", 2.6));
             b.add(root, strokes("warp", w, h, &c, "#4a2418", 2.2));
-            b.add(root, draw::rect("sheen", 0.0, 0.0, w, h, draw::linear(180.0, &[(0.0, "#ffffff10"), (0.6, "#00000000"), (1.0, "#00000040")])));
+            b.add(
+                root,
+                draw::rect(
+                    "sheen",
+                    0.0,
+                    0.0,
+                    w,
+                    h,
+                    draw::linear(
+                        180.0,
+                        &[(0.0, "#ffffff10"), (0.6, "#00000000"), (1.0, "#00000040")],
+                    ),
+                ),
+            );
             root
         }
         "basket" => {
@@ -60,8 +80,14 @@ fn grille(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
                 while x < w + s {
                     hz.push(vec![(x + 1.0, y + s * 0.35), (x + s - 1.0, y + s * 0.35)]);
                     hz.push(vec![(x + 1.0, y + s * 0.7), (x + s - 1.0, y + s * 0.7)]);
-                    vt.push(vec![(x + s + s * 0.35, y + 1.0), (x + s + s * 0.35, y + s - 1.0)]);
-                    vt.push(vec![(x + s + s * 0.7, y + 1.0), (x + s + s * 0.7, y + s - 1.0)]);
+                    vt.push(vec![
+                        (x + s + s * 0.35, y + 1.0),
+                        (x + s + s * 0.35, y + s - 1.0),
+                    ]);
+                    vt.push(vec![
+                        (x + s + s * 0.7, y + 1.0),
+                        (x + s + s * 0.7, y + s - 1.0),
+                    ]);
                     x += 2.0 * s;
                 }
                 y += s;
@@ -69,12 +95,25 @@ fn grille(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
             }
             b.add(root, strokes("weave h", w, h, &hz, "#3a383d", 1.8));
             b.add(root, strokes("weave v", w, h, &vt, "#2c2a2f", 1.8));
-            b.add(root, draw::rect("sheen", 0.0, 0.0, w, h, draw::linear(180.0, &[(0.0, "#ffffff0c"), (1.0, "#00000050")])));
+            b.add(
+                root,
+                draw::rect(
+                    "sheen",
+                    0.0,
+                    0.0,
+                    w,
+                    h,
+                    draw::linear(180.0, &[(0.0, "#ffffff0c"), (1.0, "#00000050")]),
+                ),
+            );
             root
         }
         "mesh" => {
             // Perforated copper mesh.
-            root.fills = vec![draw::linear(180.0, &[(0.0, "#e2b394"), (0.5, "#c89274"), (1.0, "#a87458")])];
+            root.fills = vec![draw::linear(
+                180.0,
+                &[(0.0, "#e2b394"), (0.5, "#c89274"), (1.0, "#a87458")],
+            )];
             let root = b.add(parent, root);
             let s = 7.0;
             let mut holes = String::new();
@@ -83,14 +122,38 @@ fn grille(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
             while y < h {
                 let mut x = if row % 2 == 0 { s * 0.5 } else { s };
                 while x < w {
-                    holes.push_str(&format!("M {:.2} {y:.2} L {:.2} {:.2} L {:.2} {y:.2} L {:.2} {:.2} Z ", x - 2.4, x, y - 2.0, x + 2.4, x, y + 2.0));
+                    holes.push_str(&format!(
+                        "M {:.2} {y:.2} L {:.2} {:.2} L {:.2} {y:.2} L {:.2} {:.2} Z ",
+                        x - 2.4,
+                        x,
+                        y - 2.0,
+                        x + 2.4,
+                        x,
+                        y + 2.0
+                    ));
                     x += s;
                 }
                 y += s * 0.55;
                 row += 1;
             }
-            b.add(root, draw::path("holes", 0.0, 0.0, w, h, holes, draw::solid("#2a1710d0")));
-            b.add(root, draw::rect("sheen", 0.0, 0.0, w, h, draw::linear(180.0, &[(0.0, "#ffffff30"), (0.3, "#ffffff00"), (1.0, "#00000040")])));
+            b.add(
+                root,
+                draw::path("holes", 0.0, 0.0, w, h, holes, draw::solid("#2a1710d0")),
+            );
+            b.add(
+                root,
+                draw::rect(
+                    "sheen",
+                    0.0,
+                    0.0,
+                    w,
+                    h,
+                    draw::linear(
+                        180.0,
+                        &[(0.0, "#ffffff30"), (0.3, "#ffffff00"), (1.0, "#00000040")],
+                    ),
+                ),
+            );
             root
         }
         _ => {
@@ -119,10 +182,28 @@ fn grille(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
                 }
                 v
             };
-            for (name, off, color) in [("piping red", -4.4, "#c8405c"), ("piping green", 0.0, "#d6f2e2"), ("piping red 2", 4.4, "#c8405c")] {
-                let mut n = draw::path(name, 0.0, 0.0, w, h, polylines(&lines(off)), draw::solid("#00000000"));
+            for (name, off, color) in [
+                ("piping red", -4.4, "#c8405c"),
+                ("piping green", 0.0, "#d6f2e2"),
+                ("piping red 2", 4.4, "#c8405c"),
+            ] {
+                let mut n = draw::path(
+                    name,
+                    0.0,
+                    0.0,
+                    w,
+                    h,
+                    polylines(&lines(off)),
+                    draw::solid("#00000000"),
+                );
                 n.fills.clear();
-                n.stroke = Stroke { paints: vec![draw::solid(color)], weight: 1.5, cap: StrokeCap::None, dash_pattern: vec![3.0, 1.6], ..Stroke::default() };
+                n.stroke = Stroke {
+                    paints: vec![draw::solid(color)],
+                    weight: 1.5,
+                    cap: StrokeCap::None,
+                    dash_pattern: vec![3.0, 1.6],
+                    ..Stroke::default()
+                };
                 b.add(root, draw::with_opacity(n, 0.85));
             }
             root
@@ -143,7 +224,10 @@ fn cabinet(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     root.fills = vec![draw::linear(180.0, &[(0.0, hi), (1.0, lo)])];
     root.corner_radii = CornerRadii::uniform(r);
     root.clips_content = true;
-    root.effects = vec![draw::inner_shadow("#ffffff26", 0.0, 1.5, 1.5), draw::inner_shadow("#00000090", 0.0, -3.0, 8.0)];
+    root.effects = vec![
+        draw::inner_shadow("#ffffff26", 0.0, 1.5, 1.5),
+        draw::inner_shadow("#00000090", 0.0, -3.0, 8.0),
+    ];
     let root = b.add(parent, root);
     // The tolex's pebbled grain.
     let mut rng = Rng::new(&format!("tolex{w}{h}"));
@@ -152,12 +236,40 @@ fn cabinet(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
         let (x, y) = (rng.range(0.0, w), rng.range(0.0, h));
         dots.push(vec![(x, y), (x + 0.7, y + 0.4)]);
     }
-    b.add(root, draw::with_opacity(strokes("grain", w, h, &dots, speck, 1.1), 0.6));
+    b.add(
+        root,
+        draw::with_opacity(strokes("grain", w, h, &dots, speck, 1.1), 0.6),
+    );
     if p.opt("corners") != Some("none") {
         let c = (w.min(h) * 0.07).clamp(18.0, 44.0);
-        for (x, y, rot) in [(0.0, 0.0, 0.0), (w - c, 0.0, 90.0), (w - c, h - c, 180.0), (0.0, h - c, 270.0)] {
-            let cap = draw::path("corner", x, y, c, c, format!("M 0 0 L {c} 0 L {c} {:.2} Q {:.2} {:.2} {:.2} {c} L 0 {c} Z", c * 0.35, c * 0.4, c * 0.4, c * 0.35), draw::linear(135.0, &[(0.0, "#6a6a6e"), (0.4, "#3a3a3e"), (1.0, "#1a1a1c")]));
-            let mut cap = draw::with_effects(draw::rotated(cap, rot), vec![draw::drop_shadow("#00000080", 0.0, 1.0, 2.0)]);
+        for (x, y, rot) in [
+            (0.0, 0.0, 0.0),
+            (w - c, 0.0, 90.0),
+            (w - c, h - c, 180.0),
+            (0.0, h - c, 270.0),
+        ] {
+            let cap = draw::path(
+                "corner",
+                x,
+                y,
+                c,
+                c,
+                format!(
+                    "M 0 0 L {c} 0 L {c} {:.2} Q {:.2} {:.2} {:.2} {c} L 0 {c} Z",
+                    c * 0.35,
+                    c * 0.4,
+                    c * 0.4,
+                    c * 0.35
+                ),
+                draw::linear(
+                    135.0,
+                    &[(0.0, "#6a6a6e"), (0.4, "#3a3a3e"), (1.0, "#1a1a1c")],
+                ),
+            );
+            let mut cap = draw::with_effects(
+                draw::rotated(cap, rot),
+                vec![draw::drop_shadow("#00000080", 0.0, 1.0, 2.0)],
+            );
             cap.name = "corner".into();
             b.add(root, cap);
         }

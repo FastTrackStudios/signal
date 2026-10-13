@@ -91,19 +91,30 @@ impl FeedKind {
     /// A spectrum over the audible band (20 Hz–20 kHz, floor −90 dB).
     #[must_use]
     pub fn spectrum(bins: u16) -> Self {
-        Self::Spectrum { bins, f_min: default_f_min(), f_max: default_f_max(), floor_db: default_floor_db() }
+        Self::Spectrum {
+            bins,
+            f_min: default_f_min(),
+            f_max: default_f_max(),
+            floor_db: default_floor_db(),
+        }
     }
 
     /// A gain-reduction trace of `len` points.
     #[must_use]
     pub fn gr_history(len: u32) -> Self {
-        Self::History { of: ScalarKind::GainReduction, len }
+        Self::History {
+            of: ScalarKind::GainReduction,
+            len,
+        }
     }
 
     /// ADSR playheads for `voices` voices (stages `A`, `D`, `S`, `R`).
     #[must_use]
     pub fn adsr(voices: u8) -> Self {
-        Self::Envelope { stages: ["A", "D", "S", "R"].map(String::from).to_vec(), voices }
+        Self::Envelope {
+            stages: ["A", "D", "S", "R"].map(String::from).to_vec(),
+            voices,
+        }
     }
 
     /// How many `values` a frame of this kind carries.
@@ -130,7 +141,10 @@ impl FeedKind {
     /// waveform) rather than a handful of readouts.
     #[must_use]
     pub fn is_series(&self) -> bool {
-        matches!(self, Self::Spectrum { .. } | Self::History { .. } | Self::Waveform { .. })
+        matches!(
+            self,
+            Self::Spectrum { .. } | Self::History { .. } | Self::Waveform { .. }
+        )
     }
 
     /// This kind as a request's `options` reshape it: `bins` resizes a
@@ -175,7 +189,12 @@ impl FeedInfo {
     /// A feed at 30 Hz.
     #[must_use]
     pub fn new(id: impl Into<String>, name: impl Into<String>, kind: FeedKind) -> Self {
-        Self { id: EntryId::new(id), name: name.into(), kind, rate_hz: 30.0 }
+        Self {
+            id: EntryId::new(id),
+            name: name.into(),
+            kind,
+            rate_hz: 30.0,
+        }
     }
 
     #[must_use]
@@ -193,7 +212,12 @@ impl FeedInfo {
             Some(r) if r.is_finite() && r > 0.0 => r.min(MAX_RATE_HZ),
             _ => self.rate_hz,
         };
-        Self { id: self.id.clone(), name: self.name.clone(), kind: self.kind.with_options(options), rate_hz }
+        Self {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            kind: self.kind.with_options(options),
+            rate_hz,
+        }
     }
 }
 
@@ -270,7 +294,10 @@ impl FeedRequest {
     /// Feed `id` as the engine offers it.
     #[must_use]
     pub fn new(id: impl Into<String>) -> Self {
-        Self { id: EntryId::new(id), options: FeedOptions::default() }
+        Self {
+            id: EntryId::new(id),
+            options: FeedOptions::default(),
+        }
     }
 
     #[must_use]
@@ -338,17 +365,25 @@ pub struct VoiceState {
 impl VoiceState {
     /// The voices of an envelope frame's `values`.
     pub fn decode(values: &[f64]) -> impl Iterator<Item = Self> + '_ {
-        values.as_chunks::<3>().0.iter().map(|&[stage, position, level]| Self {
-            stage: (stage >= 0.0).then(|| stage.round() as usize),
-            position,
-            level,
-        })
+        values
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|&[stage, position, level]| Self {
+                stage: (stage >= 0.0).then(|| stage.round() as usize),
+                position,
+                level,
+            })
     }
 
     /// This voice as a frame's triple.
     #[must_use]
     pub fn encode(&self) -> [f64; 3] {
-        [self.stage.map_or(-1.0, |s| s as f64), self.position, self.level]
+        [
+            self.stage.map_or(-1.0, |s| s as f64),
+            self.position,
+            self.level,
+        ]
     }
 }
 
@@ -372,34 +407,63 @@ mod tests {
         assert_eq!(feeds[3].kind, FeedKind::spectrum(64), "band fields default");
         assert_eq!(feeds[4].kind, FeedKind::Tuner);
         // Old kinds write exactly what they used to.
-        assert_eq!(serde_json::to_string(&feeds[1].kind).unwrap(), r#"{"Level":{"channels":2}}"#);
-        assert_eq!(serde_json::to_string(&feeds[0].kind).unwrap(), r#""GainReduction""#);
+        assert_eq!(
+            serde_json::to_string(&feeds[1].kind).unwrap(),
+            r#"{"Level":{"channels":2}}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&feeds[0].kind).unwrap(),
+            r#""GainReduction""#
+        );
     }
 
     #[test]
     fn new_kinds_round_trip() {
         let kinds = [
             FeedKind::gr_history(256),
-            FeedKind::History { of: ScalarKind::Scalar { range: Range::linear(0.0, 1.0, Unit::None) }, len: 8 },
+            FeedKind::History {
+                of: ScalarKind::Scalar {
+                    range: Range::linear(0.0, 1.0, Unit::None),
+                },
+                len: 8,
+            },
             FeedKind::Waveform { len: 512 },
             FeedKind::adsr(4),
-            FeedKind::Spectrum { bins: 128, f_min: 30.0, f_max: 16_000.0, floor_db: -72.0 },
+            FeedKind::Spectrum {
+                bins: 128,
+                f_min: 30.0,
+                f_max: 16_000.0,
+                floor_db: -72.0,
+            },
         ];
         for k in kinds {
             let json = serde_json::to_string(&k).unwrap();
-            assert_eq!(serde_json::from_str::<FeedKind>(&json).unwrap(), k, "{json}");
+            assert_eq!(
+                serde_json::from_str::<FeedKind>(&json).unwrap(),
+                k,
+                "{json}"
+            );
         }
     }
 
     #[test]
     fn requests_reshape_and_clamp() {
         let spec = FeedInfo::new("eq/spectrum", "Spectrum", FeedKind::spectrum(64));
-        let r = FeedRequest::new("eq/spectrum").bins(256).rate(1000.0).smoothing(1.0 / 3.0);
+        let r = FeedRequest::new("eq/spectrum")
+            .bins(256)
+            .rate(1000.0)
+            .smoothing(1.0 / 3.0);
         let got = spec.resolve(&r.options);
         assert_eq!(got.kind.frame_len(), 256);
         assert_eq!(got.rate_hz, MAX_RATE_HZ);
         let trace = FeedInfo::new("comp/gr_trace", "GR", FeedKind::gr_history(128));
-        assert_eq!(trace.resolve(&FeedRequest::new("x").len(0).options).kind.frame_len(), 1);
+        assert_eq!(
+            trace
+                .resolve(&FeedRequest::new("x").len(0).options)
+                .kind
+                .frame_len(),
+            1
+        );
         assert_eq!(trace.resolve(&FeedOptions::default()), trace);
         // A request with no options on the wire.
         let bare: FeedRequest = serde_json::from_str(r#"{"id":"x"}"#).unwrap();
@@ -409,8 +473,16 @@ mod tests {
     #[test]
     fn envelope_frames_decode() {
         let voices = [
-            VoiceState { stage: Some(1), position: 0.5, level: 0.8 },
-            VoiceState { stage: None, position: 0.0, level: 0.0 },
+            VoiceState {
+                stage: Some(1),
+                position: 0.5,
+                level: 0.8,
+            },
+            VoiceState {
+                stage: None,
+                position: 0.0,
+                level: 0.0,
+            },
         ];
         let values: Vec<f64> = voices.iter().flat_map(VoiceState::encode).collect();
         assert_eq!(values.len(), FeedKind::adsr(2).frame_len());

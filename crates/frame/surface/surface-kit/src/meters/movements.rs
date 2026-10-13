@@ -22,7 +22,10 @@ use crate::registry::{BuildFn, ComponentDef, Family, Place};
 /// A deep bevelled black frame: the chamfer is the frame's whole face.
 pub const BEVEL: Bezel = Bezel {
     name: "bevel",
-    frame: Lin { angle: 180.0, stops: &[(0.0, "#1a1b1e"), (1.0, "#0b0b0d")] },
+    frame: Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#1a1b1e"), (1.0, "#0b0b0d")],
+    },
     radius: 2.0,
     glow: None,
     top: "#08080a",
@@ -31,18 +34,53 @@ pub const BEVEL: Bezel = Bezel {
     bottom: "#3a3c41",
     depth: 16.0,
     vent: None,
-    sheen: Some(Lin { angle: 158.0, stops: &[(0.0, "rgba(255,255,255,0.16)"), (0.22, "rgba(255,255,255,0.05)"), (0.5, "rgba(255,255,255,0.0)"), (1.0, "rgba(0,0,0,0.12)")] }),
-    shade: Some(Shade { color: "rgba(0,0,0,0.40)", top: 7.0, side: 4.0 }),
+    sheen: Some(Lin {
+        angle: 158.0,
+        stops: &[
+            (0.0, "rgba(255,255,255,0.16)"),
+            (0.22, "rgba(255,255,255,0.05)"),
+            (0.5, "rgba(255,255,255,0.0)"),
+            (1.0, "rgba(0,0,0,0.12)"),
+        ],
+    }),
+    shade: Some(Shade {
+        color: "rgba(0,0,0,0.40)",
+        top: 7.0,
+        side: 4.0,
+    }),
 };
 
 /// Pale ivory printed in blue — a decibel readout, not a VU.
 pub static WHITE_BLUE: Face = Face {
-    card_paint: CardPaint::Linear(Lin { angle: 180.0, stops: &[(0.0, "#f1f1e8"), (0.6, "#e6e6da"), (1.0, "#d6d6c8")] }),
+    card_paint: CardPaint::Linear(Lin {
+        angle: 180.0,
+        stops: &[(0.0, "#f1f1e8"), (0.6, "#e6e6da"), (1.0, "#d6d6c8")],
+    }),
     ink: "#2a5aa8",
     hot: "#2a5aa8",
-    needle: Needle { color: "#15171b", width: 1.1, hub_r: 4.0, hub_opacity: 0.9, halo: None },
-    lamp: Some(Lamp { color: "rgba(255,250,232,0.30)", x: 50.0, y: 8.0, reach: 70.0, core: None, light: (0.0, 0.0) }),
-    glass: Some(Lin { angle: 160.0, stops: &[(0.0, "rgba(255,255,255,0.24)"), (0.38, "rgba(255,255,255,0.04)"), (1.0, "rgba(0,0,0,0.10)")] }),
+    needle: Needle {
+        color: "#15171b",
+        width: 1.1,
+        hub_r: 4.0,
+        hub_opacity: 0.9,
+        halo: None,
+    },
+    lamp: Some(Lamp {
+        color: "rgba(255,250,232,0.30)",
+        x: 50.0,
+        y: 8.0,
+        reach: 70.0,
+        core: None,
+        light: (0.0, 0.0),
+    }),
+    glass: Some(Lin {
+        angle: 160.0,
+        stops: &[
+            (0.0, "rgba(255,255,255,0.24)"),
+            (0.38, "rgba(255,255,255,0.04)"),
+            (1.0, "rgba(0,0,0,0.10)"),
+        ],
+    }),
     bezel: &BEVEL,
     card: Card::Decibels,
     tintable: false,
@@ -65,10 +103,16 @@ fn build_compression(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
 
     // ── the housing: a tall black block ──
     let mut housing = draw::frame(&p.name, 0.0, 0.0, w, h);
-    housing.fills = vec![draw::linear(180.0, &[(0.0, "#1b1c1f"), (0.5, "#121315"), (1.0, "#0c0d0e")])];
+    housing.fills = vec![draw::linear(
+        180.0,
+        &[(0.0, "#1b1c1f"), (0.5, "#121315"), (1.0, "#0c0d0e")],
+    )];
     let housing = draw::with_effects(
         draw::stroked(draw::rounded(housing, 2.0 * s), "#000000", s.max(1.0)),
-        vec![drop(css("rgba(0,0,0,0.5)"), 0.0, 2.0 * s, 5.0 * s), inner(css("rgba(255,255,255,0.08)"), 0.0, 1.0 * s, 0.0)],
+        vec![
+            drop(css("rgba(0,0,0,0.5)"), 0.0, 2.0 * s, 5.0 * s),
+            inner(css("rgba(255,255,255,0.08)"), 0.0, 1.0 * s, 0.0),
+        ],
     );
     let root = b.add(parent, housing);
 
@@ -79,12 +123,28 @@ fn build_compression(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     card.clips_content = true;
     card.effects = vec![inner(css("rgba(0,0,0,0.85)"), 0.0, 2.0 * s, 5.0 * s)];
     if p.flag("glass") {
-        card.shader = Some(document_proto::ShaderFx { shader: "glass".into(), params: std::iter::once(("strength".to_string(), 0.4)).collect(), inputs: Vec::new() });
+        card.shader = Some(document_proto::ShaderFx {
+            shader: "glass".into(),
+            params: std::iter::once(("strength".to_string(), 0.4)).collect(),
+            inputs: Vec::new(),
+        });
     }
     let card = b.add(root, draw::rounded(card, 1.5 * s));
     // The amber lamp behind it, pooled in the upper middle.
     let amber = css("rgba(255,176,72,0.55)");
-    let wash = draw::rect("lamp", 0.0, 0.0, cw, ch, draw::radial_at(0.5, 0.2, 0.75, &[(0.0, "#ffb04c8c"), (0.55, "#c0782a30"), (1.0, "#00000000")]));
+    let wash = draw::rect(
+        "lamp",
+        0.0,
+        0.0,
+        cw,
+        ch,
+        draw::radial_at(
+            0.5,
+            0.2,
+            0.75,
+            &[(0.0, "#ffb04c8c"), (0.55, "#c0782a30"), (1.0, "#00000000")],
+        ),
+    );
     b.add(card, draw::emissive(wash, amber, 0.35, 14.0 * s));
 
     // The scale: an arc of marks round a pivot well below the card.
@@ -100,12 +160,31 @@ fn build_compression(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
         ticks.push(' ');
         let (lx, ly) = draw::polar(px, py, reach - 17.0 * s, angle(*v));
         let label = format!("{v:.0}");
-        b.add(card, print("numeral", &label, (lx, ly), 8.0 * s, ink, (600.0, 0.0)));
+        b.add(
+            card,
+            print("numeral", &label, (lx, ly), 8.0 * s, ink, (600.0, 0.0)),
+        );
     }
-    b.add(card, draw::path("ticks", 0.0, 0.0, cw, ch, ticks, draw::solid("#f2e6c8")));
-    let legend = p.legend.clone().unwrap_or_else(|| "Compression".to_string());
+    b.add(
+        card,
+        draw::path("ticks", 0.0, 0.0, cw, ch, ticks, draw::solid("#f2e6c8")),
+    );
+    let legend = p
+        .legend
+        .clone()
+        .unwrap_or_else(|| "Compression".to_string());
     if !legend.trim().is_empty() {
-        b.add(card, print("legend", &legend.to_uppercase(), (cw / 2.0, ch * 0.90), 4.2 * s, ink, (500.0, 0.3 * s)));
+        b.add(
+            card,
+            print(
+                "legend",
+                &legend.to_uppercase(),
+                (cw / 2.0, ch * 0.90),
+                4.2 * s,
+                ink,
+                (500.0, 0.3 * s),
+            ),
+        );
     }
 
     // The needle: a pale line in a square frame centred on the pivot,
@@ -113,15 +192,42 @@ fn build_compression(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let len = reach + 1.0 * s;
     let nw = 1.2 * s;
     let r = len + nw;
-    let pivot = b.add(card, draw::frame("needle pivot", px - r, py - r, 2.0 * r, 2.0 * r));
-    let line = draw::rounded(draw::rect("needle", r - nw / 2.0, r - len, nw, len, draw::solid("#fff4dc")), nw / 2.0);
-    let needle = b.add(pivot, draw::emissive(line, Color { a: 1.0, ..amber }, 0.3, 3.0 * s));
+    let pivot = b.add(
+        card,
+        draw::frame("needle pivot", px - r, py - r, 2.0 * r, 2.0 * r),
+    );
+    let line = draw::rounded(
+        draw::rect(
+            "needle",
+            r - nw / 2.0,
+            r - len,
+            nw,
+            len,
+            draw::solid("#fff4dc"),
+        ),
+        nw / 2.0,
+    );
+    let needle = b.add(
+        pivot,
+        draw::emissive(line, Color { a: 1.0, ..amber }, 0.3, 3.0 * s),
+    );
 
     // The frame's shadow on the card, then the glass over it.
     let mut lip = draw::rect("lip shadow", 0.0, 0.0, cw, ch, draw::solid("#00000000"));
-    lip.effects = vec![inner(css("rgba(0,0,0,0.55)"), 0.0, 5.0 * s, 8.0 * s), inner(css("rgba(0,0,0,0.4)"), 3.0 * s, 0.0, 5.0 * s)];
+    lip.effects = vec![
+        inner(css("rgba(0,0,0,0.55)"), 0.0, 5.0 * s, 8.0 * s),
+        inner(css("rgba(0,0,0,0.4)"), 3.0 * s, 0.0, 5.0 * s),
+    ];
     b.add(card, lip);
-    let glass = Lin { angle: 158.0, stops: &[(0.0, "rgba(255,255,255,0.20)"), (0.3, "rgba(255,255,255,0.04)"), (0.6, "rgba(255,255,255,0.0)"), (1.0, "rgba(0,0,0,0.12)")] };
+    let glass = Lin {
+        angle: 158.0,
+        stops: &[
+            (0.0, "rgba(255,255,255,0.20)"),
+            (0.3, "rgba(255,255,255,0.04)"),
+            (0.6, "rgba(255,255,255,0.0)"),
+            (1.0, "rgba(0,0,0,0.12)"),
+        ],
+    };
     b.add(card, draw::rect("glass", 0.0, 0.0, cw, ch, lin(&glass)));
 
     // The zero-adjust screw under the window.
@@ -129,14 +235,36 @@ fn build_compression(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     b.add(
         root,
         draw::with_effects(
-            draw::circle("zero screw", sx, sy, sr, draw::radial_at(0.4, 0.35, 0.8, &[(0.0, "#3a3b3f"), (1.0, "#0a0a0b")])),
+            draw::circle(
+                "zero screw",
+                sx,
+                sy,
+                sr,
+                draw::radial_at(0.4, 0.35, 0.8, &[(0.0, "#3a3b3f"), (1.0, "#0a0a0b")]),
+            ),
             vec![inner(css("rgba(0,0,0,0.7)"), 0.0, 0.0, 1.5 * s)],
         ),
     );
-    b.add(root, draw::rect("zero slot", sx - 0.6 * s, sy - sr * 0.75, 1.2 * s, sr * 1.5, draw::solid("#000000")));
+    b.add(
+        root,
+        draw::rect(
+            "zero slot",
+            sx - 0.6 * s,
+            sy - sr * 0.75,
+            1.2 * s,
+            sr * 1.5,
+            draw::solid("#000000"),
+        ),
+    );
 
     // Reduction reads left to right: 0 dB at the left stop, 20 dB at the right.
-    let c = p.control(ControlKind::Gauge { sweep_degrees: 2.0 * HALF_SWEEP, floor_db: 0.0, ceiling_db: -20.0 }).slot(SlotRole::Needle, needle.0);
+    let c = p
+        .control(ControlKind::Gauge {
+            sweep_degrees: 2.0 * HALF_SWEEP,
+            floor_db: 0.0,
+            ceiling_db: -20.0,
+        })
+        .slot(SlotRole::Needle, needle.0);
     b.controls.insert(root, c);
     root
 }
@@ -189,11 +317,21 @@ mod tests {
         let page = scene.pages()[0];
         let mut controls = BTreeMap::new();
         let theme = Theme::stage_dark();
-        let mut b = Builder { scene: &mut scene, controls: &mut controls, theme: &theme };
+        let mut b = Builder {
+            scene: &mut scene,
+            controls: &mut controls,
+            theme: &theme,
+        };
         let holder = b.add(page, Node::new(NodeKind::Frame, "holder"));
-        let root = build_compression(&mut b, holder, &Place::new("GR").size(150.0).bind(Binding::stream("x/gr")));
+        let root = build_compression(
+            &mut b,
+            holder,
+            &Place::new("GR").size(150.0).bind(Binding::stream("x/gr")),
+        );
         let c = &controls[&root];
-        assert!(matches!(c.kind, ControlKind::Gauge { floor_db, ceiling_db, .. } if floor_db == 0.0 && ceiling_db == -20.0));
+        assert!(
+            matches!(c.kind, ControlKind::Gauge { floor_db, ceiling_db, .. } if floor_db == 0.0 && ceiling_db == -20.0)
+        );
         assert_eq!(c.slots_of(SlotRole::Needle).count(), 1);
         let n = scene.node(root).expect("root");
         assert!((n.size.width - 150.0).abs() < 1e-9);

@@ -29,6 +29,9 @@ tracing = { workspace = true }
 vox = { workspace = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+control-surfaces = { path = ".", features = ["kontrol"] }
 daw-standalone = { workspace = true, features = ["bootstrap", "clap-host", "decode"] }
 tracing-subscriber = { workspace = true }
 

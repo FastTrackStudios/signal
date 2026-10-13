@@ -6,11 +6,18 @@ pub(crate) struct NormalizeOptions {
 #[cfg(feature = "svg_export")]
 impl Default for NormalizeOptions {
     fn default() -> Self {
-        Self { compact_paths: true }
+        Self {
+            compact_paths: true,
+        }
     }
 }
 
-pub(crate) fn normalize_svg_for_figma_parity(svg: &str, width: u32, height: u32, opts: &NormalizeOptions) -> String {
+pub(crate) fn normalize_svg_for_figma_parity(
+    svg: &str,
+    width: u32,
+    height: u32,
+    opts: &NormalizeOptions,
+) -> String {
     let mut out = Vec::new();
     let mut body = Vec::new();
     let root = if svg.contains("xlink:") {
@@ -72,7 +79,9 @@ pub(crate) fn normalize_svg_for_figma_parity(svg: &str, width: u32, height: u32,
     out.extend(body);
     if !saw_root {
         // fallback: maintain well-formed output even if parser changes
-        out.push(format!(r##"<rect width="{width}" height="{height}" fill="#FFFFFF"/>"##));
+        out.push(format!(
+            r##"<rect width="{width}" height="{height}" fill="#FFFFFF"/>"##
+        ));
     }
     out.push("</svg>".to_string());
     out.join("\n") + "\n"
@@ -252,7 +261,10 @@ fn normalize_rect_line(line: &str) -> Option<String> {
         attrs.push(format!(r#"data-figma-gradient-fill="{payload}""#));
     }
     if let Some(radius) = figma_bg_blur_radius {
-        attrs.push(format!(r#"data-figma-bg-blur-radius="{}""#, trim_decimal(&radius)));
+        attrs.push(format!(
+            r#"data-figma-bg-blur-radius="{}""#,
+            trim_decimal(&radius)
+        ));
     }
     Some(format!("<rect {}/>", attrs.join(" ")))
 }
@@ -398,7 +410,10 @@ fn normalize_line_element(line: &str) -> Option<String> {
         attrs.push(format!(r#"stroke-dasharray="{stroke_dasharray}""#));
     }
     if let Some(stroke_dashoffset) = extract_xml_attr(line, "stroke-dashoffset") {
-        attrs.push(format!(r#"stroke-dashoffset="{}""#, trim_decimal(&stroke_dashoffset)));
+        attrs.push(format!(
+            r#"stroke-dashoffset="{}""#,
+            trim_decimal(&stroke_dashoffset)
+        ));
     }
     Some(format!("<line {}/>", attrs.join(" ")))
 }
@@ -438,7 +453,9 @@ fn normalize_group_line(line: &str) -> Option<String> {
 }
 
 #[cfg(feature = "svg_export")]
-fn parse_translate_decimal(transform: &str) -> Option<(rust_decimal::Decimal, rust_decimal::Decimal)> {
+fn parse_translate_decimal(
+    transform: &str,
+) -> Option<(rust_decimal::Decimal, rust_decimal::Decimal)> {
     let raw = transform.strip_prefix("translate(")?.strip_suffix(')')?;
     let mut parts = raw.split(',');
     let x = parse_decimal(parts.next()?.trim())?;
@@ -819,7 +836,8 @@ mod svg_normalize_tests {
 
     #[test]
     fn translate_uses_decimal_math() {
-        let line = r##"<path d="M29.7955 31.9489" transform="translate(0.1,0.2)" fill="#111111"/>"##;
+        let line =
+            r##"<path d="M29.7955 31.9489" transform="translate(0.1,0.2)" fill="#111111"/>"##;
         let out = normalize_translated_path_line(line, true).expect("normalized");
         assert!(out.contains(r#"d="M29.8955 32.1489""#), "{out}");
     }

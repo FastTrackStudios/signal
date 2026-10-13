@@ -45,8 +45,8 @@
 use dioxus::prelude::*;
 use dioxus_test::{by_testid, render};
 use expression_editor::doc::{Dimension, ExpressionDoc, Note, NoteId, TimeBase};
-use expression_editor::{Editor, Tool, Viewport};
 use expression_editor::ui::ExpressionEditor;
+use expression_editor::{Editor, Tool, Viewport};
 
 const PPQ: f64 = 960.0;
 

@@ -10,16 +10,17 @@ pub mod anyrender_renderer;
 pub mod svg;
 
 pub use anyrender_renderer::{
-    build_scene_layout_boxes, build_scene_primitives, build_scene_primitives_and_effects, build_scene_primitives_with,
-    collect_render_diagnostics, CollectOptions, EffectsPlan, LayoutBox, PaintPrimitive, RenderDiagnostics, Rgba,
+    CollectOptions, EffectsPlan, LayoutBox, PaintPrimitive, RenderDiagnostics, Rgba,
+    build_scene_layout_boxes, build_scene_primitives, build_scene_primitives_and_effects,
+    build_scene_primitives_with, collect_render_diagnostics,
 };
 #[cfg(feature = "anyrender")]
-pub use anyrender_renderer::{paint_primitives_into_scene_with, paint_scene_into};
-#[cfg(feature = "anyrender")]
 pub use anyrender_renderer::{GlyphRun, PaintTarget};
+#[cfg(feature = "anyrender")]
+pub use anyrender_renderer::{paint_primitives_into_scene_with, paint_scene_into};
 
 pub mod fonts;
-pub use fonts::{book_for_scene, text_advance, FontBook, FontSpec};
+pub use fonts::{FontBook, FontSpec, book_for_scene, text_advance};
 
 #[cfg(feature = "anyrender")]
 pub mod fx;

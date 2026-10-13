@@ -150,7 +150,12 @@ impl StreamCursor {
     /// head vs chunk, re-testing the prefetch). `None` when the pair is not
     /// wholly inside what the cursor holds. Issues the read-ahead like `get`.
     #[inline]
-    pub fn frame_pair(&mut self, a: usize, b: usize, ch: usize) -> Option<((f32, f32), (f32, f32))> {
+    pub fn frame_pair(
+        &mut self,
+        a: usize,
+        b: usize,
+        ch: usize,
+    ) -> Option<((f32, f32), (f32, f32))> {
         const SCALE: f32 = 1.0 / 32768.0;
         let hi_needed = b + ch.max(1);
         if a < self.lo || hi_needed > self.hi {
@@ -876,7 +881,8 @@ impl StreamedSample {
             }
             let from = chunk_no * CHUNK_FRAMES;
             let decode_started = std::time::Instant::now();
-            let pcm = match decode_chunk_why(stream, &self.index, from, CHUNK_FRAMES, self.channels) {
+            let pcm = match decode_chunk_why(stream, &self.index, from, CHUNK_FRAMES, self.channels)
+            {
                 Ok(pcm) => pcm,
                 Err(why) => {
                     tracing::warn!(
@@ -891,7 +897,10 @@ impl StreamedSample {
                 }
             };
             DECODE_NS.fetch_add(
-                decode_started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64,
+                decode_started
+                    .elapsed()
+                    .as_nanos()
+                    .min(u128::from(u64::MAX)) as u64,
                 Ordering::Relaxed,
             );
             CHUNKS_DECODED.fetch_add(1, Ordering::Relaxed);
@@ -983,9 +992,13 @@ fn decode_chunk_why(
     frames: u32,
     channels: u16,
 ) -> Result<Vec<i16>, String> {
-    let (bytes, starts_at) = index
-        .chunk(stream, from_frame, frames)
-        .ok_or_else(|| format!("no frame covers it (stream {} bytes, {} total frames)", stream.len(), index.total_frames()))?;
+    let (bytes, starts_at) = index.chunk(stream, from_frame, frames).ok_or_else(|| {
+        format!(
+            "no frame covers it (stream {} bytes, {} total frames)",
+            stream.len(),
+            index.total_frames()
+        )
+    })?;
     let n_bytes = bytes.len();
     let mut reader = claxon::FlacReader::new(std::io::Cursor::new(bytes))
         .map_err(|e| format!("FLAC header: {e} ({n_bytes} bytes from frame {starts_at})"))?;
@@ -1345,4 +1358,3 @@ mod tests {
     // signal-sampler's `engine::voice` tests — it needs the `Voice` types,
     // which stayed behind when this module moved into fts-sample.
 }
-

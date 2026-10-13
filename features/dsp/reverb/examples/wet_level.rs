@@ -49,6 +49,10 @@ fn main() {
     for &algo in AlgorithmType::ALL {
         let error_db = 10.0 * energy(algo).log10();
         let new = algo.wet_calibration_db() - error_db;
-        println!("{algo:?}\t{:+.2} dB off\tnow {:.2}\t→ {new:.2}", error_db, algo.wet_calibration_db());
+        println!(
+            "{algo:?}\t{:+.2} dB off\tnow {:.2}\t→ {new:.2}",
+            error_db,
+            algo.wet_calibration_db()
+        );
     }
 }

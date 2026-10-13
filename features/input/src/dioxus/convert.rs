@@ -1,10 +1,10 @@
 //! Convert Dioxus DOM events into `input` events.
 
+use crate::{InputEvent, KeyCode, KeyEvent, Modifiers, MouseAction, MouseButton, ScrollEvent};
 use dioxus::prelude::{
     InteractionLocation, Key, KeyboardEvent, Modifiers as DioxusModifiers, ModifiersInteraction,
     MouseEvent, PointerInteraction, WheelEvent,
 };
-use crate::{InputEvent, KeyCode, KeyEvent, Modifiers, MouseAction, MouseButton, ScrollEvent};
 
 /// Convert a Dioxus key value to an input key code.
 pub fn convert_key(key: &Key) -> Option<KeyCode> {

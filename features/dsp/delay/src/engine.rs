@@ -121,9 +121,12 @@ impl DelayStyle {
             Self::Bbd => Family::Analog,
             Self::Shimmer | Self::Pitch => Family::Pitch,
             Self::Rhythm | Self::Drum | Self::MultiTap => Family::Rhythmic,
-            Self::LoFi | Self::Reverse | Self::OilCan | Self::Spectral | Self::Filter | Self::Reverb => {
-                Family::Special
-            }
+            Self::LoFi
+            | Self::Reverse
+            | Self::OilCan
+            | Self::Spectral
+            | Self::Filter
+            | Self::Reverb => Family::Special,
         }
     }
 

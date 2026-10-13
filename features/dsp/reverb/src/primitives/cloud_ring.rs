@@ -50,7 +50,13 @@ const STAGES: [[(f64, f64); 4]; 5] = [
 /// How much of the input and of each stage's output the pattern line gets.
 const JUNCTION_MIX: [f64; 6] = [1.0, 1.0, 1.0, 1.0, 0.8, 0.7];
 /// Each stage's own tap, `(left, right)` re the first pattern tap.
-const JUNCTION_OUT: [(f64, f64); 5] = [(-1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-0.801, 0.801), (0.705, 0.701)];
+const JUNCTION_OUT: [(f64, f64); 5] = [
+    (-1.0, 1.0),
+    (1.0, -1.0),
+    (-1.0, 1.0),
+    (-0.801, 0.801),
+    (0.705, 0.701),
+];
 /// Overall tap level (the chain's wet calibration sets the final level).
 const TAP_GAIN: f64 = 0.25;
 /// BigSky's mono early pulse against its first ring tap: 0.1856 / 0.1328.
@@ -160,7 +166,9 @@ impl InputChain {
         // In phase at the start, a touch apart in rate: BigSky's chain delay
         // swings as one LFO slowly beating against itself.
         Self {
-            stages: core::array::from_fn(|i| RingAp::new(INPUT_STAGES.get(i).map_or(20.0, |s| s.0), sample_rate, 0.0)),
+            stages: core::array::from_fn(|i| {
+                RingAp::new(INPUT_STAGES.get(i).map_or(20.0, |s| s.0), sample_rate, 0.0)
+            }),
             sample_rate,
         }
     }
@@ -214,8 +222,18 @@ struct Half {
     line2_ms: f64,
 }
 const HALVES: [Half; 2] = [
-    Half { first: (217.604, 0.75), line1_ms: 850.104, second: (535.521, -0.5), line2_ms: 762.625 },
-    Half { first: (165.312, 0.75), line1_ms: 897.812, second: (362.813, -0.5), line2_ms: 749.688 },
+    Half {
+        first: (217.604, 0.75),
+        line1_ms: 850.104,
+        second: (535.521, -0.5),
+        line2_ms: 762.625,
+    },
+    Half {
+        first: (165.312, 0.75),
+        line1_ms: 897.812,
+        second: (362.813, -0.5),
+        line2_ms: 749.688,
+    },
 ];
 /// Where a tap reads.
 #[derive(Clone, Copy)]
@@ -301,7 +319,11 @@ impl CloudRing {
                 RingAp::new(ms, sample_rate, 0.0)
             })
         });
-        let line = |ms: f64| DelayLine::new(num::f64_to_index((ms * 1e-3 * sample_rate).mul_add(MAX_SCALE, 64.0)));
+        let line = |ms: f64| {
+            DelayLine::new(num::f64_to_index(
+                (ms * 1e-3 * sample_rate).mul_add(MAX_SCALE, 64.0),
+            ))
+        };
         let halves = core::array::from_fn(|h| {
             let spec = HALVES.get(h).unwrap_or(&HALVES[0]);
             HalfState {
@@ -316,8 +338,18 @@ impl CloudRing {
             }
         });
         let taps = core::array::from_fn(|i| {
-            let (node, ms, right, gain) = TAPS.get(i).copied().unwrap_or((Node::Line1(0), 1.0, false, 0.0));
-            Tap { node, pos: 1, right, base: gain * TAP_GAIN, gain: gain * TAP_GAIN, t_s: ms * 1e-3 }
+            let (node, ms, right, gain) =
+                TAPS.get(i)
+                    .copied()
+                    .unwrap_or((Node::Line1(0), 1.0, false, 0.0));
+            Tap {
+                node,
+                pos: 1,
+                right,
+                base: gain * TAP_GAIN,
+                gain: gain * TAP_GAIN,
+                t_s: ms * 1e-3,
+            }
         });
         let mut ring = Self {
             stages,
@@ -358,8 +390,10 @@ impl CloudRing {
         for (half, spec) in self.halves.iter_mut().zip(HALVES.iter()) {
             half.first.len = (spec.first.0 * k).round();
             half.second.len = (spec.second.0 * k).round();
-            half.line1_len = num::f64_to_index((spec.line1_ms * k).round()).clamp(2, half.line1.len().saturating_sub(2));
-            half.line2_len = num::f64_to_index((spec.line2_ms * k).round()).clamp(2, half.line2.len().saturating_sub(2));
+            half.line1_len = num::f64_to_index((spec.line1_ms * k).round())
+                .clamp(2, half.line1.len().saturating_sub(2));
+            half.line2_len = num::f64_to_index((spec.line2_ms * k).round())
+                .clamp(2, half.line2.len().saturating_sub(2));
         }
         for (tap, spec) in self.taps.iter_mut().zip(TAPS.iter()) {
             tap.pos = num::f64_to_index((spec.1 * k).round()).max(1);
@@ -428,11 +462,14 @@ impl CloudRing {
             // fourth root of the per-cycle loss, which goes as 1/T.
             last.1.powf(last.0 / t)
         } else {
-            DECAY_G.windows(2).find(|w| t <= w[1].0).map_or(last.1, |w| {
-                let ((t0, g0), (t1, g1)) = (w[0], w[1]);
-                let f = (t / t0).ln() / (t1 / t0).ln();
-                (g1 - g0).mul_add(f, g0)
-            })
+            DECAY_G
+                .windows(2)
+                .find(|w| t <= w[1].0)
+                .map_or(last.1, |w| {
+                    let ((t0, g0), (t1, g1)) = (w[0], w[1]);
+                    let f = (t / t0).ln() / (t1 / t0).ln();
+                    (g1 - g0).mul_add(f, g0)
+                })
         };
         // A resized tank keeps the same decay rate: a cycle's loss goes
         // with its length.
@@ -449,7 +486,11 @@ impl CloudRing {
         }
         // Shorter than BigSky's floor (which it cannot go): tilt the first
         // pass itself down to the time asked for.
-        let tilt = if t < FLOOR_T60 { 1.0 / t - 1.0 / FLOOR_T60 } else { 0.0 };
+        let tilt = if t < FLOOR_T60 {
+            1.0 / t - 1.0 / FLOOR_T60
+        } else {
+            0.0
+        };
         let fall = |t_s: f64| 10f64.powf(-3.0 * t_s * tilt);
         for tap in &mut self.taps {
             tap.gain = tap.base * fall(tap.t_s);
@@ -486,7 +527,12 @@ impl CloudRing {
         let (mut out_l, mut out_r) = (0.0, 0.0);
         let mut v = x0;
         let mut x = x0 * self.mix[0];
-        for ((stage, m), o) in self.stages.iter_mut().zip(self.mix.iter().skip(1)).zip(self.out.iter()) {
+        for ((stage, m), o) in self
+            .stages
+            .iter_mut()
+            .zip(self.mix.iter().skip(1))
+            .zip(self.out.iter())
+        {
             v = stage.iter_mut().fold(v, |s, ap| ap.tick(s));
             x = m.mul_add(v, x);
             out_l = o.0.mul_add(v, out_l);
@@ -513,9 +559,18 @@ impl CloudRing {
         // `read(1)` is the sample just written: a delay of k is read(k + 1).
         for tap in &self.taps {
             let s = match tap.node {
-                Node::Line1(h) => self.halves.get(h).map_or(0.0, |hs| hs.line1.read(tap.pos + 1)),
-                Node::Line2(h) => self.halves.get(h).map_or(0.0, |hs| hs.line2.read(tap.pos + 1)),
-                Node::Inside(h) => self.halves.get(h).map_or(0.0, |hs| hs.second.line.read(tap.pos + 1)),
+                Node::Line1(h) => self
+                    .halves
+                    .get(h)
+                    .map_or(0.0, |hs| hs.line1.read(tap.pos + 1)),
+                Node::Line2(h) => self
+                    .halves
+                    .get(h)
+                    .map_or(0.0, |hs| hs.line2.read(tap.pos + 1)),
+                Node::Inside(h) => self
+                    .halves
+                    .get(h)
+                    .map_or(0.0, |hs| hs.second.line.read(tap.pos + 1)),
             } * tap.gain;
             if tap.right {
                 out_r += s;
@@ -564,9 +619,15 @@ mod tests {
         let eb = impulse_energy(&mut b, 1.5);
         // 7 windows = 700 ms, inside one trip (803 ms).
         for k in 0..7 {
-            assert!((ea[k] - eb[k]).abs() <= 1e-9 * ea[k].max(1e-30), "window {k} differs before a trip");
+            assert!(
+                (ea[k] - eb[k]).abs() <= 1e-9 * ea[k].max(1e-30),
+                "window {k} differs before a trip"
+            );
         }
-        assert!(eb[14] < ea[14] * 0.9, "the shorter decay is quieter after a trip");
+        assert!(
+            eb[14] < ea[14] * 0.9,
+            "the shorter decay is quieter after a trip"
+        );
     }
 
     /// A long decay rings long and a short one dies — and Infinite holds.
@@ -586,6 +647,9 @@ mod tests {
         inf.set_t60(1.0e6);
         inf.set_diffusion(0.6);
         let e = impulse_energy(&mut inf, 20.0);
-        assert!(e.iter().all(|v| v.is_finite() && *v < 100.0), "Infinite stays bounded");
+        assert!(
+            e.iter().all(|v| v.is_finite() && *v < 100.0),
+            "Infinite stays bounded"
+        );
     }
 }

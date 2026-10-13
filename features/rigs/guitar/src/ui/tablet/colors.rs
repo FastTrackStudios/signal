@@ -9,8 +9,8 @@
 
 /// The hues a song can be: none of them the live green or the danger red.
 pub const SONG_PALETTE: [&str; 14] = [
-    "#38bdf8", "#60a5fa", "#818cf8", "#a78bfa", "#c084fc", "#e879f9", "#f472b6", "#fb7185", "#fb923c",
-    "#fbbf24", "#facc15", "#a3e635", "#2dd4bf", "#22d3ee",
+    "#38bdf8", "#60a5fa", "#818cf8", "#a78bfa", "#c084fc", "#e879f9", "#f472b6", "#fb7185",
+    "#fb923c", "#fbbf24", "#facc15", "#a3e635", "#2dd4bf", "#22d3ee",
 ];
 
 /// FNV-1a, 32-bit, over UTF-16 code units (JavaScript's `charCodeAt`).
@@ -33,7 +33,11 @@ pub fn name_colour(name: &str) -> &'static str {
 /// A song's colour: the player's, else its name's.
 #[must_use]
 pub fn song_colour(name: &str, chosen: &str) -> String {
-    if chosen.trim().is_empty() { name_colour(name).to_string() } else { chosen.trim().to_string() }
+    if chosen.trim().is_empty() {
+        name_colour(name).to_string()
+    } else {
+        chosen.trim().to_string()
+    }
 }
 
 const SLATE: &str = "#94a3b8";
@@ -123,7 +127,10 @@ pub fn parse_set_name(name: &str) -> SetMeta {
             };
         }
     }
-    SetMeta { event: name.trim().to_string(), ..SetMeta::default() }
+    SetMeta {
+        event: name.trim().to_string(),
+        ..SetMeta::default()
+    }
 }
 
 /// A set's parts: the stored ones where it has them, else read off its name.
@@ -131,9 +138,21 @@ pub fn parse_set_name(name: &str) -> SetMeta {
 pub fn set_meta(name: &str, event: &str, date: &str, title: &str) -> SetMeta {
     let parsed = parse_set_name(name);
     SetMeta {
-        event: if event.is_empty() { parsed.event } else { event.to_string() },
-        date: if date.is_empty() { parsed.date } else { date.to_string() },
-        title: if title.is_empty() { parsed.title } else { title.to_string() },
+        event: if event.is_empty() {
+            parsed.event
+        } else {
+            event.to_string()
+        },
+        date: if date.is_empty() {
+            parsed.date
+        } else {
+            date.to_string()
+        },
+        title: if title.is_empty() {
+            parsed.title
+        } else {
+            title.to_string()
+        },
     }
 }
 
@@ -145,10 +164,16 @@ pub fn set_heading(m: &SetMeta) -> String {
         return t.to_string();
     }
     let e = m.event.trim();
-    if e.is_empty() { "Untitled set".to_string() } else { e.to_string() }
+    if e.is_empty() {
+        "Untitled set".to_string()
+    } else {
+        e.to_string()
+    }
 }
 
-const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
 const WEEKDAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /// Day of the week, 0 = Sunday (Sakamoto).
@@ -174,8 +199,16 @@ pub fn date_label(iso: &str) -> String {
     }
     // The year, when it is not this one.
     let this_year = today_iso().get(..4).and_then(|x| x.parse::<i32>().ok());
-    let year = if this_year == Some(y) { String::new() } else { format!(" {y}") };
-    format!("{} {d} {}{year}", WEEKDAYS[weekday(y, m, d)], MONTHS[(m - 1) as usize])
+    let year = if this_year == Some(y) {
+        String::new()
+    } else {
+        format!(" {y}")
+    };
+    format!(
+        "{} {d} {}{year}",
+        WEEKDAYS[weekday(y, m, d)],
+        MONTHS[(m - 1) as usize]
+    )
 }
 
 fn ymd(iso: &str) -> Option<chrono::NaiveDate> {
@@ -185,14 +218,19 @@ fn ymd(iso: &str) -> Option<chrono::NaiveDate> {
 /// Today, `YYYY-MM-DD`.
 #[must_use]
 pub fn today_iso() -> String {
-    chrono::Local::now().date_naive().format("%Y-%m-%d").to_string()
+    chrono::Local::now()
+        .date_naive()
+        .format("%Y-%m-%d")
+        .to_string()
 }
 
 /// `iso` moved by `days` (today when it is not a date).
 #[must_use]
 pub fn add_days(iso: &str, days: i64) -> String {
     let d = ymd(iso).unwrap_or_else(|| chrono::Local::now().date_naive());
-    (d + chrono::Duration::days(days)).format("%Y-%m-%d").to_string()
+    (d + chrono::Duration::days(days))
+        .format("%Y-%m-%d")
+        .to_string()
 }
 
 /// A date's month and weekday, short, and its day: ("Oct", 6, "Tue").
@@ -200,13 +238,19 @@ pub fn add_days(iso: &str, days: i64) -> String {
 pub fn date_parts(iso: &str) -> Option<(&'static str, u32, &'static str)> {
     use chrono::Datelike;
     let d = ymd(iso)?;
-    Some((MONTHS[d.month0() as usize], d.day(), WEEKDAYS[d.weekday().num_days_from_sunday() as usize]))
+    Some((
+        MONTHS[d.month0() as usize],
+        d.day(),
+        WEEKDAYS[d.weekday().num_days_from_sunday() as usize],
+    ))
 }
 
 /// "Today", "Tomorrow", "Yesterday", "In 5 days", "3 weeks ago".
 #[must_use]
 pub fn when_label(iso: &str) -> String {
-    let Some(d) = ymd(iso) else { return String::new() };
+    let Some(d) = ymd(iso) else {
+        return String::new();
+    };
     let days = (d - chrono::Local::now().date_naive()).num_days();
     match days {
         0 => "Today".into(),
@@ -232,7 +276,11 @@ pub fn set_name(m: &SetMeta) -> String {
     if !m.title.trim().is_empty() {
         parts.push(m.title.trim().to_string());
     }
-    parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join(" ")
+    parts
+        .into_iter()
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The next date an event usually falls on: a week after its latest set,
@@ -240,9 +288,15 @@ pub fn set_name(m: &SetMeta) -> String {
 #[must_use]
 pub fn next_date_for(event: &str, sets: &[SetMeta]) -> String {
     let today = today_iso();
-    let mut dates: Vec<&str> = sets.iter().filter(|s| s.event.eq_ignore_ascii_case(event) && !s.date.is_empty()).map(|s| s.date.as_str()).collect();
+    let mut dates: Vec<&str> = sets
+        .iter()
+        .filter(|s| s.event.eq_ignore_ascii_case(event) && !s.date.is_empty())
+        .map(|s| s.date.as_str())
+        .collect();
     dates.sort_unstable();
-    let Some(last) = dates.last() else { return today };
+    let Some(last) = dates.last() else {
+        return today;
+    };
     let mut next = add_days(last, 7);
     while next < today {
         next = add_days(&next, 7);
@@ -256,9 +310,18 @@ pub fn suggest_section(names: &[String]) -> String {
     if names.is_empty() {
         return "Intro".into();
     }
-    let count = |base: &str| names.iter().filter(|n| n.to_lowercase().starts_with(&base.to_lowercase())).count();
+    let count = |base: &str| {
+        names
+            .iter()
+            .filter(|n| n.to_lowercase().starts_with(&base.to_lowercase()))
+            .count()
+    };
     let (verses, choruses) = (count("Verse"), count("Chorus"));
-    if verses <= choruses { format!("Verse {}", verses + 1) } else { format!("Chorus {}", choruses + 1) }
+    if verses <= choruses {
+        format!("Verse {}", verses + 1)
+    } else {
+        format!("Chorus {}", choruses + 1)
+    }
 }
 
 #[cfg(test)]
@@ -282,19 +345,40 @@ mod tests {
 
     #[test]
     fn set_names_are_built_in_the_house_style() {
-        let m = SetMeta { event: "HSM".into(), date: "2026-10-06".into(), title: "Worship Night".into() };
+        let m = SetMeta {
+            event: "HSM".into(),
+            date: "2026-10-06".into(),
+            title: "Worship Night".into(),
+        };
         assert_eq!(set_name(&m), "HSM 10-6-26 Worship Night");
         assert_eq!(parse_set_name(&set_name(&m)), m);
         assert_eq!(add_days("2026-10-06", 7), "2026-10-13");
         assert_eq!(date_parts("2026-10-06"), Some(("Oct", 6, "Tue")));
-        assert_eq!(suggest_section(&["Intro".into(), "Verse 1".into()]), "Chorus 1");
+        assert_eq!(
+            suggest_section(&["Intro".into(), "Verse 1".into()]),
+            "Chorus 1"
+        );
     }
 
     #[test]
     fn set_names_read_into_parts() {
         let m = parse_set_name("HSM 10-6-26 Worship Night");
-        assert_eq!(m, SetMeta { event: "HSM".into(), date: "2026-10-06".into(), title: "Worship Night".into() });
-        assert_eq!(date_label("2026-10-06"), if today_iso().starts_with("2026") { "Tue 6 Oct" } else { "Tue 6 Oct 2026" });
+        assert_eq!(
+            m,
+            SetMeta {
+                event: "HSM".into(),
+                date: "2026-10-06".into(),
+                title: "Worship Night".into()
+            }
+        );
+        assert_eq!(
+            date_label("2026-10-06"),
+            if today_iso().starts_with("2026") {
+                "Tue 6 Oct"
+            } else {
+                "Tue 6 Oct 2026"
+            }
+        );
         assert_eq!(date_label(""), "No date");
         assert_eq!(set_heading(&parse_set_name("CYA 7-9-26")), "CYA");
     }

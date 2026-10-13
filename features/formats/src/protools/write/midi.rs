@@ -331,7 +331,10 @@ fn find_first_raw(blocks: &[RawBlock], ct: u16) -> Option<&RawBlock> {
 /// the i-th note-bearing track's region carries the injected notes (note
 /// number + tick position; velocity is parsed from the wrong offset upstream,
 /// so do not assert it).
-pub fn inject_midi(session: &mut RawSession, tracks: &[MidiTrackInput]) -> crate::protools::PtResult<()> {
+pub fn inject_midi(
+    session: &mut RawSession,
+    tracks: &[MidiTrackInput],
+) -> crate::protools::PtResult<()> {
     let mut chunk_list: Vec<Vec<u8>> = Vec::new();
     let mut regions: Vec<Vec<u8>> = Vec::new();
     let mut groups: Vec<Vec<u8>> = Vec::new();
@@ -500,7 +503,7 @@ mod tests {
     // Phase 2-4 round-trip: inject MIDI into a donor session, re-parse.
     // ------------------------------------------------------------------
 
-    const DONOR: &str = "tests/fixtures/studio-session-2.ptx";
+    const DONOR: &str = "tests/fixtures/protools/studio-session-2.ptx";
 
     fn donor_session() -> RawSession {
         let raw = std::fs::read(DONOR).expect("donor fixture present");

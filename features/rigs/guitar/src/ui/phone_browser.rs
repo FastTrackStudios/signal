@@ -23,9 +23,9 @@
 //! plays as it opens its column; a row that only groups (a stack, a preset
 //! family) just opens it.
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{CompositionModel, LibraryModel, LiveBlock, PatchInfo, PerformanceModel};
+use dioxus::prelude::*;
 use signal_proto::block::BlockType;
 
 use crate::ui::state::RigViewState;
@@ -56,9 +56,14 @@ pub enum BrowseTab {
     Module(&'static str),
     /// One block's presets (and, for a delay or reverb, its algorithm) —
     /// by the block's chain name (`DLY 1`) and preset type (`delay`).
-    Block { name: String, block_type: String },
+    Block {
+        name: String,
+        block_type: String,
+    },
     /// One drive slot's pedal and capture, by its chain name (`Drive 1`).
-    Pedal { name: String },
+    Pedal {
+        name: String,
+    },
 }
 
 impl BrowseTab {
@@ -69,16 +74,24 @@ impl BrowseTab {
     #[must_use]
     pub fn for_block(name: &str, block_type: &str) -> Self {
         if block_type.eq_ignore_ascii_case("drive") || block_type.eq_ignore_ascii_case("boost") {
-            Self::Pedal { name: name.to_string() }
+            Self::Pedal {
+                name: name.to_string(),
+            }
         } else {
-            Self::Block { name: name.to_string(), block_type: block_type.to_string() }
+            Self::Block {
+                name: name.to_string(),
+                block_type: block_type.to_string(),
+            }
         }
     }
 
     /// A module by name, as a tab (its own name kept `'static`).
     #[must_use]
     pub fn for_module(module: &str) -> Option<Self> {
-        Self::MODULES.iter().find(|m| m.eq_ignore_ascii_case(module)).map(|m| Self::Module(m))
+        Self::MODULES
+            .iter()
+            .find(|m| m.eq_ignore_ascii_case(module))
+            .map(|m| Self::Module(m))
     }
 }
 
@@ -142,12 +155,24 @@ const FAILED: &str = "#ef4444";
 
 /// Mark the pick at `at` as `phase`, and clear it a moment later — unless
 /// another pick has taken its place meanwhile.
-async fn settle(mut status: Signal<Option<(usize, String, Phase)>>, at: (usize, String), phase: Phase) {
+async fn settle(
+    mut status: Signal<Option<(usize, String, Phase)>>,
+    at: (usize, String),
+    phase: Phase,
+) {
     // A refusal stays up long enough to read.
-    let hold = if matches!(phase, Phase::Failed(_)) { 4000 } else { 1500 };
+    let hold = if matches!(phase, Phase::Failed(_)) {
+        4000
+    } else {
+        1500
+    };
     status.set(Some((at.0, at.1.clone(), phase.clone())));
     architect::platform::sleep(std::time::Duration::from_millis(hold)).await;
-    if status.peek().as_ref().is_some_and(|(c, k, p)| *c == at.0 && *k == at.1 && *p == phase) {
+    if status
+        .peek()
+        .as_ref()
+        .is_some_and(|(c, k, p)| *c == at.0 && *k == at.1 && *p == phase)
+    {
         status.set(None);
     }
 }
@@ -156,7 +181,11 @@ async fn settle(mut status: Signal<Option<(usize, String, Phase)>>, at: (usize, 
 /// leads on; the open one raised.
 #[component]
 fn ListRow(row: Row, open: bool, phase: Option<Phase>, onpick: EventHandler<()>) -> Element {
-    let bg = if open || phase.is_some() { RAISED } else { "transparent" };
+    let bg = if open || phase.is_some() {
+        RAISED
+    } else {
+        "transparent"
+    };
     // How the pick on this row went, under its name in place of its detail.
     let (note, note_color) = phase.as_ref().map_or((String::new(), DIM), Phase::note);
     let name_color = if row.live { ACCENT } else { TEXT };
@@ -223,7 +252,11 @@ pub fn PhoneBrowser(
                         r.patches().await.unwrap_or_default(),
                         r.compositions().await.unwrap_or_default(),
                     ),
-                    None => (LibraryModel::default(), Vec::<PatchInfo>::new(), CompositionModel::default()),
+                    None => (
+                        LibraryModel::default(),
+                        Vec::<PatchInfo>::new(),
+                        CompositionModel::default(),
+                    ),
                 }
             }
         }
@@ -236,7 +269,6 @@ pub fn PhoneBrowser(
     // The last pick that plays something, and how it went: shown on its row
     // until a moment after it lands.
     let mut status = use_signal(|| None::<(usize, String, Phase)>);
-
 
     // A pick that plays: its row says Loading… until the rig answers, then
     // Loaded (or Didn't load), and clears a moment later.
@@ -256,7 +288,11 @@ pub fn PhoneBrowser(
     // The kind: what plays opens on the set or the profile, by mode.
     let kind = match &tab {
         BrowseTab::Profiles | BrowseTab::Patches | BrowseTab::Songs | BrowseTab::Setlists => {
-            if model.perform_mode == 2 { BrowseTab::Setlists } else { BrowseTab::Profiles }
+            if model.perform_mode == 2 {
+                BrowseTab::Setlists
+            } else {
+                BrowseTab::Profiles
+            }
         }
         t => t.clone(),
     };
@@ -264,13 +300,27 @@ pub fn PhoneBrowser(
     // path to what plays).
     let mut open1 = use_signal(|| None::<String>);
     let mut open2 = use_signal(|| None::<String>);
-    let live_module = |m: &str| comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m)).cloned();
-    let block = |name: &str| blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)).cloned();
+    let live_module = |m: &str| {
+        comp.active_modules
+            .iter()
+            .find(|p| p.module.eq_ignore_ascii_case(m))
+            .cloned()
+    };
+    let block = |name: &str| {
+        blocks
+            .iter()
+            .find(|b| b.name.eq_ignore_ascii_case(name))
+            .cloned()
+    };
 
     // What plays, edited from how it was saved: a module with edits on any
     // block it owns (a pedal it put in a slot swapped included), a block
     // with edits of its own.
-    let edited = |name: &str| blocks.iter().any(|b| b.overridden && b.name.eq_ignore_ascii_case(name));
+    let edited = |name: &str| {
+        blocks
+            .iter()
+            .any(|b| b.overridden && b.name.eq_ignore_ascii_case(name))
+    };
     let modified = match &kind {
         BrowseTab::Module(m) => live_module(m).is_some_and(|p| p.blocks.iter().any(|b| edited(b))),
         BrowseTab::Block { name, .. } | BrowseTab::Pedal { name } => edited(name),
@@ -280,29 +330,87 @@ pub fn PhoneBrowser(
     // ── The columns, per kind, and the path to what plays ──
     let (mut columns, path): (Vec<Column>, Vec<String>) = match &kind {
         BrowseTab::Setlists => {
-            let live_set = model.setlists.get(model.setlist_index as usize).cloned().unwrap_or_default();
+            let live_set = model
+                .setlists
+                .get(model.setlist_index as usize)
+                .cloned()
+                .unwrap_or_default();
             let set = open1().unwrap_or_else(|| live_set.clone());
-            let songs = lib.setlists.iter().find(|s| s.name == set).map(|s| s.songs.clone()).unwrap_or_default();
-            let live_song = model.songs.get(model.song_index as usize).map(|s| s.name.clone()).unwrap_or_default();
+            let songs = lib
+                .setlists
+                .iter()
+                .find(|s| s.name == set)
+                .map(|s| s.songs.clone())
+                .unwrap_or_default();
+            let live_song = model
+                .songs
+                .get(model.song_index as usize)
+                .map(|s| s.name.clone())
+                .unwrap_or_default();
             let song = open2().unwrap_or_else(|| {
-                if set == live_set { live_song.clone() } else { songs.first().map(|s| s.name.clone()).unwrap_or_default() }
+                if set == live_set {
+                    live_song.clone()
+                } else {
+                    songs.first().map(|s| s.name.clone()).unwrap_or_default()
+                }
             });
-            let parts = lib.songs.iter().find(|s| s.name == song).map(|s| s.parts.clone()).unwrap_or_default();
+            let parts = lib
+                .songs
+                .iter()
+                .find(|s| s.name == song)
+                .map(|s| s.parts.clone())
+                .unwrap_or_default();
             let playing_song = set == live_set && song == live_song;
-            let live_part = model.parts.get(model.part_index as usize).map(|p| p.name.clone()).unwrap_or_default();
+            let live_part = model
+                .parts
+                .get(model.part_index as usize)
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
             (
                 vec![
                     Column {
                         title: "Setlist".into(),
-                        rows: lib.setlists.iter().map(|s| Row { key: s.name.clone(), name: s.name.clone(), sub: format!("{} songs", s.songs.len()), live: s.name == live_set, leads: true, modified: false }).collect(),
+                        rows: lib
+                            .setlists
+                            .iter()
+                            .map(|s| Row {
+                                key: s.name.clone(),
+                                name: s.name.clone(),
+                                sub: format!("{} songs", s.songs.len()),
+                                live: s.name == live_set,
+                                leads: true,
+                                modified: false,
+                            })
+                            .collect(),
                     },
                     Column {
                         title: "Song".into(),
-                        rows: songs.iter().map(|s| Row { key: s.name.clone(), name: s.name.clone(), sub: format!("{} · {} bpm", s.key, s.bpm), live: set == live_set && s.name == live_song, leads: true, modified: false }).collect(),
+                        rows: songs
+                            .iter()
+                            .map(|s| Row {
+                                key: s.name.clone(),
+                                name: s.name.clone(),
+                                sub: format!("{} · {} bpm", s.key, s.bpm),
+                                live: set == live_set && s.name == live_song,
+                                leads: true,
+                                modified: false,
+                            })
+                            .collect(),
                     },
                     Column {
                         title: "Part".into(),
-                        rows: parts.iter().enumerate().map(|(i, p)| Row { key: format!("{i}"), name: p.clone(), sub: String::new(), live: playing_song && *p == live_part, leads: false, modified: false }).collect(),
+                        rows: parts
+                            .iter()
+                            .enumerate()
+                            .map(|(i, p)| Row {
+                                key: format!("{i}"),
+                                name: p.clone(),
+                                sub: String::new(),
+                                live: playing_song && *p == live_part,
+                                leads: false,
+                                modified: false,
+                            })
+                            .collect(),
                     },
                 ],
                 vec![live_set, live_song, live_part],
@@ -311,26 +419,66 @@ pub fn PhoneBrowser(
         BrowseTab::Profiles => {
             let live_profile = model.profile_name.clone();
             let profile = open1().unwrap_or_else(|| live_profile.clone());
-            let entry = lib.profiles.iter().find(|p| p.name == profile).cloned().unwrap_or_default();
+            let entry = lib
+                .profiles
+                .iter()
+                .find(|p| p.name == profile)
+                .cloned()
+                .unwrap_or_default();
             let live_patch = patches.iter().find(|p| p.active).cloned();
             let mut stacks: Vec<String> = entry.stacks.clone();
             if entry.patch_list.iter().any(|p| p.stack.is_empty()) {
                 stacks.push(String::new());
             }
-            let live_stack = if profile == live_profile { live_patch.as_ref().map(|p| p.stack.clone()) } else { None };
-            let stack = open2().unwrap_or_else(|| live_stack.clone().unwrap_or_else(|| stacks.first().cloned().unwrap_or_default()));
-            let stack_name = |s: &str| if s.is_empty() { "Patches".to_string() } else { s.to_string() };
+            let live_stack = if profile == live_profile {
+                live_patch.as_ref().map(|p| p.stack.clone())
+            } else {
+                None
+            };
+            let stack = open2().unwrap_or_else(|| {
+                live_stack
+                    .clone()
+                    .unwrap_or_else(|| stacks.first().cloned().unwrap_or_default())
+            });
+            let stack_name = |s: &str| {
+                if s.is_empty() {
+                    "Patches".to_string()
+                } else {
+                    s.to_string()
+                }
+            };
             (
                 vec![
                     Column {
                         title: "Profile".into(),
-                        rows: lib.profiles.iter().map(|p| Row { key: p.name.clone(), name: p.name.clone(), sub: format!("{} patches", p.patches), live: p.name == live_profile, leads: true, modified: false }).collect(),
+                        rows: lib
+                            .profiles
+                            .iter()
+                            .map(|p| Row {
+                                key: p.name.clone(),
+                                name: p.name.clone(),
+                                sub: format!("{} patches", p.patches),
+                                live: p.name == live_profile,
+                                leads: true,
+                                modified: false,
+                            })
+                            .collect(),
                     },
                     Column {
                         title: "Stack".into(),
                         rows: stacks
                             .iter()
-                            .map(|s| Row { key: s.clone(), name: stack_name(s), sub: format!("{} patches", entry.patch_list.iter().filter(|p| p.stack == *s).count()), live: live_stack.as_deref() == Some(s.as_str()), leads: true, modified: false })
+                            .map(|s| Row {
+                                key: s.clone(),
+                                name: stack_name(s),
+                                sub: format!(
+                                    "{} patches",
+                                    entry.patch_list.iter().filter(|p| p.stack == *s).count()
+                                ),
+                                live: live_stack.as_deref() == Some(s.as_str()),
+                                leads: true,
+                                modified: false,
+                            })
                             .collect(),
                     },
                     Column {
@@ -340,33 +488,84 @@ pub fn PhoneBrowser(
                             .iter()
                             .enumerate()
                             .filter(|(_, p)| p.stack == stack)
-                            .map(|(i, p)| Row { key: format!("{i}"), name: p.name.clone(), sub: String::new(), live: profile == live_profile && live_patch.as_ref().is_some_and(|l| l.name == p.name), leads: false, modified: false })
+                            .map(|(i, p)| Row {
+                                key: format!("{i}"),
+                                name: p.name.clone(),
+                                sub: String::new(),
+                                live: profile == live_profile
+                                    && live_patch.as_ref().is_some_and(|l| l.name == p.name),
+                                leads: false,
+                                modified: false,
+                            })
                             .collect(),
                     },
                 ],
-                vec![live_profile, live_stack.map(|s| stack_name(&s)).unwrap_or_default(), live_patch.map(|p| p.name).unwrap_or_default()],
+                vec![
+                    live_profile,
+                    live_stack.map(|s| stack_name(&s)).unwrap_or_default(),
+                    live_patch.map(|p| p.name).unwrap_or_default(),
+                ],
             )
         }
         BrowseTab::Module(m) => {
-            let mine: Vec<_> = comp.modules.iter().filter(|p| p.module.eq_ignore_ascii_case(m)).cloned().collect();
+            let mine: Vec<_> = comp
+                .modules
+                .iter()
+                .filter(|p| p.module.eq_ignore_ascii_case(m))
+                .cloned()
+                .collect();
             let pick = live_module(m);
             let live_preset = pick.as_ref().map(|p| p.preset.clone()).unwrap_or_default();
             let preset = open1().unwrap_or_else(|| live_preset.clone());
-            let snaps = mine.iter().find(|p| p.name == preset).map(|p| p.snapshots.clone()).unwrap_or_default();
-            let live_snaps = mine.iter().find(|p| p.name == live_preset).map(|p| p.snapshots.clone()).unwrap_or_default();
+            let snaps = mine
+                .iter()
+                .find(|p| p.name == preset)
+                .map(|p| p.snapshots.clone())
+                .unwrap_or_default();
+            let live_snaps = mine
+                .iter()
+                .find(|p| p.name == live_preset)
+                .map(|p| p.snapshots.clone())
+                .unwrap_or_default();
             let live_snap = pick
                 .as_ref()
-                .map(|p| if p.snapshot.is_empty() { live_snaps.first().cloned().unwrap_or_default() } else { p.snapshot.clone() })
+                .map(|p| {
+                    if p.snapshot.is_empty() {
+                        live_snaps.first().cloned().unwrap_or_default()
+                    } else {
+                        p.snapshot.clone()
+                    }
+                })
                 .unwrap_or_default();
             (
                 vec![
                     Column {
                         title: format!("{m} preset"),
-                        rows: mine.iter().map(|p| Row { key: p.name.clone(), name: p.name.clone(), sub: format!("{} variations", p.snapshots.len()), live: p.name == live_preset, leads: true, modified: false }).collect(),
+                        rows: mine
+                            .iter()
+                            .map(|p| Row {
+                                key: p.name.clone(),
+                                name: p.name.clone(),
+                                sub: format!("{} variations", p.snapshots.len()),
+                                live: p.name == live_preset,
+                                leads: true,
+                                modified: false,
+                            })
+                            .collect(),
                     },
                     Column {
                         title: "Variation".into(),
-                        rows: snaps.iter().map(|s| Row { key: s.clone(), name: s.clone(), sub: String::new(), live: preset == live_preset && *s == live_snap, leads: false, modified: false }).collect(),
+                        rows: snaps
+                            .iter()
+                            .map(|s| Row {
+                                key: s.clone(),
+                                name: s.clone(),
+                                sub: String::new(),
+                                live: preset == live_preset && *s == live_snap,
+                                leads: false,
+                                modified: false,
+                            })
+                            .collect(),
                     },
                 ],
                 vec![live_preset, live_snap],
@@ -374,26 +573,55 @@ pub fn PhoneBrowser(
         }
         BrowseTab::Block { name, block_type } => {
             let b = block(name);
-            let algos: Option<(&'static str, &'static [&'static str])> = match b.as_ref().map(|b| b.block_type) {
-                Some(BlockType::Delay) => Some(("style", &crate::ui::control::DELAY_ALGOS)),
-                Some(BlockType::Reverb) => Some(("algorithm", &crate::ui::control::VERB_ALGOS)),
-                _ => None,
-            };
-            let presets: Vec<_> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(block_type)).cloned().collect();
+            let algos: Option<(&'static str, &'static [&'static str])> =
+                match b.as_ref().map(|b| b.block_type) {
+                    Some(BlockType::Delay) => Some(("style", &crate::ui::control::DELAY_ALGOS)),
+                    Some(BlockType::Reverb) => Some(("algorithm", &crate::ui::control::VERB_ALGOS)),
+                    _ => None,
+                };
+            let presets: Vec<_> = comp
+                .block_presets
+                .iter()
+                .filter(|p| p.block_type.eq_ignore_ascii_case(block_type))
+                .cloned()
+                .collect();
             let groups = crate::ui::preset_look::grouped(&presets);
-            let playing = comp.active_blocks.iter().find(|x| x.block.eq_ignore_ascii_case(name)).map(|x| x.preset.clone()).unwrap_or_default();
-            let live_group = groups.iter().find(|(_, v)| v.iter().any(|(p, _)| p.name == playing)).map(|(g, _)| g.clone()).unwrap_or_default();
-            let algo_now = b
-                .as_ref()
-                .zip(algos)
-                .and_then(|(b, (param, names))| b.params.iter().find(|p| p.name == param).and_then(|p| names.get(p.value.round().max(0.0) as usize)).map(|s| (*s).to_string()));
+            let playing = comp
+                .active_blocks
+                .iter()
+                .find(|x| x.block.eq_ignore_ascii_case(name))
+                .map(|x| x.preset.clone())
+                .unwrap_or_default();
+            let live_group = groups
+                .iter()
+                .find(|(_, v)| v.iter().any(|(p, _)| p.name == playing))
+                .map(|(g, _)| g.clone())
+                .unwrap_or_default();
+            let algo_now = b.as_ref().zip(algos).and_then(|(b, (param, names))| {
+                b.params
+                    .iter()
+                    .find(|p| p.name == param)
+                    .and_then(|p| names.get(p.value.round().max(0.0) as usize))
+                    .map(|s| (*s).to_string())
+            });
             let mut first: Vec<Row> = Vec::new();
             if algos.is_some() {
-                first.push(Row { key: ALGORITHM.into(), name: "Algorithm".into(), sub: algo_now.clone().unwrap_or_default(), live: false, leads: true, modified: false });
+                first.push(Row {
+                    key: ALGORITHM.into(),
+                    name: "Algorithm".into(),
+                    sub: algo_now.clone().unwrap_or_default(),
+                    live: false,
+                    leads: true,
+                    modified: false,
+                });
             }
             first.extend(groups.iter().map(|(g, v)| Row {
                 key: g.clone(),
-                name: if g.is_empty() { "Presets".into() } else { g.clone() },
+                name: if g.is_empty() {
+                    "Presets".into()
+                } else {
+                    g.clone()
+                },
                 sub: format!("{} presets", v.len()),
                 live: *g == live_group,
                 leads: true,
@@ -404,7 +632,20 @@ pub fn PhoneBrowser(
                 (
                     "Algorithm".to_string(),
                     algos
-                        .map(|(_, names)| names.iter().enumerate().map(|(i, a)| Row { key: format!("{i}"), name: (*a).to_string(), sub: String::new(), live: algo_now.as_deref() == Some(*a), leads: false, modified: false }).collect())
+                        .map(|(_, names)| {
+                            names
+                                .iter()
+                                .enumerate()
+                                .map(|(i, a)| Row {
+                                    key: format!("{i}"),
+                                    name: (*a).to_string(),
+                                    sub: String::new(),
+                                    live: algo_now.as_deref() == Some(*a),
+                                    leads: false,
+                                    modified: false,
+                                })
+                                .collect()
+                        })
                         .unwrap_or_default(),
                 )
             } else {
@@ -413,12 +654,32 @@ pub fn PhoneBrowser(
                     groups
                         .iter()
                         .find(|(g, _)| *g == open)
-                        .map(|(_, v)| v.iter().map(|(p, _)| Row { key: p.name.clone(), name: p.name.clone(), sub: String::new(), live: p.name == playing, leads: false, modified: false }).collect())
+                        .map(|(_, v)| {
+                            v.iter()
+                                .map(|(p, _)| Row {
+                                    key: p.name.clone(),
+                                    name: p.name.clone(),
+                                    sub: String::new(),
+                                    live: p.name == playing,
+                                    leads: false,
+                                    modified: false,
+                                })
+                                .collect()
+                        })
                         .unwrap_or_default(),
                 )
             };
             (
-                vec![Column { title: name.clone(), rows: first }, Column { title: second_title, rows: second }],
+                vec![
+                    Column {
+                        title: name.clone(),
+                        rows: first,
+                    },
+                    Column {
+                        title: second_title,
+                        rows: second,
+                    },
+                ],
                 vec![algo_now.unwrap_or_default(), playing],
             )
         }
@@ -431,18 +692,45 @@ pub fn PhoneBrowser(
             let captures: Vec<String> = if open == pedal {
                 b.as_ref().map(|b| b.options.clone()).unwrap_or_default()
             } else {
-                lib.drives.iter().find(|d| d.name == open).map(|d| d.options.clone()).unwrap_or_default()
+                lib.drives
+                    .iter()
+                    .find(|d| d.name == open)
+                    .map(|d| d.options.clone())
+                    .unwrap_or_default()
             };
             let live_capture = b.as_ref().map(|b| b.detail.clone()).unwrap_or_default();
             (
                 vec![
                     Column {
                         title: "Pedal".into(),
-                        rows: lib.drives.iter().map(|d| Row { key: d.name.clone(), name: d.name.clone(), sub: d.slots.join(", "), live: d.name == pedal, leads: true, modified: false }).collect(),
+                        rows: lib
+                            .drives
+                            .iter()
+                            .map(|d| Row {
+                                key: d.name.clone(),
+                                name: d.name.clone(),
+                                sub: d.slots.join(", "),
+                                live: d.name == pedal,
+                                leads: true,
+                                modified: false,
+                            })
+                            .collect(),
                     },
                     Column {
                         title: "Capture".into(),
-                        rows: captures.iter().enumerate().map(|(i, c)| Row { key: format!("{i}"), name: c.clone(), sub: String::new(), live: open == pedal && b.as_ref().is_some_and(|b| b.option as usize == i), leads: false, modified: false }).collect(),
+                        rows: captures
+                            .iter()
+                            .enumerate()
+                            .map(|(i, c)| Row {
+                                key: format!("{i}"),
+                                name: c.clone(),
+                                sub: String::new(),
+                                live: open == pedal
+                                    && b.as_ref().is_some_and(|b| b.option as usize == i),
+                                leads: false,
+                                modified: false,
+                            })
+                            .collect(),
                     },
                 ],
                 vec![pedal, live_capture],
@@ -460,7 +748,13 @@ pub fn PhoneBrowser(
 
     // ── A pick in a column ──
     let pick = {
-        let (kind, model, lib, blocks, comp) = (kind.clone(), model.clone(), lib.clone(), blocks.clone(), comp.clone());
+        let (kind, model, lib, blocks, comp) = (
+            kind.clone(),
+            model.clone(),
+            lib.clone(),
+            blocks.clone(),
+            comp.clone(),
+        );
         move |col: usize, key: String| match (&kind, col) {
             // A set and a song play as they open.
             (BrowseTab::Setlists, 0) => {
@@ -471,9 +765,17 @@ pub fn PhoneBrowser(
                 open2.set(None);
             }
             (BrowseTab::Setlists, 1) => {
-                let set = open1.peek().clone().or_else(|| model.setlists.get(model.setlist_index as usize).cloned()).unwrap_or_default();
+                let set = open1
+                    .peek()
+                    .clone()
+                    .or_else(|| model.setlists.get(model.setlist_index as usize).cloned())
+                    .unwrap_or_default();
                 let set_i = lib.setlists.iter().position(|s| s.name == set);
-                let song_i = lib.setlists.iter().find(|s| s.name == set).and_then(|s| s.songs.iter().position(|x| x.name == key));
+                let song_i = lib
+                    .setlists
+                    .iter()
+                    .find(|s| s.name == set)
+                    .and_then(|s| s.songs.iter().position(|x| x.name == key));
                 if let (Some(set_i), Some(song_i)) = (set_i, song_i) {
                     let same = set_i as u32 == model.setlist_index;
                     play!(col, key, r => async move {
@@ -499,7 +801,10 @@ pub fn PhoneBrowser(
             }
             (BrowseTab::Profiles, 1) => open2.set(Some(key)),
             (BrowseTab::Profiles, _) => {
-                let profile = open1.peek().clone().unwrap_or_else(|| model.profile_name.clone());
+                let profile = open1
+                    .peek()
+                    .clone()
+                    .unwrap_or_else(|| model.profile_name.clone());
                 if let Ok(i) = key.parse::<u32>() {
                     let switch = profile != model.profile_name;
                     play!(col, key, r => async move {
@@ -514,7 +819,10 @@ pub fn PhoneBrowser(
             // unless it is the one playing, which only opens; a variation
             // plays.
             (BrowseTab::Module(m), 0) => {
-                let playing = comp.active_modules.iter().any(|p| p.module.eq_ignore_ascii_case(m) && p.preset == key);
+                let playing = comp
+                    .active_modules
+                    .iter()
+                    .any(|p| p.module.eq_ignore_ascii_case(m) && p.preset == key);
                 if !playing {
                     let (m, preset) = ((*m).to_string(), key.clone());
                     play!(col, key, r => r.choose_module(m, preset, String::new()));
@@ -525,7 +833,12 @@ pub fn PhoneBrowser(
                 let preset = open1
                     .peek()
                     .clone()
-                    .or_else(|| comp.active_modules.iter().find(|p| p.module.eq_ignore_ascii_case(m)).map(|p| p.preset.clone()))
+                    .or_else(|| {
+                        comp.active_modules
+                            .iter()
+                            .find(|p| p.module.eq_ignore_ascii_case(m))
+                            .map(|p| p.preset.clone())
+                    })
                     .unwrap_or_default();
                 let m = (*m).to_string();
                 play!(col, key, r => r.choose_module(m, preset, key.clone()));
@@ -534,8 +847,15 @@ pub fn PhoneBrowser(
             (BrowseTab::Block { .. }, 0) => open1.set(Some(key)),
             (BrowseTab::Block { name, .. }, _) => {
                 if open1.peek().as_deref() == Some(ALGORITHM) {
-                    if let (Some(b), Ok(i)) = (blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)), key.parse::<usize>()) {
-                        let param = if b.block_type == BlockType::Reverb { "algorithm" } else { "style" };
+                    if let (Some(b), Ok(i)) = (
+                        blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)),
+                        key.parse::<usize>(),
+                    ) {
+                        let param = if b.block_type == BlockType::Reverb {
+                            "algorithm"
+                        } else {
+                            "style"
+                        };
                         let id = b.id.clone();
                         play!(col, key, r => r.set_block_param(id, param.to_string(), i as f32));
                     }
@@ -555,7 +875,10 @@ pub fn PhoneBrowser(
                 open1.set(Some(key));
             }
             (BrowseTab::Pedal { name }, _) => {
-                if let (Some(b), Ok(i)) = (blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)), key.parse::<u32>()) {
+                if let (Some(b), Ok(i)) = (
+                    blocks.iter().find(|b| b.name.eq_ignore_ascii_case(name)),
+                    key.parse::<u32>(),
+                ) {
                     let id = b.id.clone();
                     play!(col, key, r => r.set_block_option(id, i));
                 }
@@ -566,10 +889,15 @@ pub fn PhoneBrowser(
 
     // ── ‹ › through the path's last step ──
     let mut step = {
-        let (kind, patches, comp, blocks) = (kind.clone(), patches.clone(), comp.clone(), blocks.clone());
+        let (kind, patches, comp, blocks) =
+            (kind.clone(), patches.clone(), comp.clone(), blocks.clone());
         move |d: i32| {
             let wrap = |at: Option<usize>, n: usize| -> Option<usize> {
-                (n > 0).then(|| at.map_or(0, |i| (i as i64 + i64::from(d)).rem_euclid(n as i64) as usize))
+                (n > 0).then(|| {
+                    at.map_or(0, |i| {
+                        (i as i64 + i64::from(d)).rem_euclid(n as i64) as usize
+                    })
+                })
             };
             match &kind {
                 BrowseTab::Setlists => play!(HEADER, String::new(), r => r.step_part(d, false)),
@@ -583,9 +911,21 @@ pub fn PhoneBrowser(
                     play!(HEADER, String::new(), r => r.step_module(m, d));
                 }
                 BrowseTab::Block { name, block_type } => {
-                    let names: Vec<String> = comp.block_presets.iter().filter(|p| p.block_type.eq_ignore_ascii_case(block_type)).map(|p| p.name.clone()).collect();
-                    let playing = comp.active_blocks.iter().find(|b| b.block.eq_ignore_ascii_case(name)).map(|b| b.preset.clone());
-                    if let Some(i) = wrap(playing.and_then(|p| names.iter().position(|n| *n == p)), names.len()) {
+                    let names: Vec<String> = comp
+                        .block_presets
+                        .iter()
+                        .filter(|p| p.block_type.eq_ignore_ascii_case(block_type))
+                        .map(|p| p.name.clone())
+                        .collect();
+                    let playing = comp
+                        .active_blocks
+                        .iter()
+                        .find(|b| b.block.eq_ignore_ascii_case(name))
+                        .map(|b| b.preset.clone());
+                    if let Some(i) = wrap(
+                        playing.and_then(|p| names.iter().position(|n| *n == p)),
+                        names.len(),
+                    ) {
                         let (block, preset) = (name.clone(), names[i].clone());
                         play!(HEADER, String::new(), r => r.choose_block(block, preset));
                     }
@@ -614,8 +954,14 @@ pub fn PhoneBrowser(
     let last = crumbs.last().cloned().unwrap_or_default();
     let last = if modified { format!("{last} *") } else { last };
     let before = crumbs[..crumbs.len().saturating_sub(1)].join("  ›  ");
-    let heading = if before.is_empty() { title } else { format!("{title}  ·  {before}") };
-    let arrow = format!("flex: 0 0 56px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: {RAISED}; border: 1px solid {RULE}; color: {TEXT}; font-size: 24px; font-weight: 700; cursor: pointer;");
+    let heading = if before.is_empty() {
+        title
+    } else {
+        format!("{title}  ·  {before}")
+    };
+    let arrow = format!(
+        "flex: 0 0 56px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: {RAISED}; border: 1px solid {RULE}; color: {TEXT}; font-size: 24px; font-weight: 700; cursor: pointer;"
+    );
     let mut back = step.clone();
     // A swipe down from the head closes it (where a sheet's grabber is).
     let mut drag = use_signal(|| None::<f64>);

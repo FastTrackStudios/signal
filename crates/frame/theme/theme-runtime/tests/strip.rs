@@ -32,7 +32,12 @@ const STRIP: &str = r##"<Document>
 "##;
 
 fn schema() -> Schema {
-    Schema::new().field("track.name").field("track.color").field("track.mute").live("track.fader").live("meter.level")
+    Schema::new()
+        .field("track.name")
+        .field("track.color")
+        .field("track.mute")
+        .live("track.fader")
+        .live("meter.level")
 }
 
 fn theme() -> Theme {
@@ -55,11 +60,23 @@ fn track(name: &str, mute: bool, fader: f64, level: f64) -> Vec<Value> {
 struct Fills(Vec<(String, Rect)>);
 
 impl Canvas for Fills {
-    fn fill(&mut self, transform: Affine, _: Fill, brush: &Brush, _: Option<Affine>, shape: &BezPath) {
+    fn fill(
+        &mut self,
+        transform: Affine,
+        _: Fill,
+        brush: &Brush,
+        _: Option<Affine>,
+        shape: &BezPath,
+    ) {
         if let Brush::Solid(c) = brush {
             let [r, g, b, a] = c.to_rgba8().to_u8_array();
-            let hex = if a == 255 { format!("#{r:02x}{g:02x}{b:02x}") } else { format!("#{r:02x}{g:02x}{b:02x}{a:02x}") };
-            self.0.push((hex, (transform * shape.clone()).bounding_box()));
+            let hex = if a == 255 {
+                format!("#{r:02x}{g:02x}{b:02x}")
+            } else {
+                format!("#{r:02x}{g:02x}{b:02x}{a:02x}")
+            };
+            self.0
+                .push((hex, (transform * shape.clone()).bounding_box()));
         }
     }
     fn stroke(&mut self, _: Affine, _: &Stroke, _: &Brush, _: &BezPath) {}
@@ -74,7 +91,11 @@ impl Fills {
     }
 
     fn rect(&self, hex: &str) -> Rect {
-        self.0.iter().find(|(h, _)| h == hex).map(|(_, r)| *r).unwrap_or_else(|| panic!("no {hex} in {:?}", self.0))
+        self.0
+            .iter()
+            .find(|(h, _)| h == hex)
+            .map(|(_, r)| *r)
+            .unwrap_or_else(|| panic!("no {hex} in {:?}", self.0))
     }
 }
 
@@ -97,7 +118,10 @@ fn it_compiles_with_its_roles_and_targets() {
     assert_eq!(t.authored_size("mcp.strip"), Some((86.0, 300.0)));
     assert!(t.has_live("mcp.strip"));
     // Topmost first.
-    assert_eq!(t.targets("mcp.strip", (86.0, 300.0), &track("Vox", false, 0.0, 0.0)), ["name", "fader", "arm", "solo", "mute"]);
+    assert_eq!(
+        t.targets("mcp.strip", (86.0, 300.0), &track("Vox", false, 0.0, 0.0)),
+        ["name", "fader", "arm", "solo", "mute"]
+    );
 }
 
 #[test]
@@ -139,7 +163,9 @@ fn a_taller_strip_stretches_the_travel_and_drops_the_name() {
     let cap = live(&t, size, &track("Vox", false, 0.0, 0.0)).rect("#9d9d9d");
     // Travel 240 + 200: the cap at the bottom is 200 lower.
     assert_eq!(cap.y0, 20.0 + 440.0 - 12.0);
-    let name = t.target_rect("mcp.strip", size, &track("Vox", false, 0.0, 0.0), "name").unwrap();
+    let name = t
+        .target_rect("mcp.strip", size, &track("Vox", false, 0.0, 0.0), "name")
+        .unwrap();
     assert_eq!(name.y0, 480.0);
 }
 
@@ -147,19 +173,31 @@ fn a_taller_strip_stretches_the_travel_and_drops_the_name() {
 fn a_narrow_strip_hides_what_the_theme_says() {
     let t = theme();
     let fields = track("Vox", false, 0.0, 0.0);
-    assert!(t.target_rect("mcp.strip", (86.0, 300.0), &fields, "name").is_some());
-    assert!(t.target_rect("mcp.strip", (30.0, 300.0), &fields, "name").is_none());
+    assert!(
+        t.target_rect("mcp.strip", (86.0, 300.0), &fields, "name")
+            .is_some()
+    );
+    assert!(
+        t.target_rect("mcp.strip", (30.0, 300.0), &fields, "name")
+            .is_none()
+    );
 }
 
 #[test]
 fn a_hidden_row_leaves_the_flow() {
     let t = theme();
     let fields = track("Vox", false, 0.0, 0.0);
-    let arm = |h: f64| t.target_rect("mcp.strip", (86.0, h), &fields, "arm").unwrap();
+    let arm = |h: f64| {
+        t.target_rect("mcp.strip", (86.0, h), &fields, "arm")
+            .unwrap()
+    };
     // Tall: mute, solo, arm.
     assert_eq!(arm(300.0).y0, 4.0 + 18.0 + 2.0 + 18.0 + 2.0);
     // Short: solo is hidden and arm closes up under mute.
-    assert!(t.target_rect("mcp.strip", (86.0, 200.0), &fields, "solo").is_none());
+    assert!(
+        t.target_rect("mcp.strip", (86.0, 200.0), &fields, "solo")
+            .is_none()
+    );
     assert_eq!(arm(200.0).y0, 4.0 + 18.0 + 2.0);
 }
 
@@ -167,7 +205,14 @@ fn a_hidden_row_leaves_the_flow() {
 fn the_pointer_finds_the_control_where_it_is_drawn() {
     let t = theme();
     let size = (86.0, 300.0);
-    let at = |fader: f64, p: (f64, f64)| t.hit("mcp.strip", size, &track("Vox", false, fader, 0.0), Point::new(p.0, p.1));
+    let at = |fader: f64, p: (f64, f64)| {
+        t.hit(
+            "mcp.strip",
+            size,
+            &track("Vox", false, fader, 0.0),
+            Point::new(p.0, p.1),
+        )
+    };
     assert_eq!(at(0.0, (10.0, 10.0)).as_deref(), Some("mute"));
     // The fader cap is where its value put it.
     assert_eq!(at(1.0, (60.0, 25.0)).as_deref(), Some("fader"));
@@ -180,24 +225,53 @@ fn modes_swap_the_tokens() {
     let dark = theme();
     let light = dark.with_mode("light").unwrap();
     assert_eq!(light.mode(), "light");
-    assert_eq!(dark.token("strip.ground").and_then(Value::color).unwrap().to_hex(), "#202020");
-    assert_eq!(light.token("strip.ground").and_then(Value::color).unwrap().to_hex(), "#e8e8e8");
+    assert_eq!(
+        dark.token("strip.ground")
+            .and_then(Value::color)
+            .unwrap()
+            .to_hex(),
+        "#202020"
+    );
+    assert_eq!(
+        light
+            .token("strip.ground")
+            .and_then(Value::color)
+            .unwrap()
+            .to_hex(),
+        "#e8e8e8"
+    );
     // Derived tokens follow.
-    assert_eq!(dark.token("cap").and_then(Value::color).unwrap().to_hex(), "#9d9d9d");
+    assert_eq!(
+        dark.token("cap").and_then(Value::color).unwrap().to_hex(),
+        "#9d9d9d"
+    );
     let fields = track("Vox", false, 0.0, 0.0);
     assert!(record(&light, (86.0, 300.0), &fields).has("#bbc8e1"));
 }
 
 #[test]
 fn problems_are_reported_by_where_they_are() {
-    let bad = STRIP.replace("track.name", "track.nom").replace("$meter", "$metre");
+    let bad = STRIP
+        .replace("track.name", "track.nom")
+        .replace("$meter", "$metre");
     let errs = Theme::from_markup(&bad, schema(), None).unwrap_err();
     let text: Vec<String> = errs.iter().map(ToString::to_string).collect();
-    assert!(text.iter().any(|e| e.contains("mcp.strip › @name") && e.contains("no field `track.nom`")), "{text:?}");
-    assert!(text.iter().any(|e| e.contains("Level") && e.contains("no token `$metre`")), "{text:?}");
+    assert!(
+        text.iter()
+            .any(|e| e.contains("mcp.strip › @name") && e.contains("no field `track.nom`")),
+        "{text:?}"
+    );
+    assert!(
+        text.iter()
+            .any(|e| e.contains("Level") && e.contains("no token `$metre`")),
+        "{text:?}"
+    );
     let cyclic = STRIP.replace(r##"value="#3a3a3a""##, r##"value="$cap""##);
     let errs = Theme::from_markup(&cyclic, schema(), None).unwrap_err();
-    assert!(errs.iter().any(|e| e.message.contains("refers to itself")), "{errs:?}");
+    assert!(
+        errs.iter().any(|e| e.message.contains("refers to itself")),
+        "{errs:?}"
+    );
 }
 
 #[test]
@@ -212,15 +286,27 @@ fn a_bound_rotation_turns_the_node_about_its_origin() {
     let t = Theme::from_markup(src, Schema::new().live("track.pan"), None).unwrap();
     let pointer = |pan: f64| {
         let mut c = Fills::default();
-        t.live("knob", (24.0, 24.0), &vec![Value::Num(pan)], &mut c, Affine::IDENTITY);
+        t.live(
+            "knob",
+            (24.0, 24.0),
+            &vec![Value::Num(pan)],
+            &mut c,
+            Affine::IDENTITY,
+        );
         c.rect("#ffffff")
     };
     // Centre: straight up from the middle.
     let up = pointer(0.0);
-    assert!((up.y0 - 2.0).abs() < 1e-6 && (up.x0 - 11.0).abs() < 1e-6, "{up:?}");
+    assert!(
+        (up.y0 - 2.0).abs() < 1e-6 && (up.x0 - 11.0).abs() < 1e-6,
+        "{up:?}"
+    );
     // Hard right: lying along the right-hand radius.
     let right = pointer(1.0);
-    assert!((right.x1 - 22.0).abs() < 1e-6 && (right.y0 - 11.0).abs() < 1e-6, "{right:?}");
+    assert!(
+        (right.x1 - 22.0).abs() < 1e-6 && (right.y0 - 11.0).abs() < 1e-6,
+        "{right:?}"
+    );
 }
 
 #[test]
@@ -264,7 +350,13 @@ fn an_inset_reveals_a_fixed_picture_and_a_dash_draws_part_of_a_stroke() {
         }
     }
     let mut p = Probe::default();
-    t.live("meter", (10.0, 100.0), &vec![Value::Num(0.25)], &mut p, Affine::IDENTITY);
+    t.live(
+        "meter",
+        (10.0, 100.0),
+        &vec![Value::Num(0.25)],
+        &mut p,
+        Affine::IDENTITY,
+    );
     let clip = p.clips.first().copied().expect("clipped");
     // A quarter lit: the clip is the bottom quarter, the ramp unmoved.
     assert_eq!((clip.y0, clip.y1), (75.0, 100.0));
@@ -283,7 +375,8 @@ fn a_layout_field_shapes_the_layout_like_the_box_does() {
   </Page>
 </Document>"##;
     let t = Theme::from_markup(src, Schema::new().layout("mixer.h"), None).unwrap();
-    let pan = |mixer_h: f64| t.target_rect("strip", (86.0, 200.0), &vec![Value::Num(mixer_h)], "pan");
+    let pan =
+        |mixer_h: f64| t.target_rect("strip", (86.0, 200.0), &vec![Value::Num(mixer_h)], "pan");
     // The same box, laid out against two mixer heights.
     assert!(pan(300.0).is_some());
     assert!(pan(200.0).is_none());

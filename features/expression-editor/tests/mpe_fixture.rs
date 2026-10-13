@@ -9,11 +9,11 @@
 //! the wire rather than assumed by the reader.
 
 use daw::service::midi::MidiTakeSnapshot;
-use expression_editor::doc::Dimension;
 use expression_editor::daw::fixture::{
     self, MASTER_CHANNEL, MEMBER_CHANNELS, PER_NOTE_BEND_RANGE, TIMBRE_CC,
 };
 use expression_editor::daw::{DEFAULT_BEND_RANGE, to_content, to_doc};
+use expression_editor::doc::Dimension;
 
 fn snapshot() -> MidiTakeSnapshot {
     fixture::snapshot()

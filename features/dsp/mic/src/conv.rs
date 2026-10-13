@@ -101,7 +101,11 @@ impl Convolver {
                     // A length mismatch is impossible here (buffers are
                     // sized for this plan); a failed transform leaves the
                     // slot silent rather than half-written.
-                    if self.fwd.process_with_scratch(&mut self.time, slot, &mut self.scratch).is_err() {
+                    if self
+                        .fwd
+                        .process_with_scratch(&mut self.time, slot, &mut self.scratch)
+                        .is_err()
+                    {
                         slot.fill(zero);
                     }
                     used = used.saturating_add(1);
@@ -126,7 +130,12 @@ impl Convolver {
     pub fn process(&mut self, x: f64) -> f64 {
         self.history.pop_back();
         self.history.push_front(x);
-        let direct: f64 = self.head.iter().zip(&self.history).map(|(h, s)| h * s).sum();
+        let direct: f64 = self
+            .head
+            .iter()
+            .zip(&self.history)
+            .map(|(h, s)| h * s)
+            .sum();
         let tail = self.tail.get(self.pos).copied().unwrap_or(0.0);
         if let Some(c) = self.cur.get_mut(self.pos) {
             *c = x;
@@ -146,12 +155,19 @@ impl Convolver {
         if capacity == 0 {
             return;
         }
-        self.newest = if self.newest == 0 { capacity.saturating_sub(1) } else { self.newest.saturating_sub(1) };
+        self.newest = if self.newest == 0 {
+            capacity.saturating_sub(1)
+        } else {
+            self.newest.saturating_sub(1)
+        };
         let (first, second) = self.time.split_at_mut(BLOCK);
         first.copy_from_slice(&self.prev);
         second.copy_from_slice(&self.cur);
         if let Some(slot) = self.fdl.chunks_exact_mut(BINS).nth(self.newest)
-            && self.fwd.process_with_scratch(&mut self.time, slot, &mut self.scratch).is_err()
+            && self
+                .fwd
+                .process_with_scratch(&mut self.time, slot, &mut self.scratch)
+                .is_err()
         {
             slot.fill(Complex::new(0.0, 0.0));
         }
@@ -168,12 +184,19 @@ impl Convolver {
             }
         }
         self.spec.copy_from_slice(&self.acc);
-        if self.inv.process_with_scratch(&mut self.spec, &mut self.time, &mut self.scratch).is_err() {
+        if self
+            .inv
+            .process_with_scratch(&mut self.spec, &mut self.time, &mut self.scratch)
+            .is_err()
+        {
             self.tail.fill(0.0);
             return;
         }
         let norm = 1.0 / dsp_core::count_to_f64(FFT_LEN);
-        self.tail.iter_mut().zip(self.time.iter().skip(BLOCK)).for_each(|(t, &v)| *t = v * norm);
+        self.tail
+            .iter_mut()
+            .zip(self.time.iter().skip(BLOCK))
+            .for_each(|(t, &v)| *t = v * norm);
     }
 }
 
@@ -195,13 +218,25 @@ mod tests {
 
     #[test]
     fn matches_direct_convolution_with_no_delay() {
-        let kernel: Vec<f64> = (0..1000).map(|i| (f64::from(i) * 0.37).sin() * (-f64::from(i) / 300.0).exp()).collect();
-        let x: Vec<f64> = (0..3000).map(|i| (f64::from(i) * 1.7).cos().mul_add(0.3, (f64::from(i) * 0.011).sin())).collect();
+        let kernel: Vec<f64> = (0..1000)
+            .map(|i| (f64::from(i) * 0.37).sin() * (-f64::from(i) / 300.0).exp())
+            .collect();
+        let x: Vec<f64> = (0..3000)
+            .map(|i| {
+                (f64::from(i) * 1.7)
+                    .cos()
+                    .mul_add(0.3, (f64::from(i) * 0.011).sin())
+            })
+            .collect();
         let mut c = Convolver::new(1024);
         c.set_kernel(&kernel);
         let y: Vec<f64> = x.iter().map(|&v| c.process(v)).collect();
         let want = direct(&kernel, &x);
-        let err = y.iter().zip(&want).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
+        let err = y
+            .iter()
+            .zip(&want)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0, f64::max);
         assert!(err < 1e-12, "max error {err}");
     }
 }

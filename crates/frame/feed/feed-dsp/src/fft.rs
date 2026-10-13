@@ -17,7 +17,10 @@ impl Fft {
     /// When `n` is not a power of two ≥ 2.
     #[must_use]
     pub fn new(n: usize) -> Self {
-        assert!(n >= 2 && n.is_power_of_two(), "FFT size must be a power of two ≥ 2, got {n}");
+        assert!(
+            n >= 2 && n.is_power_of_two(),
+            "FFT size must be a power of two ≥ 2, got {n}"
+        );
         let bits = n.trailing_zeros();
         let twiddles = (0..n / 2)
             .map(|k| {
@@ -25,7 +28,9 @@ impl Fft {
                 (a.cos(), a.sin())
             })
             .collect();
-        let rev = (0..n as u32).map(|i| i.reverse_bits() >> (32 - bits)).collect();
+        let rev = (0..n as u32)
+            .map(|i| i.reverse_bits() >> (32 - bits))
+            .collect();
         Self { n, twiddles, rev }
     }
 
@@ -45,7 +50,10 @@ impl Fft {
     /// When the buffers aren't the planned length.
     pub fn forward(&self, re: &mut [f64], im: &mut [f64]) {
         let n = self.n;
-        assert!(re.len() == n && im.len() == n, "FFT buffers must be {n} long");
+        assert!(
+            re.len() == n && im.len() == n,
+            "FFT buffers must be {n} long"
+        );
         for i in 0..n {
             let j = self.rev[i] as usize;
             if i < j {
@@ -80,7 +88,9 @@ mod tests {
     #[test]
     fn matches_a_naive_dft() {
         let n = 16;
-        let x: Vec<f64> = (0..n).map(|i| ((i * 7 % 5) as f64 - 2.0) * 0.3 + (i as f64 * 0.4).sin()).collect();
+        let x: Vec<f64> = (0..n)
+            .map(|i| ((i * 7 % 5) as f64 - 2.0) * 0.3 + (i as f64 * 0.4).sin())
+            .collect();
         let (mut re, mut im) = (x.clone(), vec![0.0; n]);
         Fft::new(n).forward(&mut re, &mut im);
         for k in 0..n {
@@ -90,7 +100,10 @@ mod tests {
                 dr += v * a.cos();
                 di += v * a.sin();
             }
-            assert!((re[k] - dr).abs() < 1e-9 && (im[k] - di).abs() < 1e-9, "bin {k}");
+            assert!(
+                (re[k] - dr).abs() < 1e-9 && (im[k] - di).abs() < 1e-9,
+                "bin {k}"
+            );
         }
     }
 }

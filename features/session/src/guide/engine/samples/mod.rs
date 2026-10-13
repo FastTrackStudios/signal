@@ -11,7 +11,7 @@ pub mod library;
 mod loader;
 
 pub use bank::{
-    get_guide_key, section_to_guide_filename, ClickSamplePaths, ClickSound, SampleBank,
+    ClickSamplePaths, ClickSound, SampleBank, get_guide_key, section_to_guide_filename,
 };
 pub use loader::load_wav;
 
@@ -78,9 +78,11 @@ impl AudioSample {
                 (0..out_frames)
                     .map(|i| {
                         let src = crate::guide::engine::cast::f64_from_usize(i) * ratio;
-                        let i0: usize = crate::guide::engine::cast::usize_from_f64_floor_nonneg(src);
+                        let i0: usize =
+                            crate::guide::engine::cast::usize_from_f64_floor_nonneg(src);
                         let i1 = i0.saturating_add(1).min(ch.len().saturating_sub(1));
-                        let frac: f32 = crate::guide::engine::cast::f32_from_f64_saturating(src.fract());
+                        let frac: f32 =
+                            crate::guide::engine::cast::f32_from_f64_saturating(src.fract());
                         let a = ch.get(i0).copied().unwrap_or(0.0);
                         let b = ch.get(i1).copied().unwrap_or(0.0);
                         (b - a).mul_add(frac, a)

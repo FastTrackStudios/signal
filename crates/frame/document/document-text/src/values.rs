@@ -2,8 +2,9 @@
 //! keyword enums, and the compact JSON forms of paints / effects / runs.
 
 use document_proto::{
-    AlignSelf, BlendMode, ResizeX, ResizeY, BooleanOp, Color, CrossAxisAlign, Effect, MainAxisAlign, MaskKind, Paint, PaintKind,
-    StrokeAlign, StrokeCap, StrokeJoin, TextAlign, TextCase, TextRun, Transform,
+    AlignSelf, BlendMode, BooleanOp, Color, CrossAxisAlign, Effect, MainAxisAlign, MaskKind, Paint,
+    PaintKind, ResizeX, ResizeY, StrokeAlign, StrokeCap, StrokeJoin, TextAlign, TextCase, TextRun,
+    Transform,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -40,8 +41,17 @@ fn channel_byte(v: f64) -> Option<u8> {
 
 /// `#rrggbb` / `#rrggbbaa`, only when every channel is exactly `n/255`.
 pub(crate) fn hex(c: Color) -> Option<String> {
-    let (r, g, b, a) = (channel_byte(c.r)?, channel_byte(c.g)?, channel_byte(c.b)?, channel_byte(c.a)?);
-    Some(if a == 255 { format!("#{r:02x}{g:02x}{b:02x}") } else { format!("#{r:02x}{g:02x}{b:02x}{a:02x}") })
+    let (r, g, b, a) = (
+        channel_byte(c.r)?,
+        channel_byte(c.g)?,
+        channel_byte(c.b)?,
+        channel_byte(c.a)?,
+    );
+    Some(if a == 255 {
+        format!("#{r:02x}{g:02x}{b:02x}")
+    } else {
+        format!("#{r:02x}{g:02x}{b:02x}{a:02x}")
+    })
 }
 
 /// `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa` → straight RGBA (channel = n/255).
@@ -71,17 +81,27 @@ pub(crate) trait Keyword: Sized + Copy + Serialize + 'static {
     const ALL: &'static [Self];
 
     fn keyword(self) -> String {
-        let pascal = serde_json::to_value(self).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
+        let pascal = serde_json::to_value(self)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .unwrap_or_default();
         kebab(&pascal)
     }
 
     fn from_keyword(s: &str) -> Option<Self> {
         let want = squash(s);
-        Self::ALL.iter().copied().find(|v| squash(&v.keyword()) == want)
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|v| squash(&v.keyword()) == want)
     }
 
     fn expected() -> String {
-        Self::ALL.iter().map(|v| format!("\"{}\"", v.keyword())).collect::<Vec<_>>().join(", ")
+        Self::ALL
+            .iter()
+            .map(|v| format!("\"{}\"", v.keyword()))
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
@@ -97,7 +117,10 @@ fn kebab(pascal: &str) -> String {
 }
 
 fn squash(s: &str) -> String {
-    s.chars().filter(char::is_ascii_alphanumeric).map(|c| c.to_ascii_lowercase()).collect()
+    s.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
 }
 
 macro_rules! keywords {
@@ -208,7 +231,9 @@ fn expand_colors(v: &mut Value) -> Result<(), String> {
                 if k == "color"
                     && let Value::String(s) = x
                 {
-                    let c = parse_hex(s).ok_or_else(|| format!("invalid color `{s}` (expected #rrggbb or #rrggbbaa)"))?;
+                    let c = parse_hex(s).ok_or_else(|| {
+                        format!("invalid color `{s}` (expected #rrggbb or #rrggbbaa)")
+                    })?;
                     *x = serde_json::to_value(c).map_err(|e| e.to_string())?;
                     continue;
                 }
@@ -244,13 +269,21 @@ fn fill_default(m: &mut Map<String, Value>, key: &str, default: Value) {
 /// A plain solid paint (opacity 1, normal, visible) with a hex-exact color.
 pub(crate) fn plain_solid_hex(p: &Paint) -> Option<String> {
     match &p.kind {
-        PaintKind::Solid { color } if p.opacity == 1.0 && p.blend == BlendMode::Normal && p.visible => hex(*color),
+        PaintKind::Solid { color }
+            if p.opacity == 1.0 && p.blend == BlendMode::Normal && p.visible =>
+        {
+            hex(*color)
+        }
         _ => None,
     }
 }
 
 fn paint_defaults() -> [(&'static str, Value); 3] {
-    [("opacity", json!(1.0)), ("blend", json!("Normal")), ("visible", json!(true))]
+    [
+        ("opacity", json!(1.0)),
+        ("blend", json!("Normal")),
+        ("visible", json!(true)),
+    ]
 }
 
 pub(crate) fn paint_json(p: &Paint) -> Value {
@@ -287,7 +320,9 @@ pub(crate) fn paint_from_json(v: Value) -> Result<Paint, String> {
             }
             from_json(Value::Object(m))
         }
-        other => Err(format!("a paint is a color string or an object, got `{other}`")),
+        other => Err(format!(
+            "a paint is a color string or an object, got `{other}`"
+        )),
     }
 }
 
@@ -300,7 +335,12 @@ pub(crate) fn paints_from_json(v: Value) -> Result<Vec<Paint>, String> {
 }
 
 fn effect_defaults() -> [(&'static str, Value); 4] {
-    [("visible", json!(true)), ("offset_x", json!(0.0)), ("offset_y", json!(0.0)), ("spread", json!(0.0))]
+    [
+        ("visible", json!(true)),
+        ("offset_x", json!(0.0)),
+        ("offset_y", json!(0.0)),
+        ("spread", json!(0.0)),
+    ]
 }
 
 pub(crate) fn effects_json(es: &[Effect]) -> Value {
@@ -333,7 +373,9 @@ pub(crate) fn effects_from_json(v: Value) -> Result<Vec<Effect>, String> {
                 }
                 from_json(Value::Object(m))
             }
-            other => Err(format!("an effect is an object like {{\"kind\":\"DropShadow\",…}}, got `{other}`")),
+            other => Err(format!(
+                "an effect is an object like {{\"kind\":\"DropShadow\",…}}, got `{other}`"
+            )),
         })
         .collect()
 }
@@ -364,9 +406,15 @@ pub(crate) fn runs_from_json(v: Value) -> Result<Vec<TextRun>, String> {
         .into_iter()
         .map(|r| {
             let Value::Object(mut m) = r else {
-                return Err(format!("a run is an object like {{\"text\":\"…\"}}, got `{r}`"));
+                return Err(format!(
+                    "a run is an object like {{\"text\":\"…\"}}, got `{r}`"
+                ));
             };
-            let fills = m.remove("fills").map(paints_from_json).transpose()?.unwrap_or_default();
+            let fills = m
+                .remove("fills")
+                .map(paints_from_json)
+                .transpose()?
+                .unwrap_or_default();
             m.insert("fills".into(), Value::Array(Vec::new()));
             let mut run: TextRun = from_json(Value::Object(m))?;
             run.fills = fills;
@@ -377,9 +425,18 @@ pub(crate) fn runs_from_json(v: Value) -> Result<Vec<TextRun>, String> {
 
 pub(crate) fn transform_from_json(v: Value) -> Result<Transform, String> {
     let Value::Object(mut m) = v else {
-        return Err("`transform` is an object {\"a\":…,\"b\":…,\"tx\":…,\"c\":…,\"d\":…,\"ty\":…}".into());
+        return Err(
+            "`transform` is an object {\"a\":…,\"b\":…,\"tx\":…,\"c\":…,\"d\":…,\"ty\":…}".into(),
+        );
     };
-    for (k, d) in [("a", 1.0), ("b", 0.0), ("tx", 0.0), ("c", 0.0), ("d", 1.0), ("ty", 0.0)] {
+    for (k, d) in [
+        ("a", 1.0),
+        ("b", 0.0),
+        ("tx", 0.0),
+        ("c", 0.0),
+        ("d", 1.0),
+        ("ty", 0.0),
+    ] {
         fill_default(&mut m, k, json!(d));
     }
     from_json(Value::Object(m))
@@ -391,8 +448,14 @@ mod tests {
 
     #[test]
     fn hex_is_exact_only() {
-        assert_eq!(hex(Color::rgba(1.0, 0.0, 0.0, 1.0)).as_deref(), Some("#ff0000"));
-        assert_eq!(hex(Color::rgba(1.0, 0.0, 0.0, 128.0 / 255.0)).as_deref(), Some("#ff000080"));
+        assert_eq!(
+            hex(Color::rgba(1.0, 0.0, 0.0, 1.0)).as_deref(),
+            Some("#ff0000")
+        );
+        assert_eq!(
+            hex(Color::rgba(1.0, 0.0, 0.0, 128.0 / 255.0)).as_deref(),
+            Some("#ff000080")
+        );
         assert_eq!(hex(Color::rgba(0.5, 0.0, 0.0, 1.0)), None);
         for n in 0..=255u8 {
             let c = Color::rgba(f64::from(n) / 255.0, 0.0, 0.0, 1.0);
@@ -403,16 +466,32 @@ mod tests {
     #[test]
     fn keywords() {
         assert_eq!(BlendMode::PassThrough.keyword(), "pass-through");
-        assert_eq!(BlendMode::from_keyword("PassThrough"), Some(BlendMode::PassThrough));
-        assert_eq!(StrokeCap::from_keyword("washi-tape3"), Some(StrokeCap::WashiTape3));
-        assert_eq!(MainAxisAlign::from_keyword("space_between"), Some(MainAxisAlign::SpaceBetween));
+        assert_eq!(
+            BlendMode::from_keyword("PassThrough"),
+            Some(BlendMode::PassThrough)
+        );
+        assert_eq!(
+            StrokeCap::from_keyword("washi-tape3"),
+            Some(StrokeCap::WashiTape3)
+        );
+        assert_eq!(
+            MainAxisAlign::from_keyword("space_between"),
+            Some(MainAxisAlign::SpaceBetween)
+        );
     }
 
     #[test]
     fn rotations() {
         for deg in [0.0, 90.0, 180.0, -90.0, 45.0, 30.0, 12.5] {
             let (a, b, c, d) = rotation_matrix(deg);
-            let t = Transform { a, b, tx: 0.0, c, d, ty: 0.0 };
+            let t = Transform {
+                a,
+                b,
+                tx: 0.0,
+                c,
+                d,
+                ty: 0.0,
+            };
             let back = rotation_of(&t).unwrap();
             assert_eq!(rotation_matrix(back), (a, b, c, d), "{deg}");
         }

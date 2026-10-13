@@ -253,9 +253,9 @@ fn rendering_a_held_note_does_not_allocate() {
 /// held so the walk is doing real work.
 #[test]
 fn walking_the_render_tree_does_not_allocate() {
-    use signal_proto::block::BlockType;
     use sampler::node_render::RenderNode;
     use sampler::rig_node::{Container, Role};
+    use signal_proto::block::BlockType;
 
     let tree = Container::engine("Keys").add(
         Container::layer("Keys 1")

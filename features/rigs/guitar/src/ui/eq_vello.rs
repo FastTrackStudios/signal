@@ -29,12 +29,12 @@
 //! events, and sending seven parameters per frame would put six of them on the
 //! wire for nothing.
 
+use crate::proto::LiveBlock;
+use crate::proto::rig::RigClient;
 use crate::ui::param_writer::WriteParam;
 use dioxus::prelude::*;
 use eq::ui::eq_graph::{AnalyzerSnapshot, EqGraph};
 use eq::ui::eq_graph_model::EqBand;
-use crate::proto::LiveBlock;
-use crate::proto::rig::RigClient;
 
 use eq::ui::eq_graph_model::EqBandShape;
 

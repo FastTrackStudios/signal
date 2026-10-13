@@ -15,7 +15,10 @@ use feed_proto::{FeedFrame, FeedInfo, FeedKind, Range, ScalarKind, Unit, VoiceSt
 /// A frame of `info` at `t` seconds.
 #[must_use]
 pub fn frame(info: &FeedInfo, t: f64) -> FeedFrame {
-    FeedFrame { id: info.id.clone(), values: values(&info.kind, info.rate_hz, t) }
+    FeedFrame {
+        id: info.id.clone(),
+        values: values(&info.kind, info.rate_hz, t),
+    }
 }
 
 /// One frame per feed at `t` seconds.
@@ -31,7 +34,12 @@ pub fn values(kind: &FeedKind, rate_hz: f64, t: f64) -> Vec<f64> {
     match kind {
         FeedKind::Level { channels } => (0..*channels).map(|c| level_db(c, t)).collect(),
         FeedKind::GainReduction => vec![gr_db(t)],
-        FeedKind::Spectrum { bins, f_min, f_max, floor_db } => {
+        FeedKind::Spectrum {
+            bins,
+            f_min,
+            f_max,
+            floor_db,
+        } => {
             let n = f64::from(*bins);
             let ratio = f_max / f_min.max(1e-3);
             (0..*bins)
@@ -46,7 +54,9 @@ pub fn values(kind: &FeedKind, rate_hz: f64, t: f64) -> Vec<f64> {
         FeedKind::History { of, len } => {
             let dt = 1.0 / if rate_hz > 0.0 { rate_hz } else { 30.0 };
             let n = *len as usize;
-            (0..n).map(|i| history_point(of, t - (n - 1 - i) as f64 * dt)).collect()
+            (0..n)
+                .map(|i| history_point(of, t - (n - 1 - i) as f64 * dt))
+                .collect()
         }
         FeedKind::Waveform { len } => waveform(*len as usize, t),
         FeedKind::Envelope { stages, voices } => {
@@ -93,7 +103,9 @@ fn history_point(of: &ScalarKind, t: f64) -> f64 {
 #[must_use]
 pub fn spectrum_db(hz: f64, t: f64) -> f64 {
     let oct = |a: f64, b: f64| (a / b).log2();
-    let bump = |center: f64, width_oct: f64, gain_db: f64| gain_db * (-(oct(hz, center) / width_oct).powi(2)).exp();
+    let bump = |center: f64, width_oct: f64, gain_db: f64| {
+        gain_db * (-(oct(hz, center) / width_oct).powi(2)).exp()
+    };
     let slope = -30.0 - 3.0 * oct(hz, 1000.0) - 12.0 * (-(oct(hz, 30.0) * 1.5)).exp().min(4.0);
     let kick = bump(55.0, 0.4, 20.0 * (t * PI * 2.0).sin().abs().powi(4));
     let tone = bump(440.0 * (0.5 * (t * 0.3).sin()).exp2(), 1.0 / 12.0, 22.0);
@@ -110,7 +122,8 @@ pub fn waveform(len: usize, t: f64) -> Vec<f64> {
     (0..len)
         .map(|i| {
             let ph = TAU * 3.0 * i as f64 / n;
-            let x = 0.7 * ph.sin() + 0.25 * (2.0 * ph).sin() * (t * 1.3).cos() + 0.1 * (3.0 * ph).sin();
+            let x =
+                0.7 * ph.sin() + 0.25 * (2.0 * ph).sin() * (t * 1.3).cos() + 0.1 * (3.0 * ph).sin();
             (amp * x).clamp(-1.0, 1.0)
         })
         .collect()
@@ -131,7 +144,14 @@ pub struct Adsr {
 }
 
 impl Adsr {
-    pub const DEMO: Self = Self { attack: 0.25, decay: 0.35, sustain: 0.6, release: 0.6, gate: 1.2, stagger: 0.7 };
+    pub const DEMO: Self = Self {
+        attack: 0.25,
+        decay: 0.35,
+        sustain: 0.6,
+        release: 0.6,
+        gate: 1.2,
+        stagger: 0.7,
+    };
 
     /// Note-on to note-on.
     #[must_use]
@@ -143,11 +163,24 @@ impl Adsr {
     /// R=3; idle after the release).
     #[must_use]
     pub fn at(&self, since: f64) -> VoiceState {
-        let (a, d, s, r) = (self.attack.max(1e-6), self.decay.max(1e-6), self.sustain, self.release.max(1e-6));
+        let (a, d, s, r) = (
+            self.attack.max(1e-6),
+            self.decay.max(1e-6),
+            self.sustain,
+            self.release.max(1e-6),
+        );
         let hold = (self.gate - a - d).max(1e-6);
-        let state = |stage, position: f64, level| VoiceState { stage: Some(stage), position: position.clamp(0.0, 1.0), level };
+        let state = |stage, position: f64, level| VoiceState {
+            stage: Some(stage),
+            position: position.clamp(0.0, 1.0),
+            level,
+        };
         if since < 0.0 {
-            VoiceState { stage: None, position: 0.0, level: 0.0 }
+            VoiceState {
+                stage: None,
+                position: 0.0,
+                level: 0.0,
+            }
         } else if since < a {
             state(0, since / a, since / a)
         } else if since < a + d {
@@ -159,7 +192,11 @@ impl Adsr {
             let p = (since - a - d - hold) / r;
             state(3, p, s * (1.0 - p))
         } else {
-            VoiceState { stage: None, position: 0.0, level: 0.0 }
+            VoiceState {
+                stage: None,
+                position: 0.0,
+                level: 0.0,
+            }
         }
     }
 
@@ -177,12 +214,26 @@ pub fn demo_feeds() -> Vec<FeedInfo> {
         FeedInfo::new("demo/in", "Input", FeedKind::Level { channels: 2 }),
         FeedInfo::new("demo/gr", "Gain Reduction", FeedKind::GainReduction),
         FeedInfo::new("demo/gr_trace", "GR History", FeedKind::gr_history(256)),
-        FeedInfo::new("demo/in_trace", "Input History", FeedKind::History { of: ScalarKind::Level, len: 256 }),
+        FeedInfo::new(
+            "demo/in_trace",
+            "Input History",
+            FeedKind::History {
+                of: ScalarKind::Level,
+                len: 256,
+            },
+        ),
         FeedInfo::new("demo/spectrum", "Spectrum", FeedKind::spectrum(96)),
         FeedInfo::new("demo/scope", "Scope", FeedKind::Waveform { len: 512 }),
         FeedInfo::new("demo/env", "Envelope", FeedKind::adsr(4)).rate(60.0),
         FeedInfo::new("demo/tuner", "Tuner", FeedKind::Tuner),
-        FeedInfo::new("demo/lfo", "LFO", FeedKind::Scalar { range: Range::linear(0.0, 1.0, Unit::None) }).rate(60.0),
+        FeedInfo::new(
+            "demo/lfo",
+            "LFO",
+            FeedKind::Scalar {
+                range: Range::linear(0.0, 1.0, Unit::None),
+            },
+        )
+        .rate(60.0),
     ]
 }
 
@@ -224,9 +275,15 @@ mod tests {
     #[test]
     fn the_adsr_walks_its_stages() {
         let e = Adsr::DEMO;
-        let stages: Vec<_> = [0.1, 0.4, 1.0, 1.5, 2.0, 2.9].iter().map(|t| e.at(*t).stage).collect();
+        let stages: Vec<_> = [0.1, 0.4, 1.0, 1.5, 2.0, 2.9]
+            .iter()
+            .map(|t| e.at(*t).stage)
+            .collect();
         assert_eq!(stages, [Some(0), Some(1), Some(2), Some(3), None, None]);
-        assert!((e.at(0.6).level - e.sustain).abs() < 1e-9, "decay lands on sustain");
+        assert!(
+            (e.at(0.6).level - e.sustain).abs() < 1e-9,
+            "decay lands on sustain"
+        );
         assert!(e.at(1.2 + 0.6 - 1e-9).level < 1e-6, "release lands on zero");
         // Voices are staggered.
         assert_ne!(e.voice(1.0, 0), e.voice(1.0, 1));

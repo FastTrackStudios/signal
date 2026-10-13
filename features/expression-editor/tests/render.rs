@@ -7,8 +7,8 @@
 
 use dioxus::prelude::*;
 use expression_editor::doc::{Dimension, ExpressionDoc, Note, NoteId, TimeBase};
-use expression_editor::{Editor, Viewport};
 use expression_editor::ui::ExpressionEditor;
+use expression_editor::{Editor, Viewport};
 
 const PPQ: f64 = 960.0;
 

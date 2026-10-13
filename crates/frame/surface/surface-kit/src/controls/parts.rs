@@ -58,12 +58,35 @@ pub(crate) fn rad(cx: f64, cy: f64, r: f64, stops: &[(f64, String)]) -> Paint {
 /// stated weight, uppercased.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn ink(name: &str, s: &str, x: f64, cy: f64, w: f64, size: f64, color: &str, align: TextAlign, weight: f64) -> Node {
-    cased(ink_raw(name, s, x, cy, w, size, color, align, weight), TextCase::Upper)
+pub(crate) fn ink(
+    name: &str,
+    s: &str,
+    x: f64,
+    cy: f64,
+    w: f64,
+    size: f64,
+    color: &str,
+    align: TextAlign,
+    weight: f64,
+) -> Node {
+    cased(
+        ink_raw(name, s, x, cy, w, size, color, align, weight),
+        TextCase::Upper,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn ink_raw(name: &str, s: &str, x: f64, cy: f64, w: f64, size: f64, color: &str, align: TextAlign, weight: f64) -> Node {
+fn ink_raw(
+    name: &str,
+    s: &str,
+    x: f64,
+    cy: f64,
+    w: f64,
+    size: f64,
+    color: &str,
+    align: TextAlign,
+    weight: f64,
+) -> Node {
     let mut n = draw::text(name, s, x, cy - size * 0.68, w, size, color, align);
     if let NodeKind::Text(t) = &mut n.kind {
         t.font_weight = Some(weight);
@@ -101,11 +124,25 @@ pub(crate) fn fixed(mut n: Node) -> Node {
 ///
 /// Explicit stops, as the source does: the core has to be brighter than the
 /// colour itself for the lens to read as lit from within.
-pub(crate) fn lamp(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, d: f64, color: &str) -> NodeId {
+pub(crate) fn lamp(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    cx: f64,
+    cy: f64,
+    d: f64,
+    color: &str,
+) -> NodeId {
     let r = d / 2.0;
     let rim = (d * 0.12).max(1.0);
-    b.add(parent, draw::circle("bezel", cx, cy, r + rim, draw::solid("#0c0c0e")));
-    let dark = vec![(0.0, alpha("#ffffff", 0.10)), (0.52, shade(color, 0.35)), (1.0, alpha("#000000", 0.78))];
+    b.add(
+        parent,
+        draw::circle("bezel", cx, cy, r + rim, draw::solid("#0c0c0e")),
+    );
+    let dark = vec![
+        (0.0, alpha("#ffffff", 0.10)),
+        (0.52, shade(color, 0.35)),
+        (1.0, alpha("#000000", 0.78)),
+    ];
     let unlit = draw::with_effects(
         draw::circle("lens", cx, cy, r, rad(0.36, 0.30, 0.95, &dark)),
         vec![draw::inner_shadow("#000000c0", 0.0, 0.0, d * 0.34)],

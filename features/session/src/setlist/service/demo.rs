@@ -20,11 +20,11 @@
 
 #![allow(dead_code)]
 
+use crate::proto::SessionServiceError;
+use crate::proto::ruler_lanes::CoreLane;
 use daw::rpc;
 use daw::service::transport::service::Transport as TransportService;
 use daw::service::{Markers, ProjectContext, Projects, Regions, TempoMap};
-use crate::proto::SessionServiceError;
-use crate::proto::ruler_lanes::CoreLane;
 use tracing::info;
 
 use crate::keyflow::actions::{self as keyflow_actions, KeyflowAction, MarkerKind, SectionKind};

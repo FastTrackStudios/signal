@@ -11,8 +11,8 @@
 //! definition, two renderings: if the app and the exported theme ever
 //! disagree, one of them is a bug rather than a divergence.
 
-use crate::prelude::*;
 use crate::art::vector_controls as v;
+use crate::prelude::*;
 
 /// The transport bar.
 ///

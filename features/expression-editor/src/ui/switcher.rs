@@ -9,8 +9,8 @@
 //! click each time: the reference tick lives on the row itself, and a
 //! track's position in this list *is* its shortcut number.
 
-use dioxus::prelude::*;
 use crate::{Editor, RefColor};
+use dioxus::prelude::*;
 
 use crate::ui::theme;
 

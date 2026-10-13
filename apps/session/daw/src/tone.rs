@@ -6067,11 +6067,9 @@ impl Sidechain {
 /// The emphasis bands' starting spread — the plugin's: idle bells at
 /// 80 Hz … 10 kHz.
 fn emphasis_spread() -> [saturate::emphasis::EmphBand; saturate::emphasis::BANDS] {
-    [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0].map(|freq_hz| {
-        saturate::emphasis::EmphBand {
-            freq_hz,
-            ..saturate::emphasis::EmphBand::default()
-        }
+    [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0].map(|freq_hz| saturate::emphasis::EmphBand {
+        freq_hz,
+        ..saturate::emphasis::EmphBand::default()
     })
 }
 

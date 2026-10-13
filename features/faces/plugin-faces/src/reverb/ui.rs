@@ -5,11 +5,14 @@
 //! catalog entries these faces declare.
 
 use document_proto::{
-    Color, Emission, Node, NodeId, NodeKind, Paint, ShaderFx, Size, Stroke, StrokeCap, StrokeJoin, TextAlign, TextCase,
-    Transform,
+    Color, Emission, Node, NodeId, NodeKind, Paint, ShaderFx, Size, Stroke, StrokeCap, StrokeJoin,
+    TextAlign, TextCase, Transform,
 };
 use surface_kit::{Ink, Place, TOUCH_MIN, draw};
-use surface_proto::{Binding, Control, ControlKind, Curve, CurvePoint, EntryId, ParamInfo, ParamKind, Range, SlotRole, Source, StreamInfo, StreamKind, Unit, ValueFormat};
+use surface_proto::{
+    Binding, Control, ControlKind, Curve, CurvePoint, EntryId, ParamInfo, ParamKind, Range,
+    SlotRole, Source, StreamInfo, StreamKind, Unit, ValueFormat,
+};
 use surface_widgets::Builder;
 
 use crate::face::Face;
@@ -26,12 +29,17 @@ pub fn move_to(b: &mut Builder<'_>, id: NodeId, x: f64, y: f64) {
 /// The centre of `root`'s first child named one of `names`, in `root`'s
 /// box — else the centre of the box.
 fn anchor(b: &Builder<'_>, root: NodeId, names: &[&str]) -> (f64, f64) {
-    let Some(n) = b.scene.node(root) else { return (0.0, 0.0) };
+    let Some(n) = b.scene.node(root) else {
+        return (0.0, 0.0);
+    };
     for c in &n.children {
         if let Some(k) = b.scene.node(*c)
             && names.contains(&k.name.as_str())
         {
-            return (k.transform.tx + k.size.width / 2.0, k.transform.ty + k.size.height / 2.0);
+            return (
+                k.transform.tx + k.size.width / 2.0,
+                k.transform.ty + k.size.height / 2.0,
+            );
         }
     }
     (n.size.width / 2.0, n.size.height / 2.0)
@@ -52,7 +60,15 @@ pub fn put(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, cx: f64, cy
 /// # Panics
 /// On an unknown component id or variant.
 #[allow(clippy::too_many_arguments)]
-pub fn put_by(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, names: &[&str], cx: f64, cy: f64) -> NodeId {
+pub fn put_by(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    id: &str,
+    p: &Place,
+    names: &[&str],
+    cx: f64,
+    cy: f64,
+) -> NodeId {
     let root = surface_kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
     let (ax, ay) = anchor(b, root, names);
     move_to(b, root, cx - ax, cy - ay);
@@ -73,9 +89,20 @@ pub fn put_at(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, x: f64, 
 ///
 /// # Panics
 /// On an unknown panel id or variant.
-pub fn panel(b: &mut Builder<'_>, parent: NodeId, id: &str, variant: &str, w: f64, h: f64, ends: &str) -> NodeId {
+pub fn panel(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    id: &str,
+    variant: &str,
+    w: f64,
+    h: f64,
+    ends: &str,
+) -> NodeId {
     let opts = [format!("w={w}"), format!("h={h}"), format!("ends={ends}")];
-    let p = Place { options: Some(opts.to_vec()), ..Place::new("Faceplate").variant(variant) };
+    let p = Place {
+        options: Some(opts.to_vec()),
+        ..Place::new("Faceplate").variant(variant)
+    };
     put_at(b, parent, id, &p, 0.0, 0.0)
 }
 
@@ -83,14 +110,21 @@ pub fn panel(b: &mut Builder<'_>, parent: NodeId, id: &str, variant: &str, w: f6
 /// panel's size.
 pub fn fit_root(b: &mut Builder<'_>, root: NodeId, w: f64, h: f64) {
     if let Some(n) = b.scene.node_mut(root) {
-        n.size = Size { width: w, height: h };
+        n.size = Size {
+            width: w,
+            height: h,
+        };
     }
 }
 
 /// Take a placed control's legend (and its `Label` slot) off: the face
 /// prints the legend itself, where the row's other legends are.
 pub fn strip_legend(b: &mut Builder<'_>, control: NodeId) {
-    let ids: Vec<NodeId> = b.controls.get(&control).map(|c| c.slots_of(SlotRole::Label).map(NodeId).collect()).unwrap_or_default();
+    let ids: Vec<NodeId> = b
+        .controls
+        .get(&control)
+        .map(|c| c.slots_of(SlotRole::Label).map(NodeId).collect())
+        .unwrap_or_default();
     if let Some(c) = b.controls.get_mut(&control) {
         c.slots.retain(|s| s.role != SlotRole::Label);
     }
@@ -112,15 +146,44 @@ pub fn printed(values: &[f64], unit: Unit) -> Range {
     assert!(values.len() >= 2, "a printed scale needs two marks");
     let last = (values.len() - 1) as f64;
     let (lo, hi) = (values[0], values[values.len() - 1]);
-    let points = values.iter().enumerate().map(|(i, v)| CurvePoint { x: i as f64 / last, y: (v - lo) / (hi - lo) }).collect();
-    Range { min: lo, max: hi, scale: surface_proto::Scale::Curve { curve: Curve::Points { points } }, unit, steps: None }
+    let points = values
+        .iter()
+        .enumerate()
+        .map(|(i, v)| CurvePoint {
+            x: i as f64 / last,
+            y: (v - lo) / (hi - lo),
+        })
+        .collect();
+    Range {
+        min: lo,
+        max: hi,
+        scale: surface_proto::Scale::Curve {
+            curve: Curve::Points { points },
+        },
+        unit,
+        steps: None,
+    }
 }
 
 /// Add a live value readout (`Value` slot) under a placed control's box,
 /// growing the box to hold it.
 pub fn add_value(b: &mut Builder<'_>, control: NodeId, size: f64, color: &str) -> NodeId {
-    let (w, h) = b.scene.node(control).map_or((0.0, 0.0), |n| (n.size.width, n.size.height));
-    let mut t = text("value", "", 0.0, h + size * 0.72, w, size, color, TextAlign::Center, 500.0, false);
+    let (w, h) = b
+        .scene
+        .node(control)
+        .map_or((0.0, 0.0), |n| (n.size.width, n.size.height));
+    let mut t = text(
+        "value",
+        "",
+        0.0,
+        h + size * 0.72,
+        w,
+        size,
+        color,
+        TextAlign::Center,
+        500.0,
+        false,
+    );
     if let NodeKind::Text(d) = &mut t.kind {
         d.letter_spacing = size * 0.02;
     }
@@ -129,7 +192,10 @@ pub fn add_value(b: &mut Builder<'_>, control: NodeId, size: f64, color: &str) -
         n.size.height = h + (size * 1.5).ceil();
     }
     if let Some(c) = b.controls.get_mut(&control) {
-        c.slots.push(surface_proto::Slot { role: SlotRole::Value, node: id.0 });
+        c.slots.push(surface_proto::Slot {
+            role: SlotRole::Value,
+            node: id.0,
+        });
     }
     id
 }
@@ -139,7 +205,18 @@ pub fn add_value(b: &mut Builder<'_>, control: NodeId, size: f64, color: &str) -
 /// A text node whose box is `w` wide from `x`, vertically centred on `cy`.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn text(name: &str, s: &str, x: f64, cy: f64, w: f64, size: f64, color: &str, align: TextAlign, weight: f64, upper: bool) -> Node {
+pub fn text(
+    name: &str,
+    s: &str,
+    x: f64,
+    cy: f64,
+    w: f64,
+    size: f64,
+    color: &str,
+    align: TextAlign,
+    weight: f64,
+    upper: bool,
+) -> Node {
     let mut n = draw::text(name, s, x, cy - size * 0.68, w, size, color, align);
     if let NodeKind::Text(t) = &mut n.kind {
         t.font_weight = Some(weight);
@@ -158,51 +235,187 @@ fn text_w(s: &str, size: f64) -> f64 {
 
 /// Silkscreen: uppercase, tracked, centred on (`cx`, `cy`).
 #[allow(clippy::too_many_arguments)]
-pub fn silk(b: &mut Builder<'_>, parent: NodeId, s: &str, cx: f64, cy: f64, size: f64, color: &str, weight: f64) -> NodeId {
+pub fn silk(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    cx: f64,
+    cy: f64,
+    size: f64,
+    color: &str,
+    weight: f64,
+) -> NodeId {
     let w = text_w(s, size) + size * 2.0;
-    b.add(parent, text("silk", s, cx - w / 2.0, cy, w, size, color, TextAlign::Center, weight, true))
+    b.add(
+        parent,
+        text(
+            "silk",
+            s,
+            cx - w / 2.0,
+            cy,
+            w,
+            size,
+            color,
+            TextAlign::Center,
+            weight,
+            true,
+        ),
+    )
 }
 
 /// Silkscreen set from its left edge.
 #[allow(clippy::too_many_arguments)]
-pub fn silk_left(b: &mut Builder<'_>, parent: NodeId, s: &str, x: f64, cy: f64, size: f64, color: &str, weight: f64) -> NodeId {
+pub fn silk_left(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    x: f64,
+    cy: f64,
+    size: f64,
+    color: &str,
+    weight: f64,
+) -> NodeId {
     let w = text_w(s, size) + size * 2.0;
-    b.add(parent, text("silk", s, x, cy, w, size, color, TextAlign::Left, weight, true))
+    b.add(
+        parent,
+        text(
+            "silk",
+            s,
+            x,
+            cy,
+            w,
+            size,
+            color,
+            TextAlign::Left,
+            weight,
+            true,
+        ),
+    )
 }
 
 /// Silkscreen set to end at `x`.
 #[allow(clippy::too_many_arguments)]
-pub fn silk_right(b: &mut Builder<'_>, parent: NodeId, s: &str, x: f64, cy: f64, size: f64, color: &str, weight: f64) -> NodeId {
+pub fn silk_right(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    x: f64,
+    cy: f64,
+    size: f64,
+    color: &str,
+    weight: f64,
+) -> NodeId {
     let w = text_w(s, size) + size * 2.0;
-    b.add(parent, text("silk", s, x - w, cy, w, size, color, TextAlign::Right, weight, true))
+    b.add(
+        parent,
+        text(
+            "silk",
+            s,
+            x - w,
+            cy,
+            w,
+            size,
+            color,
+            TextAlign::Right,
+            weight,
+            true,
+        ),
+    )
 }
 
 /// Mixed-case text (a model line in script-less caps is too loud).
 #[allow(clippy::too_many_arguments)]
-pub fn plain(b: &mut Builder<'_>, parent: NodeId, s: &str, cx: f64, cy: f64, size: f64, color: &str, weight: f64) -> NodeId {
+pub fn plain(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    cx: f64,
+    cy: f64,
+    size: f64,
+    color: &str,
+    weight: f64,
+) -> NodeId {
     let w = text_w(s, size) + size * 2.0;
-    b.add(parent, text("print", s, cx - w / 2.0, cy, w, size, color, TextAlign::Center, weight, false))
+    b.add(
+        parent,
+        text(
+            "print",
+            s,
+            cx - w / 2.0,
+            cy,
+            w,
+            size,
+            color,
+            TextAlign::Center,
+            weight,
+            false,
+        ),
+    )
 }
 
 /// A hairline rule.
-pub fn rule(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, w: f64, h: f64, color: &str) -> NodeId {
+pub fn rule(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    color: &str,
+) -> NodeId {
     b.add(parent, draw::rect("rule", x, y, w, h, draw::solid(color)))
 }
 
 /// A rounded outline box (a section frame).
 #[allow(clippy::too_many_arguments)]
-pub fn section(b: &mut Builder<'_>, parent: NodeId, x: f64, y: f64, w: f64, h: f64, color: &str, weight: f64) -> NodeId {
-    b.add(parent, draw::stroked(draw::rounded(draw::frame("section", x, y, w, h), 6.0), color, weight))
+pub fn section(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    color: &str,
+    weight: f64,
+) -> NodeId {
+    b.add(
+        parent,
+        draw::stroked(
+            draw::rounded(draw::frame("section", x, y, w, h), 6.0),
+            color,
+            weight,
+        ),
+    )
 }
 
 /// Print `labels` under a placed bank's keys (evenly across its box), at
 /// `cy`: the bank's own caps then carry numerals.
 #[allow(clippy::too_many_arguments)]
-pub fn bank_labels(b: &mut Builder<'_>, parent: NodeId, bank: NodeId, labels: &[&str], cy: f64, size: f64, color: &str) {
-    let (bx, bw) = b.scene.node(bank).map_or((0.0, 0.0), |n| (n.transform.tx, n.size.width));
+pub fn bank_labels(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    bank: NodeId,
+    labels: &[&str],
+    cy: f64,
+    size: f64,
+    color: &str,
+) {
+    let (bx, bw) = b
+        .scene
+        .node(bank)
+        .map_or((0.0, 0.0), |n| (n.transform.tx, n.size.width));
     let n = labels.len() as f64;
     for (i, l) in labels.iter().enumerate() {
-        silk(b, parent, l, bx + bw * (i as f64 + 0.5) / n, cy, size, color, 800.0);
+        silk(
+            b,
+            parent,
+            l,
+            bx + bw * (i as f64 + 0.5) / n,
+            cy,
+            size,
+            color,
+            800.0,
+        );
     }
 }
 
@@ -218,7 +431,11 @@ pub fn repaint(b: &mut Builder<'_>, panel: NodeId, stops: &[(f64, &str)]) {
 
 fn hex_of(c: Color) -> String {
     let q = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    if c.a >= 1.0 { format!("#{:02x}{:02x}{:02x}", q(c.r), q(c.g), q(c.b)) } else { format!("#{:02x}{:02x}{:02x}{:02x}", q(c.r), q(c.g), q(c.b), q(c.a)) }
+    if c.a >= 1.0 {
+        format!("#{:02x}{:02x}{:02x}", q(c.r), q(c.g), q(c.b))
+    } else {
+        format!("#{:02x}{:02x}{:02x}{:02x}", q(c.r), q(c.g), q(c.b), q(c.a))
+    }
 }
 
 /// `#rrggbbaa` for `color` at alpha `a`.
@@ -230,7 +447,10 @@ pub fn alpha(color: &str, a: f64) -> String {
 /// `a` mixed toward `b` by `t`, as `#rrggbb`.
 #[must_use]
 pub fn blend(a: &str, b: &str, t: f64) -> String {
-    hex_of(Color { a: 1.0, ..draw::mix(draw::hex(a), draw::hex(b), t) })
+    hex_of(Color {
+        a: 1.0,
+        ..draw::mix(draw::hex(a), draw::hex(b), t)
+    })
 }
 
 // ── light ────────────────────────────────────────────────────────────────
@@ -246,29 +466,65 @@ pub fn glowing(mut n: Node, color: &str, intensity: f64, radius: f64) -> Node {
     if matches!(n.kind, NodeKind::Vector) && n.fills.is_empty() && !n.stroke.paints.is_empty() {
         n.fills = vec![draw::solid("#00000000")];
     }
-    n.emission = Some(Emission { color: Color { a: 1.0, ..draw::hex(color) }, intensity, radius });
+    n.emission = Some(Emission {
+        color: Color {
+            a: 1.0,
+            ..draw::hex(color)
+        },
+        intensity,
+        radius,
+    });
     n
 }
 
 /// A lit lens: hot core, the colour, a dark rim — and its light.
 fn lens(cx: f64, cy: f64, r: f64, color: &str) -> Node {
-    let hot = [(0.0, "#ffffffee".to_string()), (0.2, blend(color, "#ffffff", 0.55)), (0.55, color.to_string()), (1.0, blend(color, "#000000", 0.5))];
+    let hot = [
+        (0.0, "#ffffffee".to_string()),
+        (0.2, blend(color, "#ffffff", 0.55)),
+        (0.55, color.to_string()),
+        (1.0, blend(color, "#000000", 0.5)),
+    ];
     let stops: Vec<(f64, &str)> = hot.iter().map(|(p, c)| (*p, c.as_str())).collect();
-    glowing(draw::circle("lamp", cx, cy, r, draw::radial_at(0.38, 0.32, 0.9, &stops)), color, 0.9, r * 3.0)
+    glowing(
+        draw::circle("lamp", cx, cy, r, draw::radial_at(0.38, 0.32, 0.9, &stops)),
+        color,
+        0.9,
+        r * 3.0,
+    )
 }
 
 /// An unlit lens in its bezel.
 fn dark_lens(cx: f64, cy: f64, r: f64, color: &str) -> Node {
-    let dark = [(0.0, "#ffffff22".to_string()), (0.5, blend(color, "#000000", 0.62)), (1.0, "#000000d0".to_string())];
+    let dark = [
+        (0.0, "#ffffff22".to_string()),
+        (0.5, blend(color, "#000000", 0.62)),
+        (1.0, "#000000d0".to_string()),
+    ];
     let stops: Vec<(f64, &str)> = dark.iter().map(|(p, c)| (*p, c.as_str())).collect();
-    draw::with_effects(draw::circle("lens", cx, cy, r, draw::radial_at(0.38, 0.3, 0.95, &stops)), vec![draw::inner_shadow("#000000b0", 0.0, 0.0, r * 0.7)])
+    draw::with_effects(
+        draw::circle("lens", cx, cy, r, draw::radial_at(0.38, 0.3, 0.95, &stops)),
+        vec![draw::inner_shadow("#000000b0", 0.0, 0.0, r * 0.7)],
+    )
 }
 
 /// A panel lamp in a black bezel, lit or not (a pilot light). Decoration,
 /// not a control.
 pub fn lamp(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, d: f64, color: &str, lit: bool) {
     let r = d / 2.0;
-    b.add(parent, draw::with_effects(draw::circle("bezel", cx, cy, r + (d * 0.16).max(1.2), draw::linear(180.0, &[(0.0, "#2a2b2e"), (1.0, "#060607")])), vec![draw::drop_shadow("#00000080", 0.0, 1.0, 2.0)]));
+    b.add(
+        parent,
+        draw::with_effects(
+            draw::circle(
+                "bezel",
+                cx,
+                cy,
+                r + (d * 0.16).max(1.2),
+                draw::linear(180.0, &[(0.0, "#2a2b2e"), (1.0, "#060607")]),
+            ),
+            vec![draw::drop_shadow("#00000080", 0.0, 1.0, 2.0)],
+        ),
+    );
     b.add(parent, dark_lens(cx, cy, r, color));
     if lit {
         b.add(parent, lens(cx, cy, r, color));
@@ -278,13 +534,48 @@ pub fn lamp(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, d: f64, color
 /// A recessed readout window with a live `Value` slot — the number behind
 /// a printed scale.
 #[allow(clippy::too_many_arguments)]
-pub fn readout(b: &mut Builder<'_>, parent: NodeId, name: &str, binding: Binding, cx: f64, cy: f64, w: f64, h: f64, ink: &str) -> NodeId {
+pub fn readout(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    binding: Binding,
+    cx: f64,
+    cy: f64,
+    w: f64,
+    h: f64,
+    ink: &str,
+) -> NodeId {
     let mut win = draw::frame(name, cx - w / 2.0, cy - h / 2.0, w, h);
     win.fills = vec![draw::linear(180.0, &[(0.0, "#07080a"), (1.0, "#121418")])];
-    let win = draw::with_effects(draw::stroked(draw::rounded(win, 3.0), "#00000099", 1.0), vec![draw::inner_shadow("#000000c0", 0.0, 1.5, 3.0), draw::drop_shadow("#ffffff1c", 0.0, 1.0, 0.0)]);
+    let win = draw::with_effects(
+        draw::stroked(draw::rounded(win, 3.0), "#00000099", 1.0),
+        vec![
+            draw::inner_shadow("#000000c0", 0.0, 1.5, 3.0),
+            draw::drop_shadow("#ffffff1c", 0.0, 1.0, 0.0),
+        ],
+    );
     let root = b.add(parent, win);
     let size = (h * 0.52).round();
-    let value = b.add(root, glowing(text("value", "", 0.0, h / 2.0, w, size, ink, TextAlign::Center, 600.0, false), ink, 0.5, size * 0.3));
+    let value = b.add(
+        root,
+        glowing(
+            text(
+                "value",
+                "",
+                0.0,
+                h / 2.0,
+                w,
+                size,
+                ink,
+                TextAlign::Center,
+                600.0,
+                false,
+            ),
+            ink,
+            0.5,
+            size * 0.3,
+        ),
+    );
     let mut c = Control::new(ControlKind::Readout).slot(SlotRole::Value, value.0);
     c.binding = Some(binding);
     b.controls.insert(root, c);
@@ -299,20 +590,40 @@ pub fn readout(b: &mut Builder<'_>, parent: NodeId, name: &str, binding: Binding
 #[must_use]
 pub fn strokes(name: &str, lines: &[Vec<(f64, f64)>], weight: f64, paint: Paint) -> Node {
     let pts = lines.iter().flatten();
-    let (x0, y0) = pts.clone().fold((f64::INFINITY, f64::INFINITY), |(a, b), (x, y)| (a.min(*x), b.min(*y)));
-    let (x1, y1) = pts.fold((f64::NEG_INFINITY, f64::NEG_INFINITY), |(a, b), (x, y)| (a.max(*x), b.max(*y)));
+    let (x0, y0) = pts
+        .clone()
+        .fold((f64::INFINITY, f64::INFINITY), |(a, b), (x, y)| {
+            (a.min(*x), b.min(*y))
+        });
+    let (x1, y1) = pts.fold((f64::NEG_INFINITY, f64::NEG_INFINITY), |(a, b), (x, y)| {
+        (a.max(*x), b.max(*y))
+    });
     let (x0, y0) = if x0.is_finite() { (x0, y0) } else { (0.0, 0.0) };
     let mut d = String::new();
     for line in lines {
         for (i, (x, y)) in line.iter().enumerate() {
-            d.push_str(&format!("{} {:.3} {:.3} ", if i == 0 { "M" } else { "L" }, x - x0, y - y0));
+            d.push_str(&format!(
+                "{} {:.3} {:.3} ",
+                if i == 0 { "M" } else { "L" },
+                x - x0,
+                y - y0
+            ));
         }
     }
     let mut n = Node::new(NodeKind::Vector, name);
     n.transform = Transform::translate(x0, y0);
-    n.size = Size { width: (x1 - x0).max(1.0), height: (y1 - y0).max(1.0) };
+    n.size = Size {
+        width: (x1 - x0).max(1.0),
+        height: (y1 - y0).max(1.0),
+    };
     n.fill_geometry = vec![d];
-    n.stroke = Stroke { paints: vec![paint], weight, cap: StrokeCap::Round, join: StrokeJoin::Round, ..Stroke::default() };
+    n.stroke = Stroke {
+        paints: vec![paint],
+        weight,
+        cap: StrokeCap::Round,
+        join: StrokeJoin::Round,
+        ..Stroke::default()
+    };
     n
 }
 
@@ -332,7 +643,14 @@ pub fn line_node(name: &str, pts: &[(f64, f64)], weight: f64, color: &str) -> No
 }
 
 /// A stroked polyline in `parent`.
-pub fn line(b: &mut Builder<'_>, parent: NodeId, name: &str, pts: &[(f64, f64)], weight: f64, color: &str) -> NodeId {
+pub fn line(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    pts: &[(f64, f64)],
+    weight: f64,
+    color: &str,
+) -> NodeId {
     b.add(parent, line_node(name, pts, weight, color))
 }
 
@@ -359,7 +677,11 @@ pub fn ellipse_pts(cx: f64, cy: f64, rx: f64, ry: f64, n: usize) -> Vec<(f64, f6
 
 /// A shader effect with one `strength`.
 fn shader(id: &str, strength: f64) -> Option<ShaderFx> {
-    Some(ShaderFx { shader: id.into(), params: std::collections::BTreeMap::from([("strength".to_string(), strength)]), inputs: Vec::new() })
+    Some(ShaderFx {
+        shader: id.into(),
+        params: std::collections::BTreeMap::from([("strength".to_string(), strength)]),
+        inputs: Vec::new(),
+    })
 }
 
 /// A recessed glass display window (`x, y, w, h`) lit in `tint`: a bezel, a
@@ -370,12 +692,46 @@ fn shader(id: &str, strength: f64) -> Option<ShaderFx> {
 /// `fx` names the optional shader over it (`crt` for a phosphor tube,
 /// `glass` for a lens) — the display reads the same without it.
 #[allow(clippy::too_many_arguments)]
-pub fn display(b: &mut Builder<'_>, parent: NodeId, name: &str, x: f64, y: f64, w: f64, h: f64, tint: &str, fx: &str) -> NodeId {
+pub fn display(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    tint: &str,
+    fx: &str,
+) -> NodeId {
     let bez = 5.0;
-    let bezel = draw::rounded(draw::rect("bezel", x - bez, y - bez, w + 2.0 * bez, h + 2.0 * bez, draw::linear(180.0, &[(0.0, "#050506"), (1.0, "#1c1d20")])), 6.0);
-    b.add(parent, draw::with_effects(bezel, vec![draw::drop_shadow("#ffffff1f", 0.0, 1.0, 0.0), draw::inner_shadow("#000000", 0.0, 2.0, 3.0)]));
+    let bezel = draw::rounded(
+        draw::rect(
+            "bezel",
+            x - bez,
+            y - bez,
+            w + 2.0 * bez,
+            h + 2.0 * bez,
+            draw::linear(180.0, &[(0.0, "#050506"), (1.0, "#1c1d20")]),
+        ),
+        6.0,
+    );
+    b.add(
+        parent,
+        draw::with_effects(
+            bezel,
+            vec![
+                draw::drop_shadow("#ffffff1f", 0.0, 1.0, 0.0),
+                draw::inner_shadow("#000000", 0.0, 2.0, 3.0),
+            ],
+        ),
+    );
     let mut face = draw::frame(name, x, y, w, h);
-    face.fills = vec![draw::radial_at(0.5, 0.45, 0.75, &[(0.0, &blend(tint, "#050607", 0.88)), (1.0, "#040505")])];
+    face.fills = vec![draw::radial_at(
+        0.5,
+        0.45,
+        0.75,
+        &[(0.0, &blend(tint, "#050607", 0.88)), (1.0, "#040505")],
+    )];
     face.clips_content = true;
     face.corner_radii = document_proto::CornerRadii::uniform(3.0);
     face.effects = vec![draw::inner_shadow("#000000e0", 0.0, 2.0, 8.0)];
@@ -389,14 +745,36 @@ pub fn display(b: &mut Builder<'_>, parent: NodeId, name: &str, x: f64, y: f64, 
 
 /// The glass over a [`display`], added last so it lies over what's drawn.
 pub fn glass(b: &mut Builder<'_>, face: NodeId) {
-    let (w, h) = b.scene.node(face).map_or((0.0, 0.0), |n| (n.size.width, n.size.height));
-    let sheen = draw::linear(160.0, &[(0.0, "#ffffff1a"), (0.34, "#ffffff08"), (0.35, "#ffffff00"), (1.0, "#ffffff00")]);
+    let (w, h) = b
+        .scene
+        .node(face)
+        .map_or((0.0, 0.0), |n| (n.size.width, n.size.height));
+    let sheen = draw::linear(
+        160.0,
+        &[
+            (0.0, "#ffffff1a"),
+            (0.34, "#ffffff08"),
+            (0.35, "#ffffff00"),
+            (1.0, "#ffffff00"),
+        ],
+    );
     b.add(face, draw::rect("glass", 0.0, 0.0, w, h, sheen));
 }
 
 /// Text set in a display: glowing phosphor, mixed case.
 #[allow(clippy::too_many_arguments)]
-pub fn lit_text(b: &mut Builder<'_>, parent: NodeId, s: &str, x: f64, cy: f64, w: f64, size: f64, color: &str, align: TextAlign, weight: f64) -> NodeId {
+pub fn lit_text(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    s: &str,
+    x: f64,
+    cy: f64,
+    w: f64,
+    size: f64,
+    color: &str,
+    align: TextAlign,
+    weight: f64,
+) -> NodeId {
     let mut t = text("lit", s, x, cy, w, size, color, align, weight, false);
     if let NodeKind::Text(d) = &mut t.kind {
         d.letter_spacing = size * 0.06;
@@ -407,10 +785,32 @@ pub fn lit_text(b: &mut Builder<'_>, parent: NodeId, s: &str, x: f64, cy: f64, w
 /// A glowing live value in a display: a `Readout` whose `Value` text is lit
 /// in `color`, in a box `w` wide from `x`, centred on `cy`.
 #[allow(clippy::too_many_arguments)]
-pub fn lit_readout(b: &mut Builder<'_>, parent: NodeId, name: &str, binding: Binding, x: f64, cy: f64, w: f64, size: f64, color: &str, align: TextAlign) -> NodeId {
+pub fn lit_readout(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    binding: Binding,
+    x: f64,
+    cy: f64,
+    w: f64,
+    size: f64,
+    color: &str,
+    align: TextAlign,
+) -> NodeId {
     let h = (size * 1.5).ceil();
     let root = b.add(parent, draw::frame(name, x, cy - h / 2.0, w, h));
-    let mut t = text("value", "", 0.0, h / 2.0, w, size, color, align, 600.0, false);
+    let mut t = text(
+        "value",
+        "",
+        0.0,
+        h / 2.0,
+        w,
+        size,
+        color,
+        align,
+        600.0,
+        false,
+    );
     if let NodeKind::Text(d) = &mut t.kind {
         d.letter_spacing = size * 0.04;
     }
@@ -425,31 +825,83 @@ pub fn lit_readout(b: &mut Builder<'_>, parent: NodeId, name: &str, binding: Bin
 
 /// One channel of a level stream.
 fn channel(stream: &str, ch: u8) -> Binding {
-    Binding { source: Source::Stream { id: EntryId::new(stream), channel: Some(ch) }, ..Binding::stream(stream) }
+    Binding {
+        source: Source::Stream {
+            id: EntryId::new(stream),
+            channel: Some(ch),
+        },
+        ..Binding::stream(stream)
+    }
 }
 
 /// A `meter.led_column` of `n` segments `thick` wide and `h` tall over
 /// `floor..ceiling` dB, top-left at (`x`, `y`), on one channel of a level
 /// stream.
 #[allow(clippy::too_many_arguments)]
-pub fn led_column(b: &mut Builder<'_>, parent: NodeId, name: &str, stream: &str, ch: u8, (x, y, thick, h): (f64, f64, f64, f64), n: usize, floor: f64, ceiling: f64) -> NodeId {
-    let opts = [format!("floor={floor}"), format!("ceiling={ceiling}"), format!("segments={n}"), format!("thick={thick}")];
-    let p = Place { options: Some(opts.to_vec()), ..Place::new(name).size(h).bind(channel(stream, ch)) };
+pub fn led_column(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    stream: &str,
+    ch: u8,
+    (x, y, thick, h): (f64, f64, f64, f64),
+    n: usize,
+    floor: f64,
+    ceiling: f64,
+) -> NodeId {
+    let opts = [
+        format!("floor={floor}"),
+        format!("ceiling={ceiling}"),
+        format!("segments={n}"),
+        format!("thick={thick}"),
+    ];
+    let p = Place {
+        options: Some(opts.to_vec()),
+        ..Place::new(name).size(h).bind(channel(stream, ch))
+    };
     put_at(b, parent, "meter.led_column", &p, x, y)
 }
 
 /// The kit option lighting lamp `i` of `n` in `colors(i)`.
 fn lamp_colors(n: usize, colors: &dyn Fn(usize) -> String) -> String {
-    format!("colors={}", (0..n).map(colors).collect::<Vec<_>>().join(","))
+    format!(
+        "colors={}",
+        (0..n).map(colors).collect::<Vec<_>>().join(",")
+    )
 }
 
 /// A `meter.led_bar` of `n` lamps lit left to right over `floor..ceiling`
 /// dB by a level stream, `len × thick` from (`x`, `y`), lamp `i` in
 /// `colors(i)`; `scale` printed under it.
 #[allow(clippy::too_many_arguments)]
-pub fn led_bar(b: &mut Builder<'_>, parent: NodeId, name: &str, stream: &str, (x, y, len, thick): (f64, f64, f64, f64), n: usize, (floor, ceiling): (f64, f64), scale: &[&str], ink: &str, colors: &dyn Fn(usize) -> String) -> NodeId {
-    let opts = vec![format!("floor={floor}"), format!("ceiling={ceiling}"), format!("segments={n}"), format!("thick={thick}"), lamp_colors(n, colors)];
-    let p = Place { options: Some(opts), ..Place::new(name).size(len).bind(Binding::stream(stream)).scale(scale).ink(Ink::Color(ink.into())).keep_case() };
+pub fn led_bar(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    stream: &str,
+    (x, y, len, thick): (f64, f64, f64, f64),
+    n: usize,
+    (floor, ceiling): (f64, f64),
+    scale: &[&str],
+    ink: &str,
+    colors: &dyn Fn(usize) -> String,
+) -> NodeId {
+    let opts = vec![
+        format!("floor={floor}"),
+        format!("ceiling={ceiling}"),
+        format!("segments={n}"),
+        format!("thick={thick}"),
+        lamp_colors(n, colors),
+    ];
+    let p = Place {
+        options: Some(opts),
+        ..Place::new(name)
+            .size(len)
+            .bind(Binding::stream(stream))
+            .scale(scale)
+            .ink(Ink::Color(ink.into()))
+            .keep_case()
+    };
     put_at(b, parent, "meter.led_bar", &p, x, y)
 }
 
@@ -457,8 +909,22 @@ pub fn led_bar(b: &mut Builder<'_>, parent: NodeId, name: &str, stream: &str, (x
 /// scalar stream, centred at (`cx`, `cy`), lit in `color`, its legend
 /// under it in `ink`.
 #[allow(clippy::too_many_arguments)]
-pub fn stream_lamp(b: &mut Builder<'_>, parent: NodeId, name: &str, stream: &str, legend: &str, cx: f64, cy: f64, d: f64, color: &str, ink: &str) -> NodeId {
-    let p = Place::new(name).size(d).bind(Binding::stream(stream)).options(&[&format!("color={color}")]);
+pub fn stream_lamp(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    stream: &str,
+    legend: &str,
+    cx: f64,
+    cy: f64,
+    d: f64,
+    color: &str,
+    ink: &str,
+) -> NodeId {
+    let p = Place::new(name)
+        .size(d)
+        .bind(Binding::stream(stream))
+        .options(&[&format!("color={color}")]);
     let lamp = put_by(b, parent, "meter.lamp", &p, &["bezel"], cx, cy);
     // Printed, not a `Label`: the lamp reads out the control it names.
     silk(b, parent, legend, cx, cy + d / 2.0 + 10.0, 7.5, ink, 800.0);
@@ -468,15 +934,34 @@ pub fn stream_lamp(b: &mut Builder<'_>, parent: NodeId, name: &str, stream: &str
 /// A `switch.footswitch` on toggle param `addr` (`d` across the actuator,
 /// centred at (`cx`, `cy`)), its status LED lit in `led`.
 #[allow(clippy::too_many_arguments)]
-pub fn stomp(b: &mut Builder<'_>, parent: NodeId, name: &str, addr: &str, cx: f64, cy: f64, d: f64, led: &str) -> NodeId {
-    let p = Place::new(name).size(d).bind(bind(addr)).options(&[&format!("color={led}")]);
+pub fn stomp(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    name: &str,
+    addr: &str,
+    cx: f64,
+    cy: f64,
+    d: f64,
+    led: &str,
+) -> NodeId {
+    let p = Place::new(name)
+        .size(d)
+        .bind(bind(addr))
+        .options(&[&format!("color={led}")]);
     put_by(b, parent, "switch.footswitch", &p, &["cap"], cx, cy)
 }
 
 /// An LFO stream: the modulator's output, 0..1, at a lamp's frame rate.
 #[must_use]
 pub fn lfo_stream(id: &str, name: &str) -> StreamInfo {
-    StreamInfo { id: EntryId::new(id), name: name.into(), kind: StreamKind::Scalar { range: Range::linear(0.0, 1.0, Unit::None) }, rate_hz: 60.0 }
+    StreamInfo {
+        id: EntryId::new(id),
+        name: name.into(),
+        kind: StreamKind::Scalar {
+            range: Range::linear(0.0, 1.0, Unit::None),
+        },
+        rate_hz: 60.0,
+    }
 }
 
 // ── catalog entries ──────────────────────────────────────────────────────
@@ -490,7 +975,12 @@ pub fn param(addr: &str, name: &str, range: Range, default: f64) -> ParamInfo {
 /// 0–100 %.
 #[must_use]
 pub fn percent(addr: &str, name: &str, default: f64) -> ParamInfo {
-    param(addr, name, Range::linear(0.0, 100.0, Unit::Percent), default)
+    param(
+        addr,
+        name,
+        Range::linear(0.0, 100.0, Unit::Percent),
+        default,
+    )
 }
 
 /// A stepped selector over named positions; `default` is an index.
@@ -513,7 +1003,12 @@ pub fn toggle(addr: &str, name: &str, on: bool) -> ParamInfo {
 /// A level stream of `channels`.
 #[must_use]
 pub fn level_stream(id: &str, name: &str, channels: u8) -> StreamInfo {
-    StreamInfo { id: EntryId::new(id), name: name.into(), kind: StreamKind::Level { channels }, rate_hz: 30.0 }
+    StreamInfo {
+        id: EntryId::new(id),
+        name: name.into(),
+        kind: StreamKind::Level { channels },
+        rate_hz: 30.0,
+    }
 }
 
 /// A param binding.
@@ -538,12 +1033,18 @@ fn format_for(unit: &Unit) -> Option<ValueFormat> {
 pub fn formatted(mut f: Face) -> Face {
     let ids: Vec<NodeId> = f.scene.walk(f.scene.root);
     for id in ids {
-        let Some(c) = f.scene.node_mut(id).and_then(|n| n.control.as_mut()) else { continue };
+        let Some(c) = f.scene.node_mut(id).and_then(|n| n.control.as_mut()) else {
+            continue;
+        };
         if c.format.is_some() || c.slots_of(SlotRole::Value).next().is_none() {
             continue;
         }
-        let Some(Source::Param { addr }) = c.binding.as_ref().map(|b| &b.source) else { continue };
-        let Some(p) = f.params.iter().find(|p| &p.addr == addr) else { continue };
+        let Some(Source::Param { addr }) = c.binding.as_ref().map(|b| &b.source) else {
+            continue;
+        };
+        let Some(p) = f.params.iter().find(|p| &p.addr == addr) else {
+            continue;
+        };
         if p.kind == ParamKind::Continuous {
             c.format = format_for(&p.range.unit);
         }
@@ -559,26 +1060,79 @@ pub const EDGE: f64 = 9.0;
 /// A die-cast stompbox enclosure `w × h` filling `root`, painted `paint`
 /// (top, mid, bottom): a dark cast edge, the painted lid with a satin
 /// sheen, four screws. Returns the lid (its origin is inset by the edge).
-pub fn enclosure(b: &mut Builder<'_>, root: NodeId, w: f64, h: f64, paint: [&str; 3], screws: &str) -> NodeId {
+pub fn enclosure(
+    b: &mut Builder<'_>,
+    root: NodeId,
+    w: f64,
+    h: f64,
+    paint: [&str; 3],
+    screws: &str,
+) -> NodeId {
     fit_root(b, root, w, h);
     let mut body = draw::frame("Enclosure", 0.0, 0.0, w, h);
-    body.fills = vec![draw::linear(180.0, &[(0.0, &blend(paint[1], "#000000", 0.35)), (1.0, &blend(paint[2], "#000000", 0.6))])];
+    body.fills = vec![draw::linear(
+        180.0,
+        &[
+            (0.0, &blend(paint[1], "#000000", 0.35)),
+            (1.0, &blend(paint[2], "#000000", 0.6)),
+        ],
+    )];
     body.corner_radii = document_proto::CornerRadii::uniform(22.0);
     let body = b.add(root, body);
     let e = EDGE;
     let mut lid = draw::frame("Lid", e, e, w - 2.0 * e, h - 2.0 * e);
     lid.fills = vec![
         draw::linear(172.0, &[(0.0, paint[0]), (0.5, paint[1]), (1.0, paint[2])]),
-        draw::linear(115.0, &[(0.0, "#ffffff00"), (0.42, "#ffffff00"), (0.5, "#ffffff1a"), (0.58, "#ffffff00"), (1.0, "#ffffff00")]),
+        draw::linear(
+            115.0,
+            &[
+                (0.0, "#ffffff00"),
+                (0.42, "#ffffff00"),
+                (0.5, "#ffffff1a"),
+                (0.58, "#ffffff00"),
+                (1.0, "#ffffff00"),
+            ],
+        ),
     ];
     lid.corner_radii = document_proto::CornerRadii::uniform(15.0);
-    lid.effects = vec![draw::inner_shadow("#ffffff40", 0.0, 1.5, 1.0), draw::inner_shadow("#00000055", 0.0, -3.0, 6.0), draw::drop_shadow("#00000080", 0.0, 1.0, 2.0)];
+    lid.effects = vec![
+        draw::inner_shadow("#ffffff40", 0.0, 1.5, 1.0),
+        draw::inner_shadow("#00000055", 0.0, -3.0, 6.0),
+        draw::drop_shadow("#00000080", 0.0, 1.0, 2.0),
+    ];
     let lid = b.add(body, lid);
     let (lw, lh) = (w - 2.0 * e, h - 2.0 * e);
-    for (sx, sy) in [(13.0, 13.0), (lw - 13.0, 13.0), (13.0, lh - 13.0), (lw - 13.0, lh - 13.0)] {
-        let head = draw::circle("screw", sx, sy, 4.2, draw::radial_at(0.35, 0.3, 0.8, &[(0.0, "#f4f4f0"), (1.0, screws)]));
-        b.add(lid, draw::with_effects(head, vec![draw::inner_shadow("#00000080", 0.0, 0.0, 1.5)]));
-        b.add(lid, draw::rotated(draw::rect("slot", sx - 2.6, sy - 0.5, 5.2, 1.0, draw::solid("#0000008c")), 40.0));
+    for (sx, sy) in [
+        (13.0, 13.0),
+        (lw - 13.0, 13.0),
+        (13.0, lh - 13.0),
+        (lw - 13.0, lh - 13.0),
+    ] {
+        let head = draw::circle(
+            "screw",
+            sx,
+            sy,
+            4.2,
+            draw::radial_at(0.35, 0.3, 0.8, &[(0.0, "#f4f4f0"), (1.0, screws)]),
+        );
+        b.add(
+            lid,
+            draw::with_effects(head, vec![draw::inner_shadow("#00000080", 0.0, 0.0, 1.5)]),
+        );
+        b.add(
+            lid,
+            draw::rotated(
+                draw::rect(
+                    "slot",
+                    sx - 2.6,
+                    sy - 0.5,
+                    5.2,
+                    1.0,
+                    draw::solid("#0000008c"),
+                ),
+                40.0,
+            ),
+        );
     }
     lid
 }
@@ -612,7 +1166,19 @@ pub struct Dial<'a> {
 impl<'a> Dial<'a> {
     #[must_use]
     pub const fn new(style: &'a str, variant: &'a str, d: f64, ink: &'a str, dim: &'a str) -> Self {
-        Self { style, variant, d, scale: &[], options: &[], ink, dim, value: true, legend: 9.0, legend_y: 0.0, sweep: None }
+        Self {
+            style,
+            variant,
+            d,
+            scale: &[],
+            options: &[],
+            ink,
+            dim,
+            value: true,
+            legend: 9.0,
+            legend_y: 0.0,
+            sweep: None,
+        }
     }
     #[must_use]
     pub const fn legend_at(mut self, y: f64) -> Self {
@@ -645,9 +1211,27 @@ impl<'a> Dial<'a> {
 /// Place a kit knob (or rotary switch) with its shaft at (`cx`, `cy`),
 /// printed in the face's ink, its box tight round the moving part; the
 /// live value just under it and the legend below that, in the face's inks.
-pub fn dial(b: &mut Builder<'_>, parent: NodeId, addr: &str, legend: &str, cx: f64, cy: f64, s: &Dial<'_>) -> NodeId {
-    let mut p = Place::new(legend).size(s.d).variant(s.variant).bind(bind(addr)).ink(Ink::Color(s.ink.into())).keep_case().touch(TOUCH_MIN);
-    p = if s.options.is_empty() { p.scale(s.scale) } else { p.options(s.options) };
+pub fn dial(
+    b: &mut Builder<'_>,
+    parent: NodeId,
+    addr: &str,
+    legend: &str,
+    cx: f64,
+    cy: f64,
+    s: &Dial<'_>,
+) -> NodeId {
+    let mut p = Place::new(legend)
+        .size(s.d)
+        .variant(s.variant)
+        .bind(bind(addr))
+        .ink(Ink::Color(s.ink.into()))
+        .keep_case()
+        .touch(TOUCH_MIN);
+    p = if s.options.is_empty() {
+        p.scale(s.scale)
+    } else {
+        p.options(s.options)
+    };
     if let Some(sw) = s.sweep {
         p = p.sweep(sw);
     }
@@ -657,8 +1241,16 @@ pub fn dial(b: &mut Builder<'_>, parent: NodeId, addr: &str, legend: &str, cx: f
         add_value(b, k, (s.d * 0.14).clamp(7.5, 9.0), s.dim);
     }
     if s.legend > 0.0 {
-        let below = if s.value { s.d / 2.0 + 24.0 } else { s.d / 2.0 + 14.0 };
-        let y = if s.legend_y > 0.0 { s.legend_y } else { cy + below + s.legend * 0.4 };
+        let below = if s.value {
+            s.d / 2.0 + 24.0
+        } else {
+            s.d / 2.0 + 14.0
+        };
+        let y = if s.legend_y > 0.0 {
+            s.legend_y
+        } else {
+            cy + below + s.legend * 0.4
+        };
         silk(b, parent, legend, cx, y, s.legend, s.ink, 800.0);
     }
     k
@@ -670,10 +1262,17 @@ pub fn dial(b: &mut Builder<'_>, parent: NodeId, addr: &str, legend: &str, cx: f
 /// the face already draws the edge; a second, rounded one inside it reads
 /// as a card in a card.
 pub fn flush(b: &mut Builder<'_>, root: NodeId, w: f64, h: f64) {
-    let kids = b.scene.node(root).map(|n| n.children.clone()).unwrap_or_default();
+    let kids = b
+        .scene
+        .node(root)
+        .map(|n| n.children.clone())
+        .unwrap_or_default();
     for id in kids {
         if let Some(n) = b.scene.node_mut(id) {
-            let whole = n.transform.tx.abs() < 1.0 && n.transform.ty.abs() < 1.0 && (n.size.width - w).abs() < 1.0 && (n.size.height - h).abs() < 1.0;
+            let whole = n.transform.tx.abs() < 1.0
+                && n.transform.ty.abs() < 1.0
+                && (n.size.width - w).abs() < 1.0
+                && (n.size.height - h).abs() < 1.0;
             if whole {
                 n.corner_radii = document_proto::CornerRadii::default();
                 n.stroke.paints.clear();

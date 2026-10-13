@@ -50,7 +50,10 @@ impl Engine for Backend {
         }
     }
 
-    async fn request_feeds(&self, requests: Vec<surface_proto::FeedRequest>) -> Result<Vec<surface_proto::FeedInfo>, EngineError> {
+    async fn request_feeds(
+        &self,
+        requests: Vec<surface_proto::FeedRequest>,
+    ) -> Result<Vec<surface_proto::FeedInfo>, EngineError> {
         match self {
             Self::Local(m) => sync::Local(m).request_feeds(requests).await,
             Self::Remote(r) => r.request_feeds(requests).await,
@@ -70,22 +73,48 @@ struct Built {
 impl Built {
     fn new(mut rt: Runtime) -> Result<Self, String> {
         // Carets land where the painted glyphs end.
-        rt.set_text_measure(std::sync::Arc::new(|data: &document_proto::TextData, text: &str| {
-            render::text_advance(fonts(), &render::fonts::text_font(data), text, data.font_size, data.letter_spacing)
-        }));
+        rt.set_text_measure(std::sync::Arc::new(
+            |data: &document_proto::TextData, text: &str| {
+                render::text_advance(
+                    fonts(),
+                    &render::fonts::text_font(data),
+                    text,
+                    data.font_size,
+                    data.letter_spacing,
+                )
+            },
+        ));
         let scene = &rt.surface().scene;
         let page = *scene.pages().first().ok_or("surface has no <Page>")?;
         let boxes = render::build_scene_layout_boxes(scene, page);
-        let tops = scene.node(page).map(|p| p.children.clone()).unwrap_or_default();
+        let tops = scene
+            .node(page)
+            .map(|p| p.children.clone())
+            .unwrap_or_default();
         let content = union(tops.iter().filter_map(|id| boxes.get(id)).map(bounds));
-        let background = tops.first().and_then(|id| solid_fill(scene, *id)).unwrap_or(DARK);
-        let live = rt
-            .surface()
-            .controls
-            .values()
-            .any(|c| matches!(c.binding.as_ref().map(|b| &b.source), Some(Binding::Stream { .. })));
-        rt.set_boxes(boxes.iter().map(|(id, b)| (*id, bounds(b))).collect::<Vec<_>>());
-        Ok(Self { rt, page, content, background, live })
+        let background = tops
+            .first()
+            .and_then(|id| solid_fill(scene, *id))
+            .unwrap_or(DARK);
+        let live = rt.surface().controls.values().any(|c| {
+            matches!(
+                c.binding.as_ref().map(|b| &b.source),
+                Some(Binding::Stream { .. })
+            )
+        });
+        rt.set_boxes(
+            boxes
+                .iter()
+                .map(|(id, b)| (*id, bounds(b)))
+                .collect::<Vec<_>>(),
+        );
+        Ok(Self {
+            rt,
+            page,
+            content,
+            background,
+            live,
+        })
     }
 }
 
@@ -116,7 +145,8 @@ impl Player {
     /// # Errors
     /// When the surface has no page, or the engine refuses.
     pub fn new(engine: Backend, surface: Surface) -> Result<Self, String> {
-        let rt = pollster::block_on(sync::connect(&engine, surface)).map_err(|e| format!("engine: {e}"))?;
+        let rt = pollster::block_on(sync::connect(&engine, surface))
+            .map_err(|e| format!("engine: {e}"))?;
         let b = Built::new(rt)?;
         Ok(Self {
             engine,
@@ -153,7 +183,11 @@ impl Player {
             // The in-process engine is the truth (other callers may have
             // changed it); only a param mid-drag keeps its optimistic value.
             let values = surface_proto::SurfaceEngine::values(engine);
-            rt.apply_values(values.into_iter().filter(|v| dragging.as_ref() != Some(&v.addr)));
+            rt.apply_values(
+                values
+                    .into_iter()
+                    .filter(|v| dragging.as_ref() != Some(&v.addr)),
+            );
             rt.apply_texts(surface_proto::SurfaceEngine::texts(engine));
         }
         let b = Built::new(rt)?;
@@ -199,7 +233,10 @@ impl Player {
         match &self.engine {
             Backend::Local(m) => m.value(addr),
             Backend::Remote(r) => match r.fetch_values(READ_TIMEOUT) {
-                Ok(values) => values.into_iter().find(|v| v.addr == *addr).map(|v| v.value),
+                Ok(values) => values
+                    .into_iter()
+                    .find(|v| v.addr == *addr)
+                    .map(|v| v.value),
                 Err(e) => {
                     eprintln!("frame: reading {addr} from the engine: {e}");
                     None
@@ -211,7 +248,9 @@ impl Player {
     /// "engine disconnected …" while a remote engine is unreachable.
     #[must_use]
     pub fn engine_banner(&self) -> Option<String> {
-        self.disconnected.as_ref().map(|why| format!("engine disconnected — reconnecting… ({why})"))
+        self.disconnected
+            .as_ref()
+            .map(|why| format!("engine disconnected — reconnecting… ({why})"))
     }
 
     /// Whether the remote engine reconnected with a different catalog since
@@ -253,7 +292,8 @@ impl Player {
             Backend::Remote(remote) => {
                 for event in remote.drain() {
                     match event {
-                        Event::Engine(Incoming::Param(v)) if self.dragging.as_ref() == Some(&v.addr) => {}
+                        Event::Engine(Incoming::Param(v))
+                            if self.dragging.as_ref() == Some(&v.addr) => {}
                         Event::Engine(incoming) => incoming.apply(&mut self.rt, t),
                         Event::Disconnected(why) => self.disconnected = Some(why),
                         Event::Connected { catalog, values } => {
@@ -262,8 +302,16 @@ impl Player {
                                 self.catalog_changed = true;
                                 let surface = self.rt.surface().clone();
                                 self.rt = Runtime::new(surface, catalog);
-                                let boxes = render::build_scene_layout_boxes(&self.rt.surface().scene, self.page);
-                                self.rt.set_boxes(boxes.iter().map(|(id, b)| (*id, bounds(b))).collect::<Vec<_>>());
+                                let boxes = render::build_scene_layout_boxes(
+                                    &self.rt.surface().scene,
+                                    self.page,
+                                );
+                                self.rt.set_boxes(
+                                    boxes
+                                        .iter()
+                                        .map(|(id, b)| (*id, bounds(b)))
+                                        .collect::<Vec<_>>(),
+                                );
                             }
                             self.rt.apply_values(values);
                         }
@@ -285,7 +333,15 @@ impl Player {
             self.focus = Some(id);
         }
         self.dragging = hit.and_then(|id| self.param_of(id));
-        let mut calls = self.rt.pointer(Input::Down { x: at.0, y: at.1, t, mods }, t);
+        let mut calls = self.rt.pointer(
+            Input::Down {
+                x: at.0,
+                y: at.1,
+                t,
+                mods,
+            },
+            t,
+        );
         if double {
             calls.extend(self.rt.pointer(Input::DoubleClick, t));
         }
@@ -294,7 +350,15 @@ impl Player {
 
     pub fn pointer_move(&mut self, at: (f64, f64), mods: Modifiers, t: f64) {
         self.cursor = Some(at);
-        let calls = self.rt.pointer(Input::Move { x: at.0, y: at.1, t, mods }, t);
+        let calls = self.rt.pointer(
+            Input::Move {
+                x: at.0,
+                y: at.1,
+                t,
+                mods,
+            },
+            t,
+        );
         self.dispatch(calls);
     }
 
@@ -390,8 +454,10 @@ impl Player {
         }
         // Reflect what the engine actually holds (stepped params snap).
         // Only the sent params: others may have edits still coalescing.
-        let echoed: Vec<ParamValue> =
-            sent.into_iter().filter_map(|addr| engine.value(&addr).map(|value| ParamValue { addr, value })).collect();
+        let echoed: Vec<ParamValue> = sent
+            .into_iter()
+            .filter_map(|addr| engine.value(&addr).map(|value| ParamValue { addr, value }))
+            .collect();
         self.rt.apply_values(echoed);
     }
 
@@ -412,7 +478,12 @@ impl Player {
     /// Every control's position, for effect shaders' `value`.
     #[must_use]
     pub fn control_positions(&self) -> std::collections::HashMap<NodeId, f64> {
-        self.rt.surface().controls.iter().map(|(id, c)| (*id, self.rt.position(*id, c))).collect()
+        self.rt
+            .surface()
+            .controls
+            .iter()
+            .map(|(id, c)| (*id, self.rt.position(*id, c)))
+            .collect()
     }
 
     /// The first knob in paint order and its box (for scripted input).
@@ -423,7 +494,11 @@ impl Player {
         s.scene
             .walk(s.scene.root)
             .into_iter()
-            .find(|id| s.controls.get(id).is_some_and(|c| matches!(c.kind, ControlKind::Knob { .. })))
+            .find(|id| {
+                s.controls
+                    .get(id)
+                    .is_some_and(|c| matches!(c.kind, ControlKind::Knob { .. }))
+            })
             .and_then(|id| boxes.get(&id).map(|b| (id, bounds(b))))
     }
 
@@ -435,7 +510,11 @@ impl Player {
         s.scene
             .walk(s.scene.root)
             .into_iter()
-            .find(|id| s.controls.get(id).is_some_and(|c| matches!(c.kind, ControlKind::Handle { .. })))
+            .find(|id| {
+                s.controls
+                    .get(id)
+                    .is_some_and(|c| matches!(c.kind, ControlKind::Handle { .. }))
+            })
             .and_then(|id| self.rt.hit_box(id).map(|b| (id, b)))
     }
 
@@ -446,7 +525,12 @@ impl Player {
         s.scene
             .walk(s.scene.root)
             .into_iter()
-            .filter(|id| s.controls.get(id).is_some_and(|c| matches!(c.kind, ControlKind::Handle { .. })) && self.rt.is_shown(*id))
+            .filter(|id| {
+                s.controls
+                    .get(id)
+                    .is_some_and(|c| matches!(c.kind, ControlKind::Handle { .. }))
+                    && self.rt.is_shown(*id)
+            })
             .collect()
     }
 
@@ -454,7 +538,11 @@ impl Player {
     #[must_use]
     pub fn canvas(&self) -> Option<Bounds> {
         let s = self.rt.surface();
-        let id = s.controls.iter().find(|(_, c)| matches!(c.kind, ControlKind::Canvas { .. }))?.0;
+        let id = s
+            .controls
+            .iter()
+            .find(|(_, c)| matches!(c.kind, ControlKind::Canvas { .. }))?
+            .0;
         self.rt.hit_box(*id)
     }
 
@@ -494,7 +582,12 @@ pub fn banner(message: &str, width: f64) -> Option<(Scene, NodeId)> {
 }
 
 fn bounds(b: &render::LayoutBox) -> Bounds {
-    Bounds { x: b.x, y: b.y, width: b.width, height: b.height }
+    Bounds {
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+    }
 }
 
 fn union(boxes: impl Iterator<Item = Bounds>) -> Bounds {
@@ -512,13 +605,19 @@ fn union(boxes: impl Iterator<Item = Bounds>) -> Bounds {
 }
 
 fn solid_fill(scene: &Scene, id: NodeId) -> Option<peniko::Color> {
-    scene.node(id)?.fills.iter().rev().find(|p| p.visible).and_then(|p| match p.kind {
-        PaintKind::Solid { color: c } => {
-            let u8 = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-            Some(peniko::Color::from_rgb8(u8(c.r), u8(c.g), u8(c.b)))
-        }
-        _ => None,
-    })
+    scene
+        .node(id)?
+        .fills
+        .iter()
+        .rev()
+        .find(|p| p.visible)
+        .and_then(|p| match p.kind {
+            PaintKind::Solid { color: c } => {
+                let u8 = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+                Some(peniko::Color::from_rgb8(u8(c.r), u8(c.g), u8(c.b)))
+            }
+            _ => None,
+        })
 }
 
 #[cfg(test)]
@@ -529,7 +628,11 @@ mod tests {
 
     fn demo() -> Player {
         let catalog = surface_memory::demo_catalog();
-        Player::new(Backend::Local(Memory::demo()), surface_for_catalog(&catalog, &Options::default())).unwrap()
+        Player::new(
+            Backend::Local(Memory::demo()),
+            surface_for_catalog(&catalog, &Options::default()),
+        )
+        .unwrap()
     }
 
     fn drag_first_knob(p: &mut Player, dy: f64) -> ParamAddr {
@@ -576,7 +679,10 @@ mod tests {
         p.pointer_up(1010.0);
         p.pointer_down((cx + 1.0, cy), (cx + 1.0, cy), Modifiers::default(), 1200.0);
         p.pointer_up(1210.0);
-        assert!((p.engine_value(&addr).unwrap() - default).abs() < 1e-9, "double-click resets");
+        assert!(
+            (p.engine_value(&addr).unwrap() - default).abs() < 1e-9,
+            "double-click resets"
+        );
     }
 
     #[test]
@@ -586,11 +692,16 @@ mod tests {
         let addr = p.param_of(id).unwrap();
         pollster::block_on(sync::send(
             &p.engine,
-            vec![EngineCall::SetParam { addr: addr.clone(), value: 0.9, phase: surface_proto::EditPhase::End }],
+            vec![EngineCall::SetParam {
+                addr: addr.clone(),
+                value: 0.9,
+                phase: surface_proto::EditPhase::End,
+            }],
         ))
         .unwrap();
         let catalog = surface_memory::demo_catalog();
-        p.swap(surface_for_catalog(&catalog, &Options::default())).unwrap();
+        p.swap(surface_for_catalog(&catalog, &Options::default()))
+            .unwrap();
         let (id, _) = p.first_knob().unwrap();
         let control = p.runtime().surface().controls[&id].clone();
         assert!((p.runtime().position(id, &control) - 0.9).abs() < 1e-9);
@@ -609,8 +720,14 @@ mod tests {
         assert_eq!(frames.len(), c.streams.len());
         assert_eq!(frames[0].values.len(), 2, "stereo out_level");
         // Every feed kind generates, at its shape.
-        let all = Catalog { streams: feed_memory::demo_feeds(), ..Catalog::default() };
-        for (f, info) in feed_memory::frames(&all.streams, 2.0).iter().zip(&all.streams) {
+        let all = Catalog {
+            streams: feed_memory::demo_feeds(),
+            ..Catalog::default()
+        };
+        for (f, info) in feed_memory::frames(&all.streams, 2.0)
+            .iter()
+            .zip(&all.streams)
+        {
             assert_eq!(f.values.len(), info.kind.frame_len(), "{}", info.id);
         }
     }
@@ -634,7 +751,11 @@ mod tests {
         let mut remote = Remote::start(&server.url, Some("guitar")).unwrap();
         remote.wait_connected(Duration::from_secs(5)).unwrap();
         let catalog = pollster::block_on(remote.catalog()).unwrap();
-        let mut p = Player::new(Backend::Remote(remote), surface_for_catalog(&catalog, &Options::default())).unwrap();
+        let mut p = Player::new(
+            Backend::Remote(remote),
+            surface_for_catalog(&catalog, &Options::default()),
+        )
+        .unwrap();
         assert!(p.animating());
 
         // Scripted drag lands on the served engine.
@@ -648,14 +769,35 @@ mod tests {
 
         // A change made elsewhere (another surface) streams in.
         let other = ParamAddr::new("reverb/mix");
-        surface_proto::SurfaceEngine::set_param(&server.engine, other.clone(), 0.8, surface_proto::EditPhase::End).unwrap();
-        tick_until(&mut p, &server, |p| p.runtime().values().iter().any(|v| v.addr == other && v.value == 0.8));
+        surface_proto::SurfaceEngine::set_param(
+            &server.engine,
+            other.clone(),
+            0.8,
+            surface_proto::EditPhase::End,
+        )
+        .unwrap();
+        tick_until(&mut p, &server, |p| {
+            p.runtime()
+                .values()
+                .iter()
+                .any(|v| v.addr == other && v.value == 0.8)
+        });
 
         // Losing the engine shows the banner and keeps the last state…
         server.kill();
         tick_until(&mut p, &server, |p| p.engine_banner().is_some());
-        assert!(p.engine_banner().unwrap().starts_with("engine disconnected"));
-        assert!(p.runtime().values().iter().any(|v| v.addr == other && v.value == 0.8), "last state kept");
+        assert!(
+            p.engine_banner()
+                .unwrap()
+                .starts_with("engine disconnected")
+        );
+        assert!(
+            p.runtime()
+                .values()
+                .iter()
+                .any(|v| v.addr == other && v.value == 0.8),
+            "last state kept"
+        );
 
         // …and a reconnect clears it.
         server.restart(Some("guitar"));

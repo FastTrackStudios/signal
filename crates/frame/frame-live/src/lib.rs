@@ -52,7 +52,12 @@ struct View {
 impl View {
     fn fit(content: Bounds, width: f64, height: f64) -> Self {
         if content.width <= 0.0 || content.height <= 0.0 || width <= 0.0 || height <= 0.0 {
-            return Self { scale: 1.0, scale_y: 1.0, tx: -content.x, ty: -content.y };
+            return Self {
+                scale: 1.0,
+                scale_y: 1.0,
+                tx: -content.x,
+                ty: -content.y,
+            };
         }
         let scale = (width / content.width).min(height / content.height);
         Self {
@@ -69,7 +74,12 @@ impl View {
             return Self::fit(content, width, height);
         }
         let (sx, sy) = (width / content.width, height / content.height);
-        Self { scale: sx, scale_y: sy, tx: -content.x * sx, ty: -content.y * sy }
+        Self {
+            scale: sx,
+            scale_y: sy,
+            tx: -content.x * sx,
+            ty: -content.y * sy,
+        }
     }
 
     fn to_surface(self, x: f64, y: f64) -> (f64, f64) {
@@ -90,7 +100,10 @@ thread_local! {
 
 /// A device's renderer, and its effects stages' shared pipelines (each
 /// effect compiled once, not once a face).
-type Shared = (std::rc::Rc<std::cell::RefCell<Renderer>>, render::fx::SharedPasses);
+type Shared = (
+    std::rc::Rc<std::cell::RefCell<Renderer>>,
+    render::fx::SharedPasses,
+);
 
 /// This thread's [`Shared`] for `device`, made on first use.
 fn shared_renderer(device: &wgpu::Device) -> Result<Shared, String> {
@@ -103,7 +116,12 @@ fn shared_renderer(device: &wgpu::Device) -> Result<Shared, String> {
         }
         let renderer = Renderer::new(
             device,
-            RendererOptions { use_cpu: false, antialiasing_support: [AaConfig::Area].into_iter().collect(), num_init_threads: None, pipeline_cache: None },
+            RendererOptions {
+                use_cpu: false,
+                antialiasing_support: [AaConfig::Area].into_iter().collect(),
+                num_init_threads: None,
+                pipeline_cache: None,
+            },
         )
         .map_err(|e| format!("renderer: {e}"))?;
         let r = std::rc::Rc::new(std::cell::RefCell::new(renderer));
@@ -185,7 +203,8 @@ fn stamp(path: &Path) -> Option<u64> {
 }
 
 fn load(markup: &Path, catalog: Option<&Path>) -> Result<(Surface, Catalog), String> {
-    let scene = document_io::load_surface(markup).map_err(|e| format!("{}: {e}", markup.display()))?;
+    let scene =
+        document_io::load_surface(markup).map_err(|e| format!("{}: {e}", markup.display()))?;
     let catalog = match catalog {
         Some(p) => {
             let text = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
@@ -197,26 +216,42 @@ fn load(markup: &Path, catalog: Option<&Path>) -> Result<(Surface, Catalog), Str
 }
 
 fn bounds(b: &render::LayoutBox) -> Bounds {
-    Bounds { x: b.x, y: b.y, width: b.width, height: b.height }
+    Bounds {
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+    }
 }
 
 fn union(boxes: impl Iterator<Item = Bounds>) -> Bounds {
     boxes
         .reduce(|a, b| {
             let (x, y) = (a.x.min(b.x), a.y.min(b.y));
-            Bounds { x, y, width: (a.x + a.width).max(b.x + b.width) - x, height: (a.y + a.height).max(b.y + b.height) - y }
+            Bounds {
+                x,
+                y,
+                width: (a.x + a.width).max(b.x + b.width) - x,
+                height: (a.y + a.height).max(b.y + b.height) - y,
+            }
         })
         .unwrap_or_default()
 }
 
 fn solid_fill(scene: &Scene, id: NodeId) -> Option<peniko::Color> {
-    scene.node(id)?.fills.iter().rev().find(|p| p.visible).and_then(|p| match p.kind {
-        PaintKind::Solid { color: c } => {
-            let u8 = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-            Some(peniko::Color::from_rgb8(u8(c.r), u8(c.g), u8(c.b)))
-        }
-        _ => None,
-    })
+    scene
+        .node(id)?
+        .fills
+        .iter()
+        .rev()
+        .find(|p| p.visible)
+        .and_then(|p| match p.kind {
+            PaintKind::Solid { color: c } => {
+                let u8 = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+                Some(peniko::Color::from_rgb8(u8(c.r), u8(c.g), u8(c.b)))
+            }
+            _ => None,
+        })
 }
 
 impl LiveSurface {
@@ -241,7 +276,12 @@ impl LiveSurface {
             mode: Mode::Gpu,
             gpu: None,
             born: Instant::now(),
-            view: View { scale: 1.0, scale_y: 1.0, tx: 0.0, ty: 0.0 },
+            view: View {
+                scale: 1.0,
+                scale_y: 1.0,
+                tx: 0.0,
+                ty: 0.0,
+            },
             stretch: false,
             responsive: false,
             design: Some(surface.clone()),
@@ -264,16 +304,35 @@ impl LiveSurface {
 
     /// Lay out a runtime and make it the one running.
     fn install(&mut self, mut rt: Runtime) -> Result<(), String> {
-        rt.set_text_measure(std::sync::Arc::new(|data: &document_proto::TextData, text: &str| {
-            render::text_advance(render::FontBook::bundled(), &render::fonts::text_font(data), text, data.font_size, data.letter_spacing)
-        }));
+        rt.set_text_measure(std::sync::Arc::new(
+            |data: &document_proto::TextData, text: &str| {
+                render::text_advance(
+                    render::FontBook::bundled(),
+                    &render::fonts::text_font(data),
+                    text,
+                    data.font_size,
+                    data.letter_spacing,
+                )
+            },
+        ));
         let scene = &rt.surface().scene;
         let page = *scene.pages().first().ok_or("surface has no <Page>")?;
         let boxes = render::build_scene_layout_boxes(scene, page);
-        let tops = scene.node(page).map(|p| p.children.clone()).unwrap_or_default();
+        let tops = scene
+            .node(page)
+            .map(|p| p.children.clone())
+            .unwrap_or_default();
         self.content = union(tops.iter().filter_map(|id| boxes.get(id)).map(bounds));
-        self.background = tops.first().and_then(|id| solid_fill(scene, *id)).unwrap_or(DARK);
-        rt.set_boxes(boxes.iter().map(|(id, b)| (*id, bounds(b))).collect::<Vec<_>>());
+        self.background = tops
+            .first()
+            .and_then(|id| solid_fill(scene, *id))
+            .unwrap_or(DARK);
+        rt.set_boxes(
+            boxes
+                .iter()
+                .map(|(id, b)| (*id, bounds(b)))
+                .collect::<Vec<_>>(),
+        );
         self.page = page;
         self.rt = rt;
         self.dirty = true;
@@ -301,16 +360,28 @@ impl LiveSurface {
     /// Relay the design for an element `width × height`, when its
     /// proportions call for another width than the one laid out.
     fn respond(&mut self, width: u32, height: u32) {
-        let Some(design) = self.design.as_ref() else { return };
+        let Some(design) = self.design.as_ref() else {
+            return;
+        };
         let scene = &design.scene;
-        let Some(page) = scene.pages().first().copied() else { return };
-        let Some(root) = scene.node(page).and_then(|p| p.children.first().copied()) else { return };
-        let Some((dw, dh)) = scene.node(root).map(|n| (n.size.width, n.size.height)) else { return };
+        let Some(page) = scene.pages().first().copied() else {
+            return;
+        };
+        let Some(root) = scene.node(page).and_then(|p| p.children.first().copied()) else {
+            return;
+        };
+        let Some((dw, dh)) = scene.node(root).map(|n| (n.size.width, n.size.height)) else {
+            return;
+        };
         if dw <= 0.0 || dh <= 0.0 || width == 0 || height == 0 {
             return;
         }
         let want = (dh * f64::from(width) / f64::from(height)).clamp(dw * 0.6, dw * 2.4);
-        let now = if self.laid_width > 0.0 { self.laid_width } else { dw };
+        let now = if self.laid_width > 0.0 {
+            self.laid_width
+        } else {
+            dw
+        };
         if (want - now).abs() <= dw * 0.005 {
             return;
         }
@@ -351,7 +422,10 @@ impl LiveSurface {
             return false;
         }
         self.next_check = now + POLL;
-        let stamps = (stamp(&self.markup), self.catalog_path.as_deref().and_then(stamp));
+        let stamps = (
+            stamp(&self.markup),
+            self.catalog_path.as_deref().and_then(stamp),
+        );
         if stamps == self.stamps || stamps.0.is_none() {
             return false;
         }
@@ -364,7 +438,8 @@ impl LiveSurface {
                 }
                 self.design = Some(surface.clone());
                 self.laid_width = 0.0;
-                let placeholder = Runtime::new(Surface::from_scene(Scene::new("")), Catalog::default());
+                let placeholder =
+                    Runtime::new(Surface::from_scene(Scene::new("")), Catalog::default());
                 let mut rt = std::mem::replace(&mut self.rt, placeholder);
                 if catalog != *rt.catalog() {
                     // New params (a regenerated page): start from the old
@@ -400,14 +475,22 @@ impl LiveSurface {
     /// keeps the hand's value.
     pub fn apply_values(&mut self, values: impl IntoIterator<Item = ParamValue>) {
         let dragging = self.dragging.clone();
-        self.rt.apply_values(values.into_iter().filter(|v| dragging.as_ref() != Some(&v.addr)));
+        self.rt.apply_values(
+            values
+                .into_iter()
+                .filter(|v| dragging.as_ref() != Some(&v.addr)),
+        );
         self.dirty = true;
     }
 
     /// Text values from the engine, by address (a preset's name on its
     /// nameplate): whatever control is bound to the text param shows it.
     pub fn apply_texts(&mut self, texts: impl IntoIterator<Item = (String, String)>) {
-        self.rt.apply_texts(texts.into_iter().map(|(addr, text)| TextValue { addr: ParamAddr::new(addr), text }));
+        self.rt
+            .apply_texts(texts.into_iter().map(|(addr, text)| TextValue {
+                addr: ParamAddr::new(addr),
+                text,
+            }));
         self.dirty = true;
     }
 
@@ -426,7 +509,10 @@ impl LiveSurface {
             .filter_map(|(addr, real)| {
                 let addr = ParamAddr::new(addr);
                 let info = self.rt.catalog().param(&addr)?;
-                Some(ParamValue { value: info.range.to_normalized(real), addr })
+                Some(ParamValue {
+                    value: info.range.to_normalized(real),
+                    addr,
+                })
             })
             .collect();
         self.apply_values(normalized);
@@ -439,7 +525,13 @@ impl LiveSurface {
     /// reading is pushed onto its plot's ring.
     pub fn apply_stream(&mut self, id: &str, values: Vec<f64>) {
         let t = self.t();
-        self.rt.apply_frame(surface_proto::StreamFrame { id: surface_proto::EntryId::new(id), values }, t);
+        self.rt.apply_frame(
+            surface_proto::StreamFrame {
+                id: surface_proto::EntryId::new(id),
+                values,
+            },
+            t,
+        );
         self.dirty = true;
     }
 
@@ -452,7 +544,11 @@ impl LiveSurface {
             .into_iter()
             .filter_map(|c| match c {
                 EngineCall::SetParam { addr, value, .. } => {
-                    let real = self.rt.catalog().param(&addr).map_or(value, |p| p.range.to_real(value));
+                    let real = self
+                        .rt
+                        .catalog()
+                        .param(&addr)
+                        .map_or(value, |p| p.range.to_real(value));
                     Some((addr.to_string(), real))
                 }
                 _ => None,
@@ -463,13 +559,22 @@ impl LiveSurface {
     /// The params the surface's catalog knows, by address.
     #[must_use]
     pub fn addresses(&self) -> Vec<String> {
-        self.rt.catalog().params.iter().map(|p| p.addr.to_string()).collect()
+        self.rt
+            .catalog()
+            .params
+            .iter()
+            .map(|p| p.addr.to_string())
+            .collect()
     }
 
     /// Pace clock-driven renders to at most `fps` a second (the display's
     /// rate, say); 0 leaves them unpaced.
     pub fn set_max_fps(&mut self, fps: u32) {
-        self.clock_frame = if fps == 0 { std::time::Duration::ZERO } else { std::time::Duration::from_secs_f64(1.0 / f64::from(fps)) };
+        self.clock_frame = if fps == 0 {
+            std::time::Duration::ZERO
+        } else {
+            std::time::Duration::from_secs_f64(1.0 / f64::from(fps))
+        };
     }
 
     /// Let the face move on its own (LFOs, springs settling, clock-driven
@@ -489,7 +594,10 @@ impl LiveSurface {
     /// LFO is between frames is still moving.
     #[must_use]
     pub fn is_moving(&self) -> bool {
-        let moving = self.animate || self.settle_until.is_some_and(|at| std::time::Instant::now() < at);
+        let moving = self.animate
+            || self
+                .settle_until
+                .is_some_and(|at| std::time::Instant::now() < at);
         self.dirty || (moving && (self.time_dependent || self.rt.animating()))
     }
 
@@ -502,8 +610,13 @@ impl LiveSurface {
     /// not.
     #[must_use]
     pub fn needs_redraw(&self) -> bool {
-        let due = self.rendered_at.is_none_or(|at| at.elapsed() >= self.clock_frame);
-        let moving = self.animate || self.settle_until.is_some_and(|at| std::time::Instant::now() < at);
+        let due = self
+            .rendered_at
+            .is_none_or(|at| at.elapsed() >= self.clock_frame);
+        let moving = self.animate
+            || self
+                .settle_until
+                .is_some_and(|at| std::time::Instant::now() < at);
         // A deferred check still out is read by the next render.
         let checking = self.gpu.as_ref().is_some_and(|g| g.stage.checking());
         self.dirty || checking || (moving && due && (self.time_dependent || self.rt.animating()))
@@ -521,7 +634,10 @@ impl LiveSurface {
         let echoed: Vec<ParamValue> = calls
             .iter()
             .filter_map(|c| match c {
-                EngineCall::SetParam { addr, value, .. } => Some(ParamValue { addr: addr.clone(), value: *value }),
+                EngineCall::SetParam { addr, value, .. } => Some(ParamValue {
+                    addr: addr.clone(),
+                    value: *value,
+                }),
                 _ => None,
             })
             .collect();
@@ -544,11 +660,21 @@ impl LiveSurface {
         let t = self.t();
         let at = self.view.to_surface(x, y);
         self.cursor = Some(at);
-        let double = self.last_press.is_some_and(|(lx, ly, lt)| t - lt <= DOUBLE_CLICK_MS && (x - lx).hypot(y - ly) <= DOUBLE_CLICK_PX);
+        let double = self.last_press.is_some_and(|(lx, ly, lt)| {
+            t - lt <= DOUBLE_CLICK_MS && (x - lx).hypot(y - ly) <= DOUBLE_CLICK_PX
+        });
         self.last_press = if double { None } else { Some((x, y, t)) };
         let hit = self.rt.hit(at.0, at.1);
         self.dragging = hit.and_then(|id| self.param_of(id));
-        let mut calls = self.rt.pointer(Input::Down { x: at.0, y: at.1, t, mods }, t);
+        let mut calls = self.rt.pointer(
+            Input::Down {
+                x: at.0,
+                y: at.1,
+                t,
+                mods,
+            },
+            t,
+        );
         if double {
             calls.extend(self.rt.pointer(Input::DoubleClick, t));
         }
@@ -560,7 +686,15 @@ impl LiveSurface {
         let t = self.t();
         let at = self.view.to_surface(x, y);
         self.cursor = Some(at);
-        let calls = self.rt.pointer(Input::Move { x: at.0, y: at.1, t, mods }, t);
+        let calls = self.rt.pointer(
+            Input::Move {
+                x: at.0,
+                y: at.1,
+                t,
+                mods,
+            },
+            t,
+        );
         if self.dragging.is_some() || !calls.is_empty() {
             self.dirty = true;
         }
@@ -588,7 +722,9 @@ impl LiveSurface {
         let t = self.t();
         let at = self.view.to_surface(x, y);
         self.cursor = Some(at);
-        let Some(id) = self.rt.hit(at.0, at.1) else { return };
+        let Some(id) = self.rt.hit(at.0, at.1) else {
+            return;
+        };
         let calls = self.rt.feed(id, Input::Wheel { notches, mods }, t);
         self.dispatch(calls);
     }
@@ -602,7 +738,15 @@ impl LiveSurface {
     pub fn attach_gpu(&mut self, device: wgpu::Device, queue: wgpu::Queue) -> Result<(), String> {
         let (renderer, passes) = shared_renderer(&device)?;
         let stage = render::fx::Stage::with_passes(&passes);
-        self.gpu = Some(Gpu { device, queue, renderer, check_next: true, banded: false, stage, target: None });
+        self.gpu = Some(Gpu {
+            device,
+            queue,
+            renderer,
+            check_next: true,
+            banded: false,
+            stage,
+            target: None,
+        });
         self.dirty = true;
         Ok(())
     }
@@ -626,7 +770,13 @@ impl LiveSurface {
     /// painted by the same painter; the GPU effects stage is left out (a
     /// glow is drawn as a soft copy, as frame's fallback mode draws it).
     #[cfg(feature = "anyrender-0-11")]
-    pub fn paint_vectors<S: anyrender::PaintScene>(&mut self, scene: &mut S, width: u32, height: u32, scale: f64) {
+    pub fn paint_vectors<S: anyrender::PaintScene>(
+        &mut self,
+        scene: &mut S,
+        width: u32,
+        height: u32,
+        scale: f64,
+    ) {
         if self.responsive {
             self.respond(width, height);
         }
@@ -640,14 +790,41 @@ impl LiveSurface {
         self.rt.set_clock(t / 1000.0);
         let (w, h) = (width.max(1), height.max(1));
         let scale = if scale > 0.0 { scale } else { 1.0 };
-        let physical = if self.stretch { View::fill(self.content, f64::from(w), f64::from(h)) } else { View::fit(self.content, f64::from(w), f64::from(h)) };
-        self.view = View { scale: physical.scale / scale, scale_y: physical.scale_y / scale, tx: physical.tx / scale, ty: physical.ty / scale };
+        let physical = if self.stretch {
+            View::fill(self.content, f64::from(w), f64::from(h))
+        } else {
+            View::fit(self.content, f64::from(w), f64::from(h))
+        };
+        self.view = View {
+            scale: physical.scale / scale,
+            scale_y: physical.scale_y / scale,
+            tx: physical.tx / scale,
+            ty: physical.ty / scale,
+        };
         let doc = self.rt.frame(t);
         let mut target = vectors::AnyRender011(scene);
         let bounds = kurbo::Rect::new(0.0, 0.0, f64::from(w), f64::from(h));
-        render::PaintTarget::fill(&mut target, peniko::Fill::NonZero, kurbo::Affine::IDENTITY, self.background, None, &bounds);
-        let prims = render::build_scene_primitives_with(&doc, self.page, render::CollectOptions { emission_glow: true });
-        render::paint_primitives_into_scene_with(&mut target, &prims, physical.affine(), Some(render::FontBook::bundled()));
+        render::PaintTarget::fill(
+            &mut target,
+            peniko::Fill::NonZero,
+            kurbo::Affine::IDENTITY,
+            self.background,
+            None,
+            &bounds,
+        );
+        let prims = render::build_scene_primitives_with(
+            &doc,
+            self.page,
+            render::CollectOptions {
+                emission_glow: true,
+            },
+        );
+        render::paint_primitives_into_scene_with(
+            &mut target,
+            &prims,
+            physical.affine(),
+            Some(render::FontBook::bundled()),
+        );
         self.time_dependent = false;
         self.dirty = false;
     }
@@ -659,7 +836,13 @@ impl LiveSurface {
     /// transparent margin showing what is under it. The same frame as
     /// [`paint_vectors`](Self::paint_vectors), by the same painter.
     #[cfg(feature = "anyrender-0-11")]
-    pub fn paint_vectors_at<S: anyrender::PaintScene>(&mut self, scene: &mut S, width: f64, height: f64, transform: [f64; 6]) {
+    pub fn paint_vectors_at<S: anyrender::PaintScene>(
+        &mut self,
+        scene: &mut S,
+        width: f64,
+        height: f64,
+        transform: [f64; 6],
+    ) {
         self.rendered_at = Some(std::time::Instant::now());
         if self.dirty {
             self.settle_until = self.rendered_at.map(|at| at + SETTLE);
@@ -672,8 +855,19 @@ impl LiveSurface {
         self.view = view;
         let doc = self.rt.frame(t);
         let mut target = vectors::AnyRender011(scene);
-        let prims = render::build_scene_primitives_with(&doc, self.page, render::CollectOptions { emission_glow: true });
-        render::paint_primitives_into_scene_with(&mut target, &prims, kurbo::Affine::new(transform) * view.affine(), Some(render::FontBook::bundled()));
+        let prims = render::build_scene_primitives_with(
+            &doc,
+            self.page,
+            render::CollectOptions {
+                emission_glow: true,
+            },
+        );
+        render::paint_primitives_into_scene_with(
+            &mut target,
+            &prims,
+            kurbo::Affine::new(transform) * view.affine(),
+            Some(render::FontBook::bundled()),
+        );
         self.time_dependent = false;
         self.dirty = false;
     }
@@ -686,7 +880,12 @@ impl LiveSurface {
     ///
     /// # Errors
     /// With no device attached, or when vello fails.
-    pub fn render(&mut self, width: u32, height: u32, scale: f64) -> Result<(wgpu::Texture, bool), String> {
+    pub fn render(
+        &mut self,
+        width: u32,
+        height: u32,
+        scale: f64,
+    ) -> Result<(wgpu::Texture, bool), String> {
         if self.responsive {
             self.respond(width, height);
         }
@@ -700,10 +899,25 @@ impl LiveSurface {
         self.rt.set_clock(t / 1000.0);
         let (w, h) = (width.max(1), height.max(1));
         let scale = if scale > 0.0 { scale } else { 1.0 };
-        let physical = if self.stretch { View::fill(self.content, f64::from(w), f64::from(h)) } else { View::fit(self.content, f64::from(w), f64::from(h)) };
-        self.view = View { scale: physical.scale / scale, scale_y: physical.scale_y / scale, tx: physical.tx / scale, ty: physical.ty / scale };
+        let physical = if self.stretch {
+            View::fill(self.content, f64::from(w), f64::from(h))
+        } else {
+            View::fit(self.content, f64::from(w), f64::from(h))
+        };
+        self.view = View {
+            scale: physical.scale / scale,
+            scale_y: physical.scale_y / scale,
+            tx: physical.tx / scale,
+            ty: physical.ty / scale,
+        };
         let doc = self.rt.frame(t);
-        let values = self.rt.surface().controls.iter().map(|(id, c)| (*id, self.rt.position(*id, c))).collect();
+        let values = self
+            .rt
+            .surface()
+            .controls
+            .iter()
+            .map(|(id, c)| (*id, self.rt.position(*id, c)))
+            .collect();
         let inputs = self.rt.shader_inputs();
         let gpu = self.gpu.as_mut().ok_or("no GPU attached")?;
         // The last check, deferred so a first frame does not wait on the
@@ -727,26 +941,49 @@ impl LiveSurface {
             deferred: !gpu.banded,
             ..render::fx::Frame::new(&doc, self.page, w, h)
         };
-        let rendered = gpu.stage.render(&gpu.device, &gpu.queue, &mut gpu.renderer.borrow_mut(), &frame)?;
+        let rendered = gpu.stage.render(
+            &gpu.device,
+            &gpu.queue,
+            &mut gpu.renderer.borrow_mut(),
+            &frame,
+        )?;
         gpu.check_next = false;
         self.time_dependent = gpu.stage.time_dependent();
         let fresh = !gpu.target.as_ref().is_some_and(|(_, size)| *size == (w, h));
         if fresh {
             let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("frame-live target"),
-                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
+                usage: wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
             gpu.target = Some((texture, (w, h)));
         }
         let (target, _) = gpu.target.as_ref().expect("target made above");
-        let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("frame-live copy") });
-        encoder.copy_texture_to_texture(rendered.as_image_copy(), target.as_image_copy(), wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("frame-live copy"),
+            });
+        encoder.copy_texture_to_texture(
+            rendered.as_image_copy(),
+            target.as_image_copy(),
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
         gpu.queue.submit(Some(encoder.finish()));
         self.dirty = false;
         Ok((target.clone(), fresh))
@@ -760,9 +997,15 @@ impl LiveSurface {
 pub fn face_paths(dir: &Path, name: &str) -> (PathBuf, Option<PathBuf>) {
     let markup = dir.join(format!("{name}.{}", document_io::EXTENSION));
     let legacy = dir.join(format!("{name}.{}", document_io::LEGACY_EXTENSION));
-    let markup = if !markup.exists() && legacy.exists() { legacy } else { markup };
-    let catalog = std::fs::read_dir(dir)
-        .ok()
-        .and_then(|rd| rd.filter_map(Result::ok).map(|e| e.path()).find(|p| p.to_string_lossy().ends_with(".catalog.json")));
+    let markup = if !markup.exists() && legacy.exists() {
+        legacy
+    } else {
+        markup
+    };
+    let catalog = std::fs::read_dir(dir).ok().and_then(|rd| {
+        rd.filter_map(Result::ok)
+            .map(|e| e.path())
+            .find(|p| p.to_string_lossy().ends_with(".catalog.json"))
+    });
     (markup, catalog)
 }

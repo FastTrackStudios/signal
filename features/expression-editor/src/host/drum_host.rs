@@ -9,23 +9,21 @@
 
 use std::sync::{Arc, Mutex};
 
-use daw::service::{ItemRef, ProjectContext};
-#[cfg(feature = "host-standalone")]
-use daw::standalone::Standalone;
 use crate::audio::apply_quantize::apply_warp;
 use crate::audio::daw_bound::DrumDaw;
 use crate::audio::detect::Transient;
 use crate::audio::gate::Hit;
 use crate::audio::group_detect::refine_onset;
 use crate::audio::panel_bridge::{self, PanelDetect, PanelTarget};
+use daw::service::{ItemRef, ProjectContext};
+#[cfg(feature = "host-standalone")]
+use daw::standalone::Standalone;
 mod detection;
 mod refresh;
 mod write;
 use crate::audio::stretch::stretch_hit;
 use crate::kit::LaneRole;
-use crate::ops::quantize_panel::{
-    Bin, HitPreview, QuantizePanel, WriteMode, histogram,
-};
+use crate::ops::quantize_panel::{Bin, HitPreview, QuantizePanel, WriteMode, histogram};
 
 /// One role lane's contribution to the host: its members' edit items,
 /// and (for a trigger lane) the summed signal detection runs on.

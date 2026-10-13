@@ -97,7 +97,8 @@ pub mod mcp {
     ///
     /// Measuring it off a screenshot undercounts: below the band the
     /// housing is dark on dark, which is the whole point of it.
-    pub const ARM_OVERHANG: f32 = ARM_CELL_H * (1.0 - crate::art::vector_controls::HOUSING_SHOULDER);
+    pub const ARM_OVERHANG: f32 =
+        ARM_CELL_H * (1.0 - crate::art::vector_controls::HOUSING_SHOULDER);
 
     /// The chain `rtconfig` writes down the right-hand column, each step a
     /// `[dx dy w h]` offset from the control above it (plus `padding`,

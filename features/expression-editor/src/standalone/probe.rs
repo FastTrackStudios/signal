@@ -51,7 +51,7 @@ pub fn install() -> Probe {
         let mut config = dioxus_mcp_probe::ProbeConfig::default();
         config
             .extra_targets
-            .push("crate::ui::frame_meter".into());
+            .push("expression_editor::ui::frame_meter".into());
         return Probe::Full(dioxus_mcp_probe::install_with(config));
     }
     install_panic_hook();

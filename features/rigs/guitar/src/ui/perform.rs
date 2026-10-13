@@ -20,7 +20,6 @@ use signal_widgets::switches::{
 use crate::proto::rig::RigClient;
 use crate::proto::{PerfStack, PerformanceModel, SwitchLearn, TunerReading};
 
-
 /// The jobs a footswitch can be given (the rig's `SWITCH_ACTIONS`):
 /// `(key, label)`. Stepping jobs go forward on a tap, back on a hold.
 const JOBS: &[(&str, &str)] = &[
@@ -79,7 +78,9 @@ pub fn folder_color(name: &str) -> (&'static str, &'static str) {
                 ("#e11d48", "#ffffff"), // rose
             ];
             // FNV-1a: stable across runs and builds.
-            let h = other.bytes().fold(0x811c_9dc5_u32, |h, b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193));
+            let h = other.bytes().fold(0x811c_9dc5_u32, |h, b| {
+                (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+            });
             SET[h as usize % SET.len()]
         }
     }
@@ -657,7 +658,8 @@ fn SwitchMenuCover(onclick: EventHandler<MouseEvent>) -> Element {
 /// A switch's label: one line, cut with an ellipsis if it ever does not
 /// fit. Blitz kept a label broken into lines at a width it no longer had
 /// (an idle page: "Two-" over "Rock", "Tap" over "Tempo" over its BPM).
-const NOWRAP: &str = "white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;";
+const NOWRAP: &str =
+    "white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;";
 
 /// One colored footswitch folder tile. Tap = press the stack; hold (row 1)
 /// = the row-2 function beneath it.
@@ -713,29 +715,43 @@ fn StackTile(
         "relative flex flex-col items-center justify-center gap-1 rounded-xl"
     };
     let open_switch_menu = EventHandler::new({
-        let (stack, part, parts, changes, learn, target) =
-            (stack.clone(), part.clone(), parts.clone(), changes.clone(), learn.clone(), learn_target.clone());
+        let (stack, part, parts, changes, learn, target) = (
+            stack.clone(),
+            part.clone(),
+            parts.clone(),
+            changes.clone(),
+            learn.clone(),
+            learn_target.clone(),
+        );
         move |e: MouseEvent| {
             e.prevent_default();
             let Some(h) = host else {
                 menu.set(true);
                 return;
             };
-            let (stack, part, parts, changes, learn, target) =
-                (stack.clone(), part.clone(), parts.clone(), changes.clone(), learn.clone(), target.clone());
-            open_menu(h, &e, move || rsx! {
-                SwitchMenu {
-                    switch_no,
-                    footswitch,
-                    stack: Some((index, stack.clone())),
-                    job: "stack".to_string(),
-                    part: part.clone(),
-                    in_song,
-                    parts: parts.clone(),
-                    changes: changes.clone(),
-                    learn: learn.clone(),
-                    learn_target: Some(target.clone()),
-                    on_close: move |()| close_menu(Some(h)),
+            let (stack, part, parts, changes, learn, target) = (
+                stack.clone(),
+                part.clone(),
+                parts.clone(),
+                changes.clone(),
+                learn.clone(),
+                target.clone(),
+            );
+            open_menu(h, &e, move || {
+                rsx! {
+                    SwitchMenu {
+                        switch_no,
+                        footswitch,
+                        stack: Some((index, stack.clone())),
+                        job: "stack".to_string(),
+                        part: part.clone(),
+                        in_song,
+                        parts: parts.clone(),
+                        changes: changes.clone(),
+                        learn: learn.clone(),
+                        learn_target: Some(target.clone()),
+                        on_close: move |()| close_menu(Some(h)),
+                    }
                 }
             });
         }
@@ -907,15 +923,17 @@ fn ActionTile(
                 return;
             };
             let (job, stack, part) = (job.clone(), stack.clone(), part.clone());
-            open_menu(h, &e, move || rsx! {
-                SwitchMenu {
-                    switch_no: footswitch + 1,
-                    footswitch: Some(footswitch),
-                    stack: stack.clone().map(|st| (footswitch, st)),
-                    job: job.clone(),
-                    part: part.clone(),
-                    in_song,
-                    on_close: move |()| close_menu(Some(h)),
+            open_menu(h, &e, move || {
+                rsx! {
+                    SwitchMenu {
+                        switch_no: footswitch + 1,
+                        footswitch: Some(footswitch),
+                        stack: stack.clone().map(|st| (footswitch, st)),
+                        job: job.clone(),
+                        part: part.clone(),
+                        in_song,
+                        on_close: move |()| close_menu(Some(h)),
+                    }
                 }
             });
         }
@@ -1013,8 +1031,7 @@ fn SwitchMenu(
     /// ends with its MIDI learn rows.
     #[props(default)]
     learn: SwitchLearn,
-    #[props(default)]
-    learn_target: Option<String>,
+    #[props(default)] learn_target: Option<String>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = signal_widgets::PopupHost::try_use();
@@ -1259,7 +1276,10 @@ fn SwitchMenu(
 #[component]
 fn LearnRows(target: String, learn: SwitchLearn, on_close: Callback<()>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
-    let call = move |f: fn(RigClient, String) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>| {
+    let call = move |f: fn(
+        RigClient,
+        String,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>| {
         let rig = rig.clone();
         move |t: String| {
             if let Some(r) = rig.clone() {
@@ -1267,9 +1287,21 @@ fn LearnRows(target: String, learn: SwitchLearn, on_close: Callback<()>) -> Elem
             }
         }
     };
-    let learn_it = call(|r, t| Box::pin(async move { let _ = r.midi_learn(t).await; }));
-    let cancel = call(|r, _| Box::pin(async move { let _ = r.midi_learn_cancel().await; }));
-    let unlearn = call(|r, t| Box::pin(async move { let _ = r.midi_unlearn(t).await; }));
+    let learn_it = call(|r, t| {
+        Box::pin(async move {
+            let _ = r.midi_learn(t).await;
+        })
+    });
+    let cancel = call(|r, _| {
+        Box::pin(async move {
+            let _ = r.midi_learn_cancel().await;
+        })
+    });
+    let unlearn = call(|r, t| {
+        Box::pin(async move {
+            let _ = r.midi_unlearn(t).await;
+        })
+    });
     rsx! {
         MidiLearnRows {
             target: target.clone(),
@@ -1298,9 +1330,11 @@ fn Learnable(target: String, title: String, learn: SwitchLearn, children: Elemen
                 return;
             };
             let (target, title, learn) = (target.clone(), title.clone(), learn.clone());
-            open_menu(h, &e, move || rsx! {
-                SwitchMenuFrame { title: title.clone(),
-                    LearnRows { target: target.clone(), learn: learn.clone(), on_close: move |()| close_menu(Some(h)) }
+            open_menu(h, &e, move || {
+                rsx! {
+                    SwitchMenuFrame { title: title.clone(),
+                        LearnRows { target: target.clone(), learn: learn.clone(), on_close: move |()| close_menu(Some(h)) }
+                    }
                 }
             });
         }
@@ -1458,17 +1492,19 @@ fn TapTempoTile(
                 return;
             };
             let (part, learn) = (part.clone(), learn.clone());
-            open_menu(h, &e, move || rsx! {
-                SwitchMenu {
-                    switch_no: 5usize,
-                    footswitch: Some(4usize),
-                    stack: None,
-                    job: "tap_tempo".to_string(),
-                    part: part.clone(),
-                    in_song,
-                    learn: learn.clone(),
-                    learn_target: Some("tap".to_string()),
-                    on_close: move |()| close_menu(Some(h)),
+            open_menu(h, &e, move || {
+                rsx! {
+                    SwitchMenu {
+                        switch_no: 5usize,
+                        footswitch: Some(4usize),
+                        stack: None,
+                        job: "tap_tempo".to_string(),
+                        part: part.clone(),
+                        in_song,
+                        learn: learn.clone(),
+                        learn_target: Some("tap".to_string()),
+                        on_close: move |()| close_menu(Some(h)),
+                    }
                 }
             });
         }

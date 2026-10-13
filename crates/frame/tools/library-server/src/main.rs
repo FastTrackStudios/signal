@@ -40,10 +40,14 @@ struct Args {
 
 fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
     let mut dir = None;
-    let (mut host, mut port, mut http, mut no_http, mut previews) = ("127.0.0.1".to_owned(), 4050u16, None, false, true);
+    let (mut host, mut port, mut http, mut no_http, mut previews) =
+        ("127.0.0.1".to_owned(), 4050u16, None, false, true);
     let mut args = args.into_iter();
     while let Some(a) = args.next() {
-        let mut value = || args.next().ok_or_else(|| format!("{a} needs a value\n{USAGE}"));
+        let mut value = || {
+            args.next()
+                .ok_or_else(|| format!("{a} needs a value\n{USAGE}"))
+        };
         match a.as_str() {
             "--host" => host = value()?,
             "--port" => port = value()?.parse().map_err(|_| "--port wants a number")?,
@@ -57,12 +61,26 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
         }
     }
     let dir = dir.ok_or_else(|| format!("which folder?\n{USAGE}"))?;
-    let http = if no_http { None } else { Some(http.unwrap_or(port.saturating_add(1))) };
-    Ok(Args { dir, host, port, http, previews })
+    let http = if no_http {
+        None
+    } else {
+        Some(http.unwrap_or(port.saturating_add(1)))
+    };
+    Ok(Args {
+        dir,
+        host,
+        port,
+        http,
+        previews,
+    })
 }
 
 fn run(args: Args) -> Result<(), String> {
-    let previewer = if args.previews { preview::previewer() } else { None };
+    let previewer = if args.previews {
+        preview::previewer()
+    } else {
+        None
+    };
     let lib = FsLibrary::open_with(&args.dir, previewer).map_err(|e| e.to_string())?;
     let _watch = lib.watch();
     let count = lib.list(Default::default()).len();
@@ -117,7 +135,10 @@ mod tests {
     #[test]
     fn defaults_and_flags() {
         let a = args("examples/plugins").unwrap();
-        assert_eq!((a.port, a.http, a.previews, a.host.as_str()), (4050, Some(4051), true, "127.0.0.1"));
+        assert_eq!(
+            (a.port, a.http, a.previews, a.host.as_str()),
+            (4050, Some(4051), true, "127.0.0.1")
+        );
         let a = args("--port 5000 d --no-previews --host 0.0.0.0").unwrap();
         assert_eq!((a.port, a.http, a.previews), (5000, Some(5001), false));
         assert_eq!(args("d --http 8080").unwrap().http, Some(8080));

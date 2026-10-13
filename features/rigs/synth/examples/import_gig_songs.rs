@@ -27,8 +27,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use synth::gig::{GigSong, read_presets, read_songs};
 use song::{Arrangement, Part, PartsManifest, Song, TimeSignature};
+use synth::gig::{GigSong, read_presets, read_songs};
 use uuid::Uuid;
 
 /// Patch names per rackspace, in the order Gig Performer indexes them.

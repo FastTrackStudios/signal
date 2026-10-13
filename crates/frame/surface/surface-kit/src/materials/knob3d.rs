@@ -106,12 +106,24 @@ pub struct Finish {
 impl Finish {
     #[must_use]
     pub fn plastic(color: &str, rough: f64) -> Self {
-        Self { color: color.into(), metal: 0.0, rough, coat: 0.0, aniso: 0.0 }
+        Self {
+            color: color.into(),
+            metal: 0.0,
+            rough,
+            coat: 0.0,
+            aniso: 0.0,
+        }
     }
 
     #[must_use]
     pub fn metal(color: &str, rough: f64) -> Self {
-        Self { color: color.into(), metal: 1.0, rough, coat: 0.0, aniso: 0.0 }
+        Self {
+            color: color.into(),
+            metal: 1.0,
+            rough,
+            coat: 0.0,
+            aniso: 0.0,
+        }
     }
 
     #[must_use]
@@ -171,7 +183,11 @@ pub struct Look3d {
 /// `#rrggbb` → linear-free sRGB 0..1 (grey on a bad string).
 fn rgb(hex: &str) -> [f64; 3] {
     let h = hex.trim_start_matches('#');
-    let byte = |i: usize| h.get(i..i + 2).and_then(|s| u8::from_str_radix(s, 16).ok()).map_or(0.5, |v| f64::from(v) / 255.0);
+    let byte = |i: usize| {
+        h.get(i..i + 2)
+            .and_then(|s| u8::from_str_radix(s, 16).ok())
+            .map_or(0.5, |v| f64::from(v) / 255.0)
+    };
     [byte(0), byte(2), byte(4)]
 }
 
@@ -241,14 +257,62 @@ impl Look3d {
         let inputs = vec![
             ShaderInput::constant(
                 "shape",
-                vec![self.cap_r, self.height, self.dome, self.rib_depth, self.knurl_band, self.step.0, self.step.1, f64::from(u8::from(self.diamond)), self.skirt_teeth],
+                vec![
+                    self.cap_r,
+                    self.height,
+                    self.dome,
+                    self.rib_depth,
+                    self.knurl_band,
+                    self.step.0,
+                    self.step.1,
+                    f64::from(u8::from(self.diamond)),
+                    self.skirt_teeth,
+                ],
             ),
-            ShaderInput::constant("skirt", vec![sr, sg, sb, s.metal, s.rough, s.coat, self.skirt_size.0, self.skirt_size.1]),
-            ShaderInput::constant("insert", vec![ir, ig, ib, self.insert.metal, self.insert.rough, self.insert.aniso, self.insert_size.0, self.insert_size.1]),
-            ShaderInput::constant("pointer", vec![pr, pg, pb, self.pointer_size.0, self.pointer_size.1, self.pointer_size.2]),
+            ShaderInput::constant(
+                "skirt",
+                vec![
+                    sr,
+                    sg,
+                    sb,
+                    s.metal,
+                    s.rough,
+                    s.coat,
+                    self.skirt_size.0,
+                    self.skirt_size.1,
+                ],
+            ),
+            ShaderInput::constant(
+                "insert",
+                vec![
+                    ir,
+                    ig,
+                    ib,
+                    self.insert.metal,
+                    self.insert.rough,
+                    self.insert.aniso,
+                    self.insert_size.0,
+                    self.insert_size.1,
+                ],
+            ),
+            ShaderInput::constant(
+                "pointer",
+                vec![
+                    pr,
+                    pg,
+                    pb,
+                    self.pointer_size.0,
+                    self.pointer_size.1,
+                    self.pointer_size.2,
+                ],
+            ),
             ShaderInput::constant("light", vec![self.shadow, self.occlusion, 1.0, 1.0, 1.0]),
         ];
-        ShaderFx { shader: "knob.3d".into(), params, inputs }
+        ShaderFx {
+            shader: "knob.3d".into(),
+            params,
+            inputs,
+        }
     }
 
     /// The look a `Place` asks for: its preset (variant), then options.
@@ -651,9 +715,30 @@ pub fn preset(name: &str) -> Look3d {
             ..Look3d::base(Cap::Fluted)
         },
         // `knob.render`'s caps, with its default colours.
-        "domed" => Look3d { profile: Profile::Domed, cap_r: 1.0, cap: Finish::plastic("#19191b", 0.32).coat(0.5), dome: 0.2, bevel: 0.14, ..Look3d::base(Cap::Domed) },
-        "fluted" => Look3d { profile: Profile::Fluted, cap_r: 1.0, ribs: 8.0, rib_depth: 0.1, cap: Finish::plastic("#1b1b1d", 0.26).coat(0.3), ..Look3d::base(Cap::Fluted) },
-        "knurled" => Look3d { profile: Profile::Knurled, cap_r: 1.0, ribs: 60.0, rib_depth: 0.03, cap: Finish::plastic("#2a2b2d", 0.3).coat(0.3), ..Look3d::base(Cap::Knurled) },
+        "domed" => Look3d {
+            profile: Profile::Domed,
+            cap_r: 1.0,
+            cap: Finish::plastic("#19191b", 0.32).coat(0.5),
+            dome: 0.2,
+            bevel: 0.14,
+            ..Look3d::base(Cap::Domed)
+        },
+        "fluted" => Look3d {
+            profile: Profile::Fluted,
+            cap_r: 1.0,
+            ribs: 8.0,
+            rib_depth: 0.1,
+            cap: Finish::plastic("#1b1b1d", 0.26).coat(0.3),
+            ..Look3d::base(Cap::Fluted)
+        },
+        "knurled" => Look3d {
+            profile: Profile::Knurled,
+            cap_r: 1.0,
+            ribs: 60.0,
+            rib_depth: 0.03,
+            cap: Finish::plastic("#2a2b2d", 0.3).coat(0.3),
+            ..Look3d::base(Cap::Knurled)
+        },
         "chicken_head" => Look3d {
             profile: Profile::ChickenHead,
             cap: Finish::plastic("#161617", 0.36).coat(0.4),

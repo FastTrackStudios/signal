@@ -12,10 +12,10 @@
 //! pass exists the moment it has both ends.
 
 use super::SetlistServiceImpl;
-use daw::service::transport::service::Transport;
-use daw::service::{ExtState, ProjectContext, Projects};
 use crate::proto::review::{Mark, Pass, Review};
 use crate::proto::{SessionServiceError, SetlistEvent};
+use daw::service::transport::service::Transport;
+use daw::service::{ExtState, ProjectContext, Projects};
 use tracing::{debug, warn};
 
 impl<D> SetlistServiceImpl<D>

@@ -125,11 +125,7 @@ fn half_sine(t: f64, y1: f64, y2: f64, tension: f64) -> f64 {
 fn pulse(t: f64, y1: f64, y2: f64, tension: f64) -> f64 {
     let count = (tension * tension * 100.0).max(1.0);
     let phase = (t * count).fract();
-    if phase < 0.5 {
-        y1
-    } else {
-        y2
-    }
+    if phase < 0.5 { y1 } else { y2 }
 }
 
 /// Cosine wave — tension controls frequency (odd harmonics).

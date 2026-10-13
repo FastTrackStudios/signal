@@ -9,9 +9,9 @@
 //!
 //! Echo suppression prevents infinite feedback loops.
 
+use crate::proto::offset_map::SetlistOffsetMap;
 use architect::platform::Instant;
 use daw::rpc::{Daw, Project};
-use crate::proto::offset_map::SetlistOffsetMap;
 use std::time::Duration;
 use tracing::debug;
 

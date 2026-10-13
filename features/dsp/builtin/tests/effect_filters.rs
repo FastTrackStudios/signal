@@ -2,8 +2,8 @@
 //! effect: the dry passes untouched. Checked on the wet alone (`dry` 0),
 //! set at build time and again live, as a knob turned while playing.
 
-use daw::plugin::{PluginEvents, PluginInstance};
 use builtin::{NativeDelay, NativeReverb};
+use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 256;
@@ -18,12 +18,20 @@ fn bands(fx: &mut dyn PluginInstance, live: &[(u32, f64)]) -> (f64, f64) {
         let input: Vec<f32> = (0..BLOCK)
             .map(|_| {
                 seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-                if b < 4 { (seed >> 8) as f32 / (1u32 << 24) as f32 - 0.5 } else { 0.0 }
+                if b < 4 {
+                    (seed >> 8) as f32 / (1u32 << 24) as f32 - 0.5
+                } else {
+                    0.0
+                }
             })
             .collect();
-        let ev = PluginEvents { params: if b == 0 { live } else { &[] }, ..PluginEvents::default() };
+        let ev = PluginEvents {
+            params: if b == 0 { live } else { &[] },
+            ..PluginEvents::default()
+        };
         let (mut ol, mut or) = (vec![0.0f32; BLOCK], vec![0.0f32; BLOCK]);
-        fx.process_block(&input, &input, &mut ol, &mut or, &ev).unwrap();
+        fx.process_block(&input, &input, &mut ol, &mut or, &ev)
+            .unwrap();
         if b >= 4 {
             out.extend_from_slice(&ol);
         }

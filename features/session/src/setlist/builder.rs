@@ -2,13 +2,13 @@
 //!
 //! Scans open projects and combines their song structures into a setlist.
 
+use crate::proto::Setlist;
 use crate::song::builder::SongBuilder;
 #[cfg(feature = "reaper")]
 use daw::reaper::Reaper;
 use daw::rpc::Daw;
 #[cfg(feature = "reaper")]
 use daw::service::{ProjectContext, Projects};
-use crate::proto::Setlist;
 use tracing::{debug, warn};
 
 /// Builder for assembling setlists from open DAW projects

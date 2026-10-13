@@ -32,5 +32,6 @@ pub mod stomp;
 pub mod viz;
 
 pub use registry::{
-    ComponentDef, DARK_INK, Family, Ink, Place, TOUCH_MIN, components, detent_sweep, drawn_bounds, find, place, place_in_cell,
+    ComponentDef, DARK_INK, Family, Ink, Place, TOUCH_MIN, components, detent_sweep, drawn_bounds,
+    find, place, place_in_cell,
 };

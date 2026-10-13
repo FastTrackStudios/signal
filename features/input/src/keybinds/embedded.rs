@@ -80,9 +80,7 @@ pub const FASTTRACKSTUDIO: &[(&str, &str)] = &[
     ),
     (
         "fx.styx",
-        include_str!(
-            "../../../adapters/reaper/reaper-input/config/config/fasttrackstudio/fx.styx"
-        ),
+        include_str!("../../../adapters/reaper/reaper-input/config/config/fasttrackstudio/fx.styx"),
     ),
     (
         "scrolling.styx",

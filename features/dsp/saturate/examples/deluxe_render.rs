@@ -14,14 +14,37 @@ use std::process::ExitCode;
 use saturate::deluxe::{Deluxe, DeluxeParams};
 
 fn run(args: &[String]) -> Result<(), String> {
-    let [_, input, output, crush, crunch, dark, mix, release, rest @ ..] = args else {
-        return Err("usage: deluxe_render in.f64 out.f64 crush crunch darkness_hz mix release [stereo]".into());
+    let [
+        _,
+        input,
+        output,
+        crush,
+        crunch,
+        dark,
+        mix,
+        release,
+        rest @ ..,
+    ] = args
+    else {
+        return Err(
+            "usage: deluxe_render in.f64 out.f64 crush crunch darkness_hz mix release [stereo]"
+                .into(),
+        );
     };
     let num = |s: &String| s.parse::<f64>().map_err(|e| format!("{s}: {e}"));
     let mut fx = Deluxe::new(48_000.0);
-    fx.set(DeluxeParams { crush: num(crush)?, crunch: num(crunch)?, darkness_hz: num(dark)?, mix: num(mix)?, release_on: num(release)? != 0.0 });
+    fx.set(DeluxeParams {
+        crush: num(crush)?,
+        crunch: num(crunch)?,
+        darkness_hz: num(dark)?,
+        mix: num(mix)?,
+        release_on: num(release)? != 0.0,
+    });
     let raw = std::fs::read(input).map_err(|e| format!("{input}: {e}"))?;
-    let x: Vec<f64> = raw.chunks_exact(8).map(|c| f64::from_le_bytes(c.try_into().unwrap_or([0; 8]))).collect();
+    let x: Vec<f64> = raw
+        .chunks_exact(8)
+        .map(|c| f64::from_le_bytes(c.try_into().unwrap_or([0; 8])))
+        .collect();
     let mut out = Vec::with_capacity(raw.len());
     if rest.first().is_some_and(|s| s == "stereo") {
         for f in x.chunks_exact(2) {

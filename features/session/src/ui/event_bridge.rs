@@ -4,12 +4,12 @@
 //! Used by both the desktop app (from the subscription loop) and the web app
 //! (from the `WebClientHandler`).
 
-use crate::ui::prelude::*;
 use crate::proto::{ActiveIndices, SetlistEvent, SongTransportState};
+use crate::ui::prelude::*;
 
 use crate::ui::signals::{
-    TransportState, ACTIVE_INDICES, ACTIVE_PLAYBACK_IS_PLAYING, ACTIVE_PLAYBACK_MUSICAL,
-    PLAYBACK_STATE, SETLIST_STRUCTURE, SONG_CHARTS, SONG_TRANSPORT, TAKE_PEAKS, TAKE_UNDER_REVIEW,
+    ACTIVE_INDICES, ACTIVE_PLAYBACK_IS_PLAYING, ACTIVE_PLAYBACK_MUSICAL, PLAYBACK_STATE,
+    SETLIST_STRUCTURE, SONG_CHARTS, SONG_TRANSPORT, TAKE_PEAKS, TAKE_UNDER_REVIEW, TransportState,
 };
 
 /// Apply an active-song/section cursor update to the global UI signals.

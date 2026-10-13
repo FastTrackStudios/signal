@@ -32,11 +32,11 @@
 //! sits under `pointer-events: none` so the roll underneath still gets
 //! every event.
 
-use anyrender::{PaintScene, Scene};
 use crate::cursor::{Aim, Cursor};
 use crate::mouse::{Action, Context, Gesture};
 use crate::tools::{Hit, Mods};
 use crate::{Editor, Handle};
+use anyrender::{PaintScene, Scene};
 use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, Stroke};
 use peniko::{Color, Fill};
 

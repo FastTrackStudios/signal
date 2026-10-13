@@ -3,8 +3,8 @@
 //! Uses `realfft` for efficient real-to-complex FFT with a Hann window.
 //! Output bins are smoothed with an exponential moving average (~30 ms time constant).
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use atomic_float::AtomicF32;
 use parking_lot::RwLock;

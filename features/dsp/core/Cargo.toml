@@ -29,6 +29,11 @@ nice-plug = { workspace = true, optional = true }
 parking_lot = { version = "0.12" }
 realfft = { version = "3" }
 
+[dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+dsp-core = { path = ".", features = ["audio"] }
+
 [[test]]
 name = "loudness"
 path = "tests/loudness.rs"

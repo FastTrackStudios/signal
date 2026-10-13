@@ -23,18 +23,32 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut sr = 48_000.0;
     let mut exact = false;
     for kv in settings {
-        let (k, v) = kv.split_once('=').ok_or_else(|| format!("{kv}: expected name=value"))?;
+        let (k, v) = kv
+            .split_once('=')
+            .ok_or_else(|| format!("{kv}: expected name=value"))?;
         let num = || v.parse::<f64>().map_err(|e| format!("{kv}: {e}"));
         match k {
             "pentode" => p.pentode = num()?,
             "triode" => p.triode = num()?,
             "sat_in" => p.saturation_in = num()? != 0.0,
             "saturation" => p.saturation = num()?,
-            "sat_freq" => p.saturation_freq = match v { "low" => SatFreq::Low, "high" => SatFreq::High, _ => SatFreq::Flat },
+            "sat_freq" => {
+                p.saturation_freq = match v {
+                    "low" => SatFreq::Low,
+                    "high" => SatFreq::High,
+                    _ => SatFreq::Flat,
+                }
+            }
             "alt" => p.alt_tube = num()? != 0.0,
             "air_in" => p.air_in = num()? != 0.0,
             "air" => p.air = num()?,
-            "cal" => p.cal = match v { "dark" => Cal::Dark, "bright" => Cal::Bright, _ => Cal::Norm },
+            "cal" => {
+                p.cal = match v {
+                    "dark" => Cal::Dark,
+                    "bright" => Cal::Bright,
+                    _ => Cal::Norm,
+                }
+            }
             "density" => p.density = num()?,
             "input" => p.input_db = num()?,
             "output" => p.output = num()?,
@@ -44,11 +58,17 @@ fn run(args: &[String]) -> Result<(), String> {
             _ => return Err(format!("unknown control {k}")),
         }
     }
-    let mut fx = if exact { Bluebox::new_exact(sr) } else { Bluebox::new(sr) };
+    let mut fx = if exact {
+        Bluebox::new_exact(sr)
+    } else {
+        Bluebox::new(sr)
+    };
     fx.set(p);
     let raw = std::fs::read(input).map_err(|e| format!("{input}: {e}"))?;
     let latency = fx.latency();
-    let samples = raw.chunks_exact(8).map(|c| f64::from_le_bytes(c.try_into().unwrap_or([0; 8])));
+    let samples = raw
+        .chunks_exact(8)
+        .map(|c| f64::from_le_bytes(c.try_into().unwrap_or([0; 8])));
     let mut out = Vec::with_capacity(raw.len());
     for (i, s) in samples.chain(std::iter::repeat_n(0.0, latency)).enumerate() {
         let y = fx.process(s, s).0;

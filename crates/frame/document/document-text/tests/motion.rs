@@ -16,16 +16,38 @@ fn motion_round_trips() {
     assert_eq!(coil.motion[0].name.as_deref(), Some("ring"));
     assert!(matches!(&coil.motion[1].target, Target::Shape { provider, .. } if provider == "coil"));
     let reel = nodes.iter().find(|n| n.name == "Reel").unwrap();
-    assert_eq!(reel.motion, vec![Motion::new(Target::Rotate).input("0.4 + norm(tape/speed)").dynamics(Dynamics::Spin).range(0.0, 360.0)]);
+    assert_eq!(
+        reel.motion,
+        vec![
+            Motion::new(Target::Rotate)
+                .input("0.4 + norm(tape/speed)")
+                .dynamics(Dynamics::Spin)
+                .range(0.0, 360.0)
+        ]
+    );
     let lamp = nodes.iter().find(|n| n.name == "Lamp").unwrap();
-    assert_eq!(lamp.motion[0].dynamics, Dynamics::Lfo { rate: Num::Expr("param(chorus/rate)".into()), shape: Wave::Triangle, phase: 0.0 });
+    assert_eq!(
+        lamp.motion[0].dynamics,
+        Dynamics::Lfo {
+            rate: Num::Expr("param(chorus/rate)".into()),
+            shape: Wave::Triangle,
+            phase: 0.0
+        }
+    );
 
     let mut scene = document_proto::Scene::new("p");
     let page = scene.pages()[0];
-    let ops: Vec<document_proto::Op> = nodes.into_iter().map(|n| {
-        let parent = n.parent.unwrap_or(page);
-        document_proto::Op::Insert { node: n, parent, index: u32::MAX }
-    }).collect();
+    let ops: Vec<document_proto::Op> = nodes
+        .into_iter()
+        .map(|n| {
+            let parent = n.parent.unwrap_or(page);
+            document_proto::Op::Insert {
+                node: n,
+                parent,
+                index: u32::MAX,
+            }
+        })
+        .collect();
     scene.transact(ops).unwrap();
     let text = document_text::print(&scene);
     let back = document_text::parse(&text, scene.assets.clone()).unwrap();

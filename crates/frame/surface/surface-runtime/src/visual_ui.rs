@@ -41,7 +41,10 @@ pub(crate) fn slot_ops(ops: &mut Vec<Op>, node: &Node, role: SlotRole, on: bool,
         SlotRole::Hovered => show(ops, s.hovered),
         SlotRole::On => show(ops, on),
         SlotRole::Off => show(ops, !on),
-        SlotRole::Placeholder => show(ops, s.empty && s.edit.as_ref().is_none_or(|e| e.text.is_empty())),
+        SlotRole::Placeholder => show(
+            ops,
+            s.empty && s.edit.as_ref().is_none_or(|e| e.text.is_empty()),
+        ),
         SlotRole::Tint => {
             if let Some(c) = s.tint {
                 tint_ops(ops, node, c);
@@ -49,30 +52,63 @@ pub(crate) fn slot_ops(ops: &mut Vec<Op>, node: &Node, role: SlotRole, on: bool,
         }
         SlotRole::Caret => match &s.edit {
             Some(e) => {
-                let t = Transform { tx: node.transform.tx + e.caret_x, ..node.transform };
+                let t = Transform {
+                    tx: node.transform.tx + e.caret_x,
+                    ..node.transform
+                };
                 ops.push(set(node.id, Prop::Transform(t)));
             }
             None => show(ops, false),
         },
         SlotRole::TextSelection => match s.edit.as_ref().and_then(|e| e.selection) {
             Some((x0, x1)) => {
-                ops.push(set(node.id, Prop::Transform(Transform { tx: node.transform.tx + x0, ..node.transform })));
-                ops.push(set(node.id, Prop::Size(Size { width: (x1 - x0).max(1.0), height: node.size.height })));
+                ops.push(set(
+                    node.id,
+                    Prop::Transform(Transform {
+                        tx: node.transform.tx + x0,
+                        ..node.transform
+                    }),
+                ));
+                ops.push(set(
+                    node.id,
+                    Prop::Size(Size {
+                        width: (x1 - x0).max(1.0),
+                        height: node.size.height,
+                    }),
+                ));
             }
             None => show(ops, false),
         },
         SlotRole::Marquee => match s.marquee {
             Some((x, y, w, h)) if w > 5.0 || h > 5.0 => {
                 ops.push(set(node.id, Prop::Transform(Transform::translate(x, y))));
-                ops.push(set(node.id, Prop::Size(Size { width: w, height: h })));
+                ops.push(set(
+                    node.id,
+                    Prop::Size(Size {
+                        width: w,
+                        height: h,
+                    }),
+                ));
                 ops.push(set(node.id, Prop::Visible(true)));
             }
             _ => show(ops, false),
         },
         SlotRole::Highlight => match s.highlight {
             Some((y, h)) => {
-                ops.push(set(node.id, Prop::Transform(Transform { ty: y, ..node.transform })));
-                ops.push(set(node.id, Prop::Size(Size { width: node.size.width, height: h })));
+                ops.push(set(
+                    node.id,
+                    Prop::Transform(Transform {
+                        ty: y,
+                        ..node.transform
+                    }),
+                ));
+                ops.push(set(
+                    node.id,
+                    Prop::Size(Size {
+                        width: node.size.width,
+                        height: h,
+                    }),
+                ));
                 ops.push(set(node.id, Prop::Visible(true)));
             }
             None => show(ops, false),
@@ -88,19 +124,45 @@ fn tint_ops(ops: &mut Vec<Op>, node: &Node, c: Color) {
         paints
             .iter()
             .map(|p| match &p.kind {
-                PaintKind::Solid { color } => document_proto::Paint { kind: PaintKind::Solid { color: Color { a: color.a, ..c } }, ..p.clone() },
+                PaintKind::Solid { color } => document_proto::Paint {
+                    kind: PaintKind::Solid {
+                        color: Color { a: color.a, ..c },
+                    },
+                    ..p.clone()
+                },
                 _ => p.clone(),
             })
             .collect::<Vec<_>>()
     };
-    if node.fills.iter().any(|p| matches!(p.kind, PaintKind::Solid { .. })) {
+    if node
+        .fills
+        .iter()
+        .any(|p| matches!(p.kind, PaintKind::Solid { .. }))
+    {
         ops.push(set(node.id, Prop::Fills(recolor(&node.fills))));
     }
-    if node.stroke.paints.iter().any(|p| matches!(p.kind, PaintKind::Solid { .. })) {
-        ops.push(set(node.id, Prop::Stroke(document_proto::Stroke { paints: recolor(&node.stroke.paints), ..node.stroke.clone() })));
+    if node
+        .stroke
+        .paints
+        .iter()
+        .any(|p| matches!(p.kind, PaintKind::Solid { .. }))
+    {
+        ops.push(set(
+            node.id,
+            Prop::Stroke(document_proto::Stroke {
+                paints: recolor(&node.stroke.paints),
+                ..node.stroke.clone()
+            }),
+        ));
     }
     if let Some(e) = &node.emission {
-        ops.push(set(node.id, Prop::Emission(Some(document_proto::Emission { color: Color { a: 1.0, ..c }, ..e.clone() }))));
+        ops.push(set(
+            node.id,
+            Prop::Emission(Some(document_proto::Emission {
+                color: Color { a: 1.0, ..c },
+                ..e.clone()
+            })),
+        ));
     }
 }
 
@@ -109,8 +171,17 @@ fn tint_ops(ops: &mut Vec<Op>, node: &Node, c: Color) {
 pub fn ramp(stops: &[String], t: f64) -> Option<Color> {
     let parse = |s: &str| -> Option<Color> {
         let h = s.trim_start_matches('#');
-        let p = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok().map(|v| f64::from(v) / 255.0);
-        Some(Color { r: p(0)?, g: p(2)?, b: p(4)?, a: 1.0 })
+        let p = |i: usize| {
+            u8::from_str_radix(h.get(i..i + 2)?, 16)
+                .ok()
+                .map(|v| f64::from(v) / 255.0)
+        };
+        Some(Color {
+            r: p(0)?,
+            g: p(2)?,
+            b: p(4)?,
+            a: 1.0,
+        })
     };
     let colors: Vec<Color> = stops.iter().filter_map(|s| parse(s)).collect();
     match colors.len() {
@@ -121,7 +192,12 @@ pub fn ramp(stops: &[String], t: f64) -> Option<Color> {
             let i = (x.floor() as usize).min(n - 2);
             let f = x - i as f64;
             let (a, b) = (colors[i], colors[i + 1]);
-            Some(Color { r: a.r + (b.r - a.r) * f, g: a.g + (b.g - a.g) * f, b: a.b + (b.b - a.b) * f, a: 1.0 })
+            Some(Color {
+                r: a.r + (b.r - a.r) * f,
+                g: a.g + (b.g - a.g) * f,
+                b: a.b + (b.b - a.b) * f,
+                a: 1.0,
+            })
         }
     }
 }

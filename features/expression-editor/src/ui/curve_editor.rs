@@ -16,8 +16,8 @@
 //! note is honest about the fact that velocity is discrete per note
 //! rather than continuous.
 
-use dioxus::prelude::*;
 use crate::ops::velocity::{Curve, MAX_VELOCITY, Note, Point};
+use dioxus::prelude::*;
 
 /// Height of the editor box in pixels.
 const HEIGHT: f64 = 132.0;

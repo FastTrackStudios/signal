@@ -5,11 +5,10 @@
 //! `*-dsp` crates. UI/profiles are opt-in features, wired when the plugin shell
 //! lands.
 
-
 pub mod chorus;
-pub mod trem;
-pub mod wah;
 #[cfg(feature = "profiles")]
 pub mod profiles;
+pub mod trem;
 #[cfg(feature = "ui")]
 pub mod ui;
+pub mod wah;

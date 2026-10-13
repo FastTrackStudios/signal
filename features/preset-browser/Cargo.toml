@@ -18,6 +18,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+preset-browser = { path = ".", features = ["ui"] }
 dioxus = { workspace = true }
 dioxus-test = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

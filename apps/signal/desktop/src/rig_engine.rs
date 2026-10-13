@@ -14,13 +14,13 @@
 use std::sync::{Arc, OnceLock};
 
 use architect::rig::RigBackend as _;
-#[cfg(feature = "tone3000")]
-use signal_account_proto::account::AccountAuthClient;
 use guitar::GuitarRigBackend;
 use guitar::proto::audio::AudioSettingsClient;
 use guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 #[cfg(feature = "signal-keys-rig")]
 use keys::proto::keys::{KeysRigClient, KeysRigStreamClient};
+#[cfg(feature = "tone3000")]
+use signal_account_proto::account::AccountAuthClient;
 #[cfg(feature = "tone3000")]
 use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
 
@@ -264,7 +264,11 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                 let ui = blitz_shell::frame_stats::snapshot();
                 if ui.in_frame_ms > 1500 {
                     if !stuck_logged {
-                        tracing::warn!(ui.in_frame_ms = ui.in_frame_ms, ui.layers = ui.layers, "ui frame stuck");
+                        tracing::warn!(
+                            ui.in_frame_ms = ui.in_frame_ms,
+                            ui.layers = ui.layers,
+                            "ui frame stuck"
+                        );
                         stuck_logged = true;
                     }
                 } else {
@@ -278,9 +282,17 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                         // SAFETY: a plain query of this process into a
                         // struct of the flavour's size.
                         let ok = unsafe {
-                            libc::proc_pid_rusage(libc::getpid(), libc::RUSAGE_INFO_V4, (&raw mut info).cast())
+                            libc::proc_pid_rusage(
+                                libc::getpid(),
+                                libc::RUSAGE_INFO_V4,
+                                (&raw mut info).cast(),
+                            )
                         } == 0;
-                        if ok { info.ri_phys_footprint / (1024 * 1024) } else { 0 }
+                        if ok {
+                            info.ri_phys_footprint / (1024 * 1024)
+                        } else {
+                            0
+                        }
                     };
                     tracing::info!(mem.footprint_mb = mem_mb, "memory");
                     crate::log_ring::persist();
@@ -303,7 +315,13 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                     let rig = rig.clone();
                     handle.spawn(async move {
                         if let Ok(s) = rig.status().await {
-                            let db = |p: f32| if p > 0.0 { (20.0 * p.log10()).max(-90.0) } else { -90.0 };
+                            let db = |p: f32| {
+                                if p > 0.0 {
+                                    (20.0 * p.log10()).max(-90.0)
+                                } else {
+                                    -90.0
+                                }
+                            };
                             tracing::info!(
                                 audio.running = s.running,
                                 audio.in_db = db(s.input_peak),
@@ -333,7 +351,12 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                         if now {
                             let _ = rig.start().await;
                         } else {
-                            let di = rig.status().await.ok().filter(|s| s.di_playing).map(|s| s.di_clip);
+                            let di = rig
+                                .status()
+                                .await
+                                .ok()
+                                .filter(|s| s.di_playing)
+                                .map(|s| s.di_clip);
                             let _ = rig.stop().await;
                             if let Some(clip) = di {
                                 let _ = rig.play_di(clip, true).await;

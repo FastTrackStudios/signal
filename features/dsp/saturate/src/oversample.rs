@@ -12,11 +12,33 @@
 //! stop band) by the saturator-models tool `halfband.py`.
 
 /// Stage 1 coefficients (sorted; even indices are branch 0).
-#[expect(clippy::unreadable_literal, reason = "designed coefficients, generated")]
-const STAGE1: [f64; 10] = [0.0320714673216549, 0.11095265436835794, 0.20387184033773734, 0.2980698862368612, 0.39830234813989873, 0.5028839895900741, 0.6096900499341105, 0.7196931449298735, 0.8300796258659789, 0.9415403637519943];
+#[expect(
+    clippy::unreadable_literal,
+    reason = "designed coefficients, generated"
+)]
+const STAGE1: [f64; 10] = [
+    0.0320714673216549,
+    0.11095265436835794,
+    0.20387184033773734,
+    0.2980698862368612,
+    0.39830234813989873,
+    0.5028839895900741,
+    0.6096900499341105,
+    0.7196931449298735,
+    0.8300796258659789,
+    0.9415403637519943,
+];
 /// Stage 2 coefficients.
-#[expect(clippy::unreadable_literal, reason = "designed coefficients, generated")]
-const STAGE2: [f64; 4] = [0.04466474076366215, 0.20705549699837933, 0.5713026738938929, 0.9410306618368389];
+#[expect(
+    clippy::unreadable_literal,
+    reason = "designed coefficients, generated"
+)]
+const STAGE2: [f64; 4] = [
+    0.04466474076366215,
+    0.20705549699837933,
+    0.5713026738938929,
+    0.9410306618368389,
+];
 
 /// One first-order all-pass in `z²`, run at the low rate.
 #[derive(Clone, Copy, Debug, Default)]
@@ -48,7 +70,11 @@ impl<const N: usize> Branches<N> {
         let mut p0 = [Allpass::default(); N];
         let mut p1 = [Allpass::default(); N];
         for (i, &a) in coefs.iter().enumerate() {
-            let slot = if i % 2 == 0 { p0.get_mut(i / 2) } else { p1.get_mut(i / 2) };
+            let slot = if i % 2 == 0 {
+                p0.get_mut(i / 2)
+            } else {
+                p1.get_mut(i / 2)
+            };
             if let Some(s) = slot {
                 s.a = a;
             }
@@ -157,7 +183,13 @@ impl Oversample4 {
     /// As [`Self::process`] for two signals that meet inside `f`
     /// (`f(a, b)` at the high rate).
     #[inline]
-    pub fn process2(&mut self, other: &mut Self, a: f64, b: f64, mut f: impl FnMut(f64, f64) -> f64) -> f64 {
+    pub fn process2(
+        &mut self,
+        other: &mut Self,
+        a: f64,
+        b: f64,
+        mut f: impl FnMut(f64, f64) -> f64,
+    ) -> f64 {
         let [a0, a1] = self.up1.run(a);
         let [b0, b1] = other.up1.run(b);
         let [ua, ub] = &mut self.up2;

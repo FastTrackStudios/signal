@@ -328,7 +328,9 @@ mod tests {
         assert_eq!(main_of(&base), Some(file.clone()));
         let doc = session::sync::loro::LoroDoc::new();
         for name in ["Organized", "Mix A"] {
-            store.fork(name, formats::store::MAIN, &doc).expect("forked");
+            store
+                .fork(name, formats::store::MAIN, &doc)
+                .expect("forked");
             std::thread::sleep(std::time::Duration::from_millis(1_100));
         }
         let found = alternatives(&base);

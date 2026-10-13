@@ -20,8 +20,8 @@
 use expression_editor::doc::{ExpressionDoc, Note, NoteId, TimeBase};
 use expression_editor::mouse::{Action, Context, Gesture, ModKey};
 use expression_editor::tools::Mods;
-use expression_editor::{Editor, RazorArea, Viewport};
 use expression_editor::ui::interaction::{self, Drag};
+use expression_editor::{Editor, RazorArea, Viewport};
 
 const PPQ: f64 = 960.0;
 const ROW: i32 = 60;

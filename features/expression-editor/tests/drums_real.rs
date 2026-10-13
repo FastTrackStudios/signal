@@ -5,8 +5,8 @@
 //! the mount is absent and bites when it is there.
 
 use expression_editor::kit::LaneRole;
-use expression_editor::{Mode, Viewport};
 use expression_editor::standalone::{Loaded, Runner, Source, Target};
+use expression_editor::{Mode, Viewport};
 
 const RPP: &str = "/run/media/AudioHaven/Project/02 LORD OF THE FIGHT/02 LORD OF THE FIGHT.RPP";
 

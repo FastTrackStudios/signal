@@ -42,8 +42,16 @@ pub struct EnvelopeReader {
 /// does.
 #[must_use]
 pub fn envelope(voices: usize) -> (EnvelopeTap, EnvelopeReader) {
-    let v: Arc<[AtomicU64]> = (0..voices).map(|_| AtomicU64::new(pack(None, 0.0, 0.0))).collect();
-    (EnvelopeTap { voices: v.clone() }, EnvelopeReader { voices: v, shown: voices })
+    let v: Arc<[AtomicU64]> = (0..voices)
+        .map(|_| AtomicU64::new(pack(None, 0.0, 0.0)))
+        .collect();
+    (
+        EnvelopeTap { voices: v.clone() },
+        EnvelopeReader {
+            voices: v,
+            shown: voices,
+        },
+    )
 }
 
 impl EnvelopeTap {
@@ -79,7 +87,10 @@ impl EnvelopeReader {
 
     /// Every reported voice's state.
     pub fn states(&self) -> impl Iterator<Item = VoiceState> + '_ {
-        self.voices.iter().take(self.shown).map(|v| unpack(v.load(Ordering::Relaxed)))
+        self.voices
+            .iter()
+            .take(self.shown)
+            .map(|v| unpack(v.load(Ordering::Relaxed)))
     }
 
     /// A frame's `values`: `[stage, position, level]` per voice.

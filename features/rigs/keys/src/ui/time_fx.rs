@@ -21,8 +21,8 @@
 
 use std::fmt::Write;
 
-use dioxus::prelude::*;
 use crate::proto::KeysMacro;
+use dioxus::prelude::*;
 
 use crate::ui::module_edit::KnobRow;
 

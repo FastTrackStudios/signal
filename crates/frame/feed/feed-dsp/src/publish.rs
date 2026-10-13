@@ -55,7 +55,14 @@ impl Publisher {
         let mut source: Box<dyn FeedSource> = Box::new(source);
         source.configure(&info, &FeedOptions::default());
         self.entries.retain(|e| e.base.id != info.id);
-        self.entries.push(Entry { current: info.clone(), base: info, source, next_due: f64::NEG_INFINITY, last_read: None, buf: Vec::new() });
+        self.entries.push(Entry {
+            current: info.clone(),
+            base: info,
+            source,
+            next_due: f64::NEG_INFINITY,
+            last_read: None,
+            buf: Vec::new(),
+        });
         self
     }
 
@@ -68,7 +75,10 @@ impl Publisher {
     /// Feed `id` as currently shaped.
     #[must_use]
     pub fn current(&self, id: &EntryId) -> Option<&FeedInfo> {
-        self.entries.iter().find(|e| &e.base.id == id).map(|e| &e.current)
+        self.entries
+            .iter()
+            .find(|e| &e.base.id == id)
+            .map(|e| &e.current)
     }
 
     /// Apply requests: each feed is resolved against its catalog entry (not
@@ -77,7 +87,10 @@ impl Publisher {
     /// # Errors
     /// The first unknown id; nothing is applied then.
     pub fn request(&mut self, requests: &[FeedRequest]) -> Result<Vec<FeedInfo>, EntryId> {
-        if let Some(r) = requests.iter().find(|r| !self.entries.iter().any(|e| e.base.id == r.id)) {
+        if let Some(r) = requests
+            .iter()
+            .find(|r| !self.entries.iter().any(|e| e.base.id == r.id))
+        {
             return Err(r.id.clone());
         }
         let mut out = Vec::with_capacity(requests.len());
@@ -107,7 +120,10 @@ impl Publisher {
             let dt = e.last_read.map_or(0.0, |t| (now - t).max(0.0));
             e.last_read = Some(now);
             e.source.read(dt, &mut e.buf);
-            emit(FeedFrame { id: e.current.id.clone(), values: e.buf.clone() });
+            emit(FeedFrame {
+                id: e.current.id.clone(),
+                values: e.buf.clone(),
+            });
         }
     }
 }
@@ -121,17 +137,25 @@ mod tests {
     #[test]
     fn feeds_publish_at_their_rates() {
         let mut p = Publisher::new();
-        p.add(FeedInfo::new("a", "A", FeedKind::GainReduction).rate(10.0), |_dt: f64, out: &mut Vec<f64>| {
-            out.clear();
-            out.push(-3.0);
-        });
-        p.add(FeedInfo::new("b", "B", FeedKind::GainReduction).rate(30.0), |_dt: f64, out: &mut Vec<f64>| {
-            out.clear();
-            out.push(-1.0);
-        });
+        p.add(
+            FeedInfo::new("a", "A", FeedKind::GainReduction).rate(10.0),
+            |_dt: f64, out: &mut Vec<f64>| {
+                out.clear();
+                out.push(-3.0);
+            },
+        );
+        p.add(
+            FeedInfo::new("b", "B", FeedKind::GainReduction).rate(30.0),
+            |_dt: f64, out: &mut Vec<f64>| {
+                out.clear();
+                out.push(-1.0);
+            },
+        );
         let mut counts = [0, 0];
         for i in 0..60 {
-            p.poll(f64::from(i) / 60.0, |f| counts[usize::from(f.id.0 == "b")] += 1);
+            p.poll(f64::from(i) / 60.0, |f| {
+                counts[usize::from(f.id.0 == "b")] += 1
+            });
         }
         assert_eq!(counts, [10, 30]);
     }
@@ -140,8 +164,13 @@ mod tests {
     fn requests_reshape_sources() {
         let (mut tap, reader) = history(512, 1000.0, 30.0, Aggregate::Min, 0.0);
         let mut p = Publisher::new();
-        p.add(FeedInfo::new("comp/gr_trace", "GR", FeedKind::gr_history(64)), reader);
-        let got = p.request(&[FeedRequest::new("comp/gr_trace").len(8).rate(100.0)]).unwrap();
+        p.add(
+            FeedInfo::new("comp/gr_trace", "GR", FeedKind::gr_history(64)),
+            reader,
+        );
+        let got = p
+            .request(&[FeedRequest::new("comp/gr_trace").len(8).rate(100.0)])
+            .unwrap();
         assert_eq!(got[0].kind, FeedKind::gr_history(8));
         assert_eq!(got[0].rate_hz, 100.0);
         tap.push(-2.0, 10); // 100 points/s at 1 kHz: one point per 10 frames
@@ -149,7 +178,14 @@ mod tests {
         let mut frames = Vec::new();
         p.poll(0.0, |f| frames.push(f));
         assert_eq!(frames[0].values, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -2.0, -4.0]);
-        assert_eq!(p.request(&[FeedRequest::new("nope")]), Err(EntryId::new("nope")));
-        assert_eq!(p.infos()[0].kind, FeedKind::gr_history(64), "the catalog entry is unchanged");
+        assert_eq!(
+            p.request(&[FeedRequest::new("nope")]),
+            Err(EntryId::new("nope"))
+        );
+        assert_eq!(
+            p.infos()[0].kind,
+            FeedKind::gr_history(64),
+            "the catalog entry is unchanged"
+        );
     }
 }

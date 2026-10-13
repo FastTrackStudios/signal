@@ -30,7 +30,8 @@ pub fn check_round_trip(path: &Path) -> Result<(), String> {
         crate::protools::read_session(path, 0).map_err(|e| format!("initial parse failed: {e}"))?;
 
     let original = std::fs::read(path).map_err(|e| format!("read failed: {e}"))?;
-    let raw = crate::protools::parse_raw(original.clone()).map_err(|e| format!("parse_raw failed: {e}"))?;
+    let raw = crate::protools::parse_raw(original.clone())
+        .map_err(|e| format!("parse_raw failed: {e}"))?;
     let re_encrypted = raw.encrypt();
 
     // Byte-level identity (must hold for unknown-block passthrough).
@@ -50,14 +51,17 @@ pub fn check_round_trip(path: &Path) -> Result<(), String> {
     }
 
     let mut buf = re_encrypted;
-    let session_b =
-        crate::protools::parse::parse_session(&mut buf, 0).map_err(|e| format!("re-parse failed: {e}"))?;
+    let session_b = crate::protools::parse::parse_session(&mut buf, 0)
+        .map_err(|e| format!("re-parse failed: {e}"))?;
 
     compare_sessions(&session_a, &session_b)
 }
 
 /// Field-by-field equality of two parses of the same session.
-fn compare_sessions(a: &crate::protools::ProToolsSession, b: &crate::protools::ProToolsSession) -> Result<(), String> {
+fn compare_sessions(
+    a: &crate::protools::ProToolsSession,
+    b: &crate::protools::ProToolsSession,
+) -> Result<(), String> {
     macro_rules! check {
         ($field:ident) => {
             if a.$field != b.$field {

@@ -11,8 +11,8 @@ use dawfile_reaper::RppSerialize;
 use dawfile_reaper::builder::ReaperProjectBuilder;
 use dawfile_reaper::types::item::SourceType;
 use expression_editor::kit::LaneRole;
-use expression_editor::{Mode, Viewport};
 use expression_editor::standalone::{Args, LoadError, Runner, Source, Target};
+use expression_editor::{Mode, Viewport};
 
 fn viewport() -> Viewport {
     Viewport::new(1100.0, 500.0)

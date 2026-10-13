@@ -50,7 +50,9 @@ impl Signature {
     pub fn of_scene(scene: &Scene) -> Self {
         let mut sets: [BTreeSet<String>; 4] = Default::default();
         for node in scene.nodes.values() {
-            let Some(control) = &node.control else { continue };
+            let Some(control) = &node.control else {
+                continue;
+            };
             // A templated control (`{n}`) binds every item of its repeat —
             // the enclosing template's, else the one its context names.
             if control.is_templated() {
@@ -91,7 +93,8 @@ impl Signature {
     /// Whether every address this signature needs is in `engine`.
     #[must_use]
     pub fn fits(&self, engine: &Self) -> bool {
-        let sub = |need: &[String], have: &[String]| need.iter().all(|n| have.binary_search(n).is_ok());
+        let sub =
+            |need: &[String], have: &[String]| need.iter().all(|n| have.binary_search(n).is_ok());
         sub(&self.params, &engine.params)
             && sub(&self.actions, &engine.actions)
             && sub(&self.streams, &engine.streams)
@@ -100,7 +103,10 @@ impl Signature {
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.params.is_empty() && self.actions.is_empty() && self.streams.is_empty() && self.collections.is_empty()
+        self.params.is_empty()
+            && self.actions.is_empty()
+            && self.streams.is_empty()
+            && self.collections.is_empty()
     }
 
     fn from_sets([p, a, s, c]: [BTreeSet<String>; 4]) -> Self {
@@ -125,8 +131,19 @@ fn repeat_of(scene: &Scene, id: document_proto::NodeId, control: &Control) -> Op
         if let Some(r) = n.control.as_ref().and_then(range) {
             return Some(r);
         }
-        if let Some(ControlKind::Popover { context: Some(t), .. } | ControlKind::Menu { context: Some(t), .. }) = n.control.as_ref().map(|c| &c.kind) {
-            return scene.node(document_proto::NodeId(*t)).and_then(|t| t.control.as_ref()).and_then(range);
+        if let Some(
+            ControlKind::Popover {
+                context: Some(t), ..
+            }
+            | ControlKind::Menu {
+                context: Some(t), ..
+            },
+        ) = n.control.as_ref().map(|c| &c.kind)
+        {
+            return scene
+                .node(document_proto::NodeId(*t))
+                .and_then(|t| t.control.as_ref())
+                .and_then(range);
         }
         cur = n.parent;
     }
@@ -139,7 +156,10 @@ fn collect(control: &Control, [params, actions, streams, collections]: &mut [BTr
     // every band's params).
     let mut extra: Vec<&Binding> = Vec::new();
     // Rules, commands, conditions, zooms name params too.
-    if !matches!(control.kind, ControlKind::Curve { .. } | ControlKind::Handle { .. }) {
+    if !matches!(
+        control.kind,
+        ControlKind::Curve { .. } | ControlKind::Handle { .. }
+    ) {
         for addr in control.extra_params() {
             params.insert(addr.0.clone());
         }
@@ -158,7 +178,13 @@ fn collect(control: &Control, [params, actions, streams, collections]: &mut [BTr
                 }
             }
         }
-        ControlKind::Handle { x, y, wheel, x_map, y_map } => {
+        ControlKind::Handle {
+            x,
+            y,
+            wheel,
+            x_map,
+            y_map,
+        } => {
             extra.extend(x.iter().chain(y).chain(wheel));
             for addr in x_map.after.iter().chain(&y_map.after) {
                 params.insert(addr.0.clone());
@@ -166,7 +192,12 @@ fn collect(control: &Control, [params, actions, streams, collections]: &mut [BTr
         }
         _ => {}
     }
-    for binding in control.binding.iter().chain(&control.y_binding).chain(extra) {
+    for binding in control
+        .binding
+        .iter()
+        .chain(&control.y_binding)
+        .chain(extra)
+    {
         // `if let` rather than a `match`: new source kinds (feeds) are
         // additive and needn't break this.
         if let Source::Param { addr } = &binding.source {
@@ -288,10 +319,18 @@ impl ListQuery {
     pub fn matches(&self, meta: &SurfaceMeta) -> bool {
         let text = self.text.to_lowercase();
         let has_text = text.is_empty()
-            || [&meta.id, &meta.name, &meta.description].iter().any(|s| s.to_lowercase().contains(&text))
+            || [&meta.id, &meta.name, &meta.description]
+                .iter()
+                .any(|s| s.to_lowercase().contains(&text))
             || meta.tags.iter().any(|t| t.to_lowercase().contains(&text));
-        let has_tags = self.tags.iter().all(|t| meta.tags.iter().any(|m| m.eq_ignore_ascii_case(t)));
-        let fits = self.fits.as_ref().is_none_or(|engine| meta.fits.fits(engine));
+        let has_tags = self
+            .tags
+            .iter()
+            .all(|t| meta.tags.iter().any(|m| m.eq_ignore_ascii_case(t)));
+        let fits = self
+            .fits
+            .as_ref()
+            .is_none_or(|engine| meta.fits.fits(engine));
         has_text && has_tags && fits
     }
 }
@@ -352,7 +391,10 @@ pub mod store {
     //! `SurfaceStoreService`, plus the stream sibling
     //! (`SurfaceStoreStreamClient`, `SurfaceStoreStreamService`, the
     //! `SurfaceStoreStreamSource` backend contract).
-    use super::{Catalog, Content, IndexChange, LibraryError, ListQuery, PublishMeta, Published, Surface, SurfaceMeta, SurfaceUpdate};
+    use super::{
+        Catalog, Content, IndexChange, LibraryError, ListQuery, PublishMeta, Published, Surface,
+        SurfaceMeta, SurfaceUpdate,
+    };
 
     /// A store of surfaces.
     #[architect::rpc]
@@ -411,14 +453,26 @@ mod tests {
     fn scene_signature_reads_bindings() {
         let mut scene = Scene::new("S");
         let page = scene.pages()[0];
-        for (name, binding) in [("k", Binding::param("amp/gain")), ("m", Binding::stream("out_level"))] {
+        for (name, binding) in [
+            ("k", Binding::param("amp/gain")),
+            ("m", Binding::stream("out_level")),
+        ] {
             let mut n = document_proto::Node::new(document_proto::NodeKind::Frame, name);
             let mut c = Control::new(ControlKind::knob());
             c.binding = Some(binding);
             n.control = Some(c);
-            scene.apply(document_proto::Op::Insert { node: n, parent: page, index: u32::MAX }).unwrap();
+            scene
+                .apply(document_proto::Op::Insert {
+                    node: n,
+                    parent: page,
+                    index: u32::MAX,
+                })
+                .unwrap();
         }
-        assert_eq!(Signature::of_scene(&scene), sig(&["amp/gain"], &["out_level"]));
+        assert_eq!(
+            Signature::of_scene(&scene),
+            sig(&["amp/gain"], &["out_level"])
+        );
     }
 
     #[test]
@@ -431,11 +485,41 @@ mod tests {
             ..SurfaceMeta::default()
         };
         assert!(ListQuery::default().matches(&meta));
-        assert!(ListQuery { text: "VARI".into(), ..ListQuery::default() }.matches(&meta));
-        assert!(ListQuery { tags: vec!["Comp".into()], ..ListQuery::default() }.matches(&meta));
-        assert!(!ListQuery { tags: vec!["eq".into()], ..ListQuery::default() }.matches(&meta));
-        assert!(ListQuery { fits: Some(sig(&["a", "b"], &[])), ..ListQuery::default() }.matches(&meta));
-        assert!(!ListQuery { fits: Some(sig(&["b"], &[])), ..ListQuery::default() }.matches(&meta));
+        assert!(
+            ListQuery {
+                text: "VARI".into(),
+                ..ListQuery::default()
+            }
+            .matches(&meta)
+        );
+        assert!(
+            ListQuery {
+                tags: vec!["Comp".into()],
+                ..ListQuery::default()
+            }
+            .matches(&meta)
+        );
+        assert!(
+            !ListQuery {
+                tags: vec!["eq".into()],
+                ..ListQuery::default()
+            }
+            .matches(&meta)
+        );
+        assert!(
+            ListQuery {
+                fits: Some(sig(&["a", "b"], &[])),
+                ..ListQuery::default()
+            }
+            .matches(&meta)
+        );
+        assert!(
+            !ListQuery {
+                fits: Some(sig(&["b"], &[])),
+                ..ListQuery::default()
+            }
+            .matches(&meta)
+        );
     }
 }
 
@@ -449,14 +533,30 @@ mod fits_tests {
         let mut sets: [BTreeSet<String>; 4] = Default::default();
         let curve = Control::new(ControlKind::Curve {
             provider: "eq.response".into(),
-            inputs: vec![CurveInput { name: "b1_freq".into(), source: InputSource::Param { addr: ParamAddr::new("eq/b1_freq") } }],
+            inputs: vec![CurveInput {
+                name: "b1_freq".into(),
+                source: InputSource::Param {
+                    addr: ParamAddr::new("eq/b1_freq"),
+                },
+            }],
             series: None,
             style: PlotStyle::Line,
-            x: Axis::Log { f_min: 20.0, f_max: 20_000.0 },
-            y: PlotRange { min: -18.0, max: 18.0, curve: surface_proto::Curve::Linear },
+            x: Axis::Log {
+                f_min: 20.0,
+                f_max: 20_000.0,
+            },
+            y: PlotRange {
+                min: -18.0,
+                max: 18.0,
+                curve: surface_proto::Curve::Linear,
+            },
         });
         collect(&curve, &mut sets);
-        let axis = |after: Vec<ParamAddr>| HandleAxis { axis: Axis::Linear { min: 0.0, max: 1.0 }, after, shift: 0.0 };
+        let axis = |after: Vec<ParamAddr>| HandleAxis {
+            axis: Axis::Linear { min: 0.0, max: 1.0 },
+            after,
+            shift: 0.0,
+        };
         let handle = Control::new(ControlKind::Handle {
             x: Some(Binding::param("adsr/decay")),
             y: None,
@@ -466,6 +566,9 @@ mod fits_tests {
         });
         collect(&handle, &mut sets);
         let params: Vec<_> = sets[0].iter().cloned().collect();
-        assert_eq!(params, ["adsr/attack", "adsr/decay", "eq/b1_freq", "eq/b1_q"]);
+        assert_eq!(
+            params,
+            ["adsr/attack", "adsr/decay", "eq/b1_freq", "eq/b1_q"]
+        );
     }
 }

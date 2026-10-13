@@ -26,10 +26,15 @@ fn read(path: &str) -> Result<Wav, Box<dyn std::error::Error>> {
     let spec = r.spec();
     let ch = usize::from(spec.channels);
     let samples: Vec<f64> = match spec.sample_format {
-        hound::SampleFormat::Float => r.samples::<f32>().map(|s| s.map(f64::from)).collect::<Result<_, _>>()?,
+        hound::SampleFormat::Float => r
+            .samples::<f32>()
+            .map(|s| s.map(f64::from))
+            .collect::<Result<_, _>>()?,
         hound::SampleFormat::Int => {
             let scale = f64::from(1u32 << (spec.bits_per_sample - 1));
-            r.samples::<i32>().map(|s| s.map(|v| f64::from(v) / scale)).collect::<Result<_, _>>()?
+            r.samples::<i32>()
+                .map(|s| s.map(|v| f64::from(v) / scale))
+                .collect::<Result<_, _>>()?
         }
     };
     let mut chans = vec![Vec::with_capacity(samples.len() / ch); ch];
@@ -44,9 +49,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let [input, output, rest @ ..] = args.as_slice() else {
         return Err("usage: gate_render <in.wav> <out.wav> key=value...".into());
     };
-    let kv = |k: &str| rest.iter().find_map(|a| a.strip_prefix(k).and_then(|v| v.strip_prefix('=')));
+    let kv = |k: &str| {
+        rest.iter()
+            .find_map(|a| a.strip_prefix(k).and_then(|v| v.strip_prefix('=')))
+    };
     let num = |k: &str, d: f64| kv(k).and_then(|v| v.parse::<f64>().ok()).unwrap_or(d);
-    let mode = match kv("mode").unwrap_or("kick").to_ascii_lowercase().replace([' ', '_', '-'], "").as_str() {
+    let mode = match kv("mode")
+        .unwrap_or("kick")
+        .to_ascii_lowercase()
+        .replace([' ', '_', '-'], "")
+        .as_str()
+    {
         "snaretop" => Mode::SnareTop,
         "snarebottom" => Mode::SnareBottom,
         "toms" => Mode::Toms,
@@ -74,7 +87,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for c in 0..nch {
             frame[c] = chans[c].get(n).copied().unwrap_or(0.0);
             if let Some(k) = &key {
-                kframe[c] = k.get(c).or_else(|| k.first()).and_then(|v| v.get(n)).copied().unwrap_or(0.0);
+                kframe[c] = k
+                    .get(c)
+                    .or_else(|| k.first())
+                    .and_then(|v| v.get(n))
+                    .copied()
+                    .unwrap_or(0.0);
             }
         }
         gate.process_frame(&mut frame, key.as_ref().map(|_| kframe.as_slice()));
@@ -85,11 +103,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     chans.clear();
-    let spec = hound::WavSpec { channels: u16::try_from(nch)?, sample_rate: sr, bits_per_sample: 32, sample_format: hound::SampleFormat::Float };
+    let spec = hound::WavSpec {
+        channels: u16::try_from(nch)?,
+        sample_rate: sr,
+        bits_per_sample: 32,
+        sample_format: hound::SampleFormat::Float,
+    };
     let mut w = hound::WavWriter::create(output, spec)?;
     for i in 0..len {
         for c in &out {
-            #[expect(clippy::cast_possible_truncation, clippy::as_conversions, reason = "f32 WAV output")]
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::as_conversions,
+                reason = "f32 WAV output"
+            )]
             w.write_sample(c[i] as f32)?;
         }
     }

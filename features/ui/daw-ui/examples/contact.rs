@@ -5,9 +5,9 @@
 //! Rendered at 3× so a one-pixel border is judgeable by eye — these are
 //! drawn at the sizes REAPER actually uses, which are tiny.
 
-use daw_ui::theme::{Color, Theme};
 use daw_ui::art::primitives::*;
 use daw_ui::art::render::render_svg;
+use daw_ui::theme::{Color, Theme};
 
 fn save(name: &str, svg: &str, w: u32, h: u32) {
     let mut opts = resvg::usvg::Options::default();

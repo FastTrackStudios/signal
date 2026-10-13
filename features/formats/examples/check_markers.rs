@@ -1,8 +1,8 @@
 fn main() {
     let fixtures = [
-        "crates/dawfile-protools/tests/fixtures/studio-session-2.ptx",
-        "crates/dawfile-protools/tests/fixtures/worship-session.ptx",
-        "crates/dawfile-protools/tests/fixtures/wonder-session.ptx",
+        "features/formats/tests/fixtures/protools/studio-session-2.ptx",
+        "features/formats/tests/fixtures/protools/worship-session.ptx",
+        "features/formats/tests/fixtures/protools/wonder-session.ptx",
     ];
     for path in &fixtures {
         let s = formats::protools::read_session(path, 48000).unwrap();

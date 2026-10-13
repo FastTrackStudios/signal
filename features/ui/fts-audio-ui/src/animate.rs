@@ -28,8 +28,8 @@ pub fn animating() -> bool {
 /// thread stays but pokes nothing; unmounted, it ends.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn use_frame_clock(active: bool, period: std::time::Duration) {
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+    use std::sync::Arc;
     struct Clock {
         running: Arc<AtomicBool>,
         active: Arc<AtomicBool>,
@@ -53,7 +53,10 @@ pub fn use_frame_clock(active: bool, period: std::time::Duration) {
                 }
             }
         });
-        std::rc::Rc::new(Clock { running, active: ticking })
+        std::rc::Rc::new(Clock {
+            running,
+            active: ticking,
+        })
     });
     clock.active.store(active, Relaxed);
 }

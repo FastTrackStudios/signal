@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use parking_lot::RwLock;
 use crate::analyzer::AnalyzerSnapshot;
+use parking_lot::RwLock;
 
 /// Maximum number of EQ bands supported.
 pub const MAX_BANDS: usize = 24;

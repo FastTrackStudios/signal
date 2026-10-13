@@ -16,9 +16,9 @@ use dioxus_test::{by_testid, render};
 use expression_editor::cursor::Cursor;
 use expression_editor::doc::{ExpressionDoc, Note, NoteId, TimeBase};
 use expression_editor::tools::Mods;
-use expression_editor::{Editor, Mode, MouseMap, Tool, Viewport};
 use expression_editor::ui::ExpressionEditor;
 use expression_editor::ui::cursor::cursor_at;
+use expression_editor::{Editor, Mode, MouseMap, Tool, Viewport};
 
 const PPQ: f64 = 960.0;
 

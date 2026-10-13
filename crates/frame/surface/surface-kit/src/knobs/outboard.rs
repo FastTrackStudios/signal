@@ -17,11 +17,19 @@
 use document_proto::NodeId;
 use surface_widgets::Builder;
 
-use super::spec::{Edge, Finish, Flutes, Grad, Index, KnobSpec, RingKind, SpecFill, Specular, Tier, TierPaint};
+use super::spec::{
+    Edge, Finish, Flutes, Grad, Index, KnobSpec, RingKind, SpecFill, Specular, Tier, TierPaint,
+};
 use crate::registry::{BuildFn, ComponentDef, Family, Place};
 
 const fn tier(r: f64, paint: TierPaint) -> Tier {
-    Tier { r, edge: Edge::Round, paint, shadow: 0.0, stroke: None }
+    Tier {
+        r,
+        edge: Edge::Round,
+        paint,
+        shadow: 0.0,
+        stroke: None,
+    }
 }
 
 const fn surface(r: f64, grad: Grad, finish: Finish, tint: bool) -> Tier {
@@ -39,8 +47,21 @@ const fn outlined(mut t: Tier, color: &'static str, width: f64) -> Tier {
 }
 
 /// A soft highlight sized to the lit tier `r` (fraction of the knob).
-const fn highlight(r: f64, strength: &'static [(f64, &'static str)], rim: Option<&'static str>) -> Specular {
-    Specular { w: 0.62 * r, h: 0.30 * r, dx: -0.02 * r, dy: -0.24 * r, fill: SpecFill::Ellipse(strength), rotate: 0.0, rim, r }
+const fn highlight(
+    r: f64,
+    strength: &'static [(f64, &'static str)],
+    rim: Option<&'static str>,
+) -> Specular {
+    Specular {
+        w: 0.62 * r,
+        h: 0.30 * r,
+        dx: -0.02 * r,
+        dy: -0.24 * r,
+        fill: SpecFill::Ellipse(strength),
+        rotate: 0.0,
+        rim,
+        r,
+    }
 }
 
 // ── the desktop VCA's knurled knob with an aluminium insert ─────────────
@@ -48,22 +69,81 @@ pub static KNURLED_INSERT: KnobSpec = KnobSpec {
     tiers: &[
         // The knurled wall, seen from the front: glossy black, lit on top.
         outlined(
-            shadowed(surface(1.0, Grad::Linear(178.0, &[(0.0, "#3a3b40"), (0.30, "#1b1c20"), (0.70, "#0c0c0f"), (1.0, "#050507")]), Finish::Moulded, true), 0.06),
+            shadowed(
+                surface(
+                    1.0,
+                    Grad::Linear(
+                        178.0,
+                        &[
+                            (0.0, "#3a3b40"),
+                            (0.30, "#1b1c20"),
+                            (0.70, "#0c0c0f"),
+                            (1.0, "#050507"),
+                        ],
+                    ),
+                    Finish::Moulded,
+                    true,
+                ),
+                0.06,
+            ),
             "rgba(0,0,0,0.85)",
             0.8,
         ),
         // The flat black top face the insert sits in.
-        outlined(surface(0.74, Grad::Radial(0.40, 0.30, &[(0.0, "#2a2b30"), (0.55, "#141518"), (1.0, "#0a0a0c")]), Finish::FlatTop, true), "rgba(255,255,255,0.10)", 0.6),
+        outlined(
+            surface(
+                0.74,
+                Grad::Radial(
+                    0.40,
+                    0.30,
+                    &[(0.0, "#2a2b30"), (0.55, "#141518"), (1.0, "#0a0a0c")],
+                ),
+                Finish::FlatTop,
+                true,
+            ),
+            "rgba(255,255,255,0.10)",
+            0.6,
+        ),
         // The polished insert.
-        outlined(surface(0.56, Grad::Brushed, Finish::Brushed, false), "rgba(0,0,0,0.60)", 0.9),
-        tier(0.30, TierPaint::Groove { color: "rgba(0,0,0,0.12)", width: 0.6 }),
+        outlined(
+            surface(0.56, Grad::Brushed, Finish::Brushed, false),
+            "rgba(0,0,0,0.60)",
+            0.9,
+        ),
+        tier(
+            0.30,
+            TierPaint::Groove {
+                color: "rgba(0,0,0,0.12)",
+                width: 0.6,
+            },
+        ),
     ],
     // A black line across the insert, centre to rim.
-    index: Index::Bar { from: 0.0, to: 0.54, width: 2.4, color: "#0c0d10" },
+    index: Index::Bar {
+        from: 0.0,
+        to: 0.54,
+        width: 2.4,
+        color: "#0c0d10",
+    },
     collar_index: None,
     // The knurl: fine ribs round the wall, catching the light on one side.
-    flutes: Some(Flutes { count: 44, from: 0.76, to: 1.0, stroke: "rgba(255,255,255,0.16)", width: 1.1, shadow: Some("rgba(0,0,0,0.55)") }),
-    specular: Some(highlight(0.56, &[(0.0, "rgba(255,255,255,0.30)"), (0.5, "rgba(255,255,255,0.10)"), (0.8, "rgba(255,255,255,0.0)")], Some("rgba(255,255,255,0.35)"))),
+    flutes: Some(Flutes {
+        count: 44,
+        from: 0.76,
+        to: 1.0,
+        stroke: "rgba(255,255,255,0.16)",
+        width: 1.1,
+        shadow: Some("rgba(0,0,0,0.55)"),
+    }),
+    specular: Some(highlight(
+        0.56,
+        &[
+            (0.0, "rgba(255,255,255,0.30)"),
+            (0.5, "rgba(255,255,255,0.10)"),
+            (0.8, "rgba(255,255,255,0.0)"),
+        ],
+        Some("rgba(255,255,255,0.35)"),
+    )),
     ring_offset: 0.0,
     hub: None,
     sweep: 300.0,
@@ -77,19 +157,65 @@ pub static KNURLED_INSERT: KnobSpec = KnobSpec {
 pub static CAPPED_SKIRT: KnobSpec = KnobSpec {
     tiers: &[
         // The pale grey skirt: moulded plastic, fluted round its edge.
-        outlined(shadowed(surface(1.0, Grad::Linear(165.0, &[(0.0, "#f1f3f5"), (0.45, "#d5d9de"), (1.0, "#a9aeb5")]), Finish::Matte, false), 0.06), "rgba(0,0,0,0.35)", 0.7),
+        outlined(
+            shadowed(
+                surface(
+                    1.0,
+                    Grad::Linear(
+                        165.0,
+                        &[(0.0, "#f1f3f5"), (0.45, "#d5d9de"), (1.0, "#a9aeb5")],
+                    ),
+                    Finish::Matte,
+                    false,
+                ),
+                0.06,
+            ),
+            "rgba(0,0,0,0.35)",
+            0.7,
+        ),
         // The flat coloured cap, set into it.
-        outlined(surface(0.80, Grad::Linear(162.0, &[(0.0, "#4f93dd"), (0.45, "#2a6fc4"), (1.0, "#1d4f93")]), Finish::FlatTop, true), "rgba(0,0,0,0.40)", 0.8),
+        outlined(
+            surface(
+                0.80,
+                Grad::Linear(
+                    162.0,
+                    &[(0.0, "#4f93dd"), (0.45, "#2a6fc4"), (1.0, "#1d4f93")],
+                ),
+                Finish::FlatTop,
+                true,
+            ),
+            "rgba(0,0,0,0.40)",
+            0.8,
+        ),
     ],
-    index: Index::Bar { from: 0.04, to: 0.79, width: 2.8, color: "#f7f8f8" },
+    index: Index::Bar {
+        from: 0.04,
+        to: 0.79,
+        width: 2.8,
+        color: "#f7f8f8",
+    },
     collar_index: None,
-    flutes: Some(Flutes { count: 30, from: 0.82, to: 1.0, stroke: "rgba(0,0,0,0.22)", width: 1.3, shadow: Some("rgba(255,255,255,0.35)") }),
+    flutes: Some(Flutes {
+        count: 30,
+        from: 0.82,
+        to: 1.0,
+        stroke: "rgba(0,0,0,0.22)",
+        width: 1.3,
+        shadow: Some("rgba(255,255,255,0.35)"),
+    }),
     specular: Some(Specular {
         w: 1.0,
         h: 1.0,
         dx: 0.0,
         dy: 0.0,
-        fill: SpecFill::Linear(150.0, &[(0.0, "rgba(255,255,255,0.26)"), (0.36, "rgba(255,255,255,0.06)"), (0.62, "rgba(255,255,255,0.0)")]),
+        fill: SpecFill::Linear(
+            150.0,
+            &[
+                (0.0, "rgba(255,255,255,0.26)"),
+                (0.36, "rgba(255,255,255,0.06)"),
+                (0.62, "rgba(255,255,255,0.0)"),
+            ],
+        ),
         rotate: 0.0,
         rim: None,
         r: 0.80,
@@ -100,30 +226,91 @@ pub static CAPPED_SKIRT: KnobSpec = KnobSpec {
     ring: RingKind::Dots,
     scale: &["0", "", "", "", "", "", "", "", "", "", "10"],
     variants: &["blue", "grey", "red", "green", "black", "yellow"],
-    tints: &[None, Some("#8b9097"), Some("#b3302b"), Some("#2c8f5a"), Some("#26282c"), Some("#e0b52e")],
+    tints: &[
+        None,
+        Some("#8b9097"),
+        Some("#b3302b"),
+        Some("#2c8f5a"),
+        Some("#26282c"),
+        Some("#e0b52e"),
+    ],
 };
 
 // ── the character compressor's big cream dial ────────────────────────────
 pub static NUMBERED_CREAM: KnobSpec = KnobSpec {
     tiers: &[
         // The numbered skirt.
-        outlined(shadowed(surface(1.0, Grad::Linear(172.0, &[(0.0, "#f6f1e0"), (0.5, "#e6dfc8"), (1.0, "#c9c0a4")]), Finish::Matte, true), 0.05), "rgba(0,0,0,0.45)", 0.7),
+        outlined(
+            shadowed(
+                surface(
+                    1.0,
+                    Grad::Linear(
+                        172.0,
+                        &[(0.0, "#f6f1e0"), (0.5, "#e6dfc8"), (1.0, "#c9c0a4")],
+                    ),
+                    Finish::Matte,
+                    true,
+                ),
+                0.05,
+            ),
+            "rgba(0,0,0,0.45)",
+            0.7,
+        ),
         // The raised grip, standing proud of the skirt.
         outlined(
-            shadowed(surface(0.64, Grad::Radial(0.38, 0.28, &[(0.0, "#fbf7ea"), (0.55, "#e9e2cc"), (1.0, "#cfc6aa")]), Finish::Moulded, true), 0.05),
+            shadowed(
+                surface(
+                    0.64,
+                    Grad::Radial(
+                        0.38,
+                        0.28,
+                        &[(0.0, "#fbf7ea"), (0.55, "#e9e2cc"), (1.0, "#cfc6aa")],
+                    ),
+                    Finish::Moulded,
+                    true,
+                ),
+                0.05,
+            ),
             "rgba(60,50,30,0.45)",
             0.8,
         ),
         // The black ring round the top.
         tier(0.50, TierPaint::Flat("#121214")),
         // The textured cream disc.
-        outlined(surface(0.43, Grad::Linear(170.0, &[(0.0, "#f3eedd"), (0.5, "#e4ddc6"), (1.0, "#d2c9ad")]), Finish::FlatTop, true), "rgba(0,0,0,0.35)", 0.6),
+        outlined(
+            surface(
+                0.43,
+                Grad::Linear(
+                    170.0,
+                    &[(0.0, "#f3eedd"), (0.5, "#e4ddc6"), (1.0, "#d2c9ad")],
+                ),
+                Finish::FlatTop,
+                true,
+            ),
+            "rgba(0,0,0,0.35)",
+            0.6,
+        ),
     ],
     index: Index::None,
     collar_index: None,
     // The engraved graduations round the skirt's edge, turning with it.
-    flutes: Some(Flutes { count: 110, from: 0.90, to: 0.985, stroke: "rgba(20,20,20,0.72)", width: 0.55, shadow: None }),
-    specular: Some(highlight(0.64, &[(0.0, "rgba(255,255,255,0.28)"), (0.52, "rgba(255,255,255,0.08)"), (0.80, "rgba(255,255,255,0.0)")], Some("rgba(255,255,255,0.30)"))),
+    flutes: Some(Flutes {
+        count: 110,
+        from: 0.90,
+        to: 0.985,
+        stroke: "rgba(20,20,20,0.72)",
+        width: 0.55,
+        shadow: None,
+    }),
+    specular: Some(highlight(
+        0.64,
+        &[
+            (0.0, "rgba(255,255,255,0.28)"),
+            (0.52, "rgba(255,255,255,0.08)"),
+            (0.80, "rgba(255,255,255,0.0)"),
+        ],
+        Some("rgba(255,255,255,0.30)"),
+    )),
     ring_offset: 0.0,
     hub: None,
     sweep: 300.0,
@@ -147,15 +334,17 @@ fn numbered_cream(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
 
 /// These styles' components.
 pub(crate) fn defs() -> Vec<ComponentDef> {
-    let def = |id, title, description, spec: &'static KnobSpec, default_size, build: BuildFn| ComponentDef {
-        id,
-        family: Family::Knob,
-        title,
-        description,
-        variants: spec.variants,
-        default_size,
-        binds: "param",
-        build,
+    let def = |id, title, description, spec: &'static KnobSpec, default_size, build: BuildFn| {
+        ComponentDef {
+            id,
+            family: Family::Knob,
+            title,
+            description,
+            variants: spec.variants,
+            default_size,
+            binds: "param",
+            build,
+        }
     };
     vec![
         def(

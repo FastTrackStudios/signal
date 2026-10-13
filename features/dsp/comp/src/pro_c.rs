@@ -211,8 +211,7 @@ impl ProC3Compressor {
     fn rate_coeffs(&mut self) {
         let samples = (self.sample_rate * PARAM_SMOOTHING_MS / 1000.0).max(1.0);
         self.param_coeff = 1.0 - (-1.0 / samples).exp();
-        self.bright_coeff =
-            1.0 - (-2.0 * std::f64::consts::PI * 8_000.0 / self.sample_rate).exp();
+        self.bright_coeff = 1.0 - (-2.0 * std::f64::consts::PI * 8_000.0 / self.sample_rate).exp();
         self.crest_coeff = (-1.0 / (self.sample_rate * 0.2)).exp();
     }
 
@@ -450,9 +449,11 @@ impl ProC3Compressor {
         }
         let moving_deeper = target_db < self.channels[channel].expander_gain_db;
         let coeff = if moving_deeper {
-            self.attack_pole.get(self.sample_rate, self.attack_ms.max(0.1))
+            self.attack_pole
+                .get(self.sample_rate, self.attack_ms.max(0.1))
         } else {
-            self.release_pole.get(self.sample_rate, self.release_ms.max(1.0))
+            self.release_pole
+                .get(self.sample_rate, self.release_ms.max(1.0))
         };
         self.channels[channel].expander_gain_db +=
             (target_db - self.channels[channel].expander_gain_db) * coeff;
@@ -473,9 +474,11 @@ impl ProC3Compressor {
         }
         let moving_louder = target_db > self.channels[channel].upward_gain_db;
         let coeff = if moving_louder {
-            self.attack_pole.get(self.sample_rate, self.attack_ms.max(0.1))
+            self.attack_pole
+                .get(self.sample_rate, self.attack_ms.max(0.1))
         } else {
-            self.release_pole.get(self.sample_rate, self.release_ms.max(1.0))
+            self.release_pole
+                .get(self.sample_rate, self.release_ms.max(1.0))
         };
         self.channels[channel].upward_gain_db +=
             (target_db - self.channels[channel].upward_gain_db) * coeff;

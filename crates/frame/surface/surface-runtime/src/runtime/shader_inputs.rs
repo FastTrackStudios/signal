@@ -33,10 +33,17 @@ impl Runtime {
             _ => false,
         });
         controls
-            || self.surface.scene.nodes.values().filter_map(|n| n.shader.as_ref()).flat_map(|s| &s.inputs).any(|i| match &i.source {
-                ShaderInputSource::Curve { provider, .. } => self.curves.is_animated(provider),
-                _ => false,
-            })
+            || self
+                .surface
+                .scene
+                .nodes
+                .values()
+                .filter_map(|n| n.shader.as_ref())
+                .flat_map(|s| &s.inputs)
+                .any(|i| match &i.source {
+                    ShaderInputSource::Curve { provider, .. } => self.curves.is_animated(provider),
+                    _ => false,
+                })
     }
 
     /// Every shader node's inputs this frame: each input's values from its
@@ -47,9 +54,14 @@ impl Runtime {
     pub fn shader_inputs(&self) -> ShaderData {
         let mut out = ShaderData::new();
         for node in self.surface.scene.nodes.values() {
-            let Some(fx) = node.shader.as_ref().filter(|s| !s.inputs.is_empty()) else { continue };
-            let values: BTreeMap<String, Vec<f32>> =
-                fx.inputs.iter().filter_map(|i| self.input_raw(i).map(|raw| (i.name.clone(), i.shape(&raw)))).collect();
+            let Some(fx) = node.shader.as_ref().filter(|s| !s.inputs.is_empty()) else {
+                continue;
+            };
+            let values: BTreeMap<String, Vec<f32>> = fx
+                .inputs
+                .iter()
+                .filter_map(|i| self.input_raw(i).map(|raw| (i.name.clone(), i.shape(&raw))))
+                .collect();
             out.insert(node.id, values);
         }
         out
@@ -59,11 +71,19 @@ impl Runtime {
     fn input_raw(&self, input: &ShaderInput) -> Option<Vec<f64>> {
         match &input.source {
             ShaderInputSource::Param { addr } => self.real(addr).map(|v| vec![v]),
-            ShaderInputSource::Stream { id, channel: Some(c) } => self.stream_value(id, Some(*c)).map(|v| vec![v]),
+            ShaderInputSource::Stream {
+                id,
+                channel: Some(c),
+            } => self.stream_value(id, Some(*c)).map(|v| vec![v]),
             ShaderInputSource::Stream { id, channel: None } => self.streams.get(id).cloned(),
             ShaderInputSource::Const { values } => Some(values.clone()),
-            ShaderInputSource::Curve { provider, inputs, series } => {
-                let all = self.curve_series(provider, inputs, &Axis::Linear { min: 0.0, max: 1.0 })?;
+            ShaderInputSource::Curve {
+                provider,
+                inputs,
+                series,
+            } => {
+                let all =
+                    self.curve_series(provider, inputs, &Axis::Linear { min: 0.0, max: 1.0 })?;
                 let s = pick(&all, series.as_deref())?;
                 Some(s.points.iter().flat_map(|(x, y)| [*x, *y]).collect())
             }

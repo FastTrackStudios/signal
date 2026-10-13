@@ -42,7 +42,10 @@ fn cased(text: &str, case: &TextCase) -> String {
 fn family_list(fonts: &FontBook, spec: &FontSpec) -> String {
     let mut names: Vec<String> = Vec::new();
     let mut push = |n: &str| {
-        if !names.iter().any(|m| render_fonts::fold(m) == render_fonts::fold(n)) {
+        if !names
+            .iter()
+            .any(|m| render_fonts::fold(m) == render_fonts::fold(n))
+        {
             names.push(n.to_string());
         }
     };
@@ -55,27 +58,46 @@ fn family_list(fonts: &FontBook, spec: &FontSpec) -> String {
     for f in fonts.fallback() {
         push(f);
     }
-    let quoted: Vec<String> =
-        names.iter().map(|n| if n.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') { n.clone() } else { format!("'{n}'") }).collect();
+    let quoted: Vec<String> = names
+        .iter()
+        .map(|n| {
+            if n.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+                n.clone()
+            } else {
+                format!("'{n}'")
+            }
+        })
+        .collect();
     format!("{}, sans-serif", quoted.join(", "))
 }
 
 /// Font attributes for `spec` — every one on the node, only what differs
 /// from `base` on a run.
-fn font_attrs(fonts: &FontBook, spec: &FontSpec, base: Option<&FontSpec>) -> Vec<(&'static str, String)> {
+fn font_attrs(
+    fonts: &FontBook,
+    spec: &FontSpec,
+    base: Option<&FontSpec>,
+) -> Vec<(&'static str, String)> {
     let q = spec.query();
     let b = base.map(FontSpec::query);
     let mut a = Vec::new();
-    if b.is_none_or(|b| render_fonts::fold(b.family.unwrap_or("")) != render_fonts::fold(q.family.unwrap_or(""))) {
+    if b.is_none_or(|b| {
+        render_fonts::fold(b.family.unwrap_or("")) != render_fonts::fold(q.family.unwrap_or(""))
+    }) {
         a.push(("font-family", family_list(fonts, spec)));
     }
     if b.is_none_or(|b| b.weight != q.weight) {
         a.push(("font-weight", fmt_f64(f64::from(q.weight))));
     }
     if q.italic || b.is_some_and(|b| b.italic) {
-        a.push(("font-style", if q.italic { "italic" } else { "normal" }.to_string()));
+        a.push((
+            "font-style",
+            if q.italic { "italic" } else { "normal" }.to_string(),
+        ));
     }
-    if (q.width - 100.0).abs() > f32::EPSILON || b.is_some_and(|b| (b.width - 100.0).abs() > f32::EPSILON) {
+    if (q.width - 100.0).abs() > f32::EPSILON
+        || b.is_some_and(|b| (b.width - 100.0).abs() > f32::EPSILON)
+    {
         a.push(("font-stretch", format!("{}%", fmt_f64(f64::from(q.width)))));
     }
     a
@@ -88,9 +110,26 @@ fn fill(color: &Rgba) -> (String, Option<String>) {
 /// A `Text` primitive as an SVG `<text>`, offset by (`dx`, `dy`); `None`
 /// for any other primitive or empty text.
 #[must_use]
-pub fn text_element(primitive: &PaintPrimitive, dx: f64, dy: f64, fonts: &FontBook) -> Option<Text> {
+pub fn text_element(
+    primitive: &PaintPrimitive,
+    dx: f64,
+    dy: f64,
+    fonts: &FontBook,
+) -> Option<Text> {
     let PaintPrimitive::Text {
-        x, y, text, color, font_size, line_height, letter_spacing, text_case, font, style_runs, width, align, ..
+        x,
+        y,
+        text,
+        color,
+        font_size,
+        line_height,
+        letter_spacing,
+        text_case,
+        font,
+        style_runs,
+        width,
+        align,
+        ..
     } = primitive
     else {
         return None;
@@ -101,7 +140,10 @@ pub fn text_element(primitive: &PaintPrimitive, dx: f64, dy: f64, fonts: &FontBo
     }
     let size = font_size.max(1.0);
     let line_height = line_height.unwrap_or(size * 1.2).max(1.0);
-    let ascent = fonts.chain(&font.query()).primary().map_or(size * 0.8, |f| f.ascent(size));
+    let ascent = fonts
+        .chain(&font.query())
+        .primary()
+        .map_or(size * 0.8, |f| f.ascent(size));
     let (anchor, ax) = match align {
         TextAlignment::Left => ("start", 0.0),
         TextAlignment::Center => ("middle", width * 0.5),
@@ -110,7 +152,9 @@ pub fn text_element(primitive: &PaintPrimitive, dx: f64, dy: f64, fonts: &FontBo
     let (x0, y0) = (x + dx + ANCHOR_SHIFT + ax, y + dy + ANCHOR_SHIFT + ascent);
 
     let (hex, opacity) = fill(color);
-    let mut el = Text::new("").set("font-size", fmt_f64(size)).set("fill", hex);
+    let mut el = Text::new("")
+        .set("font-size", fmt_f64(size))
+        .set("fill", hex);
     if let Some(o) = opacity {
         el = el.set("fill-opacity", o);
     }
@@ -125,12 +169,17 @@ pub fn text_element(primitive: &PaintPrimitive, dx: f64, dy: f64, fonts: &FontBo
     }
 
     // Split the runs (or the whole text) into lines of styled spans.
-    let spans: Vec<(String, Option<&crate::anyrender_renderer::TextStyleRun>)> = if style_runs.is_empty() {
-        vec![(text.clone(), None)]
-    } else {
-        style_runs.iter().map(|r| (cased(&r.text, text_case), Some(r))).collect()
-    };
-    let mut lines: Vec<Vec<(String, Option<&crate::anyrender_renderer::TextStyleRun>)>> = vec![Vec::new()];
+    let spans: Vec<(String, Option<&crate::anyrender_renderer::TextStyleRun>)> =
+        if style_runs.is_empty() {
+            vec![(text.clone(), None)]
+        } else {
+            style_runs
+                .iter()
+                .map(|r| (cased(&r.text, text_case), Some(r)))
+                .collect()
+        };
+    let mut lines: Vec<Vec<(String, Option<&crate::anyrender_renderer::TextStyleRun>)>> =
+        vec![Vec::new()];
     for (s, run) in spans {
         for (i, part) in s.split('\n').enumerate() {
             if i > 0 {
@@ -144,7 +193,9 @@ pub fn text_element(primitive: &PaintPrimitive, dx: f64, dy: f64, fonts: &FontBo
         }
     }
     for (i, line) in lines.into_iter().enumerate() {
-        let mut row = TSpan::new("").set("x", fmt_f64(x0)).set("y", fmt_f64(y0 + i as f64 * line_height));
+        let mut row = TSpan::new("")
+            .set("x", fmt_f64(x0))
+            .set("y", fmt_f64(y0 + i as f64 * line_height));
         for (s, run) in line {
             let Some(run) = run else {
                 row = row.add(svg::node::Text::new(s));
@@ -157,7 +208,10 @@ pub fn text_element(primitive: &PaintPrimitive, dx: f64, dy: f64, fonts: &FontBo
             if let Some(sz) = run.font_size.filter(|s| (s - size).abs() > f64::EPSILON) {
                 span = span.set("font-size", fmt_f64(sz));
             }
-            if let Some(ls) = run.letter_spacing.filter(|l| (l - letter_spacing).abs() > f64::EPSILON) {
+            if let Some(ls) = run
+                .letter_spacing
+                .filter(|l| (l - letter_spacing).abs() > f64::EPSILON)
+            {
                 span = span.set("letter-spacing", fmt_f64(ls));
             }
             if let Some(c) = run.color.as_ref().filter(|c| *c != color) {
@@ -185,7 +239,12 @@ mod tests {
             x: 10.0,
             y: 20.0,
             text: "GAIN\ndrive".into(),
-            color: Rgba { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
+            color: Rgba {
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
             font_size: 18.0,
             line_height: None,
             letter_spacing: 0.5,
@@ -202,9 +261,19 @@ mod tests {
     #[test]
     fn text_carries_family_weight_style_and_width() {
         let book = FontBook::bundled();
-        let font = FontSpec { family: Some("Oswald".into()), weight: Some(700.0), style: Some("italic".into()), width: Some(75.0) };
-        let svg = text_element(&prim(font, Vec::new()), 0.0, 0.0, book).unwrap().to_string();
-        assert!(svg.contains("font-family=\"Oswald, Inter, sans-serif\""), "{svg}");
+        let font = FontSpec {
+            family: Some("Oswald".into()),
+            weight: Some(700.0),
+            style: Some("italic".into()),
+            width: Some(75.0),
+        };
+        let svg = text_element(&prim(font, Vec::new()), 0.0, 0.0, book)
+            .unwrap()
+            .to_string();
+        assert!(
+            svg.contains("font-family=\"Oswald, Inter, sans-serif\""),
+            "{svg}"
+        );
         assert!(svg.contains("font-weight=\"700\""), "{svg}");
         assert!(svg.contains("font-style=\"italic\""), "{svg}");
         assert!(svg.contains("font-stretch=\"75%\""), "{svg}");
@@ -227,7 +296,13 @@ mod tests {
             font_width: None,
         };
         let svg = text_element(
-            &prim(FontSpec::default(), vec![run("GAIN\n", Some(900.0), None), run("drive", None, Some("Dancing Script"))]),
+            &prim(
+                FontSpec::default(),
+                vec![
+                    run("GAIN\n", Some(900.0), None),
+                    run("drive", None, Some("Dancing Script")),
+                ],
+            ),
             0.0,
             0.0,
             book,
@@ -237,7 +312,15 @@ mod tests {
         assert!(svg.contains("font-family=\"Inter, sans-serif\""), "{svg}");
         assert!(svg.contains("font-weight=\"400\""), "{svg}");
         let squashed: String = svg.lines().map(str::trim).collect();
-        assert!(squashed.contains("<tspan font-weight=\"900\">GAIN</tspan>"), "{svg}");
-        assert!(squashed.contains("<tspan font-family=\"&apos;Dancing Script&apos;, Inter, sans-serif\">drive</tspan>"), "{svg}");
+        assert!(
+            squashed.contains("<tspan font-weight=\"900\">GAIN</tspan>"),
+            "{svg}"
+        );
+        assert!(
+            squashed.contains(
+                "<tspan font-family=\"&apos;Dancing Script&apos;, Inter, sans-serif\">drive</tspan>"
+            ),
+            "{svg}"
+        );
     }
 }

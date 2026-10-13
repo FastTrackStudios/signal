@@ -31,12 +31,28 @@ pub fn faces() -> Vec<Face> {
     v.extend(reverb::phone_faces(false).into_iter().map(|(_, f)| f));
     v.extend(delay::phone_faces(false).into_iter().map(|(_, f)| f));
     v.extend(delay::phone_faces(true).into_iter().map(|(_, f)| f));
-    v.extend(delay::small_faces(false, kit::Tier::Ipad).into_iter().map(|(_, f)| f));
-    v.extend(delay::small_faces(true, kit::Tier::Ipad).into_iter().map(|(_, f)| f));
+    v.extend(
+        delay::small_faces(false, kit::Tier::Ipad)
+            .into_iter()
+            .map(|(_, f)| f),
+    );
+    v.extend(
+        delay::small_faces(true, kit::Tier::Ipad)
+            .into_iter()
+            .map(|(_, f)| f),
+    );
     for dark in [false, true] {
-        v.extend(delay::back_faces(dark, kit::Tier::Ipad).into_iter().map(|(_, f)| f));
+        v.extend(
+            delay::back_faces(dark, kit::Tier::Ipad)
+                .into_iter()
+                .map(|(_, f)| f),
+        );
         v.extend(reverb::pane_faces(dark).into_iter().map(|(_, f)| f));
-        v.extend(reverb::back_faces(dark, kit::Tier::Ipad).into_iter().map(|(_, f)| f));
+        v.extend(
+            reverb::back_faces(dark, kit::Tier::Ipad)
+                .into_iter()
+                .map(|(_, f)| f),
+        );
     }
     for t in [kit::Tier::Desktop, kit::Tier::Phone] {
         for dark in [false, true] {
@@ -74,7 +90,15 @@ fn machines() -> Vec<Face> {
 /// nameplate (the host fills the preset and answers its presses), the Time
 /// knob (time, sync, time_text, the host maps), and its versions for other
 /// rooms (`tiers`: the app draws the one for the room it is given).
-fn entry(mut e: serde_json::Value, f: &Face, (tall, tall_dark): (&Face, &Face), phone: Option<(usize, Face)>, phone_dark: Option<(usize, Face)>, pane: Option<(Face, Face)>, backs: impl Fn(bool, kit::Tier) -> Option<Face>) -> serde_json::Value {
+fn entry(
+    mut e: serde_json::Value,
+    f: &Face,
+    (tall, tall_dark): (&Face, &Face),
+    phone: Option<(usize, Face)>,
+    phone_dark: Option<(usize, Face)>,
+    pane: Option<(Face, Face)>,
+    backs: impl Fn(bool, kit::Tier) -> Option<Face>,
+) -> serde_json::Value {
     // Its tall face, for standing alone in a lane column: everything on
     // it, two phone lanes high.
     e["tall"] = json!(tall.file);
@@ -84,24 +108,36 @@ fn entry(mut e: serde_json::Value, f: &Face, (tall, tall_dark): (&Face, &Face), 
     // knob — said of each version, since a small room's may carry them
     // where the base face does not (the digital rack).
     let carries = |f: &Face, e: &mut serde_json::Value| {
-        if f.params.iter().any(|p| p.addr.to_string().ends_with("/preset_browse")) {
+        if f.params
+            .iter()
+            .any(|p| p.addr.to_string().ends_with("/preset_browse"))
+        {
             e["nameplate"] = json!(true);
         }
-        if f.params.iter().any(|p| p.addr.to_string().ends_with("/time_text")) {
+        if f.params
+            .iter()
+            .any(|p| p.addr.to_string().ends_with("/time_text"))
+        {
             e["time_knob"] = json!(true);
         }
     };
     carries(f, &mut e);
     // Its back (the advanced controls), where it has one: the host turns
     // the face over to it on the flip arrow.
-    if let (Some(bl), Some(bd)) = (backs(false, kit::Tier::Desktop), backs(true, kit::Tier::Desktop)) {
+    if let (Some(bl), Some(bd)) = (
+        backs(false, kit::Tier::Desktop),
+        backs(true, kit::Tier::Desktop),
+    ) {
         e["back"] = json!(bl.file);
         e["back_dark"] = json!(bd.file);
     }
     if let (Some((_, pl)), Some((_, pd))) = (phone, phone_dark) {
         let mut t = json!({ "face": pl.file, "dark": pd.file, "size": [kit::Tier::Phone.lane_w(), kit::H] });
         carries(&pl, &mut t);
-        if let (Some(bl), Some(bd)) = (backs(false, kit::Tier::Phone), backs(true, kit::Tier::Phone)) {
+        if let (Some(bl), Some(bd)) = (
+            backs(false, kit::Tier::Phone),
+            backs(true, kit::Tier::Phone),
+        ) {
             t["back"] = json!(bl.file);
             t["back_dark"] = json!(bd.file);
         }
@@ -109,9 +145,11 @@ fn entry(mut e: serde_json::Value, f: &Face, (tall, tall_dark): (&Face, &Face), 
     }
     // A desktop pane's lane, where the face has one.
     if let Some((pl, pd)) = pane {
-        let mut t = json!({ "face": pl.file, "dark": pd.file, "size": [kit::Tier::Ipad.lane_w(), kit::H] });
+        let mut t =
+            json!({ "face": pl.file, "dark": pd.file, "size": [kit::Tier::Ipad.lane_w(), kit::H] });
         carries(&pl, &mut t);
-        if let (Some(bl), Some(bd)) = (backs(false, kit::Tier::Ipad), backs(true, kit::Tier::Ipad)) {
+        if let (Some(bl), Some(bd)) = (backs(false, kit::Tier::Ipad), backs(true, kit::Tier::Ipad))
+        {
             t["back"] = json!(bl.file);
             t["back_dark"] = json!(bd.file);
         }
@@ -125,7 +163,12 @@ fn entry(mut e: serde_json::Value, f: &Face, (tall, tall_dark): (&Face, &Face), 
 
 pub fn manifest() -> serde_json::Value {
     let size = [kit::W, kit::H];
-    let (dt, dtd, rt, rtd) = (delay::tall_faces(false), delay::tall_faces(true), reverb::tall_faces(false), reverb::tall_faces(true));
+    let (dt, dtd, rt, rtd) = (
+        delay::tall_faces(false),
+        delay::tall_faces(true),
+        reverb::tall_faces(false),
+        reverb::tall_faces(true),
+    );
     let delays: Vec<_> = kit::DELAY_ALGOS
         .iter()
         .zip(delay::faces(false).into_iter().zip(delay::faces(true)))

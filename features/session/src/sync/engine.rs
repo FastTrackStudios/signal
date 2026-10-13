@@ -731,8 +731,10 @@ pub async fn apply(
             Change::ItemChanged { guid, item, fields } => {
                 let at = ids.items.engine(guid);
                 match direct {
-                    Some(d) => crate::sync::direct::set_item_fields(d, &ctx, media, &at, item, fields)
-                        .map_err(|e| engine_error(&e))?,
+                    Some(d) => {
+                        crate::sync::direct::set_item_fields(d, &ctx, media, &at, item, fields)
+                            .map_err(|e| engine_error(&e))?
+                    }
                     None => set_item_fields(project, media, &at, item, fields).await?,
                 }
             }
@@ -740,7 +742,8 @@ pub async fn apply(
                 let at = ids.items.engine(guid);
                 match direct {
                     Some(d) => {
-                        crate::sync::direct::delete_item(d, &ctx, &at).map_err(|e| engine_error(&e))?;
+                        crate::sync::direct::delete_item(d, &ctx, &at)
+                            .map_err(|e| engine_error(&e))?;
                     }
                     None => {
                         if let Some(handle) = project.items().by_guid(&at).await? {

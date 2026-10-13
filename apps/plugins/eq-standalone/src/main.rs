@@ -22,13 +22,13 @@ use std::sync::atomic::Ordering;
 
 mod pipewire_capture;
 
-use plugin_core::prelude::Param;
 use dioxus_native::launch_cfg;
 use dioxus_native::prelude::{document, rsx};
 use eq::ui::params::{EqUiState, FtsEqParams, NUM_BANDS, SPECTRUM_BINS};
 use nice_plug::context::gui::{GuiContext, GuiContextInner};
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{ParamContext, SharedState};
+use plugin_core::prelude::Param;
 
 /// Compiled by `tailwindcss -i tailwind.css -o assets/tailwind.css`.
 const TAILWIND_CSS: &str = include_str!("../assets/tailwind.css");
@@ -115,7 +115,6 @@ fn standalone_shell() -> dioxus_core::Element {
 struct StandaloneGuiContext;
 
 impl GuiContextInner for StandaloneGuiContext {
-
     /// Upstream nice-plug added this to `GuiContextInner`. Nothing in a test
     /// harness or the standalone shell has a host to restart, so it is a no-op.
     fn request_restart(&self) {}

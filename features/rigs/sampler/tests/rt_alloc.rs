@@ -13,12 +13,12 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::sync::Arc;
 
-use signal_plugin_host::{
-    PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
-};
 use sampler::block_gate::{BlockGate, GateCtl, GateMode};
 use sampler::tail_stage::{InputShare, TailStage, Voice};
 use sampler::time_stage;
+use signal_plugin_host::{
+    PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
+};
 
 struct Counting;
 
@@ -218,8 +218,8 @@ fn the_counter_counts() {
 /// renderer's lock, but on the thread that commits.
 #[test]
 fn rendering_through_reload_commits_allocates_nothing() {
-    use signal_proto::block::BlockType;
     use sampler::{GuitarRig, ProfileRig, RigBlock, RigPatch, RigProfile};
+    use signal_proto::block::BlockType;
 
     const SR: u32 = 48_000;
     const BLOCK: usize = 128;

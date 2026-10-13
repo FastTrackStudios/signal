@@ -38,8 +38,8 @@
 //! layer's container name.
 
 use facet::Facet;
-use signal_proto::block::BlockType;
 use sampler::rig_node::Container;
+use signal_proto::block::BlockType;
 
 /// One layer's slot in a scene: what it plays and how loud.
 #[derive(Debug, Clone, PartialEq, Facet)]
@@ -483,9 +483,7 @@ impl KeysProfile {
     /// unresolvable render as silent lanes, so a profile is playable before
     /// every pack is downloaded.
     pub fn build_tree(&self, resolve: impl Fn(&str) -> Option<String>) -> Container {
-        self.build_tree_with(resolve, |_, _| {
-            synth::engine::ModuleSettings::default()
-        })
+        self.build_tree_with(resolve, |_, _| synth::engine::ModuleSettings::default())
     }
 
     /// The profile as a **node library** — the domain form, and the one the
@@ -1243,7 +1241,7 @@ mod tests {
     }
 
     #[test]
-        fn the_worship_piano_lane_plays_the_gig_snapshot() {
+    fn the_worship_piano_lane_plays_the_gig_snapshot() {
         let p = worship_profile();
         let tree = p.build_tree(|name| Some(format!("/packs/{name}.signalpack")));
         let lane = tree.find("Keys 1").expect("Keys 1 lane");
@@ -1395,8 +1393,8 @@ mod order_tests {
     /// can tell the difference.
     #[test]
     fn the_rig_compiles_from_the_library() {
-        use signal_proto::node_resolve::resolve;
         use sampler::rig_node::Role;
+        use signal_proto::node_resolve::resolve;
 
         let profile = worship_profile();
         let lifted = profile.build_library(|_| None);
@@ -1445,7 +1443,10 @@ mod order_tests {
         // in "Bass"), and a plain `find` returns the engine.
         let layers = tree.of_role(sampler::rig_node::Role::Layer);
         for lane in split_lanes {
-            let found = layers.iter().find(|c| c.name == lane.name).expect(&lane.name);
+            let found = layers
+                .iter()
+                .find(|c| c.name == lane.name)
+                .expect(&lane.name);
             assert_eq!(found.zone.key_lo, lane.key_lo, "{} key_lo", lane.name);
             assert_eq!(found.zone.key_hi, lane.key_hi, "{} key_hi", lane.name);
         }

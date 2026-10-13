@@ -141,12 +141,27 @@ pub(crate) const BIND_ATTRS: &[&str] = &[
     "bind:text",
 ];
 
-pub(crate) const TEXT_ATTRS: &[&str] =
-    &["text", "font", "size", "weight", "style", "stretch", "line-height", "letter-spacing", "case", "text-align", "runs"];
+pub(crate) const TEXT_ATTRS: &[&str] = &[
+    "text",
+    "font",
+    "size",
+    "weight",
+    "style",
+    "stretch",
+    "line-height",
+    "letter-spacing",
+    "case",
+    "text-align",
+    "runs",
+];
 
 /// Attributes only one element accepts: `(attr, tag)`.
-pub(crate) const KIND_ATTRS: &[(&str, &str)] =
-    &[("component", "Instance"), ("of", "Instance"), ("op", "BooleanOperation"), ("tag", "Other")];
+pub(crate) const KIND_ATTRS: &[(&str, &str)] = &[
+    ("component", "Instance"),
+    ("of", "Instance"),
+    ("op", "BooleanOperation"),
+    ("tag", "Other"),
+];
 
 /// A component's arguments, `arg:<name>="<expr>"`: the defaults on a
 /// <Component>, the values on an <Instance>.
@@ -166,7 +181,12 @@ pub(crate) fn attrs_for(tag: &str) -> Vec<&'static str> {
     if tag == "Text" {
         v.extend_from_slice(TEXT_ATTRS);
     }
-    v.extend(KIND_ATTRS.iter().filter(|(_, t)| *t == tag).map(|(a, _)| *a));
+    v.extend(
+        KIND_ATTRS
+            .iter()
+            .filter(|(_, t)| *t == tag)
+            .map(|(a, _)| *a),
+    );
     v
 }
 

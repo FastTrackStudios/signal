@@ -38,7 +38,11 @@ fn variables_are_read_with_their_modes() {
 fn bindings_and_vertical_resizing_are_read() {
     let s = scene();
     let name = s.nodes.values().find(|n| n.name == "Name").expect("Name");
-    let binds: Vec<(&str, &str)> = name.bind.iter().map(|b| (b.prop.as_str(), b.expr.as_str())).collect();
+    let binds: Vec<(&str, &str)> = name
+        .bind
+        .iter()
+        .map(|b| (b.prop.as_str(), b.expr.as_str()))
+        .collect();
     assert_eq!(binds, [("visible", "w >= 40"), ("text", "track.name")]);
     assert_eq!(name.layout_child.resize_y, Some(ResizeY::Bottom));
 }
@@ -49,14 +53,21 @@ fn the_text_form_round_trips() {
     let printed = document_text::print(&s);
     let again = document_text::parse(&printed, BTreeMap::new()).expect("reparses");
     assert_eq!(s, again, "{printed}");
-    assert!(printed.contains("<Variables modes=\"dark light\">"), "{printed}");
+    assert!(
+        printed.contains("<Variables modes=\"dark light\">"),
+        "{printed}"
+    );
 }
 
 #[test]
 fn variables_outside_the_document_are_refused() {
     let src = r#"<Document><Page><Variables modes="dark" /></Page></Document>"#;
     let err = document_text::parse(src, BTreeMap::new()).unwrap_err();
-    assert!(err.to_string().contains("belongs directly inside <Document>"), "{err}");
+    assert!(
+        err.to_string()
+            .contains("belongs directly inside <Document>"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -82,13 +93,28 @@ const COMPONENTS: &str = r##"<Document>
 #[test]
 fn components_take_arguments_and_instances_name_them() {
     let s = document_text::parse(COMPONENTS, BTreeMap::new()).expect("parses");
-    let button = s.nodes.values().find(|n| n.name == "button").expect("button");
-    let args: Vec<(&str, &str)> = button.args.iter().map(|a| (a.name.as_str(), a.expr.as_str())).collect();
+    let button = s
+        .nodes
+        .values()
+        .find(|n| n.name == "button")
+        .expect("button");
+    let args: Vec<(&str, &str)> = button
+        .args
+        .iter()
+        .map(|a| (a.name.as_str(), a.expr.as_str()))
+        .collect();
     // As declared, defaults and all.
-    assert_eq!(args, [("on", "false"), ("label", "\"M\""), ("control", "\"\"")]);
+    assert_eq!(
+        args,
+        [("on", "false"), ("label", "\"M\""), ("control", "\"\"")]
+    );
     let mute = s.nodes.values().find(|n| n.name == "@mute").expect("@mute");
     assert_eq!(mute.of.as_deref(), Some("button"));
-    let args: Vec<(&str, &str)> = mute.args.iter().map(|a| (a.name.as_str(), a.expr.as_str())).collect();
+    let args: Vec<(&str, &str)> = mute
+        .args
+        .iter()
+        .map(|a| (a.name.as_str(), a.expr.as_str()))
+        .collect();
     assert_eq!(args, [("on", "track.mute"), ("control", "\"mute\"")]);
 
     let printed = document_text::print(&s);
@@ -100,5 +126,9 @@ fn components_take_arguments_and_instances_name_them() {
 fn only_components_and_instances_take_arguments() {
     let src = r#"<Document><Page><Frame arg:on="true" /></Page></Document>"#;
     let err = document_text::parse(src, BTreeMap::new()).unwrap_err();
-    assert!(err.to_string().contains("only a <Component> or an <Instance> takes arguments"), "{err}");
+    assert!(
+        err.to_string()
+            .contains("only a <Component> or an <Instance> takes arguments"),
+        "{err}"
+    );
 }

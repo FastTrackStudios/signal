@@ -11,21 +11,21 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::{Arc, Mutex};
 
-use architect::dispatch::CurrentThreadDispatcher;
-use architect::rig::RigBackend;
-use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use audio::io::AudioIoPrefs;
-use midicore::MidiEvent;
 use crate::proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
 use crate::proto::{
     KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
     KeysMeter, KeysMixer, KeysNode, KeysPackRef, KeysPerform, KeysPreset, KeysStack, KeysStatus,
 };
+use architect::dispatch::CurrentThreadDispatcher;
+use architect::rig::RigBackend;
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
+use audio::io::AudioIoPrefs;
+use midicore::MidiEvent;
 
 use crate::profile::{KeysProfile, worship_profile};
-use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
 use sampler::Container;
 use sampler::rig_node::{RigNode, Role};
+use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
 
 use crate::KeysRig;
 
@@ -1414,10 +1414,7 @@ fn set_macro_clamped(macros: &mut BTreeMap<String, f32>, id: &str, v: f32) {
 
 /// A module's knobs from an imported Omnisphere layer: filter, envelopes,
 /// unison — the values the patch itself plays with.
-fn seed_module_macros(
-    macros: &mut BTreeMap<String, f32>,
-    m: &synth::engine::ImportedModule,
-) {
+fn seed_module_macros(macros: &mut BTreeMap<String, f32>, m: &synth::engine::ImportedModule) {
     set_macro_clamped(macros, "filter.cutoff", m.cutoff_hz);
     set_macro_clamped(macros, "filter.reso", m.resonance);
     set_macro_clamped(macros, "filter.env_amt", m.filter_env_depth);
@@ -1672,7 +1669,9 @@ impl State {
         }
         // The rig's output limiter is a safety net, on unless a profile
         // turns it off: five hard notes stacked in one lane clip otherwise.
-        self.rig_globals.entry(format!("{RIG}limiter")).or_insert(1.0);
+        self.rig_globals
+            .entry(format!("{RIG}limiter"))
+            .or_insert(1.0);
         self.profile = profile;
         KeysRigBackend::refresh_fx_gates(self);
     }
@@ -2636,9 +2635,10 @@ impl KeysRigBackend {
     /// time, live.
     /// Hand a mod-wheel value to the `keys-wheel` worker (the latest wins).
     fn queue_wheel(inner: &Inner, value: u8) {
-        inner
-            .wheel
-            .store(u32::from(value.min(127)), std::sync::atomic::Ordering::Relaxed);
+        inner.wheel.store(
+            u32::from(value.min(127)),
+            std::sync::atomic::Ordering::Relaxed,
+        );
         if let Some(worker) = inner.wheel_worker.get() {
             worker.unpark();
         }
@@ -2650,12 +2650,16 @@ impl KeysRigBackend {
         let weak = Arc::downgrade(&self.inner);
         let worker = std::thread::Builder::new()
             .name("keys-wheel".into())
-            .spawn(move || loop {
-                std::thread::park_timeout(std::time::Duration::from_millis(500));
-                let Some(inner) = weak.upgrade() else { return };
-                let v = inner.wheel.swap(NO_WHEEL, std::sync::atomic::Ordering::Relaxed);
-                if v != NO_WHEEL {
-                    Self { inner }.wheel_cutoff(v as u8);
+            .spawn(move || {
+                loop {
+                    std::thread::park_timeout(std::time::Duration::from_millis(500));
+                    let Some(inner) = weak.upgrade() else { return };
+                    let v = inner
+                        .wheel
+                        .swap(NO_WHEEL, std::sync::atomic::Ordering::Relaxed);
+                    if v != NO_WHEEL {
+                        Self { inner }.wheel_cutoff(v as u8);
+                    }
                 }
             });
         if let Ok(handle) = worker {
@@ -2695,7 +2699,11 @@ impl KeysRigBackend {
                 })
                 .collect()
         };
-        let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let rig = self
+            .inner
+            .rig
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(rig) = rig.as_ref() else {
             return;
         };
@@ -2730,7 +2738,9 @@ impl KeysRigBackend {
             .filter(|b| *b < 0.999)
             .fold(None::<f64>, |m, b| Some(m.map_or(b, |m: f64| m.max(b))));
         let span = leader.map_or(0.0, |b| {
-            (20_000.0 / NativeFilter::cutoff_from_norm(b as f32)).log2().max(0.0)
+            (20_000.0 / NativeFilter::cutoff_from_norm(b as f32))
+                .log2()
+                .max(0.0)
         });
         let octaves = w * span;
         known.clear();
@@ -3047,8 +3057,7 @@ impl KeysRigBackend {
         let Some(lane) = lanes.get(layer) else {
             return synth::engine::ModuleSettings::default();
         };
-        let mut set =
-            Self::settings_from_macros(lane, lane.modules.get(module).map(|m| &m.macros));
+        let mut set = Self::settings_from_macros(lane, lane.modules.get(module).map(|m| &m.macros));
         // An Omnisphere lane: the knobs as seeded, through the same mapping,
         // so only what the player moved is applied onto the patch.
         if lane.omni_seed.is_some() {
@@ -3150,13 +3159,11 @@ impl KeysRigBackend {
         for (i, e) in ["env3", "env4"].into_iter().enumerate() {
             set.mod_env_dh[i] = (v(&format!("{e}.delay")), v(&format!("{e}.hold")));
             set.mod_env_depth[i] = v(&format!("{e}.depth"));
-            set.mod_env_dest[i] =
-                synth::engine::ModDest::from_value(v(&format!("{e}.dest")));
+            set.mod_env_dest[i] = synth::engine::ModDest::from_value(v(&format!("{e}.dest")));
         }
         for n in 0..4 {
             set.lfo_fade_ms[n] = v(&format!("lfo{}.fade", n + 1));
-            set.lfo_dest[n] =
-                synth::engine::ModDest::from_value(v(&format!("lfo{}.dest", n + 1)));
+            set.lfo_dest[n] = synth::engine::ModDest::from_value(v(&format!("lfo{}.dest", n + 1)));
         }
         set
     }
@@ -3236,8 +3243,7 @@ impl KeysRigBackend {
                     let audible = if s.lane_is_audible(lane) { 1.0 } else { 0.0 };
                     // Modules are named "<layer> <slot>" in the lane's tree.
                     for i in 0..lane.modules.len() {
-                        let module_name =
-                            format!("{name} {}", synth::engine::module_slot(i));
+                        let module_name = format!("{name} {}", synth::engine::module_slot(i));
                         cells.set(Role::Module, &module_name, lane.module_gain(i) * audible);
                     }
                 }
@@ -3822,7 +3828,10 @@ impl KeysRigBackend {
                     }
                 }
             }
-            if let midicore::MidiEvent::ControlChange { controller, value, .. } = &ev.event {
+            if let midicore::MidiEvent::ControlChange {
+                controller, value, ..
+            } = &ev.event
+            {
                 if controller.get() == 1 {
                     if let Some(inner) = weak.upgrade() {
                         Self::queue_wheel(&inner, value.get());
@@ -4833,11 +4842,15 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn rename_user_preset(&self, preset: u32, name: String) {
-        self.edit_user_preset(preset, |file| crate::user_presets::rename(file, &name, false).map(drop));
+        self.edit_user_preset(preset, |file| {
+            crate::user_presets::rename(file, &name, false).map(drop)
+        });
     }
 
     fn duplicate_user_preset(&self, preset: u32, name: String) {
-        self.edit_user_preset(preset, |file| crate::user_presets::rename(file, &name, true).map(drop));
+        self.edit_user_preset(preset, |file| {
+            crate::user_presets::rename(file, &name, true).map(drop)
+        });
     }
 
     fn delete_user_preset(&self, preset: u32) {
@@ -5226,7 +5239,11 @@ impl KeysRigBackend {
     fn rescan_user_presets(&self) {
         let (presets, specs) = crate::user_presets::scan();
         if let Ok(mut s) = self.inner.state.lock() {
-            let keep = s.presets.iter().position(|p| p.user).unwrap_or(s.presets.len());
+            let keep = s
+                .presets
+                .iter()
+                .position(|p| p.user)
+                .unwrap_or(s.presets.len());
             s.presets.truncate(keep);
             s.specs.truncate(keep);
             s.presets.extend(presets);
@@ -5946,12 +5963,21 @@ mod tests {
         let mut s = State::default();
         s.adopt_profile(worship_profile());
         for engine in ["Keys", "Pad", "Bass", "Aux"] {
-            assert!(!s.engines.get(engine).expect("engine").muted, "{engine} starts muted");
+            assert!(
+                !s.engines.get(engine).expect("engine").muted,
+                "{engine} starts muted"
+            );
         }
         for lane in ["Pad", "Shimmer", "Synth 1"] {
-            assert!(!s.lanes.get(lane).expect("lane").muted, "{lane} starts muted");
+            assert!(
+                !s.lanes.get(lane).expect("lane").muted,
+                "{lane} starts muted"
+            );
         }
-        assert!(s.lanes.get("Synth 2").expect("lane").muted, "Club Europa starts audible");
+        assert!(
+            s.lanes.get("Synth 2").expect("lane").muted,
+            "Club Europa starts audible"
+        );
     }
 
     /// The worship profile keeps the piano (Keys A) OUT of the global scope
@@ -6244,7 +6270,9 @@ fn spawn_engine_watch(
                     if let Some(w) = worst {
                         let lane = daw
                             .read_project(&project, |p| {
-                                p.tracks.get(w.slowest_track as usize).map(|t| t.name.clone())
+                                p.tracks
+                                    .get(w.slowest_track as usize)
+                                    .map(|t| t.name.clone())
                             })
                             .flatten()
                             .unwrap_or_default();
@@ -6274,7 +6302,8 @@ fn spawn_engine_watch(
                         "keys audio: under strain"
                     );
                 }
-                (over0, xrun0, calls0, total0, skip0, cut0) = (over, xruns, calls, total, skipped, cuts);
+                (over0, xrun0, calls0, total0, skip0, cut0) =
+                    (over, xruns, calls, total, skipped, cuts);
             }
         });
 }

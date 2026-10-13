@@ -385,7 +385,10 @@ fn paginate(faces: Vec<Face>) -> Vec<Vec<Face>> {
 }
 
 async fn shoot(name: &str, faces: Vec<Face>) -> usize {
-    assert!(!faces.is_empty(), "{name}: no faces — the design table went missing");
+    assert!(
+        !faces.is_empty(),
+        "{name}: no faces — the design table went missing"
+    );
     let knobs: usize = faces.iter().map(|f| f.knobs.len()).sum();
     let pages = paginate(faces);
     let many = pages.len() > 1;
@@ -423,5 +426,8 @@ async fn shot_every_knob_on_the_panel_it_sits_on() {
     total += shoot("delay", delay_faces()).await;
     total += shoot("reverb", reverb_faces()).await;
     println!("{total} knobs across every face in the product");
-    assert!(total > 100, "only {total} knobs — a plugin stopped reporting its faces");
+    assert!(
+        total > 100,
+        "only {total} knobs — a plugin stopped reporting its faces"
+    );
 }

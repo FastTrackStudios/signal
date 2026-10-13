@@ -3,18 +3,22 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use document_proto::{Bind, ResizeX, ResizeY, Variable, Variables, 
-    AlignSelf, Asset, AssetId, AutoLayout, BlendMode, BooleanOp, CornerRadii, CrossAxisAlign, LayoutDirection,
-    MainAxisAlign, MaskKind, Node, NodeId, NodeKind, Scene, SourceRef, StrokeAlign, StrokeCap, StrokeJoin, TextAlign,
-    TextCase, TextData,
+use document_proto::{
+    AlignSelf, Asset, AssetId, AutoLayout, Bind, BlendMode, BooleanOp, CornerRadii, CrossAxisAlign,
+    LayoutDirection, MainAxisAlign, MaskKind, Node, NodeId, NodeKind, ResizeX, ResizeY, Scene,
+    SourceRef, StrokeAlign, StrokeCap, StrokeJoin, TextAlign, TextCase, TextData, Variable,
+    Variables,
 };
 use serde_json::Value;
 
 use crate::error::ParseError;
-use crate::schema::{BIND_ATTRS, LAYOUT_ATTRS, TAGS, VARIABLES_TAG, attrs_for, default_name, owner_of, suggest_attr, suggest_tag};
+use crate::schema::{
+    BIND_ATTRS, LAYOUT_ATTRS, TAGS, VARIABLES_TAG, attrs_for, default_name, owner_of, suggest_attr,
+    suggest_tag,
+};
 use crate::values::{
-    Keyword, effects_from_json, from_json, paints_from_json, parse_hex, rotation_matrix, runs_from_json,
-    transform_from_json,
+    Keyword, effects_from_json, from_json, paints_from_json, parse_hex, rotation_matrix,
+    runs_from_json, transform_from_json,
 };
 
 type Result<T> = std::result::Result<T, ParseError>;
@@ -31,7 +35,13 @@ pub fn parse(src: &str, assets: BTreeMap<AssetId, Asset>) -> Result<Scene> {
     let els = Lexer::new(src).document()?;
     let el = match els.as_slice() {
         [one] => one,
-        [] => return Err(ParseError::at(src, 0, "empty document — expected one root element like <Document>…</Document>")),
+        [] => {
+            return Err(ParseError::at(
+                src,
+                0,
+                "empty document — expected one root element like <Document>…</Document>",
+            ));
+        }
         [_, second, ..] => {
             return Err(ParseError::at(
                 src,
@@ -43,7 +53,12 @@ pub fn parse(src: &str, assets: BTreeMap<AssetId, Asset>) -> Result<Scene> {
     let mut b = Builder::new(src, false);
     let root = b.build(el, None)?;
     let nodes = b.nodes.into_iter().map(|n| (n.id, n)).collect();
-    Ok(Scene { root, nodes, assets, variables: b.variables })
+    Ok(Scene {
+        root,
+        nodes,
+        assets,
+        variables: b.variables,
+    })
 }
 
 /// Parse a fragment: one or more elements (no `<Document>`/`<Page>`), for
@@ -56,7 +71,11 @@ pub fn parse(src: &str, assets: BTreeMap<AssetId, Asset>) -> Result<Scene> {
 pub fn parse_fragment(src: &str) -> Result<Vec<Node>> {
     let els = Lexer::new(src).document()?;
     if els.is_empty() {
-        return Err(ParseError::at(src, 0, "empty fragment — expected one or more elements like <Frame>…</Frame>"));
+        return Err(ParseError::at(
+            src,
+            0,
+            "empty fragment — expected one or more elements like <Frame>…</Frame>",
+        ));
     }
     let mut b = Builder::new(src, true);
     for el in &els {
@@ -160,12 +179,21 @@ impl<'a> Lexer<'a> {
             match self.peek() {
                 None => return Ok(out),
                 Some('<') if self.starts("</") => {
-                    let name = self.rest()[2..].split(|c: char| !c.is_alphanumeric()).next().unwrap_or("");
-                    return self.err(self.pos, format!("closing tag </{name}> has no matching opening tag"));
+                    let name = self.rest()[2..]
+                        .split(|c: char| !c.is_alphanumeric())
+                        .next()
+                        .unwrap_or("");
+                    return self.err(
+                        self.pos,
+                        format!("closing tag </{name}> has no matching opening tag"),
+                    );
                 }
                 Some('<') => out.push(self.element()?),
                 Some(c) => {
-                    return self.err(self.pos, format!("unexpected `{c}` — expected an element like <Frame …>"));
+                    return self.err(
+                        self.pos,
+                        format!("unexpected `{c}` — expected an element like <Frame …>"),
+                    );
                 }
             }
         }
@@ -176,7 +204,9 @@ impl<'a> Lexer<'a> {
         let len = rest
             .char_indices()
             .find(|(i, c)| {
-                let ok = c.is_ascii_alphanumeric() || *c == '_' || (attr && *i > 0 && (*c == '-' || *c == ':'));
+                let ok = c.is_ascii_alphanumeric()
+                    || *c == '_'
+                    || (attr && *i > 0 && (*c == '-' || *c == ':'));
                 !ok
             })
             .map_or(rest.len(), |(i, _)| i);
@@ -189,10 +219,21 @@ impl<'a> Lexer<'a> {
         self.bump(1); // <
         let tag = self.ident(false).to_owned();
         if tag.is_empty() {
-            let found = self.peek().map_or("end of input".to_owned(), |c| format!("`{c}`"));
-            return self.err(self.pos, format!("expected an element name after `<`, found {found}"));
+            let found = self
+                .peek()
+                .map_or("end of input".to_owned(), |c| format!("`{c}`"));
+            return self.err(
+                self.pos,
+                format!("expected an element name after `<`, found {found}"),
+            );
         }
-        let mut el = El { tag, pos, attrs: Vec::new(), children: Vec::new(), body: None };
+        let mut el = El {
+            tag,
+            pos,
+            attrs: Vec::new(),
+            children: Vec::new(),
+            body: None,
+        };
 
         // Attributes.
         loop {
@@ -209,10 +250,16 @@ impl<'a> Lexer<'a> {
             let name = self.ident(true).to_owned();
             if name.is_empty() {
                 return match self.peek() {
-                    None => self.err(pos, format!("<{}> is never closed — end it with `>` or `/>`", el.tag)),
+                    None => self.err(
+                        pos,
+                        format!("<{}> is never closed — end it with `>` or `/>`", el.tag),
+                    ),
                     Some(c) => self.err(
                         apos,
-                        format!("unexpected `{c}` in <{}> — expected an attribute name, `/>` or `>`", el.tag),
+                        format!(
+                            "unexpected `{c}` in <{}> — expected an attribute name, `/>` or `>`",
+                            el.tag
+                        ),
                     ),
                 };
             }
@@ -225,7 +272,12 @@ impl<'a> Lexer<'a> {
             } else {
                 (AttrValue::Flag, apos)
             };
-            el.attrs.push(Attr { name, pos: apos, value, value_pos });
+            el.attrs.push(Attr {
+                name,
+                pos: apos,
+                value,
+                value_pos,
+            });
         }
 
         // Content, up to the closing tag.
@@ -243,7 +295,10 @@ impl<'a> Lexer<'a> {
                 self.bump(seg_len);
             }
             if self.peek().is_none() {
-                return self.err(pos, format!("<{}> is never closed — add </{}>", el.tag, el.tag));
+                return self.err(
+                    pos,
+                    format!("<{}> is never closed — add </{}>", el.tag, el.tag),
+                );
             }
             if self.skip_comment()? {
                 continue;
@@ -261,7 +316,10 @@ impl<'a> Lexer<'a> {
                     let (l, c) = crate::error::line_col(self.src, pos);
                     return self.err(
                         cpos,
-                        format!("</{name}> doesn't match <{}> opened at {l}:{c} — close it with </{}>", el.tag, el.tag),
+                        format!(
+                            "</{name}> doesn't match <{}> opened at {l}:{c} — close it with </{}>",
+                            el.tag, el.tag
+                        ),
                     );
                 }
                 break;
@@ -282,7 +340,10 @@ impl<'a> Lexer<'a> {
                 );
             }
             if !el.children.is_empty() {
-                return self.err(at, "a <Text> with child elements can't also have body text — use text=\"…\"");
+                return self.err(
+                    at,
+                    "a <Text> with child elements can't also have body text — use text=\"…\"",
+                );
             }
         }
         if el.tag == "Text" && el.children.is_empty() && !text.is_empty() {
@@ -299,7 +360,12 @@ impl<'a> Lexer<'a> {
                 let mut i = start + 1;
                 loop {
                     match bytes.get(i) {
-                        None => return self.err(start, format!("unterminated string in `{name}=` — add the closing `\"`")),
+                        None => {
+                            return self.err(
+                                start,
+                                format!("unterminated string in `{name}=` — add the closing `\"`"),
+                            );
+                        }
                         Some(b'\\') => i += 2,
                         Some(b'"') => break,
                         Some(_) => i += 1,
@@ -307,7 +373,11 @@ impl<'a> Lexer<'a> {
                 }
                 let lit = &self.src[start..=i];
                 let s: String = serde_json::from_str(lit).map_err(|e| {
-                    ParseError::at(self.src, start, format!("bad string in `{name}=`: {}", strip_serde_pos(&e)))
+                    ParseError::at(
+                        self.src,
+                        start,
+                        format!("bad string in `{name}=`: {}", strip_serde_pos(&e)),
+                    )
                 })?;
                 self.pos = i + 1;
                 Ok(AttrValue::Quoted(s))
@@ -315,20 +385,28 @@ impl<'a> Lexer<'a> {
             Some('{') => {
                 let open = self.pos;
                 let body_start = open + 1;
-                let mut stream = serde_json::Deserializer::from_str(&self.src[body_start..]).into_iter::<Value>();
+                let mut stream = serde_json::Deserializer::from_str(&self.src[body_start..])
+                    .into_iter::<Value>();
                 match stream.next() {
                     Some(Ok(v)) => {
                         self.pos = body_start + stream.byte_offset();
                         self.skip_ws();
                         if !self.starts("}") {
-                            return self.err(self.pos, format!("expected `}}` to close the `{{…}}` value of `{name}`"));
+                            return self.err(
+                                self.pos,
+                                format!("expected `}}` to close the `{{…}}` value of `{name}`"),
+                            );
                         }
                         self.bump(1);
                         Ok(AttrValue::Json(v))
                     }
                     Some(Err(e)) => {
-                        let at = offset_of(&self.src[body_start..], e.line(), e.column()) + body_start;
-                        self.err(at, format!("invalid JSON in `{name}={{…}}`: {}", strip_serde_pos(&e)))
+                        let at =
+                            offset_of(&self.src[body_start..], e.line(), e.column()) + body_start;
+                        self.err(
+                            at,
+                            format!("invalid JSON in `{name}={{…}}`: {}", strip_serde_pos(&e)),
+                        )
                     }
                     None => self.err(open, format!("expected a JSON value inside `{name}={{…}}`")),
                 }
@@ -337,7 +415,11 @@ impl<'a> Lexer<'a> {
                 let rest = self.rest();
                 let len = rest
                     .char_indices()
-                    .find(|(i, c)| c.is_whitespace() || *c == '>' || (*c == '/' && rest[*i..].starts_with("/>")))
+                    .find(|(i, c)| {
+                        c.is_whitespace()
+                            || *c == '>'
+                            || (*c == '/' && rest[*i..].starts_with("/>"))
+                    })
                     .map_or(rest.len(), |(i, _)| i);
                 if len == 0 {
                     return self.err(self.pos, format!("missing value after `{name}=`"));
@@ -377,7 +459,11 @@ fn jsx_whitespace(raw: &str) -> String {
     if !raw.contains('\n') {
         return raw.to_owned();
     }
-    raw.lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ")
+    raw.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn unescape(s: &str) -> String {
@@ -440,7 +526,11 @@ struct Attrs<'e> {
 
 impl<'e> Attrs<'e> {
     fn err<T>(&self, a: &Attr, msg: impl Into<String>) -> Result<T> {
-        Err(ParseError::at(self.src, a.value_pos, format!("`{}` on <{}>: {}", a.name, self.tag, msg.into())))
+        Err(ParseError::at(
+            self.src,
+            a.value_pos,
+            format!("`{}` on <{}>: {}", a.name, self.tag, msg.into()),
+        ))
     }
 
     fn get(&self, name: &str) -> Option<&'e Attr> {
@@ -448,7 +538,9 @@ impl<'e> Attrs<'e> {
     }
 
     fn num(&self, name: &str) -> Result<Option<f64>> {
-        let Some(a) = self.get(name) else { return Ok(None) };
+        let Some(a) = self.get(name) else {
+            return Ok(None);
+        };
         let parsed = match &a.value {
             AttrValue::Bare(s) | AttrValue::Quoted(s) => s.trim().parse::<f64>().ok(),
             AttrValue::Json(Value::Number(n)) => n.as_f64(),
@@ -456,12 +548,17 @@ impl<'e> Attrs<'e> {
         };
         match parsed {
             Some(v) => Ok(Some(v)),
-            None => self.err(a, format!("expected a number like {name}=12, got {}", show(&a.value))),
+            None => self.err(
+                a,
+                format!("expected a number like {name}=12, got {}", show(&a.value)),
+            ),
         }
     }
 
     fn bool(&self, name: &str) -> Result<Option<bool>> {
-        let Some(a) = self.get(name) else { return Ok(None) };
+        let Some(a) = self.get(name) else {
+            return Ok(None);
+        };
         match &a.value {
             AttrValue::Flag | AttrValue::Json(Value::Bool(true)) => Ok(Some(true)),
             AttrValue::Json(Value::Bool(false)) => Ok(Some(false)),
@@ -472,36 +569,57 @@ impl<'e> Attrs<'e> {
     }
 
     fn str(&self, name: &str) -> Result<Option<String>> {
-        let Some(a) = self.get(name) else { return Ok(None) };
+        let Some(a) = self.get(name) else {
+            return Ok(None);
+        };
         match &a.value {
-            AttrValue::Bare(s) | AttrValue::Quoted(s) | AttrValue::Json(Value::String(s)) => Ok(Some(s.clone())),
-            v => self.err(a, format!("expected a string like {name}=\"…\", got {}", show(v))),
+            AttrValue::Bare(s) | AttrValue::Quoted(s) | AttrValue::Json(Value::String(s)) => {
+                Ok(Some(s.clone()))
+            }
+            v => self.err(
+                a,
+                format!("expected a string like {name}=\"…\", got {}", show(v)),
+            ),
         }
     }
 
     fn keyword<K: Keyword>(&self, name: &str) -> Result<Option<K>> {
-        let Some(s) = self.str(name)? else { return Ok(None) };
+        let Some(s) = self.str(name)? else {
+            return Ok(None);
+        };
         match K::from_keyword(&s) {
             Some(k) => Ok(Some(k)),
-            None => self.err(self.map[name], format!("unknown value \"{s}\" — expected one of {}", K::expected())),
+            None => self.err(
+                self.map[name],
+                format!("unknown value \"{s}\" — expected one of {}", K::expected()),
+            ),
         }
     }
 
     fn id(&self, name: &str) -> Result<Option<NodeId>> {
-        let Some(s) = self.str(name)? else { return Ok(None) };
+        let Some(s) = self.str(name)? else {
+            return Ok(None);
+        };
         match uuid::Uuid::parse_str(s.trim()) {
             Ok(u) => Ok(Some(NodeId(u))),
-            Err(_) => self.err(self.map[name], format!("\"{s}\" is not a UUID (omit `{name}` to generate one)")),
+            Err(_) => self.err(
+                self.map[name],
+                format!("\"{s}\" is not a UUID (omit `{name}` to generate one)"),
+            ),
         }
     }
 
     /// Space- or comma-separated numbers (or a JSON array / single number).
     fn nums(&self, name: &str, allowed: &[usize], example: &str) -> Result<Option<Vec<f64>>> {
-        let Some(a) = self.get(name) else { return Ok(None) };
+        let Some(a) = self.get(name) else {
+            return Ok(None);
+        };
         let parsed: Option<Vec<f64>> = match &a.value {
-            AttrValue::Bare(s) | AttrValue::Quoted(s) => {
-                s.split(|c: char| c.is_whitespace() || c == ',').filter(|p| !p.is_empty()).map(|p| p.parse().ok()).collect()
-            }
+            AttrValue::Bare(s) | AttrValue::Quoted(s) => s
+                .split(|c: char| c.is_whitespace() || c == ',')
+                .filter(|p| !p.is_empty())
+                .map(|p| p.parse().ok())
+                .collect(),
             AttrValue::Json(Value::Number(n)) => n.as_f64().map(|v| vec![v]),
             AttrValue::Json(Value::Array(xs)) => xs.iter().map(Value::as_f64).collect(),
             AttrValue::Flag | AttrValue::Json(_) => None,
@@ -523,8 +641,14 @@ impl<'e> Attrs<'e> {
         Some((a, v))
     }
 
-    fn convert<T>(&self, name: &str, f: impl FnOnce(Value) -> std::result::Result<T, String>) -> Result<Option<T>> {
-        let Some((a, v)) = self.json(name) else { return Ok(None) };
+    fn convert<T>(
+        &self,
+        name: &str,
+        f: impl FnOnce(Value) -> std::result::Result<T, String>,
+    ) -> Result<Option<T>> {
+        let Some((a, v)) = self.json(name) else {
+            return Ok(None);
+        };
         match f(v) {
             Ok(t) => Ok(Some(t)),
             Err(e) => self.err(a, e),
@@ -543,7 +667,13 @@ fn show(v: &AttrValue) -> String {
 
 impl<'a> Builder<'a> {
     fn new(src: &'a str, fragment: bool) -> Self {
-        Self { src, fragment, nodes: Vec::new(), seen: HashMap::new(), variables: Variables::default() }
+        Self {
+            src,
+            fragment,
+            nodes: Vec::new(),
+            seen: HashMap::new(),
+            variables: Variables::default(),
+        }
     }
 
     fn err<T>(&self, at: usize, msg: impl Into<String>) -> Result<T> {
@@ -553,8 +683,15 @@ impl<'a> Builder<'a> {
     fn build(&mut self, el: &El, parent: Option<NodeId>) -> Result<NodeId> {
         let tag = el.tag.as_str();
         if !TAGS.contains(&tag) {
-            let hint = suggest_tag(tag).map_or(String::new(), |t| format!(" — did you mean <{t}>?"));
-            return self.err(el.pos, format!("unknown element <{tag}>{hint} (elements: {})", TAGS.join(", ")));
+            let hint =
+                suggest_tag(tag).map_or(String::new(), |t| format!(" — did you mean <{t}>?"));
+            return self.err(
+                el.pos,
+                format!(
+                    "unknown element <{tag}>{hint} (elements: {})",
+                    TAGS.join(", ")
+                ),
+            );
         }
         if self.fragment && (tag == "Document" || tag == "Page") {
             return self.err(
@@ -570,13 +707,17 @@ impl<'a> Builder<'a> {
             let name = a.name.as_str();
             let arg = name.strip_prefix(crate::schema::ARG_PREFIX);
             if arg.is_some() && !crate::schema::takes_args(tag) {
-                return self.err(a.pos, format!("`{name}`: only a <Component> or an <Instance> takes arguments"));
+                return self.err(
+                    a.pos,
+                    format!("`{name}`: only a <Component> or an <Instance> takes arguments"),
+                );
             }
             if arg.is_none() && !valid.contains(&name) {
                 let msg = if let Some(owner) = owner_of(name) {
                     format!("attribute `{name}` is only valid on <{owner}>, not <{tag}>")
                 } else {
-                    let hint = suggest_attr(name, &valid).map_or(String::new(), |s| format!(" — did you mean `{s}`?"));
+                    let hint = suggest_attr(name, &valid)
+                        .map_or(String::new(), |s| format!(" — did you mean `{s}`?"));
                     format!("unknown attribute `{name}` on <{tag}>{hint}")
                 };
                 return self.err(a.pos, msg);
@@ -585,7 +726,11 @@ impl<'a> Builder<'a> {
                 return self.err(a.pos, format!("attribute `{name}` given twice on <{tag}>"));
             }
         }
-        let at = Attrs { src: self.src, tag, map };
+        let at = Attrs {
+            src: self.src,
+            tag,
+            map,
+        };
 
         let kind = self.kind(el, &at)?;
         let id = match at.id("id")? {
@@ -602,7 +747,9 @@ impl<'a> Builder<'a> {
         let mut node = Node::new(kind, "");
         node.id = id;
         node.parent = parent;
-        node.name = at.str("name")?.unwrap_or_else(|| default_name(&node.kind).to_owned());
+        node.name = at
+            .str("name")?
+            .unwrap_or_else(|| default_name(&node.kind).to_owned());
         apply_common(&at, &mut node)?;
 
         let index = self.nodes.len();
@@ -611,7 +758,12 @@ impl<'a> Builder<'a> {
         for c in &el.children {
             if c.tag == VARIABLES_TAG {
                 if tag != "Document" {
-                    return self.err(c.pos, format!("<{VARIABLES_TAG}> belongs directly inside <Document>, not <{tag}>"));
+                    return self.err(
+                        c.pos,
+                        format!(
+                            "<{VARIABLES_TAG}> belongs directly inside <Document>, not <{tag}>"
+                        ),
+                    );
                 }
                 self.variables(c)?;
                 continue;
@@ -626,19 +778,39 @@ impl<'a> Builder<'a> {
     /// children: each attribute other than `name`/`value` is a mode's value.
     fn variables(&mut self, el: &El) -> Result<()> {
         if !self.variables.is_empty() {
-            return self.err(el.pos, format!("a document has one <{VARIABLES_TAG}> block"));
+            return self.err(
+                el.pos,
+                format!("a document has one <{VARIABLES_TAG}> block"),
+            );
         }
         for a in &el.attrs {
             match (a.name.as_str(), &a.value) {
                 ("modes", AttrValue::Bare(v) | AttrValue::Quoted(v)) => {
-                    self.variables.modes = v.split(|c: char| c.is_whitespace() || c == ',').filter(|m| !m.is_empty()).map(str::to_owned).collect();
+                    self.variables.modes = v
+                        .split(|c: char| c.is_whitespace() || c == ',')
+                        .filter(|m| !m.is_empty())
+                        .map(str::to_owned)
+                        .collect();
                 }
-                (name, _) => return self.err(a.pos, format!("unknown attribute `{name}` on <{VARIABLES_TAG}> (it takes modes=\"…\")")),
+                (name, _) => {
+                    return self.err(
+                        a.pos,
+                        format!(
+                            "unknown attribute `{name}` on <{VARIABLES_TAG}> (it takes modes=\"…\")"
+                        ),
+                    );
+                }
             }
         }
         for v in &el.children {
             if v.tag != "Var" {
-                return self.err(v.pos, format!("<{VARIABLES_TAG}> holds <Var name=… value=…> elements, not <{}>", v.tag));
+                return self.err(
+                    v.pos,
+                    format!(
+                        "<{VARIABLES_TAG}> holds <Var name=… value=…> elements, not <{}>",
+                        v.tag
+                    ),
+                );
             }
             let mut name = None;
             let mut var = Variable::default();
@@ -655,17 +827,28 @@ impl<'a> Builder<'a> {
                         var.modes.insert(mode.to_owned(), text);
                     }
                     other => {
-                        return self.err(a.pos, format!("`{other}` on <Var> is not a mode (modes: {})", self.variables.modes.join(", ")));
+                        return self.err(
+                            a.pos,
+                            format!(
+                                "`{other}` on <Var> is not a mode (modes: {})",
+                                self.variables.modes.join(", ")
+                            ),
+                        );
                     }
                 }
             }
-            let Some(name) = name else { return self.err(v.pos, "<Var> needs name=\"…\"") };
+            let Some(name) = name else {
+                return self.err(v.pos, "<Var> needs name=\"…\"");
+            };
             if var.value.is_empty() {
                 // The first mode's value stands in for modes that don't say.
                 if let Some(first) = self.variables.modes.first().and_then(|m| var.modes.get(m)) {
                     var.value = first.clone();
                 } else {
-                    return self.err(v.pos, format!("<Var name=\"{name}\"> needs value=… or a value for each mode"));
+                    return self.err(
+                        v.pos,
+                        format!("<Var name=\"{name}\"> needs value=… or a value for each mode"),
+                    );
                 }
             }
             if self.variables.vars.insert(name.clone(), var).is_some() {
@@ -683,18 +866,27 @@ impl<'a> Builder<'a> {
             "Group" => NodeKind::Group,
             "Component" => NodeKind::Component,
             "ComponentSet" => NodeKind::ComponentSet,
-            "Instance" => NodeKind::Instance { component: at.id("component")? },
+            "Instance" => NodeKind::Instance {
+                component: at.id("component")?,
+            },
             "Rectangle" => NodeKind::Rectangle,
             "Ellipse" => NodeKind::Ellipse,
             "Line" => NodeKind::Line,
             "Polygon" => NodeKind::Polygon,
             "Star" => NodeKind::Star,
             "Vector" => NodeKind::Vector,
-            "BooleanOperation" => NodeKind::BooleanOperation { op: at.keyword::<BooleanOp>("op")? },
+            "BooleanOperation" => NodeKind::BooleanOperation {
+                op: at.keyword::<BooleanOp>("op")?,
+            },
             "Utility" => NodeKind::Utility,
             "Other" => match at.str("tag")? {
                 Some(tag) => NodeKind::Other { tag },
-                None => return self.err(el.pos, "<Other> needs tag=\"…\" naming the source node type"),
+                None => {
+                    return self.err(
+                        el.pos,
+                        "<Other> needs tag=\"…\" naming the source node type",
+                    );
+                }
             },
             "Text" => NodeKind::Text(text_data(el, at)?),
             _ => unreachable!("tag validated against TAGS"),
@@ -705,13 +897,20 @@ impl<'a> Builder<'a> {
 fn text_data(el: &El, at: &Attrs<'_>) -> Result<TextData> {
     let characters = match (at.str("text")?, &el.body) {
         (Some(_), Some((_, pos))) => {
-            return Err(ParseError::at(at.src, *pos, "<Text> has both text=\"…\" and body text — use one"));
+            return Err(ParseError::at(
+                at.src,
+                *pos,
+                "<Text> has both text=\"…\" and body text — use one",
+            ));
         }
         (Some(s), None) => s,
         (None, Some((s, _))) => s.clone(),
         (None, None) => String::new(),
     };
-    let mut t = TextData { characters, ..TextData::default() };
+    let mut t = TextData {
+        characters,
+        ..TextData::default()
+    };
     t.font_family = at.str("font")?;
     if let Some(v) = at.num("size")? {
         t.font_size = v;
@@ -775,7 +974,12 @@ fn apply_common(at: &Attrs<'_>, n: &mut Node) -> Result<()> {
     if let Some(r) = at.nums("radius", &[1, 4], "radius=8 or radius=\"tl tr br bl\"")? {
         n.corner_radii = match r.as_slice() {
             [u] => CornerRadii::uniform(*u),
-            [tl, tr, br, bl] => CornerRadii { top_left: *tl, top_right: *tr, bottom_right: *br, bottom_left: *bl },
+            [tl, tr, br, bl] => CornerRadii {
+                top_left: *tl,
+                top_right: *tr,
+                bottom_right: *br,
+                bottom_left: *bl,
+            },
             _ => unreachable!("arity checked"),
         };
     }
@@ -822,9 +1026,17 @@ fn apply_common(at: &Attrs<'_>, n: &mut Node) -> Result<()> {
                 "row" | "horizontal" | "h" => LayoutDirection::Horizontal,
                 "column" | "col" | "vertical" | "v" => LayoutDirection::Vertical,
                 "none" => {
-                    return at.err(at.map["layout"], "omit `layout` for no auto layout (\"none\" isn't a value)");
+                    return at.err(
+                        at.map["layout"],
+                        "omit `layout` for no auto layout (\"none\" isn't a value)",
+                    );
                 }
-                _ => return at.err(at.map["layout"], format!("unknown value \"{dir}\" — expected \"row\" or \"column\"")),
+                _ => {
+                    return at.err(
+                        at.map["layout"],
+                        format!("unknown value \"{dir}\" — expected \"row\" or \"column\""),
+                    );
+                }
             };
             let mut l = AutoLayout {
                 direction,
@@ -853,8 +1065,17 @@ fn apply_common(at: &Attrs<'_>, n: &mut Node) -> Result<()> {
                     return at.err(at.map["hug"], format!("unknown value \"{other}\" — expected `hug` (both axes), \"main\" or \"cross\""));
                 }
             }
-            if let Some(p) = at.nums("padding", &[1, 2, 3, 4], "padding=12 or padding=\"top right bottom left\"")? {
-                (l.padding_top, l.padding_right, l.padding_bottom, l.padding_left) = match p.as_slice() {
+            if let Some(p) = at.nums(
+                "padding",
+                &[1, 2, 3, 4],
+                "padding=12 or padding=\"top right bottom left\"",
+            )? {
+                (
+                    l.padding_top,
+                    l.padding_right,
+                    l.padding_bottom,
+                    l.padding_left,
+                ) = match p.as_slice() {
                     [u] => (*u, *u, *u, *u),
                     [v, h] => (*v, *h, *v, *h),
                     [t, h, b] => (*t, *h, *b, *h),
@@ -887,7 +1108,10 @@ fn apply_common(at: &Attrs<'_>, n: &mut Node) -> Result<()> {
 
     for name in BIND_ATTRS {
         if let Some(expr) = at.str(name)? {
-            n.bind.push(Bind { prop: name.trim_start_matches("bind:").to_owned(), expr });
+            n.bind.push(Bind {
+                prop: name.trim_start_matches("bind:").to_owned(),
+                expr,
+            });
         }
     }
     n.of = at.str("of")?;
@@ -895,12 +1119,18 @@ fn apply_common(at: &Attrs<'_>, n: &mut Node) -> Result<()> {
     let mut args: Vec<(&str, usize)> = at
         .map
         .iter()
-        .filter_map(|(k, a)| k.strip_prefix(crate::schema::ARG_PREFIX).map(|name| (name, a.pos)))
+        .filter_map(|(k, a)| {
+            k.strip_prefix(crate::schema::ARG_PREFIX)
+                .map(|name| (name, a.pos))
+        })
         .collect();
     args.sort_by_key(|(_, pos)| *pos);
     for (name, _) in args {
         if let Some(expr) = at.str(&format!("{}{name}", crate::schema::ARG_PREFIX))? {
-            n.args.push(document_proto::Arg { name: name.to_owned(), expr });
+            n.args.push(document_proto::Arg {
+                name: name.to_owned(),
+                expr,
+            });
         }
     }
 
@@ -922,9 +1152,9 @@ fn apply_common(at: &Attrs<'_>, n: &mut Node) -> Result<()> {
 fn paints_value(v: Value) -> std::result::Result<Vec<document_proto::Paint>, String> {
     match v {
         Value::String(s) if s == "none" || s.is_empty() => Ok(Vec::new()),
-        Value::String(s) if parse_hex(&s).is_none() => {
-            Err(format!("\"{s}\" is not a color — write \"#rrggbb\" / \"#rrggbbaa\", or a paint list {{[…]}}"))
-        }
+        Value::String(s) if parse_hex(&s).is_none() => Err(format!(
+            "\"{s}\" is not a color — write \"#rrggbb\" / \"#rrggbbaa\", or a paint list {{[…]}}"
+        )),
         v => paints_from_json(v),
     }
 }
@@ -942,7 +1172,8 @@ fn motion_value(v: Value) -> std::result::Result<Vec<document_proto::motion::Mot
 fn geometry_value(v: Value) -> std::result::Result<Vec<String>, String> {
     match v {
         Value::String(s) => Ok(vec![s]),
-        v => serde_json::from_value(v).map_err(|_| "expected SVG path data \"M0 0 L…\" or a list {[\"…\", …]}".to_owned()),
+        v => serde_json::from_value(v)
+            .map_err(|_| "expected SVG path data \"M0 0 L…\" or a list {[\"…\", …]}".to_owned()),
     }
 }
 
@@ -951,10 +1182,15 @@ fn source_value(v: Value) -> std::result::Result<SourceRef, String> {
         Value::String(s) => {
             let mut parts = s.splitn(3, '/');
             match (parts.next(), parts.next(), parts.next()) {
-                (Some(tool), Some(node_type), Some(id)) => {
-                    Ok(SourceRef { tool: tool.to_owned(), node_type: node_type.to_owned(), id: id.to_owned(), bounds: None })
-                }
-                _ => Err(format!("expected \"tool/TYPE/id\" (e.g. \"figma/FRAME/1:2\"), got \"{s}\"")),
+                (Some(tool), Some(node_type), Some(id)) => Ok(SourceRef {
+                    tool: tool.to_owned(),
+                    node_type: node_type.to_owned(),
+                    id: id.to_owned(),
+                    bounds: None,
+                }),
+                _ => Err(format!(
+                    "expected \"tool/TYPE/id\" (e.g. \"figma/FRAME/1:2\"), got \"{s}\""
+                )),
             }
         }
         v => from_json(v),
@@ -973,6 +1209,9 @@ mod tests {
 
     #[test]
     fn entities() {
-        assert_eq!(unescape("a &amp; b &lt;c&gt; &lbrace; &#65;&#x42; & ;"), "a & b <c> { AB & ;");
+        assert_eq!(
+            unescape("a &amp; b &lt;c&gt; &lbrace; &#65;&#x42; & ;"),
+            "a & b <c> { AB & ;"
+        );
     }
 }

@@ -9,18 +9,40 @@ use crate::registry::{ComponentDef, Family, Place};
 
 /// Frequencies the grid marks (major = a decade).
 const FREQ_LINES: [f64; 27] = [
-    20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0, 2000.0, 3000.0,
-    4000.0, 5000.0, 6000.0, 7000.0, 8000.0, 9000.0, 10_000.0,
+    20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 200.0, 300.0, 400.0, 500.0, 600.0,
+    700.0, 800.0, 900.0, 1000.0, 2000.0, 3000.0, 4000.0, 5000.0, 6000.0, 7000.0, 8000.0, 9000.0,
+    10_000.0,
 ];
-const FREQ_LABELS: [(f64, &str); 10] =
-    [(20.0, "20"), (50.0, "50"), (100.0, "100"), (200.0, "200"), (500.0, "500"), (1000.0, "1k"), (2000.0, "2k"), (5000.0, "5k"), (10_000.0, "10k"), (20_000.0, "20k")];
+const FREQ_LABELS: [(f64, &str); 10] = [
+    (20.0, "20"),
+    (50.0, "50"),
+    (100.0, "100"),
+    (200.0, "200"),
+    (500.0, "500"),
+    (1000.0, "1k"),
+    (2000.0, "2k"),
+    (5000.0, "5k"),
+    (10_000.0, "10k"),
+    (20_000.0, "20k"),
+];
 
 /// A log-frequency grid over `f_min..f_max` with its labels printed under
 /// the area (in `panel`), and dB lines every `step` over `lo..hi` labelled
 /// at the area's left (`labels_left`) or right.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn freq_grid(b: &mut Builder<'_>, panel: NodeId, a: &Area, (ax, ay): (f64, f64), f: (f64, f64), db: (f64, f64, f64), labels_left: bool) {
-    let x = Axis::Log { f_min: f.0, f_max: f.1 };
+pub(crate) fn freq_grid(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    a: &Area,
+    (ax, ay): (f64, f64),
+    f: (f64, f64),
+    db: (f64, f64, f64),
+    labels_left: bool,
+) {
+    let x = Axis::Log {
+        f_min: f.0,
+        f_max: f.1,
+    };
     let y = PlotRange::linear(db.0, db.1);
     let xs: Vec<(f64, bool)> = FREQ_LINES
         .iter()
@@ -57,10 +79,22 @@ pub(crate) fn db_lines(y: &PlotRange, step: f64) -> Vec<(f64, bool)> {
 }
 
 /// dB numerals beside the lines of [`db_lines`].
-pub(crate) fn db_labels(b: &mut Builder<'_>, panel: NodeId, a: &Area, (ax, ay): (f64, f64), y: &PlotRange, step: f64, left: bool) {
+pub(crate) fn db_labels(
+    b: &mut Builder<'_>,
+    panel: NodeId,
+    a: &Area,
+    (ax, ay): (f64, f64),
+    y: &PlotRange,
+    step: f64,
+    left: bool,
+) {
     for (v, _) in db_lines(y, step) {
         let db = y.from_unit(v);
-        let s = if db > 0.5 { format!("+{db:.0}") } else { format!("{db:.0}") };
+        let s = if db > 0.5 {
+            format!("+{db:.0}")
+        } else {
+            format!("{db:.0}")
+        };
         let cy = ay + (1.0 - v) * a.h;
         if left {
             label(b, panel, &s, (ax - 5.0, cy), TextAlign::Right, LABEL);
@@ -80,9 +114,30 @@ fn spectrum(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let f = (opt_f(p, "f_min", 20.0), opt_f(p, "f_max", 20_000.0));
     freq_grid(b, root, &a, (ax, ay), f, (lo, hi, 12.0), true);
     let color = p.lamp_color(0).unwrap_or_else(|| "#748ffc".into());
-    let (fill_top, fill_bottom, line) = (super::alpha(&color, 0.42), super::alpha(&color, 0.03), super::alpha(&color, 0.9));
-    let (node, slots) = trace(b, &a, "spectrum", Look { line: Some((&line, 1.2)), fill: Some((&fill_top, &fill_bottom)), glow: Some((&color, 0.35, 4.0)), dash: false });
-    let mut c = p.control(ControlKind::Plot { style: PlotStyle::Line, x: Axis::Log { f_min: f.0, f_max: f.1 }, y: PlotRange::linear(lo, hi) });
+    let (fill_top, fill_bottom, line) = (
+        super::alpha(&color, 0.42),
+        super::alpha(&color, 0.03),
+        super::alpha(&color, 0.9),
+    );
+    let (node, slots) = trace(
+        b,
+        &a,
+        "spectrum",
+        Look {
+            line: Some((&line, 1.2)),
+            fill: Some((&fill_top, &fill_bottom)),
+            glow: Some((&color, 0.35, 4.0)),
+            dash: false,
+        },
+    );
+    let mut c = p.control(ControlKind::Plot {
+        style: PlotStyle::Line,
+        x: Axis::Log {
+            f_min: f.0,
+            f_max: f.1,
+        },
+        y: PlotRange::linear(lo, hi),
+    });
     for (role, id) in slots {
         c = c.slot(role, id.0);
     }
@@ -97,11 +152,22 @@ fn gr_history(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let (ax, ay) = (12.0, 12.0);
     let a = area(b, root, ax, ay, w - ax - 34.0, h - 24.0);
     let range = PlotRange::linear(-opt_f(p, "range", 18.0), 0.0);
-    grid(b, &a, &(1..8).map(|i| (f64::from(i) / 8.0, false)).collect::<Vec<_>>(), &db_lines(&range, 3.0));
+    grid(
+        b,
+        &a,
+        &(1..8)
+            .map(|i| (f64::from(i) / 8.0, false))
+            .collect::<Vec<_>>(),
+        &db_lines(&range, 3.0),
+    );
     db_labels(b, root, &a, (ax, ay), &range, 6.0, false);
     let len = opt_f(p, "len", 240.0) as u32;
     let (node, slots) = gr_trace(b, &a, p.lamp_color(0).as_deref().unwrap_or("#ff6b6b"));
-    let mut c = p.control(ControlKind::Plot { style: PlotStyle::Area { baseline: 0.0 }, x: Axis::Time { len }, y: range });
+    let mut c = p.control(ControlKind::Plot {
+        style: PlotStyle::Area { baseline: 0.0 },
+        x: Axis::Time { len },
+        y: range,
+    });
     for (role, id) in slots {
         c = c.slot(role, id.0);
     }
@@ -112,14 +178,41 @@ fn gr_history(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
 }
 
 /// A gain-reduction trace: red, hanging from the top, lit.
-pub(crate) fn gr_trace(b: &mut Builder<'_>, a: &Area, color: &str) -> (NodeId, Vec<(SlotRole, NodeId)>) {
-    let (top, bottom, line) = (super::alpha(color, 0.36), super::alpha(color, 0.04), super::alpha(color, 1.0));
-    trace(b, a, "gain reduction", Look { line: Some((&line, 1.6)), fill: Some((&top, &bottom)), glow: Some((color, 0.6, 6.0)), dash: false })
+pub(crate) fn gr_trace(
+    b: &mut Builder<'_>,
+    a: &Area,
+    color: &str,
+) -> (NodeId, Vec<(SlotRole, NodeId)>) {
+    let (top, bottom, line) = (
+        super::alpha(color, 0.36),
+        super::alpha(color, 0.04),
+        super::alpha(color, 1.0),
+    );
+    trace(
+        b,
+        a,
+        "gain reduction",
+        Look {
+            line: Some((&line, 1.6)),
+            fill: Some((&top, &bottom)),
+            glow: Some((color, 0.6, 6.0)),
+            dash: false,
+        },
+    )
 }
 
 /// The latest reduction, printed top right inside the trace frame.
 pub(crate) fn gr_readout(b: &mut Builder<'_>, a: &Area, frame: NodeId) -> NodeId {
-    let mut t = crate::draw::text("reduction", "0.0 dB", a.w - 76.0, 6.0, 70.0, 11.0, "#ff8787", TextAlign::Right);
+    let mut t = crate::draw::text(
+        "reduction",
+        "0.0 dB",
+        a.w - 76.0,
+        6.0,
+        70.0,
+        11.0,
+        "#ff8787",
+        TextAlign::Right,
+    );
     if let document_proto::NodeKind::Text(td) = &mut t.kind {
         td.font_weight = Some(600.0);
     }
@@ -135,8 +228,22 @@ fn scope(b: &mut Builder<'_>, parent: NodeId, p: &Place) -> NodeId {
     let ys: Vec<(f64, bool)> = (1..8).map(|i| (f64::from(i) / 8.0, i == 4)).collect();
     grid(b, &a, &xs, &ys);
     let color = p.lamp_color(0).unwrap_or_else(|| "#51cf66".into());
-    let (node, slots) = trace(b, &a, "trace", Look { line: Some((&color, 1.4)), fill: None, glow: Some((&color, 0.9, 7.0)), dash: false });
-    let mut c = p.control(ControlKind::Plot { style: PlotStyle::Line, x: Axis::Linear { min: 0.0, max: 1.0 }, y: PlotRange::linear(-1.0, 1.0) });
+    let (node, slots) = trace(
+        b,
+        &a,
+        "trace",
+        Look {
+            line: Some((&color, 1.4)),
+            fill: None,
+            glow: Some((&color, 0.9, 7.0)),
+            dash: false,
+        },
+    );
+    let mut c = p.control(ControlKind::Plot {
+        style: PlotStyle::Line,
+        x: Axis::Linear { min: 0.0, max: 1.0 },
+        y: PlotRange::linear(-1.0, 1.0),
+    });
     for (role, id) in slots {
         c = c.slot(role, id.0);
     }

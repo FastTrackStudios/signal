@@ -3,8 +3,8 @@
 //! Progress visualization components for songs and sections.
 //! Copied from `FastTrackStudio` for exact styling match.
 
-use crate::ui::prelude::*;
 use crate::proto::QueuedTarget;
+use crate::ui::prelude::*;
 
 /// Represents the loop region as percentages (0-100) within the progress bar
 #[derive(Clone, Debug, PartialEq, Default)]

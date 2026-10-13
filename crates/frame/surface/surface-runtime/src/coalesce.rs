@@ -30,7 +30,11 @@ impl Default for Coalescer {
 impl Coalescer {
     #[must_use]
     pub fn new(interval_ms: f64) -> Self {
-        Self { interval_ms, pending: BTreeMap::new(), last_sent: BTreeMap::new() }
+        Self {
+            interval_ms,
+            pending: BTreeMap::new(),
+            last_sent: BTreeMap::new(),
+        }
     }
 
     /// Queue an edit at time `t` (ms); returns what to send now.
@@ -42,7 +46,10 @@ impl Coalescer {
                 vec![Edit { addr, value, phase }]
             }
             EditPhase::Change => {
-                let due = self.last_sent.get(&addr).is_none_or(|last| t - last >= self.interval_ms);
+                let due = self
+                    .last_sent
+                    .get(&addr)
+                    .is_none_or(|last| t - last >= self.interval_ms);
                 if due {
                     self.pending.remove(&addr);
                     self.last_sent.insert(addr.clone(), t);
@@ -60,14 +67,22 @@ impl Coalescer {
         let due: Vec<ParamAddr> = self
             .pending
             .keys()
-            .filter(|a| self.last_sent.get(*a).is_none_or(|last| t - last >= self.interval_ms))
+            .filter(|a| {
+                self.last_sent
+                    .get(*a)
+                    .is_none_or(|last| t - last >= self.interval_ms)
+            })
             .cloned()
             .collect();
         due.into_iter()
             .filter_map(|addr| {
                 let value = self.pending.remove(&addr)?;
                 self.last_sent.insert(addr.clone(), t);
-                Some(Edit { addr, value, phase: EditPhase::Change })
+                Some(Edit {
+                    addr,
+                    value,
+                    phase: EditPhase::Change,
+                })
             })
             .collect()
     }
@@ -89,16 +104,38 @@ mod tests {
             sent.extend(c.push(a.clone(), 0.1 + f64::from(i) * 0.01, EditPhase::Change, t));
             sent.extend(c.poll(t));
         }
-        assert!(sent.len() <= 3, "80 ms of drag at 40 ms interval, got {}", sent.len());
+        assert!(
+            sent.len() <= 3,
+            "80 ms of drag at 40 ms interval, got {}",
+            sent.len()
+        );
         let end = c.push(a.clone(), 0.2, EditPhase::End, 81.0);
-        assert_eq!(end, vec![Edit { addr: a, value: 0.2, phase: EditPhase::End }]);
-        assert!(c.poll(500.0).is_empty(), "the end superseded anything pending");
+        assert_eq!(
+            end,
+            vec![Edit {
+                addr: a,
+                value: 0.2,
+                phase: EditPhase::End
+            }]
+        );
+        assert!(
+            c.poll(500.0).is_empty(),
+            "the end superseded anything pending"
+        );
     }
 
     #[test]
     fn independent_params_dont_block_each_other() {
         let mut c = Coalescer::new(40.0);
-        assert_eq!(c.push(ParamAddr::new("a"), 0.5, EditPhase::Change, 0.0).len(), 1);
-        assert_eq!(c.push(ParamAddr::new("b"), 0.5, EditPhase::Change, 1.0).len(), 1);
+        assert_eq!(
+            c.push(ParamAddr::new("a"), 0.5, EditPhase::Change, 0.0)
+                .len(),
+            1
+        );
+        assert_eq!(
+            c.push(ParamAddr::new("b"), 0.5, EditPhase::Change, 1.0)
+                .len(),
+            1
+        );
     }
 }

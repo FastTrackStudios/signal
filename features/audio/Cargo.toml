@@ -25,6 +25,9 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+audio = { path = ".", features = ["io"] }
 tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]

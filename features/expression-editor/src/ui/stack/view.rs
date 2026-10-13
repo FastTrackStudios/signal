@@ -2,12 +2,12 @@
 use super::geometry::{
     CHROME_ROW_H, LaneView, RULER_TICKS_H, chrome_shelves, lanes, view_span_secs,
 };
-use crate::ui::{canvas, theme};
-use dioxus::prelude::*;
-use dioxus_elements::input_data::MouseButton;
 use crate::Editor;
 pub use crate::drum::HitGesture;
 use crate::mouse::{Context as MouseContext, Gesture as MouseGesture};
+use crate::ui::{canvas, theme};
+use dioxus::prelude::*;
+use dioxus_elements::input_data::MouseButton;
 use keyboard_types::{Key, Modifiers};
 
 /// One slip/stretch drag: which hit is being slid, and where the
@@ -172,7 +172,9 @@ pub fn StackView(
     // the box and the layout are identical, and only the seam moves.
     #[cfg(not(feature = "ui-webview"))]
     let widget = use_hook(|| {
-        dioxus_native_dom::CustomWidgetAttr::new(crate::ui::roll_widget::SceneWidget::new(slot.clone()))
+        dioxus_native_dom::CustomWidgetAttr::new(crate::ui::roll_widget::SceneWidget::new(
+            slot.clone(),
+        ))
     });
     #[cfg(feature = "ui-webview")]
     let widget = "";
@@ -462,12 +464,11 @@ pub fn StackView(
     // `cfg` on an element, and resolved per build so the tree still has
     // exactly one shape at runtime.
 
-    let zoom_cursor =
-        if zoom_from().is_some() || editor.read().tool == crate::Tool::Zoom {
-            "zoom-in"
-        } else {
-            "pointer"
-        };
+    let zoom_cursor = if zoom_from().is_some() || editor.read().tool == crate::Tool::Zoom {
+        "zoom-in"
+    } else {
+        "pointer"
+    };
     rsx! {
         div {
             // Focusable so the nudge keys have somewhere to land; the

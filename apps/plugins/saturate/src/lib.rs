@@ -90,7 +90,9 @@ impl FtsSaturate {
     /// The latency `engine` adds, in samples.
     fn latency_of(&self, engine: saturate::profiles::Engine) -> u32 {
         match engine {
-            saturate::profiles::Engine::Bluebox { .. } => u32::try_from(self.bluebox.latency()).unwrap_or(0),
+            saturate::profiles::Engine::Bluebox { .. } => {
+                u32::try_from(self.bluebox.latency()).unwrap_or(0)
+            }
             _ => 0,
         }
     }
@@ -130,13 +132,20 @@ impl FtsSaturate {
         }
         // The measured models take the same knobs through their own mapping.
         match profile.engine {
-            saturate::profiles::Engine::Deluxe => self.deluxe.set(saturate::profiles::deluxe_params(&controls)),
+            saturate::profiles::Engine::Deluxe => self
+                .deluxe
+                .set(saturate::profiles::deluxe_params(&controls)),
             saturate::profiles::Engine::Bluebox { sat_freq, alt_tube } => {
-                self.bluebox.set(saturate::profiles::bluebox_params(&controls, sat_freq, alt_tube));
+                self.bluebox.set(saturate::profiles::bluebox_params(
+                    &controls, sat_freq, alt_tube,
+                ));
             }
             saturate::profiles::Engine::Preamp => {}
         }
-        (profile.voicing.digital && !self.quantiser[0].is_transparent(), profile.engine)
+        (
+            profile.voicing.digital && !self.quantiser[0].is_transparent(),
+            profile.engine,
+        )
     }
 }
 
@@ -234,17 +243,25 @@ impl Plugin for FtsSaturate {
             // wraps what it distorts, and Output stays ours.
             for mut frame in buffer.iter_samples() {
                 let mut io = [0.0f32; 2];
-                for ((sample, slot), emph) in frame.iter_mut().zip(io.iter_mut()).zip(self.emph.iter_mut()) {
+                for ((sample, slot), emph) in frame
+                    .iter_mut()
+                    .zip(io.iter_mut())
+                    .zip(self.emph.iter_mut())
+                {
                     input_peak = input_peak.max(sample.abs());
                     *slot = emph.pre(*sample);
                 }
                 let [l, r] = io;
                 let wet_pair: [f64; 2] = match engine {
-                    saturate::profiles::Engine::Deluxe => self.deluxe.process(f64::from(l), f64::from(r)),
+                    saturate::profiles::Engine::Deluxe => {
+                        self.deluxe.process(f64::from(l), f64::from(r))
+                    }
                     _ => self.bluebox.process(f64::from(l), f64::from(r)),
                 }
                 .into();
-                for ((sample, wet), emph) in frame.iter_mut().zip(wet_pair).zip(self.emph.iter_mut()) {
+                for ((sample, wet), emph) in
+                    frame.iter_mut().zip(wet_pair).zip(self.emph.iter_mut())
+                {
                     let out = emph.post(to_f32(wet)) * output;
                     output_peak = output_peak.max(out.abs());
                     *sample = out;
@@ -289,7 +306,11 @@ impl Plugin for FtsSaturate {
 }
 
 /// The measured models run in f64; the host's buffer is f32.
-#[expect(clippy::as_conversions, clippy::cast_possible_truncation, reason = "narrowing to the host's f32 buffer is the point")]
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    reason = "narrowing to the host's f32 buffer is the point"
+)]
 const fn to_f32(x: f64) -> f32 {
     x as f32
 }
@@ -381,10 +402,16 @@ mod tests {
             for i in 0..48_000 {
                 let y = match engine {
                     saturate::profiles::Engine::Deluxe => to_f32(plugin.deluxe.process(0.0, 0.0).0),
-                    saturate::profiles::Engine::Bluebox { .. } => to_f32(plugin.bluebox.process(0.0, 0.0).0),
+                    saturate::profiles::Engine::Bluebox { .. } => {
+                        to_f32(plugin.bluebox.process(0.0, 0.0).0)
+                    }
                     saturate::profiles::Engine::Preamp => {
                         let wet = plugin.pre[0].process_wet(0, 0.0);
-                        if crushing { plugin.quantiser[0].process(0, wet) } else { wet }
+                        if crushing {
+                            plugin.quantiser[0].process(0, wet)
+                        } else {
+                            wet
+                        }
                     }
                 };
                 if i > 24_000 {

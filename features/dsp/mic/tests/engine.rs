@@ -90,7 +90,13 @@ fn chain(m: Result<MicModel, ModelError>) -> Option<MicChain> {
 fn response(chain: &mut MicChain, front: f64, rear: f64, n: usize) -> Vec<f64> {
     chain.reset();
     (0..n.saturating_add(LATENCY))
-        .map(|i| if i == 0 { chain.process(front, rear) } else { chain.process(0.0, 0.0) })
+        .map(|i| {
+            if i == 0 {
+                chain.process(front, rear)
+            } else {
+                chain.process(0.0, 0.0)
+            }
+        })
         .skip(LATENCY)
         .collect()
 }
@@ -102,59 +108,119 @@ fn at(y: &[f64], i: usize) -> f64 {
 
 #[test]
 fn neutral_settings_reproduce_the_anchor() {
-    let Some(mut c) = chain(model(None)) else { return };
-    c.apply(Settings { pattern: 2, ..Settings::default() }, true);
+    let Some(mut c) = chain(model(None)) else {
+        return;
+    };
+    c.apply(
+        Settings {
+            pattern: 2,
+            ..Settings::default()
+        },
+        true,
+    );
     let y = response(&mut c, 1.0, 0.0, 8);
     // front impulse: P(axis 0) = 1 at 0, G(pattern 2) = 0.7 at 3
     assert!((at(&y, 0) - 1.0).abs() < 1e-6, "{y:?}");
     assert!((at(&y, 3) - 0.7).abs() < 1e-6, "{y:?}");
     let y = response(&mut c, 0.0, 1.0, 8);
     // rear impulse: P − G
-    assert!((at(&y, 0) - 1.0).abs() < 1e-6 && (at(&y, 3) + 0.7).abs() < 1e-6, "{y:?}");
+    assert!(
+        (at(&y, 0) - 1.0).abs() < 1e-6 && (at(&y, 3) + 0.7).abs() < 1e-6,
+        "{y:?}"
+    );
 }
 
 #[test]
 fn axis_is_a_linear_crossfade_of_the_anchors() {
-    let Some(mut c) = chain(model(None)) else { return };
+    let Some(mut c) = chain(model(None)) else {
+        return;
+    };
     // 67.5° is halfway between the 45° (P = 2) and 90° (P = 3) anchors.
-    c.apply(Settings { axis_deg: 67.5, ..Settings::default() }, true);
+    c.apply(
+        Settings {
+            axis_deg: 67.5,
+            ..Settings::default()
+        },
+        true,
+    );
     let y = response(&mut c, 1.0, 0.0, 4);
     assert!((at(&y, 0) - 2.5).abs() < 1e-6, "{y:?}");
 }
 
 #[test]
 fn rear_trim_scales_the_rear_input_before_the_swap() {
-    let Some(mut c) = chain(model(None)) else { return };
-    c.apply(Settings { rear_trim_db: 6.0, swap: true, ..Settings::default() }, true);
+    let Some(mut c) = chain(model(None)) else {
+        return;
+    };
+    c.apply(
+        Settings {
+            rear_trim_db: 6.0,
+            swap: true,
+            ..Settings::default()
+        },
+        true,
+    );
     let g = 10f64.powf(6.0 / 20.0);
     // the input's rear channel, trimmed, becomes the front capsule
     let y = response(&mut c, 0.0, 1.0, 8);
-    assert!((at(&y, 0) - g).abs() < 1e-6 && 0.9f64.mul_add(-g, at(&y, 3)).abs() < 1e-6, "{y:?}");
+    assert!(
+        (at(&y, 0) - g).abs() < 1e-6 && 0.9f64.mul_add(-g, at(&y, 3)).abs() < 1e-6,
+        "{y:?}"
+    );
 }
 
 #[test]
 fn proximity_leaves_the_pressure_path_alone() {
-    let Some(mut c) = chain(model(None)) else { return };
+    let Some(mut c) = chain(model(None)) else {
+        return;
+    };
     // Omni-like input (front = rear) has no gradient part at all.
-    c.apply(Settings { proximity: 80.0, ..Settings::default() }, true);
+    c.apply(
+        Settings {
+            proximity: 80.0,
+            ..Settings::default()
+        },
+        true,
+    );
     let near = response(&mut c, 1.0, 1.0, 64);
-    c.apply(Settings { proximity: 0.0, ..Settings::default() }, true);
+    c.apply(
+        Settings {
+            proximity: 0.0,
+            ..Settings::default()
+        },
+        true,
+    );
     let flat = response(&mut c, 1.0, 1.0, 64);
-    let diff = near.iter().zip(&flat).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
+    let diff = near
+        .iter()
+        .zip(&flat)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f64::max);
     assert!(diff < 1e-12, "max diff {diff}");
 }
 
 #[test]
 fn phase_and_output_scale_everything() {
-    let Some(mut c) = chain(model(None)) else { return };
-    c.apply(Settings { phase_invert: true, output_db: -6.0, ..Settings::default() }, true);
+    let Some(mut c) = chain(model(None)) else {
+        return;
+    };
+    c.apply(
+        Settings {
+            phase_invert: true,
+            output_db: -6.0,
+            ..Settings::default()
+        },
+        true,
+    );
     let y = response(&mut c, 1.0, 0.0, 4);
     assert!((at(&y, 0) + 10f64.powf(-6.0 / 20.0)).abs() < 1e-6, "{y:?}");
 }
 
 #[test]
 fn the_curve_adds_harmonics_and_nothing_at_small_levels() {
-    let Some(mut c) = chain(model(Some([0.01, 0.0]))) else { return };
+    let Some(mut c) = chain(model(Some([0.01, 0.0]))) else {
+        return;
+    };
     c.apply(Settings::default(), true);
     // a2 = 0.01 on s = P∗front (P = δ): a 0.5 sample gives 0.5 + 0.01·0.25
     let y = response(&mut c, 0.5, 0.0, 4);

@@ -5,10 +5,10 @@
 //! gated on the Cinematic Studio Strings library + config being present on
 //! this machine (same pattern as the A/B examples).
 
-use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings, part_to_document, render_part_offline};
 use sampler::SamplerRig;
 use sampler::document::{annotate, stage1_annotations};
 use sampler::spec::LibrarySpec;
+use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings, part_to_document, render_part_offline};
 
 const SR: u32 = 48_000;
 const SEED: u64 = 0x60D0_1234_D0C5_EED0;

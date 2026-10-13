@@ -64,16 +64,27 @@ pub(super) fn export_base_color(node: &Node) -> Option<(u8, u8, u8, u8)> {
     fn to_u8(v: f64) -> u8 {
         (v * 255.0).round().clamp(0.0, 255.0) as u8
     }
-    node.fills.iter().filter(|p| p.visible).find_map(|p| match &p.kind {
-        PaintKind::Solid { color } => Some((to_u8(color.r), to_u8(color.g), to_u8(color.b), to_u8(p.opacity))),
-        _ => None,
-    })
+    node.fills
+        .iter()
+        .filter(|p| p.visible)
+        .find_map(|p| match &p.kind {
+            PaintKind::Solid { color } => Some((
+                to_u8(color.r),
+                to_u8(color.g),
+                to_u8(color.b),
+                to_u8(p.opacity),
+            )),
+            _ => None,
+        })
 }
 
 /// The node's visible stroke paints (solid, linear and radial only), in
 /// stack order.
 #[cfg(feature = "svg_export")]
-pub(super) fn stroke_paints(node: &Node, scene: &Scene) -> Vec<crate::anyrender_renderer::FillPaint> {
+pub(super) fn stroke_paints(
+    node: &Node,
+    scene: &Scene,
+) -> Vec<crate::anyrender_renderer::FillPaint> {
     node.stroke
         .paints
         .iter()
@@ -81,7 +92,9 @@ pub(super) fn stroke_paints(node: &Node, scene: &Scene) -> Vec<crate::anyrender_
             p.visible
                 && matches!(
                     p.kind,
-                    PaintKind::Solid { .. } | PaintKind::LinearGradient { .. } | PaintKind::RadialGradient { .. }
+                    PaintKind::Solid { .. }
+                        | PaintKind::LinearGradient { .. }
+                        | PaintKind::RadialGradient { .. }
                 )
         })
         .filter_map(|p| crate::anyrender_renderer::fill_paint(p, scene))

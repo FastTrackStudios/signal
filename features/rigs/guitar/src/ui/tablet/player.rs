@@ -5,9 +5,9 @@
 //! played through: the patch, its rig preset, the gain as the player puts
 //! it.
 
-use dioxus::prelude::*;
 use crate::proto::rig::RigClient;
 use crate::proto::{DiClip, GuitarEntry, RigStatus};
+use dioxus::prelude::*;
 
 use super::tokens::*;
 
@@ -49,7 +49,11 @@ pub fn Player() -> Element {
                             status.set(st);
                         }
                     }
-                    if ask && open() && let Ok(c) = rig.di_clips().await && *clips.peek() != c {
+                    if ask
+                        && open()
+                        && let Ok(c) = rig.di_clips().await
+                        && *clips.peek() != c
+                    {
                         clips.set(c);
                     }
                     let playing = status.peek().di_playing;
@@ -57,7 +61,13 @@ pub fn Player() -> Element {
                         let next = (*turn.peek() + 12) % 360;
                         turn.set(next);
                     }
-                    let wait = if playing { 60 } else if open() { 300 } else { 900 };
+                    let wait = if playing {
+                        60
+                    } else if open() {
+                        300
+                    } else {
+                        900
+                    };
                     architect::platform::sleep(std::time::Duration::from_millis(wait)).await;
                 }
             }
@@ -66,7 +76,11 @@ pub fn Player() -> Element {
     let st = status();
     let playing = st.di_playing;
     let ink = if playing { LIVE } else { INK_2 };
-    let bg = if open() { "rgba(255,255,255,0.06)" } else { "transparent" };
+    let bg = if open() {
+        "rgba(255,255,255,0.06)"
+    } else {
+        "transparent"
+    };
     rsx! {
         div { style: "position: relative; align-self: stretch; display: flex;",
             button {
@@ -92,7 +106,13 @@ pub fn Player() -> Element {
 }
 
 #[component]
-fn Card(status: RigStatus, clips: Vec<DiClip>, guitars: Vec<GuitarEntry>, guitar: Signal<Option<String>>, on_close: EventHandler<()>) -> Element {
+fn Card(
+    status: RigStatus,
+    clips: Vec<DiClip>,
+    guitars: Vec<GuitarEntry>,
+    guitar: Signal<Option<String>>,
+    on_close: EventHandler<()>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut seconds = use_signal(|| 8u32);
     let mut guitar = guitar;
@@ -107,7 +127,14 @@ fn Card(status: RigStatus, clips: Vec<DiClip>, guitars: Vec<GuitarEntry>, guitar
     let playing = status.di_playing;
     let current = clips.iter().find(|c| c.id == status.di_clip_id).cloned();
     let recording = status.di_recording;
-    let chip = |on: bool| format!("height: {HIT}px; padding: 0 12px; border-radius: 999px; border: 1px solid {}; background: {}; color: {}; font-size: 14px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
+    let chip = |on: bool| {
+        format!(
+            "height: {HIT}px; padding: 0 12px; border-radius: 999px; border: 1px solid {}; background: {}; color: {}; font-size: 14px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; cursor: pointer; flex-shrink: 0;",
+            pick(on, INK_2, RULE_STRONG),
+            pick(on, "rgba(255,255,255,0.08)", "transparent"),
+            pick(on, INK, INK_2)
+        )
+    };
     rsx! {
         div { style: "position: absolute; top: 100%; right: 0; z-index: 60; width: 400px; max-height: 620px; display: flex; flex-direction: column; background: {SHEET}; border: 1px solid {RULE_STRONG}; border-radius: {R_MD}; overflow: hidden; font-family: {FONT}; color: {INK};",
             // What plays, and the switch for it.
@@ -196,7 +223,12 @@ fn Card(status: RigStatus, clips: Vec<DiClip>, guitars: Vec<GuitarEntry>, guitar
 
 /// What a recording went through, in a line: its patch, rig preset, gain.
 fn through(c: &DiClip) -> String {
-    [c.patch.as_str(), c.rig_preset.as_str(), c.gain.as_str()].iter().filter(|s| !s.is_empty()).copied().collect::<Vec<_>>().join(" · ")
+    [c.patch.as_str(), c.rig_preset.as_str(), c.gain.as_str()]
+        .iter()
+        .filter(|s| !s.is_empty())
+        .copied()
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// A recording: tap to play it; a recorded one's name and gain note edit in
@@ -209,11 +241,16 @@ fn ClipRow(clip: DiClip, on: bool) -> Element {
     let (r_play, r_name, r_gain, r_del) = (rig.clone(), rig.clone(), rig.clone(), rig);
     let save = move |rig: Option<RigClient>, c: DiClip| {
         if let Some(r) = rig {
-            let _ = dioxus_core::spawn_forever(async move { let _ = r.edit_di_clip(c).await; });
+            let _ = dioxus_core::spawn_forever(async move {
+                let _ = r.edit_di_clip(c).await;
+            });
         }
     };
-    let (c_name, c_gain, id_play, id_del) = (clip.clone(), clip.clone(), clip.id.clone(), clip.id.clone());
-    let field = format!("flex: 1; min-width: 0; height: {HIT}px; padding: 0 8px; border-radius: {R}; border: 1px solid transparent; background: rgba(255,255,255,0.05); color: {INK}; font-size: 13px; font-family: {FONT};");
+    let (c_name, c_gain, id_play, id_del) =
+        (clip.clone(), clip.clone(), clip.id.clone(), clip.id.clone());
+    let field = format!(
+        "flex: 1; min-width: 0; height: {HIT}px; padding: 0 8px; border-radius: {R}; border: 1px solid transparent; background: rgba(255,255,255,0.05); color: {INK}; font-size: 13px; font-family: {FONT};"
+    );
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-bottom: 1px solid {RULE}; background: {pick(on, LIVE_BG, CLEAR)};",
             div { style: "display: flex; align-items: center; gap: 10px;",

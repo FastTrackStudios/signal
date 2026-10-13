@@ -21,8 +21,8 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 use tracing::{info, warn};
 
-use crate::guide::engine::samples::{load_wav, AudioSample, SampleBank};
 use crate::guide::engine::GuideError;
+use crate::guide::engine::samples::{AudioSample, SampleBank, load_wav};
 
 /// The guide-sample key a spoken cue is stored under in the `SampleBank`.
 #[must_use]

@@ -10,14 +10,25 @@ use signal_proto::BlockType;
 /// A block whose rate is a modulation's (the tempo can lock it).
 #[must_use]
 pub fn is_modulation(bt: BlockType) -> bool {
-    matches!(bt, BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato | BlockType::Trem | BlockType::Phaser | BlockType::Rotary)
+    matches!(
+        bt,
+        BlockType::Chorus
+            | BlockType::Flanger
+            | BlockType::Vibrato
+            | BlockType::Trem
+            | BlockType::Phaser
+            | BlockType::Rotary
+    )
 }
 
 /// The rate (Hz) for a modulation locked to `sync_div` at `bpm` — a cycle
 /// in its beats — or `None` when it runs free.
 #[must_use]
 pub fn mod_synced_rate(sync_div: f32, bpm: f32) -> Option<f32> {
-    let beats = MOD_BEATS.get(sync_div.round().max(0.0) as usize).map(|b| b.1).filter(|b| *b > 0.0)?;
+    let beats = MOD_BEATS
+        .get(sync_div.round().max(0.0) as usize)
+        .map(|b| b.1)
+        .filter(|b| *b > 0.0)?;
     (bpm > 0.0).then(|| (f64::from(bpm) / 60.0 / beats) as f32)
 }
 
@@ -33,7 +44,8 @@ fn estimate_seconds(decay: f64) -> f64 {
 #[must_use]
 pub fn reverb_seconds(algorithm: f32, variant: f32, decay: f32) -> f64 {
     let alg = reverb::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
-    reverb::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay)).unwrap_or_else(|| estimate_seconds(f64::from(decay)))
+    reverb::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay))
+        .unwrap_or_else(|| estimate_seconds(f64::from(decay)))
 }
 
 /// The decay that rings for `seconds`: [`reverb_seconds`] inverted (it
@@ -56,7 +68,10 @@ pub fn reverb_decay_for(algorithm: f32, variant: f32, seconds: f64) -> f32 {
 /// runs free.
 #[must_use]
 pub fn reverb_synced_decay(algorithm: f32, variant: f32, sync_div: f32, bpm: f32) -> Option<f32> {
-    let beats = REVERB_BEATS.get(sync_div.round().max(0.0) as usize).map(|b| b.1).filter(|b| *b > 0.0)?;
+    let beats = REVERB_BEATS
+        .get(sync_div.round().max(0.0) as usize)
+        .map(|b| b.1)
+        .filter(|b| *b > 0.0)?;
     (bpm > 0.0).then(|| reverb_decay_for(algorithm, variant, beats * 60.0 / f64::from(bpm)))
 }
 
@@ -75,7 +90,15 @@ mod tests {
     #[test]
     fn a_synced_reverb_rings_for_its_beats() {
         let d = reverb_synced_decay(1.0, 0.0, 4.0, 120.0).unwrap();
-        assert!((reverb_seconds(1.0, 0.0, d) - 2.0).abs() < 0.02, "{}", reverb_seconds(1.0, 0.0, d));
-        assert_eq!(reverb_synced_decay(1.0, 0.0, 0.0, 120.0), None, "free runs on its own decay");
+        assert!(
+            (reverb_seconds(1.0, 0.0, d) - 2.0).abs() < 0.02,
+            "{}",
+            reverb_seconds(1.0, 0.0, d)
+        );
+        assert_eq!(
+            reverb_synced_decay(1.0, 0.0, 0.0, 120.0),
+            None,
+            "free runs on its own decay"
+        );
     }
 }

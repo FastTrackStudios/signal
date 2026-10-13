@@ -76,15 +76,39 @@ struct Diode {
 /// The curve's diodes for positive inputs: an expanding junction, then two
 /// clamps; the slopes take the curve flat (rail ≈ +0.30).
 const CURVE_POS: [Diode; 3] = [
-    Diode { at: 0.024_427_4, slope: 0.230_417, knee: 0.013_059_3 },
-    Diode { at: 0.202_496, slope: -0.669_985, knee: 0.017_875_4 },
-    Diode { at: 0.308_059, slope: -0.529_683, knee: 0.004 },
+    Diode {
+        at: 0.024_427_4,
+        slope: 0.230_417,
+        knee: 0.013_059_3,
+    },
+    Diode {
+        at: 0.202_496,
+        slope: -0.669_985,
+        knee: 0.017_875_4,
+    },
+    Diode {
+        at: 0.308_059,
+        slope: -0.529_683,
+        knee: 0.004,
+    },
 ];
 /// …and for negative inputs, conducting later (rail ≈ −0.38).
 const CURVE_NEG: [Diode; 3] = [
-    Diode { at: 0.149_334, slope: 0.289_693, knee: 0.014_315_8 },
-    Diode { at: 0.291_741, slope: -0.688_952, knee: 0.032_801_2 },
-    Diode { at: 0.382_739, slope: -0.600_826, knee: 0.012_598_8 },
+    Diode {
+        at: 0.149_334,
+        slope: 0.289_693,
+        knee: 0.014_315_8,
+    },
+    Diode {
+        at: 0.291_741,
+        slope: -0.688_952,
+        knee: 0.032_801_2,
+    },
+    Diode {
+        at: 0.382_739,
+        slope: -0.600_826,
+        knee: 0.012_598_8,
+    },
 ];
 
 /// Coupling high-pass after the curve, Hz.
@@ -158,7 +182,13 @@ pub struct DeluxeParams {
 
 impl Default for DeluxeParams {
     fn default() -> Self {
-        Self { crush: 0.0, crunch: 0.0, darkness_hz: 20_000.0, mix: 100.0, release_on: false }
+        Self {
+            crush: 0.0,
+            crunch: 0.0,
+            darkness_hz: 20_000.0,
+            mix: 100.0,
+            release_on: false,
+        }
     }
 }
 
@@ -199,9 +229,18 @@ impl Curve {
     pub fn new() -> Self {
         let prepare = |d: Diode| {
             let z = -d.at / d.knee;
-            Prepared { at: d.at, slope: d.slope, knee: d.knee, leak_slope: 1.0 / (1.0 + libm::exp(-z)), leak_value: d.knee * softplus(z) }
+            Prepared {
+                at: d.at,
+                slope: d.slope,
+                knee: d.knee,
+                leak_slope: 1.0 / (1.0 + libm::exp(-z)),
+                leak_value: d.knee * softplus(z),
+            }
         };
-        Self { pos: CURVE_POS.map(prepare), neg: CURVE_NEG.map(prepare) }
+        Self {
+            pos: CURVE_POS.map(prepare),
+            neg: CURVE_NEG.map(prepare),
+        }
     }
 
     /// The curve at `u` (curve-input units).
@@ -210,7 +249,9 @@ impl Curve {
     pub fn at(&self, u: f64) -> f64 {
         let a = libm::fabs(u).min(64.0);
         let side = if u >= 0.0 { &self.pos } else { &self.neg };
-        let y = side.iter().fold(a, |y, d| y + d.slope * (d.knee * softplus((a - d.at) / d.knee) - d.leak_value - d.leak_slope * a));
+        let y = side.iter().fold(a, |y, d| {
+            y + d.slope * (d.knee * softplus((a - d.at) / d.knee) - d.leak_value - d.leak_slope * a)
+        });
         if u >= 0.0 { y } else { -y }
     }
 }
@@ -234,7 +275,10 @@ fn softplus(x: f64) -> f64 {
 /// transient meets.
 #[must_use]
 pub fn static_curve(p: &DeluxeParams, x: f64) -> f64 {
-    let gain = libm::pow(10.0, (crush_db(p.crush) + CRUNCH_DB_PER_UNIT * p.crunch.clamp(0.0, 10.0)) / 20.0);
+    let gain = libm::pow(
+        10.0,
+        (crush_db(p.crush) + CRUNCH_DB_PER_UNIT * p.crunch.clamp(0.0, 10.0)) / 20.0,
+    );
     let curve = Curve::new();
     let rail = curve.at(1.0).abs().max(curve.at(-1.0).abs());
     curve.at(0.25 * gain * x) / rail
@@ -282,7 +326,12 @@ fn bilinear2(n: [f64; 3], d: [f64; 3], c: f64) -> [f64; 5] {
 /// |H(e^jω)| of a biquad at `hz`.
 fn magnitude(c: [f64; 5], hz: f64, sr: f64) -> f64 {
     let w = 2.0 * PI * hz / sr;
-    let (c1, s1, c2, s2) = (libm::cos(w), libm::sin(w), libm::cos(2.0 * w), libm::sin(2.0 * w));
+    let (c1, s1, c2, s2) = (
+        libm::cos(w),
+        libm::sin(w),
+        libm::cos(2.0 * w),
+        libm::sin(2.0 * w),
+    );
     let [b0, b1, b2, a1, a2] = c;
     let (nr, ni) = (b0 + b1 * c1 + b2 * c2, -(b1 * s1 + b2 * s2));
     let (dr, di) = (1.0 + a1 * c1 + a2 * c2, -(a1 * s1 + a2 * s2));
@@ -304,10 +353,23 @@ fn colour_filter(sr: f64) -> [Biquad; 2] {
     );
     let fh = PRE_HIGH_POLE_HZ.min(0.45 * sr);
     let (wh, wz2) = (w(fh), w(PRE_HIGH_ZERO_HZ));
-    let high = bilinear2([1.0, 1.0 / wz2, 0.0], [1.0, 1.0 / wh, 0.0], wh / libm::tan(PI * fh / sr));
+    let high = bilinear2(
+        [1.0, 1.0 / wz2, 0.0],
+        [1.0, 1.0 / wh, 0.0],
+        wh / libm::tan(PI * fh / sr),
+    );
     let g = PRE_GAIN_1K / (magnitude(low, 1000.0, sr) * magnitude(high, 1000.0, sr)).max(1e-30);
     let [b0, b1, b2, a1, a2] = low;
-    [Biquad { c: [b0 * g, b1 * g, b2 * g, a1, a2], ..Biquad::default() }, Biquad { c: high, ..Biquad::default() }]
+    [
+        Biquad {
+            c: [b0 * g, b1 * g, b2 * g, a1, a2],
+            ..Biquad::default()
+        },
+        Biquad {
+            c: high,
+            ..Biquad::default()
+        },
+    ]
 }
 
 /// Per-channel state: the colour filter, Darkness, the 4× section and the
@@ -326,7 +388,13 @@ struct Channel {
 
 impl Channel {
     fn new(sr: f64) -> Self {
-        Self { pre: colour_filter(sr), dark: [Biquad::default(); 2], os: crate::oversample::Oversample4::new(), hp_x: 0.0, hp_y: 0.0 }
+        Self {
+            pre: colour_filter(sr),
+            dark: [Biquad::default(); 2],
+            os: crate::oversample::Oversample4::new(),
+            hp_x: 0.0,
+            hp_y: 0.0,
+        }
     }
 
     fn reset(&mut self) {
@@ -379,13 +447,21 @@ impl Channel {
 const DB_TO_LN: f64 = core::f64::consts::LN_10 / 20.0;
 
 fn pole_ms(ms: f64, sample_rate: f64) -> f64 {
-    if ms <= 0.0 { 0.0 } else { libm::exp(-1000.0 / (ms * sample_rate)) }
+    if ms <= 0.0 {
+        0.0
+    } else {
+        libm::exp(-1000.0 / (ms * sample_rate))
+    }
 }
 
 /// `k · ln(1 + e^(x/k))`: a smooth `max(0, x)`.
 fn soft_over(x: f64, k: f64) -> f64 {
     let z = x / k;
-    if z > 30.0 { x } else { k * libm::log1p(libm::exp(z)) }
+    if z > 30.0 {
+        x
+    } else {
+        k * libm::log1p(libm::exp(z))
+    }
 }
 
 /// The detector's constants. [`Default`] is the measured set
@@ -556,7 +632,8 @@ impl Deluxe {
     fn refresh_detector(&mut self) {
         let (d, sr) = (self.det, self.sample_rate);
         let on = self.release_on;
-        let leak_ratio = (1.0 - pole_ms(if on { d.tau_on_ms } else { d.tau_off_ms }, sr)) / (1.0 - pole_ms(d.tau_on_ms, sr)).max(1e-12);
+        let leak_ratio = (1.0 - pole_ms(if on { d.tau_on_ms } else { d.tau_off_ms }, sr))
+            / (1.0 - pole_ms(d.tau_on_ms, sr)).max(1e-12);
         self.c = DetCoefs {
             gain: libm::pow(10.0, d.offset_db / 20.0),
             theta: libm::pow(10.0, d.theta_db / 20.0),
@@ -570,7 +647,15 @@ impl Deluxe {
             charge_max: d.charge_max_db_per_ms * 1000.0 / sr,
             rel: pole_ms(if on { d.tau_on_ms } else { d.tau_off_ms }, sr),
             fast_attack: 1.0 - pole_ms(d.fast_attack_ms, sr),
-            fast_release: 1.0 - pole_ms(if on { d.fast_release_on_ms } else { d.fast_release_off_ms }, sr),
+            fast_release: 1.0
+                - pole_ms(
+                    if on {
+                        d.fast_release_on_ms
+                    } else {
+                        d.fast_release_off_ms
+                    },
+                    sr,
+                ),
             slow_weight: if on { 0.0 } else { d.slow_weight },
             slow_charge: 1.0 - pole_ms(d.slow_charge_ms, sr),
             slow_release: pole_ms(d.slow_release_ms, sr),
@@ -607,14 +692,30 @@ impl Deluxe {
         let k = libm::tan(PI * fc.min(0.45 * sr) / sr);
         let n = 1.0 / (1.0 + k / q + k * k);
         let b0 = k * k * n;
-        let pair = [b0, 2.0 * b0, b0, 2.0 * (k * k - 1.0) * n, (1.0 - k / q + k * k) * n];
+        let pair = [
+            b0,
+            2.0 * b0,
+            b0,
+            2.0 * (k * k - 1.0) * n,
+            (1.0 - k / q + k * k) * n,
+        ];
         let k1 = libm::tan(PI * (DARK_POLE_RATIO * fc).min(0.45 * sr) / sr);
-        let pole = [k1 / (1.0 + k1), k1 / (1.0 + k1), 0.0, (k1 - 1.0) / (1.0 + k1), 0.0];
+        let pole = [
+            k1 / (1.0 + k1),
+            k1 / (1.0 + k1),
+            0.0,
+            (k1 - 1.0) / (1.0 + k1),
+            0.0,
+        ];
         for c in &mut self.ch {
             c.set_dark([pair, pole]);
         }
-        self.dark_gain = libm::pow(10.0, -DARK_LOSS_DB * libm::log1p(libm::pow(DARK_LOSS_KNEE_HZ / hz, DARK_LOSS_EXP)) / 20.0);
-        self.dark_mix = (libm::log(20_000.0 / hz) / libm::log(20_000.0 / DARK_FIRST_HZ)).clamp(0.0, 1.0);
+        self.dark_gain = libm::pow(
+            10.0,
+            -DARK_LOSS_DB * libm::log1p(libm::pow(DARK_LOSS_KNEE_HZ / hz, DARK_LOSS_EXP)) / 20.0,
+        );
+        self.dark_mix =
+            (libm::log(20_000.0 / hz) / libm::log(20_000.0 / DARK_FIRST_HZ)).clamp(0.0, 1.0);
     }
 
     pub fn reset(&mut self) {
@@ -634,7 +735,8 @@ impl Deluxe {
         let total = self.vc + self.fast + slow;
         // the gain reduction eases into its floor; zero control voltage is
         // exactly zero reduction
-        let gr = det.floor_db - soft_over(det.floor_db - total, det.floor_knee_db) - coef.floor_idle;
+        let gr =
+            det.floor_db - soft_over(det.floor_db - total, det.floor_knee_db) - coef.floor_idle;
         // 10^(−gr/20), as one exp
         let gain = libm::exp(-gr * DB_TO_LN) * self.crush * coef.gain;
         let (dm, dg) = (self.dark_mix, self.dark_gain);
@@ -644,20 +746,38 @@ impl Deluxe {
         // detector: the stereo sum, rectified and smoothed, through the
         // rectifier law against θ, integrated on a leaky cap whose voltage is
         // the gain reduction in dB (charge rate limited)
-        let det_gr = det.det_floor_db - soft_over(det.det_floor_db - total, det.floor_knee_db) - coef.det_floor_idle;
+        let det_gr = det.det_floor_db
+            - soft_over(det.det_floor_db - total, det.floor_knee_db)
+            - coef.det_floor_idle;
         let sum = libm::fabs(0.5 * (dl + dr)) * libm::exp((gr - det_gr) * DB_TO_LN);
-        self.m += if sum > self.m { coef.smooth_attack } else { coef.smooth } * (sum - self.m);
+        self.m += if sum > self.m {
+            coef.smooth_attack
+        } else {
+            coef.smooth
+        } * (sum - self.m);
         let ln_x = libm::log(self.m / coef.theta + 1e-12);
-        let q = if det.power < 1e-6 { ln_x } else { libm::expm1(det.power * ln_x) / det.power };
+        let q = if det.power < 1e-6 {
+            ln_x
+        } else {
+            libm::expm1(det.power * ln_x) / det.power
+        };
         let excess = det.soft * soft_over(q / det.soft, 1.0);
         self.vc = self.vc * coef.rel + (coef.charge * excess).min(coef.charge_max);
         // Release Off's slow component follows the cap up and bleeds slowly
-        self.slow = if self.vc > self.slow { self.slow + coef.slow_charge * (self.vc - self.slow) } else { self.slow * coef.slow_release };
+        self.slow = if self.vc > self.slow {
+            self.slow + coef.slow_charge * (self.vc - self.slow)
+        } else {
+            self.slow * coef.slow_release
+        };
         // the fast path: a peak follower on the instantaneous level, which is
         // what makes the reference dip on every drum hit and recover between
         let level_db = libm::log(sum + 1e-9) / DB_TO_LN;
         let fast_target = det.fast_k * soft_over(level_db - det.fast_t_db, det.fast_w_db);
-        let step = if fast_target > self.fast { coef.fast_attack } else { coef.fast_release };
+        let step = if fast_target > self.fast {
+            coef.fast_attack
+        } else {
+            coef.fast_release
+        };
         self.fast += step * (fast_target - self.fast);
         let (wet, dry, hb, ha, k) = (self.wet, self.dry, self.hp_b, self.hp_a, self.crunch);
         let curve = &self.curve;
@@ -678,7 +798,11 @@ mod tests {
         let c = Curve::new();
         let slope = |u: f64| (c.at(u + 1e-7) - c.at(u - 1e-7)) / 2e-7;
         assert!(c.at(0.0).abs() < 1e-15, "value at 0: {}", c.at(0.0));
-        assert!((slope(0.0) - 1.0).abs() < 1e-6, "slope at 0: {}", slope(0.0));
+        assert!(
+            (slope(0.0) - 1.0).abs() < 1e-6,
+            "slope at 0: {}",
+            slope(0.0)
+        );
         assert!(slope(2.0).abs() < 1e-3 && slope(-2.0).abs() < 1e-3);
         assert!((0.28..0.32).contains(&c.at(2.0)) && (-0.40..-0.36).contains(&c.at(-2.0)));
     }

@@ -41,7 +41,7 @@ fn every_custom_widget_is_compiled_out_under_webview() {
                 .iter()
                 .rev()
                 .take(4)
-                .any(|prior| prior.contains(r#"cfg(not(feature = "webview"))"#));
+                .any(|prior| prior.contains(r#"cfg(not(feature = "ui-webview"))"#));
             if !guarded {
                 ungated.push(format!("{}:{}", file.display(), i + 1));
             }

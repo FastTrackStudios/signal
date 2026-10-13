@@ -26,7 +26,8 @@ pub fn session_summary(session: &LogicSession) -> String {
         .filter(|t| {
             matches!(
                 t.kind,
-                crate::logic::types::TrackKind::Midi | crate::logic::types::TrackKind::SoftwareInstrument
+                crate::logic::types::TrackKind::Midi
+                    | crate::logic::types::TrackKind::SoftwareInstrument
             )
         })
         .count();

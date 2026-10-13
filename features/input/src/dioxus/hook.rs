@@ -3,12 +3,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::{
+    ActionContext, InputCommand, InputEvent, InputProcessor, KeymapConfig, ModeId, MouseAction,
+};
 use dioxus::prelude::{
     GlobalSignal, KeyboardEvent, MouseEvent, ReadableExt, Signal, WheelEvent, WritableExt, spawn,
     use_hook, use_signal,
-};
-use crate::{
-    ActionContext, InputCommand, InputEvent, InputProcessor, KeymapConfig, ModeId, MouseAction,
 };
 
 use crate::dioxus::convert::{convert_keyboard_event, convert_mouse_event, convert_wheel_event};
