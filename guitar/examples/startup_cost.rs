@@ -16,9 +16,9 @@ use signal_sampler::rig::{RigBlock, prepare_chain};
 const SAMPLE_RATE: u32 = 48_000;
 
 fn chains() -> Vec<(String, Vec<RigBlock>)> {
-    let def = signal_guitar::profiles::worship_def();
-    let dps = signal_guitar::profiles::drive_presets();
-    let profile = signal_guitar::profiles::build_profile(&def, &dps);
+    let def = guitar::profiles::worship_def();
+    let dps = guitar::profiles::drive_presets();
+    let profile = guitar::profiles::build_profile(&def, &dps);
     profile
         .patches
         .iter()

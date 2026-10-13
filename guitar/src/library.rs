@@ -308,7 +308,7 @@ pub fn rig_is_design() -> bool {
 #[derive(Clone, Debug, Default, Facet)]
 pub struct DiLib {
     #[facet(default)]
-    pub clips: Vec<signal_guitar_proto::DiClip>,
+    pub clips: Vec<crate::proto::DiClip>,
 }
 
 impl RigHome {
@@ -469,7 +469,7 @@ pub struct RigLibrary {
     /// `song-info.styx`: song colours, artists, genres, collections.
     pub song_info: SongInfoLib,
     /// `setup.styx`: the guitars, audio rigs and MIDI controllers.
-    pub setup: signal_guitar_proto::SetupModel,
+    pub setup: crate::proto::SetupModel,
     pub setlists: Vec<SetlistDef>,
     pub midi_map: MidiMapDef,
     pub keymap: Vec<KeyBindingDef>,
@@ -1157,7 +1157,7 @@ impl RigHome {
             songs: Vec::new(),
             collections: vec![CollectionDef { name: "Church".to_string(), colour: "#f472b6".to_string(), songs: Vec::new() }],
         });
-        let setup = store.read::<signal_guitar_proto::SetupModel>("setup.styx").unwrap_or_else(|| self.seed_setup());
+        let setup = store.read::<crate::proto::SetupModel>("setup.styx").unwrap_or_else(|| self.seed_setup());
         RigLibrary {
             profile,
             profiles,
@@ -1555,7 +1555,7 @@ impl RigHome {
     }
 
     /// Write `setup.styx` (refused over a file that does not parse).
-    pub fn save_setup(&self, setup: &signal_guitar_proto::SetupModel) {
+    pub fn save_setup(&self, setup: &crate::proto::SetupModel) {
         let Some(store) = self.writable_store() else {
             return;
         };
@@ -1836,7 +1836,7 @@ mod song_patch_tests {
 impl RigHome {
     /// A setup to start from, for this rig's instrument ([`seed_setup_for`]).
     #[must_use]
-    pub fn seed_setup(&self) -> signal_guitar_proto::SetupModel {
+    pub fn seed_setup(&self) -> crate::proto::SetupModel {
         seed_setup_for(self.instrument)
     }
 }
@@ -1844,8 +1844,8 @@ impl RigHome {
 /// A setup to start from: the TMG Strat into the MiniFuse, with the
 /// AIRSTEP — and the other guitars, the Scarlett and the MC6 to choose.
 #[must_use]
-pub fn seed_setup_for(instrument: Instrument) -> signal_guitar_proto::SetupModel {
-    use signal_guitar_proto::{AudioRigEntry, ControllerEntry, GuitarEntry, GuitarTone, Pickup, SetupModel, ToneOverride};
+pub fn seed_setup_for(instrument: Instrument) -> crate::proto::SetupModel {
+    use crate::proto::{AudioRigEntry, ControllerEntry, GuitarEntry, GuitarTone, Pickup, SetupModel, ToneOverride};
     let gates = |floor: f32| vec![floor + 5.0, floor + 10.0, floor + 16.0, floor + 24.0];
     let pickups = |list: &[(&str, &str)]| list.iter().map(|(p, m)| Pickup { position: (*p).into(), model: (*m).into() }).collect();
     let tone = |trim_db: f32, floor: f32, noisy: bool, low_cut_hz: f32, bass_db: f32, treble_db: f32| GuitarTone {

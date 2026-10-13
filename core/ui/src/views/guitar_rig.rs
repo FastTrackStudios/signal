@@ -21,9 +21,9 @@ use signal::{BlockType, Preset, Signal};
 use signal_browser::grid_conversion::template_to_grid_slots;
 use signal_proto::defaults::guitar::guitar_rig_template;
 
-use signal_guitar_proto::audio::AudioSettingsClient;
-use signal_guitar_proto::rig::{RigClient, RigEvent, RigStreamClient};
-use signal_guitar_ui::{MeterPair, PerformGrid, meter_level};
+use guitar::proto::audio::AudioSettingsClient;
+use guitar::proto::rig::{RigClient, RigEvent, RigStreamClient};
+use guitar::ui::{MeterPair, PerformGrid, meter_level};
 
 use crate::components::{BlockColor, GridSelection, GridSlot, block_color};
 use crate::views::{

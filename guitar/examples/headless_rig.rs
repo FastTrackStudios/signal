@@ -7,8 +7,8 @@
 
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::{RigClient, RigEvent, RigStreamClient};
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::{RigClient, RigEvent, RigStreamClient};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -125,7 +125,7 @@ async fn main() {
     );
     // Tap = on/off at the remembered level; hold (cycle) = rotate levels,
     // engaging if off.
-    let boost_db = |perf: signal_guitar::proto::PerformanceModel| perf.boost_db;
+    let boost_db = |perf: guitar::proto::PerformanceModel| perf.boost_db;
     rig.toggle_boost().await.expect("boost on");
     assert_eq!(
         boost_db(rig.perf().await.unwrap()),

@@ -19,12 +19,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use facet::Facet;
-use signal_guitar::compose::{
+use guitar::compose::{
     self, BlockLib, Compositions, ModuleLib, ModuleSnapshotDef, PresetLib, ToneLib,
 };
-use signal_guitar::library::DrivePresetLib;
-use signal_guitar::profiles::{self, DrivePresetDef, PatchDef, ProfileDef};
-use signal_guitar::session::param_specs;
+use guitar::library::DrivePresetLib;
+use guitar::profiles::{self, DrivePresetDef, PatchDef, ProfileDef};
+use guitar::session::param_specs;
 use signal_proto::BlockType;
 use signal_sampler::rig::RigBlock;
 

@@ -4,8 +4,8 @@
 //! of 0 worked the delays' times and synced reverbs' decays out from
 //! 60 000 ms ÷ 0).
 
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::Rig;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::Rig;
 
 #[test]
 fn every_shipped_setlist_walks_through_with_a_tempo() {

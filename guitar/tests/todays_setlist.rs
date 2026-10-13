@@ -1,8 +1,8 @@
 //! A setlist dated today opens on its own when the rig does: Setlist mode,
 //! that set, its first song.
 
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::Rig;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::Rig;
 
 #[test]
 fn the_setlist_dated_today_opens_with_the_rig() {

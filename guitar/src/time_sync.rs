@@ -4,7 +4,7 @@
 //! tempo — `sync_div` ([`REVERB_BEATS`]) — and is given it again whenever
 //! the tempo or its algorithm changes.
 
-pub use signal_guitar_proto::time::{MOD_BEATS, REVERB_BEATS};
+pub use crate::proto::time::{MOD_BEATS, REVERB_BEATS};
 use signal_proto::BlockType;
 
 /// A block whose rate is a modulation's (the tempo can lock it).

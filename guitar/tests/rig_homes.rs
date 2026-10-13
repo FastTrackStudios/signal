@@ -6,10 +6,10 @@
 
 use std::path::Path;
 
-use signal_guitar::instrument::{self, Instrument};
-use signal_guitar::library::rig_dir;
-use signal_guitar::proto::rig::Rig;
-use signal_guitar::{GuitarRigBackend, RigHome};
+use guitar::instrument::{self, Instrument};
+use guitar::library::rig_dir;
+use guitar::proto::rig::Rig;
+use guitar::{GuitarRigBackend, RigHome};
 
 fn profile_names(rig: &GuitarRigBackend) -> Vec<String> {
     Rig::library(rig).profiles.into_iter().map(|p| p.name).collect()

@@ -76,5 +76,5 @@ pub use views::{
 // Generated vox clients for the rig services — the host app establishes the
 // connection (in-process LocalServer or remote WebSocket) and provides these
 // via Dioxus context; views consume them with `try_consume_context`.
-pub use signal_guitar_proto::audio::AudioSettingsClient;
-pub use signal_guitar_proto::rig::{RigClient, RigStreamClient};
+pub use guitar::proto::audio::AudioSettingsClient;
+pub use guitar::proto::rig::{RigClient, RigStreamClient};

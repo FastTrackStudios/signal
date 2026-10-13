@@ -13,8 +13,8 @@
 
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::RigClient;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::RigClient;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -62,7 +62,7 @@ async fn main() {
     }
 }
 
-fn report(p: &signal_guitar::proto::LevelProgress) {
+fn report(p: &guitar::proto::LevelProgress) {
     println!();
     println!("  patch levels — {} patches", p.results.len());
     println!("  ────────────────────────────────────────────");

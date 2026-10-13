@@ -2,8 +2,8 @@
 //! a pick that takes says so, and one the rig refuses says why — the
 //! browser shows Loaded or Didn't load from exactly this answer.
 
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::Rig;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::Rig;
 
 /// The tests set the process environment the library reads: one at a time.
 static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());

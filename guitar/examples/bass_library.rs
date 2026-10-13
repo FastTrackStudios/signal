@@ -22,12 +22,12 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_guitar::compose::{
+use guitar::compose::{
     BlockChoiceDef, BlockLib, BlockPresetDef, ModuleLib, ModulePresetDef, ModuleSnapshotDef, ParamSetDef, PresetLib,
     PresetSnapshotDef, RigPresetDef, ToneLib,
 };
-use signal_guitar::library::DrivePresetLib;
-use signal_guitar::profiles::{
+use guitar::library::DrivePresetLib;
+use guitar::profiles::{
     DriveOptionDef, DrivePresetDef, DriveSlotDef, ModuleChoiceDef, OverrideDef, PatchDef, ProfileDef, StackDef,
 };
 
@@ -313,7 +313,7 @@ fn main() {
 
     // ── Songs: the same songs and sections, the guitar's sounds left out
     //    (each section plays the bass profile's stacks until given one) ──
-    let mut songs = read::<signal_guitar::library::SongLib>(&guitar.join("songs.styx"));
+    let mut songs = read::<guitar::library::SongLib>(&guitar.join("songs.styx"));
     for song in &mut songs.songs {
         song.patches.clear();
         song.stack_defaults.clear();

@@ -15,9 +15,9 @@
 use std::path::{Path, PathBuf};
 
 use facet::Facet;
-use signal_guitar::compose::{BlockLib, ModuleLib, PresetLib, ToneLib};
-use signal_guitar::library::{DrivePresetLib, SetlistLib, SongLib};
-use signal_guitar::profiles::ProfileDef;
+use guitar::compose::{BlockLib, ModuleLib, PresetLib, ToneLib};
+use guitar::library::{DrivePresetLib, SetlistLib, SongLib};
+use guitar::profiles::ProfileDef;
 
 fn read<T: for<'a> Facet<'a>>(path: &Path) -> Option<T> {
     let text = std::fs::read_to_string(path).ok()?;
@@ -78,11 +78,11 @@ fn main() {
         }
     }
 
-    merge!(ModuleLib, "modules.styx", presets, |p: &signal_guitar::compose::ModulePresetDef| format!("{}\t{}", p.module, p.name), src, dst);
-    merge!(PresetLib, "presets.styx", presets, |p: &signal_guitar::compose::RigPresetDef| p.name.clone(), src, dst);
-    merge!(BlockLib, "blocks.styx", presets, |p: &signal_guitar::compose::BlockPresetDef| format!("{}\t{}", p.block_type, p.name), src, dst);
-    merge!(ToneLib, "tones.styx", tones, |t: &signal_guitar::compose::ToneDef| t.name.clone(), src, dst);
-    merge!(DrivePresetLib, "drive-presets.styx", presets, |p: &signal_guitar::profiles::DrivePresetDef| p.name.clone(), src, dst);
+    merge!(ModuleLib, "modules.styx", presets, |p: &guitar::compose::ModulePresetDef| format!("{}\t{}", p.module, p.name), src, dst);
+    merge!(PresetLib, "presets.styx", presets, |p: &guitar::compose::RigPresetDef| p.name.clone(), src, dst);
+    merge!(BlockLib, "blocks.styx", presets, |p: &guitar::compose::BlockPresetDef| format!("{}\t{}", p.block_type, p.name), src, dst);
+    merge!(ToneLib, "tones.styx", tones, |t: &guitar::compose::ToneDef| t.name.clone(), src, dst);
+    merge!(DrivePresetLib, "drive-presets.styx", presets, |p: &guitar::profiles::DrivePresetDef| p.name.clone(), src, dst);
     // Songs: the library's are the player's own — their sections and the
     // patches they play — so its version of a song replaces the shipped one.
     {
@@ -101,7 +101,7 @@ fn main() {
             println!("{:<20} {taken} from the library", "songs.styx");
         }
     }
-    merge!(SetlistLib, "setlists.styx", setlists, |s: &signal_guitar::profiles::SetlistDef| s.name.clone(), src, dst);
+    merge!(SetlistLib, "setlists.styx", setlists, |s: &guitar::profiles::SetlistDef| s.name.clone(), src, dst);
 
     // Profiles: new ones added; `--take` ones replace the shipped copy.
     let shipped: Vec<String> = std::fs::read_dir(dst.join("profiles"))

@@ -10,9 +10,9 @@
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
 use facet::Facet;
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::RigClient;
-use signal_guitar::proto::{CompositionModel, LibraryModel, PatchInfo, PerformanceModel, PresetInfo};
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::RigClient;
+use guitar::proto::{CompositionModel, LibraryModel, PatchInfo, PerformanceModel, PresetInfo};
 use signal_proto::live_node::LiveNode;
 
 #[derive(Facet)]

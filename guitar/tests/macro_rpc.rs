@@ -2,10 +2,10 @@
 //! every call says what it did, and a save with nowhere to go offers to
 //! make somewhere rather than failing silently.
 
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::library::RigLibrary;
-use signal_guitar::proto::rig::Rig;
-use signal_guitar::proto::{MacroSave, MacroTune};
+use guitar::GuitarRigBackend;
+use guitar::library::RigLibrary;
+use guitar::proto::rig::Rig;
+use guitar::proto::{MacroSave, MacroTune};
 
 /// The tests set the process environment the library reads: one at a time.
 static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
