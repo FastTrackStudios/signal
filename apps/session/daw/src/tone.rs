@@ -40,7 +40,7 @@ use eq_ui::eq_graph_interaction::{self as interaction, GraphMapper, Mods};
 use eq_ui::eq_graph_model::{EqBand, EqBandShape, StereoMode};
 use eq_ui::eq_graph_response::calculate_combined_response;
 use fts_audio_ui::axis::{DbAxis, FreqAxis};
-use reverb_dsp::algorithm::{AlgorithmType, Family as RoomFamily};
+use reverb::algorithm::{AlgorithmType, Family as RoomFamily};
 use saturate_dsp::preamp::{Circuit, ClassAPreamp, SideShaper};
 use vello::kurbo::{Affine, BezPath, Line, Rect, Shape, Stroke};
 use vello::peniko::{Color, Fill};
@@ -13363,9 +13363,9 @@ mod face_tests {
             Some(Grip::Choose(Which::Reverb, 2))
         );
         tone.reverb.choose_family(2);
-        assert_eq!(tone.reverb.family(), reverb_dsp::algorithm::Family::Plate);
+        assert_eq!(tone.reverb.family(), reverb::algorithm::Family::Plate);
         tone.reverb.choose_family(99);
-        assert_eq!(tone.reverb.family(), reverb_dsp::algorithm::Family::Plate);
+        assert_eq!(tone.reverb.family(), reverb::algorithm::Family::Plate);
     }
 
     /// The saturator's selector picks a circuit through the plugin's

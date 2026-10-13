@@ -16,7 +16,7 @@
 //! `signal-sampler-clap`; the nice-plug-dioxus editor is a follow-up.
 
 use audiocore_core::prelude::*;
-use reverb_ui::params::{ReverbParams, ReverbUiState};
+use reverb::ui::params::{ReverbParams, ReverbUiState};
 use std::sync::Arc;
 
 use audiocore_dsp::{AudioConfig, Processor};
@@ -55,14 +55,14 @@ impl Default for FtsReverb {
         Self {
             params,
             ui_state,
-            // The editor sizes itself — see reverb_ui::control_view.
+            // The editor sizes itself — see reverb::ui::control_view.
             editor_state: DioxusState::new(|| {
                 (
-                    reverb_ui::control_view::EDITOR_W,
-                    reverb_ui::control_view::EDITOR_H,
+                    reverb::ui::control_view::EDITOR_W,
+                    reverb::ui::control_view::EDITOR_H,
                 )
             })
-            .with_resize_hint(reverb_ui::control_view::resize_hint()),
+            .with_resize_hint(reverb::ui::control_view::resize_hint()),
             chain,
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
@@ -168,11 +168,11 @@ impl Plugin for FtsReverb {
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
-            Arc::new(reverb_ui::control_view::ReverbUi {
+            Arc::new(reverb::ui::control_view::ReverbUi {
                 params: self.params.clone(),
                 state: self.ui_state.clone(),
             }),
-            reverb_ui::control_view::App,
+            reverb::ui::control_view::App,
         )
     }
 

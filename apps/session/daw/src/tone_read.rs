@@ -302,7 +302,7 @@ fn reverb(tone: &mut Tone, fx: &EngineFx, bpm: f64) {
     let beat = 60.0 / bpm.max(1.0);
     let room = &mut tone.reverb;
     let profile = fx.text("Space").and_then(|space| {
-        reverb_profiles::PROFILES
+        reverb::profiles::PROFILES
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(space.trim()))
     });
@@ -315,7 +315,7 @@ fn reverb(tone: &mut Tone, fx: &EngineFx, bpm: f64) {
         "Time" => fx.number("Decay Time"),
         "Sync" => fx.text("Decay Div").and_then(quarters).map(|q| q * beat),
         _ => profile.and_then(|p| {
-            reverb_dsp::algorithm::decay_seconds(p.algorithm, p.variant, fx.fraction("Decay")?)
+            reverb::algorithm::decay_seconds(p.algorithm, p.variant, fx.fraction("Decay")?)
         }),
     };
     if let Some(seconds) = seconds {
@@ -547,7 +547,7 @@ mod tests {
         assert!((tone.comp.attack - 10.0).abs() < 0.1);
         assert_eq!(tone.comp_face, crate::plugin_faces::CompFace::Opto);
         assert!((tone.gate.threshold + 33.0).abs() < 0.1 && (tone.gate.range - 20.0).abs() < 0.1);
-        assert_eq!(tone.reverb.algorithm, reverb_dsp::AlgorithmType::Plate);
+        assert_eq!(tone.reverb.algorithm, reverb::AlgorithmType::Plate);
         assert!(
             (tone.reverb.decay - 1.0).abs() < 1e-3,
             "a half note at 120: {}",
@@ -590,7 +590,7 @@ mod tests {
     fn written_and_read_back_is_the_same() {
         use daw_standalone::plugin::{FxFactory, PluginEvents};
         let mut tone = crate::tone::placeholder(0);
-        tone.reverb.algorithm = reverb_dsp::AlgorithmType::Hall;
+        tone.reverb.algorithm = reverb::AlgorithmType::Hall;
         tone.reverb.decay = 2.4;
         tone.reverb.sync = None;
         tone.reverb.predelay = 35.0;

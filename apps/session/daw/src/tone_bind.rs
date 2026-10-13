@@ -103,7 +103,7 @@ fn note(quarters: f64) -> Option<&'static str> {
 
 fn reverb(tone: &Tone) -> Vec<(u32, f64)> {
     let room = &tone.reverb;
-    let space = reverb_profiles::PROFILES
+    let space = reverb::profiles::PROFILES
         .iter()
         .find(|p| p.algorithm == room.algorithm)
         .map_or("Concert Hall", |p| p.name);

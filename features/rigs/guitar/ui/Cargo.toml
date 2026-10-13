@@ -52,9 +52,8 @@ fts-audio-ui.workspace = true
 # here; the painted `viz` surface is native-only, below.
 modulation-ui = { workspace = true, features = ["viz"] }
 delay = { workspace = true, features = ["ui", "viz"] }
-reverb-ui = { workspace = true, features = ["viz"] }
+reverb = { workspace = true, features = ["ui", "viz"] }
 # The engine's own decay → seconds law, so the Time readouts are what plays.
-reverb-dsp.workspace = true
 comp-ui = { workspace = true, features = ["viz"] }
 # BlockType — chain-strip coloring.
 signal-proto.workspace = true

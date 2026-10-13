@@ -19,7 +19,7 @@ use crate::tone::{Panel, Tone, Which};
 /// What a face paints.
 #[derive(Clone)]
 pub enum Picture {
-    Reverb(reverb_ui::viz::ReverbView),
+    Reverb(reverb::ui::viz::ReverbView),
     Delay(delay::ui::viz::DelayView),
     Mod(modulation_ui::viz::ModView),
     Sat(saturate_ui::viz::SatView),
@@ -67,7 +67,7 @@ fn seconds_of(knob: f64) -> f32 {
 /// algorithm — its own law, inverted — or the Time knob's log reading
 /// for an algorithm whose decay is not a calibrated time.
 fn decay_knob(room: &crate::tone::Room) -> f64 {
-    let law = |d: f64| reverb_dsp::algorithm::decay_seconds(room.algorithm, 0, d);
+    let law = |d: f64| reverb::algorithm::decay_seconds(room.algorithm, 0, d);
     let want = f64::from(room.decay);
     if law(0.5).is_none() {
         return time_knob(room.decay);
@@ -86,7 +86,7 @@ fn decay_knob(room: &crate::tone::Room) -> f64 {
 
 /// …and the seconds the engine's decay knob `d` rings for.
 fn decay_seconds(room: &crate::tone::Room, d: f64) -> f32 {
-    reverb_dsp::algorithm::decay_seconds(room.algorithm, 0, d.clamp(0.0, 1.0))
+    reverb::algorithm::decay_seconds(room.algorithm, 0, d.clamp(0.0, 1.0))
         .map_or_else(|| seconds_of(d), crate::num::narrow)
 }
 
@@ -123,8 +123,8 @@ fn time_entry(which: Which, tone: &Tone) -> Option<&'static crate::rig::FaceEntr
 }
 
 /// The algorithm as a machine's display spells a program.
-fn program_name(algorithm: reverb_dsp::algorithm::AlgorithmType) -> String {
-    use reverb_dsp::algorithm::AlgorithmType as A;
+fn program_name(algorithm: reverb::algorithm::AlgorithmType) -> String {
+    use reverb::algorithm::AlgorithmType as A;
     match algorithm {
         A::Room => "SMALL ROOM".to_owned(),
         A::Hall => "LARGE HALL".to_owned(),
@@ -169,7 +169,7 @@ fn time_face(which: Which, tone: &Tone, entry: &crate::rig::FaceEntry, back: boo
                 (
                     at("algorithm"),
                     crate::num::coord(
-                        reverb_dsp::algorithm::AlgorithmType::ALL
+                        reverb::algorithm::AlgorithmType::ALL
                             .iter()
                             .position(|a| *a == room.algorithm)
                             .unwrap_or(0),
@@ -284,7 +284,7 @@ pub fn edit(which: Which, tone: &mut Tone, addr: &str, value: f64) -> bool {
         // The algorithm button: the next machine.
         (Which::Reverb, "algo_menu") => {
             if pressed {
-                let all = reverb_dsp::algorithm::AlgorithmType::ALL;
+                let all = reverb::algorithm::AlgorithmType::ALL;
                 let at = all
                     .iter()
                     .position(|a| *a == tone.reverb.algorithm)
@@ -337,7 +337,7 @@ pub fn edit(which: Which, tone: &mut Tone, addr: &str, value: f64) -> bool {
         // A program key: that algorithm.
         (Which::Reverb, "algorithm") => {
             if let Some(algorithm) =
-                reverb_dsp::algorithm::AlgorithmType::ALL.get(crate::num::index(value.round()))
+                reverb::algorithm::AlgorithmType::ALL.get(crate::num::index(value.round()))
             {
                 tone.reverb.algorithm = *algorithm;
             }
@@ -658,7 +658,7 @@ pub fn of(which: Which, tone: &Tone) -> Option<Face> {
             let family = room.algorithm.family();
             Some(Face {
                 name: format!("{family:?}"),
-                picture: Picture::Reverb(reverb_ui::viz::ReverbView {
+                picture: Picture::Reverb(reverb::ui::viz::ReverbView {
                     decay: room.decay,
                     density: room.diffusion,
                     damp: room.damping,
@@ -794,8 +794,8 @@ pub struct Painters {
     reverbs: std::collections::HashMap<
         String,
         (
-            reverb_ui::viz::Shared<reverb_ui::viz::ReverbView>,
-            reverb_ui::viz::ReverbWidget,
+            reverb::ui::viz::Shared<reverb::ui::viz::ReverbView>,
+            reverb::ui::viz::ReverbWidget,
         ),
     >,
     delays: std::collections::HashMap<
@@ -1168,7 +1168,7 @@ impl Painters {
             let mut scene = Scene::new();
             let (w, h) = (f64::from(width), f64::from(height));
             match picture {
-                Picture::Reverb(view) => reverb_ui::viz::paint_reverb(&mut scene, view, w, h),
+                Picture::Reverb(view) => reverb::ui::viz::paint_reverb(&mut scene, view, w, h),
                 Picture::Delay(view) => delay::ui::viz::paint_delay(&mut scene, view, w, h),
                 Picture::Mod(view) => modulation_ui::viz::paint_mod(&mut scene, view, w, h),
                 Picture::Sat(view) => saturate_ui::viz::paint_sat(&mut scene, view, w, h),
@@ -1180,7 +1180,7 @@ impl Painters {
             Picture::Reverb(view) => {
                 let (shared, widget) = self.reverbs.entry(key.to_owned()).or_insert_with(|| {
                     let shared = std::rc::Rc::new(std::cell::RefCell::new(view.clone()));
-                    let mut widget = reverb_ui::viz::ReverbWidget::new(std::rc::Rc::clone(&shared));
+                    let mut widget = reverb::ui::viz::ReverbWidget::new(std::rc::Rc::clone(&shared));
                     widget.create_surfaces(ctx);
                     (shared, widget)
                 });

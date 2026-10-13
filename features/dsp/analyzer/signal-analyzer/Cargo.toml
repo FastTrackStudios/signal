@@ -18,7 +18,7 @@ serde.workspace = true
 daw = { workspace = true, features = ["standalone", "vst3-host"] }
 signal-plugin-host = { workspace = true, features = ["clap-host", "vst3-host"] }
 fx-blocks.workspace = true
-reverb-dsp.workspace = true
+reverb = { workspace = true }
 audiocore-dsp.workspace = true
 signal-import.workspace = true
 # `examples/eq_bundle_check` configures the engine directly and compares it

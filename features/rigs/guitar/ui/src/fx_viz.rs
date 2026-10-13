@@ -13,7 +13,7 @@
 pub use fts_audio_ui::paint::lane::rgb;
 
 pub use delay::ui::viz::DelayViz;
-pub use reverb_ui::viz::ReverbViz;
+pub use reverb::ui::viz::ReverbViz;
 
 /// Mark this scope dirty ~40 times a second, for as long as it lives.
 ///

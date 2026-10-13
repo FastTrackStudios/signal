@@ -32,8 +32,8 @@ fn estimate_seconds(decay: f64) -> f64 {
 /// its decay is a calibrated time, the estimate otherwise.
 #[must_use]
 pub fn reverb_seconds(algorithm: f32, variant: f32, decay: f32) -> f64 {
-    let alg = reverb_dsp::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
-    reverb_dsp::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay)).unwrap_or_else(|| estimate_seconds(f64::from(decay)))
+    let alg = reverb::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
+    reverb::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay)).unwrap_or_else(|| estimate_seconds(f64::from(decay)))
 }
 
 /// The decay that rings for `seconds`: [`reverb_seconds`] inverted (it

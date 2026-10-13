@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, mpsc};
 
-use reverb_dsp::algorithm::{AlgorithmParams, AlgorithmType};
+use reverb::algorithm::{AlgorithmParams, AlgorithmType};
 use saturate_dsp::preamp::ClassAPreamp;
 
 /// Everything in one track's rack that moves with the audio.
@@ -242,7 +242,7 @@ pub const TAIL_BINS: usize = 64;
 /// A reverb's envelope over its own decay window, in dB below its peak.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tail {
-    /// One value per slice, [`reverb_dsp::analysis::FLOOR_DB`]..0.
+    /// One value per slice, [`reverb::analysis::FLOOR_DB`]..0.
     pub envelope: Arc<[f32; TAIL_BINS]>,
     /// Whether this is the algorithm's own response, or the exponential
     /// standing in for it while the worker renders. A display draws the
@@ -297,7 +297,7 @@ impl RoomKey {
         // log map over a plausible range is the best a display can do.
         let decay = algorithm.t60_range(0).map_or_else(
             || (decay_s.clamp(0.1, 20.0) / 0.1).log(200.0),
-            |(lo, hi)| reverb_dsp::algorithm::t60_to_decay(decay_s, lo, hi),
+            |(lo, hi)| reverb::algorithm::t60_to_decay(decay_s, lo, hi),
         );
         AlgorithmParams {
             decay,
@@ -312,7 +312,7 @@ impl RoomKey {
         let mut out = [0.0_f32; TAIL_BINS];
         // The window is the decay: a tail that reaches −60 dB at the
         // panel's right edge is a tail drawn to its own setting.
-        reverb_dsp::analysis::impulse_envelope(
+        reverb::analysis::impulse_envelope(
             self.algorithm(),
             0,
             &self.params(),
@@ -436,7 +436,7 @@ pub fn tails_generation() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{LEVELS, RUNGS, RoomKey, TAIL_BINS, ladder, render_tail_now, tail};
-    use reverb_dsp::algorithm::AlgorithmType;
+    use reverb::algorithm::AlgorithmType;
     use saturate_dsp::preamp::{ClassAPreamp, SideShaper};
 
     fn biased_triode() -> ClassAPreamp {

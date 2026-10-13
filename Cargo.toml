@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/reverb",
     "features/dsp/delay",
     "features/dsp/mic",
     "features/dsp/trigger",
@@ -191,10 +192,6 @@ members = [
     "features/dsp/multiband",
     "features/dsp/core/musical-time/musical-time",
     "features/dsp/core/musical-time/musical-time-ui",
-    "features/dsp/reverb/reverb",
-    "features/dsp/reverb/reverb-dsp",
-    "features/dsp/reverb/reverb-profiles",
-    "features/dsp/reverb/reverb-ui",
     "features/dsp/saturate/saturate",
     "features/dsp/saturate/saturate-dsp",
     "features/dsp/saturate/saturate-profiles",
@@ -333,6 +330,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+reverb = { path = "features/dsp/reverb" }
 delay = { path = "features/dsp/delay" }
 mic = { path = "features/dsp/mic" }
 trigger = { path = "features/dsp/trigger" }
@@ -562,12 +560,9 @@ saturate-dsp = { path = "features/dsp/saturate/saturate-dsp", default-features =
 # family decides how a repeat is drawn, and the reverb's envelope is
 # the algorithm's actual impulse response, rendered by `reverb-dsp`'s
 # analysis probe rather than an exponential drawn from the decay knob.
-reverb-dsp = { path = "features/dsp/reverb/reverb-dsp" }
-reverb-profiles = { path = "features/dsp/reverb/reverb-profiles" }
 # The effects' own painted pictures — every reverb family, every delay
 # family, and the six modulation engines — which the FX view's devices
 # draw (`paint_reverb`, `paint_delay`, `paint_mod`, behind `viz`).
-reverb-ui = { path = "features/dsp/reverb/reverb-ui", default-features = false, features = ["viz"] }
 modulation-ui = { path = "features/dsp/modulation/modulation-ui", default-features = false, features = ["viz"] }
 saturate-ui = { path = "features/dsp/saturate/saturate-ui", default-features = false, features = ["viz"] }
 # The saturator's five circuits and their profiles — what its selector
@@ -1118,7 +1113,6 @@ spectrum-analyzer-dsp = { path = "features/dsp/eq/spectrum-analyzer/spectrum-ana
 spectrum-analyzer-ui = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-ui" }
 comp = { path = "features/dsp/comp/comp" }
 limiter-ui = { path = "features/dsp/comp/limiter-ui" }
-reverb = { path = "features/dsp/reverb/reverb" }
 modulation = { path = "features/dsp/modulation/modulation" }
 eq-dsp = { path = "features/dsp/eq/eq-dsp" }
 comp-dsp = { path = "features/dsp/comp/comp-dsp" }

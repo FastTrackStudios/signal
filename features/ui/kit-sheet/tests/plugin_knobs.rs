@@ -153,10 +153,10 @@ fn delay_faces() -> Vec<Face> {
 }
 
 fn reverb_faces() -> Vec<Face> {
-    reverb_profiles::PROFILES
+    reverb::profiles::PROFILES
         .iter()
         .map(|p| {
-            let d = reverb_ui::faces::design_for(p.id);
+            let d = reverb::ui::faces::design_for(p.id);
             Face {
                 plugin: "Reverb",
                 name: p.name.to_string(),
@@ -165,7 +165,7 @@ fn reverb_faces() -> Vec<Face> {
                 knobs: d
                     .knobs
                     .iter()
-                    .chain(reverb_ui::faces::extras_for(p.id).iter())
+                    .chain(reverb::ui::faces::extras_for(p.id).iter())
                     .map(|k| Knob {
                         param: k.param.to_string(),
                         legend: k.legend,

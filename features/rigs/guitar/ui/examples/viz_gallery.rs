@@ -30,7 +30,7 @@ use delay::ui::viz::{DelayViz, Family as DelayFamily};
 use eq_ui::eq_graph::{AnalyzerSnapshot, EqGraph};
 use eq_ui::eq_graph_model::EqBand;
 use modulation_ui::viz::{Engine, ModViz};
-use reverb_ui::viz::{Family as VerbFamily, ReverbViz};
+use reverb::ui::viz::{Family as VerbFamily, ReverbViz};
 
 /// Cyan leads modulation, pink leads motion, blue delay, purple reverb — the
 /// rig's own grouping, so the gallery reads the way the rack does.

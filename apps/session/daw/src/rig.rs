@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 
-use reverb_dsp::algorithm::AlgorithmType;
+use reverb::algorithm::AlgorithmType;
 
 /// One block of a rig, as the rig presents it to its view.
 #[derive(Clone, Debug, PartialEq)]
@@ -565,7 +565,7 @@ const MOD_HZ: (f64, f64) = (0.05, 12.0);
 fn verb_seconds(block: &Block, decay: f64) -> f64 {
     let alg = AlgorithmType::from_index(crate::num::index(block.param("algorithm", 1.0).round()));
     let variant = crate::num::index(block.param("variant", 0.0).round());
-    reverb_dsp::algorithm::decay_seconds(alg, variant, decay).unwrap_or(decay * 8.0)
+    reverb::algorithm::decay_seconds(alg, variant, decay).unwrap_or(decay * 8.0)
 }
 
 /// The decay that rings for `seconds` (the engine's law, inverted).

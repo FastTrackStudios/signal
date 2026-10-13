@@ -71,13 +71,13 @@ fn report(label: &str, ir: &[f32]) {
 /// default-constructed chain, fully wet, at the algorithm's own T60 where it
 /// has one. `algorithms_share_one_output_level` in reverb-dsp asserts against
 /// this same construction.
-fn render_chain_t60(algo: reverb_dsp::AlgorithmType, t60: f64, frames: usize) -> Vec<f64> {
+fn render_chain_t60(algo: reverb::AlgorithmType, t60: f64, frames: usize) -> Vec<f64> {
     use audiocore_dsp::{AudioConfig, Processor};
     let cfg = AudioConfig {
         sample_rate: SR,
         max_buffer_size: 512,
     };
-    let mut c = reverb_dsp::chain::ReverbChain::new();
+    let mut c = reverb::chain::ReverbChain::new();
     c.set_algorithm(algo);
     c.mix = 1.0;
     c.update(cfg);
@@ -151,7 +151,7 @@ fn main() {
     println!("== wet normalization at T60 = {T60} s (ideal energy {ideal_energy:.5}) ==");
     let long = (SR * (T60 * 3.0)) as usize;
     println!("(unity energy is the anchor; `ideal` is shown only for reference)");
-    for (i, a) in reverb_dsp::AlgorithmType::ALL.iter().enumerate() {
+    for (i, a) in reverb::AlgorithmType::ALL.iter().enumerate() {
         let ir = render_chain_t60(*a, T60, long);
         let energy: f64 = ir.iter().map(|s| s * s).sum();
         if energy <= 1e-12 {
@@ -170,7 +170,7 @@ fn main() {
     }
 
     println!("\n== does the correction hold across T60? ==");
-    for (i, a) in reverb_dsp::AlgorithmType::ALL.iter().enumerate() {
+    for (i, a) in reverb::AlgorithmType::ALL.iter().enumerate() {
         let mut line = format!("{i:>2} {a:?}");
         while line.len() < 20 {
             line.push(' ');
@@ -192,7 +192,7 @@ fn main() {
     }
     println!();
     println!("== every algorithm, decay_time = 2.0 s ==");
-    for (i, a) in reverb_dsp::AlgorithmType::ALL.iter().enumerate() {
+    for (i, a) in reverb::AlgorithmType::ALL.iter().enumerate() {
         let ir = render(i as f64, 2.0, frames, &[]);
         report(&format!("{i:>2} {a:?}"), &ir);
     }
@@ -215,7 +215,7 @@ fn main() {
     report("NL-Snare Gut Punch", &ir);
 
     println!("\n== predelay sweep, every algorithm (decay 2.0 s) ==");
-    for (i, a) in reverb_dsp::AlgorithmType::ALL.iter().enumerate() {
+    for (i, a) in reverb::AlgorithmType::ALL.iter().enumerate() {
         let mut line = format!("{i:>2} {a:?}");
         while line.len() < 20 {
             line.push(' ');
