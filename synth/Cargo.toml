@@ -11,11 +11,11 @@ workspace = true
 
 [features]
 default = ["vox"]
-ui = ["dep:dioxus", "dep:fts-chrome", "midi/ui", "dep:signal-ui", "dep:signal-widgets"]
+ui = ["dep:dioxus", "dep:fts-chrome", "midi/ui", "dep:signal-ui", "dep:signal-widgets", "architect/atom", "architect/platform", "architect/vox"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
-architect = { workspace = true, features = ["atom", "platform", "vox"] }
+architect = { workspace = true }
 dioxus = { workspace = true, optional = true }
 facet = { workspace = true }
 facet-styx = { workspace = true }

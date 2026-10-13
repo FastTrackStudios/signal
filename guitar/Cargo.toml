@@ -12,12 +12,12 @@ workspace = true
 [features]
 default = ["vox"]
 pipewire = []
-ui = ["dep:anyrender", "dep:base64", "dep:comp", "dep:delay", "dep:dioxus", "dep:eq", "dep:fts-audio-ui", "dep:fts-chrome", "dep:kurbo", "dep:lumen-blocks", "dep:modulation", "dep:serde_json", "dep:signal-account-proto", "dep:signal-grid", "dep:signal-grid-ui", "dep:signal-tone3000-proto", "dep:signal-tone3000-ui", "dep:signal-widgets"]
+ui = ["dep:anyrender", "dep:base64", "dep:comp", "dep:delay", "dep:dioxus", "dep:eq", "dep:fts-audio-ui", "dep:fts-chrome", "dep:kurbo", "dep:lumen-blocks", "dep:modulation", "dep:serde_json", "dep:signal-account-proto", "dep:signal-grid", "dep:signal-grid-ui", "dep:signal-tone3000-proto", "dep:signal-tone3000-ui", "dep:signal-widgets", "architect/atom", "architect/platform", "reverb/ui", "reverb/viz", "uuid/v4"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
 anyrender = { workspace = true, optional = true }
-architect = { workspace = true, features = ["atom", "platform", "rig", "vox"] }
+architect = { workspace = true, features = ["rig", "vox"] }
 base64 = { workspace = true, optional = true }
 blake3 = { workspace = true }
 builtin = { workspace = true }
@@ -38,7 +38,7 @@ lumen-blocks = { workspace = true, optional = true }
 memmap2 = { workspace = true }
 midi = { workspace = true, features = ["midir", "vox"] }
 modulation = { workspace = true, features = ["ui", "viz"], optional = true }
-reverb = { workspace = true, features = ["ui", "viz"] }
+reverb = { workspace = true }
 serde_json = { workspace = true, optional = true }
 signal-account-proto = { workspace = true, optional = true }
 signal-grid = { workspace = true, optional = true }
@@ -54,7 +54,7 @@ signal-tone3000-ui = { workspace = true, optional = true }
 signal-widgets = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
+uuid = { workspace = true }
 vox = { workspace = true, optional = true }
 
 [dev-dependencies]
