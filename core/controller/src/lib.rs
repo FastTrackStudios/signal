@@ -14,12 +14,12 @@
 //!   signal-controller (this crate)
 //!           |
 //!           v
-//!   signal (facade), signal-import, signal-ui
+//!   signal (facade), signal-import
 //! ```
 //!
 //! **Depends on**: `signal-proto`, `signal-live`
 //!
-//! **Depended on by**: `signal` (facade), `signal-import`, `signal-ui`
+//! **Depended on by**: `signal` (facade), `signal-import`
 //!
 //! # Key types
 //!
