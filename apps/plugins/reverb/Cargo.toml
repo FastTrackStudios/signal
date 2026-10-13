@@ -23,7 +23,7 @@ nice-plug = { workspace = true, features = ["vst3"] }
 reverb = { workspace = true, features = ["native", "profiles", "ui", "viz"] }
 
 # The chain's lifecycle trait (`Processor`) + `AudioConfig` live here.
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["audio"] }
 
 # The Blitz/nice-plug editor: the seven families and their panels. `native`
 # pulls nice-plug-dioxus.

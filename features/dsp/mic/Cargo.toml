@@ -25,3 +25,13 @@ realfft = { workspace = true }
 dioxus-test = { workspace = true }
 hound = { version = "3.5" }
 tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[test]]
+name = "gui_editor"
+path = "tests/gui_editor.rs"
+required-features = ["ui"]
+
+[[test]]
+name = "param_round_trip"
+path = "tests/param_round_trip.rs"
+required-features = ["ui"]

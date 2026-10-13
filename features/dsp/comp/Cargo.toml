@@ -19,7 +19,7 @@ anyrender = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 audio = { workspace = true, optional = true }
-dsp-core = { workspace = true, features = ["params", "time-ui"] }
+dsp-core = { workspace = true, features = ["audio", "params", "time-ui"] }
 blitz-dom = { workspace = true, features = ["custom-widget"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 dioxus = { workspace = true, optional = true }
@@ -37,7 +37,7 @@ web-time = { workspace = true, optional = true }
 [dev-dependencies]
 dioxus = { workspace = true }
 dioxus-test = { workspace = true }
-dsp-core = { workspace = true, features = ["golden"] }
+dsp-core = { workspace = true, features = ["audio", "golden"] }
 fts-audio-ui = { workspace = true, features = ["probe"] }
 naga = { version = "29", features = ["wgsl-in"] }
 png = { version = "0.18" }
@@ -45,16 +45,26 @@ tokio = { workspace = true, features = ["macros", "rt"] }
 
 [[test]]
 name = "gui_editor"
-required-features = ["native"]
+required-features = ["native", "profiles", "ui"]
 
 [[test]]
 name = "screenshots"
-required-features = ["native"]
+required-features = ["native", "profiles", "ui"]
 
 [[test]]
 name = "param_round_trip"
-required-features = ["native"]
+required-features = ["native", "ui"]
 
 [[test]]
 name = "tempo_sync"
-required-features = ["native"]
+required-features = ["native", "ui"]
+
+[[test]]
+name = "ui_limiter_gui_editor"
+path = "tests/ui_limiter_gui_editor.rs"
+required-features = ["ui"]
+
+[[example]]
+name = "comp_sheet"
+path = "examples/comp_sheet.rs"
+required-features = ["ui", "viz"]

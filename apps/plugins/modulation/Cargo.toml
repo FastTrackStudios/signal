@@ -30,7 +30,7 @@ nice-plug = { workspace = true, features = ["vst3"] }
 # `chorus` / `trem` / `wah`). Never depend on the `*-dsp` crates directly.
 
 # The `Processor` trait + `AudioConfig` the modulation chains implement.
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["audio"] }
 
 [features]
 default = []

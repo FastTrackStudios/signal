@@ -77,7 +77,6 @@ members = [
     "features/dynamic-template/dynamic-template",
     "features/dynamic-template/dynamic-template-extension",
     "features/dynamic-template/dynamic-template-proto",
-    "features/dynamic-template/tests",
     "features/guide",
     "features/patch-list",
     "features/adapters/reaper/session-extension",

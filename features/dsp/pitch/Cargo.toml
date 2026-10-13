@@ -14,7 +14,7 @@ default = []
 rubberband = []
 
 [dependencies]
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["audio"] }
 realfft = { workspace = true }
 serde = { workspace = true }
 

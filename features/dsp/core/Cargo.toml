@@ -11,10 +11,14 @@ workspace = true
 
 [features]
 default = ["loudness"]
-golden = []
+golden = ["std"]
 loudness = ["ebur128"]
-params = ["dep:nice-plug"]
-time-ui = ["dep:dioxus", "dep:fts-audio-ui"]
+params = ["dep:nice-plug", "std"]
+time-ui = ["dep:dioxus", "dep:fts-audio-ui", "std"]
+std = []
+audio = ["std"]
+modulation = ["audio"]
+meter = ["std"]
 
 [dependencies]
 atomic_float = { workspace = true }
@@ -24,3 +28,13 @@ fts-audio-ui = { workspace = true, optional = true }
 nice-plug = { workspace = true, optional = true }
 parking_lot = { version = "0.12" }
 realfft = { version = "3" }
+
+[[test]]
+name = "loudness"
+path = "tests/loudness.rs"
+required-features = ["audio"]
+
+[[test]]
+name = "oversampling"
+path = "tests/oversampling.rs"
+required-features = ["audio"]

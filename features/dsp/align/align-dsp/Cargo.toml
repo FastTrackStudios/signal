@@ -11,7 +11,7 @@ description = "align-dsp — take-to-take temporal alignment: macro offset searc
 # arithmetic, because the point of this crate is to be usable from any
 # host — including wasm and offline batch — with no audio backend.
 realfft = { workspace = true }
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["audio"] }
 
 [dev-dependencies]
 align-dsp = { workspace = true }

@@ -24,7 +24,7 @@ anyrender = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 audio = { workspace = true, optional = true }
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["audio"] }
 blitz-dom = { workspace = true, features = ["autofocus"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 dioxus = { workspace = true, optional = true }
@@ -48,7 +48,7 @@ blitz-traits = { workspace = true }
 dioxus = { workspace = true }
 dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false }
 dioxus-test = { workspace = true }
-dsp-core = { workspace = true, features = ["golden"] }
+dsp-core = { workspace = true, features = ["audio", "golden"] }
 naga = { version = "29", features = ["wgsl-in"] }
 pollster = { version = "0.4" }
 test-that = { version = "0.5.2", default-features = false, features = ["regex", "num-traits"] }
@@ -62,12 +62,37 @@ nice-plug-dioxus = { workspace = true, optional = true }
 
 [[test]]
 name = "gui_editor"
-required-features = ["native"]
+required-features = ["graph", "native", "ui"]
 
 [[test]]
 name = "screenshots"
-required-features = ["native"]
+required-features = ["native", "ui"]
 
 [[test]]
 name = "param_round_trip"
-required-features = ["native"]
+required-features = ["native", "ui"]
+
+[[test]]
+name = "gui_headless"
+path = "tests/gui_headless.rs"
+required-features = ["ui"]
+
+[[test]]
+name = "gui_smoke"
+path = "tests/gui_smoke.rs"
+required-features = ["ui"]
+
+[[test]]
+name = "proq_presets"
+path = "tests/proq_presets.rs"
+required-features = ["native", "ui"]
+
+[[test]]
+name = "scene_snapshot"
+path = "tests/scene_snapshot.rs"
+required-features = ["graph", "graph-paint", "ui"]
+
+[[test]]
+name = "ui_overheads_preset"
+path = "tests/ui_overheads_preset.rs"
+required-features = ["native", "ui"]

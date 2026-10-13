@@ -19,7 +19,7 @@ viz = ["dep:anyrender", "dep:blitz-dom", "dep:dioxus-native-dom", "dep:vello", "
 anyrender = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["audio", "modulation"] }
 blitz-dom = { workspace = true, features = ["custom-widget"], optional = true }
 dioxus = { workspace = true, optional = true }
 dioxus-native-dom = { workspace = true, optional = true }
@@ -42,8 +42,13 @@ tokio = { workspace = true, features = ["macros", "rt"] }
 
 [[test]]
 name = "screenshots"
-required-features = ["native"]
+required-features = ["native", "profiles", "ui"]
 
 [[test]]
 name = "engines_differ"
-required-features = ["viz"]
+required-features = ["ui", "viz"]
+
+[[example]]
+name = "engine_sheet"
+path = "examples/engine_sheet.rs"
+required-features = ["ui", "viz"]

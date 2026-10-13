@@ -7,7 +7,7 @@ edition = "2021"          # kept on 2021 — pre-move workspace edition; migrate
 description = "Vello scene overlay painters for audio metering — spectrum, LUFS, K-meter, goniometer, phase"
 
 [dependencies]
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["meter"] }
 nice-plug = { workspace = true }
 nice-plug-dioxus = { workspace = true }
 parking_lot = "0.12"

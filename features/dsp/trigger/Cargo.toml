@@ -17,7 +17,7 @@ ui = []
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 audio = { workspace = true, optional = true }
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["audio"] }
 eq = { workspace = true }
 fts-audio-ui = { workspace = true, optional = true }
 fts-plug-ui = { workspace = true, optional = true }

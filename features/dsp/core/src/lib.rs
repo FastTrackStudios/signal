@@ -17,10 +17,13 @@
 //! `AudioWorklet`, and on an embedded target alike.
 
 
-#![cfg_attr(not(any(feature = "golden", feature = "time-ui")), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "audio")]
 pub mod audio;
+#[cfg(feature = "modulation")]
 pub mod modulation;
+#[cfg(feature = "meter")]
 pub mod meter;
 pub mod time;
 #[cfg(feature = "golden")]

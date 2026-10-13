@@ -35,6 +35,13 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# The integration tests (the former dynamic-template-tests crate).
+daw-standalone = { workspace = true, features = ["audio"] }
+facet-styx = { workspace = true }
+tempfile = "3.8"
+pretty_assertions = "1.4"
+insta = "1.34"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 facet-json = { workspace = true }
 
 [features]
@@ -48,3 +55,53 @@ reaper = ["daw/reaper", "dep:daw-reaper"]
 
 [lints]
 workspace = true
+
+[[test]]
+name = "01_no_unneccesary_folders"
+path = "tests/01_no_unneccesary_folders.rs"
+required-features = ["reaper"]
+
+[[test]]
+name = "02_scoped_resorting"
+path = "tests/02_scoped_resorting.rs"
+required-features = ["reaper"]
+
+[[test]]
+name = "03_assertion_sensitivity"
+path = "tests/03_assertion_sensitivity.rs"
+required-features = ["reaper"]
+
+[[test]]
+name = "04_visibility_classification"
+path = "tests/04_visibility_classification.rs"
+required-features = ["reaper"]
+
+[[test]]
+name = "06_organize_is_lossless"
+path = "tests/06_organize_is_lossless.rs"
+required-features = ["reaper"]
+
+[[test]]
+name = "07_template_group_flags"
+path = "tests/07_template_group_flags.rs"
+required-features = ["reaper"]
+
+[[test]]
+name = "08_golden_session"
+path = "tests/08_golden_session.rs"
+required-features = ["reaper"]
+
+[[test]]
+name = "multitrack_examples"
+path = "tests/multitrack_examples.rs"
+required-features = ["reaper"]
+
+[[test]]
+name = "08_scene_selector"
+path = "tests/08_scene_selector.rs"
+required-features = ["reaper"]
+
+[[test]]
+name = "09_grouping_watcher"
+path = "tests/09_grouping_watcher.rs"
+required-features = ["reaper"]

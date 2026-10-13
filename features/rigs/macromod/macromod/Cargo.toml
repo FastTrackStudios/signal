@@ -9,7 +9,7 @@ authors.workspace = true
 workspace = true
 
 [dependencies]
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["modulation"] }
 serde.workspace = true
 serde_json.workspace = true
 facet.workspace = true

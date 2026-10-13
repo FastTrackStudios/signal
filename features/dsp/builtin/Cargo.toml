@@ -19,7 +19,7 @@ daw-proto = { workspace = true }
 daw-standalone = { workspace = true, optional = true }
 delay = { workspace = true }
 delay-plugin = { workspace = true, optional = true }
-dsp-core = { workspace = true }
+dsp-core = { workspace = true, features = ["audio"] }
 eq = { workspace = true }
 eq-plugin = { workspace = true, optional = true }
 fts-sample = { workspace = true, features = ["load"] }

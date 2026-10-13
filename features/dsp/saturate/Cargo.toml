@@ -46,11 +46,11 @@ tokio = { workspace = true, features = ["macros", "rt"] }
 
 [[example]]
 name = "sat_sheet"
-required-features = ["viz"]
+required-features = ["profiles", "ui", "viz"]
 
 [[test]]
 name = "screenshots"
-required-features = ["native"]
+required-features = ["native", "profiles", "ui"]
 
 [[test]]
 name = "emphasis_eq"
@@ -58,8 +58,18 @@ required-features = ["native"]
 
 [[test]]
 name = "sat_viz"
-required-features = ["viz"]
+required-features = ["profiles", "ui", "viz"]
 
 [[test]]
 name = "param_round_trip"
-required-features = ["native"]
+required-features = ["native", "ui"]
+
+[[test]]
+name = "gain_comp"
+path = "tests/gain_comp.rs"
+required-features = ["profiles"]
+
+[[test]]
+name = "knob_readouts"
+path = "tests/knob_readouts.rs"
+required-features = ["native", "ui"]

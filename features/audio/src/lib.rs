@@ -10,7 +10,6 @@
 //! use crate::ui::prelude::*;  // FTS UI components (Toggle, Section, etc.)
 //! ```
 
-#![cfg_attr(not(any(feature = "io")), no_std)]
 
 #[cfg(feature = "io")]
 pub mod io;
