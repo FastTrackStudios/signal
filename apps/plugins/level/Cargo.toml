@@ -20,7 +20,7 @@ workspace = true
 nice-plug = { workspace = true, features = ["vst3"] }
 
 # The DSP facade (re-exports level-dsp). Never depend on level-dsp directly.
-level.workspace = true
+level = { workspace = true }
 
 [features]
 default = []

@@ -624,8 +624,8 @@ fn a_layout_from_a_different_project_is_ignored_rather_than_applied() {
 // ── Envelopes persist, in item-relative time (#208) ──────────────────
 
 use expression_editor_daw::state::ItemEnvelopes;
-use level_dsp::classify::ClassifyConfig;
-use level_dsp::envelope::{Contributions, EnvPoint, GainSpan, GenerationConfig, analyze, generate};
+use level::classify::ClassifyConfig;
+use level::envelope::{Contributions, EnvPoint, GainSpan, GenerationConfig, analyze, generate};
 
 const ITEM: &str = "{ITEM-GUID}";
 

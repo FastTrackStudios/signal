@@ -4,7 +4,7 @@
 //! An engineer evens a kick out before mixing it — clip gain stroke by
 //! stroke, or a compressor — so the compressor later shapes a steady
 //! drum rather than chasing an uneven one. Here it is the leveler's drum
-//! ride ([`level_dsp::drums`]): one gain a stroke, read off its hit
+//! ride ([`level::drums`]): one gain a stroke, read off its hit
 //! marker's level, set a few milliseconds before the attack and held
 //! through the ring. A ghost note, bleed or a flam's grace is no stroke
 //! and rides under the stroke before it.
@@ -47,7 +47,7 @@ fn hits_on(
     project: &ProjectContext,
     item: &daw_proto::Item,
     piece: &str,
-) -> Vec<level_dsp::drums::Hit> {
+) -> Vec<level::drums::Hit> {
     let markers = daw.get_take_markers(
         project.clone(),
         ItemRef::Guid(item.guid.clone()),
@@ -62,7 +62,7 @@ fn hits_on(
             Some((m.id.as_str(), (h.peak_db, m.source_position_seconds)))
         })
         .collect();
-    let mut hits: Vec<level_dsp::drums::Hit> = markers
+    let mut hits: Vec<level::drums::Hit> = markers
         .iter()
         .filter(|m| m.source_position_seconds >= from && m.source_position_seconds < to)
         .filter_map(|m| {
@@ -74,7 +74,7 @@ fn hits_on(
                 .as_deref()
                 .and_then(|other| peaks.get(other))
                 .is_some_and(|(peak, _)| *peak > h.peak_db);
-            Some(level_dsp::drums::Hit {
+            Some(level::drums::Hit {
                 t_s: m.source_position_seconds - from,
                 level_db: h.peak_db,
                 stroke: !(h.ghost || h.bleed || grace),
@@ -102,17 +102,17 @@ pub struct Knobs {
 }
 
 /// The ride for a drum by its name, turned by `knobs`.
-fn ride_for(piece: &str, knobs: &Knobs) -> level_dsp::drums::DrumRide {
+fn ride_for(piece: &str, knobs: &Knobs) -> level::drums::DrumRide {
     let name = piece.to_lowercase();
     let ride = if name.contains("kick") {
-        level_dsp::drums::DrumRide::KICK
+        level::drums::DrumRide::KICK
     } else if name.contains("snare") {
-        level_dsp::drums::DrumRide::SNARE
+        level::drums::DrumRide::SNARE
     } else {
-        level_dsp::drums::DrumRide::TOM
+        level::drums::DrumRide::TOM
     };
     let range = knobs.range_db.map(f64::abs);
-    level_dsp::drums::DrumRide {
+    level::drums::DrumRide {
         amount: knobs.consistency.map_or(ride.amount, |c| c.clamp(0.0, 1.0)),
         max_gain_db: range.unwrap_or(ride.max_gain_db),
         max_cut_db: range.unwrap_or(ride.max_cut_db),
@@ -191,27 +191,27 @@ pub fn level(
         };
         // Every hit on the song's timeline: what each stroke is held up to
         // is the playing around it there.
-        let mut all: Vec<level_dsp::drums::Hit> = comp_items(daw, project, first)
+        let mut all: Vec<level::drums::Hit> = comp_items(daw, project, first)
             .iter()
             .flat_map(|item| {
                 let at = item.position.as_seconds();
                 hits_on(daw, project, item, &piece.name)
                     .into_iter()
-                    .map(move |h| level_dsp::drums::Hit {
+                    .map(move |h| level::drums::Hit {
                         t_s: h.t_s + at,
                         ..h
                     })
             })
             .collect();
         all.sort_by(|a, b| a.t_s.total_cmp(&b.t_s));
-        let Some(target) = level_dsp::drums::target(&all) else {
+        let Some(target) = level::drums::target(&all) else {
             continue;
         };
         let around = |t: f64| {
             if knobs.whole_song {
                 target
             } else {
-                level_dsp::drums::target_at(&all, t).unwrap_or(target)
+                level::drums::target_at(&all, t).unwrap_or(target)
             }
         };
         let mut said = Leveled {
@@ -220,7 +220,7 @@ pub fn level(
             ..Leveled::default()
         };
         for hit in all.iter().filter(|h| h.stroke) {
-            let g = level_dsp::drums::gain(hit.level_db, around(hit.t_s), &ride);
+            let g = level::drums::gain(hit.level_db, around(hit.t_s), &ride);
             said.strokes = said.strokes.saturating_add(1);
             if g > ride.least_db {
                 said.raised = said.raised.saturating_add(1);
@@ -237,7 +237,7 @@ pub fn level(
             for mic in &piece.mics {
                 for item in leveled_items(daw, project, mic) {
                     let at = item.position.as_seconds();
-                    let curve = level_dsp::drums::ride(
+                    let curve = level::drums::ride(
                         &hits_on(daw, project, &item, &piece.name),
                         |t| around(t + at),
                         &ride,
@@ -265,7 +265,7 @@ pub(crate) fn write_curve(
     daw: &daw::standalone::Standalone,
     project: &ProjectContext,
     item: &daw_proto::Item,
-    curve: &[level_dsp::envelope::EnvPoint],
+    curve: &[level::envelope::EnvPoint],
 ) -> bool {
     let Some(take) = daw.get_active_take(project.clone(), ItemRef::Guid(item.guid.clone())) else {
         return false;
@@ -308,9 +308,9 @@ mod tests {
     #[test]
     fn each_drum_has_its_own_ride() {
         let none = Knobs::default();
-        assert_eq!(ride_for("Kick", &none), level_dsp::drums::DrumRide::KICK);
-        assert_eq!(ride_for("Snare", &none), level_dsp::drums::DrumRide::SNARE);
-        assert_eq!(ride_for("Tom 3", &none), level_dsp::drums::DrumRide::TOM);
+        assert_eq!(ride_for("Kick", &none), level::drums::DrumRide::KICK);
+        assert_eq!(ride_for("Snare", &none), level::drums::DrumRide::SNARE);
+        assert_eq!(ride_for("Tom 3", &none), level::drums::DrumRide::TOM);
         let all_one = Knobs {
             consistency: Some(1.0),
             range_db: Some(24.0),
@@ -320,6 +320,6 @@ mod tests {
         assert!((ride.amount - 1.0).abs() < 1e-12);
         assert!((ride.max_gain_db - 24.0).abs() < 1e-12 && (ride.max_cut_db - 24.0).abs() < 1e-12);
         // At 100% a stroke lands on the target, as far as the range allows.
-        assert!((level_dsp::drums::gain(-30.0, -20.0, &ride) - 10.0).abs() < 1e-12);
+        assert!((level::drums::gain(-30.0, -20.0, &ride) - 10.0).abs() < 1e-12);
     }
 }

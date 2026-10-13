@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/level",
     "features/dsp/tune",
     "features/dsp/gate",
     # ── session ──
@@ -106,7 +107,6 @@ members = [
     "features/formats/dawfile-reaper",
     "features/formats/dawfile-standalone",
     "features/formats/dawfile-store",
-    "features/dsp/level/level-dsp",
     "features/dsp/pitch/pitch-dsp",
     "features/launcher/fts-launcher",
     "features/adapters/reaper/daw-bridge",
@@ -181,7 +181,6 @@ members = [
     "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-dsp",
     "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-ui",
     "features/dsp/hits/hit-detect/hit-detect-dsp",
-    "features/dsp/level/level",
     "features/dsp/modulation/chorus-dsp",
     "features/dsp/modulation/modulation",
     "features/dsp/modulation/modulation-profiles",
@@ -342,6 +341,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+level = { path = "features/dsp/level" }
 tune = { path = "features/dsp/tune" }
 # Razor edit areas: a rectangle of time by row, and the set algebra over
 # it. Dependency-free and shared by the expression editor and the
@@ -618,7 +618,6 @@ expression-editor-standalone = { path = "features/expression-editor/expression-e
 expression-editor-tools = { path = "features/expression-editor/expression-editor-tools" }
 expression-editor-paint = { path = "features/expression-editor/expression-editor-paint" }
 expression-editor-ui = { path = "features/expression-editor/expression-editor-ui" }
-level-dsp = { path = "features/dsp/level/level-dsp" }
 # Internal DSP cores (behind the facades).
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────
@@ -1132,7 +1131,6 @@ limiter-ui = { path = "features/dsp/comp/limiter-ui" }
 reverb = { path = "features/dsp/reverb/reverb" }
 delay = { path = "features/dsp/delay/delay" }
 pitch = { path = "features/dsp/pitch/pitch" }
-level = { path = "features/dsp/level/level" }
 modulation = { path = "features/dsp/modulation/modulation" }
 eq-dsp = { path = "features/dsp/eq/eq-dsp" }
 comp-dsp = { path = "features/dsp/comp/comp-dsp" }

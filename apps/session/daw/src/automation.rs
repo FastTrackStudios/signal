@@ -47,7 +47,7 @@ pub fn leveler_target(stage: Stage) -> EnvelopeRef {
 /// The dB a leveler curve (`hold` points step) gives at lane time `t`; 0
 /// with none.
 #[must_use]
-pub fn db_at(points: &[level_dsp::envelope::EnvPoint], t: f64) -> f64 {
+pub fn db_at(points: &[level::envelope::EnvPoint], t: f64) -> f64 {
     let after = points.partition_point(|p| p.t_s <= t);
     match (
         after.checked_sub(1).and_then(|i| points.get(i)),

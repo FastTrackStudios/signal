@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex, PoisonError};
 
-use level_dsp::envelope::{self as env, Contributions, EnvPoint, GainSpan};
+use level::envelope::{self as env, Contributions, EnvPoint, GainSpan};
 
 /// The track ext key holding its leveler's dials ([`Stages::to_text`]).
 pub const STAGES_KEY: &str = "FTS:leveler:stages";

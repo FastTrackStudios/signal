@@ -231,7 +231,7 @@ architect-mcp = { workspace = true, optional = true, features = ["http"] }
 # signal's rigs, as built-in FX (`signal` feature).
 signal-fx = { workspace = true, optional = true }
 num-traits = { workspace = true }
-level-dsp = { workspace = true }
+level = { workspace = true }
 facet = { workspace = true }
 facet-json = { workspace = true }
 # The web demo's stems: Ogg proxies decoded a window at a time (`web_audio`).

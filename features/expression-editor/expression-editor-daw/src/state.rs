@@ -290,10 +290,10 @@ pub struct ItemEnvelopes {
 impl ItemEnvelopes {
     pub fn capture(
         item_guid: impl Into<String>,
-        curves: &level_dsp::envelope::Contributions,
+        curves: &level::envelope::Contributions,
         digest: u64,
     ) -> Self {
-        let pts = |v: &[level_dsp::envelope::EnvPoint]| StoredEnvelope {
+        let pts = |v: &[level::envelope::EnvPoint]| StoredEnvelope {
             points: v
                 .iter()
                 .map(|p| StoredEnvPoint {
@@ -325,8 +325,8 @@ impl ItemEnvelopes {
         }
     }
 
-    pub fn restore(&self) -> level_dsp::envelope::Contributions {
-        use level_dsp::envelope::{Bypass, Contributions, EnvPoint, GainSpan};
+    pub fn restore(&self) -> level::envelope::Contributions {
+        use level::envelope::{Bypass, Contributions, EnvPoint, GainSpan};
         let pts = |e: &StoredEnvelope| {
             e.points
                 .iter()

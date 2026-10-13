@@ -6794,7 +6794,7 @@ dependencies = [
  "expression-editor-tools",
  "facet",
  "facet-styx",
- "level-dsp",
+ "level",
 ]
 
 [[package]]
@@ -6935,7 +6935,7 @@ dependencies = [
  "image",
  "input",
  "kurbo 0.13.1",
- "level-dsp",
+ "level",
  "parley 0.10.0",
  "peniko 0.6.1",
  "png 0.17.16",
@@ -8277,7 +8277,7 @@ dependencies = [
  "delay",
  "eq",
  "fts-sample",
- "level-dsp",
+ "level",
  "midicore-proto",
  "modulation",
  "pitch-dsp",
@@ -11004,13 +11004,6 @@ checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
 
 [[package]]
 name = "level"
-version = "0.1.0"
-dependencies = [
- "level-dsp",
-]
-
-[[package]]
-name = "level-dsp"
 version = "0.1.0"
 dependencies = [
  "audiocore-dsp",
@@ -18149,7 +18142,7 @@ dependencies = [
  "input-keybinds",
  "js-sys",
  "keyflow",
- "level-dsp",
+ "level",
  "live-proto",
  "lucide-dioxus",
  "modulation-ui",

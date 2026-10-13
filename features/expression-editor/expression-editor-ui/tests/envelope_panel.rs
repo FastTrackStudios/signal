@@ -4,7 +4,7 @@
 //! the two questions four overlaid crossing curves make hard.
 
 use expression_editor_ui::envelopes::{ActiveEnvelope, EnvelopePanel, Shown, traces};
-use level_dsp::envelope::{Bypass, Contributions, EnvPoint, GainSpan};
+use level::envelope::{Bypass, Contributions, EnvPoint, GainSpan};
 
 fn parts() -> Contributions {
     Contributions {

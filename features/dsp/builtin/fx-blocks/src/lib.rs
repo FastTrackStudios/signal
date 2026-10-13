@@ -2390,18 +2390,18 @@ const LEVEL_PARAMS: &[ParamSpec] = &[
     },
 ];
 
-/// Native Leveler block — wraps [`level_dsp::VocalLeveler`], the realtime vocal chain.
+/// Native Leveler block — wraps [`level::VocalLeveler`], the realtime vocal chain.
 ///
 /// Gate → de-breath → ride → de-ess. The core is mono, so L/R each get their own leveler
 /// instance (independent state). Every stage parameter is an enumerable, macro/modulation-targetable
 /// [`PluginParamInfo`].
 pub struct NativeLevel {
-    left: level_dsp::VocalLeveler,
-    right: level_dsp::VocalLeveler,
-    gate: level_dsp::GateConfig,
-    debreath: level_dsp::DeBreathConfig,
-    rider: level_dsp::RiderConfig,
-    deess: level_dsp::DeEssConfig,
+    left: level::VocalLeveler,
+    right: level::VocalLeveler,
+    gate: level::GateConfig,
+    debreath: level::DeBreathConfig,
+    rider: level::RiderConfig,
+    deess: level::DeEssConfig,
     silence_db: f64,
     /// A param changed this block → re-push stage configs before processing.
     dirty: bool,
@@ -2411,11 +2411,11 @@ pub struct NativeLevel {
 impl NativeLevel {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let cfg = level_dsp::LevelerConfig::default();
+        let cfg = level::LevelerConfig::default();
         let sr = sample_rate.max(1.0);
         Self {
-            left: level_dsp::VocalLeveler::new(sr, cfg),
-            right: level_dsp::VocalLeveler::new(sr, cfg),
+            left: level::VocalLeveler::new(sr, cfg),
+            right: level::VocalLeveler::new(sr, cfg),
             gate: cfg.gate.unwrap_or_default(),
             debreath: cfg.debreath.unwrap_or_default(),
             rider: cfg.rider.unwrap_or_default(),
@@ -2426,13 +2426,13 @@ impl NativeLevel {
         }
     }
 
-    fn config(&self) -> level_dsp::LevelerConfig {
-        level_dsp::LevelerConfig {
+    fn config(&self) -> level::LevelerConfig {
+        level::LevelerConfig {
             gate: Some(self.gate),
             debreath: Some(self.debreath),
             rider: Some(self.rider),
             deess: Some(self.deess),
-            classify: level_dsp::LevelerConfig::default().classify,
+            classify: level::LevelerConfig::default().classify,
             silence_db: self.silence_db,
         }
     }
@@ -2489,8 +2489,8 @@ impl PluginInstance for NativeLevel {
     fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
         let cfg = self.config();
         let sr = sample_rate.max(1.0);
-        self.left = level_dsp::VocalLeveler::new(sr, cfg);
-        self.right = level_dsp::VocalLeveler::new(sr, cfg);
+        self.left = level::VocalLeveler::new(sr, cfg);
+        self.right = level::VocalLeveler::new(sr, cfg);
         self.dirty = false;
         self.prepared = true;
         Ok(())

@@ -3,7 +3,7 @@
 //! the classifier, segmenter, offline envelope, and realtime rider without
 //! needing an audio asset on disk.
 
-use level_dsp::{
+use level::{
     analyze, apply_envelope, render_gain_envelope, BlockClass, ClassifyConfig, RenderConfig,
     RiderConfig, SegmentConfig, VocalRider,
 };

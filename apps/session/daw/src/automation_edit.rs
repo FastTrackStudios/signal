@@ -427,22 +427,22 @@ fn ride_scale(leveled: &automation::Leveled) -> Option<f64> {
 /// `ride` with point `moving` moved to (or a new point made at) `t`
 /// (lane seconds), `db` — and where it is now, the points kept in order.
 fn with_ride_point(
-    ride: &[level_dsp::envelope::EnvPoint],
+    ride: &[level::envelope::EnvPoint],
     moving: Option<usize>,
     t: f64,
     db: f64,
-) -> (Vec<level_dsp::envelope::EnvPoint>, usize) {
+) -> (Vec<level::envelope::EnvPoint>, usize) {
     let mut out = ride.to_vec();
     if let Some(i) = moving.filter(|&i| i < out.len()) {
         out.remove(i);
     }
     let at = out.partition_point(|p| p.t_s <= t);
-    out.insert(at, level_dsp::envelope::EnvPoint::new(t, db));
+    out.insert(at, level::envelope::EnvPoint::new(t, db));
     (out, at)
 }
 
 /// Leveled item `item`'s ride (as made) in the window, and its sum again.
-fn set_ride(track: &str, item: &str, ride: &[level_dsp::envelope::EnvPoint]) {
+fn set_ride(track: &str, item: &str, ride: &[level::envelope::EnvPoint]) {
     crate::leveler::update(track, |l| {
         if l.item == item {
             l.lanes.ride = ride.to_vec();

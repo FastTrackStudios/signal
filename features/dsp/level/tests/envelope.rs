@@ -5,8 +5,8 @@
 //! a gate is set well is a listening judgement and is not what a test
 //! can settle.
 
-use level_dsp::classify::ClassifyConfig;
-use level_dsp::envelope::{analyze, gate_envelope};
+use level::classify::ClassifyConfig;
+use level::envelope::{analyze, gate_envelope};
 
 const SR: f64 = 48_000.0;
 
@@ -123,7 +123,7 @@ fn one_analysis_pass_serves_every_stage() {
 
 // ── The other three (#204) ───────────────────────────────────────────
 
-use level_dsp::envelope::{breath_envelope, ride_envelope, sibilance_spans};
+use level::envelope::{breath_envelope, ride_envelope, sibilance_spans};
 
 /// Loud tonal phrase, quiet breath, loud tonal phrase.
 fn phrase_breath_phrase() -> Vec<f64> {
@@ -253,7 +253,7 @@ fn a_breath_curve_ramps_rather_than_stepping() {
 
 // ── The composite (#205) ─────────────────────────────────────────────
 
-use level_dsp::envelope::{composite, Contributions, EnvPoint, GainSpan, COMPOSITE_FLOOR_DB};
+use level::envelope::{composite, Contributions, EnvPoint, GainSpan, COMPOSITE_FLOOR_DB};
 
 fn flat(db: f64) -> Vec<EnvPoint> {
     vec![EnvPoint::new(0.0, db), EnvPoint::new(1.0, db)]
@@ -431,7 +431,7 @@ fn nothing_at_all_composites_to_nothing() {
 
 // ── Bypass (#206) ────────────────────────────────────────────────────
 
-use level_dsp::envelope::{config_for, generate, Bypass, Cached, GenerationConfig};
+use level::envelope::{config_for, generate, Bypass, Cached, GenerationConfig};
 
 #[test]
 fn bypassing_removes_a_contribution_and_leaves_the_rest() {
@@ -661,7 +661,7 @@ fn generation_produces_all_four_from_one_pass() {
 
 // ── Absorbing an external edit (#209) ────────────────────────────────
 
-use level_dsp::envelope::absorb_into_ride;
+use level::envelope::absorb_into_ride;
 
 #[test]
 fn a_dragged_composite_is_absorbed_into_the_ride() {

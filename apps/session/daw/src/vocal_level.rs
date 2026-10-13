@@ -5,7 +5,7 @@
 //! between lines taken down, the breaths tucked under, the esses eased,
 //! and every line ridden to where the song wants it — a verse sung 10 dB
 //! under the chorus brought up to sit with it. Each is a curve of its own
-//! ([`level_dsp::envelope`]), made from one analysis of the item's audio,
+//! ([`level::envelope`]), made from one analysis of the item's audio,
 //! so any one can be switched off or redrawn without the others; their
 //! sum in dB is the take's volume envelope, which plays, rides with the
 //! audio through every split and move, and is what the waveform draws.
@@ -14,7 +14,7 @@
 //! by itself, but the level every line is ridden to is one level for the
 //! track — the middle of where its lines are sung — so a quiet verse is
 //! lifted toward the chorus, not only evened against itself. It is read
-//! a phrase at a time ([`level_dsp::envelope::phrase_levels`]), so the
+//! a phrase at a time ([`level::envelope::phrase_levels`]), so the
 //! words inside a line keep their shape. Then the makeup: one gain over
 //! the whole track that puts the leveled vocal's sung level where its
 //! louder lines were sung: the final amplitude, the choruses keeping
@@ -43,7 +43,7 @@ use std::collections::HashMap;
 use daw::service::{Items as _, ProjectContext, Takes as _, TrackRef, Tracks};
 use daw_proto::ItemRef;
 use facet::Facet;
-use level_dsp::envelope::{self as env, Analysis, Contributions, EnvPoint};
+use level::envelope::{self as env, Analysis, Contributions, EnvPoint};
 
 /// How much of a phrase a ride hears, seconds: a line's words, not each
 /// syllable.
@@ -222,7 +222,7 @@ fn read(
                     .mul_add(speed, take.start_offset.as_seconds()),
             );
             let slice = samples.get(from.min(samples.len())..to.min(samples.len()))?;
-            let analysis = env::analyze(slice, *rate, level_dsp::ClassifyConfig::default());
+            let analysis = env::analyze(slice, *rate, level::ClassifyConfig::default());
             Some(Read {
                 item,
                 analysis,

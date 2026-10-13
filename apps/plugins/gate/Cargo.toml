@@ -21,7 +21,7 @@ nice-plug = { workspace = true, features = ["vst3"] }
 
 # The DSP facade (re-exports level-dsp, including the standalone `Gate` stage).
 # Never depend on level-dsp directly.
-level.workspace = true
+level = { workspace = true }
 # The Drum style's engine (the gate crate).
 gate.workspace = true
 
