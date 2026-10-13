@@ -13,11 +13,14 @@
 //! [`morph_kit`](proto::ekit::EkitRig::morph_kit) stepping every pad at once
 //! (XO "Kit Similarity").
 
+
+pub mod proto;
+#[cfg(feature = "ui")]
+pub mod ui;
+
 mod backend;
 
 pub use backend::{DEFAULT_COLS, DEFAULT_ROWS, EkitBackend};
-pub use signal_ekit_proto as proto;
-
 /// MIDI note of pad 0 — GM kick, so a stock drum map lines up.
 pub const BASE_NOTE: u8 = 36;
 /// The rig's MIDI channel (GM drums).

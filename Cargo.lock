@@ -6319,6 +6319,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ekit"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "daw",
+ "dioxus",
+ "facet",
+ "midicore",
+ "signal-rigs-proto",
+ "signal-sampler",
+ "signal-space",
+ "tracing",
+ "tracing-subscriber",
+ "vox",
+]
+
+[[package]]
 name = "embedded-io"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18415,6 +18432,7 @@ dependencies = [
  "dioxus-native",
  "dioxus-native-dom",
  "drums",
+ "ekit",
  "eyre",
  "facet",
  "facet-json",
@@ -18437,8 +18455,6 @@ dependencies = [
  "sha2 0.10.9",
  "signal-account",
  "signal-account-proto",
- "signal-ekit",
- "signal-ekit-proto",
  "signal-guitar",
  "signal-guitar-proto",
  "signal-guitar-ui",
@@ -18471,39 +18487,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "signal-ekit"
-version = "0.1.0"
-dependencies = [
- "architect",
- "daw",
- "midicore",
- "signal-ekit-proto",
- "signal-rigs-proto",
- "signal-sampler",
- "signal-space",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "signal-ekit-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "vox",
-]
-
-[[package]]
-name = "signal-ekit-ui"
-version = "0.1.0"
-dependencies = [
- "architect",
- "dioxus",
- "signal-ekit-proto",
 ]
 
 [[package]]

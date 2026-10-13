@@ -122,8 +122,8 @@ signal = [
     "dep:signal-pack-library",
     "dep:signal-space",
     "dep:signal-space-proto",
-    "dep:signal-ekit",
-    "dep:signal-ekit-proto",
+    "dep:ekit",
+    "dep:ekit",
     # TONE3000: the engine holds the session and serves the OAuth redirect
     # (engine_tone3000.rs); signal-nam resolves where downloads land.
     "tone3000",
@@ -203,7 +203,7 @@ utils.workspace = true
 # browser remote renders the map and the pad grid from these; their
 # backends (signal-space / signal-ekit) stay native-only below.
 signal-space-proto = { workspace = true, optional = true }
-signal-ekit-proto = { workspace = true, optional = true }
+ekit = { workspace = true, optional = true }
 signal-rigs-proto.workspace = true
 # Standard-MIDI-file codec (daw-proto's `midi::smf`) — the browser keys
 # rig's demo MIDI player parses the bundled .mid presets with it, and the
@@ -329,7 +329,7 @@ signal-synth-rig = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }
 signal-pack-library = { workspace = true, optional = true }
 signal-space = { workspace = true, optional = true }
-signal-ekit = { workspace = true, optional = true }
+ekit = { workspace = true, optional = true }
 signal-tone3000 = { workspace = true, optional = true }
 signal-account = { workspace = true, optional = true }
 signal-account-proto = { workspace = true, optional = true }

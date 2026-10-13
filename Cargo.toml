@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/rigs/ekit",
     "features/rigs/drums",
     "features/input",
     "features/ui/themer",
@@ -216,9 +217,6 @@ members = [
     "features/rigs/plugin-host",
     "features/adapters/reaper/signal-extension",
     "features/adapters/reaper/signal-reaper-controller",
-    "features/rigs/ekit",
-    "features/rigs/ekit/proto",
-    "features/rigs/ekit/ui",
     "features/rigs/guitar",
     "features/rigs/guitar/proto",
     "features/rigs/guitar/ui",
@@ -300,6 +298,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+ekit = { path = "features/rigs/ekit" }
 drums = { path = "features/rigs/drums" }
 input = { path = "features/input" }
 themer = { path = "features/ui/themer", default-features = false }
@@ -1087,9 +1086,6 @@ signal-ui = { path = "features/rigs/core/ui", default-features = false }
 signal-browser = { path = "features/rigs/core/browser", default-features = false }
 signal-space = { path = "features/rigs/core/space" }
 signal-space-proto = { path = "features/rigs/core/space/proto" }
-signal-ekit = { path = "features/rigs/ekit" }
-signal-ekit-proto = { path = "features/rigs/ekit/proto" }
-signal-ekit-ui = { path = "features/rigs/ekit/ui" }
 signal-grid = { path = "features/rigs/core/grid" }
 signal-grid-ui = { path = "features/rigs/core/grid-ui" }
 signal-controller = { path = "features/rigs/core/controller" }

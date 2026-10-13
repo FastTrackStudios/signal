@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use signal_ekit_proto::ekit::EkitRig;
-use signal_ekit_proto::{EkitEvent, EkitStatus, Pad};
+use crate::proto::ekit::EkitRig;
+use crate::proto::{EkitEvent, EkitStatus, Pad};
 use signal_sampler::{PreloadProfile, SamplerRig};
 use signal_space::{Space, knn};
 
@@ -835,7 +835,7 @@ impl EkitBackend {
     }
 }
 
-impl signal_ekit_proto::ekit::EkitRigStreamSource for EkitBackend {
+impl crate::proto::ekit::EkitRigStreamSource for EkitBackend {
     fn events_hub(&self) -> &PubSub<EkitEvent> {
         &self.inner.events
     }
@@ -916,8 +916,8 @@ impl signal_rigs_proto::rig_core::RigCore for EkitBackend {
 impl Services for EkitBackend {
     fn layers() -> impl Layer<Self> {
         layers![
-            signal_ekit_proto::ekit::Service,
-            signal_ekit_proto::ekit::StreamService
+            crate::proto::ekit::Service,
+            crate::proto::ekit::StreamService
         ]
     }
 }

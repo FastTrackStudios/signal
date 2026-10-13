@@ -7,8 +7,8 @@
 //! cargo run --release -p signal-ekit --example pad_probe -- <space-name>
 //! ```
 
-use signal_ekit::EkitBackend;
-use signal_ekit::proto::ekit::EkitRig;
+use ekit::EkitBackend;
+use ekit::proto::ekit::EkitRig;
 
 fn main() {
     tracing_subscriber::fmt().with_env_filter("warn").init();

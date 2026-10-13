@@ -3,8 +3,8 @@
 //! stepping, plus whole-kit generation and morphing.
 
 use dioxus::prelude::*;
-use signal_ekit_proto::ekit::{EkitRigClient, EkitRigStreamClient};
-use signal_ekit_proto::{EkitEvent, EkitStatus, Pad};
+use ekit::proto::ekit::{EkitRigClient, EkitRigStreamClient};
+use ekit::proto::{EkitEvent, EkitStatus, Pad};
 use signal_space_proto::space::SampleSpaceClient;
 
 use crate::remote::{EngineTarget, establish};

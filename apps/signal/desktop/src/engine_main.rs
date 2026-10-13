@@ -230,7 +230,7 @@ async fn async_main() {
     let router = router.merge_router(space.router());
 
     // ── Electronic Kit (pad grid over the sample space, #77) ─────────────
-    let ekit = signal_ekit::EkitBackend::new();
+    let ekit = ekit::EkitBackend::new();
     let router = router.merge_router(ekit.router());
     let router = mount_core!(router, Rig::Ekit, ekit.clone());
 
