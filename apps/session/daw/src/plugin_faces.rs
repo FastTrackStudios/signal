@@ -136,11 +136,11 @@ fn design(which: Which, tone: &Tone) -> Option<&'static str> {
         Which::Comp => Some(tone.comp_face.design()),
         Which::RescueComp if tone.comp_face == CompFace::Opto => Some(CompFace::Fet.design()),
         Which::Sat => Some(match sat_circuit(tone) {
-            saturate_ui::viz::Circuit::Valve => "saturate/01-tube",
-            saturate_ui::viz::Circuit::Tape => "saturate/02-tape",
-            saturate_ui::viz::Circuit::Core => "saturate/03-transformer",
-            saturate_ui::viz::Circuit::Solid => "saturate/04-transistor",
-            saturate_ui::viz::Circuit::Steps => "saturate/05-digital",
+            saturate::ui::viz::Circuit::Valve => "saturate/01-tube",
+            saturate::ui::viz::Circuit::Tape => "saturate/02-tape",
+            saturate::ui::viz::Circuit::Core => "saturate/03-transformer",
+            saturate::ui::viz::Circuit::Solid => "saturate/04-transistor",
+            saturate::ui::viz::Circuit::Steps => "saturate/05-digital",
         }),
         Which::Mod => match tone.modulation.engine {
             modulation_ui::viz::Engine::Chorus => Some("modulation/01-chorus"),
@@ -154,11 +154,11 @@ fn design(which: Which, tone: &Tone) -> Option<&'static str> {
 }
 
 /// The circuit the saturator's profile is.
-fn sat_circuit(tone: &Tone) -> saturate_ui::viz::Circuit {
-    saturate_profiles::PROFILES.get(tone.sat_profile).map_or(
-        saturate_ui::viz::Circuit::Valve,
+fn sat_circuit(tone: &Tone) -> saturate::ui::viz::Circuit {
+    saturate::profiles::PROFILES.get(tone.sat_profile).map_or(
+        saturate::ui::viz::Circuit::Valve,
         |profile| {
-            saturate_ui::viz::SatView::of(*profile, saturate_profiles::Controls::default())
+            saturate::ui::viz::SatView::of(*profile, saturate::profiles::Controls::default())
                 .circuit()
         },
     )
@@ -407,10 +407,10 @@ fn sc_face(
 }
 
 /// The emphasis EQ's shapes, by the face's `emph/b{n}_shape` index.
-const EMPH_SHAPES: [saturate_dsp::emphasis::EmphShape; 3] = [
-    saturate_dsp::emphasis::EmphShape::Bell,
-    saturate_dsp::emphasis::EmphShape::LowShelf,
-    saturate_dsp::emphasis::EmphShape::HighShelf,
+const EMPH_SHAPES: [saturate::emphasis::EmphShape; 3] = [
+    saturate::emphasis::EmphShape::Bell,
+    saturate::emphasis::EmphShape::LowShelf,
+    saturate::emphasis::EmphShape::HighShelf,
 ];
 
 /// What a saturator's emphasis view shows: whether it is up, and the six
@@ -580,7 +580,7 @@ pub fn title(which: Which, tone: &Tone) -> String {
             format!("{} → {after}", tone.comp_face.title())
         }
         Which::Comp => tone.comp_face.title().to_owned(),
-        Which::Sat => saturate_profiles::PROFILES
+        Which::Sat => saturate::profiles::PROFILES
             .get(tone.sat_profile)
             .map_or_else(|| "Saturation".to_owned(), |p| p.name.to_owned()),
         Which::Mod => format!("{:?}", tone.modulation.engine),
@@ -624,7 +624,7 @@ fn values(design: &str, which: Which, tone: &Tone) -> Vec<(String, f64)> {
             out
         }
         "tube" | "tape_sat" | "transformer" | "transistor" | "digital_sat" => {
-            let scale = saturate_profiles::PROFILES
+            let scale = saturate::profiles::PROFILES
                 .get(tone.sat_profile)
                 .map_or(1.0, |p| p.voicing.drive_scale)
                 .max(f32::EPSILON);
@@ -776,7 +776,7 @@ pub fn edit(which: Which, tone: &mut Tone, addr: &str, value: f64) -> bool {
             return emphasis_edit(tone, p, value);
         }
         ("tube" | "tape_sat" | "transformer" | "transistor" | "digital_sat", "drive") => {
-            let scale = saturate_profiles::PROFILES
+            let scale = saturate::profiles::PROFILES
                 .get(tone.sat_profile)
                 .map_or(1.0, |p| p.voicing.drive_scale);
             tone.sat.drive = (15.0 * scale).mul_add(span(value / 100.0, 0.0, 1.0), 1.0);
@@ -931,7 +931,7 @@ mod eq_face_tests {
         assert!((tone.sat_emphasis[2].gain_db - 6.0).abs() < 1e-6);
         assert_eq!(
             tone.sat_emphasis[2].shape,
-            saturate_dsp::emphasis::EmphShape::HighShelf
+            saturate::emphasis::EmphShape::HighShelf
         );
         // Negative control: there is no seventh band.
         assert!(!edit(

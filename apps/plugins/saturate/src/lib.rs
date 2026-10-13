@@ -11,7 +11,7 @@
 //! Transformer/Console/Fuzz — which named nearly the same circuits as the
 //! rail did, mapped them to slightly different settings, and drifted from it.
 //! Two vocabularies for one choice is a bug that ships as a sound. There is
-//! one now, and [`saturate_profiles::apply`] is the only thing that knows how
+//! one now, and [`saturate::profiles::apply`] is the only thing that knows how
 //! a knob reaches the DSP — which is also why the editor's curve is the
 //! engine's curve rather than a drawing of one.
 //!
@@ -31,7 +31,7 @@ use saturate::deluxe::Deluxe;
 use saturate::digital::DigitalStage;
 use saturate::emphasis::EmphasisEq;
 use saturate::preamp::ClassAPreamp;
-use saturate_ui::params::{SatParams, SatUiState};
+use saturate::ui::params::{SatParams, SatUiState};
 
 const PLUGIN_NAME: &str = "FTS Saturate";
 
@@ -68,14 +68,14 @@ impl Default for FtsSaturate {
         Self {
             params: Arc::new(SatParams::default()),
             ui_state: Arc::new(SatUiState::default()),
-            // The editor sizes itself — see saturate_ui::control_view.
+            // The editor sizes itself — see saturate::ui::control_view.
             editor_state: DioxusState::new(|| {
                 (
-                    saturate_ui::control_view::EDITOR_W,
-                    saturate_ui::control_view::EDITOR_H,
+                    saturate::ui::control_view::EDITOR_W,
+                    saturate::ui::control_view::EDITOR_H,
                 )
             })
-            .with_resize_hint(saturate_ui::control_view::resize_hint()),
+            .with_resize_hint(saturate::ui::control_view::resize_hint()),
             pre: [ClassAPreamp::new(48_000.0), ClassAPreamp::new(48_000.0)],
             quantiser: [DigitalStage::new(), DigitalStage::new()],
             emph: [EmphasisEq::new(48_000.0), EmphasisEq::new(48_000.0)],
@@ -88,9 +88,9 @@ impl Default for FtsSaturate {
 
 impl FtsSaturate {
     /// The latency `engine` adds, in samples.
-    fn latency_of(&self, engine: saturate_profiles::Engine) -> u32 {
+    fn latency_of(&self, engine: saturate::profiles::Engine) -> u32 {
         match engine {
-            saturate_profiles::Engine::Bluebox { .. } => u32::try_from(self.bluebox.latency()).unwrap_or(0),
+            saturate::profiles::Engine::Bluebox { .. } => u32::try_from(self.bluebox.latency()).unwrap_or(0),
             _ => 0,
         }
     }
@@ -100,9 +100,9 @@ impl FtsSaturate {
     /// Resolved through the *persisted id* rather than the automatable index,
     /// so growing the rail never repoints an old session at a different
     /// circuit — same contract the reverb and the compressor keep.
-    fn sync_params(&mut self) -> (bool, saturate_profiles::Engine) {
+    fn sync_params(&mut self) -> (bool, saturate::profiles::Engine) {
         let profile = self.params.resolved_profile();
-        let controls = saturate_profiles::Controls {
+        let controls = saturate::profiles::Controls {
             drive: self.params.drive.value(),
             bias: self.params.bias.value(),
             sag: self.params.sag.value(),
@@ -126,15 +126,15 @@ impl FtsSaturate {
         let sigma_gain = self.emph[0].sigma_gain();
         for (pre, quantiser) in self.pre.iter_mut().zip(self.quantiser.iter_mut()) {
             pre.set_emphasis_sigma_gain(sigma_gain);
-            saturate_profiles::apply(profile, &controls, pre, quantiser);
+            saturate::profiles::apply(profile, &controls, pre, quantiser);
         }
         // The measured models take the same knobs through their own mapping.
         match profile.engine {
-            saturate_profiles::Engine::Deluxe => self.deluxe.set(saturate_profiles::deluxe_params(&controls)),
-            saturate_profiles::Engine::Bluebox { sat_freq, alt_tube } => {
-                self.bluebox.set(saturate_profiles::bluebox_params(&controls, sat_freq, alt_tube));
+            saturate::profiles::Engine::Deluxe => self.deluxe.set(saturate::profiles::deluxe_params(&controls)),
+            saturate::profiles::Engine::Bluebox { sat_freq, alt_tube } => {
+                self.bluebox.set(saturate::profiles::bluebox_params(&controls, sat_freq, alt_tube));
             }
-            saturate_profiles::Engine::Preamp => {}
+            saturate::profiles::Engine::Preamp => {}
         }
         (profile.voicing.digital && !self.quantiser[0].is_transparent(), profile.engine)
     }
@@ -165,11 +165,11 @@ impl Plugin for FtsSaturate {
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
-            Arc::new(saturate_ui::control_view::SatUi {
+            Arc::new(saturate::ui::control_view::SatUi {
                 params: self.params.clone(),
                 state: self.ui_state.clone(),
             }),
-            saturate_ui::control_view::App,
+            saturate::ui::control_view::App,
         )
     }
 
@@ -228,7 +228,7 @@ impl Plugin for FtsSaturate {
         let mut input_peak = 0.0f32;
         let mut output_peak = 0.0f32;
 
-        if engine != saturate_profiles::Engine::Preamp {
+        if engine != saturate::profiles::Engine::Preamp {
             // A measured model is a whole stereo algorithm with its own mix
             // law (handed over in `sync_params`); the emphasis pair still
             // wraps what it distorts, and Output stays ours.
@@ -240,7 +240,7 @@ impl Plugin for FtsSaturate {
                 }
                 let [l, r] = io;
                 let wet_pair: [f64; 2] = match engine {
-                    saturate_profiles::Engine::Deluxe => self.deluxe.process(f64::from(l), f64::from(r)),
+                    saturate::profiles::Engine::Deluxe => self.deluxe.process(f64::from(l), f64::from(r)),
                     _ => self.bluebox.process(f64::from(l), f64::from(r)),
                 }
                 .into();
@@ -342,7 +342,7 @@ mod tests {
     /// first symptom: a profile that plays as something else.
     #[test]
     fn every_profile_on_the_rail_voices_the_engine_it_names() {
-        for (index, profile) in saturate_profiles::PROFILES.iter().enumerate() {
+        for (index, profile) in saturate::profiles::PROFILES.iter().enumerate() {
             let plugin = {
                 let mut p = FtsSaturate::default();
                 p.params.store_profile_id(index);
@@ -373,16 +373,16 @@ mod tests {
     /// hums at rest is unusable however good it sounds when played.
     #[test]
     fn no_profile_makes_a_sound_out_of_nothing() {
-        for index in 0..saturate_profiles::PROFILES.len() {
+        for index in 0..saturate::profiles::PROFILES.len() {
             let mut plugin = FtsSaturate::default();
             plugin.params.store_profile_id(index);
             let (crushing, engine) = plugin.sync_params();
             let mut worst = 0.0f32;
             for i in 0..48_000 {
                 let y = match engine {
-                    saturate_profiles::Engine::Deluxe => to_f32(plugin.deluxe.process(0.0, 0.0).0),
-                    saturate_profiles::Engine::Bluebox { .. } => to_f32(plugin.bluebox.process(0.0, 0.0).0),
-                    saturate_profiles::Engine::Preamp => {
+                    saturate::profiles::Engine::Deluxe => to_f32(plugin.deluxe.process(0.0, 0.0).0),
+                    saturate::profiles::Engine::Bluebox { .. } => to_f32(plugin.bluebox.process(0.0, 0.0).0),
+                    saturate::profiles::Engine::Preamp => {
                         let wet = plugin.pre[0].process_wet(0, 0.0);
                         if crushing { plugin.quantiser[0].process(0, wet) } else { wet }
                     }
@@ -391,7 +391,7 @@ mod tests {
                     worst = worst.max(y.abs());
                 }
             }
-            let id = saturate_profiles::PROFILES[index].id;
+            let id = saturate::profiles::PROFILES[index].id;
             assert!(worst < 1.0e-3, "{id} idles at {worst}");
         }
     }

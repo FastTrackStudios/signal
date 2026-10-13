@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/saturate",
     "features/dsp/reverb",
     "features/dsp/delay",
     "features/dsp/mic",
@@ -192,10 +193,6 @@ members = [
     "features/dsp/multiband",
     "features/dsp/core/musical-time/musical-time",
     "features/dsp/core/musical-time/musical-time-ui",
-    "features/dsp/saturate/saturate",
-    "features/dsp/saturate/saturate-dsp",
-    "features/dsp/saturate/saturate-profiles",
-    "features/dsp/saturate/saturate-ui",
     "features/dsp/builtin/fx-blocks",
     "features/dsp/stack",
     "features/preset-browser/preset-browser",
@@ -330,6 +327,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+saturate = { path = "features/dsp/saturate" }
 reverb = { path = "features/dsp/reverb" }
 delay = { path = "features/dsp/delay" }
 mic = { path = "features/dsp/mic" }
@@ -555,7 +553,6 @@ align-dsp = { path = "features/dsp/align/align-dsp" }
 # second plugin host inside the mixer.
 comp-ui = { path = "features/dsp/comp/comp-ui", default-features = false }
 eq-ui = { path = "features/dsp/eq/eq-ui", default-features = false }
-saturate-dsp = { path = "features/dsp/saturate/saturate-dsp", default-features = false }
 # The Depth units draw the plugins' own machines: the delay's style
 # family decides how a repeat is drawn, and the reverb's envelope is
 # the algorithm's actual impulse response, rendered by `reverb-dsp`'s
@@ -564,10 +561,8 @@ saturate-dsp = { path = "features/dsp/saturate/saturate-dsp", default-features =
 # family, and the six modulation engines — which the FX view's devices
 # draw (`paint_reverb`, `paint_delay`, `paint_mod`, behind `viz`).
 modulation-ui = { path = "features/dsp/modulation/modulation-ui", default-features = false, features = ["viz"] }
-saturate-ui = { path = "features/dsp/saturate/saturate-ui", default-features = false, features = ["viz"] }
 # The saturator's five circuits and their profiles — what its selector
 # picks from, applied through the plugin's own `apply`.
-saturate-profiles = { path = "features/dsp/saturate/saturate-profiles" }
 # The FTS plugins themselves, run in-process as the engine's built-in FX
 # (`builtin-fx`): their CLAP/VST3 exports off (`default-features`).
 comp-plugin = { path = "apps/plugins/comp", default-features = false }
@@ -1102,7 +1097,6 @@ midicore-wasm = { path = "features/midi/midicore-wasm" }
 # ── from processor's workspace (joined into studio) ──
 tone3000 = "0.1"
 signal-nam = { path = "features/rigs/nam" }
-saturate = { path = "features/dsp/saturate/saturate" }
 dsp-golden = { path = "features/dsp/core/dsp-golden" }
 dsp-core = { path = "features/dsp/core/dsp-core" }
 hit-detect-dsp = { path = "features/dsp/hits/hit-detect/hit-detect-dsp" }

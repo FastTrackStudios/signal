@@ -99,10 +99,10 @@ fn row_h(f: &Face) -> f64 {
 }
 
 fn saturate_faces() -> Vec<Face> {
-    saturate_profiles::PROFILES
+    saturate::profiles::PROFILES
         .iter()
         .map(|p| {
-            let d = saturate_ui::faces::design_for(p.id);
+            let d = saturate::ui::faces::design_for(p.id);
             Face {
                 plugin: "Saturate",
                 name: p.name.to_string(),

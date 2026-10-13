@@ -243,13 +243,13 @@ fn comp(tone: &mut Tone, fx: &EngineFx) {
 
 fn sat(tone: &mut Tone, fx: &EngineFx) {
     if let Some(index) = fx.text("Space").and_then(|space| {
-        saturate_profiles::PROFILES
+        saturate::profiles::PROFILES
             .iter()
             .position(|p| p.name.eq_ignore_ascii_case(space.trim()))
     }) {
         tone.set_sat_profile(index);
     }
-    let Some(profile) = saturate_profiles::PROFILES.get(tone.sat_profile) else {
+    let Some(profile) = saturate::profiles::PROFILES.get(tone.sat_profile) else {
         return;
     };
     let v = profile.voicing;
@@ -560,7 +560,7 @@ mod tests {
             tone.delay.time
         );
         assert!(tone.delay.sync.is_some() && (tone.delay.feedback - 0.35).abs() < 0.01);
-        let tape = saturate_profiles::PROFILES
+        let tape = saturate::profiles::PROFILES
             .iter()
             .position(|p| p.name == "Tape");
         assert_eq!(Some(tone.sat_profile), tape);

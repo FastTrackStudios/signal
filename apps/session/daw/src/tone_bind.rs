@@ -270,7 +270,7 @@ fn comp(tone: &Tone) -> Vec<(u32, f64)> {
 
 fn sat(tone: &Tone) -> Vec<(u32, f64)> {
     const FX: &str = "FTS Saturate";
-    let Some(profile) = saturate_profiles::PROFILES.get(tone.sat_profile) else {
+    let Some(profile) = saturate::profiles::PROFILES.get(tone.sat_profile) else {
         return Vec::new();
     };
     let v = profile.voicing;

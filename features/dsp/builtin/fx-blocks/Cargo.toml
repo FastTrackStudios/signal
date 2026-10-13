@@ -10,7 +10,7 @@ workspace = true
 
 [dependencies]
 fts-sample = { workspace = true, features = ["load"] }
-saturate-dsp = { workspace = true, features = ["analysis"] }
+saturate = { workspace = true, features = ["analysis"] }
 tune = { workspace = true }
 daw-proto = { workspace = true }
 # `PluginInstance` and friends. Taken from `daw` directly rather than

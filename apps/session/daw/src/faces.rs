@@ -22,7 +22,7 @@ pub enum Picture {
     Reverb(reverb::ui::viz::ReverbView),
     Delay(delay::ui::viz::DelayView),
     Mod(modulation_ui::viz::ModView),
-    Sat(saturate_ui::viz::SatView),
+    Sat(saturate::ui::viz::SatView),
     /// A face designed in frame, running live: its controls are its own.
     Frame(FrameFace),
 }
@@ -493,7 +493,7 @@ const MOD_KNOBS: [Macro; 4] = [
 /// The saturator's drive as its knob, 0..1: the gain back through the
 /// profile's own drive scale (`Tone::set_sat_profile`'s rule).
 fn drive_knob(tone: &Tone) -> f32 {
-    let scale = saturate_profiles::PROFILES
+    let scale = saturate::profiles::PROFILES
         .get(tone.sat_profile)
         .map_or(1.0, |p| p.voicing.drive_scale)
         .max(f32::EPSILON);
@@ -504,18 +504,18 @@ const SAT_KNOBS: [Macro; 3] = [
     Macro {
         name: "Type",
         get: |t| {
-            let last = saturate_profiles::PROFILES.len().saturating_sub(1).max(1);
+            let last = saturate::profiles::PROFILES.len().saturating_sub(1).max(1);
             crate::num::coord(t.sat_profile) / crate::num::coord(last)
         },
         set: |t, f| {
-            let last = crate::num::coord(saturate_profiles::PROFILES.len().saturating_sub(1));
+            let last = crate::num::coord(saturate::profiles::PROFILES.len().saturating_sub(1));
             let at = crate::num::index((f.clamp(0.0, 1.0) * last).round());
             if at != t.sat_profile {
                 t.set_sat_profile(at);
             }
         },
         says: |t| {
-            saturate_profiles::PROFILES
+            saturate::profiles::PROFILES
                 .get(t.sat_profile)
                 .map_or_else(String::new, |p| p.name.to_owned())
         },
@@ -524,7 +524,7 @@ const SAT_KNOBS: [Macro; 3] = [
         name: "Drive",
         get: |t| f64::from(drive_knob(t)),
         set: |t, f| {
-            let scale = saturate_profiles::PROFILES
+            let scale = saturate::profiles::PROFILES
                 .get(t.sat_profile)
                 .map_or(1.0, |p| p.voicing.drive_scale);
             t.sat.drive = (15.0 * scale).mul_add(span(f, 0.0, 1.0), 1.0);
@@ -541,14 +541,14 @@ const SAT_KNOBS: [Macro; 3] = [
 
 /// What the saturation editor's picture draws, for `tone`: its profile
 /// voiced at this drive and mix.
-fn sat_view(tone: &Tone) -> Option<saturate_ui::viz::SatView> {
-    let profile = *saturate_profiles::PROFILES.get(tone.sat_profile)?;
-    let controls = saturate_profiles::Controls {
+fn sat_view(tone: &Tone) -> Option<saturate::ui::viz::SatView> {
+    let profile = *saturate::profiles::PROFILES.get(tone.sat_profile)?;
+    let controls = saturate::profiles::Controls {
         drive: drive_knob(tone),
         mix: tone.sat.mix,
-        ..saturate_profiles::Controls::default()
+        ..saturate::profiles::Controls::default()
     };
-    Some(saturate_ui::viz::SatView::of(profile, controls))
+    Some(saturate::ui::viz::SatView::of(profile, controls))
 }
 
 /// What the modulation editor's picture draws, for `tone`.
@@ -698,7 +698,7 @@ pub fn of(which: Which, tone: &Tone) -> Option<Face> {
             })
         }
         Which::Sat => sat_view(tone).map(|view| Face {
-            name: saturate_profiles::PROFILES
+            name: saturate::profiles::PROFILES
                 .get(tone.sat_profile)
                 .map_or_else(String::new, |p| p.name.to_owned()),
             picture: Picture::Sat(view),
@@ -1171,7 +1171,7 @@ impl Painters {
                 Picture::Reverb(view) => reverb::ui::viz::paint_reverb(&mut scene, view, w, h),
                 Picture::Delay(view) => delay::ui::viz::paint_delay(&mut scene, view, w, h),
                 Picture::Mod(view) => modulation_ui::viz::paint_mod(&mut scene, view, w, h),
-                Picture::Sat(view) => saturate_ui::viz::paint_sat(&mut scene, view, w, h),
+                Picture::Sat(view) => saturate::ui::viz::paint_sat(&mut scene, view, w, h),
                 Picture::Frame(_) => {}
             }
             return scene;
@@ -1203,7 +1203,7 @@ impl Painters {
             Picture::Sat(view) => {
                 let mut scene = Scene::new();
                 let (w, h) = (f64::from(width), f64::from(height));
-                saturate_ui::viz::paint_sat(&mut scene, view, w, h);
+                saturate::ui::viz::paint_sat(&mut scene, view, w, h);
                 scene
             }
             Picture::Mod(view) => {

@@ -18,7 +18,7 @@
 //! |---|---|
 //! | EQ | `eq_ui::eq_graph_response::calculate_combined_response` |
 //! | Compressor | `comp_ui::comp_graph_svg::compress_transfer` |
-//! | Saturation | `saturate_dsp::preamp::analysis::transfer_curve` |
+//! | Saturation | `saturate::preamp::analysis::transfer_curve` |
 //!
 //! None of the maths is here, and that is the point: a curve in the
 //! strip that disagreed with the curve in the plugin window would be
@@ -41,7 +41,7 @@ use eq_ui::eq_graph_model::{EqBand, EqBandShape, StereoMode};
 use eq_ui::eq_graph_response::calculate_combined_response;
 use fts_audio_ui::axis::{DbAxis, FreqAxis};
 use reverb::algorithm::{AlgorithmType, Family as RoomFamily};
-use saturate_dsp::preamp::{Circuit, ClassAPreamp, SideShaper};
+use saturate::preamp::{Circuit, ClassAPreamp, SideShaper};
 use vello::kurbo::{Affine, BezPath, Line, Rect, Shape, Stroke};
 use vello::peniko::{Color, Fill};
 
@@ -80,17 +80,17 @@ pub struct Tone {
     pub comp: Comp,
     pub sat: ClassAPreamp,
     /// Which of the plugin's profiles the stage is — an index into
-    /// `saturate_profiles::PROFILES`. The selector picks one; `sat` is
+    /// `saturate::profiles::PROFILES`. The selector picks one; `sat` is
     /// what `apply` made of it, plus whatever the grips moved since.
     pub sat_profile: usize,
     /// The quantiser after the stage, which only the digital profiles
     /// switch on. Kept so the curve can draw its steps.
-    pub sat_digital: saturate_dsp::digital::DigitalStage,
+    pub sat_digital: saturate::digital::DigitalStage,
     /// The saturator's emphasis EQ: six bands before the stage, exactly
     /// inverted after it, so the curve chooses what distorts and not
     /// what comes out (`fx.sat.emphasis`). Bell and shelves only — a
     /// cut has no inverse. At 0 dB a band is idle.
-    pub sat_emphasis: [saturate_dsp::emphasis::EmphBand; saturate_dsp::emphasis::BANDS],
+    pub sat_emphasis: [saturate::emphasis::EmphBand; saturate::emphasis::BANDS],
     /// Whether the saturator's face shows its emphasis EQ in place of
     /// its picture.
     pub sat_emphasis_view: bool,
@@ -483,7 +483,7 @@ impl Tone {
     /// profile is in, else what the shapers say.
     #[must_use]
     pub fn sat_circuit(&self) -> Circuit {
-        if saturate_profiles::PROFILES
+        if saturate::profiles::PROFILES
             .get(self.sat_profile)
             .is_some_and(|p| p.voicing.digital)
         {
@@ -500,21 +500,21 @@ impl Tone {
     /// fuzz travels further than a tape machine, and carrying the gain
     /// across would land a modest tape drive at the top of the fuzz.
     pub fn set_sat_profile(&mut self, index: usize) {
-        let Some(profile) = saturate_profiles::PROFILES.get(index) else {
+        let Some(profile) = saturate::profiles::PROFILES.get(index) else {
             return;
         };
-        let was_scale = saturate_profiles::PROFILES
+        let was_scale = saturate::profiles::PROFILES
             .get(self.sat_profile)
             .map_or(1.0, |p| p.voicing.drive_scale)
             .max(f32::EPSILON);
         let knob = ((self.sat.drive - 1.0) / (15.0 * was_scale)).clamp(0.0, 1.0);
         let mix = self.sat.mix;
-        let controls = saturate_profiles::Controls {
+        let controls = saturate::profiles::Controls {
             drive: knob,
             mix,
-            ..saturate_profiles::Controls::default()
+            ..saturate::profiles::Controls::default()
         };
-        saturate_profiles::apply(profile, &controls, &mut self.sat, &mut self.sat_digital);
+        saturate::profiles::apply(profile, &controls, &mut self.sat, &mut self.sat_digital);
         self.sat.mix = mix;
         self.sat_profile = index;
     }
@@ -522,14 +522,14 @@ impl Tone {
     /// A click on a circuit chip: the plugin's own rail rule — the
     /// family's first profile, or the next one if you are already in it.
     pub fn choose_sat_family(&mut self, category: usize) {
-        let to = saturate_profiles::rail_click_target(self.sat_profile, category);
+        let to = saturate::profiles::rail_click_target(self.sat_profile, category);
         self.set_sat_profile(to);
     }
 
     /// The next profile, wrapping — what a click on the glyph does.
     pub fn cycle_sat(&mut self) {
         let next = self.sat_profile.saturating_add(1);
-        let to = if next >= saturate_profiles::PROFILES.len() {
+        let to = if next >= saturate::profiles::PROFILES.len() {
             0
         } else {
             next
@@ -4645,7 +4645,7 @@ fn sat(
     }
 
     let mut samples = [(0.0_f32, 0.0_f32); SAMPLES];
-    saturate_dsp::preamp::analysis::transfer_curve(pre, &mut samples);
+    saturate::preamp::analysis::transfer_curve(pre, &mut samples);
     // A quantiser has no transfer curve of its own — there is no curve
     // that produces an alias — but it does one thing to this one: it
     // turns it into a staircase, and that is the honest picture of it.
@@ -4906,7 +4906,7 @@ fn glyph(scene: &mut Scene, ink: Color, glyph: Glyph, x: f64, baseline: f64) {
 }
 
 /// The saturator's five circuits, in the plugin's own rail order —
-/// which is `saturate_profiles::CATEGORIES`' order, chip for chip.
+/// which is `saturate::profiles::CATEGORIES`' order, chip for chip.
 const CIRCUITS: [Circuit; 5] = [
     Circuit::Valve,
     Circuit::Tape,
@@ -4935,11 +4935,11 @@ fn selector(
     const SIZE: f32 = 6.5;
     let (chips, current, name): (Vec<Glyph>, usize, &str) = match which {
         Which::Sat => {
-            let profile = saturate_profiles::PROFILES.get(tone.sat_profile);
+            let profile = saturate::profiles::PROFILES.get(tone.sat_profile);
             (
                 CIRCUITS.iter().map(|c| Glyph::Circuit(*c)).collect(),
                 profile
-                    .and_then(|p| saturate_profiles::category_of(p.id))
+                    .and_then(|p| saturate::profiles::category_of(p.id))
                     .map_or(0, |(category, _)| category),
                 profile.map_or("", |p| p.name),
             )
@@ -6066,11 +6066,11 @@ impl Sidechain {
 
 /// The emphasis bands' starting spread — the plugin's: idle bells at
 /// 80 Hz … 10 kHz.
-fn emphasis_spread() -> [saturate_dsp::emphasis::EmphBand; saturate_dsp::emphasis::BANDS] {
+fn emphasis_spread() -> [saturate::emphasis::EmphBand; saturate::emphasis::BANDS] {
     [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0].map(|freq_hz| {
-        saturate_dsp::emphasis::EmphBand {
+        saturate::emphasis::EmphBand {
             freq_hz,
-            ..saturate_dsp::emphasis::EmphBand::default()
+            ..saturate::emphasis::EmphBand::default()
         }
     })
 }
@@ -6159,7 +6159,7 @@ pub fn placeholder(index: usize) -> Tone {
             pre
         },
         sat_profile: 0,
-        sat_digital: saturate_dsp::digital::DigitalStage::new(),
+        sat_digital: saturate::digital::DigitalStage::new(),
         sat_emphasis: emphasis_spread(),
         sat_emphasis_view: false,
         pre_eq: Vec::new(),
@@ -6176,7 +6176,7 @@ pub fn placeholder(index: usize) -> Tone {
     // Each voice on its own circuit, so a mixer of racks shows the five
     // faces; the drive the voice wants survives the profile.
     let drive = tone.sat.drive;
-    tone.set_sat_profile(saturate_profiles::profile_index(voice.sat_profile()).unwrap_or(0));
+    tone.set_sat_profile(saturate::profiles::profile_index(voice.sat_profile()).unwrap_or(0));
     tone.sat.drive = drive;
     tone
 }
@@ -6283,7 +6283,7 @@ fn fundamental(mut tone: Tone, name: &str, ancestors: &[String]) -> Tone {
         hold: 40.0,
         release: 90.0,
     };
-    tone.set_sat_profile(saturate_profiles::profile_index("transformer").unwrap_or(0));
+    tone.set_sat_profile(saturate::profiles::profile_index("transformer").unwrap_or(0));
     tone.sat.drive = 2.0;
     tone.presets = Vec::new();
     tone.preset = None;
@@ -13384,23 +13384,23 @@ mod face_tests {
         );
         let drive = tone.sat.drive;
         tone.choose_sat_family(4);
-        assert_eq!(tone.sat_circuit(), saturate_dsp::preamp::Circuit::Steps);
-        assert_eq!(saturate_profiles::PROFILES[tone.sat_profile].name, "Clip");
+        assert_eq!(tone.sat_circuit(), saturate::preamp::Circuit::Steps);
+        assert_eq!(saturate::profiles::PROFILES[tone.sat_profile].name, "Clip");
         tone.choose_sat_family(4);
         assert_eq!(
-            saturate_profiles::PROFILES[tone.sat_profile].name,
+            saturate::profiles::PROFILES[tone.sat_profile].name,
             "Bitcrush"
         );
         assert!(!tone.sat_digital.is_transparent(), "a bitcrusher quantises");
         tone.choose_sat_family(0);
-        assert_eq!(tone.sat_circuit(), saturate_dsp::preamp::Circuit::Valve);
+        assert_eq!(tone.sat_circuit(), saturate::preamp::Circuit::Valve);
         assert!(tone.sat_digital.is_transparent());
         // The drive knob rides across: a transformer at its drive is a
         // triode at the same knob, not the same gain.
         assert!(tone.sat.drive > 1.0 && (tone.sat.drive - drive).abs() < 8.0);
         tone.cycle_sat();
         assert_eq!(
-            saturate_profiles::PROFILES[tone.sat_profile].name,
+            saturate::profiles::PROFILES[tone.sat_profile].name,
             "Pentode"
         );
     }

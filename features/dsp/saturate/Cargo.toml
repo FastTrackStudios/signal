@@ -1,0 +1,65 @@
+[package]
+name = "saturate"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Saturation: its circuits, their profiles and its editor"
+
+[lints]
+workspace = true
+
+[features]
+analysis = []
+native = ["dep:architect-ui", "dep:atomic_float", "dep:eq-ui", "dep:fts-plug-ui", "dep:nice-plug", "dep:nice-plug-dioxus", "dep:parking_lot", "eq-ui/native"]
+profiles = []
+ui = ["dep:crossbeam-channel", "dep:dioxus", "dep:fts-audio-ui"]
+viz = ["analysis", "dep:anyrender", "dep:kurbo", "dep:multiband-dsp", "dep:peniko"]
+
+[dependencies]
+anyrender = { workspace = true, optional = true }
+architect-ui = { workspace = true, optional = true }
+atomic_float = { workspace = true, optional = true }
+crossbeam-channel = { workspace = true, optional = true }
+dioxus = { workspace = true, optional = true }
+dsp-core = { workspace = true }
+eq-ui = { workspace = true, optional = true }
+fts-audio-ui = { workspace = true, optional = true }
+fts-plug-ui = { workspace = true, optional = true }
+kurbo = { workspace = true, optional = true }
+libm = { version = "0.2" }
+multiband-dsp = { workspace = true, optional = true }
+nice-plug = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+peniko = { workspace = true, optional = true }
+
+[dev-dependencies]
+anyrender_vello_cpu = { workspace = true }
+approx = { workspace = true }
+dioxus = { workspace = true }
+dioxus-test = { workspace = true }
+dsp-golden = { workspace = true }
+fx-stack = { workspace = true }
+png = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[example]]
+name = "sat_sheet"
+required-features = ["viz"]
+
+[[test]]
+name = "screenshots"
+required-features = ["native"]
+
+[[test]]
+name = "emphasis_eq"
+required-features = ["native"]
+
+[[test]]
+name = "sat_viz"
+required-features = ["viz"]
+
+[[test]]
+name = "param_round_trip"
+required-features = ["native"]

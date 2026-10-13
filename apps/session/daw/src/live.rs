@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, mpsc};
 
 use reverb::algorithm::{AlgorithmParams, AlgorithmType};
-use saturate_dsp::preamp::ClassAPreamp;
+use saturate::preamp::ClassAPreamp;
 
 /// Everything in one track's rack that moves with the audio.
 ///
@@ -172,8 +172,8 @@ impl SatKey {
     }
 }
 
-const fn shaper_index(shaper: saturate_dsp::preamp::SideShaper) -> u8 {
-    use saturate_dsp::preamp::SideShaper as S;
+const fn shaper_index(shaper: saturate::preamp::SideShaper) -> u8 {
+    use saturate::preamp::SideShaper as S;
     match shaper {
         S::Clean => 0,
         S::OpAmp => 1,
@@ -199,7 +199,7 @@ thread_local! {
 /// The harmonic ladder for this stage, measured once per distinct
 /// setting.
 ///
-/// Three probes through `saturate_dsp::preamp::analysis` on a miss —
+/// Three probes through `saturate::preamp::analysis` on a miss —
 /// about a third of a millisecond — and a hash lookup on a hit. The
 /// memo is per thread because the probe is pure and the racks are
 /// drawn from one; sharing it across threads would buy a lock for
@@ -215,7 +215,7 @@ pub fn ladder(pre: &ClassAPreamp) -> Ladder {
         for (level, row) in LEVELS.iter().zip(rungs.iter_mut()) {
             // H1..H8; the ladder drops H1, which is the signal itself.
             let mut all = [0.0_f32; RUNGS + 1];
-            saturate_dsp::preamp::analysis::harmonic_spectrum_at(pre, *level, &mut all);
+            saturate::preamp::analysis::harmonic_spectrum_at(pre, *level, &mut all);
             for (slot, value) in row.iter_mut().zip(all.iter().skip(1)) {
                 *slot = value.clamp(0.0, 1.0);
             }
@@ -437,7 +437,7 @@ pub fn tails_generation() -> u64 {
 mod tests {
     use super::{LEVELS, RUNGS, RoomKey, TAIL_BINS, ladder, render_tail_now, tail};
     use reverb::algorithm::AlgorithmType;
-    use saturate_dsp::preamp::{ClassAPreamp, SideShaper};
+    use saturate::preamp::{ClassAPreamp, SideShaper};
 
     fn biased_triode() -> ClassAPreamp {
         let mut pre = ClassAPreamp::new(48_000.0);

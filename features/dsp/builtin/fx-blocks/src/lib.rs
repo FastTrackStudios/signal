@@ -687,14 +687,14 @@ const PREAMP_PARAMS: &[ParamSpec] = &[
 ///
 /// The magnitudes are normalized to H1 — the UI's harmonic visualization polls these.
 /// The transfer curve for the indicative sine display comes from
-/// `saturate_dsp::preamp::analysis::transfer_curve` on a mirror.
+/// `saturate::preamp::analysis::transfer_curve` on a mirror.
 pub const PREAMP_HARMONIC_BASE: u32 = 100;
 pub const PREAMP_HARMONICS: usize = 8;
 
 /// Native Class-A preamp — asymmetric saturation with a Q-point bias,
 /// independent per-side shapers, and a 1073-style output DC blocker.
 pub struct NativePreamp {
-    pre: [saturate_dsp::preamp::ClassAPreamp; 2],
+    pre: [saturate::preamp::ClassAPreamp; 2],
     harmonics: [f32; PREAMP_HARMONICS],
     harmonics_dirty: bool,
     prepared: bool,
@@ -703,7 +703,7 @@ pub struct NativePreamp {
 impl NativePreamp {
     #[must_use]
     pub fn new(sample_rate: f64) -> Self {
-        let mk = || saturate_dsp::preamp::ClassAPreamp::new(sample_rate.max(1.0) as f32);
+        let mk = || saturate::preamp::ClassAPreamp::new(sample_rate.max(1.0) as f32);
         let mut p = Self {
             pre: [mk(), mk()],
             harmonics: [0.0; PREAMP_HARMONICS],
@@ -722,8 +722,8 @@ impl NativePreamp {
             match id {
                 0 => pre.drive = 10.0f32.powf(v.clamp(0.0, 24.0) / 20.0),
                 1 => pre.q_point = v.clamp(-1.0, 1.0),
-                2 => pre.positive = saturate_dsp::preamp::SideShaper::from_index(v as u32),
-                3 => pre.negative = saturate_dsp::preamp::SideShaper::from_index(v as u32),
+                2 => pre.positive = saturate::preamp::SideShaper::from_index(v as u32),
+                3 => pre.negative = saturate::preamp::SideShaper::from_index(v as u32),
                 4 => pre.mix = v.clamp(0.0, 1.0),
                 5 => pre.output_gain = 10.0f32.powf(v.clamp(-24.0, 24.0) / 20.0),
                 _ => {}
@@ -743,7 +743,7 @@ impl NativePreamp {
     /// Current measured harmonic spectrum (H1..H8, linear re H1).
     pub fn harmonics(&mut self) -> [f32; PREAMP_HARMONICS] {
         if self.harmonics_dirty {
-            saturate_dsp::preamp::analysis::harmonic_spectrum(&self.pre[0], &mut self.harmonics);
+            saturate::preamp::analysis::harmonic_spectrum(&self.pre[0], &mut self.harmonics);
             self.harmonics_dirty = false;
         }
         self.harmonics
@@ -944,7 +944,7 @@ pub const SATURATE_EQ_BASE: u32 = 200;
 use audiocore_dsp::biquad::{Biquad as SatBiquad, FilterType as SatFilterType};
 
 pub struct NativeSaturate {
-    pre: [saturate_dsp::preamp::ClassAPreamp; 2],
+    pre: [saturate::preamp::ClassAPreamp; 2],
     os: audiocore_dsp::oversampling::Oversampler,
     emph_lo: SatBiquad,
     emph_hi: SatBiquad,
@@ -986,7 +986,7 @@ impl NativeSaturate {
     pub fn new(sample_rate: f64) -> Self {
         use audiocore_dsp::oversampling::{OversampleQuality, OversampleRate};
         let sr = sample_rate.max(1.0);
-        let mk = || saturate_dsp::preamp::ClassAPreamp::new(sr as f32);
+        let mk = || saturate::preamp::ClassAPreamp::new(sr as f32);
         let mut sat = Self {
             pre: [mk(), mk()],
             os: audiocore_dsp::oversampling::Oversampler::new(
@@ -1104,12 +1104,12 @@ impl NativeSaturate {
             }
             2 => {
                 for p in &mut self.pre {
-                    p.positive = saturate_dsp::preamp::SideShaper::from_index(v as u32);
+                    p.positive = saturate::preamp::SideShaper::from_index(v as u32);
                 }
             }
             3 => {
                 for p in &mut self.pre {
-                    p.negative = saturate_dsp::preamp::SideShaper::from_index(v as u32);
+                    p.negative = saturate::preamp::SideShaper::from_index(v as u32);
                 }
             }
             4 => {
@@ -1185,7 +1185,7 @@ impl NativeSaturate {
     /// sag, tilt, and the model filters all move; every one of them
     /// remains individually overridable afterwards (= Custom).
     fn apply_model(&mut self, model: u32) {
-        use saturate_dsp::preamp::SideShaper as S;
+        use saturate::preamp::SideShaper as S;
         let sr = self.sample_rate;
         self.voice_on = (false, false);
         let (pos, neg, q, sag, tilt) = match model {
@@ -1239,7 +1239,7 @@ impl NativeSaturate {
 
     pub fn harmonics(&mut self) -> [f32; PREAMP_HARMONICS] {
         if self.harmonics_dirty {
-            saturate_dsp::preamp::analysis::harmonic_spectrum(&self.pre[0], &mut self.harmonics);
+            saturate::preamp::analysis::harmonic_spectrum(&self.pre[0], &mut self.harmonics);
             self.harmonics_dirty = false;
         }
         self.harmonics

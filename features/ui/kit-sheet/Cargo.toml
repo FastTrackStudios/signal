@@ -26,7 +26,6 @@ comp-ui = { workspace = true, features = ["native"] }
 delay = { workspace = true, features = ["native", "profiles", "ui", "viz"] }
 eq-ui = { workspace = true, features = ["native"] }
 reverb = { workspace = true, features = ["native", "profiles", "ui", "viz"] }
-saturate-ui = { workspace = true, features = ["native"] }
+saturate = { workspace = true, features = ["native", "profiles", "ui", "viz"] }
 comp-profiles = { path = "../../dsp/comp/comp-profiles" }
-saturate-profiles = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

@@ -103,16 +103,14 @@ fts-audio-ui = { workspace = true }
 # model, the response maths and the interaction helpers), which is what
 # the wasm remotes take.
 eq-ui = { workspace = true }
-saturate-dsp = { workspace = true, features = ["analysis"] }
+saturate = { workspace = true, features = ["analysis", "profiles", "ui", "viz"] }
 # The delay's style families and the reverb's rendered impulse — the
 # Depth panels draw the machine, not a picture of its knob.
 delay = { workspace = true, features = ["profiles", "ui", "viz"] }
 reverb = { workspace = true, features = ["profiles", "ui", "viz"] }
 # Their painted pictures, for the FX view's devices.
 modulation-ui = { workspace = true }
-saturate-ui = { workspace = true }
 frame-live = { workspace = true }
-saturate-profiles = { workspace = true }
 
 # `standalone-rpp` = the standalone backend plus the `.rpp` loader and
 # source decoding — what makes a real project openable with no REAPER in
