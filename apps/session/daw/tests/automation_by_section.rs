@@ -110,7 +110,7 @@ fn the_kicks_top_end_comes_up_in_the_loud_sections() {
         .replace("VOCAL_WAV", &vocal.to_string_lossy())
         .replace("GUITAR_WAV", &guitar.to_string_lossy());
     let daw = daw::standalone::Standalone::new();
-    daw.set_fx_factory(Arc::new(builtin_fx::BuiltinFx));
+    daw.set_fx_factory(Arc::new(builtin::engine::BuiltinFx));
     let loaded =
         daw::standalone::project_loader::load_rpp_text(&daw, "song", "/tmp/song.RPP", &song)
             .expect("the song");
@@ -175,9 +175,9 @@ fn the_kicks_top_end_comes_up_in_the_loud_sections() {
         ]
     );
 
-    let (index, _) = builtin_fx::setting("FTS EQ", "SSL HF Gain", "0 dB").expect("the parameter");
+    let (index, _) = builtin::engine::setting("FTS EQ", "SSL HF Gain", "0 dB").expect("the parameter");
     let level = |t: &str| {
-        builtin_fx::setting("FTS EQ", "SSL HF Gain", t)
+        builtin::engine::setting("FTS EQ", "SSL HF Gain", t)
             .map(|(_, v)| v)
             .expect("a level")
     };

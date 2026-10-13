@@ -316,7 +316,7 @@ pub(crate) fn param_of<'a>(
 
 /// The normalized value for `text` on `param` of `fx`: `=0.42` as given;
 /// a choice by its label; else the plugin's own reading of the words (an
-/// FTS processor's, `builtin_fx::setting`).
+/// FTS processor's, `builtin::engine::setting`).
 pub(crate) fn value_of(
     fx: &str,
     param: &daw_proto::fx::FxParameter,
@@ -339,7 +339,7 @@ pub(crate) fn value_of(
     }
     // The FTS processors read their own words; the index found by name is
     // the first of a repeated one, so the value is the same either way.
-    builtin_fx::setting(fx, &param.name, text)
+    builtin::engine::setting(fx, &param.name, text)
         .map(|(_, v)| v)
         .ok_or_else(|| {
             format!(
@@ -740,7 +740,7 @@ pub(crate) fn register(list: &ActionList) {
     });
     list.register(&ADD, Effect::Mutating, |a: AddArg| {
         let (daw, project) = song()?;
-        if !daw_standalone::plugin::FxFactory::provides(&builtin_fx::BuiltinFx, &a.fx) {
+        if !daw_standalone::plugin::FxFactory::provides(&builtin::engine::BuiltinFx, &a.fx) {
             return Err(format!(
                 "{} is not one of the FTS processors (FTS Mic, FTS EQ, FTS Comp, …)",
                 a.fx

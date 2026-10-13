@@ -2,7 +2,7 @@
 //! dynamic bands, per-band spectral mode, and transient dual-stream
 //! mode — all toggles inside `signal.fx.eq`.
 
-use fx_blocks::NativeEq;
+use builtin::NativeEq;
 use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48000.0;

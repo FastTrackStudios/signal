@@ -17,7 +17,7 @@ mod reverb_time {
     /// The RT60 FTS Reverb rings with `settings` (in its own words) at `bpm`:
     /// an impulse, the tail's Schroeder curve, T20 × 3.
     fn rings(settings: &[(&str, &str)], bpm: f64) -> f64 {
-        let mut fx = builtin_fx::BuiltinFx
+        let mut fx = builtin::engine::BuiltinFx
             .create("FTS Reverb", SR)
             .expect("the reverb");
         fx.prepare(SR, u32::try_from(BLOCK).expect("a block"))
@@ -25,7 +25,7 @@ mod reverb_time {
         let params: Vec<(u32, f64)> = settings
             .iter()
             .map(|(p, t)| {
-                builtin_fx::setting("FTS Reverb", p, t).unwrap_or_else(|| panic!("{p}={t}"))
+                builtin::engine::setting("FTS Reverb", p, t).unwrap_or_else(|| panic!("{p}={t}"))
             })
             .collect();
         let mut energy = Vec::new();
@@ -122,7 +122,7 @@ mod reverb_time {
     /// hit, and it is silent after that.
     #[test]
     fn a_gate_in_notes_shuts_on_the_beat() {
-        let mut fx = builtin_fx::BuiltinFx
+        let mut fx = builtin::engine::BuiltinFx
             .create("FTS Reverb", SR)
             .expect("the reverb");
         fx.prepare(SR, 512).expect("prepared");
@@ -135,7 +135,7 @@ mod reverb_time {
             ("Decay Div", "1/4"),
         ]
         .iter()
-        .map(|(p, t)| builtin_fx::setting("FTS Reverb", p, t).expect("a setting"))
+        .map(|(p, t)| builtin::engine::setting("FTS Reverb", p, t).expect("a setting"))
         .collect();
         let mut out = Vec::new();
         for block in 0..SETTLE_BLOCKS + 188 {

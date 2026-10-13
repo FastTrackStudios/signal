@@ -1,6 +1,6 @@
 //! FTS-Saturate: the full distortion chain, measured.
 
-use fx_blocks::{NativeSaturate, SATURATE_HARMONIC_BASE};
+use builtin::{NativeSaturate, SATURATE_HARMONIC_BASE};
 use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48000.0;

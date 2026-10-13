@@ -29,7 +29,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use daw::standalone::offline_fx::{self, RenderOptions};
-use fx_blocks::NativeReverb;
+use builtin::NativeReverb;
 use signal_analyzer::reverb_character::{self, Character};
 use signal_analyzer::reverb_stimuli::Stimulus;
 

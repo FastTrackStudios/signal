@@ -2,7 +2,7 @@
 //! check the surface itself: that a default EQ is transparent, and that the
 //! id/name path reaches the engine intact.
 
-use fx_blocks::NativeEq;
+use builtin::NativeEq;
 use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;

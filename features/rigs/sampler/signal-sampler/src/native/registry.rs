@@ -64,76 +64,76 @@ fn set_stored(block: &RigBlock, mut set: impl FnMut(&str, f64)) {
 }
 
 fn build_chorus(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeMod::chorus(sample_rate as f64);
+    let mut fx = builtin::NativeMod::chorus(sample_rate as f64);
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 /// The octaver / harmony: two shifted voices over the dry (fx-blocks
 /// `NativePitch`, the phase-vocoder shifter).
 fn build_pitch(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativePitch::new(sample_rate as f64);
+    let mut fx = builtin::NativePitch::new(sample_rate as f64);
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_flanger(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeMod::flanger(sample_rate as f64);
+    let mut fx = builtin::NativeMod::flanger(sample_rate as f64);
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_vibrato(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeMod::vibrato(sample_rate as f64);
+    let mut fx = builtin::NativeMod::vibrato(sample_rate as f64);
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_trem(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeTrem::new(sample_rate as f64);
+    let mut fx = builtin::NativeTrem::new(sample_rate as f64);
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_gate(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeGate::new(sample_rate as f64);
+    let mut fx = builtin::NativeGate::new(sample_rate as f64);
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_volume(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeGain::new(sample_rate as f64);
+    let mut fx = builtin::NativeGain::new(sample_rate as f64);
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_phaser(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(fx_blocks::NativePassthrough::new("Phaser"))
+    Box::new(builtin::NativePassthrough::new("Phaser"))
 }
 fn build_rotary(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(fx_blocks::NativePassthrough::new("Rotary"))
+    Box::new(builtin::NativePassthrough::new("Rotary"))
 }
 /// The clean boost at the head of the drive board: its `drive` is the level
 /// push into the drives (0 dB … +18 dB).
 fn build_boost_pedal(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeBoost::new(sample_rate as f64);
+    let mut fx = builtin::NativeBoost::new(sample_rate as f64);
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 fn build_drive(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(fx_blocks::NativePassthrough::new("Drive"))
+    Box::new(builtin::NativePassthrough::new("Drive"))
 }
 
 fn build_eq(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeEq::new(sample_rate as f64);
+    let mut fx = builtin::NativeEq::new(sample_rate as f64);
     // Full band set: b{1..24}_{used,on,freq,gain,q,shape}.
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 
 fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeComp::new(sample_rate as f64);
+    let mut fx = builtin::NativeComp::new(sample_rate as f64);
     // `meter` is which compressor-panel trace this block draws on (0 =
-    // none) — see `fx_blocks::comp_meter`.
+    // none) — see `builtin::comp_meter`.
     set_stored(block, |n, v| fx.set_named(n, v));
     Box::new(fx)
 }
 
 fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeReverb::new(sample_rate as f64);
+    let mut fx = builtin::NativeReverb::new(sample_rate as f64);
     // Every numeric param the block carries (the block ignores names it does
     // not have). A fixed list here dropped the algorithm, tone, damping and
     // modulation a preset set, and the new `dry`: a reverb built as the
@@ -148,7 +148,7 @@ fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 }
 
 fn build_delay(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    let mut fx = fx_blocks::NativeDelay::new(sample_rate as f64);
+    let mut fx = builtin::NativeDelay::new(sample_rate as f64);
     // Every numeric param the block carries — a fixed list dropped the style,
     // high-pass and repeat dynamics a preset set (and `dry`).
     set_stored(block, |n, v| fx.set_named(n, v));

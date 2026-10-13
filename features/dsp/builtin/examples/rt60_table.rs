@@ -16,7 +16,7 @@
 //! asks each engine for times through the tables and prints what it rang.
 
 use daw::plugin::{PluginEvents, PluginInstance};
-use fx_blocks::NativeReverb;
+use builtin::NativeReverb;
 
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 512;

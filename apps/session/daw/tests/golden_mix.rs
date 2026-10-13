@@ -166,7 +166,7 @@ fn fed_by(
 #[test]
 fn prepare_builds_the_golden_template() {
     let daw = daw::standalone::Standalone::new();
-    daw.set_fx_factory(Arc::new(builtin_fx::BuiltinFx));
+    daw.set_fx_factory(Arc::new(builtin::engine::BuiltinFx));
     // The lead sung into a dual-capsule mic (front and rear, two
     // channels), the scream into an ordinary one.
     let dir = std::env::temp_dir().join(format!("golden-mix-{}", std::process::id()));

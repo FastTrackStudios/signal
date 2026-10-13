@@ -2,7 +2,7 @@
 //! 1, `level = 20·log10(m)` plays exactly what `mix = m` did.
 
 use daw::plugin::{PluginEvents, PluginInstance};
-use fx_blocks::{NativeDelay, NativeReverb};
+use builtin::{NativeDelay, NativeReverb};
 
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 256;
@@ -56,7 +56,7 @@ fn reverb_level_matches_the_mix_it_replaces() {
 /// centre untouched, hard right +4.5 dB on the right and silent on the left.
 #[test]
 fn gain_pan_is_a_4_5_db_law() {
-    use fx_blocks::NativeGain;
+    use builtin::NativeGain;
     let run = |pan: f64| {
         let mut g = NativeGain::new(SR);
         g.set_named("pan", pan);

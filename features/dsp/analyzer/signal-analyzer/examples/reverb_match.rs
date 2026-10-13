@@ -1,7 +1,7 @@
 //! The render bridge: measure FTS-Reverb against a real reference reverb.
 //!
 //! Renders the same impulse through a hosted reference plugin and through
-//! `fx_blocks::NativeReverb` driven by the translated parameters, then reports
+//! `builtin::NativeReverb` driven by the translated parameters, then reports
 //! how far apart they are under the analyzer's metrics.
 //!
 //! ```text
@@ -29,7 +29,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use fx_blocks::NativeReverb;
+use builtin::NativeReverb;
 use signal_analyzer::{DecayFit, Thresholds, compare, decay, generators};
 use signal_import::valhalla;
 use signal_plugin_host::{HostedPlugin, PluginInstance};
@@ -856,7 +856,7 @@ fn run_comparison(
                 "mode_value": patch.mode_value(),
             },
             "target": {
-                "engine": "fx_blocks::NativeReverb",
+                "engine": "builtin::NativeReverb",
                 "parameters": tuned,
             },
             "measurement": {

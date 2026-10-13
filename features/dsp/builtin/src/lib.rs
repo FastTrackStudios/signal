@@ -12,6 +12,10 @@
 //! via [`set_named`](NativeReverb::set_named), which the native-block registry
 //! in `signal-sampler` calls when constructing the block.
 
+
+#[cfg(feature = "engine")]
+pub mod engine;
+
 use dsp_core::audio::{AudioConfig, Processor};
 use daw::plugin::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,

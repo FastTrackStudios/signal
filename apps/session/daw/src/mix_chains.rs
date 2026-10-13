@@ -675,7 +675,7 @@ pub fn add(
                 fx: FxRef::Guid(guid),
             };
             for (param, text) in settings {
-                match builtin_fx::setting(fx, param, text) {
+                match builtin::engine::setting(fx, param, text) {
                     Some((index, value)) => Effects::set_parameter(
                         daw,
                         project.clone(),
@@ -877,7 +877,7 @@ fn set(
             Some((base, n)) if base.starts_with("Post ") => (base, n.saturating_sub(1)),
             _ => (*param, 0),
         };
-        match builtin_fx::setting(fx, base, text) {
+        match builtin::engine::setting(fx, base, text) {
             Some((index, value)) => Effects::set_parameter(
                 daw,
                 project.clone(),
@@ -1075,7 +1075,7 @@ fn one_note(
     ];
     for n in 2_u32.. {
         let on = format!("B{n} On");
-        if builtin_fx::setting("FTS EQ", &on, "Off").is_none() {
+        if builtin::engine::setting("FTS EQ", &on, "Off").is_none() {
             break;
         }
         eq.push((on, "Off".into()));
@@ -1162,7 +1162,7 @@ mod tests {
                     .trim_end_matches(|c: char| c.is_ascii_digit())
                     .trim_end();
                 assert!(
-                    builtin_fx::setting(fx, base, text).is_some(),
+                    builtin::engine::setting(fx, base, text).is_some(),
                     "{what}: {param}={text}"
                 );
             }
@@ -1184,7 +1184,7 @@ mod tests {
         }
         assert!(drum_return("bass", "room").is_none());
         // The check refuses what a plugin does not know.
-        assert!(builtin_fx::setting("FTS Reverb", "Decay Div", "1/3").is_none());
+        assert!(builtin::engine::setting("FTS Reverb", "Decay Div", "1/3").is_none());
         for (name, settings) in ROOMS.iter().chain(COMPRESS) {
             let fx = if ROOMS.iter().any(|(n, _)| n == name) {
                 "FTS Reverb"

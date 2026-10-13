@@ -18,7 +18,7 @@
 //!     [--density 50] [--range -18] [--threshold -30] [--q 1] [--tilt] [--auto]
 //! ```
 
-use fx_blocks::NativeEq;
+use builtin::NativeEq;
 use realfft::RealFftPlanner;
 use signal_plugin_host::{HostedPlugin, PluginEvents, PluginInstance};
 

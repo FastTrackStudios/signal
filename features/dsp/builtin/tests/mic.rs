@@ -68,7 +68,7 @@ fn sides(block: &StereoBuffer) -> (f32, f32) {
 #[test]
 fn a_capsule_pair_comes_out_one_mic() {
     let daw = Standalone::new();
-    daw.set_fx_factory(Arc::new(builtin_fx::BuiltinFx));
+    daw.set_fx_factory(Arc::new(builtin::engine::BuiltinFx));
     let project = daw.seed_project(ProjectInfo {
         guid: "p".into(),
         name: "p".into(),

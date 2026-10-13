@@ -3,7 +3,7 @@
 //! `cargo run --release -p fx-blocks --example chorus_gain`
 
 use daw::plugin::{PluginEvents, PluginInstance};
-use fx_blocks::NativeMod;
+use builtin::NativeMod;
 
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 512;

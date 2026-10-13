@@ -2200,28 +2200,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56ed6191a7e78c36abdb16ab65341eefd73d64d303fffccdbb00d51e4205967b"
 
 [[package]]
-name = "builtin-fx"
+name = "builtin"
 version = "0.1.0"
 dependencies = [
+ "comp",
  "comp-plugin",
+ "daw",
  "daw-proto",
  "daw-standalone",
+ "delay",
  "delay-plugin",
+ "dsp-core",
+ "eq",
  "eq-plugin",
+ "fts-sample",
  "gate-plugin",
+ "level",
  "level-plugin",
  "limiter-plugin",
  "meter-plugin",
  "mic-plugin",
+ "midicore-proto",
+ "modulation",
  "modulation-plugin",
  "nice-plug",
  "num-traits",
+ "pitch",
  "pitch-plugin",
+ "reverb",
  "reverb-plugin",
+ "saturate",
  "saturate-plugin",
  "serde",
  "serde_json",
  "tracing",
+ "tune",
  "tune-plugin",
  "unison-plugin",
 ]
@@ -6058,11 +6071,11 @@ name = "drums"
 version = "0.1.0"
 dependencies = [
  "architect",
+ "builtin",
  "control-surfaces",
  "daw",
  "dioxus",
  "facet",
- "fx-blocks",
  "midicore",
  "midicore-proto",
  "midicore-ui",
@@ -7899,7 +7912,7 @@ dependencies = [
 name = "fts-convert"
 version = "0.1.0"
 dependencies = [
- "fx-blocks",
+ "builtin",
  "signal-analyzer",
  "signal-import",
  "signal-plugin-host",
@@ -8143,26 +8156,6 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "slab",
-]
-
-[[package]]
-name = "fx-blocks"
-version = "0.1.0"
-dependencies = [
- "comp",
- "daw",
- "daw-proto",
- "delay",
- "dsp-core",
- "eq",
- "fts-sample",
- "level",
- "midicore-proto",
- "modulation",
- "pitch",
- "reverb",
- "saturate",
- "tune",
 ]
 
 [[package]]
@@ -17842,7 +17835,7 @@ dependencies = [
  "blitz-dom",
  "blitz-paint",
  "blitz-traits",
- "builtin-fx",
+ "builtin",
  "comp",
  "crdt",
  "cursor-icon",
@@ -18333,10 +18326,10 @@ dependencies = [
 name = "signal-analyzer"
 version = "0.1.0"
 dependencies = [
+ "builtin",
  "daw",
  "dsp-core",
  "eq",
- "fx-blocks",
  "hound",
  "realfft",
  "reverb",
@@ -18410,6 +18403,7 @@ dependencies = [
  "base64 0.22.1",
  "blitz-shell",
  "block2 0.6.2",
+ "builtin",
  "daw-proto",
  "dioxus",
  "dioxus-native",
@@ -18422,7 +18416,6 @@ dependencies = [
  "fts-chrome",
  "futures-channel",
  "futures-util",
- "fx-blocks",
  "getrandom 0.3.4",
  "include_dir",
  "js-sys",
@@ -18532,11 +18525,11 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "blake3",
+ "builtin",
  "chrono",
  "facet",
  "facet-json",
  "facet-styx",
- "fx-blocks",
  "hound",
  "libc",
  "midicore",
@@ -18672,9 +18665,9 @@ name = "signal-import"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "builtin",
  "eq",
  "eyre",
- "fx-blocks",
  "reverb",
  "serde",
  "serde_json",
@@ -18907,6 +18900,7 @@ name = "signal-sampler"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "builtin",
  "clap",
  "cpal",
  "daw",
@@ -18916,7 +18910,6 @@ dependencies = [
  "facet-styx",
  "facet-toml",
  "fts-sample",
- "fx-blocks",
  "hound",
  "keyflow-annotate",
  "keyflow-orchestra",

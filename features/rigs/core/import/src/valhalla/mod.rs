@@ -9,7 +9,7 @@
 //! ```
 //!
 //! So there is no binary decode here — find the element, read the attributes,
-//! de-normalize into real units, and map onto `fx_blocks::NativeReverb`.
+//! de-normalize into real units, and map onto `builtin::NativeReverb`.
 //!
 //! Two wrinkles the format hides:
 //!

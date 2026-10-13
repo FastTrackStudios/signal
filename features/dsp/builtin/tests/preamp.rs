@@ -1,6 +1,6 @@
 //! Class-A preamp block: the Q-point demo, measured.
 
-use fx_blocks::{NativePreamp, PREAMP_HARMONIC_BASE};
+use builtin::{NativePreamp, PREAMP_HARMONIC_BASE};
 use daw::plugin::{PluginEvents, PluginInstance};
 
 const SR: f64 = 48000.0;

@@ -6,7 +6,7 @@
 
 use std::fmt::Write;
 
-use fx_blocks::NativeReverb;
+use builtin::NativeReverb;
 use signal_analyzer::generators;
 use signal_plugin_host::PluginInstance;
 

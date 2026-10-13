@@ -8,7 +8,7 @@ mod state_round_trip {
 
     #[test]
     fn every_builtin_saves_what_it_loaded() {
-        let factory = builtin_fx::BuiltinFx;
+        let factory = builtin::engine::BuiltinFx;
         let names: Vec<String> = factory.installed().into_iter().map(|fx| fx.name).collect();
         assert!(names.len() > 5, "the built-ins: {names:?}");
         for name in names {

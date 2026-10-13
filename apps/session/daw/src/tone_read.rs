@@ -446,7 +446,7 @@ mod tests {
     /// as the engine reports it: names, values and the plugin's texts.
     fn engine_fx(name: &str, settings: &[(&str, &str)]) -> EngineFx {
         use daw_standalone::plugin::{FxFactory, PluginEvents};
-        let mut fx = builtin_fx::BuiltinFx
+        let mut fx = builtin::engine::BuiltinFx
             .create(name, 48_000.0)
             .expect("a built-in");
         fx.prepare(48_000.0, 64).expect("prepared");
@@ -456,7 +456,7 @@ mod tests {
                 let base = param
                     .trim_end_matches(|c: char| c.is_ascii_digit())
                     .trim_end();
-                builtin_fx::setting(name, base, text).unwrap_or_else(|| panic!("{param}={text}"))
+                builtin::engine::setting(name, base, text).unwrap_or_else(|| panic!("{param}={text}"))
             })
             .collect();
         let (silence, mut l, mut r) = (vec![0.0_f32; 64], vec![0.0_f32; 64], vec![0.0_f32; 64]);
@@ -607,7 +607,7 @@ mod tests {
             .into_iter()
             .filter(|(name, _)| ["FTS Reverb", "FTS Delay", "FTS Gate"].contains(name))
             .map(|(name, changes)| {
-                let mut fx = builtin_fx::BuiltinFx
+                let mut fx = builtin::engine::BuiltinFx
                     .create(name, 48_000.0)
                     .expect("a built-in");
                 fx.prepare(48_000.0, 64).expect("prepared");

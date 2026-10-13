@@ -1,6 +1,6 @@
 //! `NativeTune`: correction accuracy, retune independence, MIDI targets.
 
-use fx_blocks::NativeTune;
+use builtin::NativeTune;
 use daw::plugin::{PluginEvents, PluginInstance, PluginMidiEvent};
 
 const SR: f64 = 48000.0;
@@ -70,7 +70,7 @@ fn corrects_a_sharp_a_to_pitch() {
         "output should center on 440: e440={at_440:e} e452={at_452:e}"
     );
     // Readback drives the tuner UI.
-    let detected = t.param_value(fx_blocks::TUNE_DETECTED_MIDI_ID).unwrap();
+    let detected = t.param_value(builtin::TUNE_DETECTED_MIDI_ID).unwrap();
     assert!(
         (detected - 69.47).abs() < 0.2,
         "detected ≈ A4+47c: {detected:.2}"

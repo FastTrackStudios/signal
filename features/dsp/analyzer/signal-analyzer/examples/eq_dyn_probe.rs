@@ -18,7 +18,7 @@
 //!     [--range -12] [--threshold -30] [--freq 1000] [--auto]
 //! ```
 
-use fx_blocks::NativeEq;
+use builtin::NativeEq;
 use signal_plugin_host::{HostedPlugin, PluginEvents, PluginInstance};
 
 const SR: f64 = 48_000.0;

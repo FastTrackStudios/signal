@@ -3,7 +3,7 @@
 //! set at build time and again live, as a knob turned while playing.
 
 use daw::plugin::{PluginEvents, PluginInstance};
-use fx_blocks::{NativeDelay, NativeReverb};
+use builtin::{NativeDelay, NativeReverb};
 
 const SR: f64 = 48_000.0;
 const BLOCK: usize = 256;

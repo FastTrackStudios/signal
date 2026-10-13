@@ -1,4 +1,4 @@
-use fx_blocks::NativeEq;
+use builtin::NativeEq;
 use daw::plugin::{PluginEvents, PluginInstance};
 use std::fmt::Write;
 const SR: f64 = 48_000.0;

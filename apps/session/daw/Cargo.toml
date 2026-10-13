@@ -217,7 +217,7 @@ gloo-timers = { workspace = true, optional = true }
 daw-standalone = { workspace = true, features = ["bootstrap", "rpp-project-wasm"] }
 dawfile-reaper = { workspace = true, optional = true }
 # The FTS processors as built-in FX (desktop: they are nice-plug plugins).
-builtin-fx = { workspace = true, optional = true }
+builtin = { workspace = true, optional = true, features = ["engine"] }
 realfft = { workspace = true, optional = true }
 architect-mcp = { workspace = true, optional = true, features = ["http"] }
 # signal's rigs, as built-in FX (`signal` feature).
@@ -251,121 +251,13 @@ tokio = { version = "1.48", default-features = false, features = ["sync", "macro
 
 [features]
 default = ["native"]
-# signal's rigs run in Session's own engine: the bass rig's NAM amp and
-# cab on a bass track, the drum sampler's per-mic voices on the kit.
 signal = ["native", "dep:signal-fx"]
-# The desktop app: dioxus-native (Blitz) hosts for the panels, the
-# in-process engine with its audio device, threads, the plugin-UI graph.
-native = [
-    "dep:dioxus-native",
-    "dep:realfft",
-    "dep:architect-mcp",
-    "dep:anyrender_vello",
-    "dep:wgpu",
-    "dep:wgpu-context-07",
-    "dep:pollster",
-    "dep:dirs",
-    "dep:winit",
-    "dep:tokio",
-    "dep:tracing-subscriber",
-    "eq/native",
-    "daw/standalone-rpp",
-    "daw/standalone-bootstrap",
-    # Take peaks folded from the `.sessionpeaks` (or REAPER's `.reapeaks`)
-    # cache beside the media, rather than a PCM scan on every open.
-    "daw-standalone/reapeaks",
-    # A song pulled from the library has only its Ogg proxies: they stream
-    # around the playhead (a native butler thread), never decoded whole.
-    "daw-standalone/stream-ogg",
-    # Prepared once, saved as `Song.session`, opened from it after.
-    "daw/standalone-session-file",
-    "daw/cli",
-    "dynamic-template/reaper",
-    "dep:patch-list",
-    "dep:editor-view",
-    "editor-view/native",
-    "dep:editor-state",
-    "dep:keyflow-editor-lang",
-    "dep:futures-channel",
-    "dep:rayon",
-    "dep:hits",
-    "dep:dawfile-store",
-    "dep:futures-util",
-    "session/collab",
-    "dep:architect",
-    # Hosting and joining a set over iroh, desktop to desktop.
-    "architect/iroh",
-    "dep:crdt",
-    "dep:vox-core",
-    "dep:uuid",
-    "dep:editor-crdt",
-    "dep:futures-timer",
-    "dep:daw-transport-sync",
-    "dep:fts-sample",
-    # A song's reference bounce (`reference`): its Ogg proxy and waveform.
-    "fts-sample/engine-native",
-    "fts-sample/write",
-    "dep:dawfile-reaper",
-    "dep:builtin-fx",
-    "dawfile-reaper/peaks-wav",
-    "dawfile-reaper/peaks-ogg",
-    "dep:session-library",
-    "dep:auth-client",
-    "dep:live-proto",
-    "dep:task-dial",
-    "dep:reqwest",
-]
-# The browser: the same widgets, hosted in <canvas> elements under
-# dioxus-web and drawn with vello_hybrid's WebGL renderer (keyflow-ui's
-# `wasm-graphics` pattern). See `web_host`.
-web = [
-    "dioxus/web",
-    "dep:web-sys",
-    "dep:wasm-bindgen",
-    "dep:wasm-bindgen-futures",
-    "dep:js-sys",
-    "dep:anyrender_vello_hybrid",
-    "dep:vello_hybrid",
-    "dep:vello_common",
-    "dep:rustc-hash",
-    "dep:gloo-timers", "daw-standalone/stream-ogg", "dep:fts-sample", "dep:futures-util",
-    # A shared song, streamed from its share link (song_stream::ShareSource),
-    # opened from memory the one way songs open (open_core, folder).
-    "dep:reqwest", "daw/standalone-session-file",
-    # The live session (collab.rs): a set Task keeps, joined from the page.
-    "session/collab", "dep:architect", "dep:crdt", "dep:uuid", "dep:daw-transport-sync",
-    "dep:live-proto", "dep:task-dial", "dep:vox",
-    # Waveforms for streamed takes: their originals' peaks, handed in.
-    "daw-standalone/reapeaks",
-    "dep:futures-channel",
-]
-# The `#[reaper_test]` suites, which need a REAPER to talk to. Behind a
-# feature so an ordinary `cargo nextest run --workspace` does not try to
-# reach one that is not running — `just reaper-test` turns it on, via
-# session-reaper-xtask, which starts the REAPER first.
+native = ["dep:dioxus-native", "dep:realfft", "dep:architect-mcp", "dep:anyrender_vello", "dep:wgpu", "dep:wgpu-context-07", "dep:pollster", "dep:dirs", "dep:winit", "dep:tokio", "dep:tracing-subscriber", "eq/native", "daw/standalone-rpp", "daw/standalone-bootstrap", "daw-standalone/reapeaks", "daw-standalone/stream-ogg", "daw/standalone-session-file", "daw/cli", "dynamic-template/reaper", "dep:patch-list", "dep:editor-view", "editor-view/native", "dep:editor-state", "dep:keyflow-editor-lang", "dep:futures-channel", "dep:rayon", "dep:hits", "dep:dawfile-store", "dep:futures-util", "session/collab", "dep:architect", "architect/iroh", "dep:crdt", "dep:vox-core", "dep:uuid", "dep:editor-crdt", "dep:futures-timer", "dep:daw-transport-sync", "dep:fts-sample", "fts-sample/engine-native", "fts-sample/write", "dep:dawfile-reaper", "dep:builtin", "builtin?/engine", "dawfile-reaper/peaks-wav", "dawfile-reaper/peaks-ogg", "dep:session-library", "dep:auth-client", "dep:live-proto", "dep:task-dial", "dep:reqwest"]
+web = ["dioxus/web", "dep:web-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:anyrender_vello_hybrid", "dep:vello_hybrid", "dep:vello_common", "dep:rustc-hash", "dep:gloo-timers", "daw-standalone/stream-ogg", "dep:fts-sample", "dep:futures-util", "dep:reqwest", "daw/standalone-session-file", "session/collab", "dep:architect", "dep:crdt", "dep:uuid", "dep:daw-transport-sync", "dep:live-proto", "dep:task-dial", "dep:vox", "daw-standalone/reapeaks", "dep:futures-channel"]
 reaper-tests = ["daw/test-harness"]
-# A sampling profiler on the headless benchmarks. Behind a feature so an
-# ordinary build never links a signal handler: `pprof` installs a SIGPROF
-# timer, which is exactly what you want while measuring and nothing you
-# want in a window somebody is using.
-#
-#   cargo run --release -p session-daw --bin blitz_shot --features profile
-#
-# with `FTS_BLITZ_PROFILE=/tmp/frame.svg`.
 profile = ["dep:pprof"]
-# Vello's own per-frame split — `cmd / render / present / wait` — on
-# stdout, one line a frame. Behind a feature because that is a line a
-# frame, which is a log nobody reads and a cost nobody wants in a
-# window somebody is using; turned on to answer "which half of the
-# frame is this" when the two atomics the shell records are not enough.
-#
-#   cargo run --release -p session-daw --bin blitz_shot --features frame-times
-#
-# See #119, and libs/vendor/anyrender_vello/UPSTREAM.md.
 frame-times = ["anyrender_vello?/log_frame_times"]
 
-
-# Every binary is a desktop one.
 [[bin]]
 name = "bench"
 path = "src/bin/bench.rs"
@@ -397,7 +289,7 @@ path = "src/bin/chain-probe.rs"
 required-features = ["native"]
 
 [dev-dependencies]
-builtin-fx = { workspace = true }
+builtin = { workspace = true, features = ["engine"] }
 # Temp project trees for the Patch List view's discovery tests, and the
 # scratch directory the golden scene renders (`tests/golden_scenes.rs`)
 # draw into before comparing with the committed pictures.

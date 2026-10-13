@@ -52,7 +52,7 @@ fn a_rack_edit_sets_the_tracks_processor() {
                     .await
                     .expect("looked up"),
             };
-            let index = builtin_fx::setting("FTS Comp", "Threshold", "-30.0 dB")
+            let index = builtin::engine::setting("FTS Comp", "Threshold", "-30.0 dB")
                 .expect("a threshold")
                 .0;
             let text = match fx {
@@ -67,7 +67,7 @@ fn a_rack_edit_sets_the_tracks_processor() {
     let (track, before) = read("add");
     assert_ne!(before, "-30.0 dB", "a different threshold to start from");
     let (index, value) =
-        builtin_fx::setting("FTS Comp", "Threshold", "-30.0 dB").expect("a threshold");
+        builtin::engine::setting("FTS Comp", "Threshold", "-30.0 dB").expect("a threshold");
     assert!(session_daw::engine::apply_now(&Edit::SetFxParam(
         track,
         "FTS Comp".into(),

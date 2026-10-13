@@ -54,7 +54,7 @@ fn rms(block: &daw_standalone::audio_engine::render::StereoBuffer) -> f32 {
 #[test]
 fn the_trigger_opens_the_gate_on_the_mic() {
     let daw = Standalone::new();
-    daw.set_fx_factory(Arc::new(builtin_fx::BuiltinFx));
+    daw.set_fx_factory(Arc::new(builtin::engine::BuiltinFx));
     let project = daw.seed_project(ProjectInfo {
         guid: "p".into(),
         name: "p".into(),
@@ -85,7 +85,7 @@ fn the_trigger_opens_the_gate_on_the_mic() {
     let gate = Effects::add(&daw, ctx.clone(), chain.clone(), "FTS Gate").expect("a gate");
     let set = |param: &str, text: &str| {
         let (index, value) =
-            builtin_fx::setting("FTS Gate", param, text).unwrap_or_else(|| panic!("{param}"));
+            builtin::engine::setting("FTS Gate", param, text).unwrap_or_else(|| panic!("{param}"));
         Effects::set_parameter(
             &daw,
             ctx.clone(),

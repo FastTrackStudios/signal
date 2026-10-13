@@ -5,7 +5,7 @@
 //! put on bypassed by [`crate::mix_chains`] — as the plugins' own
 //! parameters, each written in the plugin's own words (`-18.0 dB`, `3.0:1`,
 //! `Low Shelf`, `Triode`) and resolved by the plugin
-//! ([`builtin_fx::setting`]), so no plugin's ranges are assumed here.
+//! ([`builtin::engine::setting`]), so no plugin's ranges are assumed here.
 //!
 //! - EQ: every band the plugin has — the rack's bands, on or off as they
 //!   are, and the rest off (the plugin's own defaults have bands on).
@@ -210,7 +210,7 @@ fn modulation(tone: &Tone) -> Vec<(u32, f64)> {
 
 /// `(index, value)` for `fx`'s `param` at `text`, if the plugin knows it.
 fn at(fx: &str, param: &str, text: &str) -> Option<(u32, f64)> {
-    builtin_fx::setting(fx, param, text)
+    builtin::engine::setting(fx, param, text)
 }
 
 fn eq(tone: &Tone) -> Vec<(u32, f64)> {
@@ -324,7 +324,7 @@ mod tests {
         );
         assert!(first.iter().all(|e| !matches!(e, Edit::SetFxParam(_, fx, ..) | Edit::SetFxEnabled(_, fx, _) if fx != "FTS Comp")), "EQ and Saturate untouched: {first:?}");
         let (index, value) =
-            builtin_fx::setting("FTS Comp", "Threshold", "-30.0 dB").expect("a threshold");
+            builtin::engine::setting("FTS Comp", "Threshold", "-30.0 dB").expect("a threshold");
         assert!(first.contains(&Edit::SetFxParam(
             "t".into(),
             "FTS Comp".into(),
@@ -348,7 +348,7 @@ mod tests {
             tone.eq.clear();
         }
         let edits = store.flush();
-        let off = builtin_fx::setting("FTS EQ", "B2 On", "Off").expect("B2 On");
+        let off = builtin::engine::setting("FTS EQ", "B2 On", "Off").expect("B2 On");
         assert!(
             edits.contains(&Edit::SetFxParam("t".into(), "FTS EQ".into(), off.0, off.1)),
             "{edits:?}"

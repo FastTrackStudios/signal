@@ -335,8 +335,8 @@ pub fn install(daw: &daw_standalone::Standalone, library: Library) {
     // And signal's rigs, with the `signal` feature: the bass rig's NAM
     // amp and cab, the drum kit's sampled voices.
     #[cfg(feature = "native")]
-    let factory: Arc<dyn FxFactory> = Arc::new(builtin_fx::Chain(vec![
-        Arc::new(builtin_fx::BuiltinFx),
+    let factory: Arc<dyn FxFactory> = Arc::new(builtin::engine::Chain(vec![
+        Arc::new(builtin::engine::BuiltinFx),
         #[cfg(feature = "signal")]
         Arc::new(signal_fx::SignalFx),
         guide,

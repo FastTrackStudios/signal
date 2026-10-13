@@ -24,7 +24,7 @@ const SONG: &str = r#"<REAPER_PROJECT 0.1 "7.75/linux-x86_64" 1790015830 0
 #[test]
 fn an_fts_processor_is_added_to_a_track_by_name() {
     let daw = Standalone::new();
-    daw.set_fx_factory(Arc::new(builtin_fx::BuiltinFx));
+    daw.set_fx_factory(Arc::new(builtin::engine::BuiltinFx));
     let loaded = load_rpp_text(&daw, "song", "/tmp/song.RPP", SONG).expect("the song");
     let project = ProjectContext::Project(loaded.project_guid);
     let chain = FxChainContext::Track(TRACK.into());

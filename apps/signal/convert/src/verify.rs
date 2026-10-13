@@ -32,7 +32,7 @@
 //! said nothing", and reports the second as itself rather than as an
 //! infinite error.
 
-use fx_blocks::NativeEq;
+use builtin::NativeEq;
 use signal_analyzer::eq_transfer::{self, Difference, Stimulus};
 use signal_import::rpp::convert::Family;
 use signal_plugin_host::{HostedPlugin, PluginEvents, PluginInstance};

@@ -284,7 +284,7 @@ impl Lane {
 #[must_use]
 pub fn say(kind: Kind, param: Option<(&str, u32)>, value: f64) -> String {
     #[cfg(feature = "native")]
-    if let Some(text) = param.and_then(|(fx, index)| builtin_fx::reading(fx, index, value)) {
+    if let Some(text) = param.and_then(|(fx, index)| builtin::engine::reading(fx, index, value)) {
         return text;
     }
     #[cfg(not(feature = "native"))]
