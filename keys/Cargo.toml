@@ -12,7 +12,7 @@ workspace = true
 [features]
 default = ["vox"]
 pipewire = []
-ui = ["dep:dioxus", "dep:fts-chrome", "midi/ui", "dep:signal-browser", "signal-widgets/piano", "dep:signal-widgets", "architect/atom", "architect/platform"]
+ui = ["dep:dioxus", "dep:fts-audio-ui", "midi/ui", "dep:signal-browser", "signal-widgets/piano", "dep:signal-widgets", "architect/atom", "architect/platform"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
@@ -25,7 +25,7 @@ eyre = { workspace = true }
 facet = { workspace = true }
 facet-json = { workspace = true }
 facet-styx = { workspace = true }
-fts-chrome = { workspace = true, optional = true }
+fts-audio-ui = { workspace = true, optional = true }
 midi = { workspace = true, features = ["midir", "ui", "vox"] }
 signal-browser = { workspace = true, default-features = false, optional = true }
 signal-plugin-host = { workspace = true }

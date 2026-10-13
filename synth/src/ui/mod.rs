@@ -153,10 +153,10 @@ pub fn SynthRigRemote() -> Element {
 
     // PLAY / SETUP / EDIT / BROWSE are the app bar's tabs now, and the preset
     // and meters are its readouts — the rig keeps only its volume control.
-    let level = fts_chrome::use_chrome_level(2);
+    let level = fts_audio_ui::chrome::use_chrome_level(2);
     level.status(vec![
-        fts_chrome::StatusItem::text(status.loaded_preset.clone().unwrap_or_else(|| "—".into())),
-        fts_chrome::StatusItem::meter(
+        fts_audio_ui::chrome::StatusItem::text(status.loaded_preset.clone().unwrap_or_else(|| "—".into())),
+        fts_audio_ui::chrome::StatusItem::meter(
             status.master_peak,
             if clipping { "#ef4444" } else { "#22c55e" },
         ),
@@ -171,7 +171,7 @@ pub fn SynthRigRemote() -> Element {
         .into_iter()
         .map(|(id, label, m)| {
             let mut pick = mode;
-            fts_chrome::ChromeTab::new(id, label, mode() == m, Callback::new(move |()| pick.set(m)))
+            fts_audio_ui::chrome::ChromeTab::new(id, label, mode() == m, Callback::new(move |()| pick.set(m)))
         })
         .collect(),
     );

@@ -1053,14 +1053,14 @@ fn PanelHeader(
                         title: "Put away",
                         style: "padding: 0 4px; color: #a1a1aa; cursor: pointer; display: flex;",
                         onclick: move |_| on_leave.call(()),
-                        fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 11 }
+                        fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Close, size: 11 }
                     }
                 } else {
                     div {
                         title: "Tune how this macro moves each param",
                         style: "padding: 0 4px; color: #71717a; cursor: pointer; display: flex;",
                         onclick: move |_| on_tune.call(()),
-                        fts_chrome::Glyph { icon: fts_chrome::Icon::Pencil, size: 11 }
+                        fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Pencil, size: 11 }
                     }
                 }
             }
@@ -1085,7 +1085,7 @@ fn PanelHeader(
                         div {
                             style: "padding: 0 2px; color: #71717a; cursor: pointer; display: flex;",
                             onclick: move |_| on_dismiss.call(()),
-                            fts_chrome::Glyph { icon: fts_chrome::Icon::Close, size: 9 }
+                            fts_audio_ui::chrome::Glyph { icon: fts_audio_ui::chrome::Icon::Close, size: 9 }
                         }
                     }
                 }

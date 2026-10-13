@@ -78,7 +78,7 @@ pub fn KeysRigRemote() -> Element {
     // The live state, for the panels that re-pull their own detail when the
     // rig publishes (the mixer's macro band).
     use_context_provider(|| state);
-    let level = fts_chrome::use_chrome_level(2);
+    let level = fts_audio_ui::chrome::use_chrome_level(2);
 
     let status = state.status.read().clone();
     let mixer = state.mixer.read().clone();
@@ -105,19 +105,19 @@ pub fn KeysRigRemote() -> Element {
 
     // What the rig's bar used to say, said in the app bar instead.
     level.status(vec![
-        fts_chrome::StatusItem::pill(lens_label.clone(), lens_fg, lens_bg),
-        fts_chrome::StatusItem::text(format!(
+        fts_audio_ui::chrome::StatusItem::pill(lens_label.clone(), lens_fg, lens_bg),
+        fts_audio_ui::chrome::StatusItem::text(format!(
             "{live_lanes} lane{} live",
             if live_lanes == 1 { "" } else { "s" }
         )),
-        fts_chrome::StatusItem::dot(midi_lit, midi_color),
-        fts_chrome::StatusItem::dot(running, "#22c55e"),
-        fts_chrome::StatusItem::meter(status.master_peak, "#22c55e"),
+        fts_audio_ui::chrome::StatusItem::dot(midi_lit, midi_color),
+        fts_audio_ui::chrome::StatusItem::dot(running, "#22c55e"),
+        fts_audio_ui::chrome::StatusItem::meter(status.master_peak, "#22c55e"),
     ]);
     // The old Routing and Session pages, as panels.
     level.panels(vec![
-        fts_chrome::PanelSpec::new("keys.routing", "Routing", fts_chrome::Icon::Routing).width(360),
-        fts_chrome::PanelSpec::new("keys.midi", "MIDI", fts_chrome::Icon::Midi).width(360),
+        fts_audio_ui::chrome::PanelSpec::new("keys.routing", "Routing", fts_audio_ui::chrome::Icon::Routing).width(360),
+        fts_audio_ui::chrome::PanelSpec::new("keys.midi", "MIDI", fts_audio_ui::chrome::Icon::Midi).width(360),
     ]);
     let held = held_notes(&midi);
     // Where the wheels and pedals are sitting, for the strip beside the keys.
@@ -154,10 +154,10 @@ pub fn KeysRigRemote() -> Element {
                     }
                 }
                 // The rig's panels, flush against the app's right rail.
-                fts_chrome::PanelHost { id: "keys.routing".to_string(),
+                fts_audio_ui::chrome::PanelHost { id: "keys.routing".to_string(),
                     RoutingView { tree: tree.clone() }
                 }
-                fts_chrome::PanelHost { id: "keys.midi".to_string(),
+                fts_audio_ui::chrome::PanelHost { id: "keys.midi".to_string(),
                     midi_light::MidiPanel { midi: midi.clone(), port: status.midi_port.clone() }
                 }
             }

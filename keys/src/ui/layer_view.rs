@@ -90,7 +90,7 @@ pub fn LayerView(
     // sibling lane, the module crumb is the A/B/C/D switcher, the pages are
     // the bar's tabs and the patch is a readout. Clicking a parent crumb is
     // what "back" means now.
-    let level = fts_chrome::use_chrome_level(3);
+    let level = fts_audio_ui::chrome::use_chrome_level(3);
     // The browser follows the zoom: inside a lane it lists what fits the
     // module you are editing.
     let mut selection = crate::ui::selection::use_selection();
@@ -154,35 +154,35 @@ pub fn LayerView(
         let up = back_to.clone();
         let mut zoom_up = zoom;
         level.crumbs(vec![
-            fts_chrome::Crumb::new(
+            fts_audio_ui::chrome::Crumb::new(
                 d.engine.clone(),
                 Callback::new(move |()| zoom_up.set(Zoom::Engine(up.clone()))),
             ),
-            fts_chrome::Crumb::here(d.layer.clone()).with_menu(lanes),
-            fts_chrome::Crumb::here(module_label).with_menu(modules),
+            fts_audio_ui::chrome::Crumb::here(d.layer.clone()).with_menu(lanes),
+            fts_audio_ui::chrome::Crumb::here(module_label).with_menu(modules),
         ]);
     }
     level.tabs(vec![
-        fts_chrome::ChromeTab::new(
+        fts_audio_ui::chrome::ChromeTab::new(
             "layer",
             "Layer",
             page() == Page::Layer,
             Callback::new(move |()| page.set(Page::Layer)),
         ),
-        fts_chrome::ChromeTab::new(
+        fts_audio_ui::chrome::ChromeTab::new(
             "module",
             "Module",
             page() == Page::Module,
             Callback::new(move |()| page.set(Page::Module)),
         ),
-        fts_chrome::ChromeTab::new(
+        fts_audio_ui::chrome::ChromeTab::new(
             "edit",
             "Edit",
             page() == Page::Edit,
             Callback::new(move |()| page.set(Page::Edit)),
         ),
     ]);
-    level.status(vec![fts_chrome::StatusItem::pill(
+    level.status(vec![fts_audio_ui::chrome::StatusItem::pill(
         patch.clone(),
         accent.clone(),
         "#101821",
