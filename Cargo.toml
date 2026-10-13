@@ -195,7 +195,6 @@ members = [
     "crates/frame/tools/mcp",
     "crates/frame/tools/desktop",
     "crates/frame/tools/library-server",
-    "crates/frame/frame",
     "crates/frame/frame-embed",
     "crates/frame/frame-live",
     "crates/frame/design/design-lint",

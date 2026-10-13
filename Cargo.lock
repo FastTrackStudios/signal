@@ -7456,15 +7456,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "frame"
-version = "0.1.0"
-dependencies = [
- "figma-model",
- "figma-rest",
- "render",
-]
-
-[[package]]
 name = "frame-cli"
 version = "0.1.0"
 dependencies = [
