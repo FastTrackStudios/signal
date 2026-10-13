@@ -20,7 +20,7 @@ nice-plug.workspace = true
 audio = { workspace = true }
 
 # The sampler engine + document scheduler
-signal-sampler.workspace = true
+sampler = { workspace = true }
 
 # Lock-free Arc<Schedule> swap at block boundaries
 arc-swap = "1.7"

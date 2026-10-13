@@ -37,8 +37,8 @@ use arc_swap::ArcSwapOption;
 use audio::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use signal_sampler::spec::LibrarySpec;
-use signal_sampler::{
+use sampler::spec::LibrarySpec;
+use sampler::{
     BlockTransport, RealtimeScheduler, SamplerBank, Schedule, TrackDocument, annotate,
 };
 

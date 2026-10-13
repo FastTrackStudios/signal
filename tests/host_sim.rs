@@ -18,8 +18,8 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use signal_sampler::document::{DocumentRenderOptions, render_schedule};
-use signal_sampler::{
+use sampler::document::{DocumentRenderOptions, render_schedule};
+use sampler::{
     BlockTransport, DocNote, PlayMode, RealtimeScheduler, SamplerBank, Schedule, TrackDocument,
     annotate,
 };
@@ -187,7 +187,7 @@ fn test_doc() -> TrackDocument {
             note(2.0, 4.1, 62, 30),  // legato, slow zone (333 ms prefire)
             note(4.0, 6.0, 65, 110), // legato, fast zone (100 ms prefire)
         ],
-        ccs: vec![signal_sampler::DocCc {
+        ccs: vec![sampler::DocCc {
             qn: 0.0,
             chan: 0,
             cc: 1,
