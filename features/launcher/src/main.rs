@@ -12,7 +12,7 @@ fn main() {
         .init();
 
     fn app() -> Element {
-        let state = use_signal(|| crate::LauncherEngine::new().into_state());
+        let state = use_signal(|| launcher::LauncherEngine::new().into_state());
         let theme_state = use_signal(|| ThemeState::new(default_theme_preset(), ThemeMode::Dark));
         // dioxus 0.7.9 handlers must return `()` (or async) — the diverging
         // `!` from process::exit no longer satisfies SpawnIfAsync, so pin the
