@@ -1,0 +1,17 @@
+[package]
+name = "frame"
+description = "Frame — design + control-surface engine (facade crate)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+figma-model = { path = "../figma/figma-model" }
+figma-rest = { path = "../figma/figma-rest" }
+render = { path = "../render/render" }
+
+[features]
+vello = ["render/anyrender"]
+svg = ["render/svg_export"]
+
+[lints]
+workspace = true

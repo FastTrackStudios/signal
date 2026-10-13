@@ -1,6 +1,6 @@
 # Session app on Blitz — plan and handoff
 
-The Session app (`apps/desktop`, `session-desktop`) moves onto Blitz
+The Session app (`apps/session/desktop`, `session-desktop`) moves onto Blitz
 (`dioxus-native`) on desktop and iOS, and becomes a docking app built from
 panels. The web build stays on dioxus-web (custom widgets work there too).
 Started 2026-09-21, most recently worked 2026-09-22.
@@ -20,7 +20,7 @@ daw       — crates/keyflow/keyflow-proto (chord renotation, unrelated to
 keyflow   — features/engraver/{engraver,proto}, crates/keyflow/keyflow:
             the new `paint` feature and `ChartView` (see below). All new
             code in this session's work is here.
-session   — apps/desktop/src/native/ (the Blitz shell), apps/session-daw
+session   — apps/session/desktop/src/native/ (the Blitz shell), apps/session/daw
             (the studio-as-panel, the toolbar, the transport bar, the
             chart panel), docs/app-on-blitz.md (this file).
 ```
@@ -42,7 +42,7 @@ each one was found).
 
 **What's still rough**, in priority order:
 1. **Docking (phase 3) hasn't started.** Panels are hand-composed in
-   `apps/desktop/src/native/shell.rs`'s `DawView`/`PerformanceView`, not
+   `apps/session/desktop/src/native/shell.rs`'s `DawView`/`PerformanceView`, not
    through `dock-proto`'s tree. This is the next big piece — see Phases.
 2. **Multi-window (phase 4, spike 0a) needs a dioxus-native patch** before
    it can start — see "Spike results" below, unchanged since 0a was
@@ -63,7 +63,7 @@ each one was found).
 
 | panel | from | today |
 |---|---|---|
-| ProgressBar | `session-ui` `SongProgressBar` / `SegmentedProgressBar` | done — `apps/desktop/src/native/progress.rs`, click-to-seek |
+| ProgressBar | `session-ui` `SongProgressBar` / `SegmentedProgressBar` | done — `apps/session/desktop/src/native/progress.rs`, click-to-seek |
 | Arrangement | `session-daw` `ArrangementWidget` + ruler + scrollbars + main toolbar | done — `session_daw::studio`, `session_daw::toolbar` |
 | Mixer | `session-daw` (`mcp::Mixer`, `tone.rs`) | not yet wired into a panel |
 | Editor | expression editor (`features/expression-editor`) | not yet wired into a panel |
@@ -91,7 +91,7 @@ session engine (`session_daw::studio::StudioSession`, opened once at
 launch), so the transport, the song and the edits are the same
 everywhere. The example session is `sessions/Always On Time` (+ its
 `.kf`), prepared (organize, chart, guide) the same way `just studio-song`
-prepares it — see `native::launch` in `apps/desktop/src/native/mod.rs`.
+prepares it — see `native::launch` in `apps/session/desktop/src/native/mod.rs`.
 
 ## Architecture
 
@@ -253,7 +253,7 @@ just macos-install    # build Session.app + the signed .pkg, install to ~/Applic
 just macos-pkg        # just the .pkg (target/Session-<ver>-macos.pkg)
 ```
 
-`apps/desktop/ios/package-session-macos.sh` builds with the HOST toolchain
+`apps/session/desktop/ios/package-session-macos.sh` builds with the HOST toolchain
 (`cargo build --release`, no nix shell, no dx). It assembles `Session.app`
 by hand: Info.plist, bundle id `app.fasttrackstudio.session`, and
 `icon.icns` made from the iOS icon master by `macos-icon.swift`, which puts
@@ -398,7 +398,7 @@ cursor.rs`), a soft blue highlight over the current measure with a thin
 1.5pt line at the playhead (`CursorStyle::MeasureWithLine`), and no
 notehead glow. It is the look session's web SVG pane already had, now
 moved into keyflow as a named preset. `ChartView::new` uses it, and so does
-`apps/desktop/src/session_chart_pane.rs`, which dropped its hand-drawn
+`apps/session/desktop/src/session_chart_pane.rs`, which dropped its hand-drawn
 `<line>`, so the two panes can't drift apart. keyflow's own default
 (a thick red line with a notehead glow) is still what keyflow-ui uses.
 Confirmed by eye on native with `FTS_SESSION_AUTOPLAY=1`. The web build
@@ -432,7 +432,7 @@ timeout, which is the thing to add before bringing auto-follow back.
   `can_create_surfaces`, and dioxus-native offers no way to open one from
   a running app (`DioxusNativeDocument::new`, the event handlers and the
   net provider are crate-private). Plan: vendor dioxus-native into
-  `libs/vendor/dioxus-native` (as `dioxus-native-dom` already is) and add
+  `vendor/dioxus-native` (as `dioxus-native-dom` already is) and add
   an `OpenWindow` embedder event that builds a document + `View` on the
   live event loop with the same context injection as the first window.
 - **0b Tailwind under Blitz** — passes. `SongProgressBar` renders

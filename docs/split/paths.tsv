@@ -36,8 +36,8 @@ daw	features/sync
 daw	libs
 keyflow	crates/keyflow
 keyflow	features/engraver
-session	crates/session
-session	features/chord-tool
+session	features/session
+session	features/chords
 session	features/dynamic-template
 session	features/guide
 session	features/reaper/session-extension

@@ -8,7 +8,7 @@ and setlists that are just markdown with `[[wikilinks]]`.
 
 ## `session-vault-sync`
 
-`apps/vault-sync` (crate `session-vault-sync`) scans a Tracks folder — by
+`apps/session/vault-sync` (crate `session-vault-sync`) scans a Tracks folder — by
 default `/home/cody/Task/days-to-praise/Assets/Tracks`, one folder per
 song named `"{Title} - {Artist}"` (no key — that's tag data, not a
 filename) — and writes a `type: song` note **directly into that song's
@@ -47,7 +47,7 @@ tempo/time-signature/section lengths); `## Lyrics` is always the plain
 lyric text from `lyrics/*.json` when present, alongside the chart rather
 than instead of it. All six songs currently in the library have real
 `.kf` charts, lifted verbatim from the demo charts already bundled in
-`crates/session/session/src/setlist/service/demo.rs` (`PRAISE_CHART` and
+`features/session/session/src/setlist/service/demo.rs` (`PRAISE_CHART` and
 siblings) — that file happened to already have accurate transcriptions
 for exactly these six songs.
 
@@ -149,7 +149,7 @@ probing OGG duration needs a real decoder and a WAV header doesn't.
 Tempo/time-signature come from the song's `chart/*.kf` first line when
 present (`72bpm 4/4 #Bb` et al.), defaulting to 120bpm 4/4 otherwise.
 
-This is a generation step, not a live player — see `apps/session-player`
+This is a generation step, not a live player — see `apps/session/player`
 below for that.
 
 ### The live scheme: `--live` / the Master Setlist Template
@@ -331,11 +331,11 @@ exists so a human — or a future importer — can find the real audio;
 exactly where it is since the note lives inside that same folder.
 `key:`/`artist:` are real fields Task's `SongFront` reader already knows.
 
-## The live player: `apps/session-player`
+## The live player: `apps/session/player`
 
 `session-player` (crate `session-player`) plays a setlist for real —
 natively, no REAPER, no browser. It's driven by `daw-standalone` directly
-(the same engine `apps/desktop/src/session_engine.rs` uses for
+(the same engine `apps/session/desktop/src/session_engine.rs` uses for
 its in-process setlist player), not the RPC/vox facade that crate builds
 for remote UIs — this is a local CLI, so it calls `Standalone`'s sync
 `Transport`/`Tracks` trait methods directly.
@@ -414,7 +414,7 @@ guide is a record of), so the gaps are known rather than accidental:
   is built: either a new `ShareTarget` with its own guest lane, or a
   dedicated unauthenticated HTTP path patterned on
   `share_rendition_handler`/`share_download_handler`.
-- **No web/GUI player yet** — `apps/session-player` (above) is a
+- **No web/GUI player yet** — `apps/session/player` (above) is a
   terminal REPL, which is enough to prove the whole chain end-to-end
   (setlist → resolved songs → seeded projects → real synced audio →
   mute/solo) but not what a musician wants open during rehearsal. Decided

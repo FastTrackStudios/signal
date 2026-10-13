@@ -10,7 +10,7 @@ and playing it through CoreAudio. Everything here was done on the Mac mini
 there is more to push together (§6).
 
 **2026-09-22 follow-on:** this studio is now also embedded as a panel in the
-Session app's own Blitz shell (`session-desktop`, `apps/desktop/src/native/`)
+Session app's own Blitz shell (`session-desktop`, `apps/session/desktop/src/native/`)
 — a top bar, a DAW view and a Performance view with a live paginated chart
 panel, on the same prepared session this doc describes. See
 `docs/app-on-blitz.md` for that work (currently uncommitted, further along
@@ -77,7 +77,7 @@ Runs on the engine the window opened, before the view reads it, in order:
 ## 3. The guide instrument (`session-daw/src/guide_instrument.rs`)
 
 `session_guide::GuideEngine` in MIDI mode — the DSP the FTS Guide CLAP/VST3
-(`signal/apps/plugins/guide`) wraps — as a native `PluginInstance`,
+(`apps/plugins/guide`) wraps — as a native `PluginInstance`,
 installed as the `fts.guide` FX factory when a session opens. Named per role
 (`fts.guide:click|count|guide`).
 

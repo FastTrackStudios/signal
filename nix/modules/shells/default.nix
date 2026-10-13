@@ -113,7 +113,7 @@
         echo "  ─────────────────────────────────────────────"
         echo "  cargo check --workspace"
         echo "  cargo build -p session-desktop — THE app (--engine = headless rig)"
-        echo "  (cd apps/desktop && dx build --platform web --no-default-features --features signal)"
+        echo "  (cd apps/session/desktop && dx build --platform web --no-default-features --features signal)"
         echo ""
         echo "  Rust: $(rustc --version)"
         echo "  dx:   $(dx --version 2>/dev/null || echo 'not available')"

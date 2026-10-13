@@ -143,8 +143,8 @@ jobs:
       # socket path past the 108-byte Unix limit — and stops it after.
       - name: Flow verification gate
         run: ${NIX_DEV} just daw-flows --own-daemon
-      # apps/web/assets/tailwind.css is gitignored build output that
-      # `asset!()` demands at compile time (see apps/web/tailwind.css) —
+      # apps/session/web/assets/tailwind.css is gitignored build output that
+      # `asset!()` demands at compile time (see apps/session/web/tailwind.css) —
       # the sheet has to exist before any cargo step touches session-web.
       - name: Web tailwind sheet
         run: ${NIX_DEV} just web-tailwind

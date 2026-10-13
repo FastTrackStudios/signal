@@ -213,7 +213,7 @@ This pattern should be applied to every domain group in the workspace:
 
 For each domain:
 
-1. Ensure a facade crate exists (e.g. `crates/session/session/`)
+1. Ensure a facade crate exists (e.g. `features/session/session/`)
 2. Move all re-exports into the facade
 3. Remove internal crates from `[workspace.dependencies]`
 4. Fix internal crates to use `path = ` for sibling deps

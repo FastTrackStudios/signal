@@ -108,7 +108,7 @@
         installPhaseCommand = ''
           mkdir -p $out/www
           cp -R dist/. $out/www/
-          cp apps/session-daw-web/www/index.html $out/www/
+          cp apps/session/daw-web/www/index.html $out/www/
           # The best brotli there is: done once per build, and the wasm
           # comes out 6.4 MB against 7.5 at Cloudflare's own level.
           find $out/www -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.html' \) \
@@ -130,17 +130,17 @@
       };
 
       # session.fasttrackstudio.app — landing page + the live in-browser
-      # setlist demo (`just web`). apps/web/tailwind.css @sources
+      # setlist demo (`just web`). apps/session/web/tailwind.css @sources
       # architect-ui, a GIT DEP with no stable path on disk — resolve it
       # via cargo metadata and symlink it in first, the same way
       # `just _web-tw-link` does locally. session-ui is a local path dep
-      # (crates/session/ui) and needs no symlink.
+      # (features/session/ui) and needs no symlink.
       session-web = mkDxWebBundle {
         pname = "session-web";
-        appDir = "apps/web";
+        appDir = "apps/session/web";
         dxName = "session-web";
         preBuild = ''
-          mkdir -p apps/web/.tailwind-src
+          mkdir -p apps/session/web/.tailwind-src
           for crate in architect-ui; do
             dir="$(cargo metadata --format-version 1 --offline \
               | jq -er --arg c "$crate" \
@@ -151,9 +151,9 @@
               echo "cannot resolve $crate for the tailwind @source globs" >&2
               exit 1
             fi
-            ln -sfn "$dir" "apps/web/.tailwind-src/$crate"
+            ln -sfn "$dir" "apps/session/web/.tailwind-src/$crate"
           done
-          (cd apps/web && tailwindcss -i ./tailwind.css -o ./assets/tailwind.css --minify)
+          (cd apps/session/web && tailwindcss -i ./tailwind.css -o ./assets/tailwind.css --minify)
         '';
         # `--ssg` pre-renders the guide into the same `public` directory
         # the bundle lands in: dx builds the app's server too, runs it,

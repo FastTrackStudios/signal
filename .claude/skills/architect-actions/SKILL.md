@@ -1,19 +1,19 @@
 ---
 name: architect-actions
-description: "Use when adding a new REAPER-facing action module, or refactoring an existing `*_actions.rs` in crates/session (or elsewhere) off the legacy action-id-enum + action_for_id/dispatch pattern onto architect's declarative action system. Covers #[architect::actions], ActionBackend/ScopedActionBackend, the daw crate's Tracks/Items/Projects + TracksExt, and the concrete-wrapper-struct-with-Deref shape used by TrackManager. Also the reference for `daw::service::TracksExt` conventions (TrackRef vs Track, generic plumbing vs domain logic) even outside action modules."
+description: "Use when adding a new REAPER-facing action module, or refactoring an existing `*_actions.rs` in features/session (or elsewhere) off the legacy action-id-enum + action_for_id/dispatch pattern onto architect's declarative action system. Covers #[architect::actions], ActionBackend/ScopedActionBackend, the daw crate's Tracks/Items/Projects + TracksExt, and the concrete-wrapper-struct-with-Deref shape used by TrackManager. Also the reference for `daw::service::TracksExt` conventions (TrackRef vs Track, generic plumbing vs domain logic) even outside action modules."
 ---
 
 # architect + daw action modules
 
 How to build (or refactor) a REAPER action module the way
-`crates/session/session/src/track_manager.rs` does — paired with its
-contract in `crates/session/proto/src/track_manager.rs`. Those files are
+`features/session/session/src/track_manager.rs` does — paired with its
+contract in `features/session/proto/src/track_manager.rs`. Those files are
 the canonical example — read them alongside this skill, not instead of
 them.
 
 ## The old pattern (what you're refactoring away from)
 
-The action modules under `crates/session/session/src/` used to look like
+The action modules under `features/session/session/src/` used to look like
 this — a hand-written id enum, a `action_for_id(&str) -> Option<Enum>`
 string-matcher, a `dispatch(action)` free function, **and** a separate
 `#[architect::actions]` trait whose methods are one-line forwards to
@@ -67,7 +67,7 @@ Three pieces, using `track_manager` as the reference:
 
 1. **A plain declaration-only trait**, annotated with `#[architect::actions]`
    — this is the macro surface, nothing else. It lives in the domain's
-   `-proto` crate (`crates/session/proto/src/`), never beside the impl:
+   `-proto` crate (`features/session/proto/src/`), never beside the impl:
    traits are protocol, and the macro emits the `ActionMeta` consts +
    `register_<name>_actions` beside the trait, where any host — the
    REAPER extension, a CLI, a remote client — can see them without
@@ -187,7 +187,7 @@ Three pieces, using `track_manager` as the reference:
    every module's shim and applies whatever nesting that crate owns:
 
    ```rust
-   // crates/session/session/src/lib.rs
+   // features/session/session/src/lib.rs
    pub fn register_all_actions<D, B>(backend: &B, daw: D) { /* … */
        playback::register_actions(backend, daw.clone());
        modes::register_actions(backend);
@@ -366,7 +366,7 @@ Assert on the resulting track tree with `daw_proto`'s existing
 `TrackHierarchy`/`TrackStructureBuilder`/`assert_tracks_equal` (the same
 helpers `dynamic-template`'s guitar-layer tests already use) rather than
 inventing a one-off comparison type — see
-`crates/session/session/tests/track_manager_actions.rs` for a full
+`features/session/session/tests/track_manager_actions.rs` for a full
 example, including the `Track` → `TrackNode`/`FolderDepthChange`
 conversion (`Track.folder_depth` is already `FolderDepthChange`'s raw
 `i32` representation, so it's a direct field-for-field map, not a

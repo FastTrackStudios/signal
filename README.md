@@ -28,15 +28,15 @@ daw  ->  session  ->  signal
 ## Layout
 
 ```
-crates/session/      the session domain — setlists, transport, proto, ui
+features/session/      the session domain — setlists, transport, proto, ui
 crates/keyflow/      the keyflow chart language — syntax, chordpro,
                      musicxml, midi, live, sync, lsp, tree-sitter, ui
 features/song/       song sections and arrangement
 features/engraver/   MusicXML -> scores and parts
 features/guide/      click / count-in / spoken section cues
-features/chord-tool/ chord entry and analysis
+features/chords/ chord entry and analysis
 features/dynamic-template/  dynamic session templates
-apps/desktop/                the Session app
+apps/session/desktop/                the Session app
 ```
 
 ## Build

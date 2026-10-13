@@ -115,13 +115,13 @@ Keyflow language/engine changes (keyflow + daw's keyflow-proto):
 
 ### Lyrics (new)
 
-- **Model** — `crates/session/session/src/lyrics.rs`: `Layer` (7 layers),
+- **Model** — `features/session/session/src/lyrics.rs`: `Layer` (7 layers),
   `Lyrics { lines }` with `Line/Word/Syllable` (seconds + optional pitch),
   `from_lrc`, `deepest()/layers()`, `sections(&[SectionSpan])` (a line
   belongs to the section it overlaps most), `slides(sections, 2)`,
   `from_items`, `stamp_lines` (onto the Lyrics track, created before HITS
   in the Keyflow folder), `Anchor` + `align`.
-- **Fetch** — `session lyrics fetch` (apps/cli/src/lyrics/): LRCLIB (no
+- **Fetch** — `session lyrics fetch` (apps/session/cli/src/lyrics/): LRCLIB (no
   auth), provider trait with room for Spotify/Deezer/Musixmatch; title +
   artists from the `.kf` header; picks the version nearest the song's
   SONGSTART→SONGEND length (`--pick N` to override). All 8 songs have a
@@ -137,7 +137,7 @@ Keyflow language/engine changes (keyflow + daw's keyflow-proto):
   (Free drops 3 ad-libs), Washed `VS 1 | -1` (drops the opening chorus),
   Who Else `CH 1 | -2 | Who else is worthy`. One anchor = one global shift;
   lines drift where the recording's arrangement differs.
-- **Panel** — `apps/session-daw/src/lyrics_panel.rs`, in the Overview
+- **Panel** — `apps/session/daw/src/lyrics_panel.rs`, in the Overview
   under the chart (and in the Performance view beside it). Three views:
   **Confidence Monitor** (default; ProPresenter stage display: current
   slide white, rule, next slide in its **section colour**, yellow if the
@@ -203,7 +203,7 @@ Keyflow language/engine changes (keyflow + daw's keyflow-proto):
 
 In the user's order of interest: keep polishing the lyric views (they
 react fast — screenshot every change); lyrics word/syllable workflows;
-DAW → `.kf` sync; the web demo (then replace `/demo` in `apps/web`,
+DAW → `.kf` sync; the web demo (then replace `/demo` in `apps/session/web`,
 deploy only after the user approves); the iPhone app.
 
 ## 7. Traps learned the hard way
@@ -281,21 +281,21 @@ daw's tag) and drop the path entries. Data outside git: the songs' `.kf`,
 
 | what | where |
 |---|---|
-| lyrics model, anchors, stamping | `crates/session/session/src/lyrics.rs` |
-| lyrics panel (3 views, dropdown) | `apps/session-daw/src/lyrics_panel.rs` |
-| lyrics fetcher (LRCLIB) | `apps/cli/src/lyrics/` |
-| prepare, stamp_lyrics, apply_chart | `apps/session-daw/src/prepare.rs` |
-| the Overview layout | `apps/session-daw/src/shell.rs` (`OverviewLayout`) |
-| the desktop shell (views, editor toggle, contexts) | `apps/desktop/src/native/shell.rs` |
-| chart panel (paged fit, next-page peek) | `apps/session-daw/src/chart_panel.rs` |
-| chord track voicings (pushes, rests) | `crates/session/session/src/keyflow/generate.rs` |
-| rebuild_from_chart | `crates/session/session/src/keyflow/from_chart.rs` |
-| mixer memory | `apps/session-daw/src/mixer_panel.rs` |
-| `.session` save/load (labels) | `daw/features/standalone/daw-standalone/src/session_file.rs`, `project_loader.rs` |
-| chord parsing (add2/add4, parens) | `daw/crates/keyflow/keyflow-proto/src/chord/definition.rs`, `normalization.rs` |
-| chord memory setting | `daw/crates/keyflow/keyflow-proto/src/chart/memory.rs`, `settings.rs` |
+| lyrics model, anchors, stamping | `features/session/session/src/lyrics.rs` |
+| lyrics panel (3 views, dropdown) | `apps/session/daw/src/lyrics_panel.rs` |
+| lyrics fetcher (LRCLIB) | `apps/session/cli/src/lyrics/` |
+| prepare, stamp_lyrics, apply_chart | `apps/session/daw/src/prepare.rs` |
+| the Overview layout | `apps/session/daw/src/shell.rs` (`OverviewLayout`) |
+| the desktop shell (views, editor toggle, contexts) | `apps/session/desktop/src/native/shell.rs` |
+| chart panel (paged fit, next-page peek) | `apps/session/daw/src/chart_panel.rs` |
+| chord track voicings (pushes, rests) | `features/session/session/src/keyflow/generate.rs` |
+| rebuild_from_chart | `features/session/session/src/keyflow/from_chart.rs` |
+| mixer memory | `apps/session/daw/src/mixer_panel.rs` |
+| `.session` save/load (labels) | `crates/daw/standalone/src/session_file.rs`, `project_loader.rs` |
+| chord parsing (add2/add4, parens) | `crates/keyflow/keyflow-proto/src/chord/definition.rs`, `normalization.rs` |
+| chord memory setting | `crates/keyflow/keyflow-proto/src/chart/memory.rs`, `settings.rs` |
 | chart parser | `keyflow/crates/keyflow/keyflow-text/src/chart/parser/{chords,sections,metadata}.rs` |
-| open, setlist, tabs | `apps/session-daw/src/open.rs`, `setlist.rs`, `shell.rs` |
+| open, setlist, tabs | `apps/session/daw/src/open.rs`, `setlist.rs`, `shell.rs` |
 
 ## 10. The browser demo and Task (unchanged since 2026-09-22 morning)
 

@@ -14,7 +14,7 @@ gives:
   done yet; the entry then says what has to be built and where.
 - **Asserts**: what the test checks once the step has run.
 
-The test lives at `apps/session-daw/tests/original_composition.rs`. It
+The test lives at `apps/session/daw/tests/original_composition.rs`. It
 starts from an empty engine, not the golden fixture. Every step goes
 through the Action List (`session_daw::actions::list().run_json`), so the
 test runs the same paths that a key press, a menu or a model over MCP
@@ -43,29 +43,29 @@ simulated, and how the test stands in for the window.
 ### 0.1 Engine and process
 
 - One test, one process, because the daw facade binds to the first
-  engine opened (`apps/session-daw/tests/drum_quantize.rs:9-10`,
+  engine opened (`apps/session/daw/tests/drum_quantize.rs:9-10`,
   `tests/default_view.rs:12-13`).
 - Build with `--features native,signal`. `BASS_RIG` and `DRUMS_SAMPLES`
-  exist only with `signal` (`apps/session-daw/src/actions.rs:2236-2264`,
+  exist only with `signal` (`apps/session/daw/src/actions.rs:2236-2264`,
   `:2205-2283`), and `TRACK_COMP_FROM_LANE` only with `native`
   (`actions.rs:993-994`).
 - Today a test can only open a file: `session_daw::open::open_silent(path)`
-  (`apps/session-daw/src/open.rs:116`). Phase 1 replaces this with
+  (`apps/session/daw/src/open.rs:116`). Phase 1 replaces this with
   `SESSION_NEW`.
 - Engine access for assertions: `session_daw::actions::song()`
   (`actions.rs:2636`) returns `(daw, project)`. Raw engine edits go
   through `session_daw::engine::apply_now(&Edit)`
-  (`apps/session-daw/src/engine.rs:1683`).
+  (`apps/session/daw/src/engine.rs:1683`).
 
 ### 0.2 Being the window
 
 Window actions such as `SESSION_COMP_TAKE`, `SESSION_TOGGLE_RECORD` and
 `SESSION_MARKER` only queue an `Action` (`actions.rs:46` `take_window`).
 The window applies the queue in `ArrangementWidget::paint_scene`
-(`apps/session-daw/src/widget.rs:3076-3089`, which calls the private
+(`apps/session/daw/src/widget.rs:3076-3089`, which calls the private
 `apply_actions` at `widget.rs:2411`). `SESSION_MODE` only stores a
 request that the desktop shell takes up
-(`actions.rs:960-977`, `apps/desktop/src/native/shell.rs:76`).
+(`actions.rs:960-977`, `apps/session/desktop/src/native/shell.rs:76`).
 
 The harness builds an `ArrangementWidget::for_session` the way
 `tests/default_view.rs:55-71` does. After any window action it calls
@@ -94,7 +94,7 @@ Bars are numbered from 1.
 
 These lengths are what Session already produces:
 
-- the count-in is two bars (`crates/session/session/src/keyflow/actions.rs:1059`);
+- the count-in is two bars (`features/session/session/src/keyflow/actions.rs:1059`);
 - the default section lengths are Intro 4 and Verse/Chorus 8 (`keyflow/actions.rs:1053-1071`);
 - after a section is inserted, the edit cursor moves to its end (`keyflow/actions.rs:446`), so the next section goes in after it.
 
@@ -126,9 +126,9 @@ Recording does not work in the standalone engine today:
 
 - `SESSION_TOGGLE_RECORD` queues `Action::ToggleRecord`, and the window
   only logs "record is not wired to the transport yet"
-  (`apps/session-daw/src/arrange_edit.rs:1446`).
+  (`apps/session/daw/src/arrange_edit.rs:1446`).
 - The transport bar's record button reaches `transport.toggle_recording()`
-  (`apps/session-daw/src/transport_bar.rs:185-186`, `engine.rs:934`).
+  (`apps/session/daw/src/transport_bar.rs:185-186`, `engine.rs:934`).
   But daw-standalone's `record`, `stop_recording` and `toggle_recording`
   only change the play state
   (`daw:features/standalone/daw-standalone/src/transport.rs:119-141`).
@@ -188,7 +188,7 @@ The project gets its name the first time it is saved.
 **1.1. Does:** opens the app and gets the start screen.
 
 - **Today:** the start screen is `Start` in the desktop app
-  (`apps/desktop/src/native/start.rs:93-97`). Its home shelves are the
+  (`apps/session/desktop/src/native/start.rs:93-97`). Its home shelves are the
   demo, Reconnect to REAPER, setlists, Recent and On this device
   (`start.rs:712-834`). It is a dioxus desktop view, so the test does not
   drive it.
@@ -198,12 +198,12 @@ The project gets its name the first time it is saved.
 
 - **Today: MISSING.** There is no new-project path:
   - The only "New song" pill makes a Task library song record, not a
-    DAW project (`start.rs:987`, `apps/desktop/src/native/library.rs:811`,
+    DAW project (`start.rs:987`, `apps/session/desktop/src/native/library.rs:811`,
     `:932-937`).
   - The app can only open a file (`open.rs:116`, `SESSION_OPEN` at
     `actions.rs:1738`).
 - **Build (M1):** an action `SESSION_NEW {template?: String}` in
-  `apps/session-daw/src/actions.rs`, beside `SESSION_OPEN`, plus a
+  `apps/session/daw/src/actions.rs`, beside `SESSION_OPEN`, plus a
   "New Project" button on the Home shelf of `start.rs` that runs it.
   The action:
   1. creates an untitled project in the app's scratch folder;
@@ -211,7 +211,7 @@ The project gets its name the first time it is saved.
   3. stamps COUNT-IN at bar 1 and SONGSTART at bar 3, the two-bar
      count-in that `keyflow/actions.rs:1059` uses, with a SONGEND placed
      after SONGSTART. A chart import already stamps these markers
-     (`crates/session/session/src/keyflow/from_chart.rs:104-131`). An
+     (`features/session/session/src/keyflow/from_chart.rs:104-131`). An
      empty project needs the same markers with no chart.
   4. generates the guide (step 3.4);
   5. requests Organize mode.
@@ -220,7 +220,7 @@ The project gets its name the first time it is saved.
 - **Asserts:**
   - `SESSION_TRACKS` (`actions.rs:635`) lists only the Guide folder and
     its tracks: `Guide/Click`, `Guide/Count`, `Guide/Guide`, in the order
-    `crates/session/session/src/guide.rs:65-81` gives them.
+    `features/session/session/src/guide.rs:65-81` gives them.
   - The markers are `COUNT-IN` at 0.0 s and `SONGSTART` at bar 3.
   - The mode reads back as Organize (needs the 0.2 readback).
   - The project name is `Untitled`, and it has no file path.
@@ -249,9 +249,9 @@ track.
 
 - **Today: partly.**
   - Organize mode mounts `OrganizeToolbar` across the top
-    (`apps/desktop/src/native/shell.rs:613-614`). It has the 12 structure
-    buttons and the time signatures (`apps/session-daw/src/organize.rs:42-55`).
-  - The left rail lists scenes (`apps/session-daw/src/rails.rs:467-497`).
+    (`apps/session/desktop/src/native/shell.rs:613-614`). It has the 12 structure
+    buttons and the time signatures (`apps/session/daw/src/organize.rs:42-55`).
+  - The left rail lists scenes (`apps/session/daw/src/rails.rs:467-497`).
   - Session has no instrument buttons.
   - In REAPER, `_FTS_SESSION_CREATE_NEW_*` toolbar buttons exist
     (`nix/reaper-config/reaper-menu.ini:22-43`). They map to
@@ -272,7 +272,7 @@ track.
   - The golden kit is `dynamic_template::golden_session::shape::drums()`
     (`features/dynamic-template/dynamic-template/src/golden_session/shape.rs:518`).
 - **Build (M2):** `TRACK_ADD_INSTRUMENT {instrument: "Drums"}` in a new
-  `apps/session-daw/src/organize_tracks.rs`. It appends the golden kit
+  `apps/session/daw/src/organize_tracks.rs`. It appends the golden kit
   from `shape::drums()` and a `Drums/MIDI` track (see Q6), then folds
   `Drums` with `SESSION_FOLD {track: "Drums", open: false}`
   (`actions.rs:1664`, handler `:1917-1941`). The whole action is one
@@ -327,11 +327,11 @@ in place, and setting 68 bpm turns on the eighth-note click.
 
 - **Today:** `SESSION_MODE {mode: "Record"}` (`actions.rs:758`,
   `:960-977`). The modes are listed in
-  `crates/session/session/src/modes.rs:15-29`. The request is applied
-  by the shell (`apps/desktop/src/native/shell.rs:76`) and, in the test,
+  `features/session/session/src/modes.rs:15-29`. The request is applied
+  by the shell (`apps/session/desktop/src/native/shell.rs:76`) and, in the test,
   by the 0.2 harness.
 - **Asserts:** the mode reads back as Record. Record mode shows the
-  record arm in the track panel (`apps/session-daw/src/tcp.rs:193`).
+  record arm in the track panel (`apps/session/daw/src/tcp.rs:193`).
 
 **3.2. Does:** arms the guitar.
 
@@ -354,14 +354,14 @@ guitar profile. The track is then named for the stack that loads:
 
 - **Today: MISSING, three separate gaps.**
   1. **The browser.** Session has no B binding and no browser panel. The
-     keys come from the FTS keybind profile (`apps/session-daw/src/keys.rs:1-16`).
+     keys come from the FTS keybind profile (`apps/session/daw/src/keys.rs:1-16`).
      Signal has a headless browser crate (`signal:crates/signal/browser/src/lib.rs`)
      and a tablet `Browser` component
      (`signal:features/rigs/guitar/ui/src/tablet/browser.rs`); the spec
      is `docs/spec/signal/browser.md`.
   2. **A guitar rig as track FX.** signal-fx hosts only `FTS Bass Rig`
      and `FTS Kit Mic` (`features/signal-fx/src/lib.rs:30-32`).
-     `apps/session-daw/src/rig.rs` only draws (`rig.rs:153-167`). On the
+     `apps/session/daw/src/rig.rs` only draws (`rig.rs:153-167`). On the
      signal side:
      - `RigHome` lets a guitar rig and a bass rig coexist
        (`signal:features/rigs/guitar/src/library.rs:83-126`, commit
@@ -388,7 +388,7 @@ guitar profile. The track is then named for the stack that loads:
     instrument comes from the track's group when it is not given.
     `BASS_RIG` becomes the bass case of this action.
   - **(M8)** The browser panel, toggled with B, in a new
-    `apps/session-daw/src/browser.rs`. It follows the selected track
+    `apps/session/daw/src/browser.rs`. It follows the selected track
     (`SESSION_SELECT_TRACK`, `actions.rs:1827`). Clicking an entry runs
     `RIG_LOAD`, or `TONE_SET` for a stack within the loaded profile.
   - **(M7)** When a rig loads onto a track whose name has no
@@ -399,7 +399,7 @@ guitar profile. The track is then named for the stack that loads:
   - The track is now named `Guitar Clean`, and its GUID is unchanged.
   - `SESSION_TRACKS.fx` for it is `["FTS Signal Rig"]`.
   - `FX_PARAMS {track: "Guitar Clean", fx: "FTS Signal Rig"}`
-    (`apps/session-daw/src/fx_actions.rs:32`) reads Scene = `Clean`, and
+    (`apps/session/daw/src/fx_actions.rs:32`) reads Scene = `Clean`, and
     the profile reads `Worship`.
   - Negative control: the `Bass` track has no FX.
 
@@ -423,7 +423,7 @@ pick one by hand.
     track and again when `TRACK_ARM` arms one, using
     `Tracks::set_record_input` (`daw:…/track/service.rs:226`).
   - A `ROUTING_PRESET {device?}` action reads the preset and applies it.
-  - This lives in a new `apps/session-daw/src/routing_presets.rs`.
+  - This lives in a new `apps/session/daw/src/routing_presets.rs`.
 - **Asserts:**
   - With a preset in the temp folder, `Guitar Clean.record_input` is
     mono input 1, and `Bass.record_input` is mono input 2.
@@ -435,9 +435,9 @@ folder, already in place.
 
 - **Today: partly.** `Guide::generate` builds the Guide folder, its
   tracks and their notes from the sections and the tempo map
-  (`crates/session/session/src/guide.rs:209-260`). Only these call it:
+  (`features/session/session/src/guide.rs:209-260`). Only these call it:
   - an Organize toolbar press (`organize.rs:156-162`);
-  - a chart edit (`apps/session-daw/src/prepare.rs:569-583`);
+  - a chart edit (`apps/session/daw/src/prepare.rs:569-583`);
   - prepare (`prepare.rs:714-718`).
 
   Generation fails on a project with no length ("song has no length — is
@@ -458,7 +458,7 @@ threshold, so the guide's click plays soft eighths.
   - `engine::Edit::SetTempo(guid, at, bpm)` exists
     (`engine.rs:199`, applied by `set_tempo` at `engine.rs:2027-2045`).
     The only thing that produces it is a test (`tests/reaper_panel.rs:342`).
-  - The ruler's tempo lane only draws (`apps/session-daw/src/ruler/tempo.rs`).
+  - The ruler's tempo lane only draws (`apps/session/daw/src/ruler/tempo.rs`).
   - The only user path is a chart's `68bpm` line through
     `rebuild_from_chart`.
 - **Today, the eighths: EXISTS.**
@@ -468,7 +468,7 @@ threshold, so the guide's click plays soft eighths.
     segment (`midi.rs:202-208`).
   - The offbeat clicks have pitch 62 (`midi.rs:9`, `:214`). The guide
     instrument plays them as the kit's lower tick
-    (`apps/session-daw/src/guide_instrument.rs:68-70`).
+    (`apps/session/daw/src/guide_instrument.rs:68-70`).
   - They are "soft" by sample only. The velocity is the same 96 as the
     beats (`midi.rs:224-225`).
   - There is a unit test at 68 bpm (`midi.rs:412-440`).
@@ -515,7 +515,7 @@ the last two, in Record mode.
 
 - **Today: EXISTS as an action. Comping in Record mode does not.**
   - `TRACK_COMP_FROM_LANE {track, lane, start, end}`
-    (`apps/session-daw/src/comp.rs:347-354`, args `:367-375`) copies the
+    (`apps/session/daw/src/comp.rs:347-354`, args `:367-375`) copies the
     source lane's items onto the comp lane with 5 ms fades and records a
     `CompArea`. It is one undo step (`comp.rs:107`, `:124`, `:130-170`).
   - A second area cuts into the first (`comp.rs:298-334`).
@@ -549,14 +549,14 @@ Intro. The region goes over them and the guide updates.
     (`organize.rs:125-163`). That hands the arrangement's selection and
     cursor to the engine, then calls
     `session::keyflow::actions::dispatch(InsertSection(Intro))`
-    (`crates/session/session/src/keyflow/actions.rs:38-77`), then
+    (`features/session/session/src/keyflow/actions.rs:38-77`), then
     regenerates the guide.
   - `insert_section_region` fills a time selection, carves away any
     overlapping section, moves the cursor to the section's end and
     clears the selection (`keyflow/actions.rs:399-468`, `:446-451`,
     `:493-496`).
   - The time selection is only ever set by a mouse drag
-    (`apps/session-daw/src/cursor.rs:157-185`).
+    (`apps/session/daw/src/cursor.rs:157-185`).
   - The toolbar exists only in Organize mode. The narrative does this
     from Record mode.
 - **Build (M3):**
@@ -566,7 +566,7 @@ Intro. The region goes over them and the guide updates.
   - `SECTION_INSERT {kind, from?, to?}` and `MARKER_INSERT {kind, at?}`.
     They do the same as `press_local`, guide regeneration included, so
     the toolbar and a model take one path. Move `press_local` into
-    `apps/session-daw/src/organize.rs` as a `pub fn insert`.
+    `apps/session/daw/src/organize.rs` as a `pub fn insert`.
   - Bind them to keys that work in every mode.
 - **Test:** `TIME_SELECTION_SET {from: "3", to: "7"}`, then
   `SECTION_INSERT {kind: "Intro"}`.
@@ -607,7 +607,7 @@ after recording it: take 1 two stars, take 2 three stars, take 3 X.
 - **Today, rating: half exists.**
   - `take_rating::star(Scope)` and `miss(Scope)` drop REAPER's rank
     markers (`:)`, `:))`, `:)))`, `:(`) on the active take
-    (`apps/session-daw/src/take_rating.rs:89-143`, `:146-165`;
+    (`apps/session/daw/src/take_rating.rs:89-143`, `:146-165`;
     `TakeRating` is at `daw:crates/daw/proto/src/item/take.rs:273-300`).
   - They are only reached from Record mode's rating pad
     (`record_view.rs:346-352`, `:414-421`).
@@ -701,11 +701,11 @@ with snare and hi-hat on beat 4.
   - The expression editor has a pencil (`Tool::NoteDraw`,
     `daw:features/expression-editor/expression-editor-core/src/tools.rs:15-27`).
     Its notes reach the engine only when the editor saves
-    (`apps/session-daw/src/editor_view.rs:772-791`).
+    (`apps/session/daw/src/editor_view.rs:772-791`).
   - The engine API exists: `create_midi_item`
     (`daw:crates/daw/proto/src/midi/service.rs:316`) and `add_notes_ppq`
     (`:339`). `DRUMS_SAMPLES` uses both
-    (`apps/session-daw/src/drum_samples.rs:281-319`).
+    (`apps/session/daw/src/drum_samples.rs:281-319`).
 - **Build (M9):** `MIDI_NOTES_ADD {track, at: String, notes: [{bar_beat, pitch|piece, velocity, length}]}`.
   - It creates or extends the MIDI item under `at` (a section name or a
     bar range).
@@ -775,10 +775,10 @@ bass profile.
 
 - **Today: EXISTS without the browser.**
   - `BASS_RIG {profile: "Worship"}` (`actions.rs:2236-2264`;
-    `apps/session-daw/src/bass_rig.rs:129-207`) puts `FTS Bass Rig`
+    `apps/session/daw/src/bass_rig.rs:129-207`) puts `FTS Bass Rig`
     first on every non-folder track whose top folder is `Bass`. A plain
     top-level `Bass` track matches, because `gain_stage::path_of`
-    includes the track itself (`apps/session-daw/src/gain_stage.rs:199-217`).
+    includes the track itself (`apps/session/daw/src/gain_stage.rs:199-217`).
   - The starting scene is the patch whose name the track's name contains.
     Otherwise it is the profile's default patch (`bass_rig.rs:107-121`).
   - The profile is read from Session's own copy at
@@ -806,7 +806,7 @@ chorus.
     (`fx_actions.rs:77-80`, args `:152-159`) writes points at section
     names (`"CH 1"`, `"CH 1 end"`) with the value in the plugin's own
     words.
-  - `AUTOMATION_BY_SECTION` (`apps/session-daw/src/automation_actions.rs:425-431`,
+  - `AUTOMATION_BY_SECTION` (`apps/session/daw/src/automation_actions.rs:425-431`,
     impl `:709`) sets a whole envelope by section.
     `tests/automation_by_section.rs:265-360` already automates
     `FTS Bass Rig/Scene` with Drive in the choruses.
@@ -874,21 +874,21 @@ double is recorded.
 calls "add layer", which makes `Main` and `DBL`.
 
 - **Today: EXISTS in the session crate. Not on Session's Action List.**
-  - `GUITAR_DOUBLE` (`crates/session/proto/src/guitar_grow.rs:35-55`;
-    impl `crates/session/session/src/guitar_grow.rs:66-72`) acts on the
+  - `GUITAR_DOUBLE` (`features/session/proto/src/guitar_grow.rs:35-55`;
+    impl `features/session/session/src/guitar_grow.rs:66-72`) acts on the
     selected track. The track carrying the items becomes the folder, and
     a new first member takes the items
     (`guitar_grow.rs:257-264`, `grow_level_to` at `:205-233`).
   - The new members are named `L` and `R`, the Channel dimension
-    (`crates/session/session/tests/guitar_grow_actions.rs:188-207`).
+    (`features/session/session/tests/guitar_grow_actions.rs:188-207`).
   - It is registered for REAPER only, as `FTS_SESSION_GUITAR_DOUBLE`
-    (`crates/session/session/src/lib.rs:166-171`).
+    (`features/session/session/src/lib.rs:166-171`).
   - It moves items. Whether take lanes, lane names, the play mask and
     comp areas move too is not tested.
 - **Build (M10):**
   - Register `GuitarGrow<Standalone>` on Session's Action List as
     `TRACK_DOUBLE`, `TRACK_ADD_ARRANGEMENT`, `TRACK_ADD_LAYER` and
-    `TRACK_ADD_SOURCE`, in a new `apps/session-daw/src/grow.rs`.
+    `TRACK_ADD_SOURCE`, in a new `apps/session/daw/src/grow.rs`.
   - Moving the content to the first member moves its lanes and its comp
     with it: `lane_names`, `lane_play_mask` and the `LaneComping` areas.
   - Settle the naming (Q1).
@@ -930,11 +930,11 @@ Lead. It gets a lead sound and is tracked in the intro and chorus only.
 track Lead.
 
 - **Today: EXISTS in the session crate. Not in Session.**
-  - `GUITAR_ADD_ARRANGEMENT` (`crates/session/proto/src/guitar_grow.rs:57-69`)
+  - `GUITAR_ADD_ARRANGEMENT` (`features/session/proto/src/guitar_grow.rs:57-69`)
     reads the container's own Arrangement value off its name, moves it
     down onto a new folder, and adds the template's next unused
     arrangement beside it
-    (`crates/session/session/tests/guitar_grow_actions.rs:251-266`).
+    (`features/session/session/tests/guitar_grow_actions.rs:251-266`).
   - The electric arrangement order is Clean, Crunch, Drive, Lead, …
     (`electric_guitar.rs:8-27`). So `Guitar Clean` would become
     `Guitar/{Clean/{L,R}, Crunch}`.
@@ -952,7 +952,7 @@ track Lead.
   - When the Arrangement level is inserted, the part's chain (the rig
     and its envelopes) moves down onto the arrangement it belongs to.
     "A Channel shares a chain, a Layer has its own"
-    (`crates/session/proto/src/guitar_grow.rs:42-45`). The same applies
+    (`features/session/proto/src/guitar_grow.rs:42-45`). The same applies
     to an Arrangement.
   - Q2 decides whether the first arrangement is named `Clean` or
     `Rhythm`.
@@ -1012,7 +1012,7 @@ rig.
 **13.1. Does:** runs Add Part on Lead and names the new track Harmony.
 
 - **Today: EXISTS as a Layer grow, with two differences.**
-  - `GUITAR_ADD_LAYER` (`crates/session/proto/src/guitar_grow.rs:71-82`)
+  - `GUITAR_ADD_LAYER` (`features/session/proto/src/guitar_grow.rs:71-82`)
     wraps the part's channels under a `Main` layer and adds the next
     layer.
   - The next layer is `OCT` for an electric
@@ -1131,7 +1131,7 @@ remaining step of the demo test in the memory notes.
 
 | # | feature | needs | where | steps |
 |---|---|---|---|---|
-| M1 | `SESSION_NEW` (untitled project, COUNT-IN/SONGSTART/SONGEND, guide, Organize), a New Project button, naming on first save | — | `apps/session-daw/src/actions.rs`, `open.rs`, `apps/desktop/src/native/start.rs` | 1.2, 1.3, 3.5, 14.1 |
+| M1 | `SESSION_NEW` (untitled project, COUNT-IN/SONGSTART/SONGEND, guide, Organize), a New Project button, naming on first save | — | `apps/session/daw/src/actions.rs`, `open.rs`, `apps/session/desktop/src/native/start.rs` | 1.2, 1.3, 3.5, 14.1 |
 | M2 | `TRACK_ADD_INSTRUMENT` (golden kit + `Drums/MIDI`, `Bass`, `Guitar`), the Organize instrument rail, `TRACK_RENAME`, `SESSION_TRACKS` readback (`armed`, `record_input`, `open`) | M1 | new `organize_tracks.rs`, `rails.rs`, `actions.rs` | 2.1–2.4, 11.1 |
 | M3 | `TEMPO_SET` (markers keep their bars, guide regenerates), `TIME_SELECTION_SET`, `SECTION_INSERT`, `MARKER_INSERT` on the Action List | M1 | `actions.rs`, `organize.rs` (`press_local` → `pub fn insert`) | 3.6, 4.3, 5.1, 6.0 |
 | M4 | Recording: capture + `finish_recording` into take lanes in daw-standalone, a test input source, `TRACK_ARM`, the record action working (`arrange_edit.rs:1446`) | M2 | `daw:features/standalone/daw-standalone/src/transport.rs`, `audio_engine/render`, `actions.rs` | 3.2, 4.1, 5.2, 7.1, 8.3, 10.2, 11.3, 12.1, 13.2 |
@@ -1140,9 +1140,9 @@ remaining step of the demo test in the memory notes.
 | M7 | `FTS Signal Rig` (the hosted guitar rig as track FX, signal S1–S3), `RIG_LOAD {instrument, profile, stack}`, naming a track after the loaded stack | M2 | `features/signal-fx`, `signal:features/rigs/guitar/src/session.rs` | 3.3, 8.1, 9.1, 11.2 |
 | M8 | The browser panel on B (follows the selection; click = `TONE_SET`/`RIG_LOAD`, Shift-click = `TONE_INSERT`) | M7 | new `browser.rs`, `keys.rs`, signal-guitar-ui exports | 3.3, 8.1, 8.2, 9.1 |
 | M9 | A worship kit preset + `KIT_LOAD`, MIDI sends from `Drums/MIDI`, `MIDI_NOTES_ADD` | M2, M8 | kit library data, `features/signal-fx/src/kit.rs`, `actions.rs` | 6.1–6.3 |
-| M10 | Grow actions on Session's list (`TRACK_DOUBLE`, `TRACK_ADD_ARRANGEMENT {name}`, `TRACK_ADD_LAYER {name, mirror}`), lanes and comps moving with their items, the chain moving to its level, L/R panning into the folder's rig, `Harmony` as a layer | M2, M7 | new `apps/session-daw/src/grow.rs`, `crates/session/session/src/guitar_grow.rs`, `metadata_patterns.rs` | 10.1, 11.1, 12.1, 13.1, 13.2 |
+| M10 | Grow actions on Session's list (`TRACK_DOUBLE`, `TRACK_ADD_ARRANGEMENT {name}`, `TRACK_ADD_LAYER {name, mirror}`), lanes and comps moving with their items, the chain moving to its level, L/R panning into the folder's rig, `Harmony` as a layer | M2, M7 | new `apps/session/daw/src/grow.rs`, `features/session/session/src/guitar_grow.rs`, `metadata_patterns.rs` | 10.1, 11.1, 12.1, 13.1, 13.2 |
 | M11 | `TRACK_SPLIT_BY_TONE` | M7, M10 | new action | 15 |
-| H | Test harness: a headless window pump and a mode readback | — | `apps/session-daw/src/` | 0.2 |
+| H | Test harness: a headless window pump and a mode readback | — | `apps/session/daw/src/` | 0.2 |
 
 Already there, and used as-is:
 
@@ -1160,7 +1160,7 @@ Already there, and used as-is:
 | `FX_AUTOMATE` / `FX_AUTOMATION` / `FX_PARAMS` | `fx_actions.rs` |
 | the auto-eighths click | `features/guide/src/midi.rs:196` |
 | section insertion and guide regeneration | `keyflow/actions.rs:38`, `guide.rs:209` (behind a UI click) |
-| the guitar grow actions | `crates/session/session/src/guitar_grow.rs` (REAPER only) |
+| the guitar grow actions | `features/session/session/src/guitar_grow.rs` (REAPER only) |
 
 ## Step count
 
@@ -1194,7 +1194,7 @@ asserts nothing, and phase 15 is a follow-on.
 - Session's guitar vocabulary calls the double a **Channel** (`L`/`R`),
   one that "shares a chain". A **Layer** (Main, Harmony, OCT) "has its
   own" (`workflows.md` `r[flow.guitars.dimensions]`;
-  `crates/session/proto/src/guitar_grow.rs:42-45`).
+  `features/session/proto/src/guitar_grow.rs:42-45`).
 - The organizer also parses `DBL` as a Layer
   (`metadata_patterns.rs:93`; `electric_guitar.rs:323-360` sorts
   `Guitar Clean DBL` into a `DBL` folder). Vocals use Main and DBL as

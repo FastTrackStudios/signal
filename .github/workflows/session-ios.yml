@@ -14,8 +14,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "apps/desktop/**"
-      - "apps/session-daw/**"
+      - "apps/session/desktop/**"
+      - "apps/session/daw/**"
       - "crates/**"
       - "libs/**"
       - "Cargo.toml"
@@ -97,11 +97,11 @@ jobs:
           TASK_OTLP_TOKEN: ${{ secrets.TASK_OTLP_TOKEN }}
           TASK_SENTRY_DSN: ${{ secrets.TASK_SENTRY_DSN }}
           # ── Session product identity ─────────────────────────────────
-          # The app crate is `session-desktop` (apps/desktop) — the same one
+          # The app crate is `session-desktop` (apps/session/desktop) — the same one
           # the Mac runs, on Blitz (`native`): the phone gets the same
           # panels in the small-screen layout (session_daw::compact).
           DX_PACKAGE: session-desktop
-          DX_APP_DIR: apps/desktop
+          DX_APP_DIR: apps/session/desktop
           # NOT the crate defaults. `session` implies `tts`, which pulls
           # ort/ONNX Runtime -- and ONNX publishes no prebuilt binary for
           # aarch64-apple-ios, so ort-sys' build.rs panics and the whole
@@ -117,7 +117,7 @@ jobs:
           set -euo pipefail
           export PATH="/nix/var/nix/profiles/default/bin:$PATH"
           export NIX=/nix/var/nix/profiles/default/bin/nix
-          bash apps/desktop/ios/deploy-testflight.sh
+          bash apps/session/desktop/ios/deploy-testflight.sh
 
       - name: Summary
         if: always()

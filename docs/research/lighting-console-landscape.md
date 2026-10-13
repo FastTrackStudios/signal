@@ -388,7 +388,7 @@ its own OS window" is not a shortcut here.
 ## 8. The differentiator: cues that write themselves
 
 This is the part no competitor can copy, because it requires owning the audio
-and the musical structure. FTS already stores, in `crates/session/proto`:
+and the musical structure. FTS already stores, in `features/session/proto`:
 
 ```rust
 Section { section_id, name, section_type, start_seconds, end_seconds,
@@ -498,4 +498,4 @@ and uniquely able to do something neither Eos nor MA can" is achievable.
 - [ETC community: GDTF + MVR feature requests](https://community.etcconnect.com/control_consoles/eos-family-consoles/i/feature-requests/gdtf-mvr)
 - Rust: [Mizer](https://github.com/maxjoehnk/Mizer) · [radiant](https://github.com/BaukeWestendorp/radiant) · [zeevonk](https://github.com/BaukeWestendorp/zeevonk) · [demex](https://github.com/matteolutz/demex) · [rigger](https://github.com/BaukeWestendorp/rigger) · [gdtf-rs](https://github.com/cpdt/gdtf-rs) · [RustLight/sacn](https://github.com/RustLight/sacn) · [artnet_protocol](https://github.com/Trangar/artnet_protocol) · [rust_dmx](https://crates.io/crates/rust_dmx) · [tiny-artnet](https://github.com/D1plo1d/tiny-artnet)
 - [Open Fixture Library](https://github.com/OpenLightingProject/open-fixture-library) (MIT)
-- Repo evidence: `crates/session/proto/src/song.rs`, `features/song/src/model.rs`, `features/guide/`, `features/surfaces/daw-csi/`, root `CLAUDE.md` (signal domain rules, platform targets, licence).
+- Repo evidence: `features/session/proto/src/song.rs`, `features/song/src/model.rs`, `features/guide/`, `features/surfaces/daw-csi/`, root `CLAUDE.md` (signal domain rules, platform targets, licence).

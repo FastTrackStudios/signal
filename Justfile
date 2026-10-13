@@ -25,12 +25,12 @@ default:
 
 # ── Tailwind (app UI sheet) ──────────────────────────────────────────────
 # The single compiled sheet (assets/tailwind-signal.css) is inlined by
-# BOTH apps/desktop/src/rig_view.rs (signal UI) and
+# BOTH apps/session/desktop/src/rig_view.rs (signal UI) and
 # src/main.rs SessionChrome (session UI) via include_str!; rebuild it
 # whenever UI-crate class usage changes. input.css @source globs scan the
 # signal/session UI crates + libs/ui + libs/dock.
 
-# Point apps/desktop/.lumen-blocks at the lumen-blocks checkout
+# Point apps/session/desktop/.lumen-blocks at the lumen-blocks checkout
 # cargo actually resolved.
 #
 # input.css used to reach into $CARGO_HOME with a hardcoded /home/cody path
@@ -44,15 +44,15 @@ _lumen-link:
     set -euo pipefail
     dir=$(cargo metadata --locked --format-version 1 2>/dev/null \
         | python3 -c 'import json,sys,os; print(next(os.path.dirname(p["manifest_path"]) for p in json.load(sys.stdin)["packages"] if p["name"]=="lumen-blocks"))')
-    ln -sfn "$dir" apps/desktop/.lumen-blocks
+    ln -sfn "$dir" apps/session/desktop/.lumen-blocks
 
 # Build Tailwind CSS (v4)
 tailwind: _lumen-link
-    cd apps/desktop && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
+    cd apps/session/desktop && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
 
 # Watch Tailwind CSS for changes
 tailwind-watch: _lumen-link
-    cd apps/desktop && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --watch --minify
+    cd apps/session/desktop && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --watch --minify
 
 # Fail if the committed sheet isn't what the sources produce.
 #
@@ -63,7 +63,7 @@ tailwind-watch: _lumen-link
 tailwind-check: tailwind
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! git diff --quiet -- apps/desktop/assets/tailwind-signal.css; then
+    if ! git diff --quiet -- apps/session/desktop/assets/tailwind-signal.css; then
         echo "tailwind-signal.css is out of date — run 'just tailwind' and commit the result" >&2
         exit 1
     fi
@@ -88,18 +88,18 @@ alias rigd := signal-engine
 # Launch the desktop app (Session and/or Charts, per default features) via
 # dx serve, so UI edits hot-reload instead of a plain `cargo run`.
 desktop:
-    cd apps/desktop && dx serve --release
+    cd apps/session/desktop && dx serve --release
 
 # Stage the fts web bundle (the browser remote) for embedding: tailwind →
 # dx web build (signal rigs + the session setlist remote) →
-# apps/desktop/web-dist/, which `cargo build -p session-desktop
+# apps/session/desktop/web-dist/, which `cargo build -p session-desktop
 # --features embed-web` compiles into the binary (include_dir). On wasm the
 # session feature is only the wire surface (session-proto clients +
 # session-ui); the player itself runs in the engine. web-dist/ is gitignored.
 web-stage: tailwind
-    cd apps/desktop && dx build --platform web --release --no-default-features --features signal,session
-    rm -rf apps/desktop/web-dist
-    cp -r target/dx/session-desktop/release/web/public apps/desktop/web-dist
+    cd apps/session/desktop && dx build --platform web --release --no-default-features --features signal,session
+    rm -rf apps/session/desktop/web-dist
+    cp -r target/dx/session-desktop/release/web/public apps/session/desktop/web-dist
     just keys-worklet-wasm
 
 # Stage the browser keys rig's AudioWorklet bundle (W4 of
@@ -114,7 +114,7 @@ web-stage: tailwind
 #   /worklet/signal_keys_worklet_bg.wasm
 # wasm-bindgen-cli comes from the dev shell, pinned to the workspace
 # wasm-bindgen version (same as task-worklet-wasm).
-keys-worklet-wasm out='apps/desktop/web-dist/worklet':
+keys-worklet-wasm out='apps/session/desktop/web-dist/worklet':
     # --max-memory: default wasm linear memory caps at 2 GB — resident pack
     # bytes + decoded-PCM budget + app need the full 4 GB address space.
     #
@@ -156,7 +156,7 @@ keys-worklet-wasm out='apps/desktop/web-dist/worklet':
 # Kept as its OWN recipe until it is proven: `keys-worklet-wasm` (single
 # threaded) stays the default so a toolchain problem here can never take the
 # working rig down with it.
-keys-worklet-wasm-threads out='apps/desktop/web-dist/worklet':
+keys-worklet-wasm-threads out='apps/session/desktop/web-dist/worklet':
     # The four TLS symbols are exported EXPLICITLY: wasm-bindgen's threading
     # pass looks up `__wasm_init_tls` (each thread initialises its own TLS
     # block through it), and LLD garbage-collects all of them when no Rust
@@ -198,7 +198,7 @@ keys-web: web-stage
 # to exist — build it with `just keys-web` first. Needs the real pack
 # library (or FTS_PACK_LIBRARY pointing at one with the Worship proxies).
 keys-web-e2e:
-    cd apps/desktop/e2e && npm install --no-fund --no-audit && npx playwright test
+    cd apps/session/desktop/e2e && npm install --no-fund --no-audit && npx playwright test
 
 # Build the RELEASE binary (web bundle EMBEDDED) and deploy the ONE
 # artifact to ~/.local/lib/fts/session-desktop behind the signal-engine
@@ -219,7 +219,7 @@ rig-install: web-stage
     # bundle) are superseded; leave any existing ones in place until the
     # new unit is confirmed, then clean by hand if desired.
     install -d ~/.config/systemd/user
-    install -m 644 apps/desktop/systemd/signal-engine.service ~/.config/systemd/user/
+    install -m 644 apps/session/desktop/systemd/signal-engine.service ~/.config/systemd/user/
     systemctl --user daemon-reload
     systemctl --user try-restart signal-engine
     if systemctl --user is-active --quiet signal-engine; then
@@ -243,11 +243,11 @@ install: rig-install
     ln -sf ~/.local/lib/fts/session-desktop ~/.local/bin/session-desktop
     ln -sf ~/.local/lib/fts/fts ~/.local/bin/fts
     install -d ~/.local/share/icons/hicolor/scalable/apps
-    install -m 644 apps/desktop/assets/icon.svg \
+    install -m 644 apps/session/desktop/assets/icon.svg \
         ~/.local/share/icons/hicolor/scalable/apps/session-desktop.svg
     install -d ~/.local/share/applications
     sed "s|@BIN@|$HOME/.local/lib/fts/session-desktop|" \
-        apps/desktop/assets/session-desktop.desktop \
+        apps/session/desktop/assets/session-desktop.desktop \
         > ~/.local/share/applications/session-desktop.desktop
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
@@ -276,7 +276,7 @@ uninstall:
 # identities in the login keychain), built with the host toolchain — see the
 # script's header for the knobs (NOTARIZE=1, ADHOC_SIGN=1, MAC_TARGETS=...).
 macos-pkg:
-    bash apps/desktop/ios/package-session-macos.sh
+    bash apps/session/desktop/ios/package-session-macos.sh
 
 # Build the installer and install it for this user (~/Applications, no
 # password), replacing any earlier install.
@@ -316,9 +316,9 @@ release-package: web-stage
     cp target/release/libreaper_fts_extensions.so "$stage/reaper_fts_extensions.so"
     "${PATCHELF[@]}" --remove-rpath "$stage/reaper_fts_extensions.so"
     strip "$stage/reaper_fts_extensions.so"
-    cp apps/desktop/systemd/signal-engine.service "$stage"/
-    cp apps/desktop/assets/session-desktop.desktop "$stage"/
-    cp apps/desktop/assets/icon.svg "$stage/icon.svg"
+    cp apps/session/desktop/systemd/signal-engine.service "$stage"/
+    cp apps/session/desktop/assets/session-desktop.desktop "$stage"/
+    cp apps/session/desktop/assets/icon.svg "$stage/icon.svg"
     install -m 755 apps/installer/scripts/install.sh apps/installer/scripts/uninstall.sh "$stage"/
     printf '%s\n' "$version" > "$stage/VERSION"
     mkdir -p dist
@@ -404,7 +404,7 @@ plugins-bundle plugins=fts_plugins:
     cmd=bundle
     [ "$(uname)" = "Darwin" ] && cmd=bundle-universal
     for p in {{plugins}}; do
-        cargo run -q -p fts-plugin-xtask -- "$cmd" -p "$p-plugin" --release
+        cargo run -q -p fts-plugin-xtask -- "$cmd" -p "$p-plugin" --release --features export
     done
     ls target/bundled/
 
@@ -470,7 +470,7 @@ plugins-list:
 # Package the plugin bundles as a single release tarball in dist/
 # (fts-plugins-v<version>-<platform>.tar.gz + SHA256SUMS entry). The macOS
 # release artifact is NOT this — it's the signed+notarized .zip built by
-# apps/desktop/ios/deploy-macos-plugins.sh, since Apple only accepts
+# apps/session/desktop/ios/deploy-macos-plugins.sh, since Apple only accepts
 # zip/pkg/dmg for notarization.
 plugins-package: plugins-bundle
     #!/usr/bin/env bash
@@ -728,7 +728,7 @@ graph-serve:
 
 # Rebuild the browser setlist player's AudioWorklet wasm bundle — a small
 # RELEASE build of daw-standalone (the render graph that runs ON the audio
-# thread; see the task repo's apps/web/assets/worklet/processor.js).
+# thread; see the task repo's apps/session/web/assets/worklet/processor.js).
 # wasm-bindgen-cli comes from the dev shell, pinned to the workspace
 # wasm-bindgen version.
 #
@@ -819,34 +819,34 @@ ee-shots *ARGS:
     cargo test -p expression-editor-ui --test screenshots \
         -- --ignored --test-threads 1 {{ARGS}}
 
-# ── apps/web (session.fasttrackstudio.app) ────────────────────────────────
-# `apps/web/tailwind.css` @sources this crate plus architect-ui, a GIT DEP
+# ── apps/session/web (session.fasttrackstudio.app) ────────────────────────────────
+# `apps/session/web/tailwind.css` @sources this crate plus architect-ui, a GIT DEP
 # with no stable path on disk — the glob cannot be written literally.
 # `cargo metadata` knows where cargo actually resolved it; this recipe asks,
-# and symlinks the answer into apps/web/.tailwind-src/. Without it the
+# and symlinks the answer into apps/session/web/.tailwind-src/. Without it the
 # classes architect-ui's components use are simply absent from the sheet,
 # and the failure is SILENT (a `@source` matching nothing is not an error —
-# see keyflow's apps/web/tailwind.css, the same pattern this mirrors).
+# see keyflow's apps/session/web/tailwind.css, the same pattern this mirrors).
 _web-tw-link:
     #!/usr/bin/env bash
     set -euo pipefail
-    mkdir -p apps/web/.tailwind-src
+    mkdir -p apps/session/web/.tailwind-src
     dir=$(cargo metadata --format-version 1 2>/dev/null \
         | python3 -c "import json,sys,os;p=json.load(sys.stdin)['packages'];print(next(os.path.dirname(x['manifest_path']) for x in p if x['name']=='architect-ui'))")
     if [ -z "$dir" ] || [ ! -d "$dir" ]; then
         echo "cannot resolve architect-ui — is it in the dependency graph?" >&2
         exit 1
     fi
-    ln -sfn "$dir" apps/web/.tailwind-src/architect-ui
+    ln -sfn "$dir" apps/session/web/.tailwind-src/architect-ui
 
 # Compile the site's Tailwind sheet. Gitignored output; `asset!()` needs it
 # at compile time, so this runs before any build of apps/web.
 web-tailwind: _web-tw-link
-    cd apps/web && tailwindcss -i ./tailwind.css -o ./assets/tailwind.css --minify
+    cd apps/session/web && tailwindcss -i ./tailwind.css -o ./assets/tailwind.css --minify
 
-# Serve apps/web with hot reload.
+# Serve apps/session/web with hot reload.
 web: web-tailwind
-    cd apps/web && dx serve --platform web
+    cd apps/session/web && dx serve --platform web
 
 # Build the shipping web bundle into target/dx/session-web/release/web/public,
 # with the guide pre-rendered into it.
@@ -858,7 +858,7 @@ web: web-tailwind
 # `--fullstack` because dx decides whether to build a server from the
 # CLIENT's features, and `dioxus/fullstack` is on the `server` feature
 # alone here (its reqwest would be a second major in the wasm binary —
-# see apps/web/Cargo.toml). Without it there is no server target and
+# see apps/session/web/Cargo.toml). Without it there is no server target and
 # `--ssg` silently does nothing.
 #
 # `--force-sequential` because the pre-render borrows
@@ -872,10 +872,10 @@ web: web-tailwind
 # served rather than re-rendered and a rebuild ships the old html.
 web-build: web-tailwind
     rm -rf target/dx/session-web/release/web/public
-    cd apps/web && dx build --platform web --release \
+    cd apps/session/web && dx build --platform web --release \
         --ssg --fullstack --force-sequential
 
-# Type-check apps/web against the actual deploy target.
+# Type-check apps/session/web against the actual deploy target.
 web-check:
     cargo check -p session-web --target wasm32-unknown-unknown
 
@@ -1112,7 +1112,7 @@ daw-template:
 # Re-render every scene's committed picture from the golden session.
 #
 # The pictures under features/dynamic-template/fixtures/golden/scenes/
-# are test fixtures (`apps/session-daw/tests/golden_scenes.rs`): a
+# are test fixtures (`apps/session/daw/tests/golden_scenes.rs`): a
 # change to what a scene shows is a diff in a PR. Run this after a
 # deliberate scene or template change and commit the result.
 daw-scenes:
@@ -1149,7 +1149,7 @@ daw-scenes:
 # Both halves, at three zooms, under
 # features/dynamic-template/fixtures/golden/folder-items/ — the fold
 # (`<slug>.fold`, compared byte for byte) and the picture (`<slug>.png`,
-# compared structurally). See `apps/session-daw/tests/folder_items.rs`.
+# compared structurally). See `apps/session/daw/tests/folder_items.rs`.
 # Run this after a deliberate change to the fold, the colours or the
 # fixture media, and commit the result.
 daw-folder-items:
@@ -1257,7 +1257,7 @@ daw-expression OUT="/tmp/fts-expression.png" SIZE="1600x900":
 # The Patch List view's render fixture: the fixture album resolved
 # against the fixture room, written where its test reads it. Run it when
 # a deliberate change to the view has moved a pixel, and commit the PNG.
-daw-patch-list OUT="apps/session-daw/fixtures/patch-list.png" SIZE="1280x1280":
+daw-patch-list OUT="apps/session/daw/fixtures/patch-list.png" SIZE="1280x1280":
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build --release -p session-daw --bin bench 2>&1 | grep -E '^error' -A6 || true
@@ -1267,7 +1267,7 @@ daw-patch-list OUT="apps/session-daw/fixtures/patch-list.png" SIZE="1280x1280":
 # The Patch List view's second render fixture: the same fixture album
 # with a session override on Cody's DI and a stale banner (#57). Run it
 # when a deliberate change has moved a pixel, and commit the PNG.
-daw-patch-list-overridden-stale OUT="apps/session-daw/fixtures/patch-list-overridden-stale.png" SIZE="1280x1280":
+daw-patch-list-overridden-stale OUT="apps/session/daw/fixtures/patch-list-overridden-stale.png" SIZE="1280x1280":
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build --release -p session-daw --bin bench 2>&1 | grep -E '^error' -A6 || true
@@ -1539,7 +1539,7 @@ daw-animate PROJECT="" SIZE="2560x1440":
 #
 #   just mixer-golden                    at the pictures' 2560x1440
 #   SIMULATE=0 just mixer-golden         silent, as the engine has it
-#   THEME=console just mixer-golden      apps/session-daw/themes/console/ (a folder of layers)
+#   THEME=console just mixer-golden      apps/session/daw/themes/console/ (a folder of layers)
 #   THEME=console:~/my-layers just …     a theme over it: each path over the ones before
 mixer-golden SIZE="2560x1440":
     #!/usr/bin/env bash
@@ -1550,8 +1550,8 @@ mixer-golden SIZE="2560x1440":
     theme=""
     IFS=: read -ra layers <<< "${THEME:-dark}"
     for layer in "${layers[@]}"; do
-        if [ -d "apps/session-daw/themes/$layer" ]; then path="$PWD/apps/session-daw/themes/$layer"
-        elif [ -f "apps/session-daw/themes/fts-$layer.frame" ]; then path="$PWD/apps/session-daw/themes/fts-$layer.frame"
+        if [ -d "apps/session/daw/themes/$layer" ]; then path="$PWD/apps/session-daw/themes/$layer"
+        elif [ -f "apps/session/daw/themes/fts-$layer.frame" ]; then path="$PWD/apps/session-daw/themes/fts-$layer.frame"
         else path="${layer/#\~/$HOME}"; fi
         theme="${theme:+$theme:}$path"
     done
@@ -1574,9 +1574,9 @@ theme-parity PROJECT="features/dynamic-template/fixtures/golden/template.rpp" SI
     set -euo pipefail
     mkdir -p "{{OUT}}"
     cargo build -q --release -p session-daw --bin bench --bin theme_diff --bin theme_export
-    ./target/release/theme_export apps/session-daw/themes/fts-dark.frame
+    ./target/release/theme_export apps/session/daw/themes/fts-dark.frame
     FTS_BENCH_MIXER="{{OUT}}/native.png" FTS_BENCH_SIZE="{{SIZE}}" ./target/release/bench "{{PROJECT}}" 2>&1 | grep -E 'wrote' || true
-    FTS_THEME=apps/session-daw/themes/fts-dark.frame FTS_BENCH_MIXER="{{OUT}}/themed.png" FTS_BENCH_SIZE="{{SIZE}}" ./target/release/bench "{{PROJECT}}" 2>&1 | grep -E 'wrote|theme' || true
+    FTS_THEME=apps/session/daw/themes/fts-dark.frame FTS_BENCH_MIXER="{{OUT}}/themed.png" FTS_BENCH_SIZE="{{SIZE}}" ./target/release/bench "{{PROJECT}}" 2>&1 | grep -E 'wrote|theme' || true
     ./target/release/theme_diff "{{OUT}}/native.png" "{{OUT}}/themed.png" "{{OUT}}/diff.png"
 
 # The studio window (Blitz + the painted arrangement) on a real session,
@@ -1851,7 +1851,7 @@ ci FROM="lockfile":
     echo "every CI step passed locally"
 
 # The Session DAW view in a browser (session-daw's web_host), built to
-# apps/session-daw-web/dist: cargo → wasm-bindgen → index.html, plus the
+# apps/session/daw-web/dist: cargo → wasm-bindgen → index.html, plus the
 # demo session's project and chart under dist/session/. Host toolchain
 # (rustup target add wasm32-unknown-unknown; cargo install
 # wasm-bindgen-cli --version 0.2.126). Serve with `just web-daw-serve`.
@@ -1859,7 +1859,7 @@ web-daw SESSION="../sessions/Always On Time" RPP="Always On Time.RPP" CHART="Alw
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build -p session-daw-web --target wasm32-unknown-unknown --profile {{PROFILE}}
-    out=apps/session-daw-web/dist
+    out=apps/session/daw-web/dist
     mkdir -p "$out/session"
     dir=$([ "{{PROFILE}}" = "dev" ] && echo debug || echo "{{PROFILE}}")
     wasm-bindgen --target web --no-typescript --out-dir "$out" \
@@ -1870,14 +1870,14 @@ web-daw SESSION="../sessions/Always On Time" RPP="Always On Time.RPP" CHART="Alw
             --enable-sign-ext --enable-mutable-globals --enable-reference-types \
             --enable-multivalue "$out/session-daw-web_bg.wasm" -o "$out/session-daw-web_bg.wasm"
     fi
-    cp apps/session-daw-web/www/index.html "$out/"
+    cp apps/session/daw-web/www/index.html "$out/"
     cp "{{SESSION}}/{{RPP}}" "$out/session/demo.RPP"
     cp "{{SESSION}}/{{CHART}}" "$out/session/demo.kf"
     ls -lh "$out" "$out/session"
 
 # Serve the built web DAW on http://localhost:8765.
 web-daw-serve:
-    cd apps/session-daw-web/dist && python3 -m http.server 8765
+    cd apps/session/daw-web/dist && python3 -m http.server 8765
 
 # Fetch the large binaries kept out of this repository (assets.txt: the
 # private studio-assets and rig-models repos) into .assets/<repo>, and link
@@ -1901,9 +1901,9 @@ assets:
     done < assets.txt
     echo "linked $n assets from ${#fetched[@]} repos"
 
-# Generate frame's plugin faces (frame/examples/plugins: every `.frame`, the
+# Generate frame's plugin faces (features/faces/generated: every `.frame`, the
 # catalogs and rig-faces/faces.json) from examples/plugin-faces. They are
 # not kept in git; session-daw and signal read them from here at runtime.
 # Deterministic: unchanged sources rewrite every file byte for byte.
 faces *ONLY:
-    cargo run -q --release -p plugin-faces -- frame/examples/plugins {{ if ONLY != "" { "--only " + ONLY } else { "" } }}
+    cargo run -q --release -p plugin-faces -- features/faces/generated {{ if ONLY != "" { "--only " + ONLY } else { "" } }}
