@@ -19,7 +19,7 @@ workspace = true
 nice-plug = { workspace = true, features = ["vst3"] }
 
 # The Blitz/nice-plug editor: the six families and their panels.
-delay = { workspace = true, features = ["native", "profiles", "ui"] }
+delay = { workspace = true, features = ["native", "profiles", "ui", "viz"] }
 audiocore-core = { workspace = true }
 
 # The DSP facade (re-exports delay-dsp). Never depend on delay-dsp directly.

@@ -20,7 +20,7 @@ workspace = true
 nice-plug = { workspace = true, features = ["vst3"] }
 
 # The DSP facade (re-exports reverb-dsp). Never depend on reverb-dsp directly.
-reverb = { workspace = true, features = ["native", "profiles", "ui"] }
+reverb = { workspace = true, features = ["native", "profiles", "ui", "viz"] }
 
 # The chain's lifecycle trait (`Processor`) + `AudioConfig` live here.
 audiocore-dsp.workspace = true
