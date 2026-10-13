@@ -24,22 +24,29 @@
 
 use std::sync::{Arc, Mutex};
 
+#[cfg(not(target_arch = "wasm32"))]
 use audio::io::AudioIoPrefs;
+#[cfg(not(target_arch = "wasm32"))]
 use audio::io::duplex::EngineStats;
 use daw::service::handle::DawHandle as _;
 use daw::service::{ProjectContext, ProjectInfo, TrackRef, Tracks as _};
 use daw::standalone::Standalone;
+#[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::metering::Meters;
 use daw::standalone::transport_engine::TransportShared;
 
-use crate::{DuplexEngine, HostedEngine, lock::LockExt as _, uuid_string};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::{DuplexEngine, HostedEngine};
+use crate::{lock::LockExt as _, uuid_string};
 
 /// A running device, whatever engine type opened it.
+#[cfg(not(target_arch = "wasm32"))]
 trait Running: Send {
     fn sample_rate(&self) -> u32;
     fn stats(&self) -> Option<Arc<EngineStats>>;
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<E: HostedEngine + Send> Running for E {
     fn sample_rate(&self) -> u32 {
         HostedEngine::sample_rate(self)
@@ -59,6 +66,7 @@ pub struct Engine {
     /// The device, once [`start_audio`](Self::start_audio) opened it, or
     /// `None` while the engine is someone else's (see [`on`](Self::on)) or
     /// not started.
+    #[cfg(not(target_arch = "wasm32"))]
     audio: Mutex<Option<Box<dyn Running>>>,
 }
 
@@ -89,10 +97,12 @@ impl Engine {
             daw: daw.clone(),
             project_guid: project_guid.to_string(),
             shared,
+            #[cfg(not(target_arch = "wasm32"))]
             audio: Mutex::new(None),
         })
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// Open the device: one duplex engine (input and output in one realtime
     /// callback) rendering the whole project. Live input and FX run while
     /// the transport is stopped, so rigs sound without it rolling.
@@ -121,6 +131,7 @@ impl Engine {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// Close the device (the project and its rigs stay).
     pub fn stop_audio(&self) {
         self.audio.lock_ok().take();
@@ -144,6 +155,7 @@ impl Engine {
         &self.shared
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// The device's sample rate, once [`start_audio`](Self::start_audio)
     /// opened it.
     #[must_use]
@@ -151,6 +163,7 @@ impl Engine {
         self.audio.lock_ok().as_ref().map(|a| a.sample_rate())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     /// Live realtime metrics, from engines that report them.
     #[must_use]
     pub fn stats(&self) -> Option<Arc<EngineStats>> {
