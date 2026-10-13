@@ -56,14 +56,14 @@ impl EngineMode {
         if cfg!(target_arch = "wasm32") {
             return Self::Supervised;
         }
-        match crate::prefs::get("signal-engine-mode").as_deref() {
+        match utils::prefs::get_raw("signal-engine-mode").as_deref() {
             Some("supervised") => Self::Supervised,
             _ => Self::Embedded,
         }
     }
 
     pub(crate) fn store(self) {
-        crate::prefs::set(
+        utils::prefs::set_raw(
             "signal-engine-mode",
             match self {
                 Self::Embedded => "embedded",

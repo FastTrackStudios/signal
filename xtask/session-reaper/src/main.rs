@@ -31,16 +31,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let virtual_display = args.iter().any(|a| a == "--virtual");
     let keep_open = args.iter().any(|a| a == "--keep-open");
 
-    // This crate sits at apps/session-reaper-xtask; the repo root is two
-    // levels up.
+    // This crate sits at xtask/session-reaper; the repo root (which holds
+    // the daw crates too) is two levels up.
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../apps")
+        .join("../..")
         .canonicalize()
-        .map_err(|e| format!("session repo root not found: {e}"))?;
-    let daw_root = repo_root
-        .join("../daw")
-        .canonicalize()
-        .map_err(|e| format!("sibling ../daw checkout not found: {e}"))?;
+        .map_err(|e| format!("repo root not found: {e}"))?;
+    let daw_root = repo_root.clone();
 
     println!("=== session REAPER integration tests ===");
     println!("  Workspace: {}", repo_root.display());

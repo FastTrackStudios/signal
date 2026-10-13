@@ -27,6 +27,7 @@ members = [
     "features/formats",
     "features/ui/daw-ui",
     "features/dynamic-template",
+    "features/app-shell",
     "features/audio",
     "features/dsp/builtin",
     "features/dsp/core",
@@ -248,6 +249,7 @@ nice-plug = { git = "https://github.com/FastTrackStudios/nice-plug.git", branch 
 nice-plug-dioxus = { git = "https://github.com/FastTrackStudios/nice-plug.git", branch = "fts-baseview-03" }
 nice-plug-xtask = { git = "https://github.com/FastTrackStudios/nice-plug.git", branch = "fts-baseview-03" }
 utils = { path = "crates/daw/utils" }
+app-shell = { path = "features/app-shell" }
 # The grid that follows the zoom. Pure arithmetic and no dependencies, so
 # the arrange view and the expression editor can agree on it without
 # either depending on the other.
@@ -483,7 +485,7 @@ include_dir = "0.7"
 # hardware-dante-fixes rev (parser guards + pagination + status
 # semantics, found by patchbay against the live network); bump the
 # ~/.flake input to match when it merges.
-inferno-net = { git = "https://codeberg.org/FastTrackStudios/inferno-control", rev = "d3b048941df55dae12c7b9f8c4b776681b8679d3" }
+inferno-net = { git = "https://github.com/FastTrackStudios/inferno-control", rev = "d3b048941df55dae12c7b9f8c4b776681b8679d3" }
 
 # ── Architect framework — its own repo since the 2026-08 three-way split
 # (FastTrackStudios/architect: the entity/RPC framework, the auth/crdt/
@@ -651,7 +653,7 @@ reaper-macros = { git = "https://codeberg.org/FastTrackStudios/reaper-rs.git", b
 swell-ui = { git = "https://codeberg.org/FastTrackStudios/reaper-lib.git", branch = "main" }
 
 # ── Plugin frameworks / hosting (daw) ─────────────────────────────────
-nih_plug = { git = "https://codeberg.org/FastTrackStudios/nih-plug.git", branch = "reaper-embed-ui" }
+nih_plug = { git = "https://github.com/FastTrackStudios/nih-plug.git", branch = "reaper-embed-ui" }
 clack-host = { git = "https://github.com/prokopyl/clack", rev = "f874e858ad576c601367b3038af5088a4e671744" }
 clack-extensions = { git = "https://github.com/prokopyl/clack", rev = "f874e858ad576c601367b3038af5088a4e671744", features = [
     "clack-host",
@@ -1333,17 +1335,17 @@ debug = false
 # base opt-level. The audio path is ours, so the hot crates get full opt
 # even in dev builds: a debug rig must never xrun. (Launch paths default
 # to --release regardless; this is the safety net for dev runs.)
-[profile.dev.package.audiocore-dsp]
+[profile.dev.package.dsp-core]
 opt-level = 3
 [profile.dev.package.daw-audio-graph]
 opt-level = 3
-[profile.dev.package.daw-audio-io]
+[profile.dev.package.audio]
 opt-level = 3
 [profile.dev.package.daw-standalone]
 opt-level = 3
 [profile.dev.package.neural-amp-modeler]
 opt-level = 3
-[profile.dev.package.pitch-dsp]
+[profile.dev.package.pitch]
 opt-level = 3
 
 # Preserve audio sources on newly split items until the upstream exporter is fixed.
@@ -1365,35 +1367,35 @@ dawfile-reaper = { path = "features/formats/dawfile-reaper" }
 fts-sample = { path = "features/audio/sample" }
 
 # from processor
-[profile.dev.package.fx-blocks]
+[profile.dev.package.builtin]
 opt-level = 3
 
 # from processor
-[profile.dev.package.eq-dsp]
+[profile.dev.package.eq]
 opt-level = 3
 
 # from processor
-[profile.dev.package.comp-dsp]
+[profile.dev.package.comp]
 opt-level = 3
 
 # from processor
-[profile.dev.package.reverb-dsp]
+[profile.dev.package.reverb]
 opt-level = 3
 
 # from processor
-[profile.dev.package.delay-dsp]
+[profile.dev.package.delay]
 opt-level = 3
 
 # from processor
-[profile.dev.package.trigger-dsp]
+[profile.dev.package.trigger]
 opt-level = 3
 
 # from signal
-[profile.dev.package.signal-sampler]
+[profile.dev.package.sampler]
 opt-level = 3
 
 # from signal
-[profile.dev.package.signal-guitar]
+[profile.dev.package.guitar]
 opt-level = 3
 
 # from signal

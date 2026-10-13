@@ -9,8 +9,6 @@
 
 use architect::iroh_link::iroh;
 
-use crate::prefs;
-
 /// Where the engine core lives. Native: `SIGNAL_ENGINE_URL` (or legacy
 /// `RIGD_URL`) at runtime, else the local default. Web: same-origin —
 /// the engine that served this page also serves /vox — falling back to
@@ -21,13 +19,13 @@ pub(crate) fn server_url() -> String {
         .or_else(|_| std::env::var("RIGD_URL"))
         .ok()
         // No env on iOS — the phone saves the engine URL from its connect UI.
-        .or_else(|| prefs::get("signal-engine-ws-url"))
+        .or_else(|| utils::prefs::get_raw("signal-engine-ws-url"))
         .unwrap_or_else(|| "ws://127.0.0.1:4040/vox".to_string())
 }
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn server_url() -> String {
-    if let Some(saved) = prefs::get("signal-engine-ws-url") {
+    if let Some(saved) = utils::prefs::get_raw("signal-engine-ws-url") {
         return saved;
     }
     let derived = web_sys::window().and_then(|w| {
@@ -76,13 +74,13 @@ pub(crate) fn engine_iroh_id() -> Option<iroh::EndpointId> {
     if let Ok(raw) = std::env::var("SIGNAL_ENGINE_IROH_ID") {
         return raw.trim().parse().ok();
     }
-    if let Some(saved) = prefs::get("signal-engine-iroh-id") {
+    if let Some(saved) = utils::prefs::get_raw("signal-engine-iroh-id") {
         return saved.parse().ok();
     }
     // iPhone with nothing configured: fall back to the studio pack host
     // — but never shadow an explicitly-saved ws URL.
     #[cfg(target_os = "ios")]
-    if prefs::get("signal-engine-ws-url").is_none() {
+    if utils::prefs::get_raw("signal-engine-ws-url").is_none() {
         return DEFAULT_ENGINE_IROH_ID.parse().ok();
     }
     None
@@ -93,8 +91,8 @@ pub(crate) fn engine_iroh_id() -> Option<iroh::EndpointId> {
 #[allow(dead_code)]
 pub(crate) fn store_engine_iroh_id(id: Option<&str>) {
     match id {
-        Some(id) => prefs::set("signal-engine-iroh-id", id.trim()),
-        None => prefs::remove("signal-engine-iroh-id"),
+        Some(id) => utils::prefs::set_raw("signal-engine-iroh-id", id.trim()),
+        None => utils::prefs::remove("signal-engine-iroh-id"),
     }
 }
 
@@ -141,13 +139,13 @@ fn device_secret_key() -> Option<iroh::SecretKey> {
 
 #[cfg(target_arch = "wasm32")]
 fn device_secret_key() -> Option<iroh::SecretKey> {
-    if let Some(hex) = prefs::get("iroh-key") {
+    if let Some(hex) = utils::prefs::get_raw("iroh-key") {
         if let Ok(key) = architect::iroh_link::secret_key_from_hex(&hex) {
             return Some(key);
         }
     }
     let key = iroh::SecretKey::generate();
-    prefs::set("iroh-key", &architect::iroh_link::secret_key_to_hex(&key));
+    utils::prefs::set_raw("iroh-key", &architect::iroh_link::secret_key_to_hex(&key));
     Some(key)
 }
 

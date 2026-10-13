@@ -1,6 +1,6 @@
-# The REAPER-facing recipes for the daw repo.
+# The REAPER-facing recipes (daw-reaper, the extensions).
 #
-# `mod reaper 'features/reaper/reaper.just'` in the root Justfile has
+# `mod reaper 'features/adapters/reaper/reaper.just'` in the root Justfile has
 # pointed here since the repo-root cleanup, but the file it names was
 # never tracked in git — so the move that claimed to bring it here moved
 # nothing, and `just` has refused to load AT ALL since. Not just these

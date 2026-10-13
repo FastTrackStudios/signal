@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${1:-features/render/tests/fixtures}"
-OUT="${2:-features/render/tests/fixtures/corpus-manifest.json}"
+ROOT="${1:-crates/frame/render/tests/fixtures}"
+OUT="${2:-crates/frame/render/tests/fixtures/corpus-manifest.json}"
 
 if [[ ! -d "$ROOT" ]]; then
   echo "missing fixture dir: $ROOT" >&2

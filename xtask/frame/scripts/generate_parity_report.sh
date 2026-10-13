@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage:
-#   xtask/scripts/generate_parity_report.sh <fts_export_json> \
+#   xtask/frame/scripts/generate_parity_report.sh <fts_export_json> \
 #     [--visual-json path] \
 #     [--perf-json path] \
 #     [--render-diag-json path] \

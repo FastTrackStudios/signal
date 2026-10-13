@@ -1,0 +1,17 @@
+[package]
+name = "app-shell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "What every FTS app shares around its UI: the in-memory log ring (with the crash log and the flight log), and the update check"
+
+[dependencies]
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+dirs = "6"
+
+[lints]
+workspace = true

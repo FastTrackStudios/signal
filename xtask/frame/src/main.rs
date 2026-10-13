@@ -25,32 +25,32 @@ fn run() -> Result<(), String> {
     match task.as_str() {
         "parity_test" | "partiy_test" => run_script(
             &workspace_root,
-            workspace_root.join("xtask/scripts/run_parity_render_and_diff.sh"),
+            workspace_root.join("xtask/frame/scripts/run_parity_render_and_diff.sh"),
             &passthrough,
         ),
         "parity_render" => run_script(
             &workspace_root,
-            workspace_root.join("xtask/scripts/render_parity_actuals.sh"),
+            workspace_root.join("xtask/frame/scripts/render_parity_actuals.sh"),
             &passthrough,
         ),
         "parity_diff" => run_script(
             &workspace_root,
-            workspace_root.join("xtask/scripts/run_parity_scenarios.sh"),
+            workspace_root.join("xtask/frame/scripts/run_parity_scenarios.sh"),
             &passthrough,
         ),
         "parity_svg" => run_script(
             &workspace_root,
-            workspace_root.join("xtask/scripts/run_svg_parity_scenarios.sh"),
+            workspace_root.join("xtask/frame/scripts/run_svg_parity_scenarios.sh"),
             &passthrough,
         ),
         "parity_svg_analyze" => run_script(
             &workspace_root,
-            workspace_root.join("xtask/scripts/analyze_svg_canonical_precision.sh"),
+            workspace_root.join("xtask/frame/scripts/analyze_svg_canonical_precision.sh"),
             &passthrough,
         ),
         "parity_svg_hash" => run_script(
             &workspace_root,
-            workspace_root.join("xtask/scripts/check_svg_hash_baselines.sh"),
+            workspace_root.join("xtask/frame/scripts/check_svg_hash_baselines.sh"),
             &passthrough,
         ),
         "svg_to_png" => cmd_svg_to_png(&passthrough),
@@ -65,8 +65,10 @@ fn run() -> Result<(), String> {
 
 fn workspace_root() -> Result<PathBuf, String> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    // xtask/frame → the repo root.
     manifest_dir
         .parent()
+        .and_then(Path::parent)
         .map(Path::to_path_buf)
         .ok_or_else(|| "failed resolving workspace root".to_string())
 }
@@ -211,7 +213,7 @@ fn svg_to_png(
 // ---------------------------------------------------------------------------
 
 fn cmd_parity_svg_png(workspace_root: &Path, args: &[String]) -> Result<(), String> {
-    let scenarios_dir = workspace_root.join("features/render/tests/parity/scenarios");
+    let scenarios_dir = workspace_root.join("crates/frame/render/tests/parity/scenarios");
     let core10_path = scenarios_dir.join("core10.txt");
 
     let mut scenario_filter: Option<String> = None;

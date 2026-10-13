@@ -1,4 +1,5 @@
-# dx web bundles (fts-site-web) + their static-site OCI images.
+# dx web bundles (signal-web, session-web, session-app-web) + their
+# static-site OCI images.
 # dx bundle → $out/www (+ brotli pre-compression).
 { ... }:
 {
@@ -120,13 +121,40 @@
       # task-webapp moved to the task repo with the August 2026 split,
       # along with task-server and the ui-lab bundle.
 
-      # fasttrackstudio.app website — `just site-build` is a plain
-      # `dx build --platform web --release` (assets/tailwind.css is
-      # committed; no tailwind step).
-      fts-site-web = mkDxWebBundle {
-        pname = "fts-site-web";
-        appDir = "apps/site";
-        dxName = "fts-site";
+      # signal.fasttrackstudio.app — the Signal landing page, rig demos
+      # and guide (`just signal-web-build`). No tailwind step:
+      # assets/site.css is committed and inlined by the app.
+      #
+      # (This replaced an `fts-site-web` bundle of `apps/site` for
+      # fasttrackstudio.app — a directory that left with the August 2026
+      # split, so that derivation referred to nothing.)
+      signal-web = mkDxWebBundle {
+        pname = "signal-web";
+        appDir = "apps/signal/web";
+        dxName = "signal-web";
+        # --wasm-split is NOT optional here, and not really about splitting.
+        #
+        # Without it, wasm-opt (binaryen 129) aborts with SIGABRT and no
+        # diagnostic on this bundle; dx reports the failure, carries on, and
+        # ships the UNOPTIMISED wasm — 2,029,954 bytes. With it, wasm-opt
+        # completes and the same bundle is 859,778. Measured both ways on a
+        # clean target dir. The route splitting itself earns almost nothing;
+        # do not drop the flag as "we don't need splitting" — that silently
+        # triples the bundle.
+        #
+        # `--ssg` pre-renders the guide (`signal_web::static_routes`) into
+        # the same `public` directory; `--force-sequential` is REQUIRED
+        # alongside it (the pre-render borrows the client build's
+        # `public/index.html` as its page shell — dioxus#3518).
+        dxArgs = "--ssg --force-sequential --wasm-split --features wasm-split";
+        env = {
+          # `dx build --platform web` still compiles a HOST binary (the
+          # SSG server), and signal-web depends on the rig UI crates,
+          # which reach cpal -> {alsa,jack,pipewire}-sys: the host half
+          # needs the devshell's native libraries even though the shipped
+          # artifact is wasm.
+          buildInputs = config.fts.buildInputs;
+        };
       };
 
       # session.fasttrackstudio.app — landing page + the live in-browser
@@ -212,11 +240,11 @@
       '';
     in
     {
-      packages = { inherit fts-site-web session-web session-app-web; }
+      packages = { inherit signal-web session-web session-app-web; }
       // lib.optionalAttrs pkgs.stdenv.isLinux {
-        fts-site-image = mkStaticSite {
-          name = "fts-site";
-          siteRoot = "${fts-site-web}/www";
+        signal-web-image = mkStaticSite {
+          name = "signal-web";
+          siteRoot = "${signal-web}/www";
         };
         session-web-image = mkStaticSite {
           name = "session-web";

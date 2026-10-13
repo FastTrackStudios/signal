@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "../../../../libs/ui/assets/fts-theme.css";
+@import "../../ui/.architect-ui/assets/fts-theme.css";
 
 /* comp-ui's OWN Tailwind build — the plugin editor embeds the compiled
  * output (assets/tailwind.css) via include_str! in control_view.rs.
@@ -8,10 +8,12 @@
  * rsx uses. Rebuild with `just tailwind-comp` after class changes.
  * Scan paths are relative to THIS file. */
 @source "./src/**/*.rs";
-/* architect-ui sources now live in the architect repo (git dep) — no
- * stable path to scan. Utilities used only inside architect-ui
- * components are NOT generated here. See the split follow-up. */
-@source "../../../../libs/ui/fts-audio-ui/src/**/*.rs";
+/* The plugin chrome, the audio widgets, and architect-ui (a git dep:
+ * `.architect-ui` is a symlink to the resolved checkout, refreshed by
+ * `just tailwind-*` and gitignored). */
+@source "../../ui/fts-audio-ui/src/**/*.rs";
+@source "../../ui/.architect-ui/src/**/*.rs";
+@source "../../ui/plugin-core/src/**/*.rs";
 
 @layer base {
     html {

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Usage:
-#   xtask/scripts/run_svg_parity_scenarios.sh \
-#     [--root features/render/tests/parity] \
+#   xtask/frame/scripts/run_svg_parity_scenarios.sh \
+#     [--root crates/frame/render/tests/parity] \
 #     [--all] \
 #     [--core10] \
 #     [--scenario <scenario-id>] \
@@ -16,7 +16,7 @@ set -euo pipefail
 # - Canonical pass uses frame-cli svg_canonical_diff and can be promoted by
 #   semantic structure equality when only float formatting differs.
 
-ROOT="features/render/tests/parity"
+ROOT="crates/frame/render/tests/parity"
 SCENARIO_FILTER=""
 RUN_ALL="false"
 REQUIRE_PASS="false"

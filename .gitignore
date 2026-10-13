@@ -25,10 +25,17 @@ result-*
 
 # Symlink to the resolved lumen-blocks checkout, created by `just tailwind`
 # so Tailwind scans the pinned revision instead of every cached one.
-apps/fasttrackstudio/.lumen-blocks
+apps/session/desktop/.lumen-blocks
+apps/signal/desktop/.lumen-blocks
+features/ui/.architect-ui
 
 # local reference checkouts (upstream scripts we port from)
 .reference/
+
+# Local credentials (the TONE3000 keys — features/rigs/core/docs/tone3000.md),
+# sourced by the default dev shell.
+# `.env` holds real values and is never committed.
+.env
 
 # Stray cargo target directories.
 #

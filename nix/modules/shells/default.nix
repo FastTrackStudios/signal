@@ -45,6 +45,10 @@
         pkgs.pipewire.jack
         # jack_iodelay / jack_lsp — measure real round-trip latency.
         pkgs.jack-example-tools
+        # Patchbay: the session manager and pactl/parec it drives, and
+        # what its sandboxed integration tests stand up.
+        pkgs.wireplumber
+        pkgs.pulseaudio
         # Xvfb + xvfb-run — virtual display for the REAPER
         # integration-test harness (`just reaper-integration-test`).
         pkgs.xorg.xorgserver

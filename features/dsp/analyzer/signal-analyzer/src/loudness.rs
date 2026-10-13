@@ -6,8 +6,9 @@
 //! is what decides whether a translated preset drops into a mix at the level
 //! the engineer expected.
 
-use crate::filters::{OCTAVE_CENTRES_HZ, k_weight, octave_bands};
+use crate::filters::{OCTAVE_CENTRES_HZ, octave_bands};
 use crate::null::rms;
+use dsp_core::audio::loudness::KWeightingFilter;
 
 /// Offset from the BS.1770 mean-square sum to LUFS.
 const LUFS_OFFSET: f64 = -0.691;
@@ -23,12 +24,18 @@ pub fn loudness_lufs(x: &[f32], sample_rate: f64) -> f64 {
     if x.is_empty() {
         return f64::NEG_INFINITY;
     }
-    let weighted = k_weight(x, sample_rate);
-    let mean_square = weighted
+    // K-weighting: dsp-core's BS.1770 filter, the one every loudness
+    // measurement in the stack uses.
+    let mut k = KWeightingFilter::new();
+    k.update(sample_rate);
+    let mean_square = x
         .iter()
-        .map(|&s| (s as f64) * (s as f64))
+        .map(|&s| {
+            let y = k.tick(f64::from(s));
+            y * y
+        })
         .sum::<f64>()
-        / weighted.len() as f64;
+        / x.len() as f64;
     if mean_square <= 0.0 {
         return f64::NEG_INFINITY;
     }
@@ -219,8 +226,9 @@ mod tests {
         // This is the case overall loudness alone would miss: same LUFS,
         // wrong spectral balance.
         let x = white_noise(96_000, 43);
-        let [shelf, _] = crate::filters::k_weighting(SR);
-        let tilted = shelf.apply(&x); // lifts the top only
+        // K-weighting's own shelf: lifts the top only.
+        let shelf = crate::filters::Biquad::high_shelf(1_681.97, 0.707, 4.0, SR);
+        let tilted = shelf.apply(&x);
         let c = compare_loudness(&x, &tilted, SR);
         assert!(
             c.worst_band_difference_db.unwrap() > 1.0,

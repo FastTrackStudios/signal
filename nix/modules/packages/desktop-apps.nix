@@ -1,16 +1,18 @@
-# The Dioxus desktop GUI, built as an ordinary crane package —
-# `nix run .#session-desktop`. Not the notarized/bundled
-# .app release artifact (that's still apps/session/desktop/ios/deploy-macos.sh
+# The Dioxus desktop apps, built as ordinary crane packages —
+# `nix run .#session-desktop`, `nix run .#signal-desktop`. Not the
+# notarized/bundled .app release artifacts (those are still
+# apps/{session,signal}/desktop/ios/deploy-macos.sh
 # via `dx build` for now); this is a plain native binary for local dev/rig
 # use (cargoArtifacts = null — the workspace
 # is too large/build.rs-heavy for crane's dummy-src deps split).
 #
 # `desktop`/`launch` are ordinary cargo features on non-wasm/non-ios targets
-# (see apps/session/desktop/Cargo.toml), so no
+# (see the apps' Cargo.toml), so no
 # `dx` involvement is needed to produce a runnable binary — dx is only for
 # the wasm/mobile/.app-bundle pipelines. `embed-web` is deliberately NOT
-# enabled here yet: it needs apps/session/desktop/web-dist staged into the
-# source before compiling (a separate `fts-web-dist` bundle, not built yet).
+# enabled on signal-desktop here yet: it needs apps/signal/desktop/web-dist
+# staged into the source before compiling (`just signal-web-stage` does it
+# locally; there is no nix bundle for it yet).
 { ... }:
 {
   perSystem = { pkgs, lib, config, ... }:
@@ -38,9 +40,17 @@
         meta.mainProgram = "session-desktop";
       });
 
-      # task-desktop moved to the task repo with the August 2026 split.
+      # The isolated live-rig app (one engine, rigs only).
+      signal-desktop = config.fts.craneLib.buildPackage (config.fts.commonArgs // guiArgs // {
+        pname = "signal-desktop";
+        version = "0.0.2-alpha";
+        cargoArtifacts = null;
+        cargoExtraArgs = "--package signal-desktop";
+        doCheck = false;
+        meta.mainProgram = "signal-desktop";
+      });
     in
     {
-      packages = { inherit session-desktop; };
+      packages = { inherit session-desktop signal-desktop; };
     };
 }

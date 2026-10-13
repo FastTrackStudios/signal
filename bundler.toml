@@ -52,3 +52,6 @@ name = "FTS Pitch"
 
 [unison-plugin]
 name = "FTS Unison"
+
+[mic-plugin]
+name = "FTS Mic"

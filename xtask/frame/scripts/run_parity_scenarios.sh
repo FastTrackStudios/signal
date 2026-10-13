@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Usage:
-#   xtask/scripts/run_parity_scenarios.sh \
-#     [--root features/render/tests/parity] \
+#   xtask/frame/scripts/run_parity_scenarios.sh \
+#     [--root crates/frame/render/tests/parity] \
 #     [--core10] \
 #     [--all] \
 #     [--scenario <scenario-id>] \
@@ -11,7 +11,7 @@ set -euo pipefail
 #     [--require-pass]
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="features/render/tests/parity"
+ROOT="crates/frame/render/tests/parity"
 SCENARIO_FILTER=""
 THRESHOLD="0.0"
 REQUIRE_PASS="false"

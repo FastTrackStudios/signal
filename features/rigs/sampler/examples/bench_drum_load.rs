@@ -110,58 +110,21 @@ fn main() {
         println!("    {l:5}/{t:<5}  {id}");
     }
 
-    // ── Drum mixer: structure + that close mics AND OH/Room buses get signal ──
-    if let Some(layout) = player.drum_mixer_layout("bench") {
-        let n_ch: usize = layout.engines.iter().map(|e| e.channels.len()).sum();
-        let n_sn: usize = layout.engines.iter().map(|e| e.sends.len()).sum();
-        println!(
-            "\n  mixer: {} engines, {} close channels, {} sends, {} buses",
-            layout.engines.len(),
-            n_ch,
-            n_sn,
-            layout.buses.len()
-        );
-        for b in &layout.buses {
-            println!("    bus[{}] {}", b.bus_idx, b.label);
-        }
-
-        // Play a spread of drum notes and render ~0.5 s offline.
-        // `note_on` dispatches on MIDI channel 0, so map the preset there
-        // first — otherwise every note is dropped (`midi_channels` miss) and
-        // the signal check reads silence.
-        player.set_midi_channel("bench", 0);
-        for note in 35u8..=59 {
-            player.note_on("bench", note, 110);
-        }
-        let mut block = vec![0.0f32; 512 * 2];
-        let mut master_peak = 0.0f32;
-        for _ in 0..((48_000 / 512) / 2) {
-            let _ = player.render_offline(&mut block);
-            for &s in &block {
-                master_peak = master_peak.max(s.abs());
-            }
-        }
-        if let Some(meters) = player.drum_mixer_meters("bench") {
-            let mut ch_hot = 0;
-            for e in &layout.engines {
-                for c in &e.channels {
-                    if meters.channel_peak(c.channel_idx) > 1e-4 {
-                        ch_hot += 1;
-                    }
-                }
-            }
-            println!("\n  signal check (after playing notes 35..59):");
-            println!("    master peak       : {master_peak:.4}");
-            println!("    close channels hot: {ch_hot}/{n_ch}");
-            for b in &layout.buses {
-                println!(
-                    "    bus {:<12} peak: {:.4}",
-                    b.label,
-                    meters.bus_peak(b.bus_idx)
-                );
-            }
-        }
-    } else {
-        println!("\n  mixer: (preset is not send-routed / no mixer)");
+    // ── Signal check: play a spread of drum notes, render ~0.5 s offline ──
+    // `note_on` dispatches on MIDI channel 0, so map the preset there first —
+    // otherwise every note is dropped and the check reads silence.
+    player.set_midi_channel("bench", 0);
+    for note in 35u8..=59 {
+        player.note_on("bench", note, 110);
     }
+    let mut block = vec![0.0f32; 512 * 2];
+    let mut master_peak = 0.0f32;
+    for _ in 0..((48_000 / 512) / 2) {
+        let _ = player.render_offline(&mut block);
+        for &s in &block {
+            master_peak = master_peak.max(s.abs());
+        }
+    }
+    println!("\n  signal check (after playing notes 35..59):");
+    println!("    master peak       : {master_peak:.4}");
 }

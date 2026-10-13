@@ -133,33 +133,6 @@ pub fn octave_bands(x: &[f32], sample_rate: f64) -> Vec<Vec<f32>> {
         .collect()
 }
 
-/// ITU-R BS.1770 K-weighting: a high-shelf "head" filter followed by an RLB
-/// highpass.
-///
-/// The standard tabulates coefficients for 48 kHz; these are the analog
-/// prototype parameters the table is derived from, re-designed at the actual
-/// sample rate so the weighting stays correct off 48 kHz.
-#[must_use]
-pub fn k_weighting(sample_rate: f64) -> [Biquad; 2] {
-    const SHELF_F0: f64 = 1_681.974_450_955_533;
-    const SHELF_Q: f64 = 0.707_175_236_955_419_6;
-    const SHELF_GAIN_DB: f64 = 3.999_843_853_973_347;
-    const HP_F0: f64 = 38.135_470_876_024_44;
-    const HP_Q: f64 = 0.500_327_037_323_877_3;
-
-    [
-        Biquad::high_shelf(SHELF_F0, SHELF_Q, SHELF_GAIN_DB, sample_rate),
-        Biquad::highpass(HP_F0, HP_Q, sample_rate),
-    ]
-}
-
-/// Apply K-weighting to a buffer.
-#[must_use]
-pub fn k_weight(x: &[f32], sample_rate: f64) -> Vec<f32> {
-    let [shelf, hp] = k_weighting(sample_rate);
-    hp.apply(&shelf.apply(x))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,40 +182,6 @@ mod tests {
             (db(magnitude(&bq, 20_000.0, SR)) - 6.0).abs() < 0.5,
             "+6 above"
         );
-    }
-
-    #[test]
-    fn k_weighting_matches_the_standards_shape() {
-        let [shelf, hp] = k_weighting(SR);
-        let resp = |f: f64| db(magnitude(&shelf, f, SR) * magnitude(&hp, f, SR));
-
-        // BS.1770: ~0 dB through the midrange, ~+4 dB at the top, steep
-        // low-frequency rolloff.
-        assert!(
-            resp(1000.0).abs() < 0.5,
-            "flat at 1 kHz, got {}",
-            resp(1000.0)
-        );
-        assert!(
-            resp(10_000.0) > 3.0,
-            "lifted at 10 kHz, got {}",
-            resp(10_000.0)
-        );
-        assert!(
-            resp(20.0) < -10.0,
-            "rolled off at 20 Hz, got {}",
-            resp(20.0)
-        );
-    }
-
-    #[test]
-    fn k_weighting_is_redesigned_per_sample_rate() {
-        // The same physical frequency must weight the same at 44.1 and 96 kHz.
-        for sr in [44_100.0, 96_000.0] {
-            let [shelf, hp] = k_weighting(sr);
-            let at_1k = db(magnitude(&shelf, 1000.0, sr) * magnitude(&hp, 1000.0, sr));
-            assert!(at_1k.abs() < 0.5, "1 kHz at {sr} Hz: {at_1k}");
-        }
     }
 
     #[test]

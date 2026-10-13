@@ -1,0 +1,95 @@
+# REAPER integration suites — INTENTIONALLY TRIGGERED ONLY, never on
+# push/PR. This is the one workflow that MUST run self-hosted: REAPER's
+# license does not permit redistribution, so the suites only run where
+# REAPER is licensed (THEBATTLESHIP).
+#
+# Runs on the same self-hosted runner as checks.yml (THEBATTLESHIP,
+# where REAPER is licensed).
+#
+# Triggers:
+#   workflow_dispatch — run a full pass whenever you want.
+#   push tags v* / rc-* — release candidates and releases always get
+#     the full REAPER pass before anything ships.
+#
+# The job resolves the same REAPER 7.75 store path the dev machine's
+# rig uses (pinned via gcroot; nixpkgs fallback) and runs both harnesses
+# fully isolated — daw-reaper's (`just reaper daw-test`) and Session's
+# (`just reaper-test`). Each builds its own rig under target/; nothing
+# touches ~/.config/signal or port 4040 (different user, Dummy audio,
+# unix sockets only).
+
+name: reaper-integration
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+      - "rc-*"
+
+concurrency:
+  group: reaper-${{ github.ref }}
+  cancel-in-progress: false
+
+# No FTS_CI here. The paths are resolved in the first step instead,
+# because a hard-coded /var/lib/github-runner is not writable by the
+# runner service — every run of this workflow since it was written died
+# in "Prepare persistent caches" with "Read-only file system", before a
+# single test. checks.yml already had the answer: ask systemd where its
+# cache went, and fall back to the home directory.
+
+jobs:
+  reaper-integration:
+    runs-on: [self-hosted, session]
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare persistent caches
+        run: |
+          # `CacheDirectory=` in the runner unit, or the home directory
+          # when this runs anywhere else. Either way somewhere this
+          # process can actually write.
+          fts_ci="${CI_CACHE_DIR:-${CACHE_DIRECTORY:-$HOME/.cache}}/fts-ci"
+          mkdir -p "$fts_ci/target-reaper" "$fts_ci/cargo-home"
+          {
+            echo "FTS_CI=$fts_ci"
+            echo "CARGO_TARGET_DIR=$fts_ci/target-reaper"
+            echo "CARGO_HOME=$fts_ci/cargo-home"
+          } >> "$GITHUB_ENV"
+          echo "caches: $fts_ci"
+          nix develop .#reaper-test --profile "$fts_ci/devshell-reaper" -c true
+
+      # Resolve REAPER. Preferred: the exact 7.75 store path the dev
+      # machine's rig uses (built from FastTrackStudios/reaper-flake) —
+      # pinned with an indirect gcroot so GC can't take it. Fallback:
+      # nixpkgs reaper from the repo flake's pin (7.67; version drift
+      # possible — the daw-reaper skip list is tuned against 7.75).
+      - name: Resolve REAPER
+        run: |
+          mkdir -p "$FTS_CI"
+          PIN=/nix/store/ky0r08mnqbhrs1r6prvkfv4lv41yyhz8-reaper-7.75
+          if [ -x "$PIN/bin/reaper" ]; then
+            nix-store --add-root "$FTS_CI/reaper" --indirect -r "$PIN" > /dev/null
+          else
+            echo "pinned REAPER 7.75 missing — building nixpkgs reaper (flake pin)"
+            NIXPKGS_ALLOW_UNFREE=1 nix build --impure --inputs-from . \
+              nixpkgs#reaper -o "$FTS_CI/reaper"
+          fi
+          echo "REAPER: $(readlink -f "$FTS_CI/reaper")"
+
+      # daw domain suite (95 tests): builds its own isolated rig under
+      # <checkout>/target/fts-reaper-test — fresh every run, never the
+      # dev rig, never ~/.config/signal.
+      - name: daw suite (daw-reaper)
+        run: |
+          FTS_REAPER_EXECUTABLE="$FTS_CI/reaper/bin/reaper" \
+            nix develop .#reaper-test -c cargo run -p daw-reaper-xtask
+
+      # Session's `#[reaper_test]` suites (xtask/session-reaper): the same
+      # isolated-rig runner (studio::test::runner), daw-bridge as the host.
+      - name: session suite (session-reaper)
+        if: ${{ !cancelled() }}
+        run: |
+          FTS_REAPER_EXECUTABLE="$FTS_CI/reaper/bin/reaper" \
+            nix develop .#reaper-test -c cargo run -p session-reaper-xtask

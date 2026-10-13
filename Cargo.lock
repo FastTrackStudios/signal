@@ -580,6 +580,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "app-shell"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "app_units"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9446,7 +9455,7 @@ dependencies = [
 [[package]]
 name = "inferno-net"
 version = "0.1.0"
-source = "git+https://codeberg.org/FastTrackStudios/inferno-control?rev=d3b048941df55dae12c7b9f8c4b776681b8679d3#d3b048941df55dae12c7b9f8c4b776681b8679d3"
+source = "git+https://github.com/FastTrackStudios/inferno-control?rev=d3b048941df55dae12c7b9f8c4b776681b8679d3#d3b048941df55dae12c7b9f8c4b776681b8679d3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -16382,6 +16391,7 @@ dependencies = [
  "clap",
  "cpal",
  "daw",
+ "dsp-core",
  "eyre",
  "facet",
  "facet-json",
@@ -17235,6 +17245,7 @@ dependencies = [
 name = "session-desktop"
 version = "0.0.2-alpha"
 dependencies = [
+ "app-shell",
  "architect",
  "architect-telemetry",
  "axum",
@@ -17524,6 +17535,7 @@ dependencies = [
 name = "signal-desktop"
 version = "0.0.2-alpha"
 dependencies = [
+ "app-shell",
  "architect",
  "architect-telemetry",
  "axum",

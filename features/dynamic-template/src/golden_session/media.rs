@@ -165,10 +165,25 @@ pub fn write_all(
         } else {
             wav(&samples(&track.path), 1)
         };
-        std::fs::write(&path, bytes)?;
+        replace(&path, &bytes)?;
         written.push(file);
     }
     Ok(written)
+}
+
+/// Put `bytes` at `path` without ever truncating what is there: tests run
+/// in parallel processes, and one may have the file mapped while another
+/// regenerates it (a truncated mapping is a SIGBUS). The same bytes are
+/// left alone; new ones are written beside it and renamed over it, so a
+/// reader keeps the file it opened.
+fn replace(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    if std::fs::read(path).is_ok_and(|on_disk| on_disk == bytes) {
+        return Ok(());
+    }
+    let mut staged = path.as_os_str().to_owned();
+    staged.push(format!(".{}.tmp", std::process::id()));
+    std::fs::write(&staged, bytes)?;
+    std::fs::rename(&staged, path)
 }
 
 #[cfg(test)]

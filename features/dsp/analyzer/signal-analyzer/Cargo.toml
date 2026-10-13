@@ -6,6 +6,8 @@ license.workspace = true
 description = "Measure FTS FX against reference plugins — signal generation, metrics, and A/B comparison"
 
 [dependencies]
+# K-weighting (BS.1770) for the loudness comparison.
+dsp-core = { workspace = true, features = ["audio"] }
 realfft.workspace = true
 serde.workspace = true
 
@@ -19,7 +21,6 @@ daw = { workspace = true, features = ["standalone", "vst3-host"] }
 signal-plugin-host = { workspace = true, features = ["clap-host", "vst3-host"] }
 builtin = { workspace = true }
 reverb = { workspace = true }
-dsp-core = { workspace = true, features = ["audio"] }
 signal-import.workspace = true
 # `examples/eq_bundle_check` configures the engine directly and compares it
 # with the installed bundle, which is how a plugin-side fault is told from a

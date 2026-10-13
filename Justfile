@@ -30,8 +30,8 @@ default:
 # whenever UI-crate class usage changes. input.css @source globs scan the
 # signal/session UI crates + libs/ui + libs/dock.
 
-# Point apps/session/desktop/.lumen-blocks at the lumen-blocks checkout
-# cargo actually resolved.
+# Point apps/{session,signal}/desktop/.lumen-blocks at the lumen-blocks
+# checkout cargo actually resolved.
 #
 # input.css used to reach into $CARGO_HOME with a hardcoded /home/cody path
 # and a `lumen-blocks-*/*/` wildcard. That wildcard matched EVERY checkout
@@ -45,6 +45,11 @@ _lumen-link:
     dir=$(cargo metadata --locked --format-version 1 2>/dev/null \
         | python3 -c 'import json,sys,os; print(next(os.path.dirname(p["manifest_path"]) for p in json.load(sys.stdin)["packages"] if p["name"]=="lumen-blocks"))')
     ln -sfn "$dir" apps/session/desktop/.lumen-blocks
+    ln -sfn "$dir" apps/signal/desktop/.lumen-blocks
+    # architect-ui, for the FX editors' sheets (a git dep has no stable path).
+    ui=$(cargo metadata --locked --format-version 1 2>/dev/null \
+        | python3 -c 'import json,sys,os; print(next(os.path.dirname(p["manifest_path"]) for p in json.load(sys.stdin)["packages"] if p["name"]=="architect-ui"))')
+    ln -sfn "$ui" features/ui/.architect-ui
 
 # Build Tailwind CSS (v4)
 tailwind: _lumen-link
@@ -78,10 +83,11 @@ tailwind-check: tailwind
 # NOTE: needs `libpipewire` on PKG_CONFIG_PATH for `--features pipewire`.
 
 # The signal engine — the headless rig core (serves the vox router on
-# ws://:4040/vox): the session-desktop binary in --engine mode. `rigd`
-# kept as an alias for muscle memory.
+# ws://:4040/vox): the signal-desktop binary in --engine mode. `rigd`
+# kept as an alias for muscle memory. (`session-desktop --engine` is a
+# different thing: the setlist + daw facade server.)
 signal-engine:
-    cargo run --release -p session-desktop -- --engine
+    cargo run --release -p signal-desktop -- --engine
 
 alias rigd := signal-engine
 
@@ -101,8 +107,150 @@ web-stage: tailwind
     rm -rf apps/session/desktop/web-dist
     cp -r target/dx/session-desktop/release/web/public apps/session/desktop/web-dist
 
+# ── Signal (apps/signal/desktop) ─────────────────────────────────────────
+# The isolated live-rig app: the same one engine as Session, running only
+# the rigs (see docs/design/one-engine.md). Its Tailwind sheet is its own
+# (apps/signal/desktop/assets/tailwind-signal.css, include_str!'d by
+# rig_view.rs), built from apps/signal/desktop/input.css.
+
+# Build the Signal app's Tailwind sheet
+signal-tailwind: _lumen-link
+    cd apps/signal/desktop && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
+
+# Release rather than dev because the rig plays audio in-process, and a
+# debug build xruns. dx rebuilds and relaunches on a source change; that is
+# a slow loop at this opt level, so reach for `just signal-run` when you
+# only want to launch the thing.
+#
+# Run the Signal desktop app (release) through dx, with its file watcher
+signal-desktop: signal-tailwind
+    cd apps/signal/desktop && PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
+        dx serve --release --platform desktop
+
+# ONE build line for the app, shared by every recipe that runs it. The
+# profile is `release-fast` (release optimisation, incremental — see the
+# root Cargo.toml) and the features are the app bundle's. Building with a
+# different feature set, or `--release` here and `release-fast` there, makes
+# cargo recompile every shared crate for the other combination: that was the
+# difference between a 2-minute rebuild and a 15-minute one.
+signal_features := "signal-keys-rig"
+signal_build := "cargo build --profile release-fast -p signal-desktop --features " + signal_features
+signal_bin := "./target/release-fast/signal-desktop"
+
+# Build the Signal app (what `Signal.app` and the menu bar run)
+signal-app:
+    {{signal_build}}
+
+# Launch the release Signal app directly — no watcher, the fast path
+signal-run: signal-tailwind
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{signal_build}}
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
+    RUST_LOG="${RUST_LOG:-info,vox_core=warn,schema_deser=off}" \
+        {{signal_bin}}
+
+# The Signal app as a macOS bundle — target/Signal.app, installed to
+# ~/Applications (Finder, Dock, Spotlight; log in ~/Library/Logs/Signal).
+#   just signal-mac-app                maximized, as the laptop opens it
+#   just signal-mac-app macbook        a MacBook Pro 14"'s window (1512x945)
+#   just signal-mac-app 1280x800       any size
+signal-mac-app size="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{signal_build}}
+    size="{{size}}"
+    [ "$size" = macbook ] && size=1512x945
+    SIGNAL_WINDOW_SIZE="$size" scripts/signal/mac-app.sh --install
+
+# Publish the Mac app + this Mac's whole rig config as a GitHub release the
+# laptop installs without building (see scripts/signal/mac-release.sh — it
+# names the repo the release goes to; whatever is in it is public if that
+# repo is).
+#   just signal-mac-release signal-mac-2026.10.06
+signal-mac-release tag:
+    scripts/signal/mac-release.sh {{tag}}
+
+# Stage the Signal web bundle (the browser remote) for embedding: tailwind →
+# dx web build → apps/signal/desktop/web-dist/, which `cargo build -p
+# signal-desktop --features embed-web` compiles into the binary
+# (include_dir), plus the keys AudioWorklet. web-dist/ is gitignored.
+signal-web-stage: signal-tailwind
+    cd apps/signal/desktop && dx build --platform web --release --no-default-features --features signal
+    rm -rf apps/signal/desktop/web-dist
+    cp -r target/dx/signal-desktop/release/web/public apps/signal/desktop/web-dist
+    just keys-worklet-wasm
+
+# ── The guitar rig ───────────────────────────────────────────────────────
+#
+#   just guitar                 the real rig: your interface, your DSP
+#   just guitar --design        no device, no MIDI, no DSP — several at once
+#   just guitar --silent        plays everything, heard by nobody
+#   just guitar --ephemeral     touches nothing on disk
+#
+# Release, not debug: the debug build renders the UI at a rate you can watch
+# arrive. Run it from the dev shell — the window is Blitz/Vello, and wgpu
+# needs `libvulkan.so` on the library path; outside it, wgpu finds only the
+# GL backend and panics before drawing a frame.
+
+# The guitar rig — the Signal app, release-fast build
+guitar *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{signal_build}}
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
+    RUST_LOG="${RUST_LOG:-info,vox_core=warn,schema_deser=off}" \
+        {{signal_bin}} --guitar {{ARGS}}
+
+# The rig with no audio at all: the profile loads, the meters move, and
+# nothing is opened. Several of these run side by side — an interface is
+# exclusive. Implies ephemeral, so a design session cannot move your
+# position or edit your profile.
+
+# The rig with no device, no MIDI and no DSP — run several at once
+guitar-design *ARGS:
+    @just guitar --design {{ARGS}}
+
+alias gd := guitar-design
+
+# Every visualiser in the rig, in one window, on the design rig's fake
+# guitar. Stills of one effect at a time, rendered offline with no window:
+#   cargo run -p delay      --features viz --example family_sheet -- out/
+#   cargo run -p reverb     --features viz --example family_sheet -- out/
+#   cargo run -p modulation --features viz --example engine_sheet -- out/
+viz-gallery:
+    cargo run --release -p guitar --features ui --example viz_gallery
+
+# A picture of the rig as it is ACTUALLY running, shaders and all.
+#
+#   just guitar-grab                    rig-live.png
+#   just guitar-grab /tmp/eq.png 2560   refuse anything but a 2560px-wide window
+#
+# Unlike `guitar-shot` this needs a rig on screen: the headless renderer
+# hands out no GPU device, so it can only ever draw the vector fallback.
+# KWin raises the rig and captures that window alone.
+guitar-grab OUT="rig-live.png" EXPECT_W="":
+    ./scripts/signal/rig-grab.sh {{OUT}} {{EXPECT_W}}
+
+# Render the rig UI to a PNG — no window, no compositor, no device. Design
+# mode is forced, so this can be taken while the rig is playing; it draws
+# the VECTOR fallback for any painted panel.
+#   just guitar-shot /tmp/rig.png 2560 1440
+guitar-shot OUT="rig.png" W="1600" H="1000":
+    cargo run --release -p guitar --features ui --example rig_shot -- {{OUT}} {{W}} {{H}}
+
+# What the rig costs to run, measured on the real device (silent + ephemeral).
+guitar-bench SECONDS="10":
+    cargo run --release -p guitar --features sampler/pipewire \
+        --example rig_bench -- {{SECONDS}}
+
+# How long a patch switch takes, and where the time goes.
+guitar-switch-bench SWITCHES="12":
+    cargo run --release -p guitar --features sampler/pipewire \
+        --example switch_bench -- {{SWITCHES}}
+
 # Stage the browser keys rig's AudioWorklet bundle (W4 of
-# crates/signal/docs/browser-keys-rig.md) into the web bundle:
+# features/rigs/core/docs/browser-keys-rig.md) into the web bundle:
 # a RELEASE wasm build of web-audio-worklet --features keys (KeysWorklet =
 # WebRenderer + headless KeysRig), wasm-bindgen'd `--target web`, plus
 # the keys-specific processor + worklet polyfill (AudioWorkletGlobalScope
@@ -216,42 +364,43 @@ guitar-web-harness dir='target/guitar-web' port='8765':
     python3 {{dir}}/serve.py {{port}}
 
 # ONE engine binary serving the whole browser keys rig: stage the web
-# bundle + keys worklet (web-stage), then embed it into the release
+# bundle + keys worklet (signal-web-stage), then embed it into the release
 # binary. Order matters — embed-web include_dir!s web-dist/ at compile
 # time, so staging runs first. Then:
-#   target/release/session-desktop --engine     (binds 0.0.0.0:4040)
+#   target/release/signal-desktop --engine     (binds 0.0.0.0:4040)
 # and open http://<host>:4040/rigs/keys/worship (tailnet-reachable).
-keys-web: web-stage
-    cargo build --release -p session-desktop --features embed-web
+keys-web: signal-web-stage
+    cargo build --release -p signal-desktop --features embed-web
 
 # Playwright end-to-end suite for the browser keys rig (W5): spawns its
 # own engine on a scratch port (SIGNAL_ENGINE_ADDR) and proves the rig
-# makes SOUND in real chromium. Expects target/release/session-desktop
+# makes SOUND in real chromium. Expects target/release/signal-desktop
 # to exist — build it with `just keys-web` first. Needs the real pack
 # library (or FTS_PACK_LIBRARY pointing at one with the Worship proxies).
 keys-web-e2e:
-    cd apps/session/desktop/e2e && npm install --no-fund --no-audit && npx playwright test
+    cd apps/signal/desktop/e2e && npm install --no-fund --no-audit && npx playwright test
 
-# Build the RELEASE binary (web bundle EMBEDDED) and deploy the ONE
-# artifact to ~/.local/lib/fts/session-desktop behind the signal-engine
+# Build the RELEASE Signal binary (web bundle EMBEDDED) and deploy the ONE
+# artifact to ~/.local/lib/fts/signal-desktop behind the signal-engine
 # systemd user unit. The unit is installed but NOT enabled: the desktop
 # app (or `systemctl --user start signal-engine`) is the on/off switch;
 # while running, systemd restarts crashes in ~1s; an explicit stop is
 # final. If the engine is running during deploy it restarts onto the new
 # build, otherwise it stays stopped.
 # Logs: `journalctl --user -u signal-engine`.
-rig-install: web-stage
+rig-install: signal-web-stage
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p session-desktop --features embed-web
+    cargo build --release -p signal-desktop --features embed-web
     install -d ~/.local/lib/fts
-    install -m 755 target/release/session-desktop ~/.local/lib/fts/session-desktop.new
-    mv -T ~/.local/lib/fts/session-desktop.new ~/.local/lib/fts/session-desktop
-    # The pre-consolidation artifacts (signal-engine binary + signal-web
-    # bundle) are superseded; leave any existing ones in place until the
-    # new unit is confirmed, then clean by hand if desired.
+    install -m 755 target/release/signal-desktop ~/.local/lib/fts/signal-desktop.new
+    mv -T ~/.local/lib/fts/signal-desktop.new ~/.local/lib/fts/signal-desktop
+    # No launcher prefix: audio is daw-audio-io's native PipeWire duplex and
+    # MIDI midicore's native PipeWire backend, so the engine needs no
+    # `pw-jack` shim.
     install -d ~/.config/systemd/user
-    install -m 644 apps/session/desktop/systemd/signal-engine.service ~/.config/systemd/user/
+    sed "s|@LAUNCH@||" apps/signal/desktop/systemd/signal-engine.service \
+        > ~/.config/systemd/user/signal-engine.service
     systemctl --user daemon-reload
     systemctl --user try-restart signal-engine
     if systemctl --user is-active --quiet signal-engine; then
@@ -261,32 +410,28 @@ rig-install: web-stage
         echo "deployed (engine stopped — start it from the app or: systemctl --user start signal-engine)"
     fi
 
-# Full install on this machine: everything rig-install does (release
-# binary + embedded web UI + systemd unit) PLUS the `fts` CLI, PATH
-# symlinks in ~/.local/bin, and desktop integration (launcher entry +
-# icon) — FastTrackStudio shows up in the app menu like any other app.
+# Full Signal install on this machine: everything rig-install does (release
+# binary + embedded web UI + systemd unit) PLUS the PATH symlink in
+# ~/.local/bin and desktop integration (launcher entry + icon) — Signal
+# shows up in the app menu like any other app.
 install: rig-install
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p fts-cli
-    install -m 755 target/release/fts ~/.local/lib/fts/fts.new
-    mv -T ~/.local/lib/fts/fts.new ~/.local/lib/fts/fts
     install -d ~/.local/bin
-    ln -sf ~/.local/lib/fts/session-desktop ~/.local/bin/session-desktop
-    ln -sf ~/.local/lib/fts/fts ~/.local/bin/fts
+    ln -sf ~/.local/lib/fts/signal-desktop ~/.local/bin/signal-desktop
     install -d ~/.local/share/icons/hicolor/scalable/apps
-    install -m 644 apps/session/desktop/assets/icon.svg \
-        ~/.local/share/icons/hicolor/scalable/apps/session-desktop.svg
+    install -m 644 apps/signal/desktop/assets/icon.svg \
+        ~/.local/share/icons/hicolor/scalable/apps/signal-desktop.svg
     install -d ~/.local/share/applications
-    sed "s|@BIN@|$HOME/.local/lib/fts/session-desktop|" \
-        apps/session/desktop/assets/session-desktop.desktop \
-        > ~/.local/share/applications/session-desktop.desktop
+    sed -e "s|@LAUNCH@||" -e "s|@BIN@|$HOME/.local/lib/fts/signal-desktop|" \
+        apps/signal/desktop/assets/signal-desktop.desktop \
+        > ~/.local/share/applications/signal-desktop.desktop
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
-    echo "installed: session-desktop + fts in ~/.local/bin, launcher entry ready"
+    echo "installed: signal-desktop in ~/.local/bin, launcher entry ready"
 
 # Remove everything `just install` put on this machine: stop + remove
-# the systemd unit, binaries, symlinks, launcher entry, and icon.
+# the systemd unit, binary, symlink, launcher entry, and icon.
 # User data is untouched (~/.config/fts, ~/.config/signal — the rig
 # config may be a symlink into this repo; never deleted).
 uninstall:
@@ -296,10 +441,12 @@ uninstall:
     systemctl --user disable signal-engine 2>/dev/null || true
     rm -f ~/.config/systemd/user/signal-engine.service
     systemctl --user daemon-reload
-    rm -f ~/.local/bin/session-desktop ~/.local/bin/fts
-    rm -rf ~/.local/lib/fts
-    rm -f ~/.local/share/applications/session-desktop.desktop
-    rm -f ~/.local/share/icons/hicolor/scalable/apps/session-desktop.svg
+    # ~/.local/lib/fts is shared with the other FTS products (patchbay,
+    # session). Remove only what this recipe installed.
+    rm -f ~/.local/bin/signal-desktop
+    rm -f ~/.local/lib/fts/signal-desktop
+    rm -f ~/.local/share/applications/signal-desktop.desktop
+    rm -f ~/.local/share/icons/hicolor/scalable/apps/signal-desktop.svg
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
     echo "uninstalled (user data in ~/.config/fts and ~/.config/signal kept)"
@@ -315,105 +462,45 @@ macos-pkg:
 macos-install: macos-pkg
     installer -pkg "target/Session-$(cargo pkgid -p session-desktop | sed 's/.*[#@]//')-macos.pkg" -target CurrentUserHomeDirectory
 
-# ── Release packaging ────────────────────────────────────────────────────
-# Assemble the distributable release artifacts into dist/ (what a
-# codeberg release carries, and what fts-installer downloads):
-#   session-desktop-v<ver>-x86_64-linux.tar.gz   app + fts CLI + systemd
-#       unit + desktop/icon templates + install.sh/uninstall.sh + VERSION
-#   fts-installer-x86_64-linux                    standalone installer
-#   SHA256SUMS                                    covers both
-# Binary copies are patchelf'd to the standard /lib64 loader so they run
-# outside the nix shell (target machines still need the shared libs —
-# see `ldd` on the packaged binary).
-release-package: web-stage
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cargo build --release -p session-desktop --features embed-web
-    cargo build --release -p fts-cli
-    cargo build --release -p fts-installer
-    cargo build --release -p fts-extensions
-    version="$(cargo pkgid -p session-desktop | sed 's/.*[#@]//')"
-    plat=x86_64-linux
-    if command -v patchelf >/dev/null; then PATCHELF=(patchelf); else PATCHELF=(nix shell nixpkgs#patchelf -c patchelf); fi
-    stage="$(mktemp -d)"; trap 'rm -rf "$stage"' EXIT
-    cp target/release/session-desktop target/release/fts "$stage"/
-    cp target/release/fts-installer "$stage/fts-installer-$plat"
-    for b in session-desktop fts "fts-installer-$plat"; do
-        "${PATCHELF[@]}" --set-interpreter /lib64/ld-linux-x86-64.so.2 --remove-rpath "$stage/$b"
-        strip "$stage/$b"
-    done
-    # REAPER extension cdylib: no interpreter to patch (shared lib), just
-    # rpath + symbols. install.sh drops it into ~/.config/REAPER/UserPlugins
-    # when a REAPER install is present.
-    cp target/release/libreaper_fts_extensions.so "$stage/reaper_fts_extensions.so"
-    "${PATCHELF[@]}" --remove-rpath "$stage/reaper_fts_extensions.so"
-    strip "$stage/reaper_fts_extensions.so"
-    cp apps/session/desktop/systemd/signal-engine.service "$stage"/
-    cp apps/session/desktop/assets/session-desktop.desktop "$stage"/
-    cp apps/session/desktop/assets/icon.svg "$stage/icon.svg"
-    install -m 755 apps/installer/scripts/install.sh apps/installer/scripts/uninstall.sh "$stage"/
-    printf '%s\n' "$version" > "$stage/VERSION"
-    mkdir -p dist
-    tarball="session-desktop-v$version-$plat.tar.gz"
-    tar -czf "dist/$tarball" -C "$stage" \
-        session-desktop fts reaper_fts_extensions.so \
-        signal-engine.service session-desktop.desktop \
-        icon.svg install.sh uninstall.sh VERSION
-    mv "$stage/fts-installer-$plat" dist/
-    (cd dist && sha256sum "$tarball" "fts-installer-$plat" > SHA256SUMS)
-    echo "packaged:"
-    ls -lh "dist/$tarball" "dist/fts-installer-$plat" dist/SHA256SUMS
+# The FX editors' embedded Tailwind sheets (the editor include_str!s
+# assets/tailwind.css). Rebuild after class changes in the editor or in
+# architect-ui.
+tailwind-eq: _lumen-link
+    tailwindcss -i features/dsp/eq/tailwind.css -o features/dsp/eq/assets/tailwind.css --minify
 
-# Rebuild eq-ui's embedded Tailwind (features/fx/eq/eq-ui/assets/
-# tailwind.css) after class changes in eq-ui / architect-ui.
-tailwind-eq:
-    tailwindcss -i features/fx/eq/eq-ui/tailwind.css -o features/fx/eq/eq-ui/assets/tailwind.css --minify
+tailwind-comp: _lumen-link
+    tailwindcss -i features/dsp/comp/tailwind.css -o features/dsp/comp/assets/tailwind.css --minify
 
-# Rebuild comp-ui's embedded Tailwind (features/fx/comp/comp-ui/assets/
-# tailwind.css) after class changes in comp-ui / architect-ui.
-tailwind-comp:
-    tailwindcss -i features/fx/comp/comp-ui/tailwind.css -o features/fx/comp/comp-ui/assets/tailwind.css --minify
+tailwind-limiter: _lumen-link
+    tailwindcss -i features/dsp/comp/ui_limiter-tailwind.css -o features/dsp/comp/ui_limiter-assets/tailwind.css --minify
 
-tailwind-limiter:
-    tailwindcss -i features/fx/comp/limiter-ui/tailwind.css -o features/fx/comp/limiter-ui/assets/tailwind.css --minify
+tailwind-trigger: _lumen-link
+    tailwindcss -i features/dsp/trigger/tailwind.css -o features/dsp/trigger/assets/tailwind.css --minify
 
-# Rebuild trigger-ui's embedded Tailwind (features/fx/trigger/trigger-ui/
-# assets/tailwind.css) after class changes in trigger-ui / architect-ui.
-tailwind-trigger:
-    tailwindcss -i features/fx/trigger/trigger-ui/tailwind.css -o features/fx/trigger/trigger-ui/assets/tailwind.css --minify
+tailwind-eq-standalone: _lumen-link
+    tailwindcss -i apps/plugins/eq-standalone/tailwind.css -o apps/plugins/eq-standalone/assets/tailwind.css --minify
 
-# Rasterize the comp editor to PNGs — every profile face, plus the Advanced
-# page and a resized panel — so a GUI change can be looked at without opening
-# a DAW. Same headless mount the behavioural tests drive, painted through
-# blitz + vello_cpu. Shots land in target/gui-shots/comp/ (FTS_SHOTS_DIR
-# overrides).
+# Rasterize an FX editor to PNGs — every profile face / family / circuit,
+# painted headless through blitz + vello_cpu (the same mount the behavioural
+# tests drive), so a GUI change can be looked at without opening a DAW.
+# Shots land in target/gui-shots/<fx>/ (FTS_SHOTS_DIR overrides).
 comp-shots:
-    cargo test -p comp-ui --features native --test screenshots -- --nocapture
+    cargo test -p comp --features native,profiles,ui --test screenshots -- --nocapture
 
-# Same for the EQ: every hardware model's faceplate, painted headless.
-# Shots land in target/gui-shots/eq/.
 eq-shots:
-    cargo test -p eq-ui --features native --test screenshots -- --nocapture
+    cargo test -p eq --features native,ui --test screenshots -- --nocapture
 
-# Every reverb family's panel, painted headless. Shots land in
-# target/gui-shots/reverb/.
 reverb-shots:
-    cargo test -p reverb-ui --features native --test screenshots -- --nocapture
+    cargo test -p reverb --features native,profiles,ui --test screenshots -- --nocapture
 
-# Every delay family's panel, painted headless. Shots land in
-# target/gui-shots/delay/.
 delay-shots:
-    cargo test -p delay-ui --features native --test screenshots -- --nocapture
+    cargo test -p delay --features native,profiles,ui --test screenshots -- --nocapture
 
-# Every saturation circuit's panel, painted headless. Shots land in
-# target/gui-shots/saturate/.
 saturate-shots:
-    cargo test -p saturate-ui --features native --test screenshots -- --nocapture
+    cargo test -p saturate --features native,profiles,ui --test screenshots -- --nocapture
 
-# Every modulation circuit's panel, painted headless. Shots land in
-# target/gui-shots/modulation/.
 modulation-shots:
-    cargo test -p modulation-ui --features native --test screenshots -- --nocapture
+    cargo test -p modulation --features native,profiles,ui --test screenshots -- --nocapture
 
 # THE plugin suite — the one list every plugin recipe iterates. A name here
 # is `<name>-plugin` as a cargo package and "FTS <Name>" as a bundle (see
@@ -436,21 +523,72 @@ plugins-bundle plugins=fts_plugins:
     cmd=bundle
     [ "$(uname)" = "Darwin" ] && cmd=bundle-universal
     for p in {{plugins}}; do
-        cargo run -q -p fts-plugin-xtask -- "$cmd" -p "$p-plugin" --release --features export
+        # `export` (the CLAP/VST3 entry points) is a feature of the FX
+        # plugins; nam, signal and guide have no such feature.
+        feat=(); grep -q '^export *=' "apps/plugins/$p/Cargo.toml" && feat=(--features export)
+        cargo run -q -p fts-plugin-xtask -- "$cmd" -p "$p-plugin" --release "${feat[@]}"
     done
     ls target/bundled/
 
-# Install the bundled plugins into THIS machine's user plugin dirs, straight
-# from target/bundled — no release download, no network. Linux: ~/.clap and
-# ~/.vst3; macOS: ~/Library/Audio/Plug-Ins/{CLAP,VST3}. Writes the same
-# manifest the release installer does, so `just plugins-uninstall` removes
-# exactly this set (and replaces any stale symlink or older copy of the same
-# name left over from a previous worktree).
+# Symlink the built bundles into this machine's user plugin dirs, so a rebuild
+# is live in REAPER (and anything else that scans them) without reinstalling.
 #
-# Build + install everything:        just plugins-install
-# Iterate on one:                    just plugins-bundle eq && just plugins-install
-plugins-install: plugins-bundle
-    cargo run -q -p fts-installer -- plugins install --from target/bundled
+# Points at `target/bundled` rather than copying it. The bundler rewrites each bundle in place at a stable path, so the link stays
+# valid across rebuilds — `just plugins-bundle eq` and the next plugin scan
+# sees the new binary.
+#
+#   just plugins-link              # every bundle currently in target/bundled
+#   just plugins-bundle eq && ...  # rebuild one; the link already points at it
+#
+# Idempotent, and deliberately conservative: it replaces its own symlinks but
+# refuses to delete a REAL directory of the same name, which would be a copy
+# installed by hand or by a release. Remove those yourself first —
+# a plugin folder is not somewhere to be clever with rm -rf.
+plugins-link:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="$(pwd)/target/bundled"
+    [ -d "$src" ] || { echo "no target/bundled — run 'just plugins-bundle' first" >&2; exit 1; }
+    case "$(uname)" in
+        Darwin) clap_dir="$HOME/Library/Audio/Plug-Ins/CLAP"; vst3_dir="$HOME/Library/Audio/Plug-Ins/VST3";;
+        *)      clap_dir="$HOME/.clap"; vst3_dir="$HOME/.vst3";;
+    esac
+    mkdir -p "$clap_dir" "$vst3_dir"
+    linked=0; skipped=0
+    for bundle in "$src"/*.clap "$src"/*.vst3; do
+        [ -e "$bundle" ] || continue
+        name="$(basename "$bundle")"
+        case "$name" in *.clap) dest_dir="$clap_dir";; *) dest_dir="$vst3_dir";; esac
+        dest="$dest_dir/$name"
+        if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+            printf "  SKIP  %-22s (a real copy is installed at %s)\n" "$name" "$dest_dir"
+            skipped=$((skipped+1))
+            continue
+        fi
+        rm -f "$dest"
+        ln -s "$bundle" "$dest"
+        printf "  link  %-22s -> %s\n" "$name" "$dest_dir"
+        linked=$((linked+1))
+    done
+    echo "linked $linked bundle(s), skipped $skipped"
+
+# Remove the symlinks `plugins-link` made, leaving any real installs alone.
+plugins-unlink:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="$(pwd)/target/bundled"
+    case "$(uname)" in
+        Darwin) dirs=("$HOME/Library/Audio/Plug-Ins/CLAP" "$HOME/Library/Audio/Plug-Ins/VST3");;
+        *)      dirs=("$HOME/.clap" "$HOME/.vst3");;
+    esac
+    for dir in "${dirs[@]}"; do
+        [ -d "$dir" ] || continue
+        for link in "$dir"/*.clap "$dir"/*.vst3; do
+            [ -L "$link" ] || continue
+            target="$(readlink "$link")"
+            case "$target" in "$src"/*) rm -f "$link"; echo "  unlink $(basename "$link")";; esac
+        done
+    done
 
 # Prove every bundle in target/bundled actually LOADS — dlopen it, run its
 # entry point, and walk its factory (apps/plugins/verify/). A plugin that
@@ -491,13 +629,23 @@ plugins-verify arch="":
     [ "$fail" = 0 ] || { echo "FAILURES — some bundles do not load" >&2; exit 1; }
     echo "all bundles load"
 
-# Remove every plugin recorded in the install manifest.
-plugins-uninstall:
-    cargo run -q -p fts-installer -- plugins uninstall
-
-# What the manifest says is installed, and from which version.
-plugins-list:
-    cargo run -q -p fts-installer -- plugins list
+# The models are the private FastTrackStudios/mic-models repository, read from
+# $FTS_MIC_MODELS, else ~/.local/share/fts/mic-models. The default mic (LD-47K)
+# is built into the plugin, so this is only needed for the other thirty-nine.
+# Install or update the FTS Mic models for the plugin
+mic-models-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dest="${FTS_MIC_MODELS:-${XDG_DATA_HOME:-$HOME/.local/share}/fts/mic-models}"
+    if [ -d "$dest/.git" ]; then
+        git -C "$dest" pull --ff-only
+    elif [ -e "$dest" ]; then
+        echo "$dest exists and is not a mic-models checkout; leaving it alone" >&2
+        exit 1
+    else
+        mkdir -p "$(dirname "$dest")"
+        git clone git@github.com:FastTrackStudios/mic-models.git "$dest"
+    fi
 
 # Package the plugin bundles as a single release tarball in dist/
 # (fts-plugins-v<version>-<platform>.tar.gz + SHA256SUMS entry). The macOS
@@ -520,26 +668,6 @@ plugins-package: plugins-bundle
     (cd dist && sha256sum "$tarball" >> SHA256SUMS 2>/dev/null || sha256sum "$tarball" > SHA256SUMS)
     echo "packaged: dist/$tarball"
 
-# Pull the latest upstream NeuralAmpModelerCore into the vendored copy
-# (libs/neural-amp-modeler/NeuralAmpModelerCore) and run the crate's
-# test suite. The parity tests run every shipped rig model through BOTH
-# engines (upstream C++ oracle vs the pure-Rust wasm engine) — a
-# divergence or a new unsupported architecture fails loudly and is the
-# to-port list for src/pure/. Review the diff before committing.
-nam-update:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
-    git clone --depth 1 --recurse-submodules --shallow-submodules \
-        https://github.com/sdatkinson/NeuralAmpModelerCore "$tmp/core"
-    dst="libs/neural-amp-modeler/NeuralAmpModelerCore"
-    rsync -a --delete \
-        --exclude .git --exclude build --exclude build_inline \
-        "$tmp/core/" "$dst/"
-    echo "vendored $(git -C "$tmp/core" rev-parse --short HEAD); running parity…"
-    cargo test -p neural-amp-modeler
-
 # Symlink the live rig config (~/.config/signal/rig) to the repo's
 # in-tree default config, so realtime edits — text editor or the rig's
 # own auto-save — are working-tree diffs you commit like any change.
@@ -555,128 +683,128 @@ rig-link:
     ln -s "$target" "$rig"
     echo "linked: $rig -> $target"
 
-# Open the default guitar rig (Yamaha TF ch4 → NAM amps)
-guitar: (rig "Guitar Rig")
+# The guitar rig as a TUI (meters + patch switching in a terminal).
+#
+# Was `just guitar` until the Signal app became the rig's real surface;
+# that name now opens the app. This is still the way in over ssh, or when
+# you want the rig without a window.
+
+# The guitar rig as a TUI (was `just guitar`)
+guitar-tui: (rig "Guitar Rig")
 
 # Open the default drums rig (needs `just rig-setup "Drum Rig" ...` first)
 drums: (rig "Drum Rig")
 
-# Built then run separately, under `pw-jack`, for one reason: midir's MIDI
-# backend on Linux is JACK-over-pipewire-jack, but the dev shell links the real
-# libjack2, so the binary looks for a `jackd` that is not running and hardware
-# MIDI silently never attaches. `pw-jack` points it at PipeWire's shim instead.
-# Wrapping only the run keeps that LD_LIBRARY_PATH off the build toolchain.
-# (The real fix is the flake shipping pipewire.jack rather than libjack2; when
-# that lands, drop the wrapper.) --release is REQUIRED for real-time audio.
+# Built then run separately. This used to go through `pw-jack`: midir's MIDI
+# backend on Linux was JACK-over-pipewire-jack, and the dev shell links the
+# real libjack2, so the binary looked for a `jackd` that is not running and
+# hardware MIDI silently never attached. midicore now talks to PipeWire
+# directly, so there is nothing to wrap.
+# --release is REQUIRED for real-time audio.
 #
-# Open the FTS desktop app straight to the keys rig (Worship profile, loaded)
+# Open the Signal app straight to the keys rig (Worship profile, loaded)
 keys log="/tmp/fts-keys.log":
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p session-desktop --features signal-keys-rig
+    cargo build --release -p signal-desktop --features signal-keys-rig
     echo "logging to {{log}}"
     # The engine is a child with inherited stdio, so one tee captures the app
     # AND the engine it spawns — which is where the rig actually lives, and so
     # where anything worth debugging gets logged.
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
-    RUST_LOG="${RUST_LOG:-info,signal_keys=debug,signal_sampler=debug,vox_core=warn,schema_deser=off}" \
-        pw-jack ./target/release/session-desktop --keys 2>&1 | tee "{{log}}"
+    RUST_LOG="${RUST_LOG:-info,keys=debug,sampler=debug,vox_core=warn,schema_deser=off}" \
+        ./target/release/signal-desktop --keys 2>&1 | tee "{{log}}"
 
 # A terminal surface over the composition-tree presets, no GUI. This was
 # `just keys` before the app grew a keys mode.
 #
 # Nord Stage-style keys TUI — play a preset from a MIDI keyboard
 keys-tui preset="Nord Stage" midi="all":
-    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-keys --features pipewire --example keys_tui -- --preset "{{preset}}" --midi "{{midi}}"
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p keys --features pipewire --example keys_tui -- --preset "{{preset}}" --midi "{{midi}}"
 
 # Keys rig integration test: open the rig headless, inject MIDI through the
 # ALSA loopback, and assert the rig both saw the events and made sound
 # (midi_recent + master_peak). Needs pipewire + the sample libraries; exits
 # nonzero on a deaf or silent rig.
 keys-test:
-    cargo build --release -p signal-keys --example midi_probe
-    PIPEWIRE_PROPS='{ application.name = FTS-KeysTest }' pw-jack ./target/release/examples/midi_probe
+    cargo build --release -p keys --example midi_probe
+    PIPEWIRE_PROPS='{ application.name = FTS-KeysTest }' ./target/release/examples/midi_probe
 
 # Play the City Grand physically-modeled piano from a MIDI keyboard.
 # Voice loads its param table from ~/.config/signal/city-grand/table.json
 # (regenerate with `pm sweep` in research/piano-model).
-# NOTE: --midi targets ONE port by name (substring). Do NOT use "all" here —
-# it allocates an ALSA sequencer queue per port (~24 on this rig) and blows
-# past ALSA's ~32-queue limit. `just piano <name>` picks a different keyboard.
+# NOTE: --midi targets ONE port by name (substring). "all" used to be a trap —
+# midir allocated an ALSA sequencer queue per port (~24 on this rig), past
+# ALSA's ~32-queue limit — but the native PipeWire backend opens ONE node
+# however many devices are linked. `just piano <name>` picks a keyboard.
 piano midi="KONTROL":
-    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-keys --features pipewire --example keys_tui -- --preset "City Grand" --midi "{{midi}}"
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p keys --features pipewire --example keys_tui -- --preset "City Grand" --midi "{{midi}}"
 
 # Play City Wurli — the vendored physically-modeled Wurlitzer 200A (openwurli,
 # GPL, personal use) from a MIDI keyboard (TUI). Same ALSA-queue caveat as
 # `just piano`: --midi targets ONE port by name, never "all".
 wurli midi="KONTROL":
-    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-keys --features pipewire --example keys_tui -- --preset "City Wurli" --midi "{{midi}}"
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p keys --features pipewire --example keys_tui -- --preset "City Wurli" --midi "{{midi}}"
 
 # Play Cinematic Studio Strings — 1st Violins from a MIDI keyboard (TUI).
 strings lib="" midi="all" artic="Leg" mic="Mix":
-    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-sampler --features pipewire --example strings_tui -- {{ if lib != "" { "--lib '" + lib + "'" } else { "" } }} --midi "{{midi}}" --artic "{{artic}}" --mic "{{mic}}"
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p sampler --features pipewire --example strings_tui -- {{ if lib != "" { "--lib '" + lib + "'" } else { "" } }} --midi "{{midi}}" --artic "{{artic}}" --mic "{{mic}}"
 
 # Open a saved rig by name (TUI with meters + patch switching).
 # --release is REQUIRED for real-time (the vendored NAM C++ core xruns in
 # unoptimized builds; the dev profile optimizes deps, release is safest).
 rig name:
-    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-sampler --features pipewire --example guitar_tui -- --rig "{{name}}"
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p sampler --features pipewire --example guitar_tui -- --rig "{{name}}"
 
 # List audio devices + channel counts (find your interface name)
 rig-devices:
-    cargo run -p signal-sampler --example guitar_rig -- --list
+    cargo run -p sampler --example guitar_rig -- --list
 
 # Configure + remember a rig's interface / channel / profile, e.g.:
 #   just rig-setup "Guitar Rig" --input "Yamaha TF" --channel 3 --profile /path/to.styx
 rig-setup name *args:
-    cargo run --release -p signal-sampler --example guitar_rig -- --rig "{{name}}" {{args}} --write-config
+    cargo run --release -p sampler --example guitar_rig -- --rig "{{name}}" {{args}} --write-config
 
-# ── Website (apps/site → fasttrackstudio.app) ───────────────────────────
+# ── Signal site (apps/signal/web → signal.fasttrackstudio.app) ─────────
+# The guide is statically generated: `--ssg` builds the app's server,
+# starts it, asks it for `static_routes` and renders each one to an
+# index.html under target/dx/signal-web/release/web/public — the directory
+# to deploy. Nix runs the same command (nix/modules/packages/web-bundles.nix).
 
-# Dev server for the website (dioxus, live reload)
-site-serve:
-    cd apps/site && dx serve --platform web
+# The Signal site's sheet (assets/tailwind-signal.css, committed and
+# include_str!'d by src/lib.rs — the landing page embeds the real rig
+# surfaces, and the guitar rig's UI is Tailwind-styled).
+signal-web-tailwind: _lumen-link
+    cd apps/signal/web && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
 
-# Production web build of the website
-site-build:
-    cd apps/site && dx build --platform web --release
+# Dev server for the Signal site
+signal-web-serve:
+    cd apps/signal/web && dx serve --platform web
 
-# ── Docs site (apps/docs-site → docs.fasttrackstudio.app) ───────────────
-# kf docs (kf-block → SVG pre-render) + dodeca (`ddc`). See
-# apps/docs-site/README.md.
-
-# Build the unified docs site → apps/docs-site/output
-docs-build:
-    apps/docs-site/build.sh
-
-# Docs dev loop — kf-block watcher + ddc live reload on :8080
-docs-serve:
-    apps/docs-site/serve.sh
-
-# Build + deploy the docs site to fly.io (app: fts-docs)
-docs-deploy:
-    apps/docs-site/deploy.sh
-
-# ── REAPER extension ─────────────────────────────────────────────────────
-# `apps/extensions/reaper-fts-extensions` (the production cdylib this
-# module's recipes and `release-package` below build) never made it into
-# this repo's August 2026 split -- it's signal-domain and lives in the
-# signal repo now. `features/adapters/reaper/reaper.just` was never committed here
-# either, so `mod reaper` broke every `just` invocation in this repo.
-# Disabled until this repo has its own extension to wire up (the
-# test-only `session-extension` crate at features/adapters/reaper/session-extension
-# has no recipes of its own yet).
+# The Signal site as it ships: bundle + pre-rendered guide.
 #
-# mod reaper 'features/adapters/reaper/reaper.just'
+# `--force-sequential` is required: the pre-render borrows
+# `public/index.html` (written by the CLIENT build) for its page shell, and
+# in parallel the pages can come out in Dioxus's bare fallback shell
+# (dioxus#3518). The `rm` is required too: the renderer's cache is
+# `clear_cache(false)`, so a route already in it is served rather than
+# re-rendered and a rebuild silently ships the OLD html. `--wasm-split` is
+# load-bearing for wasm-opt — see web-bundles.nix.
+signal-web-build:
+    rm -rf target/dx/signal-web/release/web/public
+    cd apps/signal/web && dx build --platform web --release --ssg --force-sequential \
+        --wasm-split --features wasm-split
 
-# The UI snapshot regression gate (ui-snapshot) moved to the architect
-# repo with architect-ui in the August 2026 split. Run it there:
-#   just snapshot-check / snapshot-render <name> / snapshot-update
+# What `signal-web-build` produced, served the way a static host would
+signal-web-preview: signal-web-build
+    cd target/dx/signal-web/release/web/public && python3 -m http.server 8080
 
-# REAPER integration tests moved into the `reaper` module:
-#   just reaper integration-test        (was: just reaper-integration-test)
-#   just reaper integration-test-gui
-#   just reaper daw-test                (was: just daw-reaper-test)
+# ── REAPER (features/adapters/reaper) ────────────────────────────────────
+# The daw-bridge cdylib (the thin host the integration harness stands up)
+# and the daw-reaper integration suites: `just reaper install`,
+# `just reaper log`, `just reaper daw-test [FILTER]`. Session's own REAPER
+# suites are `just reaper-test` below.
+mod reaper 'features/adapters/reaper/reaper.just'
 
 # ── Build ────────────────────────────────────────────────────────────────
 
@@ -791,7 +919,7 @@ css-ab *ARGS:
     cargo build -p fts-cli --bin fts
     # Score the binary we just BUILT. score.py defaults to ./target/debug/fts,
     # so under a CARGO_TARGET_DIR override it would silently score a stale one.
-    python3 features/rigs/sampler/signal-sampler/tests/css-ab/score.py \
+    python3 features/rigs/sampler/tests/css-ab/score.py \
         --fts "${CARGO_TARGET_DIR:-target}/debug/fts" \
         --pack {{quote(css_pack)}} --json scratch/css-ab/score.json {{ARGS}}
 
@@ -826,18 +954,18 @@ css-ab-sections SECTIONS:
 # is only shape. To rule it out entirely: `just ee-serve --hot-reload
 # false`, or `just ee` for a one-shot window.
 ee-serve *ARGS:
-    dx serve -p expression-editor-standalone --example serve \
+    dx serve -p expression-editor --features standalone,ui --example serve \
         --platform desktop --renderer native {{ARGS}}
 
 # One-shot window on a file (no hot reload, no chooser).
 ee SOURCE="phrase" *ARGS:
-    cargo run -p expression-editor-standalone --example editor -- {{SOURCE}} {{ARGS}}
+    cargo run -p expression-editor --features standalone,ui --example editor -- {{SOURCE}} {{ARGS}}
 
 # The workstation: arrangement + TCP over the drum-mode editor, mixer
 # down the right, audio out the default output. Defaults to the drum-
 # mode reference session; pass any .rpp to open something else.
 workstation SOURCE="/run/media/AudioHaven/Project/02 LORD OF THE FIGHT/02 LORD OF THE FIGHT.RPP" *ARGS:
-    cargo run --release -p expression-editor-standalone --example workstation -- \
+    cargo run --release -p expression-editor --features standalone --example workstation -- \
         "{{SOURCE}}" --drums --size 1920x1080 {{ARGS}}
 
 # Repaint the visual-inspection PNGs into target/gui-shots/expression-editor.
@@ -848,7 +976,7 @@ workstation SOURCE="/run/media/AudioHaven/Project/02 LORD OF THE FIGHT/02 LORD O
 # of the suite into timing out. Single-threaded on purpose: they are all
 # CPU rasterization, so running them in parallel only makes each slower.
 ee-shots *ARGS:
-    cargo test -p expression-editor-ui --test screenshots \
+    cargo test -p expression-editor --features guitarpro,ui --test screenshots \
         -- --ignored --test-threads 1 {{ARGS}}
 
 # ── apps/session/web (session.fasttrackstudio.app) ────────────────────────────────
@@ -911,6 +1039,15 @@ web-build: web-tailwind
 web-check:
     cargo check -p session-web --target wasm32-unknown-unknown
 
+# ── Standalone playback ──────────────────────────────────────────────────
+# Open a REAPER project in daw-standalone and play it through the default
+# output device, with a transport prompt on stdin (h for help). Release,
+# because a debug build of the render path can xrun.
+
+# Play an .rpp through the standalone engine
+daw-play RPP:
+    cargo run --release -p daw-standalone --features rpp-loader --example play_rpp -- "{{RPP}}"
+
 # ── Aliases ──────────────────────────────────────────────────────────────
 
 alias c := check
@@ -936,7 +1073,7 @@ ee-practice $SONG="set-in-stone" $FRESH="false":
     # record as recorded.
     staging=(--cached)
     if [[ "$FRESH" == "true" ]]; then staging=(); fi
-    project=$(cargo run -p expression-editor-standalone --example practice -- "${staging[@]}" "$SONG")
+    project=$(cargo run -p expression-editor --features standalone --example practice -- "${staging[@]}" "$SONG")
     # Served, so `rsx!` edits hot-reload into the running window. `dx`
     # owns argv — it has --cargo-args and --rustc-args but nothing that
     # reaches the app — so the project goes through the environment
@@ -946,7 +1083,7 @@ ee-practice $SONG="set-in-stone" $FRESH="false":
     # it. `tee` keeps it on screen too.
     mkdir -p target
     EXPRESSION_EDITOR_ARGS="'$project' --drums --size 1600x900" \
-        dx serve -p expression-editor-standalone --example workstation \
+        dx serve -p expression-editor --features standalone --example workstation \
         --platform desktop --renderer native 2>&1 | tee target/ee-practice.log
 
 # The same workstation in a WRY WebView (dioxus-desktop) instead of Blitz.
@@ -979,7 +1116,7 @@ ee-webview $SONG="set-in-stone" $FRESH="false" $PROBE="0":
     fi
     staging=(--cached)
     if [[ "$FRESH" == "true" ]]; then staging=(); fi
-    project=$(cargo run -p expression-editor-standalone --example practice -- "${staging[@]}" "$SONG")
+    project=$(cargo run -p expression-editor --features standalone --example practice -- "${staging[@]}" "$SONG")
     # Served too, and this is the one where it pays most: a WebView has
     # devtools, so a hot-reloaded `rsx!` edit can be inspected as it
     # lands.
@@ -988,8 +1125,8 @@ ee-webview $SONG="set-in-stone" $FRESH="false" $PROBE="0":
     RUST_LOG="${RUST_LOG:-warn,expression_editor_ui::frame_meter=info}" \
     ${WEBKIT_DISABLE_COMPOSITING_MODE:+WEBKIT_DISABLE_COMPOSITING_MODE="$WEBKIT_DISABLE_COMPOSITING_MODE"} \
     EXPRESSION_EDITOR_ARGS="'$project' --drums --size 1600x900" \
-        dx serve -p expression-editor-standalone --example webview \
-        --platform desktop --features webview 2>&1 | tee target/ee-webview.log
+        dx serve -p expression-editor --example webview \
+        --platform desktop --features standalone,webview 2>&1 | tee target/ee-webview.log
 
 # Drive the WebView window on a private display and measure a scroll.
 #
@@ -1036,11 +1173,11 @@ ee-practice-prepare $SONG="both" $FRESH="false":
     set -euo pipefail
     staging=(--cached)
     if [[ "$FRESH" == "true" ]]; then staging=(); fi
-    cargo run -p expression-editor-standalone --example practice -- "${staging[@]}" "$SONG"
+    cargo run -p expression-editor --features standalone --example practice -- "${staging[@]}" "$SONG"
 
 # Real-song regression: copy, load, split, undo/redo, save/reopen, verify originals.
 ee-practice-test:
-    cargo test -p expression-editor-standalone --test practice_real -- --ignored --nocapture --test-threads=1
+    cargo test -p expression-editor --features audio,standalone --test practice_real -- --ignored --nocapture --test-threads=1
 
 # Fast iteration loop: the SAME cached song/audio staging every run, fewer
 # frames, optionally one phase. Prints the report directory for compare.py.
@@ -1054,7 +1191,7 @@ ee-bench $SONG="set-in-stone" $FRAMES="120" $PHASE="all_panels" $PROFILE="releas
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ "$SONG" == "both" ]]; then echo 'Run one song per benchmark: set-in-stone or unbreakable' >&2; exit 2; fi
-    cargo build -p expression-editor-standalone --example stress --example practice --profile "$PROFILE"
+    cargo build -p expression-editor --features standalone --example stress --example practice --profile "$PROFILE"
     artifact_root="${CARGO_TARGET_DIR:-target}"
     artifact_profile="$PROFILE"
     if [[ "$PROFILE" == "dev" ]]; then artifact_profile=debug; fi
@@ -1095,7 +1232,7 @@ ee-stress $SONG="set-in-stone" $FRAMES="120" $PROFILE="dev" $ENFORCE="false":
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ "$SONG" == "both" ]]; then echo 'Run one song per benchmark: set-in-stone or unbreakable' >&2; exit 2; fi
-    cargo build -p expression-editor-standalone --example stress --example practice --profile "$PROFILE"
+    cargo build -p expression-editor --features standalone --example stress --example practice --profile "$PROFILE"
     artifact_root="${CARGO_TARGET_DIR:-target}"
     artifact_profile="$PROFILE"
     if [[ "$PROFILE" == "dev" ]]; then artifact_profile=debug; fi
@@ -1582,8 +1719,8 @@ mixer-golden SIZE="2560x1440":
     theme=""
     IFS=: read -ra layers <<< "${THEME:-dark}"
     for layer in "${layers[@]}"; do
-        if [ -d "apps/session/daw/themes/$layer" ]; then path="$PWD/apps/session-daw/themes/$layer"
-        elif [ -f "apps/session/daw/themes/fts-$layer.frame" ]; then path="$PWD/apps/session-daw/themes/fts-$layer.frame"
+        if [ -d "apps/session/daw/themes/$layer" ]; then path="$PWD/apps/session/daw/themes/$layer"
+        elif [ -f "apps/session/daw/themes/fts-$layer.frame" ]; then path="$PWD/apps/session/daw/themes/fts-$layer.frame"
         else path="${layer/#\~/$HOME}"; fi
         theme="${theme:+$theme:}$path"
     done
@@ -1807,7 +1944,7 @@ ci FROM="lockfile":
     #!/usr/bin/env bash
     set -euo pipefail
     export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target}"
-    steps=(lockfile fmt flows tailwind check nextest)
+    steps=(lockfile fmt flows tailwind check wasm nextest)
     start=0
     for i in "${!steps[@]}"; do
       [ "${steps[$i]}" = "{{FROM}}" ] && start=$i && break
@@ -1874,6 +2011,12 @@ ci FROM="lockfile":
       echo "ok"
     fi
 
+    if run_from wasm; then
+      echo "── wasm check (Signal browser remote) ───────────────"
+      cargo check -p signal-desktop --target wasm32-unknown-unknown --no-default-features --features signal
+      echo "ok"
+    fi
+
     if run_from nextest; then
       echo "── cargo nextest --workspace ────────────────────────"
       # The app CLIs and the worklet rigs sit behind features: name them, or
@@ -1936,11 +2079,24 @@ assets:
     echo "linked $n assets from ${#fetched[@]} repos"
 
 # Generate frame's plugin faces (features/faces/generated: every `.frame`, the
-# catalogs and rig-faces/faces.json) from examples/plugin-faces. They are
+# catalogs and rig-faces/faces.json) from features/faces/plugin-faces. They are
 # not kept in git; session-daw and signal read them from here at runtime.
 # Deterministic: unchanged sources rewrite every file byte for byte.
 faces *ONLY:
     cargo run -q --release -p plugin-faces -- features/faces/generated {{ if ONLY != "" { "--only " + ONLY } else { "" } }}
+
+# The face library: every plugin face rendered with frame's GPU effects
+# stage to OUT/<set>/<face>.webp, indexed by kind in OUT/index.json
+# (placeholders marked). Run `just faces` first; needs ImageMagick.
+#   just faces-gallery /tmp/gallery --only saturate
+faces-gallery OUT *ARGS:
+    cargo build --release -p frame-cli --features anyrender --bin render_surface
+    python3 scripts/face_gallery.py {{OUT}} {{ARGS}}
+
+# Frame's Figma parity: import → render → pixel + SVG diff against Figma's
+# own output (xtask/frame/scripts/run_parity_render_and_diff.sh).
+frame-parity *ARGS="--all":
+    cargo run -p xtask -- parity_test {{ARGS}}
 
 # ── Patchbay (apps/patchbay) ──────────────────────────────────────────
 # One crate, two platforms: the desktop app (default) and the browser

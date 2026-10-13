@@ -31,9 +31,9 @@
 /* This crate's own markup. */
 @source "./src/**/*.rs";
 
-/* session-ui is a LOCAL path dep (crates/session/ui) — a literal relative
- * glob works directly, no `.tailwind-src` symlink needed. */
-@source "../../crates/session/ui/src/**/*.rs";
+/* Session's views (features/session, a local path dep) — a literal
+ * relative glob works directly, no `.tailwind-src` symlink needed. */
+@source "../../../features/session/src/ui/**/*.rs";
 
 /* architect-ui: a git dep with no stable path on disk. */
 @source "./.tailwind-src/architect-ui/src/**/*.rs";

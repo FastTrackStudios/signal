@@ -1,7 +1,7 @@
-# session — the PR gate.
+# studio — the PR gate.
 #
 # Pull requests only (and by hand): a merge to main is the tree its PR
-# already passed, and a second run of it on push held session's one runner
+# already passed, and a second run of it on push held the one runner
 # for ten minutes while the deploy of that same merge queued behind it.
 #
 # Runs on the org's self-hosted runner (THEBATTLESHIP, label `nix-host` —
@@ -15,29 +15,11 @@
 # `nix develop .#ci -c`. `--accept-flake-config` picks up the
 # fasttrackstudio.cachix.org substituter from flake.nix nixConfig.
 #
-# Deliberately simpler than the monorepo gate it replaces: that one drove
-# `cargo rail plan` to pick affected crates out of a 238-member workspace.
-# These workspaces are small enough to just build.
-#
-# Sibling checkouts: the root Cargo.toml patches every daw and processor
-# crate to `../daw` and `../processor` (see the `[patch."https://github.com/
-# FastTrackStudios/daw"]` block for why it is a path and not a tag). The
-# runner therefore needs those two repos beside this one. actions/checkout
-# refuses a `path` outside $GITHUB_WORKSPACE, so all three land INSIDE the
-# workspace — `session/`, `daw/`, `processor/` — and every step runs from
-# `session/`, where `../daw` and `../processor` resolve. Both repos are
-# public, so the default GITHUB_TOKEN can clone them.
-#
-# The sibling refs are pinned to the shas the local siblings were on when
-# this was last bumped (2026-09-20: both carry the blitz db4318a9 repin,
-# which is the point — a sibling on the old rev puts two blitz revs in
-# one graph). Bump them here when the local siblings move —
-# that is the CI half of "edit ../daw directly", and the thing to do at
-# the same moment as the tag in `[workspace.dependencies]`: the tag is
-# what a consumer WITHOUT the sibling patch would take, and this sha is
-# what CI actually builds. A bump that moves one and not the other
-# passes locally and fails here, which is how it announced itself.
-# See issue #40.
+# Deliberately simple: no `cargo rail plan` to pick affected crates — the
+# whole workspace is checked and tested, the same steps `just ci` runs
+# locally, in the same order. Everything the workspace builds is in this
+# repo (daw, processor, signal and patchbay were folded in), so there are
+# no sibling checkouts.
 
 name: checks
 
@@ -57,41 +39,8 @@ jobs:
     name: Build + test
     runs-on: [self-hosted, session]
     timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: session
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: session
-      - name: Sibling checkout — daw
-        uses: actions/checkout@v4
-        with:
-          repository: FastTrackStudios/daw
-          ref: b037697d3eac5833cf8405d697838da9177cfd8d
-          path: daw
-      - name: Sibling checkout — processor
-        uses: actions/checkout@v4
-        with:
-          repository: FastTrackStudios/processor
-          ref: 473ade6c8cdd1d10e26b4baff19f30aefa56154f
-          path: processor
-      # signal's rigs (signal-fx: the bass rig, the kit's voices) build
-      # from ../signal, and its NAM from ../neural-amp-modeler-rs — path
-      # dependencies, which cargo needs on disk to read the workspace at
-      # all, the `signal` feature on or off.
-      - name: Sibling checkout — signal
-        uses: actions/checkout@v4
-        with:
-          repository: FastTrackStudios/signal
-          ref: 2858d926a98164d15aea408e409a0df2042d4abc
-          path: signal
-      - name: Sibling checkout — neural-amp-modeler-rs
-        uses: actions/checkout@v4
-        with:
-          repository: FastTrackStudios/neural-amp-modeler-rs
-          ref: 28035789bbe3ceaeff2acfb4639bba8ba29d3666
-          path: neural-amp-modeler-rs
       - name: Persistent target dir
         run: |
           # On the runner's big disk ($CI_CACHE_DIR: the runner module's
@@ -103,9 +52,9 @@ jobs:
           echo "CARGO_TARGET_DIR=$dir" >> "$GITHUB_ENV"
           echo "target dir: $dir ($(du -sh "$dir" 2>/dev/null | cut -f1))"
       # Not `--locked`: cargo writes the lockfile's [[patch.unused]] trailer
-      # in HashMap order — one group per patched source URL (crates-io,
-      # daw, processor) — so the same inputs serialise differently from
-      # one run to the next and `--locked` fails at random (observed
+      # in HashMap order — one group per patched source URL — so the same
+      # inputs serialise differently from one run to the next and
+      # `--locked` fails at random (observed
       # locally: four consecutive `cargo metadata` runs, three orderings).
       # Instead: resolve, then diff the committed lockfile against the
       # written one with the trailer compared as a sorted set. The whole
@@ -150,5 +99,20 @@ jobs:
         run: ${NIX_DEV} just web-tailwind
       - name: cargo check --workspace
         run: ${NIX_DEV} cargo check --workspace
+      # The Signal browser remote: signal-desktop's web build, which the
+      # workspace check (native) never compiles.
+      - name: wasm check (Signal browser remote)
+        run: |
+          ${NIX_DEV} cargo check -p signal-desktop \
+            --target wasm32-unknown-unknown --no-default-features --features signal
       - name: cargo nextest
         run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast --features session-desktop/cli,signal-desktop/cli,web-audio-worklet/guitar,web-audio-worklet/keys
+      # Advisory only: the lint debt is being paid down crate by crate, so
+      # this reports (grouped by lint and crate, .github/scripts/
+      # clippy-report.py) without blocking the PR.
+      - name: cargo clippy (advisory, does not block)
+        continue-on-error: true
+        run: |
+          ${NIX_DEV} cargo clippy --workspace --no-deps --all-targets --keep-going \
+            --message-format=json -- --cap-lints warn \
+            | ${NIX_DEV} python3 .github/scripts/clippy-report.py

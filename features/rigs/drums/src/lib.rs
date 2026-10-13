@@ -13,7 +13,7 @@ pub mod ui;
 
 use std::path::Path;
 
-use sampler::midicore::{self, DrumMap, DrumMapConverter};
+use sampler::midicore::{DrumMap, DrumMapConverter};
 use sampler::{InstrumentId, PreloadProfile, PresetSpec, SamplerRig};
 
 mod backend;
@@ -53,9 +53,11 @@ pub fn attach_converted_kit(
 /// Load a full drum kit from a `.signalpreset` and route it to the GM percussion channel.
 ///
 /// This is the loader for native GGD-style kits (e.g. Modern & Massive 2), where
-/// the `.signalpreset` carries one engine per piece + GM `note_routing` +
-/// send-based multi-mic `DrumMixer`, with per-piece mic sets. Unlike [`load_kit`],
-/// which loads a single merged articulation/zone library.
+/// the `.signalpreset` carries one engine per piece + GM `note_routing` + its
+/// mic layout, with per-piece mic sets. Each mic loads as a track in the daw —
+/// close mics to master, overheads and rooms sent to shared bus tracks — so
+/// the kit is mixed on the daw's own faders. Unlike [`load_kit`], which loads
+/// a single merged articulation/zone library.
 ///
 /// Returns the per-engine instrument ids (`"<id>:<piece>"`).
 ///

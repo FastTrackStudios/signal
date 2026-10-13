@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage:
-#   xtask/scripts/run_parity_pipeline.sh <export_json> \
+#   xtask/frame/scripts/run_parity_pipeline.sh <export_json> \
 #     --out-dir <dir> \
 #     [--actual-png-dir <dir> --expected-png-dir <dir> --threshold <percent>] \
 #     [--require-pass]

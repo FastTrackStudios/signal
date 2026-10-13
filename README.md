@@ -1,51 +1,64 @@
-# session
+# studio
 
-Post-production and live-performance coordination: setlists, songs,
-charts, the keyflow chart language, notation, and the guide (click,
-count-in, spoken section cues).
+FastTrackStudio's audio and music software, in one repository: a DAW and
+the apps built on it.
 
-Split out of the FastTrackStudio monorepo in August 2026.
+- **Session** — the full DAW: tracking, editing and mixing, setlists and
+  songs, charts in the keyflow language, and the guide (click, count-in,
+  spoken section cues). Desktop, iPhone, and a browser version.
+- **Signal** — a live instrument rig: guitar, bass, keys, drums and
+  sampled instruments, with tones and patches switched during a set. The
+  rig runs headless and every screen — laptop, phone, tablet, browser — is
+  a remote attached to it.
+- **Patchbay** — studio routing: PipeWire, Core Audio, Dante and digital
+  desks, wired and recalled from one window.
+- **Plugins** — the FTS effects (EQ, compressor, saturation, delay,
+  reverb, modulation, gate, limiter, pitch, NAM amps and more) as CLAP and
+  VST3.
+- **frame** — the design and control-surface engine the plugin faces and
+  control surfaces are drawn with.
 
-## Where this sits
-
-Session is the **coordinator at runtime** — the Session app opens and
-syncs Signal and Ignition over WebSocket, and depends on neither.
-
-In *cargo* terms the arrow is the other way round: this repo publishes
-the musical vocabulary (`keyflow`, `song`, `session-proto`,
-`session-ui`, `engraver`) that Signal's rigs consume, so it sits
-**below** `signal` in the dependency graph. Runtime role and layer
-order are deliberately opposite; the graph stays acyclic because the
-coordination is over the wire, not over cargo.
-
-```
-daw  ->  session  ->  signal
-             ^
-             └── the Session app lives here too, and talks to
-                 Signal / Ignition over ws:// rather than linking them
-```
+Session and Signal run the same engine: one DAW engine per process, with
+a rig being a folder of tracks in it
+([docs/design/one-engine.md](docs/design/one-engine.md)).
 
 ## Layout
 
 ```
-features/session/      the session domain — setlists, transport, proto, ui
-crates/keyflow/      the keyflow chart language — syntax, chordpro,
-                     musicxml, midi, live, sync, lsp, tree-sitter, ui
-features/song/       song sections and arrangement
-features/engraver/   MusicXML -> scores and parts
-features/guide/      click / count-in / spoken section cues
-features/chords/ chord entry and analysis
-features/dynamic-template/  dynamic session templates
-apps/session/desktop/                the Session app
+apps/      the applications — session/, signal/, patchbay/, plugins/, themer/
+crates/    daw (the DAW core and its standalone engine), studio (the
+           umbrella: REAPER adapter, project files, UI, CLI), frame, keyflow
+features/  one crate per feature — the effects, the rigs, audio, MIDI,
+           formats, editing, control surfaces, …
+vendor/    patched third-party crates
+xtask/     build tooling
+docs/      design notes and guides
 ```
 
-## Build
+## Building
+
+Everything builds from the repository root, in the Nix dev shell:
 
 ```bash
-nix develop
-cargo check --workspace
+nix develop                 # or: direnv allow
+just check                  # cargo check --workspace
+just test                   # the test suite (cargo nextest)
+just app                    # run Session
+just guitar                 # run Signal's guitar rig
+just plugins-bundle         # build the CLAP/VST3 plugins into target/bundled
 ```
+
+`just --list` shows every recipe.
+
+## Assets
+
+Large binaries — test fixtures, research captures, the amp captures and
+impulse responses the rigs ship with — live in separate private
+repositories. `just assets` fetches them and links them into place
+(the list is in `assets.txt`). The tests that read those fixtures, and
+the rigs' bundled models, need them.
 
 ## Licence
 
-GPL-3.0-or-later.
+GPL-3.0-or-later. Vendored third-party code under `vendor/` keeps its
+own licence.

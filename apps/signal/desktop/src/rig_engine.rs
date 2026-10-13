@@ -254,7 +254,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                 }
             };
             report("start");
-            crate::log_ring::restore_previous();
+            app_shell::log_ring::restore_previous();
             let mut tick: u32 = 0;
             let mut stuck_logged = false;
             loop {
@@ -297,7 +297,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
                         }
                     };
                     tracing::info!(mem.footprint_mb = mem_mb, "memory");
-                    crate::log_ring::persist();
+                    app_shell::log_ring::persist();
                     tracing::info!(
                         ui.fps = ui.fps,
                         ui.mean_ms = ui.mean_ms,

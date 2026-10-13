@@ -39,7 +39,13 @@
       # definition of how those sheets get built.
       ++ [
         pkgs.just
-      ];
+      ]
+      # Patchbay's integration tests stand up a private PipeWire graph
+      # (features/patchbay/tests/common): the daemon and pw-* tools come
+      # with pipewire (buildInputs), the session manager and the
+      # pulse-side pactl/parec from these. Without them the sandbox tests
+      # skip themselves rather than fail.
+      ++ lib.optionals pkgs.stdenv.isLinux [ pkgs.wireplumber pkgs.pulseaudio ];
 
       # Seeded cargo-home bins (dx for the web-bundle steps) resolve
       # from PATH — never installed from here. APPEND, don't prepend:

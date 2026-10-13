@@ -441,3 +441,25 @@ fn autogain_no_nan() {
         }
     }
 }
+
+#[test]
+fn k_weighting_is_redesigned_per_sample_rate() {
+    // The same physical frequency weights the same at 44.1, 48 and 96 kHz:
+    // a 1 kHz sine passes near unity at each.
+    for sr in [44_100.0f64, 48_000.0, 96_000.0] {
+        let mut k = KWeightingFilter::new();
+        k.update(sr);
+        let n = sr as usize;
+        let (mut inp, mut out) = (0.0f64, 0.0f64);
+        for i in 0..n {
+            let x = (2.0 * std::f64::consts::PI * 1000.0 * i as f64 / sr).sin();
+            let y = k.tick(x);
+            if i > n / 2 {
+                inp += x * x;
+                out += y * y;
+            }
+        }
+        let db = 10.0 * (out / inp).log10();
+        assert!(db.abs() < 0.8, "1 kHz at {sr} Hz: {db:.2} dB");
+    }
+}

@@ -1581,123 +1581,7 @@ impl SamplerBank {
 
     // ── Drum mixer (send-based mic routing) ──────────────────────────────
 
-    /// Snapshot the drum mixer layout for a loaded preset (engines → close-mic
-    /// channels + bus sends, plus shared bus tracks). `None` if the preset
-    /// isn't a send-routed drum preset.
-    #[must_use]
-    pub fn preset_mixer_layout(&self, prefix: &str) -> Option<crate::mixer::MixerLayout> {
-        self.presets
-            .get(prefix)?
-            .mixer()
-            .map(super::mixer::DrumMixer::layout)
-    }
-
-    /// Clone the lock-free peak-meter handle for a loaded preset's mixer.
-    #[must_use]
-    pub fn preset_mixer_meters(
-        &self,
-        prefix: &str,
-    ) -> Option<std::sync::Arc<crate::mixer::MixerMeters>> {
-        self.presets.get(prefix)?.mixer().map(|m| m.meters.clone())
-    }
-
-    pub fn set_mixer_piece_gain_db(&mut self, prefix: &str, i: usize, db: f32) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_piece_gain_db(i, db);
-        }
-    }
-    pub fn set_mixer_piece_mute(&mut self, prefix: &str, i: usize, muted: bool) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_piece_mute(i, muted);
-        }
-    }
-    pub fn set_mixer_piece_solo(&mut self, prefix: &str, i: usize, soloed: bool) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_piece_solo(i, soloed);
-        }
-    }
-    pub fn set_mixer_channel_gain_db(&mut self, prefix: &str, i: usize, db: f32) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_channel_gain_db(i, db);
-        }
-    }
-    pub fn set_mixer_channel_mute(&mut self, prefix: &str, i: usize, muted: bool) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_channel_mute(i, muted);
-        }
-    }
-    pub fn set_mixer_channel_solo(&mut self, prefix: &str, i: usize, soloed: bool) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_channel_solo(i, soloed);
-        }
-    }
-    pub fn set_mixer_send_level_db(&mut self, prefix: &str, i: usize, db: f32) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_send_level_db(i, db);
-        }
-    }
-    pub fn set_mixer_send_mute(&mut self, prefix: &str, i: usize, muted: bool) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_send_mute(i, muted);
-        }
-    }
-    pub fn set_mixer_send_solo(&mut self, prefix: &str, i: usize, soloed: bool) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_send_solo(i, soloed);
-        }
-    }
-    pub fn set_mixer_bus_gain_db(&mut self, prefix: &str, i: usize, db: f32) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_bus_gain_db(i, db);
-        }
-    }
-    pub fn set_mixer_bus_mute(&mut self, prefix: &str, i: usize, muted: bool) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_bus_mute(i, muted);
-        }
-    }
-    pub fn set_mixer_bus_solo(&mut self, prefix: &str, i: usize, soloed: bool) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_bus_solo(i, soloed);
-        }
-    }
-    pub fn set_mixer_master_gain_db(&mut self, prefix: &str, db: f32) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_master_gain_db(db);
-        }
-    }
-    pub fn set_mixer_master_mute(&mut self, prefix: &str, muted: bool) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_master_mute(muted);
-        }
-    }
-
     // ── FX-chain plugin hosting ──────────────────────────────────────────
-
-    /// Install a hosted plugin into a slot on the loaded preset's drum mixer
-    /// (channel / bus / master). Returns the new slot index.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the preset or mixer cannot be found, or if the plugin
-    /// cannot be installed.
-    pub fn install_mixer_plugin(
-        &mut self,
-        prefix: &str,
-        target: crate::mixer::FxTarget,
-        plugin: signal_plugin_host::HostedPlugin,
-    ) -> Result<usize, signal_plugin_host::PluginError> {
-        let mixer = self
-            .presets
-            .get_mut(prefix)
-            .and_then(|p| p.mixer_mut())
-            .ok_or_else(|| {
-                signal_plugin_host::PluginError::LoadFailed(format!(
-                    "no drum mixer for preset {prefix:?}"
-                ))
-            })?;
-        mixer.install_plugin(target, plugin)
-    }
 
     /// Install a hosted plugin on the preset's master FX chain (works for
     /// drum and non-drum presets — for drum presets this chain runs after
@@ -1718,80 +1602,10 @@ impl SamplerBank {
         preset.install_master_plugin(plugin)
     }
 
-    pub fn remove_mixer_plugin(
-        &mut self,
-        prefix: &str,
-        target: crate::mixer::FxTarget,
-        slot_idx: usize,
-    ) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.remove_plugin(target, slot_idx);
-        }
-    }
-
     pub fn remove_preset_master_plugin(&mut self, prefix: &str, slot_idx: usize) {
         if let Some(p) = self.presets.get_mut(prefix) {
             p.remove_master_plugin(slot_idx);
         }
-    }
-
-    pub fn set_mixer_slot_bypass(
-        &mut self,
-        prefix: &str,
-        target: crate::mixer::FxTarget,
-        slot_idx: usize,
-        bypassed: bool,
-    ) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_slot_bypass(target, slot_idx, bypassed);
-        }
-    }
-
-    pub fn set_mixer_slot_param(
-        &self,
-        prefix: &str,
-        target: crate::mixer::FxTarget,
-        slot_idx: usize,
-        param_id: u32,
-        value: f64,
-    ) {
-        if let Some(m) = self.presets.get(prefix).and_then(|p| p.mixer.as_ref()) {
-            m.set_slot_param(target, slot_idx, param_id, value);
-        }
-    }
-
-    pub fn mixer_slot_params(
-        &mut self,
-        prefix: &str,
-        target: crate::mixer::FxTarget,
-        slot_idx: usize,
-    ) -> Option<Vec<signal_plugin_host::PluginParamInfo>> {
-        let m = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut())?;
-        m.slot_params(target, slot_idx)
-    }
-
-    /// Install a NAM model on the drum mixer at `target`. The model is
-    /// loaded from disk + prepared at the mixer's sample rate before the
-    /// audio thread sees the slot — so the slot is render-ready the
-    /// instant `install_nam` returns.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the preset or mixer cannot be found, or if the NAM model
-    /// cannot be loaded or installed.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn install_mixer_nam(
-        &mut self,
-        prefix: &str,
-        target: crate::mixer::FxTarget,
-        model_path: impl AsRef<std::path::Path>,
-    ) -> Result<usize, String> {
-        let mixer = self
-            .presets
-            .get_mut(prefix)
-            .and_then(|p| p.mixer_mut())
-            .ok_or_else(|| format!("no drum mixer for preset {prefix:?}"))?;
-        mixer.install_nam(target, model_path)
     }
 
     /// Install a NAM model on the preset's master FX chain (works for
@@ -1812,22 +1626,6 @@ impl SamplerBank {
             .get_mut(prefix)
             .ok_or_else(|| format!("no preset {prefix:?}"))?;
         preset.install_master_nam(model_path)
-    }
-
-    /// Set the input or output gain (dB) of a NAM slot. No-op for non-NAM
-    /// backends and missing slots.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn set_mixer_nam_gain(
-        &mut self,
-        prefix: &str,
-        target: crate::mixer::FxTarget,
-        slot_idx: usize,
-        input: bool,
-        gain_db: f32,
-    ) {
-        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
-            m.set_nam_gain(target, slot_idx, input, gain_db);
-        }
     }
 
     /// Render a loaded preset into per-mic buses (keyed by mic id). See

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage:
-#   xtask/scripts/capture_load_profile.sh <fts_export_or_figma_json> <out_json> [iterations]
+#   xtask/frame/scripts/capture_load_profile.sh <fts_export_or_figma_json> <out_json> [iterations]
 
 INPUT="${1:-}"
 OUT="${2:-}"

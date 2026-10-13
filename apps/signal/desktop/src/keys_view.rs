@@ -308,10 +308,10 @@ fn PlayPage(status: KeysStatus, presets: Vec<KeysPreset>) -> Element {
 /// a copy-all button for pasting into a bug report.
 #[component]
 fn LogsPage() -> Element {
-    let mut lines = use_signal(crate::log_ring::snapshot);
+    let mut lines = use_signal(app_shell::log_ring::snapshot);
     use_future(move || async move {
         loop {
-            lines.set(crate::log_ring::snapshot());
+            lines.set(app_shell::log_ring::snapshot());
             architect::platform::sleep(std::time::Duration::from_millis(1000)).await;
         }
     });
@@ -358,7 +358,7 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
     let mut host = use_signal(|| {
         crate::remote::engine_iroh_id()
             .map(|id| id.to_string())
-            .or_else(|| crate::prefs::get("signal-engine-ws-url"))
+            .or_else(|| utils::prefs::get_raw("signal-engine-ws-url"))
             .unwrap_or_default()
     });
     let mut packs = use_signal(Vec::<PackInfo>::new);
@@ -477,7 +477,7 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
     let on_save = move |_| {
         let raw = host().trim().to_string();
         if raw.starts_with("ws://") || raw.starts_with("wss://") {
-            crate::prefs::set("signal-engine-ws-url", &raw);
+            utils::prefs::set_raw("signal-engine-ws-url", &raw);
             crate::remote::store_engine_iroh_id(None);
         } else if !raw.is_empty() {
             // Not a URL — treat as an iroh endpoint id.

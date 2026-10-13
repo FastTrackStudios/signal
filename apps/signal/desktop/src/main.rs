@@ -38,10 +38,6 @@ mod engines;
 mod ios_safari;
 /// In-memory log ring (tracing capture + panic hook) — rendered by the
 /// keys Logs tab on the phone, harmless elsewhere.
-#[expect(dead_code)]
-#[cfg(not(target_arch = "wasm32"))]
-mod log_ring;
-mod prefs;
 // The shared "dial the engine" plumbing every remote surface uses (rig
 // views + the browser session player).
 /// Pack downloads — list + fetch `.signalpack`s from a pack host (the
@@ -88,8 +84,6 @@ mod web_keys_decoder;
 mod ekit_view;
 #[cfg(feature = "signal")]
 mod space_view;
-#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
-mod updates;
 #[cfg(all(feature = "signal", target_arch = "wasm32"))]
 mod web_keys_threads;
 // ── iPhone: the in-process rig + the phone shell ────────────────────────
@@ -217,7 +211,7 @@ fn main() {
                     .unwrap_or_else(|_| LOG_FILTER.into()),
             )
             .with(tracing_subscriber::fmt::layer())
-            .with(log_ring::RingLayer::new())
+            .with(app_shell::log_ring::RingLayer::new())
             .with(architect_telemetry::tracing_layer());
         match architect_telemetry::otel::init("signal", LOG_FILTER) {
             Some((otel_guard, layers)) => {
@@ -226,7 +220,7 @@ fn main() {
             }
             None => registry.init(),
         }
-        log_ring::install_panic_hook();
+        app_shell::log_ring::install_panic_hook("Signal");
     }
 
     // Session: bring up the in-process engine (standalone daw + setlist
@@ -321,7 +315,7 @@ fn window_placement() -> WindowPlacement {
     fn setting(var: &str, key: &str) -> Option<String> {
         std::env::var(var)
             .ok()
-            .or_else(|| prefs::get(key))
+            .or_else(|| utils::prefs::get_raw(key))
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
     }
@@ -549,7 +543,7 @@ impl Workspace {
 // ── Landing / last-workspace persistence ────────────────────────────────────
 
 fn load_last_workspace() -> Option<Workspace> {
-    let saved = prefs::get("last-workspace")?;
+    let saved = utils::prefs::get_raw("last-workspace")?;
     Workspace::all()
         .into_iter()
         .find(|(_, label)| *label == saved)
@@ -557,7 +551,7 @@ fn load_last_workspace() -> Option<Workspace> {
 }
 
 fn store_last_workspace(w: Workspace) {
-    prefs::set("last-workspace", w.label());
+    utils::prefs::set_raw("last-workspace", w.label());
 }
 
 /// Web deep link: `#signal`, `#session`, `#charts`, `#home` (first hash
@@ -1297,13 +1291,13 @@ fn UpdateCheck(msg: Signal<String>) -> Element {
         button {
             style: "padding: 3px 10px; border-radius: 5px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px;",
             onclick: move |_| {
-                use updates::Updater as _;
-                let text = match updates::CodebergUpdater.check_for_updates() {
-                    updates::UpdateStatus::UpToDate => "Up to date.".to_string(),
-                    updates::UpdateStatus::Available(info) => {
+                use app_shell::updates::Updater as _;
+                let text = match app_shell::updates::GithubUpdater::new(env!("CARGO_PKG_VERSION")).check_for_updates() {
+                    app_shell::updates::UpdateStatus::UpToDate => "Up to date.".to_string(),
+                    app_shell::updates::UpdateStatus::Available(info) => {
                         format!("Update available: v{}", info.version)
                     }
-                    updates::UpdateStatus::Failed(e) => format!("Check failed: {e}"),
+                    app_shell::updates::UpdateStatus::Failed(e) => format!("Check failed: {e}"),
                 };
                 msg.set(text);
             },

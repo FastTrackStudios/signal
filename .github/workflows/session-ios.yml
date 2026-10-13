@@ -17,7 +17,7 @@ on:
       - "apps/session/desktop/**"
       - "apps/session/daw/**"
       - "crates/**"
-      - "libs/**"
+      - "features/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "flake.nix"
@@ -56,28 +56,9 @@ jobs:
           df -h /Volumes/build-disk | tail -1
 
       # clean:false keeps target/ between runs so cargo builds incrementally.
-      # Into session/, beside its siblings: the workspace takes daw and
-      # processor as path deps (`../daw`, `../processor`), as checks.yml
-      # lays them out.
       - uses: actions/checkout@v4
         with:
-          path: session
           clean: false
-
-      # The siblings at the revisions flake.lock pins (daw-src,
-      # processor-src) — the one place they are pinned for a build.
-      - name: Sibling checkouts — daw, processor
-        run: |
-          set -euo pipefail
-          for sibling in daw processor; do
-            rev=$(jq -r ".nodes[\"$sibling-src\"].locked.rev" session/flake.lock)
-            if [ ! -d "$sibling/.git" ]; then
-              git clone --quiet "https://github.com/FastTrackStudios/$sibling" "$sibling"
-            fi
-            git -C "$sibling" fetch --quiet origin "$rev"
-            git -C "$sibling" checkout --quiet --force "$rev"
-            echo "$sibling at $rev"
-          done
 
       - name: Build, sign, and upload Session to TestFlight
         env:
@@ -111,8 +92,7 @@ jobs:
           DX_BUNDLE_ID: app.fasttrackstudio.session
           APP_DISPLAY_NAME: Session
           PROFILE_NAME: FTS Session App Store
-          ICONS_DIR: ${{ github.workspace }}/session/apps/desktop/ios/Assets.xcassets
-        working-directory: session
+          ICONS_DIR: ${{ github.workspace }}/apps/session/desktop/ios/Assets.xcassets
         run: |
           set -euo pipefail
           export PATH="/nix/var/nix/profiles/default/bin:$PATH"
@@ -121,7 +101,6 @@ jobs:
 
       - name: Summary
         if: always()
-        working-directory: session
         run: |
           echo "### Session iOS TestFlight" >> "$GITHUB_STEP_SUMMARY"
           echo "commit \`$(git rev-parse --short HEAD)\` → Session uploaded (see log for build number)." >> "$GITHUB_STEP_SUMMARY"

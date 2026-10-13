@@ -1,0 +1,103 @@
+# Signal iOS TestFlight — build the Signal iPhone app (the rig, laid out
+# for a phone) and upload it on every push to main that touches the app or
+# the crates it renders with.
+#
+# Runs on the org-level self-hosted macOS runner `airlock`, which holds its
+# own credentials (~/.appstoreconnect + fts-build.keychain), so this needs no
+# GitHub secrets.
+#
+# Reuses the same parameterized deploy-testflight.sh the other products use;
+# only the DX_* env below differs.
+
+name: signal-ios
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/signal/desktop/**"
+      - "crates/**"
+      - "features/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/signal-ios.yml"
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "CFBundleShortVersionString (e.g. 0.0.2)"
+        required: false
+        default: "0.0.1"
+
+# Per-workflow group: a newer run supersedes an older queued one. NOT shared
+# across products — a concurrency group holds only one pending run, so a
+# shared name makes the products cancel each other (that is exactly how
+# task-ios went stale for four merges). Serialization is already guaranteed:
+# airlock is a single runner and takes one job at a time.
+concurrency:
+  group: ios-testflight-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: [self-hosted, macos, airlock]
+    # Turn a missing runner into a red X within the hour. Without it a job
+    # with no available runner sits QUEUED and is eventually cancelled,
+    # which reads as "cancelled" rather than "failed" and alerts nobody.
+    timeout-minutes: 90
+    steps:
+      - name: Preflight — build volume mounted
+        run: |
+          if [ ! -d /Volumes/build-disk ]; then
+            echo "ERROR: /Volumes/build-disk is not mounted on this runner." >&2
+            exit 1
+          fi
+          df -h /Volumes/build-disk | tail -1
+
+      # clean:false keeps target/ between runs so cargo builds incrementally.
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Build, sign, and upload Signal to TestFlight
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+          MARKETING_VER: ${{ inputs.marketing_version || '0.0.1' }}
+          # The release Xcode xcode-select points at (27, on macOS 27) builds,
+          # compiles the icon catalog, signs and uploads: App Store Connect
+          # refuses a beta SDK (90534), and actool must match the macOS.
+          # ── Telemetry ────────────────────────────────────────────────
+          # Baked at build time via option_env! in architect-telemetry: a
+          # shipped app has nobody to set env vars for it, and the exporter
+          # is built at process start -- before sign-in -- so a session
+          # token cannot be the credential. Both empty => the app is
+          # telemetry-free, which is the local-first default.
+          TASK_OTLP_ENDPOINT: ${{ vars.TASK_OTLP_ENDPOINT }}
+          TASK_OTLP_TOKEN: ${{ secrets.TASK_OTLP_TOKEN }}
+          TASK_SENTRY_DSN: ${{ secrets.TASK_SENTRY_DSN }}
+          # ── Signal product identity ──────────────────────────────────
+          # The app crate (apps/signal/desktop) — the Mac's Blitz app, which
+          # lays the rig out for a phone — with the guitar and keys rigs.
+          DX_PACKAGE: signal-desktop
+          DX_APP_DIR: apps/signal/desktop
+          DX_FEATURES: --no-default-features --features signal-guitar,signal-keys-rig
+          # Bundle id must match apps/signal/desktop/Dioxus.toml.
+          DX_BUNDLE_ID: app.fasttrackstudio.signal
+          # Home-screen name; without it the device shows the crate name.
+          APP_DISPLAY_NAME: Signal
+          # Own profile, or each product's build revokes the last one's.
+          PROFILE_NAME: FTS Signal App Store
+          ICONS_DIR: ${{ github.workspace }}/apps/signal/desktop/ios/Assets.xcassets
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          bash apps/signal/desktop/ios/deploy-testflight.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Signal iOS TestFlight" >> "$GITHUB_STEP_SUMMARY"
+          echo "commit \`$(git rev-parse --short HEAD)\` → Signal uploaded (see log for build number)." >> "$GITHUB_STEP_SUMMARY"

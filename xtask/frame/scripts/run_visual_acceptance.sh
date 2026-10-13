@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage:
-#   xtask/scripts/run_visual_acceptance.sh <actual> <expected> [threshold_percent] [--out-json path] [--out-md path]
+#   xtask/frame/scripts/run_visual_acceptance.sh <actual> <expected> [threshold_percent] [--out-json path] [--out-md path]
 #
 # Supports either:
 # - file-to-file compare (PNG path + PNG path), or

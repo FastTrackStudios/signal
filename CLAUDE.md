@@ -1,358 +1,296 @@
-# FastTrackStudio — Repo Instructions
+# studio — Repo Instructions
 
-**This repo is the audio/music product.** It was split into four repos in
-August 2026; Task, the framework, and the third-party forks now live
-elsewhere:
-
-| repo | holds | consumed as |
-|---|---|---|
-| **fasttrackstudio** (here) | signal, daw, session, keyflow, patchbay, fx, sampler, reaper, the app, the site | — |
-| [daw](https://github.com/FastTrackStudios/daw) | the daw domain, dawfile, the REAPER backend | **sibling checkout** at `../daw` |
-| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui`, `architect-story-*`, `architect-telemetry` | git dep, tag `v0.1.1` |
-| [task](https://github.com/FastTrackStudios/task) | the Task product + the Editor stack | git dep, `branch = "main"` (repin to a tag) |
-| [vendor](https://github.com/FastTrackStudios/vendor) | `phon`, `phon-jit`, `styx-format` forks (pinned rc.5) | `[patch.crates-io]`, tag `v0.1.0` |
-
-One root Cargo workspace (249 members), one lockfile, one `target/`, one
-flake. Intra-repo dependencies are path deps in root
-`[workspace.dependencies]`, consumed as `x.workspace = true`. Cross-repo
-dependencies are **git deps pinned to a tag**.
-
-**Co-developing across repos**: override the tag with a local checkout
-rather than pushing a tag to test:
-
-```toml
-[patch."https://github.com/FastTrackStudios/architect"]
-architect = { path = "../architect/architect" }
-```
-
-Never commit those overrides — the paths are machine-specific.
-
-**The dependency arrow is bidirectional** (a deliberate choice): this repo
-takes `editor`, `editor-keyflow*`, `view-knowledge-graph`,
-`collection-proto` and `attachments-proto` from task, while task takes
-`daw`, `session`, `keyflow*`, `engraver`, `input`, `actions-*`, `song` and
-`dioxus-test` from here. Cargo's package graph stays acyclic, but a change
-spanning both repos needs two bumps in sequence — land here, tag, bump
-there. Use the local `[patch]` while developing; only the release needs
-the round trip.
+**studio is FastTrackStudio's audio/music product in one repo**: the DAW
+(`daw`) and everything built on it — Session (the full DAW), Signal (the
+live-rig app), Patchbay (studio routing), the CLAP/VST3 plugins, and
+frame (the design / control-surface engine). It is the merger, in October
+2026, of the former session, daw, processor, signal, patchbay and frame
+repos. One Cargo workspace, one lockfile, one `target/`, one flake.
 
 ## Layout
 
 ```
-crates/    domain cores — daw, session, keyflow, signal (facade+proto+
-           ui+live+storage+...), midicore, input, audiocore,
-           patchbay (PipeWire studio routing: facade+proto+ui)
-features/  capabilities — audio, sync, dawfile, reaper, standalone,
-           surfaces, daw-ui, guide, engraver, dynamic-template,
-           fx (built-in FX), rigs, sampler, nam, plugin-host,
-           expression-editor, chord-tool, song,
-           launcher/ (fts-launcher — the REAPER DawModule glue; the
-           launcher engine itself is architect-launcher-*)
-libs/      infra libraries — dock, nice-plug, utils,
-           installer-core, neural-amp-modeler, monarchy, devtools,
-           ui/ (fts-plug-ui, fts-audio-ui — the audio-specific UI that
-           did NOT move to architect-ui, plus a vendored copy of
-           fts-theme.css that Tailwind builds @import),
-           vendor/ (dioxus-test, facet-swift, world)
-apps/      fasttrackstudio (THE app: desktop GUI = signal / session /
-           full / tts; `fasttrackstudio --engine` = the headless signal
-           engine; the dx web build is the browser remote, embeddable in
-           the binary via feature embed-web),
-           daw-cli, keyflow-cli, installer, plugins/, extensions/,
-           site (fts-site — fasttrackstudio.app website, dioxus web),
-           docs-site (docs.fasttrackstudio.app — dodeca + kf docs, NOT a
-           cargo member; `just docs-build` / `just docs-serve`)
-docs/      cross-domain guides (facet, styx, tracey, spec/)
+apps/       session/{desktop,daw,web,daw-web}  Session: the desktop app, the DAW
+                                               view, the site, the DAW in a browser
+            signal/{desktop,mobile,web}        Signal: the desktop/iOS app (and its
+                                               headless `--engine`), Android, the site
+            patchbay/                          fts-patchbay: app, agent CLI, browser remote
+            plugins/*                          the CLAP/VST3 plugins (`<name>-plugin`),
+                                               verify/ (bundle load checks)
+            themer/
+crates/     daw/*      the DAW alone: the domain core (`daw`), proto, control,
+                       the standalone engine (`daw-standalone`), audio-graph,
+                       allocator, transport-sync, actions, module, utils
+            studio/    the umbrella over daw: REAPER adapter, project files,
+                       UI, CSI, the daw CLI, the integration-test harness —
+                       all cargo features of `studio`
+            frame/     the design / control-surface engine (+ tools/: cli,
+                       desktop, mcp, library-server)
+            keyflow/   keyflow-proto, keyflow-syntax (the rest of keyflow is a
+                       git dep)
+features/   one crate per feature, sub-folders allowed: dsp/* (the effects),
+            rigs/* (Signal's rigs; rigs/core/* is the signal domain), audio,
+            midi, session, song, chords, formats, editing, expression-editor,
+            input, sync, ui/*, faces, control-surfaces, patchbay,
+            adapters/reaper/*, dynamic-template, …
+vendor/     patched third-party crates (each with UPSTREAM.md or FTS-PATCH.md)
+xtask/      devtools, frame (Figma parity), plugins (the bundler), session-reaper
+docs/       design/ (one-engine.md), per-domain notes (daw, signal, frame,
+            patchbay, …), agents/, guides, specs
+nix/        flake modules (toolchain, shells, packages), reaper-config,
+            vendored flakes
+scripts/    helper scripts the Justfile calls
 ```
 
-**architect is a separate repo** as of the August 2026 split. Framework
-changes are made there, tagged, and pulled in by bumping the tag here —
-with a local `[patch]` override for the edit/test loop. `architect-ui`
-(formerly `fts-ui`) and `architect-story-*` (formerly `fts-story-*`) went
-with it; `fts-plug-ui` and `fts-audio-ui` stayed here because they link
-`audiocore-core` and `nice-plug`.
+Some features carry their own `AGENTS.md` / `README.md`
+(`features/input`, `features/dynamic-template`,
+`features/expression-editor`, …) — read it before working there.
+
+## The model
+
+- **daw is the DAW alone; `studio` is the umbrella.** `crates/daw/*` knows
+  nothing of REAPER or of any product. REAPER, the project formats, the
+  UI, control surfaces and the daw CLI are features of `crates/studio`.
+- **One engine.** A process runs ONE daw engine: one `Standalone`, one
+  project, one realtime audio engine on one device. A rig is a folder of
+  tracks in that project (`signal_rig_host::engine::{Engine, Rig}`), not an
+  engine of its own. Signal and Session both just run the DAW: Signal is
+  the isolated live-rig app, Session the full DAW, and rigs live in Session
+  as tracks. More engines means more processes of the same engine. Read
+  **`docs/design/one-engine.md`** before touching rigs, engines, meters or
+  MIDI.
+- **The apps share their shell**: the log ring / crash log / flight log
+  and the update check are `features/app-shell`; prefs are `utils::prefs`.
+  Session and Signal do not keep copies.
+- **The apps share their shell**: the log ring / crash log / flight log
+  and the update check are `features/app-shell`; prefs are `utils::prefs`.
+  Session and Signal do not keep copies.
+- **Faces are frame documents.** Control surfaces and plugin faces are
+  `.frame` documents rendered by `crates/frame`. `just faces` generates the
+  plugin faces into `features/faces/generated` (not kept in git; the apps
+  read them at runtime).
+
+## Crate rules
+
+- **One crate per feature, with cargo features** — not `-proto` / `-ui` /
+  `-dsp` sibling crates. A feature's wire types, UI and engine are features
+  of its one crate (`features/dsp/eq`: `native`, `ui`, `profiles`, …;
+  `features/patchbay`: `server`, `ui`, `vox`).
+- **Path deps inside the repo, declared once** in the root
+  `[workspace.dependencies]` and consumed as `x.workspace = true`.
+  `default-features = false` cannot be set on a workspace-inherited dep —
+  put it on the `[workspace.dependencies]` entry.
+- **Git deps across repos, pinned to a tag** (architect, keyflow, editor,
+  music-convention, neural-amp-modeler-rs, the `vendor` repo). The branch
+  pins that remain say why in Cargo.toml (nice-plug's `fts-baseview-03`,
+  reaper-rs, task's `editor`).
+- **The root `[patch]` tables**, all live: `crates-io` (the vendor repo's
+  vox-phon / phon / phon-jit / styx-format / facet-core forks, the FTS
+  blitz tag, pipewire-rs past 0.10.0, in-tree `vendor/baseview` and
+  `vendor/anyrender_*`); `DioxusLabs/dioxus` (in-tree
+  `vendor/dioxus-native{,-dom}` and `vendor/dioxus-core`);
+  `FastTrackStudios/daw` (hands keyflow's git dep the in-tree `daw`,
+  `dawfile-reaper` and `fts-sample` — goes when keyflow takes them from
+  studio); `FastTrackStudios/architect` (architect's unreleased
+  `action-list` branch through the `www.github.com` host — repin to a tag
+  when architect cuts one). A `[patch]` **cannot rename a crate**.
+- **Co-developing across repos**: override with a local checkout —
+  `[patch."https://github.com/FastTrackStudios/architect"] architect =
+  { path = "../architect/architect" }` — and never commit it; the paths are
+  machine-specific.
+- **`include_str!` / `@import` across a repo boundary does not work** (a
+  git dep has no stable path on disk). Export the bytes from the owning
+  crate (`architect_ui::THEME_CSS`), or resolve the path with
+  `cargo metadata` the way `just _lumen-link` and `just _web-tw-link` do.
+- **Architect idiom**: services are `#[architect::rpc]` traits (at most 4
+  params per method — a Facet constraint); live updates are `#[subscribe]`
+  streams from `architect::PubSub` hubs, never Tx-parameter subscriptions;
+  transports are `architect::axum_ws` + `LayerRouter` server-side and
+  `vox_core::initiator_on(link).establish::<Client>()` client-side.
+- **Async**: `tokio::sync::*` for locks and channels;
+  `architect::platform::{spawn, sleep, timeout}` for tasks and timers
+  (tokio on native, browser timers on wasm).
+
+## Build and test
+
+Dev shell: `nix develop` (or direnv `use flake`) — the Rust 1.94 pin with
+wasm (plus iOS on darwin, Android on Linux), `dx`, wasm-bindgen,
+tailwindcss, tracey, mold, and the native headers (alsa, pipewire, jack).
+It sources `.env` (gitignored) on entry. `nix develop .#ci` is what CI
+runs in, `.#reaper-test` the REAPER suites, `.#stems` stem separation.
+
+```bash
+just check                 # cargo check --workspace
+just test                  # cargo nextest run --workspace --features session-desktop/cli,signal-desktop/cli,web-audio-worklet/guitar,web-audio-worklet/keys
+just test-doc              # doctests (nextest cannot run them)
+just app [PROJECT]         # Session (session-desktop, release-fast)
+just guitar / just keys    # Signal's rigs (signal-desktop)
+just signal-engine         # signal-desktop --engine: the headless rig engine (ws://:4040/vox)
+just reaper-test [FILTER]  # Session's #[reaper_test] suites in a real REAPER
+just reaper daw-test       # daw-reaper's suites (module: features/adapters/reaper/reaper.just)
+just plugins-bundle [names] && just plugins-link   # .clap/.vst3 into target/bundled, linked into ~/.clap, ~/.vst3
+just faces                 # generate the plugin faces
+just assets                # link the big binaries (see Assets)
+```
+
+The test feature list matters: the app CLIs and the worklet rigs sit
+behind features, and without them their tests never build.
+
+**Before you push: `just ci`.** It runs exactly what
+`.github/workflows/checks.yml` runs, in the same order, and stops at the
+first failure: lockfile drift, `cargo fmt --check`, the flow gate
+(`just daw-flows`), the web tailwind sheet, `cargo check --workspace`, the
+Signal wasm check, then nextest as above. `just ci <step>` starts from a
+step (`lockfile`, `fmt`, `flows`, `tailwind`, `check`, `wasm`, `nextest`).
+It refuses to start with less than 25 GB free: a full disk shows up as
+mold dying with a bus error, which reads as a broken toolchain
+(`just sweep-incremental` is the always-safe reclaim). It says nothing
+about `session-ios` / `signal-ios` (Xcode, signing), `deploy` or
+`reaper-integration`, which have their own runners and reasons to be red.
+
+**Build performance / disk** — read the `build-performance` skill before
+touching a `[profile.*]` knob, benchmarking a build, or when the disk
+fills up. The short version:
+
+- Dev debuginfo is `line-tables-only`; need a debugger? `--profile dev-dbg`.
+- mold is the Linux linker — `direnv reload` after pulling, or links fail
+  with `cannot find -fuse-ld=mold`. `target.<triple>.rustflags` REPLACES
+  `build.rustflags`, so a new global flag goes in both.
+- Dependencies build at opt-level 1, with an allowlist back at 3 for
+  audio-thread crates. A dev run of a rig must never xrun: extend the
+  allowlist, never raise `package."*"`.
+- `release-fast` is the incremental release profile the app recipes
+  share; build an app with one feature set, or cargo rebuilds everything.
+- Cargo never GCs `target/`: `just disk`, `just sweep`, `just sweep-all`,
+  `just sweep-incremental`.
+- There is no `RUSTC_WRAPPER` (sccache breaks `dx`). Check `uptime` /
+  `pgrep -c rustc` before benchmarking.
+
+## Assets
+
+Big binaries (test fixtures over 1 MB, research captures, the rigs' NAM
+captures and IRs) are not in git. They live in the private repos
+`studio-assets` and `rig-models`; `assets.txt` lists each file or
+directory and where it goes, and `just assets` clones those repos into
+`.assets/` and symlinks everything into place. A new large file goes into
+one of those repos plus a line in `assets.txt` (and `.gitignore`), never
+into this repo.
 
 ## Licence
 
-**GPL-3.0-or-later.** The workspace `license` field, every FTS-owned
-crate, and `LICENSE` at the root all say so; a new crate inherits it via
-`license.workspace = true` and should not declare its own.
+**GPL-3.0-or-later.** The workspace `license` field, every FTS-owned crate
+and `LICENSE` at the root say so; a new crate inherits it with
+`license.workspace = true` and does not declare its own.
 
-Two vendored crates keep the licence of the code they vendor, because it
-is not ours to change: `libs/vendor/world` (WORLD vocoder, M. Morise,
-BSD-3-Clause) and `libs/vendor/dioxus-test` (DioxusLabs, MIT OR
-Apache-2.0). Anything else vendored follows the same rule.
+Vendored code keeps the licence of the code it vendors, because it is not
+ours to change: everything under `vendor/` (the dioxus crates, baseview,
+anyrender_*, wgpu-hal, winit-uikit, raw-window-metal, dioxus-test — MIT
+and/or Apache-2.0; `vendor/world`, the WORLD vocoder — BSD-3-Clause), and
+`features/patchbay/driver` (forked from MARS mars-hal:
+`GPL-3.0-or-later AND MIT`). Incoming code must be GPL-compatible (MIT,
+BSD, Apache-2.0 — keep the notice and licence text); code cannot go the
+other way.
 
-Incoming code must be GPL-compatible: MIT, BSD and Apache-2.0 sources can
-be brought in (keeping their copyright notice and licence text), and the
-combined work is GPL. Code cannot go the other way — this is a one-way
-door, which is why the tree was MIT OR Apache-2.0 until August 2026.
+## Signal, plugin and DSP rules
 
-## Rules
+Signal is the live-rig domain: `features/rigs/*` (the domain core in
+`features/rigs/core/*` — proto, live, storage, controller, rig-host, grid,
+tone3000, …; docs in `features/rigs/core/docs/`), the effects in
+`features/dsp/*`, `features/adapters/reaper/signal-*` and `apps/signal/*`.
+`docs/signal/domain-model.md` explains the rig model.
 
-- **Path deps within this repo; tagged git deps across repos.** If a
-  `[patch]` block's URL is a repo that no longer exists, it is either dead
-  (delete it) or load-bearing for a *transitive* git dep. Check the
-  lockfile before touching — and note that a `[patch]` **cannot rename a
-  crate**. That is what briefly broke `fts-launcher` at the split: its
-  `launcher-ui` dep wanted a crate literally named `fts-ui`, with nothing
-  left to redirect to, so it resolved a stale Codeberg copy carrying its
-  own dioxus. Fixed by vendoring the engine into architect as
-  `architect-launcher-*` (v0.2.0), where it is an ordinary path dep on
-  `architect-ui`. `fts-launcher` is now only the REAPER DawModule glue.
-- **`default-features = false` cannot be applied to a workspace-inherited
-  dep.** Put it on the `[workspace.dependencies]` entry, not the consumer.
-- **`include_str!` / `@import` across a repo boundary does not work.** A
-  git dep has no stable path on disk, and these are invisible to cargo's
-  dependency graph, so they fail at compile time rather than resolution
-  time. Export the bytes from the owning crate instead — that is what
-  `architect_ui::THEME_CSS` is. (This class of break bit the split three
-  times.)
-  (The last dead patch table — keyflow.git for Editor.git — died
-  when Editor was imported in-tree 2026-07-10.)
-- **Architect idiom everywhere**: services are `#[architect::rpc]`
-  traits; live updates are `#[subscribe]` streams served from
-  `architect::PubSub` hubs (never Tx-parameter subscriptions or
-  reverse-dispatch "client services"); transports are
-  `architect::axum_ws` + `LayerRouter` server-side and
-  `vox_core::initiator_on(link).establish::<Client>()` client-side.
-  `session/` is the reference conversion; `signal/` was born this way.
-- Async (moire is retired — Jul 2026): `tokio::sync::*` for locks/channels
-  (`Mutex`/`RwLock`/`broadcast`/`watch`/`mpsc`); `architect::platform::{spawn,
-  sleep, timeout}` for tasks/timers — the wasm-cfg-split seam (tokio on native,
-  `spawn_local`/browser timers on wasm). Drop the old moire instrumentation
-  name-arg on constructors.
-- Each domain has its own CLAUDE.md with domain rules; read it before
-  working in that domain.
+**Detachable GUI (strict)**: the rig engine is headless; every GUI —
+desktop, phone, browser, plugin editor — is a vox client of it.
 
-## Build
+**GUI rendering** — signal and plugin UI renders identically standalone,
+as a CLAP/VST3 editor and embedded in REAPER, through one pipeline:
+`nice-plug-dioxus` / `dioxus_native` → Blitz (Vello + wgpu):
 
-Everything builds from the repo root (one workspace):
+- Never `dioxus::desktop::LaunchBuilder` for this UI (WebKit/WRY breaks
+  plugin parity; `signal-desktop --features webview` is an escape hatch
+  that nothing painted can mount under).
+- **Inline styles only** — Blitz does not load external stylesheets.
+  Inline `style`, or a static string via `document::Style { {CSS} }`;
+  never `document::Stylesheet { href }`, no Tailwind `asset!()` —
+  `include_str!` the compiled sheet (`just tailwind`, `just signal-tailwind`,
+  `just tailwind-eq`, …). Components must lay out correctly without
+  Tailwind; classes are additive only.
+- Root `App` components take no props (context via
+  `use_context_provider`), so one component serves standalone and as a
+  plugin editor.
+- Blitz's gaps: no `position: fixed`/`sticky` (absolute positions against
+  the immediate parent; mount overlays at the root with `inset: 0`), no
+  `overflow: auto` (use `overflow-y: scroll`, or `hidden` to clip), no
+  `text-overflow`, no CSS `fill`/`stroke` on SVG (use presentation
+  attributes), no `vertical-align`, `text-shadow`, blend modes, 3D
+  transforms, multi-column or container queries. Inside a plugin
+  `use_effect` never runs, `autofocus` is ignored unless the node is
+  already in the document, `MountedData::set_focus` panics from an event
+  handler, and there is no `placeholder`. Load the **`blitz-design`
+  skill** before building or refactoring this UI.
 
-```bash
-cargo check --workspace                          # the whole tree
-cargo build -p fasttrackstudio                   # THE app (GUI; `--engine` = headless signal engine)
-cargo build -p fts-cli                           # the unified `fts` CLI (fts daw / fts kf / fts signal engine / fts status)
-cargo check -p fasttrackstudio --target wasm32-unknown-unknown --no-default-features --features signal  # browser remote (web build)
-```
+**Processing cores** (`crates/daw/audio-graph`, the engines in
+`features/dsp/*`, the sampler engine) build for native, WASM/AudioWorklet
+and embedded `no_std`: `#![no_std]` + `alloc` (gate `std` behind an
+additive feature); no heap allocation on the hot path (pre-allocate in
+`reset()`; `process()` never calls `Vec::push`/`Box::new`); no threads and
+no task spawning; no platform I/O (cpal, web-sys and MIDI drivers live in
+adapter crates); keep the `AudioNode: Send` bound.
 
-Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
-carries the FTS 1.94 toolchain pin, `dx`, wasm target, tailwindcss, and
-the native headers (alsa, pipewire, jack). Also
-mold and cargo-sweep (see build performance below).
+**Effects do not depend on products**: nothing in `features/dsp/*` may
+depend on `features/rigs`, `features/session` or an app. If an effect
+needs something from a product, the dependency points the wrong way — the
+product adapts to the effect (`builtin` makes the effects daw engine
+blocks, a contract both products already speak).
 
-**Build performance / disk** — read the `build-performance` skill before
-touching a `[profile.*]` knob in the root Cargo.toml, benchmarking a
-build-time change, or when the dev disk fills up. The short version:
+**Parameters must parse the string they print** — a host's parameter list
+is text in, text out; each effect's `tests/param_round_trip.rs` holds that
+line. Tempo-synced times use `dsp_core::time` (note values, dotted and
+triplet); do not grow a second table.
 
-- Dev debuginfo is `line-tables-only` + `split-debuginfo = "unpacked"`
-  (98% of a debug binary was DWARF; the fat test binary went 1.62 GB →
-  211 MB). Need a debugger? `--profile dev-dbg`.
-- mold is the Linux linker — after pulling, `direnv reload` or links
-  fail with `cannot find -fuse-ld=mold`. Note that
-  `target.<triple>.rustflags` REPLACES `build.rustflags`; it does not
-  merge, so a new global rustflag must go in both.
-- Dependencies build at opt-level 1, with an explicit allowlist back at
-  3 for audio-thread crates. A dev run of the rig must never xrun — if
-  one does, run `--release` or extend the allowlist, never raise
-  `package."*"` wholesale.
-- Cargo never GCs `target/`. `just disk`, `just sweep`, `just sweep-all`.
-  Never delete another agent's worktree target dir.
-- There is no `RUSTC_WRAPPER`. sccache was removed (Aug 2026): measured
-  0% hits across worktrees, so it never deduped what actually costs
-  disk, and it breaks every `dx build` / `dx serve` — sccache refuses
-  dx's rustc shim with "Compiler not supported". Do not reintroduce it
-  without solving that.
-- Benchmarking: check `uptime` / `pgrep -c rustc` first — other agents
-  and background `cargo rail` runs on this 32-core box will invalidate
-  an A/B silently.
+**Realtime lints**: `features/{dsp,rigs,audio}/clippy.toml` add the
+audio-thread rules (`disallowed-methods` for locks, `env::var`, sleeps;
+`too-large-for-stack`). Clippy reads the nearest `clippy.toml`, so they hold
+under those trees and nowhere else — keep the three copies identical, and
+keep the shared settings in step with the root one.
 
-Live rig: `cargo build -p fasttrackstudio` from the repo root →
-`target/debug/fasttrackstudio --engine` (ws://:4040/vox); browser remote
-= the fts web build (`just web-stage` stages it to
-apps/fasttrackstudio/web-dist/, embedded by `--features embed-web`),
-config in `~/.config/signal/rig/*.styx`. Deployed: `just rig-install` →
-ONE binary at `~/.local/lib/fts/fasttrackstudio` behind the
-`signal-engine` systemd user unit.
-
-## Before you push: `just ci`
-
-**Run `just ci` and get a green run before every push.** It runs exactly
-what `.github/workflows/checks.yml` runs, in the same order — lockfile
-drift, `cargo fmt --check`, the flow verification gate, the web tailwind
-sheet, `cargo check --workspace`, `cargo nextest run --workspace` — and
-stops at the first failure, because CI does too and a later step built
-on a broken one tells you nothing.
-
-It mirrors **`checks.yml` and nothing else.** The other two workflows —
-`session-ios` (Xcode, signing, TestFlight) and `deploy` — need a Mac,
-signing keys and upload credentials, so they are not a pre-push check
-and must not be added to one. A green `just ci` says the CODE is good;
-it says nothing about those two, which have their own reasons to be red
-and at the time of writing both are.
-
-It refuses to start with less than 25 GB free, because a build that runs
-out of room does not fail as a full disk: mold dies with a bus error and
-cargo reports `linking with cc failed`, which reads as a broken
-toolchain. `just sweep-incremental` is the always-safe reclaim,
-`just disk` says where it went.
-
-`just ci <step>` starts from a step when you have already passed the
-cheap ones and are iterating: `lockfile`, `fmt`, `flows`, `tailwind`,
-`check`, `nextest`.
-
-A full run is a few minutes against a warm `target/`. A red CI round
-trip is far longer, and on a shared self-hosted runner it blocks
-everyone else's checks while it fails.
-
-## Signal domain rules (from the dissolved signal/CLAUDE.md)
-
-Signal is the signal-chain / plugin-management domain: `crates/signal/*`
-(facade `signal` + proto/ui/live/storage/controller/import/browser/grid/
-grid-ui/daw-bridge), `features/{fx,rigs,sampler,nam,plugin-host}`,
-`features/adapters/reaper/signal-*`, the engine mode of `apps/fasttrackstudio`. The `signal`
-facade is the only public API surface: apps depend on `signal` or
-`sampler`, never on the internal domain crates.
-Docs: `crates/signal/docs/` (DESIGN.md, DOMAIN.md).
-
-**Detachable GUI (STRICT)**: the rig core is 100% headless; every GUI is
-a vox remote via architect (`signal-guitar-proto` is the wire contract;
-`fasttrackstudio --engine` serves the router; browser/desktop/tablet UIs are clients).
-
-**GUI rendering** — signal UI must render identically standalone, as a
-VST3/CLAP plugin, and embedded in REAPER, so all contexts share one
-pipeline: `nice-plug-dioxus` → Blitz (Vello + wgpu) → baseview:
-
-- Never `dioxus::desktop::LaunchBuilder` (WebKit/WRY breaks VST parity);
-  standalone windows use `nice_plug_dioxus::open_standalone_with_state`.
-- **Inline styles only in signal UI crates** — Blitz does not load
-  external CSS files reliably. Inline `style="..."` or embed CSS as a
-  static string via `document::Style { {CSS_STR} }`; never
-  `document::Stylesheet { href: ... }`, no Tailwind `asset!()` calls
-  (embed via `include_str!()`).
-- Components must render correctly without Tailwind — explicit style
-  values for layout-critical properties; Tailwind classes are additive
-  only (built via `just tailwind` → `apps/fasttrackstudio/assets/tailwind-signal.css`).
-- Root `App` components take no props (context via `use_context_provider`)
-  so the same component works standalone and as a plugin editor.
-
-**Platform targets** — processing-core crates (`daw-audio-graph`,
-signal DSP cores in `features/fx/*-dsp`, sampler engine) must support
-native, WASM/AudioWorklet, and embedded `no_std`:
-
-- `#![no_std]` + `alloc` compatible; gate unavoidable `std` behind an
-  additive `std` feature.
-- No heap allocation on the hot path — pre-allocate at `reset()`;
-  `process()` never calls `Vec::push`/`Box::new`.
-- No threads — the graph is driven synchronously by whichever callback
-  owns it. No task spawning (`architect::platform::spawn` / `tokio`) inside
-  processing crates.
-- No platform I/O in processing crates — `cpal`/`web-sys`/MIDI drivers
-  live only in adapter crates (the engine mode, web builds, future embedded).
-- Keep the `AudioNode: Send` bound.
-
-**RPC**: service traits use `#[architect::rpc]`; max 4 params per method
-(Facet constraint); `Tx<T>`/`Rx<T>` for streaming.
-
-## Active modernization queue
-
-(Items 1–4 are DONE as of 2026-07-14 — the five daw subscriptions are
-`#[subscribe]` streams, the app embeds daw-standalone + session
-in-process, the guide lives at features/guide with TTS. Newest completed
-item: the architect CRDT doc-sync rework for vox 0.10 channel scoping —
-held-open sync/presence calls, `SyncDown::Attached` envelope; see
-crates/signal/docs/detachable-gui.md. Kept below for context until the
-queue is refilled.)
-
-1. **daw streams**: convert the five Tx-parameter subscriptions
-   (track / tempo_map / event_bus / marker / region — all
-   `subscribe(project: ProjectContext, tx)`) to `#[subscribe]` streams.
-   Design: events carry their `ProjectContext` (most already embed
-   project ids), subscribers filter client-side; per-service PubSub hub
-   on each backend (daw-standalone + daw-reaper), pumps replacing the
-   per-subscriber spawn loops — exactly the session SetlistService
-   conversion. ~29 subscriber call sites in daw-control/consumers.
-2. **fasttrackstudio app = daw-standalone player**: embed
-   daw-standalone (bootstrap + audio features) + the session domain
-   in-process so the live setlist is DATA the app can PLAY — transport
-   over the setlist without REAPER. session facade already dev-deps
-   this combination (memory-link bootstrap) — promote it to the app.
-3. **FTS-Guide → session feature**: port
-   legacy FTS-Plugins/apps/fts-guide (~3k lines: click_player,
-   count_player, guide_player, trigger_scheduler, count-in
-   calculator/pattern) into `session/features/guide` as a portable
-   engine (drop the REAPER cdylib shell; drive it from song sections +
-   tempo map). Click + guide tracks become session data.
-4. **TTS in the guide**: bearcove/cbx (`chatterbox-rs` — local ONNX
-   Chatterbox TTS, lib + CLI). Embed as an optional session feature to
-   speak section names / notes into the guide bus ("Chorus in 2…").
-   Pre-render section cues to wav at setlist-build time (TTS is not
-   realtime-safe); cache by text hash next to the styx library.
-
-## Phase 2
-
-1. ~~Root workspace: merge domain workspaces into one root Cargo.toml.~~
-   DONE — all waves complete; apps/fasttrackstudio, FastTrackStudio and
-   Plugins dissolved in the finale wave (legacy remnants parked in
-2. Feature-gate heavy backends (reaper, standalone-audio) so cold builds
-   only compile what's used.
-3. ~~Retire `FastTrackStudio/apps/*`.~~ DONE — the legacy app is parked;
-   `apps/installer` (fts-installer) survived as a root member.
-4. ~~Root flake.nix.~~ DONE — adopted signal's flake at the root
-   (dioxus-flake toolchain, rust 1.94 + wasm, pipewire/jack shells).
-
-### Dedup queue
-
-- keyflow-daw-analysis's daw types → daw-proto only
-- audio-controls: the widget kit daw-ui re-exports; most of it (knobs,
-  sliders, effect graphs) predates frame's control surfaces — trim to what
-  daw-ui still uses
-- signal-audio remnants, duplicate wav/resampler helpers → libs/utils
-  or audiocore-dsp
-- three CLIs → one `fts` CLI in apps/ (subcommands)
+**Realtime lints**: `features/{dsp,rigs,audio}/clippy.toml` add the
+audio-thread rules (`disallowed-methods` for locks, `env::var`, sleeps;
+`too-large-for-stack`). Clippy reads the nearest `clippy.toml`, so they hold
+under those trees and nowhere else — keep the three copies identical, and
+keep the shared settings in step with the root one.
 
 ## Logging & tracing — wide events, ALWAYS
 
-Before writing ANY log or debug output, load the
-`logging-best-practices` skill (`.claude/skills/logging-best-practices/`
-— read `rules/fts-rust.md` first). The rules are not optional:
+Before writing ANY log or debug output, load the `logging-best-practices`
+skill (`.claude/skills/logging-best-practices/` — read `rules/fts-rust.md`
+first). The rules are not optional:
 
-- **The span IS the wide event.** `architect` opens one span per vox
-  RPC, `tower_http` one per HTTP request. Enrich it with
+- **The span IS the wide event.** `architect` opens one span per vox RPC,
+  `tower_http` one per HTTP request. Enrich it with
   `architect_telemetry::wide::set("namespace.field", value)` — one
   context-rich event per request, never scattered log lines.
-- **Never `println!`/`eprintln!`/`dbg!` in server or library code** —
-  not in committed code, and not as debug scaffolding either. To chase
-  a bug, reproduce it in a failing unit test (the artifact that
-  outlives the session) or query the span fields; if you must watch a
-  live process, use `tracing` with structured fields behind `RUST_LOG`
-  and delete it before committing.
+- **Never `println!`/`eprintln!`/`dbg!` in server or library code** — not
+  in committed code, and not as debug scaffolding either. To chase a bug,
+  reproduce it in a failing unit test or query the span fields; if you
+  must watch a live process, use `tracing` with structured fields behind
+  `RUST_LOG` and delete it before committing.
 - Follow the established field names (`org.slug`, `auth.*`, `perm.*`,
   `media.*`, `share.*`); record the **shape**, never the secret (no
   tokens, no passwords, no raw note paths/URIs in fields).
 - Denials/refusals get ONE `tracing::warn!` line (alertable); allowed
   outcomes ride the span only.
-- New surface = new fields: any new HTTP route or RPC service must set
-  its outcome fields on the span the way `authorize_media`
-  (`media.authorized`, `media.auth_via`) and the share gate
-  (`share.outcome`, `share.target_kind`) do.
+- New surface = new fields: any new HTTP route or RPC service sets its
+  outcome fields on the span (`rules/fts-rust.md` lists the field
+  conventions, e.g. `auth.outcome`).
 
-## Agent skills
+## Agent skills and process
 
-### Issue tracker
-
-GitHub Issues on `FastTrackStudios/FastTrackStudio`, via the `gh` CLI.
-See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five canonical roles, unchanged: `needs-triage`, `needs-info`,
-`ready-for-agent`, `ready-for-human`, `wontfix`.
-See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Per-domain `CONTEXT.md` files, written by `/domain-modeling` when a term
-actually needs resolving. (The root `CONTEXT-MAP.md` pointing at them was
-removed — it indexed files that never got written.) See
-`docs/agents/domain.md`.
+- Issues: GitHub Issues on `FastTrackStudios/studio` via `gh` — see
+  `docs/agents/issue-tracker.md`; the triage labels (`needs-triage`,
+  `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) in
+  `docs/agents/triage-labels.md`; domain docs in `docs/agents/domain.md`.
+- Project skills live in `.claude/skills/` (build-performance,
+  logging-best-practices, blitz-design, reaper-testing, architect-actions,
+  signalpack, reaper-theme-*, …) — load the matching one before the work
+  it covers.

@@ -20,8 +20,6 @@
 use dioxus::prelude::*;
 pub use signal_rigs_proto::Rig;
 
-use crate::prefs;
-
 /// Whether this rig actually runs in this build — see the module note.
 #[cfg(target_os = "ios")]
 pub fn available(rig: Rig) -> bool {
@@ -99,7 +97,7 @@ pub fn load_last() -> Option<Rig> {
     }
     // A remembered rig that this build cannot open would strand the app on a
     // dead screen, so it falls back to the menu.
-    prefs::get("last-rig")
+    utils::prefs::get_raw("last-rig")
         .as_deref()
         .and_then(Rig::from_slug)
         .filter(|k| available(*k))
@@ -107,8 +105,8 @@ pub fn load_last() -> Option<Rig> {
 
 pub fn store_last(rig: Option<Rig>) {
     match rig {
-        Some(k) => prefs::set("last-rig", k.slug()),
-        None => prefs::remove("last-rig"),
+        Some(k) => utils::prefs::set_raw("last-rig", k.slug()),
+        None => utils::prefs::remove("last-rig"),
     }
 }
 

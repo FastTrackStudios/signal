@@ -142,6 +142,7 @@ tts = ["session/tts"]
 # the transport moves; on iOS, Now Playing and the remote commands).
 futures-timer = "3"
 utils.workspace = true
+app-shell.workspace = true
 tracing.workspace = true
 fts-audio-ui = { workspace = true }
 

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BASELINE_FILE="${ROOT_DIR}/features/render/tests/parity/reports/svg-hash-baselines.json"
-SCENARIOS_DIR="${ROOT_DIR}/features/render/tests/parity/scenarios"
+BASELINE_FILE="${ROOT_DIR}/crates/frame/render/tests/parity/reports/svg-hash-baselines.json"
+SCENARIOS_DIR="${ROOT_DIR}/crates/frame/render/tests/parity/scenarios"
 
 if [[ ! -f "${BASELINE_FILE}" ]]; then
   echo "missing baseline file: ${BASELINE_FILE}" >&2

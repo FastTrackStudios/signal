@@ -63,6 +63,13 @@
             "aarch64-apple-ios"
             "aarch64-apple-ios-sim"
             "x86_64-apple-darwin"
+          ]
+          # The Signal phone app (apps/signal/mobile, `dx build --platform
+          # android`): the emulator's x86_64 and phones' aarch64. dx links
+          # them with the NDK's clang (ANDROID_NDK_HOME, from the system SDK).
+          ++ lib.optionals pkgs.stdenv.isLinux [
+            "x86_64-linux-android"
+            "aarch64-linux-android"
           ];
       };
 

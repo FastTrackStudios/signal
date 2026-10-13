@@ -27,23 +27,13 @@
 //!   offline path) so tests / benches can pull blocks without an audio
 //!   backend or daw renderer plumbing.
 //!
-//! ## Per-instrument-track model (alternate API)
+//! ## Per-instrument-track model
 //!
-//! The lower-level [`add_instrument`](SamplerRig::add_instrument) /
-//! [`from_mixer_layout`](SamplerRig::from_mixer_layout) surface maps one
-//! [`SampleEngine`] onto one daw track with daw-native send/bus routing — the
-//! richer "one instrument = one daw track" model. It is retained alongside
-//! the bank-backed surface for the eventual full per-track migration.
-//!
-//! ## Drum mic / bus routing (the per-track mixer mapping)
-//!
-//! [`SamplerRig::from_mixer_layout`] maps a [`MixerLayout`] onto daw's native
-//! send/bus primitives — **no new daw capability is needed**:
-//!
-//! - **Close mic / direct-to-master** → a plain instrument track.
-//! - **Bus mic (overhead / room)** → the mic's instrument track gets a
-//!   `Routing::add_send` to a shared **bus track** with
-//!   `SendMode::PostFx`, and its parent-send to master is disabled.
+//! [`add_instrument`](SamplerRig::add_instrument) maps one [`SampleEngine`]
+//! onto one daw track; a drum kit loads as tracks the same way
+//! ([`load_kit_tracks`](SamplerRig::load_kit_tracks)) — close mics as
+//! instrument tracks, overhead / room mics as tracks sending post-FX into a
+//! shared bus track with their parent send off. The mixer is the daw's.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -65,7 +55,7 @@ use crate::bank::{PreloadProfile, SamplerBank};
 use crate::engine::SampleEngine;
 use crate::engine::cache::{EvictStats, PreloadStats};
 use crate::instrument::SamplerInstrument;
-use crate::mixer::{FX_PREPARE_BLOCK, MixerLayout};
+use crate::mixer::FX_PREPARE_BLOCK;
 use crate::stats::AudioStatsSnapshot;
 
 /// Stable identifier for a loaded instrument within the rig (e.g. a piece id
@@ -1265,127 +1255,7 @@ impl SamplerRig {
         self.inner.midi_monitor.clone()
     }
 
-    // ── Drum mixer (bank-backed; SamplerPlayer-equivalent) ────────────────────
-
-    #[must_use]
-    pub fn drum_mixer_layout(&self, id: &str) -> Option<MixerLayout> {
-        self.bank().lock().ok()?.preset_mixer_layout(id)
-    }
-
-    #[must_use]
-    pub fn drum_mixer_meters(&self, id: &str) -> Option<Arc<crate::mixer::MixerMeters>> {
-        self.bank().lock().ok()?.preset_mixer_meters(id)
-    }
-
-    pub fn set_mixer_piece_gain_db(&self, id: &str, idx: usize, db: f32) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_piece_gain_db(id, idx, db);
-        }
-    }
-    pub fn set_mixer_piece_mute(&self, id: &str, idx: usize, muted: bool) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_piece_mute(id, idx, muted);
-        }
-    }
-    pub fn set_mixer_piece_solo(&self, id: &str, idx: usize, soloed: bool) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_piece_solo(id, idx, soloed);
-        }
-    }
-    pub fn set_mixer_channel_gain_db(&self, id: &str, idx: usize, db: f32) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_channel_gain_db(id, idx, db);
-        }
-    }
-    pub fn set_mixer_channel_mute(&self, id: &str, idx: usize, muted: bool) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_channel_mute(id, idx, muted);
-        }
-    }
-    pub fn set_mixer_channel_solo(&self, id: &str, idx: usize, soloed: bool) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_channel_solo(id, idx, soloed);
-        }
-    }
-    pub fn set_mixer_send_level_db(&self, id: &str, idx: usize, db: f32) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_send_level_db(id, idx, db);
-        }
-    }
-    pub fn set_mixer_send_mute(&self, id: &str, idx: usize, muted: bool) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_send_mute(id, idx, muted);
-        }
-    }
-    pub fn set_mixer_send_solo(&self, id: &str, idx: usize, soloed: bool) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_send_solo(id, idx, soloed);
-        }
-    }
-    pub fn set_mixer_bus_gain_db(&self, id: &str, idx: usize, db: f32) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_bus_gain_db(id, idx, db);
-        }
-    }
-    pub fn set_mixer_bus_mute(&self, id: &str, idx: usize, muted: bool) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_bus_mute(id, idx, muted);
-        }
-    }
-    pub fn set_mixer_bus_solo(&self, id: &str, idx: usize, soloed: bool) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_bus_solo(id, idx, soloed);
-        }
-    }
-    pub fn set_mixer_master_gain_db(&self, id: &str, db: f32) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_master_gain_db(id, db);
-        }
-    }
-    pub fn set_mixer_master_mute(&self, id: &str, muted: bool) {
-        if let Ok(mut b) = self.bank().lock() {
-            b.set_mixer_master_mute(id, muted);
-        }
-    }
-
-    // ── Hosted FX plugins (CLAP / VST3) on the bank's drum mixer ──────────────
-
-    /// # Errors
-    ///
-    /// Returns an error if the plugin cannot be loaded or if the bank is poisoned.
-    pub fn load_mixer_plugin(
-        &self,
-        id: &str,
-        target: crate::mixer::FxTarget,
-        path: impl AsRef<std::path::Path>,
-    ) -> Result<Option<usize>, signal_plugin_host::PluginError> {
-        let Some(plugin) = signal_plugin_host::HostedPlugin::load(path)? else {
-            return Ok(None);
-        };
-        let mut bank = self.bank().lock().map_err(|_| {
-            signal_plugin_host::PluginError::LoadFailed("bank mutex poisoned".into())
-        })?;
-        let slot = bank.install_mixer_plugin(id, target, plugin)?;
-        Ok(Some(slot))
-    }
-
-    /// Install an already-built `HostedPlugin` (e.g. a built-in fx-blocks
-    /// processor) into a drum-mixer channel/bus/master FX chain.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the bank is poisoned or the plugin cannot be installed.
-    pub fn install_mixer_plugin(
-        &self,
-        id: &str,
-        target: crate::mixer::FxTarget,
-        plugin: signal_plugin_host::HostedPlugin,
-    ) -> Result<usize, signal_plugin_host::PluginError> {
-        let mut bank = self.bank().lock().map_err(|_| {
-            signal_plugin_host::PluginError::LoadFailed("bank mutex poisoned".into())
-        })?;
-        bank.install_mixer_plugin(id, target, plugin)
-    }
+    // ── Hosted FX plugins (CLAP / VST3) on a preset's master chain ───────────
 
     /// # Errors
     ///
@@ -1405,71 +1275,10 @@ impl SamplerRig {
         Ok(Some(slot))
     }
 
-    pub fn remove_mixer_plugin(&self, id: &str, target: crate::mixer::FxTarget, slot_idx: usize) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.remove_mixer_plugin(id, target, slot_idx);
-        }
-    }
-
     pub fn remove_preset_master_plugin(&self, id: &str, slot_idx: usize) {
         if let Ok(mut bank) = self.bank().lock() {
             bank.remove_preset_master_plugin(id, slot_idx);
         }
-    }
-
-    pub fn set_mixer_slot_bypass(
-        &self,
-        id: &str,
-        target: crate::mixer::FxTarget,
-        slot_idx: usize,
-        bypassed: bool,
-    ) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.set_mixer_slot_bypass(id, target, slot_idx, bypassed);
-        }
-    }
-
-    pub fn set_mixer_slot_param(
-        &self,
-        id: &str,
-        target: crate::mixer::FxTarget,
-        slot_idx: usize,
-        param_id: u32,
-        value: f64,
-    ) {
-        if let Ok(bank) = self.bank().lock() {
-            bank.set_mixer_slot_param(id, target, slot_idx, param_id, value);
-        }
-    }
-
-    #[must_use]
-    pub fn mixer_slot_params(
-        &self,
-        id: &str,
-        target: crate::mixer::FxTarget,
-        slot_idx: usize,
-    ) -> Option<Vec<signal_plugin_host::PluginParamInfo>> {
-        self.bank()
-            .lock()
-            .ok()?
-            .mixer_slot_params(id, target, slot_idx)
-    }
-
-    /// # Errors
-    ///
-    /// Returns an error if the NAM model cannot be loaded or if the bank is poisoned.
-    pub fn load_mixer_nam(
-        &self,
-        id: &str,
-        target: crate::mixer::FxTarget,
-        path: impl AsRef<std::path::Path>,
-    ) -> Result<usize, String> {
-        let path = path.as_ref().to_path_buf();
-        let mut bank = self
-            .bank()
-            .lock()
-            .map_err(|_| String::from("bank mutex poisoned"))?;
-        bank.install_mixer_nam(id, target, &path)
     }
 
     /// # Errors
@@ -1486,19 +1295,6 @@ impl SamplerRig {
             .lock()
             .map_err(|_| String::from("bank mutex poisoned"))?;
         bank.install_preset_master_nam(id, &path)
-    }
-
-    pub fn set_mixer_nam_gain(
-        &self,
-        id: &str,
-        target: crate::mixer::FxTarget,
-        slot_idx: usize,
-        input: bool,
-        gain_db: f32,
-    ) {
-        if let Ok(mut bank) = self.bank().lock() {
-            bank.set_mixer_nam_gain(id, target, slot_idx, input, gain_db);
-        }
     }
 
     // ── Stats / introspection (bank-backed; SamplerPlayer-equivalent) ─────────
@@ -1618,11 +1414,6 @@ impl SamplerRig {
 
     // ── Per-instrument-track API (alternate "one engine = one daw track") ─────
 
-    /// Total tracks in the per-track project (instruments + buses).
-    fn track_count(tables: &TrackTables) -> usize {
-        tables.instruments.len() + tables.buses.len()
-    }
-
     /// The rig's tracks (a live rig only).
     fn rig(&self) -> eyre::Result<&Rig> {
         self.inner
@@ -1733,67 +1524,6 @@ impl SamplerRig {
             .apply()
             .map_err(|e| eyre::eyre!("sampler rig: route {source_track} → {bus_track}: {e}"))?;
         Ok(())
-    }
-
-    /// Build a per-track sampler rig from a [`MixerLayout`] + a per-strip
-    /// engine map (per-track API). Each close mic → an instrument track direct
-    /// to master; each bus mic → an instrument track sending into a shared bus.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the audio engine cannot be initialized or if track setup fails.
-    pub fn from_mixer_layout(
-        prefs: &AudioIoPrefs,
-        layout: &MixerLayout,
-        mut engines: HashMap<(usize, String), SampleEngine>,
-    ) -> eyre::Result<Self> {
-        let rig = Self::open(prefs)?;
-
-        for eng in &layout.engines {
-            let piece = eng.label.clone();
-
-            for ch in &eng.channels {
-                let key = (eng.engine_idx, ch.mic_label.clone());
-                let Some(engine) = engines.remove(&key) else {
-                    continue;
-                };
-                let id = format!("{}:{}", eng.label, ch.mic_label);
-                let name = format!("{} {}", eng.label, ch.mic_label);
-                rig.add_instrument_track(id, &name, engine, Some(piece.clone()))?;
-            }
-
-            for snd in &eng.sends {
-                let key = (eng.engine_idx, snd.mic_label.clone());
-                let Some(engine) = engines.remove(&key) else {
-                    continue;
-                };
-
-                let bus_id = if snd.bus_label.is_empty() {
-                    snd.mic_label.clone()
-                } else {
-                    snd.bus_label.clone()
-                };
-                let bus_guid = {
-                    let existing = rig
-                        .inner
-                        .tracks
-                        .lock()
-                        .ok()
-                        .and_then(|t| t.buses.get(&bus_id).map(|b| b.track_guid.clone()));
-                    match existing {
-                        Some(g) => g,
-                        None => rig.add_bus_track(&bus_id)?.track_guid,
-                    }
-                };
-
-                let id = format!("{}:{}", eng.label, snd.mic_label);
-                let name = format!("{} {}", eng.label, snd.mic_label);
-                let track = rig.add_instrument_track(id, &name, engine, Some(piece.clone()))?;
-                rig.route_to_bus(&track.track_guid, &bus_guid)?;
-            }
-        }
-
-        Ok(rig)
     }
 
     /// Note-on to a per-track instrument (or piece) `id` — fans the MIDI to
@@ -2371,43 +2101,11 @@ fn warm_document(
 mod tests {
     use super::*;
     use crate::mixer::mic_is_bus;
-    use daw::service::Routing;
-
-    /// A 2-piece kit (kick, snare), each with a close mic + an Overhead bus mic.
-    fn kit_layout() -> MixerLayout {
-        let mics = |v: &[&str]| {
-            v.iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<_>>()
-        };
-        let engine_mics = vec![
-            ("kick".to_string(), mics(&["In 1", "Overhead"])),
-            ("snare".to_string(), mics(&["In 1", "Overhead"])),
-        ];
-        crate::mixer::DrumMixer::build(&engine_mics, 48_000).layout()
-    }
 
     #[test]
     fn classifies_close_and_bus_mics() {
         assert!(!mic_is_bus("In 1"));
         assert!(mic_is_bus("Overhead"));
-    }
-
-    #[test]
-    fn layout_yields_expected_track_shape() {
-        let layout = kit_layout();
-        let total_channels: usize = layout.engines.iter().map(|e| e.channels.len()).sum();
-        let total_sends: usize = layout.engines.iter().map(|e| e.sends.len()).sum();
-        assert_eq!(total_channels, 2, "two close mics → two direct tracks");
-        assert_eq!(total_sends, 2, "two overhead sends");
-        assert_eq!(layout.buses.len(), 1, "one shared Overhead bus");
-        let bus_labels: std::collections::HashSet<_> = layout
-            .engines
-            .iter()
-            .flat_map(|e| e.sends.iter().map(|s| s.bus_label.clone()))
-            .collect();
-        assert_eq!(bus_labels.len(), 1);
-        assert_eq!(bus_labels.into_iter().next().unwrap(), "Overhead");
     }
 
     // ── Offline (headless, no device) ─────────────────────────────────────────
@@ -2640,70 +2338,6 @@ zones (
         assert_eq!(rig.instrument_count(), 1);
         assert!(rig.instrument("piano").is_some());
         rig.track_note_on("piano", 60, 100);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn from_mixer_layout_builds_tracks_buses_and_sends() {
-        if !audio_available() {
-            eprintln!("skip: set SIGNAL_SAMPLER_RIG_AUDIO=1 with an audio backend to run");
-            return;
-        }
-        let dir = std::env::temp_dir().join(format!("signal-sampler-mix-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("mkdir");
-
-        let layout = kit_layout();
-        let prefs = AudioIoPrefs {
-            sample_rate: 48_000,
-            buffer_size: 256,
-            ..Default::default()
-        };
-
-        let mut engines: HashMap<(usize, String), SampleEngine> = HashMap::new();
-        for eng in &layout.engines {
-            for ch in &eng.channels {
-                engines.insert((eng.engine_idx, ch.mic_label.clone()), minimal_engine(&dir));
-            }
-            for snd in &eng.sends {
-                engines.insert(
-                    (eng.engine_idx, snd.mic_label.clone()),
-                    minimal_engine(&dir),
-                );
-            }
-        }
-
-        let rig = SamplerRig::from_mixer_layout(&prefs, &layout, engines).expect("build rig");
-        assert_eq!(rig.instrument_count(), 4);
-        assert_eq!(rig.buses().len(), 1);
-        assert!(rig.buses().contains_key("Overhead"));
-
-        let bus_guid = rig.buses()["Overhead"].track_guid.clone();
-        let daw = rig.inner.daw.as_ref().unwrap();
-        let project = daw::service::ProjectContext::Project(rig.project_guid());
-        use daw::service::TrackRef;
-        for (id, t) in &rig.inner.tracks.lock().unwrap().instruments {
-            if id.ends_with(":Overhead") {
-                let sends = <Standalone as Routing>::sends(
-                    daw,
-                    project.clone(),
-                    TrackRef::guid(&t.track_guid),
-                );
-                assert!(
-                    sends
-                        .iter()
-                        .any(|s| s.dest_track_guid.as_deref() == Some(bus_guid.as_str())),
-                    "overhead mic {id} must send to the Overhead bus"
-                );
-                assert!(
-                    !<Standalone as Routing>::parent_send_enabled(
-                        daw,
-                        project.clone(),
-                        TrackRef::guid(&t.track_guid)
-                    ),
-                    "overhead mic {id} parent send must be disabled"
-                );
-            }
-        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -13,11 +13,6 @@ use dioxus::prelude::*;
 
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod guide;
-/// In-memory log ring (tracing capture + panic hook).
-#[allow(dead_code)]
-#[cfg(not(target_arch = "wasm32"))]
-mod log_ring;
-mod prefs;
 // The shared "dial the engine" plumbing the browser session player uses.
 #[cfg(feature = "session-domain")]
 mod remote;
@@ -74,8 +69,6 @@ mod collection_browser;
 mod native;
 #[cfg(all(feature = "session", target_arch = "wasm32"))]
 mod session_chart_pane;
-#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
-mod updates;
 
 fn main() {
     // iPhone: the page is drawn to the left and right edges, and minds the
@@ -137,7 +130,7 @@ fn main() {
                     .with_ansi(false)
                     .with_writer(std::sync::Mutex::new(file))
             }))
-            .with(log_ring::RingLayer::new())
+            .with(app_shell::log_ring::RingLayer::new())
             .with(architect_telemetry::tracing_layer());
         match architect_telemetry::otel::init("session", LOG_DEFAULT) {
             Some((otel_guard, layers)) => {
@@ -146,7 +139,7 @@ fn main() {
             }
             None => registry.init(),
         }
-        log_ring::install_panic_hook();
+        app_shell::log_ring::install_panic_hook("Session");
     }
 
     // `--engine`: headless — serves the setlist and (Live Mode) the whole
@@ -422,7 +415,7 @@ impl Workspace {
 // ── Landing / last-workspace persistence ────────────────────────────────────
 
 fn load_last_workspace() -> Option<Workspace> {
-    let saved = prefs::get("last-workspace")?;
+    let saved = utils::prefs::get_raw("last-workspace")?;
     Workspace::all()
         .into_iter()
         .find(|(_, label)| *label == saved)
@@ -430,7 +423,7 @@ fn load_last_workspace() -> Option<Workspace> {
 }
 
 fn store_last_workspace(w: Workspace) {
-    prefs::set("last-workspace", w.label());
+    utils::prefs::set_raw("last-workspace", w.label());
 }
 
 /// Web deep link: `#session`, `#charts`, `#home` (first hash segment).
@@ -1439,13 +1432,13 @@ fn UpdateCheck(msg: Signal<String>) -> Element {
         button {
             style: "padding: 3px 10px; border-radius: 5px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px;",
             onclick: move |_| {
-                use updates::Updater as _;
-                let text = match updates::CodebergUpdater.check_for_updates() {
-                    updates::UpdateStatus::UpToDate => "Up to date.".to_string(),
-                    updates::UpdateStatus::Available(info) => {
+                use app_shell::updates::Updater as _;
+                let text = match app_shell::updates::GithubUpdater::new(env!("CARGO_PKG_VERSION")).check_for_updates() {
+                    app_shell::updates::UpdateStatus::UpToDate => "Up to date.".to_string(),
+                    app_shell::updates::UpdateStatus::Available(info) => {
                         format!("Update available: v{}", info.version)
                     }
-                    updates::UpdateStatus::Failed(e) => format!("Check failed: {e}"),
+                    app_shell::updates::UpdateStatus::Failed(e) => format!("Check failed: {e}"),
                 };
                 msg.set(text);
             },

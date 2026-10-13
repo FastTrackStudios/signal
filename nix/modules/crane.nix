@@ -18,20 +18,6 @@
           !(builtins.elem name [ "target" "node_modules" ".git" "result" "web-dist" ]);
       };
 
-      # What a deployable build compiles in: this repo at `session/`,
-      # beside the sibling checkouts its root Cargo.toml patches daw and
-      # processor to (`../daw`, `../processor` — flake inputs pinned to
-      # the shas checks.yml checks out). Without them cargo cannot even
-      # read the manifest. Every build starts in `session/` (`postUnpack`
-      # in commonArgs); vendoring needs only the lockfile, so it keeps
-      # the repo alone.
-      buildTree = pkgs.runCommand "session-build-tree" { } ''
-        mkdir -p $out
-        cp -r ${ftsSrc} $out/session
-        cp -r ${inputs.daw-src} $out/daw
-        cp -r ${inputs.processor-src} $out/processor
-      '';
-
       craneLib = (inputs.crane.mkLib pkgs).overrideToolchain config.fts.rustToolchain;
 
       # reaper-low (git dep on codeberg.org/FastTrackStudios/reaper-rs)
@@ -119,10 +105,7 @@
       fts.src = ftsSrc;
 
       fts.commonArgs = {
-        src = buildTree;
-        postUnpack = ''
-          sourceRoot="$sourceRoot/session"
-        '';
+        src = ftsSrc;
         inherit cargoVendorDir;
         strictDeps = true;
         # mold: the repo's `.cargo/config.toml` pins

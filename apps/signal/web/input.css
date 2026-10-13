@@ -18,7 +18,8 @@
  * a landing page should not need a CSS toolchain to build.
  */
 @source "./src/**/*.rs";
-@source "../../features/rigs/guitar/ui/src/**/*.rs";
-@source "../../features/rigs/keys/ui/src/**/*.rs";
-@source "../../crates/signal/widgets/src/**/*.rs";
-@source "../../libs/ui/*/src/**/*.rs";
+@source "../../../features/rigs/guitar/src/**/*.rs";
+@source "../../../features/rigs/keys/src/**/*.rs";
+@source "../../../features/rigs/core/widgets/src/**/*.rs";
+@source "../../../features/ui/**/*.rs";
+@source "../../../features/ui/.architect-ui/src/**/*.rs";

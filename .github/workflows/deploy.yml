@@ -2,7 +2,10 @@
 # out by ArgoCD + argocd-image-updater (digest strategy on the channel
 # tag).
 #
-#   session-web -> registry.starcommand.live:30050/session-web
+#   session-web -> registry.starcommand.live:30050/session-web  (session.fasttrackstudio.app)
+#   signal-web  -> registry.starcommand.live:30050/signal-web   (signal.fasttrackstudio.app)
+#
+# One matrix leg per site; a failing leg does not stop the other.
 #
 # The in-cluster registry is NOT reachable from GitHub-hosted runners, so
 # this runs on the org's SELF-HOSTED runner labelled `nix-host`
@@ -41,10 +44,21 @@ env:
 
 jobs:
   deploy:
+    name: deploy ${{ matrix.img }}
     runs-on: [self-hosted, session]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - img: session-web
+            env: session-production
+            url: https://session.fasttrackstudio.app
+          - img: signal-web
+            env: signal-production
+            url: https://signal.fasttrackstudio.app
     environment:
-      name: session-production
-      url: https://session.fasttrackstudio.app
+      name: ${{ matrix.env }}
+      url: ${{ matrix.url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,7 +69,7 @@ jobs:
       - name: Push image
         run: |
           set -euo pipefail
-          img=session-web
+          img=${{ matrix.img }}
           echo "── $img ──"
           # streamLayeredImage builds an EXECUTABLE that streams a
           # docker-archive to stdout — there is no tarball on disk to
@@ -80,7 +94,7 @@ jobs:
       # mkStaticSite), so this is the site answering, not the registry.
       - name: Verify live
         run: |
-          url="https://session.fasttrackstudio.app"
+          url="${{ matrix.url }}"
           want="${GITHUB_SHA}"
           echo "waiting for $url to serve $want"
           for i in $(seq 1 60); do

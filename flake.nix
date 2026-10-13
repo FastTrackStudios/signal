@@ -31,11 +31,10 @@
     # plus binaryen 129 — see nix/modules/dx.nix.
     nixpkgs-dx.url = "github:NixOS/nixpkgs/d99b013d5d1931ad77fe3912ed218170dec5d9a4";
 
-    # The sibling checkouts the root Cargo.toml patches daw and processor
-    # to (`../daw`, `../processor`; see CLAUDE.md): the deployable builds
-    # put them beside this repo (nix/modules/crane.nix). The SAME shas as
-    # the sibling checkouts in .github/workflows/checks.yml — bump both
-    # together, to the commits the local siblings are on.
+    # UNUSED since daw and processor were folded into this repo (nothing
+    # reads them any more; crane.nix builds this tree alone). Kept only so
+    # flake.lock stays as committed — delete both with `nix flake lock`
+    # the next time the lock is updated anyway.
     daw-src = {
       url = "github:FastTrackStudios/daw/b037697d3eac5833cf8405d697838da9177cfd8d";
       flake = false;

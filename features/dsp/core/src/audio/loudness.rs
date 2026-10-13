@@ -78,10 +78,12 @@ impl KWeightingFilter {
     pub fn update(&mut self, sample_rate: f64) {
         // Stage 1: Pre-filter (high shelf)
         {
-            let f0 = 1681.97;
-            let q = 0.7071752;
-            let vh = 1.584_864_701_13;
-            let vb = 1.258_720_930_23;
+            // BS.1770's analog prototype at full precision, so every rate
+            // reproduces the standard's 48 kHz coefficients.
+            let f0 = 1_681.974_450_955_533;
+            let q = 0.707_175_236_955_419_6;
+            let vh = 10f64.powf(3.999_843_853_973_347 / 20.0);
+            let vb = vh.powf(0.499_666_774_154_541_6);
 
             let k = (PI * f0 / sample_rate).tan();
             let k2 = k * k;
@@ -96,16 +98,18 @@ impl KWeightingFilter {
 
         // Stage 2: RLB high-pass
         {
-            let f0 = 38.1355;
-            let q = 0.5003270;
+            let f0 = 38.135_470_876_024_44;
+            let q = 0.500_327_037_323_877_3;
 
             let k = (PI * f0 / sample_rate).tan();
             let k2 = k * k;
             let denom = 1.0 + k / q + k2;
 
-            self.b0_2 = 1.0 / denom;
-            self.b1_2 = -2.0 / denom;
-            self.b2_2 = 1.0 / denom;
+            // BS.1770's numerator [1, -2, 1], as the standard gives it —
+            // not normalised by a0.
+            self.b0_2 = 1.0;
+            self.b1_2 = -2.0;
+            self.b2_2 = 1.0;
             self.a1_2 = 2.0 * (k2 - 1.0) / denom;
             self.a2_2 = (1.0 - k / q + k2) / denom;
         }
@@ -137,6 +141,64 @@ impl Default for KWeightingFilter {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// The integrated loudness of silence (or of too little audio to measure).
+pub const SILENCE_LUFS: f64 = f64::NEG_INFINITY;
+
+/// Integrated loudness of a mono buffer, in LUFS — ITU-R BS.1770-4 / EBU
+/// R128: K-weighting, 400 ms mean-square blocks with 75 % overlap, then the
+/// absolute −70 LUFS gate and the relative −10 LU gate. The one offline
+/// measurement every level match uses (amp models, sample packs, patches).
+///
+/// Returns [`SILENCE_LUFS`] for fewer than one block of audio, or a buffer
+/// the gates leave empty.
+#[must_use]
+pub fn integrated_lufs(samples: &[f64], sample_rate: f64) -> f64 {
+    const ABS_OFFSET: f64 = -0.691;
+    const ABSOLUTE_GATE_LUFS: f64 = -70.0;
+    const RELATIVE_GATE_LU: f64 = -10.0;
+    if sample_rate <= 0.0 {
+        return SILENCE_LUFS;
+    }
+    let mut filter = KWeightingFilter::new();
+    filter.update(sample_rate);
+    let weighted: Vec<f64> = samples.iter().map(|&x| filter.tick(x)).collect();
+    let block_len = (0.4 * sample_rate).round() as usize;
+    let hop = (0.1 * sample_rate).round() as usize;
+    if block_len == 0 || hop == 0 || weighted.len() < block_len {
+        return SILENCE_LUFS;
+    }
+    let powers: Vec<f64> = weighted
+        .windows(block_len)
+        .step_by(hop)
+        .map(|block| block.iter().map(|&y| y * y).sum::<f64>() / block_len as f64)
+        .collect();
+    let loudness = |z: f64| {
+        if z > 0.0 {
+            ABS_OFFSET + 10.0 * z.log10()
+        } else {
+            SILENCE_LUFS
+        }
+    };
+    let gated_abs: Vec<f64> = powers
+        .iter()
+        .copied()
+        .filter(|&z| loudness(z) > ABSOLUTE_GATE_LUFS)
+        .collect();
+    if gated_abs.is_empty() {
+        return SILENCE_LUFS;
+    }
+    let relative_gate =
+        loudness(gated_abs.iter().sum::<f64>() / gated_abs.len() as f64) + RELATIVE_GATE_LU;
+    let gated: Vec<f64> = gated_abs
+        .into_iter()
+        .filter(|&z| loudness(z) > relative_gate)
+        .collect();
+    if gated.is_empty() {
+        return SILENCE_LUFS;
+    }
+    loudness(gated.iter().sum::<f64>() / gated.len() as f64)
 }
 
 // ── Loudness meter (ebur128 backend) ────────────────────────────────────

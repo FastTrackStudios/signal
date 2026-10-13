@@ -96,7 +96,7 @@ pub fn MobileApp() -> Element {
     // The log ring, for the Audio mode's Log tab (copied for pasting into a
     // message when the audio misbehaves).
     use_context_provider(|| guitar::ui::LogFeed {
-        lines: crate::log_ring::snapshot,
+        lines: app_shell::log_ring::snapshot,
         copy: copy_log,
     });
     use_future(move || {

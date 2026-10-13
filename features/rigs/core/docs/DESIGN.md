@@ -10,7 +10,7 @@
 
 Signal is being restructured from the **crate-facade** layout (`crates/*`
 + one public `signal` facade) into the **feature-slice** layout used by
-[architect](https://codeberg.org/FastTrackStudios/architect): top-level
+[architect](https://github.com/FastTrackStudios/architect): top-level
 `features/<name>/` folders, each grouping the crates for one slice, plus
 `apps/`, `xtask/`, and shared tooling at the root.
 

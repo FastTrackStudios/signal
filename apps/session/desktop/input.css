@@ -7,19 +7,17 @@
  * by src/rig_view.rs — distinct from assets/tailwind.css, the
  * session-scoped sheet loaded via asset!(). */
 @source "./src/**/*.rs";
-@source "../../crates/signal/ui/src/**/*.rs";
-@source "../../crates/signal/grid-ui/src/**/*.rs";
-@source "../../features/rigs/guitar/ui/src/**/*.rs";
-@source "../../crates/session/ui/src/**/*.rs";
-@source "../../features/daw-ui/daw-ui/src/**/*.rs";
-/* The vector art. It emits no Tailwind classes today — every value is a
-   presentation attribute, because inside an <svg> there is no box model to
-   style — but it is scanned anyway so the committed sheet's drift check
-   covers this code the moment that stops being true. */
-@source "../../features/daw-ui/daw-theme-art/src/**/*.rs";
-@source "../../features/chord-tool/*/src/**/*.rs";
-@source "../../libs/ui/*/src/**/*.rs";
-@source "../../libs/dock/*/src/**/*.rs";
+/* The UI crates, by folder: the rigs (signal's views, the grid, the guitar
+   rig's UI), Session's views, the shared UI (daw-ui with its theme art,
+   dock, the audio widgets), the chord tool and the key-binding overlay. */
+@source "../../../features/rigs/**/*.rs";
+@source "../../../features/session/src/**/*.rs";
+@source "../../../features/ui/**/*.rs";
+@source "../../../features/chords/src/**/*.rs";
+@source "../../../features/input/src/**/*.rs";
+/* architect-ui's components (a git dep: a symlink to the resolved
+   checkout, refreshed by `just tailwind`). */
+@source "../../../features/ui/.architect-ui/src/**/*.rs";
 /* lumen-blocks is still a git dep. `.lumen-blocks` is a symlink to the
  * checkout cargo resolved, refreshed by `just tailwind` (recipe
  * `_lumen-link`) and gitignored. Do NOT put a $CARGO_HOME glob here: it

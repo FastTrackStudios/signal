@@ -29,10 +29,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gui = args.iter().any(|a| a == "--gui");
     let keep_open = args.iter().any(|a| a == "--keep-open");
 
-    // xtask lives at features/reaper/daw-reaper/xtask — repo root is
-    // three levels up.
+    // xtask lives at features/adapters/reaper/daw-reaper/xtask — the repo
+    // root is five levels up.
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../../legacy/daw/features")
+        .join("../../../../..")
         .canonicalize()
         .map_err(|e| format!("monorepo root not found: {e}"))?;
 

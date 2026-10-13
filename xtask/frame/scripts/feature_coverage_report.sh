@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage:
-#   xtask/scripts/feature_coverage_report.sh <fts_export_json> [--out-json path]
+#   xtask/frame/scripts/feature_coverage_report.sh <fts_export_json> [--out-json path]
 #
 # Produces aggregate feature counts used by parity tracking.
 
