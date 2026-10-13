@@ -688,7 +688,7 @@ check:
 # `cargo test` on this many crates. It does NOT run doctests — use
 # `just test-doc` for those.
 test:
-    cargo nextest run --workspace
+    cargo nextest run --workspace --features session-desktop/cli,signal-desktop/cli,web-audio-worklet/guitar,web-audio-worklet/keys
 
 # Doctests only — nextest can't run them (libtest owns doctests).
 test-doc:
@@ -1876,7 +1876,9 @@ ci FROM="lockfile":
 
     if run_from nextest; then
       echo "── cargo nextest --workspace ────────────────────────"
-      cargo nextest run --workspace --no-fail-fast
+      # The app CLIs and the worklet rigs sit behind features: name them, or
+      # their tests never build (an app crate has no lib to dev-depend on).
+      cargo nextest run --workspace --no-fail-fast --features session-desktop/cli,signal-desktop/cli,web-audio-worklet/guitar,web-audio-worklet/keys
     fi
 
     echo

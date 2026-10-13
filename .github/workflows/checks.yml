@@ -151,4 +151,4 @@ jobs:
       - name: cargo check --workspace
         run: ${NIX_DEV} cargo check --workspace
       - name: cargo nextest
-        run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast
+        run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast --features session-desktop/cli,signal-desktop/cli,web-audio-worklet/guitar,web-audio-worklet/keys
