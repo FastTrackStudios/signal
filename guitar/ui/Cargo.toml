@@ -50,7 +50,7 @@ fts-audio-ui.workspace = true
 # The visualisers, from the effects that own them: Signal draws processor's
 # picture of a chorus rather than keeping a second one. Their portable cores
 # here; the painted `viz` surface is native-only, below.
-modulation-ui = { workspace = true, features = ["viz"] }
+modulation = { workspace = true, features = ["ui", "viz"] }
 delay = { workspace = true, features = ["ui", "viz"] }
 reverb = { workspace = true, features = ["ui", "viz"] }
 # The engine's own decay → seconds law, so the Time readouts are what plays.
