@@ -8,7 +8,7 @@
 //! what REAPER would draw for the same lanes. Decided on the prototype
 //! (issue #27, `prototype/folder-items`).
 
-use expression_editor_core::kit::LaneRole;
+use expression_editor::kit::LaneRole;
 
 /// How many groups a column can hold: four roles, or two sides.
 pub const SLOTS: usize = 4;

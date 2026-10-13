@@ -942,7 +942,7 @@ pub fn use_window_transport_keys() {
             // the document hands the key on, so the Editor still shows the
             // sequence pending. Only the panes stand aside — the transport
             // never does, or a sequence left pending would take Space.
-            let editors = expression_editor_paint::keys::is_pending();
+            let editors = expression_editor::paint::keys::is_pending();
             for action in keys.borrow_mut().press(code, held.get()) {
                 if editors
                     && matches!(

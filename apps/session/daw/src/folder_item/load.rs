@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use daw_proto::Track;
 use daw_ui::studio::project::Project;
-use expression_editor_core::kit::kit_role;
+use expression_editor::kit::kit_role;
 use vello::peniko::Color;
 
 use super::Folder;

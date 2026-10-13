@@ -59,12 +59,12 @@ fn aligned_the_double_lands_on_its_lead() {
             .expect("the take analyses")
     };
     let (reference, dub) = (analysed(&main), analysed(&dbl));
-    let alignment = expression_editor_audio::align_placed(
+    let alignment = expression_editor::audio::align_placed(
         &reference,
         main.position.as_seconds(),
         &dub,
         dbl.position.as_seconds(),
-        expression_editor_audio::AlignConfig::default(),
+        expression_editor::audio::AlignConfig::default(),
     )
     .expect("an alignment");
     // The truth, from the generator: each note the lead begins at `on`,
@@ -88,7 +88,7 @@ fn aligned_the_double_lands_on_its_lead() {
             continue;
         }
         let sung = on + perform::double_lag(on) - dbl_start;
-        let lands = expression_editor_audio::align::warped(&alignment, sung);
+        let lands = expression_editor::audio::align::warped(&alignment, sung);
         before.push((sung - (on - dbl_start)).abs());
         after.push((lands - (on - dbl_start)).abs());
     }
@@ -105,10 +105,10 @@ fn aligned_the_double_lands_on_its_lead() {
         frame * 1e3
     );
     // Negative control: the lead against itself moves nowhere.
-    let itself = expression_editor_audio::align(
+    let itself = expression_editor::audio::align(
         &reference,
         &reference,
-        expression_editor_audio::AlignConfig::default(),
+        expression_editor::audio::AlignConfig::default(),
     )
     .expect("an alignment");
     assert!(

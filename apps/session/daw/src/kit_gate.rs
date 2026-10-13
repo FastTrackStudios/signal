@@ -11,7 +11,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use expression_editor_core::kit::{LaneRole, kit_role};
+use expression_editor::kit::{LaneRole, kit_role};
 
 /// How much of a layer shows away from its drum's hits: enough to see
 /// the bleed is there, not enough to read as the drum.

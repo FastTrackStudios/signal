@@ -1487,7 +1487,7 @@ impl Editor {
     /// exact: after it, "the items in the area" is a set with no
     /// partial overlaps left to reason about, so the caller never has
     /// to decide what a half-covered take means. It is the same order
-    /// `expression_editor_core::razor::carve` uses over notes, for the
+    /// `expression_editor::razor::carve` uses over notes, for the
     /// same reason.
     ///
     /// The guids that come back are the session's own. A folded row's

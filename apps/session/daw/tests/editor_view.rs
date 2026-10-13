@@ -181,7 +181,7 @@ fn the_editor_opens_on_a_midi_item_and_reads_its_notes() {
     let editor = widget.editor().expect("landed");
     assert_eq!(
         editor.editor.mode,
-        expression_editor_core::Mode::PitchedAudio
+        expression_editor::Mode::PitchedAudio
     );
     assert_eq!(editor.item(), None, "an audio take writes nothing back");
 

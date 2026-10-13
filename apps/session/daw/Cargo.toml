@@ -78,10 +78,7 @@ input = { workspace = true }
 
 # The expression editor: its engine, its painter and gestures (no
 # dioxus), and the take-to-document conversion.
-expression-editor-audio = { workspace = true, features = ["daw"] }
-expression-editor-core = { workspace = true }
-expression-editor-paint = { workspace = true }
-expression-editor-daw = { workspace = true }
+expression-editor = { workspace = true, features = ["audio", "audio-daw", "daw", "paint"] }
 # BS.1770 K-weighting: gain staging sets the drum kit by its short-term loudness.
 dsp-core = { workspace = true, features = ["audio"] }
 

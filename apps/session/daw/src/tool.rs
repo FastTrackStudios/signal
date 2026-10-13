@@ -20,7 +20,7 @@
 //! the whole arrangement is one node.
 
 use cursor_icon::CursorIcon;
-use expression_editor_core::cursor::Cursor;
+use expression_editor::cursor::Cursor;
 
 use crate::window_cursor::{Glyph, Shape};
 use std::cell::RefCell;

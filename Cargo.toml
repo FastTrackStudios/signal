@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/expression-editor",
     "features/session",
     "features/rigs/synth",
     "features/rigs/sampler",
@@ -50,18 +51,6 @@ members = [
     "vendor/anyrender_vello",
     "vendor/anyrender_vello_hybrid",
     "features/rigs/fx",
-    "features/expression-editor/expression-editor-audio",
-    "features/expression-editor/expression-editor-core",
-    "features/expression-editor/expression-editor-corpus",
-    "features/expression-editor/expression-editor-daw",
-    "features/expression-editor/expression-editor-demo",
-    "features/expression-editor/expression-editor-guitarpro",
-    "features/expression-editor/expression-editor-host",
-    "features/expression-editor/expression-editor-reaper",
-    "features/expression-editor/expression-editor-standalone",
-    "features/expression-editor/expression-editor-tools",
-    "features/expression-editor/expression-editor-paint",
-    "features/expression-editor/expression-editor-ui",
     "features/ui/themer/fts-themer-ui",
     "features/adapters/reaper/daw-reaper-dioxus-ext",
     "features/adapters/reaper/daw-reaper-dioxus-ext-test",
@@ -264,6 +253,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+expression-editor = { path = "features/expression-editor" }
 session = { path = "features/session" }
 synth = { path = "features/rigs/synth" }
 sampler = { path = "features/rigs/sampler" }
@@ -511,18 +501,6 @@ signal-fx = { path = "features/rigs/fx" }
 # processors are the session engine's `PluginInstance`s.
 # signal's rig library — its profiles, scenes and how a profile becomes the
 # chains a scene plays (the bass rig's profile mode, signal-fx).
-expression-editor-audio = { path = "features/expression-editor/expression-editor-audio" }
-expression-editor-core = { path = "features/expression-editor/expression-editor-core" }
-expression-editor-corpus = { path = "features/expression-editor/expression-editor-corpus" }
-expression-editor-daw = { path = "features/expression-editor/expression-editor-daw" }
-expression-editor-demo = { path = "features/expression-editor/expression-editor-demo" }
-expression-editor-guitarpro = { path = "features/expression-editor/expression-editor-guitarpro" }
-expression-editor-host = { path = "features/expression-editor/expression-editor-host" }
-expression-editor-reaper = { path = "features/expression-editor/expression-editor-reaper" }
-expression-editor-standalone = { path = "features/expression-editor/expression-editor-standalone" }
-expression-editor-tools = { path = "features/expression-editor/expression-editor-tools" }
-expression-editor-paint = { path = "features/expression-editor/expression-editor-paint" }
-expression-editor-ui = { path = "features/expression-editor/expression-editor-ui" }
 # Internal DSP cores (behind the facades).
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────

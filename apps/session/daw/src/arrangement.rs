@@ -2390,7 +2390,7 @@ pub fn hits_overlay(
         let drum = overlay
             .pieces
             .get(piece)
-            .and_then(|name| kit_color(expression_editor_core::kit::kit_role(name, &[])))
+            .and_then(|name| kit_color(expression_editor::kit::kit_role(name, &[])))
             .unwrap_or(palette.text);
         let spaced = |k: usize| {
             let x = mine.get(k).map_or(0.0, |m| x_of(m.time));
@@ -3254,7 +3254,7 @@ fn track_versions(project: &ProjectRef) -> std::collections::HashMap<&str, u64> 
         .collect()
 }
 
-use expression_editor_core::kit::LaneRole;
+use expression_editor::kit::LaneRole;
 
 /// The drums a shut kit's item is layered by, under to over: the kit's
 /// own colour for the rest (cymbals, rooms) at the bottom, then toms,
@@ -3298,7 +3298,7 @@ fn kit_roles(project: &ProjectRef) -> std::collections::HashMap<&str, LaneRole> 
             }
             (
                 track.guid.as_str(),
-                expression_editor_core::kit::kit_role(&track.name, &folders),
+                expression_editor::kit::kit_role(&track.name, &folders),
             )
         })
         .collect()
@@ -4746,7 +4746,7 @@ mod dial_tests {
     #[test]
     fn a_hit_marker_wears_its_drums_colour() {
         let colour =
-            |piece: &str| super::kit_color(expression_editor_core::kit::kit_role(piece, &[]));
+            |piece: &str| super::kit_color(expression_editor::kit::kit_role(piece, &[]));
         assert_eq!(colour("Kick"), super::kit_color(super::LaneRole::Kick));
         assert_eq!(colour("Snare"), super::kit_color(super::LaneRole::Snare));
         assert_eq!(colour("Tom 1"), super::kit_color(super::LaneRole::Toms));

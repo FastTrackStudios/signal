@@ -4285,8 +4285,7 @@ dependencies = [
  "dawfile-reaper",
  "display-info",
  "enumflags2",
- "expression-editor-daw",
- "expression-editor-tools",
+ "expression-editor",
  "eyre",
  "facet-json",
  "formats",
@@ -6541,148 +6540,51 @@ dependencies = [
 ]
 
 [[package]]
-name = "expression-editor-audio"
-version = "0.1.0"
-dependencies = [
- "align-dsp",
- "daw",
- "expression-editor-audio",
- "expression-editor-core",
- "expression-editor-tools",
- "fts-sample",
- "realfft",
- "tune",
-]
-
-[[package]]
-name = "expression-editor-core"
+name = "expression-editor"
 version = "0.1.0"
 dependencies = [
  "adaptive-grid",
+ "align-dsp",
+ "anyrender 0.11.1",
+ "anyrender_vello_cpu",
  "architect",
  "architect-action-derive",
- "facet",
- "keyflow-proto 0.1.0 (git+https://github.com/FastTrackStudios/keyflow?tag=v0.2.4)",
- "razor",
- "view-gestures",
-]
-
-[[package]]
-name = "expression-editor-corpus"
-version = "0.1.0"
-dependencies = [
- "clap",
- "expression-editor-audio",
- "fts-sample",
- "hound",
- "midly",
-]
-
-[[package]]
-name = "expression-editor-daw"
-version = "0.1.0"
-dependencies = [
- "daw",
- "expression-editor-core",
- "expression-editor-tools",
- "facet",
- "facet-styx",
- "level",
-]
-
-[[package]]
-name = "expression-editor-demo"
-version = "0.1.0"
-dependencies = [
- "daw",
- "daw-proto",
- "dawfile-reaper",
- "expression-editor-audio",
- "expression-editor-core",
- "expression-editor-corpus",
- "expression-editor-daw",
- "expression-editor-guitarpro",
- "expression-editor-tools",
- "formats",
- "hound",
- "midly",
-]
-
-[[package]]
-name = "expression-editor-guitarpro"
-version = "0.1.0"
-dependencies = [
- "expression-editor-core",
- "guitarpro",
-]
-
-[[package]]
-name = "expression-editor-host"
-version = "0.1.0"
-dependencies = [
- "daw",
- "expression-editor-audio",
- "expression-editor-core",
- "expression-editor-tools",
- "tracing",
-]
-
-[[package]]
-name = "expression-editor-paint"
-version = "0.1.0"
-dependencies = [
- "adaptive-grid",
- "anyrender 0.11.1",
- "daw-ui",
- "expression-editor-core",
- "input",
- "kurbo 0.13.1",
- "parley 0.10.0",
- "peniko 0.6.1",
- "razor",
- "tracing",
- "view-gestures",
-]
-
-[[package]]
-name = "expression-editor-reaper"
-version = "0.1.0"
-dependencies = [
- "daw",
- "daw-test-macro",
- "dioxus",
- "expression-editor-audio",
- "expression-editor-core",
- "expression-editor-daw",
- "expression-editor-host",
- "expression-editor-ui",
- "eyre",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "expression-editor-standalone"
-version = "0.1.0"
-dependencies = [
+ "base64 0.22.1",
+ "blitz-dom",
  "blitz-traits",
+ "clap",
  "daw",
  "daw-control",
+ "daw-proto",
+ "daw-test-macro",
  "daw-ui",
  "dawfile-reaper",
  "dioxus",
  "dioxus-mcp-probe",
  "dioxus-native",
+ "dioxus-native-dom",
+ "dioxus-ssr",
  "dioxus-test",
- "expression-editor-audio",
- "expression-editor-core",
- "expression-editor-daw",
- "expression-editor-guitarpro",
- "expression-editor-host",
- "expression-editor-ui",
  "eyre",
+ "facet",
+ "facet-styx",
  "formats",
+ "fts-sample",
  "futures-timer",
+ "guitarpro",
+ "hound",
+ "image",
+ "input",
+ "keyflow-proto 0.1.0 (git+https://github.com/FastTrackStudios/keyflow?tag=v0.2.4)",
+ "kurbo 0.13.1",
+ "level",
+ "midly",
+ "parley 0.10.0",
+ "peniko 0.6.1",
+ "png 0.17.16",
+ "rand 0.8.8",
+ "razor",
+ "realfft",
  "regex",
  "serde_json",
  "sha2 0.10.9",
@@ -6690,49 +6592,8 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "expression-editor-tools"
-version = "0.1.0"
-dependencies = [
- "expression-editor-core",
- "expression-editor-tools",
- "rand 0.8.8",
- "tracing",
  "tune",
-]
-
-[[package]]
-name = "expression-editor-ui"
-version = "0.1.0"
-dependencies = [
- "adaptive-grid",
- "anyrender 0.11.1",
- "anyrender_vello_cpu",
- "base64 0.22.1",
- "blitz-dom",
- "daw-ui",
- "dioxus",
- "dioxus-native-dom",
- "dioxus-ssr",
- "dioxus-test",
- "expression-editor-core",
- "expression-editor-guitarpro",
- "expression-editor-host",
- "expression-editor-paint",
- "expression-editor-tools",
- "futures-timer",
- "image",
- "input",
- "kurbo 0.13.1",
- "level",
- "parley 0.10.0",
- "peniko 0.6.1",
- "png 0.17.16",
- "serde_json",
- "tokio",
- "tracing",
+ "view-gestures",
 ]
 
 [[package]]
@@ -17878,10 +17739,7 @@ dependencies = [
  "editor-state",
  "editor-view",
  "eq",
- "expression-editor-audio",
- "expression-editor-core",
- "expression-editor-daw",
- "expression-editor-paint",
+ "expression-editor",
  "eyre",
  "facet",
  "facet-json",

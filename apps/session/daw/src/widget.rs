@@ -5434,7 +5434,7 @@ mod tests {
         assert_eq!(
             widget.pointing.borrow().icon(),
             crate::window_cursor::Shape::Glyph(crate::window_cursor::Glyph::Editor(
-                expression_editor_core::cursor::Cursor::Zoom
+                expression_editor::cursor::Cursor::Zoom
             ))
         );
     }
@@ -5483,7 +5483,7 @@ mod tests {
         assert_eq!(
             widget.pointing.borrow().icon(),
             crate::window_cursor::Shape::Glyph(crate::window_cursor::Glyph::Editor(
-                expression_editor_core::cursor::Cursor::Razor
+                expression_editor::cursor::Cursor::Razor
             ))
         );
     }

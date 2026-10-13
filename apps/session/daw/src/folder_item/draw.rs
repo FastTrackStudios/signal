@@ -5,7 +5,7 @@
 //! sides into two halves of one.
 
 use anyrender::{PaintScene, Scene};
-use expression_editor_core::kit::LaneRole;
+use expression_editor::kit::LaneRole;
 use vello::kurbo::{Affine, BezPath, Rect};
 use vello::peniko::{Color, Fill};
 

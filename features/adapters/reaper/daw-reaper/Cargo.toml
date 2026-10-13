@@ -66,8 +66,7 @@ swell-ui.workspace = true
 display-info = "0.5"
 
 [dev-dependencies]
-expression-editor-tools.workspace = true
-expression-editor-daw.workspace = true
+expression-editor = { workspace = true, features = ["daw", "ops"] }
 
 daw-control = { workspace = true }
 daw-proto = { workspace = true }

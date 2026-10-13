@@ -3,7 +3,7 @@
 //! The system's shapes have no `[`, no `]`, no seam and no fade — which
 //! is to say none of the shapes that tell you *which* edge you are about
 //! to take, or which way a fade runs. The editor already draws those
-//! (`expression_editor_paint::cursor`); here they are rasterized into
+//! (`expression_editor::paint::cursor`); here they are rasterized into
 //! real window cursors, so the arrangement and the Editor point the same
 //! way and the shape is the OS pointer itself, not a picture following it.
 //!
@@ -21,8 +21,8 @@ use std::rc::Rc;
 
 use anyrender::{PaintScene, Scene};
 use cursor_icon::CursorIcon;
-use expression_editor_core::cursor::Cursor;
-use expression_editor_paint::cursor::{SIZE, draw};
+use expression_editor::cursor::Cursor;
+use expression_editor::paint::cursor::{SIZE, draw};
 use vello::kurbo::{Affine, BezPath, Stroke};
 use vello::peniko::Color;
 
@@ -148,7 +148,7 @@ impl Glyph {
 fn passes(scene: &mut Scene, path: &BezPath) {
     let halo = Color::from_rgba8(0, 0, 0, 190);
     // The Editor's glyphs' own ink, so the two sets are one set.
-    let ink = expression_editor_paint::paint::color(expression_editor_paint::theme::TEXT_BRIGHT);
+    let ink = expression_editor::paint::paint::color(expression_editor::paint::theme::TEXT_BRIGHT);
     for (color, width) in [(halo, 3.4), (ink, 1.5)] {
         scene.stroke(&Stroke::new(width), Affine::IDENTITY, color, None, path);
     }
