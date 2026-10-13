@@ -99,8 +99,8 @@ signal-keys-rig = [
 ]
 signal = [
     "signal-guitar",
-    "dep:signal-drums-proto",
-    "dep:signal-drums-ui",
+    "dep:drums",
+    "dep:drums",
     "dep:signal-keys-proto",
     "dep:signal-keys-ui",
     "dep:midicore-proto",
@@ -113,7 +113,7 @@ signal = [
     # engine_main.rs — the former apps/signal-engine). These optional
     # deps only exist in the not(wasm32) target table, so enabling them
     # here is a no-op on the web build.
-    "dep:signal-drums",
+    "dep:drums",
     "dep:signal-keys",
     "dep:signal-synth-rig",
     "dep:signal-sampler",
@@ -220,8 +220,7 @@ signal-tone3000-proto = { workspace = true, optional = true }
 signal-tone3000-ui = { workspace = true, optional = true }
 fts-chrome.workspace = true
 signal-guitar-ui = { workspace = true, optional = true }
-signal-drums-proto = { workspace = true, optional = true }
-signal-drums-ui = { workspace = true, optional = true }
+drums = { workspace = true, optional = true, features = ["ui"] }
 signal-keys-proto = { workspace = true, optional = true }
 signal-keys-ui = { workspace = true, optional = true }
 # MidiEvent — the in-tab keys backend (web_keys_backend.rs) decodes the raw
@@ -324,7 +323,7 @@ fx-blocks = { workspace = true, optional = true }
 # ── Engine mode (`--engine`, feature `signal`) — the former
 #    apps/signal-engine, native only ─────────────────────────────────────
 signal-guitar = { workspace = true, optional = true }
-signal-drums = { workspace = true, optional = true }
+drums = { workspace = true, optional = true }
 signal-keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }

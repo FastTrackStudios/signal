@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         PathBuf::from,
     );
     let t0 = std::time::Instant::now();
-    let (dir, analyzed, skipped) = signal_drums::piece_space::build(&root)?;
+    let (dir, analyzed, skipped) = drums::piece_space::build(&root)?;
     println!(
         "built piece space: {analyzed} engines ({skipped} skipped) in {:.1}s → {}",
         t0.elapsed().as_secs_f32(),
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         seen.push(&item.class);
         let full = std::path::Path::new(&space.root).join(&item.path);
-        let hits = match signal_drums::piece_space::similar_to(&root, &full, 4) {
+        let hits = match drums::piece_space::similar_to(&root, &full, 4) {
             Ok(h) => h,
             Err(e) => {
                 println!("   (similar_to error: {e})");

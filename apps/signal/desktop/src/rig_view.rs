@@ -11,8 +11,8 @@
 //! remount fresh.
 
 use dioxus::prelude::*;
-use signal_drums_proto::drum::{DrumRigClient, DrumRigStreamClient};
-use signal_drums_ui::DrumRigRemote;
+use drums::proto::drum::{DrumRigClient, DrumRigStreamClient};
+use drums::ui::DrumRigRemote;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::{RigClient, RigStreamClient};
 use signal_guitar_ui::GuitarRigRemote;

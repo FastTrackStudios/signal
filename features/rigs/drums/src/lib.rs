@@ -7,6 +7,11 @@
 //! drum-kit *definitions* (how to load and route a kit), the behaviour *spec*
 //! (`spec/`), and the kit-loading *tests* as they land.
 
+
+pub mod proto;
+#[cfg(feature = "ui")]
+pub mod ui;
+
 use std::path::Path;
 
 use signal_sampler::midicore::{self, DrumMap, DrumMapConverter};
@@ -20,8 +25,6 @@ pub mod mm2fx;
 pub mod piece_space;
 pub use backend::DrumRigBackend;
 pub use lightguide::DrumLightGuide;
-pub use signal_drums_proto as proto;
-
 /// General-MIDI percussion channel (0-indexed 9 = MIDI channel 10).
 pub const GM_DRUM_CHANNEL: u8 = 9;
 

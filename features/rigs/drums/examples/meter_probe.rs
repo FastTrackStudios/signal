@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(36);
 
     let rig = SamplerRig::new_offline(48_000);
-    let ids = signal_drums::load_preset_kit(&rig, KIT, PRESET)?;
+    let ids = drums::load_preset_kit(&rig, KIT, PRESET)?;
     println!("loaded {} engines; kick note = {kick}", ids.len());
 
     // Let preload settle (samples may decode on a background thread).
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Hit the kick on GM ch10 and render ~0.2 s, tracking peak meters.
-    rig.midi_message(signal_drums::GM_DRUM_CHANNEL, 0x90, kick, 120);
+    rig.midi_message(drums::GM_DRUM_CHANNEL, 0x90, kick, 120);
     let (mut mx_ch, mut mx_bus, mut mx_master) = (0.0f32, 0.0f32, 0.0f32);
     for _ in 0..20 {
         buf.fill(0.0);
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hit_all = |rig: &SamplerRig, buf: &mut Vec<f32>| -> Vec<f32> {
         for (_, note) in &notes {
             if *note > 0 {
-                rig.midi_message(signal_drums::GM_DRUM_CHANNEL, 0x90, *note, 120);
+                rig.midi_message(drums::GM_DRUM_CHANNEL, 0x90, *note, 120);
             }
         }
         let mut peaks = vec![0.0f32; notes.len()];

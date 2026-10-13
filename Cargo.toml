@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/rigs/drums",
     "features/input",
     "features/ui/themer",
     "features/launcher",
@@ -215,9 +216,6 @@ members = [
     "features/rigs/plugin-host",
     "features/adapters/reaper/signal-extension",
     "features/adapters/reaper/signal-reaper-controller",
-    "features/rigs/drums",
-    "features/rigs/drums/proto",
-    "features/rigs/drums/ui",
     "features/rigs/ekit",
     "features/rigs/ekit/proto",
     "features/rigs/ekit/ui",
@@ -302,6 +300,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+drums = { path = "features/rigs/drums" }
 input = { path = "features/input" }
 themer = { path = "features/ui/themer", default-features = false }
 launcher = { path = "features/launcher" }
@@ -1118,9 +1117,6 @@ signal-keys-worklet = { path = "features/audio/worklet/keys" }
 signal-guitar-worklet = { path = "features/audio/worklet/guitar" }
 openwurli-dsp = { path = "features/rigs/wurli/openwurli-dsp" }
 signal-orchestra = { path = "features/rigs/orchestra" }
-signal-drums = { path = "features/rigs/drums" }
-signal-drums-proto = { path = "features/rigs/drums/proto" }
-signal-drums-ui = { path = "features/rigs/drums/ui" }
 signal-synth = { path = "features/rigs/synth" }
 signal-synth-proto = { path = "features/rigs/synth/proto" }
 signal-synth-ui = { path = "features/rigs/synth/ui" }

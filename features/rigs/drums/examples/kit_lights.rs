@@ -7,7 +7,7 @@
 use std::thread::sleep;
 use std::time::Duration;
 
-use signal_drums::DrumLightGuide;
+use drums::DrumLightGuide;
 use signal_sampler::PresetSpec;
 
 const PRESET: &str = "/run/media/AudioHaven/Signal/Libraries/Drum Kits/\

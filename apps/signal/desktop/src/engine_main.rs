@@ -154,7 +154,7 @@ async fn async_main() {
     // wiring is identical.
     let guitar = GuitarRigBackend::new();
     guitar.start(); // worship rig: open audio + load profile off-thread
-    let drums = signal_drums::DrumRigBackend::new(); // dormant until started
+    let drums = drums::DrumRigBackend::new(); // dormant until started
     let keys = signal_keys::KeysRigBackend::new(); // dormant until started
     let synth = signal_synth_rig::SynthRigBackend::new(); // dormant until started
 

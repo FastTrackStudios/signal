@@ -6069,6 +6069,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "drums"
+version = "0.1.0"
+dependencies = [
+ "architect",
+ "control-surfaces",
+ "daw",
+ "dioxus",
+ "facet",
+ "fx-blocks",
+ "midicore",
+ "midicore-proto",
+ "midicore-ui",
+ "signal-plugin-host",
+ "signal-rig-host",
+ "signal-rigs-proto",
+ "signal-sampler",
+ "signal-space",
+ "signal-ui",
+ "tracing",
+ "tracing-subscriber",
+ "vox",
+]
+
+[[package]]
 name = "dsp-core"
 version = "0.1.0"
 
@@ -18390,6 +18414,7 @@ dependencies = [
  "dioxus",
  "dioxus-native",
  "dioxus-native-dom",
+ "drums",
  "eyre",
  "facet",
  "facet-json",
@@ -18412,9 +18437,6 @@ dependencies = [
  "sha2 0.10.9",
  "signal-account",
  "signal-account-proto",
- "signal-drums",
- "signal-drums-proto",
- "signal-drums-ui",
  "signal-ekit",
  "signal-ekit-proto",
  "signal-guitar",
@@ -18449,47 +18471,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "signal-drums"
-version = "0.1.0"
-dependencies = [
- "architect",
- "control-surfaces",
- "daw",
- "fx-blocks",
- "midicore",
- "signal-drums-proto",
- "signal-plugin-host",
- "signal-rig-host",
- "signal-rigs-proto",
- "signal-sampler",
- "signal-space",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "signal-drums-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "midicore-proto",
- "vox",
-]
-
-[[package]]
-name = "signal-drums-ui"
-version = "0.1.0"
-dependencies = [
- "architect",
- "dioxus",
- "midicore-proto",
- "midicore-ui",
- "signal-drums-proto",
- "signal-ui",
 ]
 
 [[package]]

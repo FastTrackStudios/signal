@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("swapping kick → {}", alt_kick.display());
 
     let rig = SamplerRig::new_offline(48_000);
-    signal_drums::load_preset_kit(&rig, KIT, &preset_path)?;
+    drums::load_preset_kit(&rig, KIT, &preset_path)?;
 
     let hit_kick = |rig: &SamplerRig| -> f32 {
         let mut buf = vec![0.0f32; 512 * 2];
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::thread::sleep(std::time::Duration::from_millis(8));
         }
         // Kick = note 35 in Metal Monster.
-        rig.midi_message(signal_drums::GM_DRUM_CHANNEL, 0x90, 35, 120);
+        rig.midi_message(drums::GM_DRUM_CHANNEL, 0x90, 35, 120);
         let mut pk = 0.0f32;
         for _ in 0..40 {
             buf.fill(0.0);
@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     rig.load_preset_spec(KIT, &spec2, &dir)?;
-    rig.set_midi_channel(KIT, signal_drums::GM_DRUM_CHANNEL);
+    rig.set_midi_channel(KIT, drums::GM_DRUM_CHANNEL);
     rig.set_default_instrument(KIT);
 
     let after = hit_kick(&rig);
