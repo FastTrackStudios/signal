@@ -34,8 +34,7 @@ midi = { workspace = true, features = ["vox"] }
 uuid = { version = "1", features = ["v4"] }
 tracing.workspace = true
 audio-controls.workspace = true
-dock-dioxus = { workspace = true, default-features = false }
-dock-proto.workspace = true
+dock = { workspace = true, features = ["ui"] }
 
 # Native-only: the live signal/daw engine (cpal), the SignalController, the
 # Vello/baseview surfaces (nice-plug-dioxus/audiocore-gui), hardware MIDI
@@ -59,5 +58,5 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [features]
 default = ["web"]
-web = ["dock-dioxus/web"]
-desktop = ["dock-dioxus/web"]
+web = ["dock/ui", "dock/web"]
+desktop = ["dock/ui", "dock/web"]

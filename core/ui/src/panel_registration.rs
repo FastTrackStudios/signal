@@ -7,8 +7,8 @@
 //! (the app must `provide_context` it before the dock renders).
 
 use dioxus::prelude::*;
-use dock_dioxus::PanelRendererRegistry;
-use dock_proto::PanelId;
+use dock::ui::PanelRendererRegistry;
+use dock::PanelId;
 use signal::Signal;
 
 use crate::components::GridSlot;
