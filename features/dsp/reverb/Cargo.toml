@@ -19,7 +19,7 @@ viz = ["dep:anyrender", "dep:blitz-dom", "dep:bytemuck", "dep:dioxus-native-dom"
 anyrender = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
-dsp-core = { workspace = true, features = ["audio", "modulation", "time-ui"] }
+dsp-core = { workspace = true, features = ["audio", "modulation"] }
 blitz-dom = { workspace = true, features = ["custom-widget"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 crossbeam-channel = { workspace = true }
