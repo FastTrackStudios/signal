@@ -21,7 +21,7 @@ use crate::tone::{Panel, Tone, Which};
 pub enum Picture {
     Reverb(reverb::ui::viz::ReverbView),
     Delay(delay::ui::viz::DelayView),
-    Mod(modulation_ui::viz::ModView),
+    Mod(modulation::ui::viz::ModView),
     Sat(saturate::ui::viz::SatView),
     /// A face designed in frame, running live: its controls are its own.
     Frame(FrameFace),
@@ -453,7 +453,7 @@ const MOD_KNOBS: [Macro; 4] = [
     Macro {
         name: "Type",
         get: |t| {
-            let all = modulation_ui::viz::Engine::ALL;
+            let all = modulation::ui::viz::Engine::ALL;
             let at = all
                 .iter()
                 .position(|e| *e == t.modulation.engine)
@@ -461,7 +461,7 @@ const MOD_KNOBS: [Macro; 4] = [
             crate::num::coord(at) / crate::num::coord(all.len().saturating_sub(1).max(1))
         },
         set: |t, f| {
-            let all = modulation_ui::viz::Engine::ALL;
+            let all = modulation::ui::viz::Engine::ALL;
             let steps = crate::num::coord(all.len().saturating_sub(1));
             let at = crate::num::index((f.clamp(0.0, 1.0) * steps).round());
             if let Some(engine) = all.get(at) {
@@ -553,9 +553,9 @@ fn sat_view(tone: &Tone) -> Option<saturate::ui::viz::SatView> {
 
 /// What the modulation editor's picture draws, for `tone`.
 #[must_use]
-pub const fn mod_view(tone: &Tone) -> modulation_ui::viz::ModView {
+pub const fn mod_view(tone: &Tone) -> modulation::ui::viz::ModView {
     let wobble = tone.modulation;
-    modulation_ui::viz::ModView {
+    modulation::ui::viz::ModView {
         engine: wobble.engine,
         rate: wobble.rate,
         depth: wobble.depth,
@@ -563,8 +563,8 @@ pub const fn mod_view(tone: &Tone) -> modulation_ui::viz::ModView {
         on: true,
         // Modulation is cyan-led and motion pink-led, as its editor has it.
         color: match wobble.engine.group() {
-            modulation_ui::viz::Group::Colouring => [34, 211, 238],
-            modulation_ui::viz::Group::Moving => [244, 114, 182],
+            modulation::ui::viz::Group::Colouring => [34, 211, 238],
+            modulation::ui::viz::Group::Moving => [244, 114, 182],
         },
         time: 0.0,
     }
@@ -577,7 +577,7 @@ pub fn paint_mod_in(scene: &mut Scene, tone: &Tone, at: Panel) {
         return;
     }
     let mut picture = Scene::new();
-    modulation_ui::viz::paint_mod(&mut picture, &mod_view(tone), at.width, at.height);
+    modulation::ui::viz::paint_mod(&mut picture, &mod_view(tone), at.width, at.height);
     let place = Affine::translate((at.x, at.y));
     scene.push_clip_layer(place, &Rect::new(0.0, 0.0, at.width, at.height));
     scene.append_scene(picture, place);
@@ -823,8 +823,8 @@ pub struct Painters {
     mods: std::collections::HashMap<
         String,
         (
-            modulation_ui::viz::Shared<modulation_ui::viz::ModView>,
-            modulation_ui::viz::ModWidget,
+            modulation::ui::viz::Shared<modulation::ui::viz::ModView>,
+            modulation::ui::viz::ModWidget,
         ),
     >,
 }
@@ -1170,7 +1170,7 @@ impl Painters {
             match picture {
                 Picture::Reverb(view) => reverb::ui::viz::paint_reverb(&mut scene, view, w, h),
                 Picture::Delay(view) => delay::ui::viz::paint_delay(&mut scene, view, w, h),
-                Picture::Mod(view) => modulation_ui::viz::paint_mod(&mut scene, view, w, h),
+                Picture::Mod(view) => modulation::ui::viz::paint_mod(&mut scene, view, w, h),
                 Picture::Sat(view) => saturate::ui::viz::paint_sat(&mut scene, view, w, h),
                 Picture::Frame(_) => {}
             }
@@ -1210,7 +1210,7 @@ impl Painters {
                 let (shared, widget) = self.mods.entry(key.to_owned()).or_insert_with(|| {
                     let shared = std::rc::Rc::new(std::cell::RefCell::new(view.clone()));
                     let mut widget =
-                        modulation_ui::viz::ModWidget::new(std::rc::Rc::clone(&shared));
+                        modulation::ui::viz::ModWidget::new(std::rc::Rc::clone(&shared));
                     widget.create_surfaces(ctx);
                     (shared, widget)
                 });

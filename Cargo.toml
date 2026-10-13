@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "features/dsp/modulation",
     "features/dsp/comp",
     "features/dsp/saturate",
     "features/dsp/reverb",
@@ -179,13 +180,6 @@ members = [
     "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-dsp",
     "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-ui",
     "features/dsp/hits/hit-detect/hit-detect-dsp",
-    "features/dsp/modulation/chorus-dsp",
-    "features/dsp/modulation/modulation",
-    "features/dsp/modulation/modulation-profiles",
-    "features/dsp/modulation/modulation-ui",
-    "features/dsp/modulation/pattern-ui",
-    "features/dsp/modulation/trem-dsp",
-    "features/dsp/modulation/wah-dsp",
     "features/dsp/multiband",
     "features/dsp/core/musical-time/musical-time",
     "features/dsp/core/musical-time/musical-time-ui",
@@ -323,6 +317,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+modulation = { path = "features/dsp/modulation" }
 comp = { path = "features/dsp/comp" }
 saturate = { path = "features/dsp/saturate" }
 reverb = { path = "features/dsp/reverb" }
@@ -556,7 +551,6 @@ eq-ui = { path = "features/dsp/eq/eq-ui", default-features = false }
 # The effects' own painted pictures — every reverb family, every delay
 # family, and the six modulation engines — which the FX view's devices
 # draw (`paint_reverb`, `paint_delay`, `paint_mod`, behind `viz`).
-modulation-ui = { path = "features/dsp/modulation/modulation-ui", default-features = false, features = ["viz"] }
 # The saturator's five circuits and their profiles — what its selector
 # picks from, applied through the plugin's own `apply`.
 # The FTS plugins themselves, run in-process as the engine's built-in FX
@@ -1101,18 +1095,12 @@ eq-profiles = { path = "features/dsp/eq/eq-profiles" }
 spectrum-analyzer = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer" }
 spectrum-analyzer-dsp = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-dsp" }
 spectrum-analyzer-ui = { path = "features/dsp/eq/spectrum-analyzer/spectrum-analyzer-ui" }
-modulation = { path = "features/dsp/modulation/modulation" }
 eq-dsp = { path = "features/dsp/eq/eq-dsp" }
 gate = { path = "features/dsp/gate" }
-chorus-dsp = { path = "features/dsp/modulation/chorus-dsp" }
-modulation-profiles = { path = "features/dsp/modulation/modulation-profiles" }
 multiband-dsp = { path = "features/dsp/multiband" }
 fx-stack = { path = "features/dsp/stack" }
 musical-time = { path = "features/dsp/core/musical-time/musical-time" }
 musical-time-ui = { path = "features/dsp/core/musical-time/musical-time-ui" }
-pattern-ui = { path = "features/dsp/modulation/pattern-ui" }
-trem-dsp = { path = "features/dsp/modulation/trem-dsp" }
-wah-dsp = { path = "features/dsp/modulation/wah-dsp" }
 preset-browser = { path = "features/preset-browser/preset-browser" }
 preset-browser-ui = { path = "features/preset-browser/preset-browser-ui" }
 fx-blocks = { path = "features/dsp/builtin/fx-blocks" }

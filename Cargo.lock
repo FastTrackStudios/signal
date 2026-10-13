@@ -2603,13 +2603,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chorus-dsp"
-version = "0.1.0"
-dependencies = [
- "audiocore-dsp",
-]
-
-[[package]]
 name = "chrono"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12265,9 +12258,26 @@ dependencies = [
 name = "modulation"
 version = "0.1.0"
 dependencies = [
- "chorus-dsp",
- "trem-dsp",
- "wah-dsp",
+ "anyrender 0.11.1",
+ "architect-ui",
+ "atomic_float",
+ "audiocore-dsp",
+ "blitz-dom",
+ "bytemuck",
+ "dioxus",
+ "dioxus-native-dom",
+ "dioxus-test",
+ "fts-audio-ui",
+ "fts-modulation",
+ "fts-plug-ui",
+ "naga",
+ "nice-plug",
+ "nice-plug-dioxus",
+ "parking_lot",
+ "png 0.18.1",
+ "tokio",
+ "vello 0.9.0",
+ "web-time",
 ]
 
 [[package]]
@@ -12278,41 +12288,7 @@ dependencies = [
  "audiocore-core",
  "audiocore-dsp",
  "modulation",
- "modulation-profiles",
- "modulation-ui",
  "nice-plug",
-]
-
-[[package]]
-name = "modulation-profiles"
-version = "0.1.0"
-dependencies = [
- "modulation",
-]
-
-[[package]]
-name = "modulation-ui"
-version = "0.1.0"
-dependencies = [
- "anyrender 0.11.1",
- "architect-ui",
- "atomic_float",
- "blitz-dom",
- "bytemuck",
- "dioxus",
- "dioxus-native-dom",
- "dioxus-test",
- "fts-audio-ui",
- "fts-plug-ui",
- "modulation-profiles",
- "naga",
- "nice-plug",
- "nice-plug-dioxus",
- "parking_lot",
- "png 0.18.1",
- "tokio",
- "vello 0.9.0",
- "web-time",
 ]
 
 [[package]]
@@ -14663,13 +14639,6 @@ name = "pathdiff"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
-
-[[package]]
-name = "pattern-ui"
-version = "0.1.0"
-dependencies = [
- "fts-modulation",
-]
 
 [[package]]
 name = "pbkdf2"
@@ -18013,7 +17982,7 @@ dependencies = [
  "level",
  "live-proto",
  "lucide-dioxus",
- "modulation-ui",
+ "modulation",
  "num-traits",
  "patch-list",
  "pollster",
@@ -18797,7 +18766,7 @@ dependencies = [
  "image",
  "kurbo 0.13.1",
  "lumen-blocks",
- "modulation-ui",
+ "modulation",
  "naga",
  "parley 0.10.0",
  "reverb",
@@ -19389,8 +19358,8 @@ dependencies = [
  "getrandom 0.3.4",
  "lumen-blocks",
  "midicore",
+ "modulation",
  "nice-plug-dioxus",
- "pattern-ui",
  "signal",
  "signal-browser",
  "signal-controller",
@@ -22304,14 +22273,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
 
 [[package]]
-name = "trem-dsp"
-version = "0.1.0"
-dependencies = [
- "audiocore-dsp",
- "fts-modulation",
-]
-
-[[package]]
 name = "trigger"
 version = "0.1.0"
 dependencies = [
@@ -23516,14 +23477,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d9b2acfb050df409c972a37d3b8e08cdea3bddb0c09db9d53137e504cfabed0"
 dependencies = [
  "utf8parse",
-]
-
-[[package]]
-name = "wah-dsp"
-version = "0.1.0"
-dependencies = [
- "audiocore-dsp",
- "fts-modulation",
 ]
 
 [[package]]

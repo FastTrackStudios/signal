@@ -14,7 +14,7 @@
 //! wah's resonance, stages and sensitivity were fields nothing wrote. Seven
 //! parameters over about twenty-five real controls.
 //!
-//! [`modulation_profiles::apply`] is the only thing that knows how a knob
+//! [`modulation::profiles::apply`] is the only thing that knows how a knob
 //! reaches the DSP — which is also why the editor's shape is the engine's own
 //! movement rather than a drawing of one.
 
@@ -26,8 +26,8 @@ use audiocore_dsp::{AudioConfig, Processor};
 use modulation::chorus::chain::ChorusChain;
 use modulation::trem::chain::TremChain;
 use modulation::wah::chain::WahChain;
-use modulation_profiles::Chain;
-use modulation_ui::params::{ModParams, ModUiState};
+use modulation::profiles::Chain;
+use modulation::ui::params::{ModParams, ModUiState};
 
 const PLUGIN_NAME: &str = "FTS Modulation";
 
@@ -52,20 +52,20 @@ pub struct FtsModulation {
 
 impl Default for FtsModulation {
     fn default() -> Self {
-        // The modulators' clocks are set by `modulation_profiles::apply`, not
+        // The modulators' clocks are set by `modulation::profiles::apply`, not
         // here — a chain configured in two places is how the editor ended up
         // drawing a still line for the tremolo while the plugin ran fine.
         Self {
             params: Arc::new(ModParams::default()),
             ui_state: Arc::new(ModUiState::default()),
-            // The editor sizes itself — see modulation_ui::control_view.
+            // The editor sizes itself — see modulation::ui::control_view.
             editor_state: DioxusState::new(|| {
                 (
-                    modulation_ui::control_view::EDITOR_W,
-                    modulation_ui::control_view::EDITOR_H,
+                    modulation::ui::control_view::EDITOR_W,
+                    modulation::ui::control_view::EDITOR_H,
                 )
             })
-            .with_resize_hint(modulation_ui::control_view::resize_hint()),
+            .with_resize_hint(modulation::ui::control_view::resize_hint()),
             chorus: ChorusChain::new(),
             trem: TremChain::new(),
             wah: WahChain::new(),
@@ -99,7 +99,7 @@ impl FtsModulation {
             }
         }
 
-        modulation_profiles::apply(
+        modulation::profiles::apply(
             profile,
             &self.params.controls(),
             &mut self.chorus,
@@ -135,11 +135,11 @@ impl Plugin for FtsModulation {
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
-            Arc::new(modulation_ui::control_view::ModUi {
+            Arc::new(modulation::ui::control_view::ModUi {
                 params: self.params.clone(),
                 state: self.ui_state.clone(),
             }),
-            modulation_ui::control_view::App,
+            modulation::ui::control_view::App,
         )
     }
 
@@ -283,7 +283,7 @@ nice_export_vst3!(FtsModulation);
 mod tests {
     use super::*;
     use audiocore_core::nice_plug::params::InternalParamMut;
-    use modulation_profiles::{Circuit, EngineType};
+    use modulation::profiles::{Circuit, EngineType};
 
     /// The plugin runs whatever the rail says, with no table of its own.
     ///
@@ -293,7 +293,7 @@ mod tests {
     /// what notices.
     #[test]
     fn every_profile_on_the_rail_reaches_the_engine_it_names() {
-        for (index, profile) in modulation_profiles::PROFILES.iter().enumerate() {
+        for (index, profile) in modulation::profiles::PROFILES.iter().enumerate() {
             let mut plugin = FtsModulation::default();
             plugin.params.store_profile_id(index);
             let chain = plugin.sync_params();
@@ -310,7 +310,7 @@ mod tests {
     #[test]
     fn the_shell_can_select_every_chorus_engine() {
         let mut reached = Vec::new();
-        for (index, _) in modulation_profiles::PROFILES.iter().enumerate() {
+        for (index, _) in modulation::profiles::PROFILES.iter().enumerate() {
             let mut plugin = FtsModulation::default();
             plugin.params.store_profile_id(index);
             plugin.sync_params();
@@ -330,7 +330,7 @@ mod tests {
     /// something is unusable however good it sounds when played.
     #[test]
     fn no_profile_makes_a_sound_out_of_nothing() {
-        for index in 0..modulation_profiles::PROFILES.len() {
+        for index in 0..modulation::profiles::PROFILES.len() {
             let mut plugin = FtsModulation::default();
             plugin.params.store_profile_id(index);
             let chain = plugin.sync_params();
@@ -358,7 +358,7 @@ mod tests {
                     }
                 }
             }
-            let id = modulation_profiles::PROFILES[index].id;
+            let id = modulation::profiles::PROFILES[index].id;
             assert!(worst < 1.0e-6, "{id} idles at {worst}");
         }
     }
@@ -367,7 +367,7 @@ mod tests {
     /// its controls.
     #[test]
     fn nothing_explodes_at_any_setting() {
-        for index in 0..modulation_profiles::PROFILES.len() {
+        for index in 0..modulation::profiles::PROFILES.len() {
             for end in [0.0f32, 1.0] {
                 let mut plugin = FtsModulation::default();
                 plugin.params.store_profile_id(index);
@@ -417,7 +417,7 @@ mod tests {
                             assert!(
                                 v.is_finite(),
                                 "{} went non-finite at {end}",
-                                modulation_profiles::PROFILES[index].id,
+                                modulation::profiles::PROFILES[index].id,
                             );
                             worst = worst.max(v.abs());
                         }
@@ -426,7 +426,7 @@ mod tests {
                 assert!(
                     worst < 4.0,
                     "{} reached {worst} at {end}",
-                    modulation_profiles::PROFILES[index].id,
+                    modulation::profiles::PROFILES[index].id,
                 );
             }
         }

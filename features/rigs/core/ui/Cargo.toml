@@ -19,7 +19,7 @@ lumen-blocks.workspace = true
 # the native sampler/daw engine (cpal) and so is native-only below.
 signal-proto.workspace = true
 fts-modulation = { workspace = true }
-pattern-ui = { workspace = true }
+modulation = { workspace = true, features = ["ui"] }
 # The guitar-rig wire contract (types + vox service clients) — the detachable
 # GUI boundary. wasm-clean; NOT the audio backend.
 signal-guitar-proto.workspace = true

@@ -188,7 +188,7 @@ fn delay(tone: &Tone) -> Vec<(u32, f64)> {
 }
 
 fn modulation(tone: &Tone) -> Vec<(u32, f64)> {
-    use modulation_ui::viz::Engine;
+    use modulation::ui::viz::Engine;
     let w = &tone.modulation;
     let circuit = match w.engine {
         Engine::Flanger => "Flanger",

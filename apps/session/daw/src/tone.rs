@@ -703,7 +703,7 @@ fn suppression(set: Suppress) -> String {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Wobble {
     /// Which machine: chorus, flanger, phaser, tremolo, vibrato, rotary.
-    pub engine: modulation_ui::viz::Engine,
+    pub engine: modulation::ui::viz::Engine,
     /// How fast, in Hz.
     pub rate: f32,
     /// How deep, 0 to 1.
@@ -715,7 +715,7 @@ pub struct Wobble {
 impl Default for Wobble {
     fn default() -> Self {
         Self {
-            engine: modulation_ui::viz::Engine::Chorus,
+            engine: modulation::ui::viz::Engine::Chorus,
             rate: 0.8,
             depth: 0.5,
             mix: 0.5,
@@ -6134,8 +6134,8 @@ pub fn placeholder(index: usize) -> Tone {
         sc_view: None,
         drum: false,
         modulation: Wobble {
-            engine: modulation_ui::viz::Engine::ALL
-                .get(index % modulation_ui::viz::Engine::ALL.len())
+            engine: modulation::ui::viz::Engine::ALL
+                .get(index % modulation::ui::viz::Engine::ALL.len())
                 .copied()
                 .unwrap_or_default(),
             ..Wobble::default()

@@ -16,7 +16,7 @@
 
 use dioxus::prelude::*;
 use fts_modulation::{CurveType, Point};
-use pattern_ui::{
+use modulation::ui::pattern::{
     PatternMapper, adjust_tension, build_pattern, constrained_move, nearest_point, next_curve_type,
     pattern_paths,
 };

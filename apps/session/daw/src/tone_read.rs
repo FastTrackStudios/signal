@@ -413,7 +413,7 @@ fn delay(tone: &mut Tone, fx: &EngineFx, bpm: f64) {
 }
 
 fn modulation(tone: &mut Tone, fx: &EngineFx) {
-    use modulation_ui::viz::Engine;
+    use modulation::ui::viz::Engine;
     let w = &mut tone.modulation;
     if let Some(circuit) = fx.text("Circuit").map(str::trim) {
         // The circuit's family is what the face draws: delay modulation

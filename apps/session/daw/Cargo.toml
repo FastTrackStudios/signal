@@ -109,7 +109,7 @@ saturate = { workspace = true, features = ["analysis", "profiles", "ui", "viz"] 
 delay = { workspace = true, features = ["profiles", "ui", "viz"] }
 reverb = { workspace = true, features = ["profiles", "ui", "viz"] }
 # Their painted pictures, for the FX view's devices.
-modulation-ui = { workspace = true }
+modulation = { workspace = true, features = ["ui", "viz"] }
 frame-live = { workspace = true }
 
 # `standalone-rpp` = the standalone backend plus the `.rpp` loader and
