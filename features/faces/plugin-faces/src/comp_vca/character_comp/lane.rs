@@ -10,8 +10,8 @@
 //! flip arrow (the comp catalog has no such params) and the maker's mark
 //! (no face in this set prints a maker).
 
-use document_proto::{NodeId, NodeKind, Op, Scene};
-use surface_proto::{ParamInfo, Source};
+use frame::document::proto::{NodeId, NodeKind, Op, Scene};
+use frame::surface::proto::{ParamInfo, Source};
 
 use crate::face::Face;
 use crate::lane::Shape;
@@ -55,7 +55,7 @@ pub fn faces() -> Vec<Face> {
 }
 
 /// The rack face's params that `scene` binds a control to.
-fn bound(scene: &document_proto::Scene, params: &[ParamInfo]) -> Vec<ParamInfo> {
+fn bound(scene: &frame::document::proto::Scene, params: &[ParamInfo]) -> Vec<ParamInfo> {
     let addrs: Vec<String> = scene
         .walk(scene.root)
         .into_iter()

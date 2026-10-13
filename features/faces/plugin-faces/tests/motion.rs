@@ -2,12 +2,12 @@
 //! away by its params; the room redraws with its params; reels turn; the
 //! valves flicker; the pedals' lamps pulse even without a stream.
 
-use document_proto::{NodeId, Scene};
+use frame::document::proto::{NodeId, Scene};
+use frame::surface::proto::{EntryId, ParamAddr, ParamValue, StreamFrame};
+use frame::surface::runtime::{Runtime, Surface};
 use plugin_faces::Face;
-use surface_proto::{EntryId, ParamAddr, ParamValue, StreamFrame};
-use surface_runtime::{Runtime, Surface};
 
-fn face(file: &str) -> (Face, surface_proto::Catalog) {
+fn face(file: &str) -> (Face, frame::surface::proto::Catalog) {
     let all = plugin_faces::all();
     let catalogs = plugin_faces::catalogs(&all);
     let f = all

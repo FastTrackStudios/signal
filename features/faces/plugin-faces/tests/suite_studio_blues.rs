@@ -3,10 +3,10 @@
 //! pedal is a pedal class's size with its footswitches in the bottom 30 %,
 //! and nothing names a real product.
 
-use design_lint::{Config, Severity, lint};
-use document_proto::{NodeId, Scene};
+use frame::design::lint::{Config, Severity, lint};
+use frame::document::proto::{NodeId, Scene};
+use frame::surface::proto::{ControlKind, Source};
 use plugin_faces::suite_studio_blues::{self, PLUGIN};
-use surface_proto::{ControlKind, Source};
 
 #[test]
 fn every_unit_lints_without_errors() {
@@ -134,7 +134,7 @@ fn pedals_are_a_class_size_and_stomp_low() {
             let momentary = matches!(
                 c.kind,
                 ControlKind::Button {
-                    mode: surface_proto::ButtonMode::Momentary
+                    mode: frame::surface::proto::ButtonMode::Momentary
                 }
             );
             if matches!(c.kind, ControlKind::Footswitch { .. }) || momentary {
@@ -169,7 +169,7 @@ fn nothing_names_a_real_product() {
         "studio verb",
     ];
     for f in suite_studio_blues::faces() {
-        let text = document_text::print(&f.scene).to_lowercase();
+        let text = frame::document::text::print(&f.scene).to_lowercase();
         for b in BANNED {
             assert!(!text.contains(b), "{}: mentions `{b}`", f.file);
             assert!(!f.file.contains(b), "{}: file name mentions `{b}`", f.file);

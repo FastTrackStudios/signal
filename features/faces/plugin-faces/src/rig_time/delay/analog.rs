@@ -4,10 +4,10 @@
 //! the feedback and wider than the last, the way an analog repeat smears
 //! and darkens. Beside it, the name and five knobs.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -223,7 +223,7 @@ pub fn face_at(dark: bool, tier: kit::Tier) -> Face {
     let scene = kit::tier_lane("Analog", tier, |b, root| {
         let mut panel = draw::frame("Panel", 0.0, 0.0, w, kit::H);
         panel.fills = vec![draw::linear(180.0, &fill)];
-        panel.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         let panel = b.add(
             root,
             draw::with_effects(
@@ -243,7 +243,7 @@ pub fn face_at(dark: bool, tier: kit::Tier) -> Face {
         let mut view = draw::frame("Repeats", vx, vy, vw, vh);
         view.fills = vec![draw::linear(180.0, &window)];
         view.clips_content = true;
-        view.corner_radii = document_proto::CornerRadii::uniform(7.0);
+        view.corner_radii = frame::document::proto::CornerRadii::uniform(7.0);
         view.effects = vec![draw::inner_shadow("#000000b0", 0.0, 2.0, 6.0)];
         let view = b.add(panel, view);
         repeats(b, view, vw, vh, ink, dim, grid);
@@ -408,7 +408,7 @@ pub fn back_at(dark: bool, tier: kit::Tier) -> Face {
     let scene = kit::tier_lane("Analog", tier, |b, root| {
         let mut panel = draw::frame("Panel", 0.0, 0.0, w, kit::H);
         panel.fills = vec![draw::linear(180.0, &fill)];
-        panel.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         let panel = b.add(
             root,
             draw::with_effects(
@@ -527,7 +527,7 @@ pub fn tall(dark: bool) -> Face {
     let scene = kit::tall_lane("Analog", |b, root| {
         let mut panel = draw::frame("Panel", 0.0, 0.0, kit::TALL_W, kit::TALL_H);
         panel.fills = vec![draw::linear(180.0, &fill)];
-        panel.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         let panel = b.add(
             root,
             draw::with_effects(
@@ -539,7 +539,7 @@ pub fn tall(dark: bool) -> Face {
         let mut view = draw::frame("Repeats", vx, vy, vw, vh);
         view.fills = vec![draw::linear(180.0, &window)];
         view.clips_content = true;
-        view.corner_radii = document_proto::CornerRadii::uniform(7.0);
+        view.corner_radii = frame::document::proto::CornerRadii::uniform(7.0);
         view.effects = vec![draw::inner_shadow("#000000b0", 0.0, 2.0, 6.0)];
         let view = b.add(panel, view);
         repeats(b, view, vw, vh, ink, dim, grid);

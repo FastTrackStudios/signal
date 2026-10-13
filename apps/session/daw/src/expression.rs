@@ -1251,7 +1251,7 @@ fn themed_bar(
     (w, h): (f64, f64),
     font: Option<&crate::text::Font>,
 ) -> Option<anyrender::Scene> {
-    use theme_runtime::Value;
+    use frame::theme::runtime::Value;
     let theme = crate::skin::loaded()
         .filter(|t| t.has_role("editor.bar") && t.has_role("editor.button"))?;
     let font = font?;
@@ -1312,7 +1312,7 @@ fn themes_stack_lanes() -> bool {
 /// take's name, the rail down the one being edited, the reference
 /// mark. `None` when the theme does not draw them.
 fn themed_stack_lanes(ed: &Editor, font: Option<&crate::text::Font>) -> Option<anyrender::Scene> {
-    use theme_runtime::{Rgba, Value};
+    use frame::theme::runtime::{Rgba, Value};
     let theme = crate::skin::loaded().filter(|t| t.has_role("editor.lane"))?;
     let font = font?;
     let ruler_h = Stack::ruler_h(ed);
@@ -1367,7 +1367,7 @@ fn themed_roll_chrome(
     h: f64,
     font: Option<&crate::text::Font>,
 ) -> Option<anyrender::Scene> {
-    use theme_runtime::Value;
+    use frame::theme::runtime::Value;
     let theme = crate::skin::loaded().filter(|t| ROLL_CHROME.iter().all(|r| t.has_role(r)))?;
     let font = font?;
     let (gutter, ruler_h) = (canvas::GUTTER_W, canvas::RULER_H);
@@ -1484,7 +1484,7 @@ fn themed_roll_chrome(
 /// and an `editor.menuitem` per row — or `None` when the theme does not
 /// draw it, for the editor's own painter.
 fn themed_menu(menu: &chrome::Menu, font: Option<&crate::text::Font>) -> Option<anyrender::Scene> {
-    use theme_runtime::Value;
+    use frame::theme::runtime::Value;
     let theme = crate::skin::loaded()
         .filter(|t| t.has_role("editor.menu") && t.has_role("editor.menuitem"))?;
     let font = font?;
@@ -1552,7 +1552,7 @@ fn themed_strip(
         (w, h),
         &crate::skin::values(&[(
             "strip.label",
-            theme_runtime::Value::text(ed.strip_lane.label()),
+            frame::theme::runtime::Value::text(ed.strip_lane.label()),
         )]),
         &mut host,
         Affine::IDENTITY,
@@ -1612,7 +1612,7 @@ fn themed(look: &mut Look) {
     let colour = |name: &str| {
         theme
             .token(&format!("editor.{name}"))
-            .and_then(theme_runtime::Value::color)
+            .and_then(frame::theme::runtime::Value::color)
             .map(|c| {
                 let [r, g, b, a] = c.to_rgba8();
                 vello::peniko::Color::from_rgba8(r, g, b, a)
@@ -2406,9 +2406,12 @@ mod theme_tests {
                 "</Variables>",
                 r##"<Var name="editor.bg" value="#ff0000" /></Variables>"##,
             );
-        let theme =
-            theme_runtime::Theme::from_sources(&[("tokens", &tokens)], crate::skin::schema(), None)
-                .expect("the tokens load");
+        let theme = frame::theme::runtime::Theme::from_sources(
+            &[("tokens", &tokens)],
+            crate::skin::schema(),
+            None,
+        )
+        .expect("the tokens load");
         crate::skin::set(Some(std::sync::Arc::new(theme)));
         let themed = look_of(&palette);
         crate::skin::set(None);
@@ -2432,9 +2435,12 @@ mod theme_tests {
             r##"<Var name="editor.drum_kick" value="#00ff00" /></Variables>"##,
         );
         let tokens = tokens.replace(r##"<Var name="editor.drum_kick" value="#ef4444" />"##, "");
-        let theme =
-            theme_runtime::Theme::from_sources(&[("tokens", &tokens)], crate::skin::schema(), None)
-                .expect("the tokens load");
+        let theme = frame::theme::runtime::Theme::from_sources(
+            &[("tokens", &tokens)],
+            crate::skin::schema(),
+            None,
+        )
+        .expect("the tokens load");
         crate::skin::set(Some(std::sync::Arc::new(theme)));
         let _ = look_of(&palette);
         // The tables, not the painter's recolour: that one is the
@@ -2466,7 +2472,7 @@ mod theme_tests {
         assert!(!buttons.is_empty());
         crate::skin::set(None);
         assert!(themed_bar(&buttons, None, (1200.0, 30.0), Some(&font)).is_none());
-        let theme = theme_runtime::Theme::from_sources(
+        let theme = frame::theme::runtime::Theme::from_sources(
             &[
                 ("tokens", include_str!("../themes/console/tokens.frame")),
                 ("editor", include_str!("../themes/console/editor.frame")),

@@ -3,9 +3,9 @@
 //! every param it declares, sits in its form factor's size, and prints no
 //! maker, artist or product name.
 
-use document_proto::Scene;
+use frame::document::proto::Scene;
+use frame::surface::proto::{Catalog, Source};
 use plugin_faces::{Face, catalogs, suite_boutique_clean};
-use surface_proto::{Catalog, Source};
 
 const PLUGIN: &str = "suite-boutique-clean";
 
@@ -15,7 +15,12 @@ fn catalog() -> Catalog {
         .expect("suite catalog")
 }
 
-fn controls(scene: &Scene) -> Vec<(&document_proto::Node, &surface_proto::Control)> {
+fn controls(
+    scene: &Scene,
+) -> Vec<(
+    &frame::document::proto::Node,
+    &frame::surface::proto::Control,
+)> {
     scene
         .walk(scene.root)
         .into_iter()
@@ -25,10 +30,10 @@ fn controls(scene: &Scene) -> Vec<(&document_proto::Node, &surface_proto::Contro
 }
 
 fn lint_errors(face: &Face, scene: &Scene, catalog: &Catalog) {
-    let issues = design_lint::lint(scene, catalog, &design_lint::Config::default());
+    let issues = frame::design::lint::lint(scene, catalog, &frame::design::lint::Config::default());
     let errors: Vec<String> = issues
         .iter()
-        .filter(|i| i.severity == design_lint::Severity::Error)
+        .filter(|i| i.severity == frame::design::lint::Severity::Error)
         .map(ToString::to_string)
         .collect();
     assert!(
@@ -62,8 +67,8 @@ fn every_unit_lints_without_errors() {
     let catalog = catalog();
     for face in suite_boutique_clean::faces() {
         lint_errors(&face, &face.scene, &catalog);
-        let text = document_text::print(&face.scene);
-        let parsed = document_text::parse(&text, Default::default())
+        let text = frame::document::text::print(&face.scene);
+        let parsed = frame::document::text::parse(&text, Default::default())
             .unwrap_or_else(|e| panic!("{}: {e}", face.file));
         lint_errors(&face, &parsed, &catalog);
     }
@@ -80,7 +85,9 @@ fn every_binding_exists_and_every_param_is_bound() {
             assert!(issues.is_empty(), "{f} / {}: {issues:?}", node.name);
             // A handle binds its two axes; everything else its binding.
             let bindings = match &c.kind {
-                surface_proto::ControlKind::Handle { x, y, .. } => vec![x.as_ref(), y.as_ref()],
+                frame::surface::proto::ControlKind::Handle { x, y, .. } => {
+                    vec![x.as_ref(), y.as_ref()]
+                }
                 _ => vec![c.binding.as_ref()],
             };
             for binding in bindings {

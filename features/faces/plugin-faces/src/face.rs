@@ -2,9 +2,9 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use document_proto::{Node, NodeId, NodeKind, Scene};
-use surface_proto::{Catalog, Control, ParamInfo};
-use surface_widgets::{Builder, Theme};
+use frame::document::proto::{Node, NodeId, NodeKind, Scene};
+use frame::surface::proto::{Catalog, Control, ParamInfo};
+use frame::surface::widgets::{Builder, Theme};
 
 /// One plugin face: a surface plus the params it binds.
 pub struct Face {
@@ -15,7 +15,7 @@ pub struct Face {
     pub scene: Scene,
     /// Params this face binds (merged into `<plugin>.catalog.json`).
     pub params: Vec<ParamInfo>,
-    pub streams: Vec<surface_proto::StreamInfo>,
+    pub streams: Vec<frame::surface::proto::StreamInfo>,
 }
 
 /// A fresh one-page scene with a builder over it; returns the root frame
@@ -176,7 +176,7 @@ pub fn embed(
         .and_then(|p| p.children.first().copied())
         .expect("face top frame");
     let size = src.node(top).map_or(
-        document_proto::Size {
+        frame::document::proto::Size {
             width: 1.0,
             height: 1.0,
         },
@@ -193,7 +193,7 @@ pub fn embed(
         };
         if id == top {
             n.parent = Some(parent);
-            n.transform = document_proto::Transform {
+            n.transform = frame::document::proto::Transform {
                 a: s,
                 b: 0.0,
                 tx: ox,

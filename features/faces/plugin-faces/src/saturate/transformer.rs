@@ -15,10 +15,10 @@
 //! index — DRIVE and OUTPUT the largest, in the same places as on every
 //! saturation face.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Num, Target};
-use surface_kit::{Place, draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Num, Target};
+use frame::surface::kit::{Place, draw, motion};
+use frame::surface::widgets::Builder;
 
 use super::hw;
 use crate::delay::art;
@@ -82,8 +82,8 @@ fn poly(
     name: &str,
     (w, h): (f64, f64),
     pts: &[(f64, f64)],
-    fill: document_proto::Paint,
-) -> document_proto::Node {
+    fill: frame::document::proto::Paint,
+) -> frame::document::proto::Node {
     draw::path(name, 0.0, 0.0, w, h, art::poly_d(pts, false), fill)
 }
 
@@ -853,7 +853,7 @@ pub fn face() -> Face {
     }
 }
 
-fn params() -> Vec<surface_proto::ParamInfo> {
+fn params() -> Vec<frame::surface::proto::ParamInfo> {
     vec![
         parts::percent(&a("drive"), "Drive", 30.0).featured(),
         parts::trim(&a("core"), "Core").featured(),
@@ -868,7 +868,7 @@ fn params() -> Vec<surface_proto::ParamInfo> {
     .collect()
 }
 
-fn streams() -> Vec<surface_proto::StreamInfo> {
+fn streams() -> Vec<frame::surface::proto::StreamInfo> {
     vec![parts::level_stream(&a("out"), "Output Level", 2)]
 }
 

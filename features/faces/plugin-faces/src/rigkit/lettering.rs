@@ -6,10 +6,10 @@
 //! weight, italic and width; the book measures it so it can be centred on
 //! its caps, fitted to a width, stretched or turned.
 
-use document_proto::{NodeId, TextAlign, Transform};
-use render_fonts::{Chain, FontBook, FontQuery};
-use surface_kit::draw::{self, Lettering, family};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign, Transform};
+use frame::render::font_book::{Chain, FontBook, FontQuery};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::widgets::Builder;
 
 /// How a line of display lettering is set.
 #[derive(Clone, Copy)]
@@ -145,7 +145,7 @@ const ANCHOR: f64 = 1.0;
 
 /// The text node for `s` (its box at the local origin), and the local
 /// point its caps' middle-left sits at.
-fn node(s: &str, l: &Letter<'_>, m: &Measure) -> (document_proto::Node, (f64, f64)) {
+fn node(s: &str, l: &Letter<'_>, m: &Measure) -> (frame::document::proto::Node, (f64, f64)) {
     let spacing = l.track * l.size;
     let w = m.width + spacing + 2.0 * ANCHOR + 1.0;
     let mut n = draw::styled_text(
@@ -159,7 +159,7 @@ fn node(s: &str, l: &Letter<'_>, m: &Measure) -> (document_proto::Node, (f64, f6
         TextAlign::Left,
         &l.lettering(),
     );
-    if let document_proto::NodeKind::Text(t) = &mut n.kind {
+    if let frame::document::proto::NodeKind::Text(t) = &mut n.kind {
         t.letter_spacing = spacing;
     }
     n.name = format!("lettering {s}");
@@ -182,10 +182,10 @@ pub fn text_in(
     (x, y, w): (f64, f64, f64),
     l: &Letter<'_>,
     align: TextAlign,
-) -> document_proto::Node {
+) -> frame::document::proto::Node {
     let m = measure("0", l);
     let mut n = draw::styled_text("text", s, x, y, w, l.size, l.color, align, &l.lettering());
-    if let document_proto::NodeKind::Text(t) = &mut n.kind {
+    if let frame::document::proto::NodeKind::Text(t) = &mut n.kind {
         t.letter_spacing = l.track * l.size;
     }
     n.size.height = (m.ascent + l.size * 0.3 + 2.0 * ANCHOR).ceil();

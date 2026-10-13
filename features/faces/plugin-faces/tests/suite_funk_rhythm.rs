@@ -3,9 +3,9 @@
 //! every param it declares, sits in its form factor's size, and prints no
 //! maker, artist or product name.
 
-use document_proto::Scene;
+use frame::document::proto::Scene;
+use frame::surface::proto::{Catalog, Source};
 use plugin_faces::{Face, catalogs, suite_funk_rhythm};
-use surface_proto::{Catalog, Source};
 
 const PLUGIN: &str = "suite-funk-rhythm";
 
@@ -15,7 +15,12 @@ fn catalog() -> Catalog {
         .expect("suite catalog")
 }
 
-fn controls(scene: &Scene) -> Vec<(&document_proto::Node, &surface_proto::Control)> {
+fn controls(
+    scene: &Scene,
+) -> Vec<(
+    &frame::document::proto::Node,
+    &frame::surface::proto::Control,
+)> {
     scene
         .walk(scene.root)
         .into_iter()
@@ -25,18 +30,18 @@ fn controls(scene: &Scene) -> Vec<(&document_proto::Node, &surface_proto::Contro
 }
 
 /// What a control binds: a handle's two axes, else its binding.
-fn bindings(c: &surface_proto::Control) -> Vec<Option<&surface_proto::Binding>> {
+fn bindings(c: &frame::surface::proto::Control) -> Vec<Option<&frame::surface::proto::Binding>> {
     match &c.kind {
-        surface_proto::ControlKind::Handle { x, y, .. } => vec![x.as_ref(), y.as_ref()],
+        frame::surface::proto::ControlKind::Handle { x, y, .. } => vec![x.as_ref(), y.as_ref()],
         _ => vec![c.binding.as_ref()],
     }
 }
 
 fn lint_errors(face: &Face, scene: &Scene, catalog: &Catalog) {
-    let issues = design_lint::lint(scene, catalog, &design_lint::Config::default());
+    let issues = frame::design::lint::lint(scene, catalog, &frame::design::lint::Config::default());
     let errors: Vec<String> = issues
         .iter()
-        .filter(|i| i.severity == design_lint::Severity::Error)
+        .filter(|i| i.severity == frame::design::lint::Severity::Error)
         .map(ToString::to_string)
         .collect();
     assert!(
@@ -67,8 +72,8 @@ fn every_unit_lints_without_errors() {
     let catalog = catalog();
     for face in suite_funk_rhythm::faces() {
         lint_errors(&face, &face.scene, &catalog);
-        let text = document_text::print(&face.scene);
-        let parsed = document_text::parse(&text, Default::default())
+        let text = frame::document::text::print(&face.scene);
+        let parsed = frame::document::text::parse(&text, Default::default())
             .unwrap_or_else(|e| panic!("{}: {e}", face.file));
         lint_errors(&face, &parsed, &catalog);
     }
@@ -192,7 +197,7 @@ fn every_hardware_knob_is_a_gpu_knob() {
     {
         let s = &face.scene;
         for (n, c) in controls(s) {
-            if !matches!(c.kind, surface_proto::ControlKind::Knob { .. }) {
+            if !matches!(c.kind, frame::surface::proto::ControlKind::Knob { .. }) {
                 continue;
             }
             let gpu = s
@@ -216,7 +221,7 @@ fn the_eq_reads_off_at_its_stops_and_signs_its_gains() {
     let read = |addr: &str, n: f64| {
         let (_, c) = controls(&eq.scene)
             .into_iter()
-            .find(|(_, c)| matches!(c.kind, surface_proto::ControlKind::Readout) && matches!(c.binding.as_ref().map(|b| &b.source), Some(Source::Param { addr: a }) if a.0 == addr))
+            .find(|(_, c)| matches!(c.kind, frame::surface::proto::ControlKind::Readout) && matches!(c.binding.as_ref().map(|b| &b.source), Some(Source::Param { addr: a }) if a.0 == addr))
             .unwrap_or_else(|| panic!("{addr} readout"));
         cat.params
             .iter()

@@ -10,10 +10,10 @@
 //! The module is a tall strip; the face keeps its column but widens it a
 //! little and closes up the bands, so it opens at a plugin-sized portrait.
 
-use document_proto::NodeId;
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{ParamInfo, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{ParamInfo, Unit};
+use frame::surface::widgets::Builder;
 
 use super::paint;
 use crate::comp_vca::ui::{self, Glyph, bind};

@@ -28,12 +28,12 @@
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
-use design_session::{Session, tools};
+use frame::design::session::{Session, tools};
+use frame::surface::proto::{Catalog, SurfaceEngineClient};
+use frame::surface::runtime::sync;
 use serde_json::{Value, json};
-use surface_proto::{Catalog, SurfaceEngineClient};
-use surface_runtime::sync;
 
-const REFERENCE: &str = include_str!("../../../document/document-text/REFERENCE.md");
+const REFERENCE: &str = include_str!("../../../src/document/text/REFERENCE.md");
 
 const INSTRUCTIONS: &str = "frame designs live-performance control surfaces (knobs, faders, footswitches, meters) \
 that are bound to an audio engine's parameters. Workflow: `catalog` to see what can be controlled → `describe` \
@@ -48,7 +48,7 @@ const USAGE: &str = "usage: frame-mcp [--file surface.frame] [--engine ws://HOST
 
 /// Where edits are published (`--library`).
 struct Publish {
-    client: library_link::Blocking,
+    client: frame::library::link::Blocking,
     /// The surface id; `None` until the library assigns one.
     id: Option<String>,
 }
@@ -57,15 +57,15 @@ impl Publish {
     /// Publish the session's document as the next version.
     fn publish(&mut self, session: &Session) -> Result<String, String> {
         let scene = session.scene();
-        let meta = library_link::PublishMeta {
+        let meta = frame::library::link::PublishMeta {
             id: self.id.clone().unwrap_or_default(),
-            name: library_link::scene_name(scene).unwrap_or_default(),
+            name: frame::library::link::scene_name(scene).unwrap_or_default(),
             author: std::env::var("USER").unwrap_or_default(),
-            ..library_link::PublishMeta::default()
+            ..frame::library::link::PublishMeta::default()
         };
         let p = self
             .client
-            .publish(&library_link::Content::markup(scene), &meta)?;
+            .publish(&frame::library::link::Content::markup(scene), &meta)?;
         self.id = Some(p.id.clone());
         Ok(format!("{}@{}", p.id, p.version))
     }
@@ -170,7 +170,7 @@ fn main() {
         eprintln!("frame-mcp: --surface needs --library\n{USAGE}");
         std::process::exit(2);
     }
-    let mut publish = match library.as_deref().map(library_link::Blocking::new) {
+    let mut publish = match library.as_deref().map(frame::library::link::Blocking::new) {
         None => None,
         Some(Ok(client)) => {
             let id = surface.clone().or_else(|| {
@@ -199,7 +199,7 @@ fn main() {
         }
     };
     let catalog = match &mut engine {
-        None => surface_memory::demo_catalog(),
+        None => frame::surface::memory::demo_catalog(),
         Some(e) => match e.fetch() {
             Ok(c) => {
                 eprintln!(
@@ -453,11 +453,11 @@ mod tests {
 
     #[test]
     fn refresh_catalog_swaps_the_catalog() {
-        let mut smaller = surface_memory::demo_catalog();
+        let mut smaller = frame::surface::memory::demo_catalog();
         smaller.id = "live.guitar".into();
         smaller.params.retain(|p| !p.addr.0.starts_with("delay/"));
         let mut engine = Scripted(vec![Ok(smaller), Err("connection refused".into())]);
-        let mut s = Session::blank(surface_memory::demo_catalog());
+        let mut s = Session::blank(frame::surface::memory::demo_catalog());
         assert!(
             tool_names(&rpc_with(&mut s, &mut engine, "tools/list", json!({})))
                 .contains(&"refresh_catalog".into())
@@ -504,7 +504,7 @@ mod tests {
 
     #[test]
     fn refresh_catalog_without_an_engine() {
-        let mut s = Session::blank(surface_memory::demo_catalog());
+        let mut s = Session::blank(frame::surface::memory::demo_catalog());
         assert!(
             !tool_names(&rpc(&mut s, "tools/list", json!({}))).contains(&"refresh_catalog".into())
         );
@@ -523,8 +523,10 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let url = format!("ws://{}/vox", listener.local_addr().unwrap());
-        let router = LayerRouter::new()
-            .merge_router_scoped("guitar", surface_memory::Memory::demo().into_router());
+        let router = LayerRouter::new().merge_router_scoped(
+            "guitar",
+            frame::surface::memory::Memory::demo().into_router(),
+        );
         // Serves until the test process exits.
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -549,7 +551,7 @@ mod tests {
 
     #[test]
     fn mcp_handshake_list_and_call() {
-        let mut s = Session::blank(surface_memory::demo_catalog());
+        let mut s = Session::blank(frame::surface::memory::demo_catalog());
         let init = rpc(
             &mut s,
             "initialize",
@@ -593,21 +595,21 @@ mod tests {
     #[test]
     fn edits_publish_to_the_library() {
         use architect::Services as _;
-        use library_fs::SurfaceStore as _;
+        use frame::library::fs::SurfaceStore as _;
         let dir = std::env::temp_dir().join(format!("frame-mcp-lib-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let lib = library_fs::FsLibrary::open(&dir).unwrap();
-        let served = library_link::Served::start(
+        let lib = frame::library::fs::FsLibrary::open(&dir).unwrap();
+        let served = frame::library::link::Served::start(
             lib.clone().into_router(),
             std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
         )
         .unwrap();
         let mut publish = Publish {
-            client: library_link::Blocking::new(&served.url).unwrap(),
+            client: frame::library::link::Blocking::new(&served.url).unwrap(),
             id: Some("agent/one".into()),
         };
-        let mut s = Session::blank(surface_memory::demo_catalog());
+        let mut s = Session::blank(frame::surface::memory::demo_catalog());
         let call = |s: &mut Session, p: &mut Publish, name: &str| {
             let msg = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": {}}});
             handle(
@@ -650,7 +652,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("frame-mcp-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("s.frame");
-        let mut s = Session::blank(surface_memory::demo_catalog());
+        let mut s = Session::blank(frame::surface::memory::demo_catalog());
         handle(
             &mut s,
             Sinks {
@@ -660,7 +662,10 @@ mod tests {
             None,
             &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "generate", "arguments": {}}}),
         );
-        assert_eq!(document_io::load_surface(&path).unwrap(), *s.scene());
+        assert_eq!(
+            frame::document::io::load_surface(&path).unwrap(),
+            *s.scene()
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -668,13 +673,13 @@ mod tests {
     fn a_textured_file_keeps_its_textures_across_edits() {
         let dir = std::env::temp_dir().join(format!("frame-mcp-assets-{}", std::process::id()));
         let path = dir.join("tex.frame");
-        let mut scene = Session::blank(surface_memory::demo_catalog())
+        let mut scene = Session::blank(frame::surface::memory::demo_catalog())
             .scene()
             .clone();
         scene.add_asset("image/png", b"texture".to_vec());
-        document_io::save_surface(&path, &scene).unwrap();
+        frame::document::io::save_surface(&path, &scene).unwrap();
 
-        let mut s = Session::open(&path, surface_memory::demo_catalog()).unwrap();
+        let mut s = Session::open(&path, frame::surface::memory::demo_catalog()).unwrap();
         let page = s.scene().pages()[0].to_string();
         let msg = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "write", "arguments": {"parent": page, "markup": "<Frame name=\"New\" w=10 h=10 />"}}});
         handle(
@@ -686,7 +691,7 @@ mod tests {
             None,
             &msg,
         );
-        let back = document_io::load_surface(&path).unwrap();
+        let back = frame::document::io::load_surface(&path).unwrap();
         assert!(
             back.nodes.values().any(|n| n.name == "New"),
             "the edit was saved"

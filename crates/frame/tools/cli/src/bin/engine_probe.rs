@@ -6,9 +6,9 @@
 //! Prints the catalog (groups, params, actions, streams), sets one param
 //! (normalized) and reads the value back through the engine.
 
-use surface_proto::{EditPhase, ParamAddr};
-use surface_runtime::EngineCall;
-use surface_runtime::sync::{Engine, connect_ws};
+use frame::surface::proto::{EditPhase, ParamAddr};
+use frame::surface::runtime::EngineCall;
+use frame::surface::runtime::sync::{Engine, connect_ws};
 
 fn main() {
     let mut url = "ws://127.0.0.1:4040/vox".to_string();
@@ -55,9 +55,9 @@ fn main() {
         }
         if let Some(path) = &catalog_out {
             let json = serde_json::to_string_pretty(&catalog)
-                .map_err(|e| surface_runtime::sync::EngineError(e.to_string()))?;
+                .map_err(|e| frame::surface::runtime::sync::EngineError(e.to_string()))?;
             std::fs::write(path, json)
-                .map_err(|e| surface_runtime::sync::EngineError(format!("{path}: {e}")))?;
+                .map_err(|e| frame::surface::runtime::sync::EngineError(format!("{path}: {e}")))?;
             println!("wrote catalog to {path}");
         }
         let values = Engine::values(&engine).await?;
@@ -91,7 +91,7 @@ fn main() {
                     .map_or("?".into(), |(v, p)| format!("{v:.4} ({})", p.display(v))),
             );
         }
-        Ok::<_, surface_runtime::sync::EngineError>(())
+        Ok::<_, frame::surface::runtime::sync::EngineError>(())
     });
     if let Err(e) = result {
         eprintln!("engine_probe: {e}");

@@ -9,13 +9,13 @@
 //! tone and output knobs. MIDI and engage stomps at the corners, the name
 //! between them.
 
-use document_proto::{CornerRadii, NodeId, TextAlign};
-use surface_kit::draw;
-use surface_proto::{
+use frame::document::proto::{CornerRadii, NodeId, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::proto::{
     Axis, Binding, ButtonMode, Condition, Control, ControlKind, HandleAxis, Orientation, Range,
     SlotRole, Unit, ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::parts::{self, Hand, PEDAL_H, knob, pedal, switch, word};
@@ -63,7 +63,7 @@ fn screen_text(
     color: &str,
     align: TextAlign,
     weight: f64,
-) -> document_proto::Node {
+) -> frame::document::proto::Node {
     draw::lettered(
         ui::text(name, s, x, cy, w, size, color, align, weight, false),
         &Hand::Ui.lettering(weight),

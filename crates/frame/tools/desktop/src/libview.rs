@@ -8,10 +8,10 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use document_proto::{NodeId, Scene};
-use library_link::{Signature, Surface as Stored};
-use surface_proto::Catalog;
-use surface_runtime::{Bounds, Surface};
+use frame::document::proto::{NodeId, Scene};
+use frame::library::link::{Signature, Surface as Stored};
+use frame::surface::proto::Catalog;
+use frame::surface::runtime::{Bounds, Surface};
 
 use crate::browser::{self, Browser, Nav};
 use crate::library::{self, Change, Live};
@@ -343,7 +343,7 @@ pub fn toast_scene(text: &str, error: bool, width: f64) -> Option<(Scene, NodeId
         tw = w - 24.0,
         t = serde_json::to_string(text).ok()?,
     );
-    let scene = document_text::parse(&src, BTreeMap::new()).ok()?;
+    let scene = frame::document::text::parse(&src, BTreeMap::new()).ok()?;
     let page = *scene.pages().first()?;
     Some((scene, page, w, h))
 }

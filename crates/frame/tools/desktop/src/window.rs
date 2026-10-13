@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use document_proto::{NodeId, Scene};
+use frame::document::proto::{NodeId, Scene};
 use vello::wgpu::{self, PresentMode};
 use vello::{AaConfig, Renderer, RendererOptions};
 use winit::application::ApplicationHandler;
@@ -71,8 +71,8 @@ struct Gpu {
     window: Arc<Window>,
     surface: vello::util::RenderSurface<'static>,
     renderer: Renderer,
-    /// Light/shader effects around vello (see `render::fx`).
-    stage: render::fx::Stage,
+    /// Light/shader effects around vello (see `frame::render::fx`).
+    stage: frame::render::fx::Stage,
 }
 
 /// Frame-time accounting for `--stats`, printed every couple of seconds.
@@ -126,7 +126,7 @@ struct App {
     gpu: Option<Gpu>,
     /// The banner, painted over the frame.
     scene: vello::Scene,
-    fx: render::fx::Mode,
+    fx: frame::render::fx::Mode,
     /// The last frame had a time-dependent effect (a flicker): keep drawing.
     fx_animating: bool,
     /// `--library`: the browser and the live-followed surface.
@@ -323,7 +323,7 @@ impl App {
             },
         )
         .map_err(|e| format!("renderer: {e}"))?;
-        let stage = render::fx::Stage::new(&self.context.devices[surface.dev_id].device);
+        let stage = frame::render::fx::Stage::new(&self.context.devices[surface.dev_id].device);
         Ok(Gpu {
             window,
             surface,
@@ -371,7 +371,7 @@ impl App {
 
         self.scene.reset();
         if let Some((b, page, _, _)) = &self.banner {
-            render::paint_scene_into(
+            frame::render::paint_scene_into(
                 &mut self.scene,
                 b,
                 *page,
@@ -387,7 +387,7 @@ impl App {
         if let Some((toast, page, tw, th)) = &toast {
             let at = kurbo::Affine::scale(scale)
                 * kurbo::Affine::translate(((logical_w - tw) / 2.0, logical_h - th - 18.0));
-            render::paint_scene_into(&mut self.scene, toast, *page, at, Some(fonts()));
+            frame::render::paint_scene_into(&mut self.scene, toast, *page, at, Some(fonts()));
         }
         let browsing = self.browsing();
         let (doc, page, base) = match self.library.as_mut().and_then(LibraryView::document) {
@@ -412,7 +412,7 @@ impl App {
         let Some(gpu) = &mut self.gpu else { return };
         let device = &self.context.devices[gpu.surface.dev_id];
         let (w, h) = (gpu.surface.config.width, gpu.surface.config.height);
-        let frame = render::fx::Frame {
+        let frame = frame::render::fx::Frame {
             transform: view.affine(),
             base,
             fonts: Some(fonts()),
@@ -422,7 +422,7 @@ impl App {
             inputs: Some(&inputs),
             overlay: overlay.then_some(&self.scene),
             antialiasing: AaConfig::Area,
-            ..render::fx::Frame::new(&doc, page, w, h)
+            ..frame::render::fx::Frame::new(&doc, page, w, h)
         };
         let rendered =
             match gpu
@@ -583,7 +583,7 @@ impl ApplicationHandler for App {
                 // A field being edited takes every key: named ones as keys,
                 // the rest as the text they type.
                 let key = input::key(&event.logical_key)
-                    .filter(|k| !matches!(k, surface_runtime::Key::Char(_)) || mods.alt);
+                    .filter(|k| !matches!(k, frame::surface::runtime::Key::Char(_)) || mods.alt);
                 match key {
                     Some(k) => {
                         self.player.key(k, mods, t);

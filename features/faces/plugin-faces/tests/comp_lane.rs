@@ -3,9 +3,9 @@
 //! against the merged `comp` catalog, binding only the rack face's own
 //! addresses and declaring only what it binds.
 
-use document_proto::Scene;
+use frame::document::proto::Scene;
+use frame::surface::proto::Source;
 use plugin_faces::{Face, catalogs, lane::Shape};
-use surface_proto::Source;
 
 const UNITS: &[&str] = &[
     "01-fet-black",
@@ -62,10 +62,14 @@ fn lane_faces_lint_clean_and_bind_the_rack_addresses() {
         .iter()
         .filter(|f| f.file.ends_with("-lane") || f.file.ends_with("-tall"))
     {
-        let issues = design_lint::lint(&face.scene, &catalog, &design_lint::Config::default());
+        let issues = frame::design::lint::lint(
+            &face.scene,
+            &catalog,
+            &frame::design::lint::Config::default(),
+        );
         let errors: Vec<String> = issues
             .iter()
-            .filter(|i| i.severity == design_lint::Severity::Error)
+            .filter(|i| i.severity == frame::design::lint::Severity::Error)
             .map(ToString::to_string)
             .collect();
         assert!(errors.is_empty(), "{}: {}", face.file, errors.join("\n"));

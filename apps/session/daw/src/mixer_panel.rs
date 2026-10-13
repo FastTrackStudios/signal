@@ -2599,7 +2599,7 @@ mod rail_tests {
     fn the_strips_answer_inside_the_rails() {
         in_runtime(|| {
             let palette = crate::arrangement::Palette::from_theme(&daw_ui::theming::Theme::dark());
-            let theme = theme_runtime::Theme::from_markup(
+            let theme = frame::theme::runtime::Theme::from_markup(
                 &crate::skin::export::fts_dark(&palette),
                 crate::skin::schema(),
                 None,

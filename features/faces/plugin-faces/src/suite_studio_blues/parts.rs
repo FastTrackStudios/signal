@@ -3,11 +3,11 @@
 //! label-maker strip, stomp), the suite's one knob helper with its looks,
 //! segment readouts, and set type in real faces.
 
-use document_proto::{NodeId, NodeKind, TextAlign};
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::{Place, TOUCH_MIN};
-use surface_proto::{Binding, ButtonMode, Control, ControlKind, SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, NodeKind, TextAlign};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::{Place, TOUCH_MIN};
+use frame::surface::proto::{Binding, ButtonMode, Control, ControlKind, SlotRole, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use crate::reverb::ui;
 
@@ -57,7 +57,7 @@ pub fn pedal(b: &mut Builder<'_>, root: NodeId, w: f64, trim: Option<&str>) -> N
         172.0,
         &[(0.0, "#2c2e42"), (0.5, "#252736"), (1.0, "#1d1e2a")],
     )];
-    lid.corner_radii = document_proto::CornerRadii::uniform(r);
+    lid.corner_radii = frame::document::proto::CornerRadii::uniform(r);
     lid.clips_content = true;
     let lid = b.add(enc, lid);
     let mut rng =
@@ -130,7 +130,14 @@ pub fn pedal(b: &mut Builder<'_>, root: NodeId, w: f64, trim: Option<&str>) -> N
             draw::radial_at(0.28, 0.18, 0.95, &[(0.0, "#ffffff16"), (1.0, "#ffffff00")]),
         ),
     );
-    for e in surface_kit::materials::light::edge("lid edge", (0.0, 0.0, w, lh), r, 2.5, 1.0, true) {
+    for e in frame::surface::kit::materials::light::edge(
+        "lid edge",
+        (0.0, 0.0, w, lh),
+        r,
+        2.5,
+        1.0,
+        true,
+    ) {
         b.add(lid, e);
     }
     if let Some(t) = trim {
@@ -460,7 +467,7 @@ pub fn knob_scaled(
         .bind(Binding::param(addr))
         .legend("")
         .scale(scale)
-        .ink(surface_kit::Ink::Color(ink.into()))
+        .ink(frame::surface::kit::Ink::Color(ink.into()))
         .keep_case()
         .touch(TOUCH_MIN);
     if !opts.is_empty() {
@@ -539,7 +546,7 @@ pub fn knob_pair(
         .unwrap_or_default();
     if let Some(c) = b.controls.get_mut(&a) {
         c.slots
-            .extend(needles.into_iter().map(|node| surface_proto::Slot {
+            .extend(needles.into_iter().map(|node| frame::surface::proto::Slot {
                 role: SlotRole::Needle,
                 node,
             }));
@@ -661,7 +668,7 @@ pub fn stomp(
         .bind(Binding::param(addr))
         .legend("")
         .options(&[side, &format!("color={led}")]);
-    let root = surface_kit::place(b, parent, "switch.stomp_side_led", &p)
+    let root = frame::surface::kit::place(b, parent, "switch.stomp_side_led", &p)
         .unwrap_or_else(|e| panic!("{e}"));
     // Centre the actuator (not the pair) on (cx, cy).
     let (w, h) = b
@@ -700,12 +707,12 @@ pub fn tape(
             ],
         ),
     ];
-    f.stroke = document_proto::Stroke {
+    f.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid("#0000002a")],
         weight: 0.7,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
-    f.corner_radii = document_proto::CornerRadii::uniform(0.8);
+    f.corner_radii = frame::document::proto::CornerRadii::uniform(0.8);
     f.effects = vec![draw::drop_shadow("#00000080", 0.3, 1.2, 1.6)];
     let f = b.add(parent, draw::rotated(f, tilt));
     b.add(
@@ -810,11 +817,11 @@ pub fn segments(
 ) -> NodeId {
     let mut win = draw::frame("Display", x, y, w, h);
     win.fills = vec![draw::linear(180.0, &[(0.0, "#050507"), (1.0, "#0d0e12")])];
-    win.corner_radii = document_proto::CornerRadii::uniform((h * 0.16).min(6.0));
-    win.stroke = document_proto::Stroke {
+    win.corner_radii = frame::document::proto::CornerRadii::uniform((h * 0.16).min(6.0));
+    win.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid("#00000099")],
         weight: 1.0,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     win.effects = vec![draw::drop_shadow("#ffffff22", 0.0, 0.8, 0.0)];
     win.clips_content = true;

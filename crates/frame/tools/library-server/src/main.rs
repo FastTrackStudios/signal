@@ -23,8 +23,8 @@ mod preview;
 use std::path::PathBuf;
 
 use architect::Services as _;
-use library_fs::FsLibrary;
-use library_fs::SurfaceStore as _;
+use frame::library::fs::FsLibrary;
+use frame::library::fs::SurfaceStore as _;
 
 const USAGE: &str = "usage: frame-library-server DIR [--host 127.0.0.1] [--port 4050] [--http PORT | --no-http] [--no-previews]";
 
@@ -109,9 +109,9 @@ fn run(args: Args) -> Result<(), String> {
         let router = lib.clone().into_router();
         match http {
             Some(h) => {
-                tokio::join!(library_link::serve_ws(ws, router), http::serve(h, lib));
+                tokio::join!(frame::library::link::serve_ws(ws, router), http::serve(h, lib));
             }
-            None => library_link::serve_ws(ws, router).await,
+            None => frame::library::link::serve_ws(ws, router).await,
         }
         Ok(())
     })

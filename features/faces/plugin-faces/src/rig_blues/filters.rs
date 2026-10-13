@@ -9,12 +9,12 @@
 //! range, peak, gain, boost, sweep, on), so either finish draws the same
 //! filter.
 
-use document_proto::motion::{Dynamics, Motion, Num, Target, Wave};
-use document_proto::{CornerRadii, NodeId, ResizeX, TextAlign};
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::motion;
-use surface_proto::{Binding, Control, ControlKind, Range, SlotRole, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Num, Target, Wave};
+use frame::document::proto::{CornerRadii, NodeId, ResizeX, TextAlign};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::motion;
+use frame::surface::proto::{Binding, Control, ControlKind, Range, SlotRole, Unit};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::drives::{H, enclosure, knob, led, on, stomp};
@@ -401,7 +401,7 @@ pub(super) fn treadle(
         ),
     );
     let mut c = Control::new(ControlKind::Fader {
-        orientation: surface_proto::Orientation::Horizontal,
+        orientation: frame::surface::proto::Orientation::Horizontal,
     })
     .slot(SlotRole::Thumb, thumb.0);
     c.binding = Some(ui::bind(pos_addr));
@@ -526,7 +526,7 @@ pub fn wah_unit() -> Face {
 }
 
 /// The envelope filter's params, shared by its finishes.
-fn env_params() -> Vec<surface_proto::ParamInfo> {
+fn env_params() -> Vec<frame::surface::proto::ParamInfo> {
     const NS: &str = "env";
     vec![
         ui::choice(&format!("{NS}/mode"), "Mode", &["LP", "BP", "HP", "Mix"], 1),
@@ -1177,7 +1177,7 @@ fn keys(
     color: &str,
     ink: &str,
 ) {
-    use surface_proto::ButtonMode;
+    use frame::surface::proto::ButtonMode;
     parts::print(b, parent, name, x + w / 2.0, y - 9.0, 8.0, ink, 800.0, 0.14);
     let n = opts.len();
     let cw = (w - 3.0 * (n as f64 - 1.0)) / n as f64;
@@ -1339,10 +1339,10 @@ pub fn q_tron_phone() -> Face {
         let mut lid = draw::frame("Box", 0.0, 0.0, w, h);
         lid.fills = vec![draw::linear(180.0, &[(0.0, "#1a1a1c"), (1.0, "#0d0d0f")])];
         lid.corner_radii = CornerRadii::uniform(14.0);
-        lid.stroke = document_proto::Stroke {
+        lid.stroke = frame::document::proto::Stroke {
             paints: vec![draw::solid("#2a2a2e")],
             weight: 1.5,
-            ..document_proto::Stroke::default()
+            ..frame::document::proto::Stroke::default()
         };
         let lid = b.add(
             root,
@@ -2301,9 +2301,12 @@ pub fn harmonizer_phone() -> Face {
     let interval = |addr: &str, name: &str, d: f64| {
         let labels: Vec<String> = (-24..=24).map(interval_name).collect();
         let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
-        let mut p =
-            surface_proto::ParamInfo::new(addr, name, Range::linear(-24.0, 24.0, Unit::None))
-                .choice(&refs);
+        let mut p = frame::surface::proto::ParamInfo::new(
+            addr,
+            name,
+            Range::linear(-24.0, 24.0, Unit::None),
+        )
+        .choice(&refs);
         p.default = (d + 24.0) / 48.0;
         p.featured = true;
         p

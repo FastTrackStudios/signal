@@ -15,10 +15,10 @@
 //!   slats over glowing valves; flat slotted knobs with their names printed
 //!   on them and a square orange power button.
 
-use document_proto::NodeId;
-use surface_kit::{Place, TOUCH_MIN, draw, motion};
-use surface_proto::{ButtonMode, Control, ControlKind, SlotRole};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, TOUCH_MIN, draw, motion};
+use frame::surface::proto::{ButtonMode, Control, ControlKind, SlotRole};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use crate::delay::parts::{self, Ink};
@@ -40,7 +40,7 @@ const TONE_STACK: [(&str, &str, &str); 7] = [
     ("output", "Output", "Output"),
 ];
 
-fn tone_params(ns: &str) -> Vec<surface_proto::ParamInfo> {
+fn tone_params(ns: &str) -> Vec<frame::surface::proto::ParamInfo> {
     let defaults = [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0];
     TONE_STACK
         .iter()
@@ -731,11 +731,11 @@ fn mech_rhythm() -> Face {
         for bar in ["M 506 290 Q 520 266 566 262", "M 694 290 Q 680 266 634 262"] {
             let mut n = draw::path("strut", 0.0, 0.0, w, h, bar.into(), draw::solid("#dcdde0"));
             n.fills = Vec::new();
-            n.stroke = document_proto::Stroke {
+            n.stroke = frame::document::proto::Stroke {
                 paints: vec![draw::solid("#dcdde0")],
                 weight: 5.0,
-                cap: document_proto::StrokeCap::Round,
-                ..document_proto::Stroke::default()
+                cap: frame::document::proto::StrokeCap::Round,
+                ..frame::document::proto::Stroke::default()
             };
             b.add(root, n);
         }
@@ -1309,7 +1309,9 @@ fn turn_legend(b: &mut Builder<'_>, knob: NodeId, s: &str, d: f64) {
     let (Some(body), Some(old)) = (body, old) else {
         return;
     };
-    let _ = b.scene.apply(document_proto::Op::Remove { id: old });
+    let _ = b
+        .scene
+        .apply(frame::document::proto::Op::Remove { id: old });
     let c = b.scene.node(body).map_or(0.0, |n| n.size.width / 2.0);
     let k = d / 48.0;
     let size = (8.5 * k).max(7.0);
@@ -1323,7 +1325,7 @@ fn turn_legend(b: &mut Builder<'_>, knob: NodeId, s: &str, d: f64) {
     );
     if let Some(ctl) = b.controls.get_mut(&knob) {
         ctl.slots.retain(|s| s.role != SlotRole::Label);
-        ctl.slots.push(surface_proto::Slot {
+        ctl.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Label,
             node: id.0,
         });

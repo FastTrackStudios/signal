@@ -7,10 +7,10 @@
 //! each with its gain read over it and its band (65 Hz … 16 kHz) under it;
 //! the low-pass knob and the invented maker's badge at the right.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{Control, ControlKind, Orientation, SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Control, ControlKind, Orientation, SlotRole, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use crate::delay::parts::{self, Ink};
@@ -93,7 +93,7 @@ pub fn face() -> Face {
         let _ = t;
         badge(b, root, (864.0, 204.0));
     });
-    let mut params: Vec<surface_proto::ParamInfo> = (1..=9)
+    let mut params: Vec<frame::surface::proto::ParamInfo> = (1..=9)
         .map(|i| {
             rk::db(
                 &a(&format!("b{i}")),

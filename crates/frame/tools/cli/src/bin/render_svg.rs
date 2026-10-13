@@ -6,7 +6,7 @@ fn main() {
 
 #[cfg(feature = "svg_export")]
 fn main() {
-    if let Err(err) = render::svg::run_cli(figma_import::import_bytes) {
+    if let Err(err) = frame::render::svg::run_cli(frame::figma::import::import_bytes) {
         eprintln!("render_svg error: {err}");
         std::process::exit(1);
     }

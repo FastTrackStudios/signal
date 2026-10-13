@@ -10,10 +10,10 @@
 //! where they are on every saturation face. The heaters glow with DRIVE
 //! and HEAT and flicker as they're pushed (motion), with or without a GPU.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Num, Target};
-use surface_kit::{Place, draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Num, Target};
+use frame::surface::kit::{Place, draw, motion};
+use frame::surface::widgets::Builder;
 
 use crate::delay::art;
 use crate::delay::parts::{self, Ink, bind};
@@ -346,7 +346,7 @@ pub fn face() -> Face {
     }
 }
 
-fn params() -> Vec<surface_proto::ParamInfo> {
+fn params() -> Vec<frame::surface::proto::ParamInfo> {
     vec![
         parts::percent(&a("drive"), "Drive", 25.0).featured(),
         parts::trim(&a("bias"), "Bias").featured(),
@@ -363,7 +363,7 @@ fn params() -> Vec<surface_proto::ParamInfo> {
     .collect()
 }
 
-fn streams() -> Vec<surface_proto::StreamInfo> {
+fn streams() -> Vec<frame::surface::proto::StreamInfo> {
     vec![parts::level_stream(&a("out"), "Output Level", 2)]
 }
 

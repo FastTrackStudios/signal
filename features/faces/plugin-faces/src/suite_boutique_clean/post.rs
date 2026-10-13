@@ -11,11 +11,11 @@
 //!   display (mode, pre-delay, decay, filters, mix — each bar a slim slider
 //!   of its param), the HALL / PLATE toggle, five pill faders and POWER.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::meters::scale::Card;
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{Binding, Control, ControlKind, Orientation, SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::meters::scale::Card;
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Binding, Control, ControlKind, Orientation, SlotRole, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::look::{self, KnobLook};
 use crate::face::{Face, canvas};
@@ -207,7 +207,7 @@ fn vu(b: &mut Builder<'_>, parent: NodeId, (px, py): (f64, f64), r: f64) {
     })
     .slot(SlotRole::Needle, needle.0);
     ctl.binding = Some(binding);
-    ctl.reference_dbfs = Some(surface_proto::VU_REFERENCE_DBFS);
+    ctl.reference_dbfs = Some(frame::surface::proto::VU_REFERENCE_DBFS);
     b.controls.insert(root, ctl);
 }
 
@@ -572,7 +572,7 @@ pub(super) fn echo() -> Face {
         ui::param(
             "echo/bpm",
             "Tempo",
-            surface_proto::Range::linear(40.0, 240.0, surface_proto::Unit::Bpm),
+            frame::surface::proto::Range::linear(40.0, 240.0, frame::surface::proto::Unit::Bpm),
             120.0,
         )
         .featured(),
@@ -814,7 +814,8 @@ pub(super) fn reverb() -> Face {
                 options: Some(vec![format!("color={color}")]),
                 ..Place::new(addr).size(118.0).bind(ui::bind(addr))
             };
-            let f = surface_kit::place(b, bay2, "lever.pill", &p).unwrap_or_else(|e| panic!("{e}"));
+            let f = frame::surface::kit::place(b, bay2, "lever.pill", &p)
+                .unwrap_or_else(|e| panic!("{e}"));
             parts::centre_on(b, f, (x, 88.0));
             if legend.is_empty() {
                 let lo = addr.ends_with("low");
@@ -849,7 +850,7 @@ pub(super) fn reverb() -> Face {
         ui::param(
             "verb/decay",
             "Decay",
-            surface_proto::Range::log(0.2, 20.0, surface_proto::Unit::Seconds),
+            frame::surface::proto::Range::log(0.2, 20.0, frame::surface::proto::Unit::Seconds),
             2.0,
         )
         .featured(),

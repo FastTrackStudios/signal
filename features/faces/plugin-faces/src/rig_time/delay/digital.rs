@@ -4,14 +4,14 @@
 //! each lower by the feedback), the data wheel for the time, and the
 //! parameter knobs in a grid.
 
-use document_proto::NodeId;
-use surface_kit::draw;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::draw;
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
 use crate::rig_time::kit::{self, DLY};
-use surface_kit::draw::Lettering;
+use frame::surface::kit::draw::Lettering;
 
 const INK: &str = "#d9dde2";
 const DIM: &str = "#7d838b";
@@ -45,7 +45,7 @@ fn window(
     let mut win = draw::frame(name, x, y, w, h);
     win.fills = vec![draw::linear(180.0, &[(0.0, glass.0), (1.0, glass.1)])];
     win.clips_content = true;
-    win.corner_radii = document_proto::CornerRadii::uniform(2.0);
+    win.corner_radii = frame::document::proto::CornerRadii::uniform(2.0);
     win.effects = vec![draw::inner_shadow("#000000e0", 0.0, 2.0, 5.0)];
     let win = b.add(parent, win);
     kit::glass(b, win);
@@ -103,7 +103,7 @@ pub fn face(dark: bool) -> Face {
     let scene = kit::lane("Digital", |b, root| {
         let mut plate = draw::frame("Faceplate", 0.0, 0.0, kit::W, kit::H);
         plate.fills = vec![draw::linear(180.0, &fill)];
-        plate.corner_radii = document_proto::CornerRadii::uniform(4.0);
+        plate.corner_radii = frame::document::proto::CornerRadii::uniform(4.0);
         let plate = b.add(
             root,
             draw::with_effects(
@@ -367,7 +367,7 @@ pub fn face_at(dark: bool, tier: kit::Tier) -> Face {
     let scene = kit::tier_lane("Digital", tier, |b, root| {
         let mut plate = draw::frame("Faceplate", 0.0, 0.0, w, kit::H);
         plate.fills = vec![draw::linear(180.0, &fill)];
-        plate.corner_radii = document_proto::CornerRadii::uniform(4.0);
+        plate.corner_radii = frame::document::proto::CornerRadii::uniform(4.0);
         let plate = b.add(
             root,
             draw::with_effects(
@@ -567,7 +567,7 @@ pub fn back_at(dark: bool, tier: kit::Tier) -> Face {
     let scene = kit::tier_lane("Digital", tier, |b, root| {
         let mut plate = draw::frame("Faceplate", 0.0, 0.0, w, kit::H);
         plate.fills = vec![draw::linear(180.0, &fill)];
-        plate.corner_radii = document_proto::CornerRadii::uniform(4.0);
+        plate.corner_radii = frame::document::proto::CornerRadii::uniform(4.0);
         let plate = b.add(
             root,
             draw::with_effects(

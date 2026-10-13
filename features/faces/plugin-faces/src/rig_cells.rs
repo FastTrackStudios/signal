@@ -13,12 +13,12 @@
 //! `faces.json`'s `blocks` lists them by what they match: `<type>:<name>`
 //! (a delay's machine, a reverb's algorithm) before `<type>`.
 
-use document_proto::motion::{Motion, Target};
-use document_proto::{CornerRadii, NodeId};
+use frame::document::proto::motion::{Motion, Target};
+use frame::document::proto::{CornerRadii, NodeId};
+use frame::surface::kit::{Place, draw, motion};
+use frame::surface::proto::{ParamInfo, Range, Unit};
+use frame::surface::widgets::Builder;
 use serde_json::json;
-use surface_kit::{Place, draw, motion};
-use surface_proto::{ParamInfo, Range, Unit};
-use surface_widgets::Builder;
 
 use crate::face::{Face, canvas};
 use crate::reverb::ui;
@@ -38,7 +38,7 @@ pub fn block(
     name: &str,
     window: &[(f64, &str)],
     build: impl FnOnce(&mut Builder<'_>, NodeId, NodeId),
-) -> document_proto::Scene {
+) -> frame::document::proto::Scene {
     let window = window.to_vec();
     canvas(name, move |b, root| {
         ui::fit_root(b, root, S + 2.0 * BLEED, S + 2.0 * BLEED);
@@ -53,7 +53,11 @@ pub fn block(
 
 /// A block face.
 #[must_use]
-pub fn face(file: &'static str, scene: document_proto::Scene, params: Vec<ParamInfo>) -> Face {
+pub fn face(
+    file: &'static str,
+    scene: frame::document::proto::Scene,
+    params: Vec<ParamInfo>,
+) -> Face {
     Face {
         file,
         plugin: PLUGIN,
@@ -422,7 +426,7 @@ fn viz(
 
 #[must_use]
 pub fn faces() -> Vec<Face> {
-    use surface_kit::viz::{catalog, lit_catalog};
+    use frame::surface::kit::viz::{catalog, lit_catalog};
     let dark = [(0.0, "#0c0d10"), (1.0, "#08090b")];
     let mut eq = catalog::eq_params("eq", 24);
     eq.extend(catalog::eq_view_params("eq"));

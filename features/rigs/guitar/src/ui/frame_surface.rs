@@ -1,7 +1,7 @@
 //! A frame surface in the rig — a page designed in frame, running live.
 //!
 //! [`FrameSurface`] mounts one page of a frame design (`<name>.fm` beside its
-//! `*.catalog.json`) as a Blitz custom widget: `frame_live::LiveSurface`
+//! `*.catalog.json`) as a Blitz custom widget: `frame::live::LiveSurface`
 //! renders it through frame's own effects stage on the window's wgpu device,
 //! into a texture Blitz composites, and runs its controls from the pointer.
 //!
@@ -125,7 +125,7 @@ mod native {
     use blitz_dom::node::ComputedStyles;
     use blitz_traits::events::{BlitzWheelDelta, UiEvent};
     use dioxus::prelude::*;
-    use frame_live::LiveSurface;
+    use frame::live::LiveSurface;
     use kurbo::{Affine, Rect};
     use vello::peniko::{Fill, ImageBrush, ImageSampler};
 
@@ -186,7 +186,7 @@ mod native {
             .file_name()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let (markup, catalog) = frame_live::face_paths(&dir, &stem);
+        let (markup, catalog) = frame::live::face_paths(&dir, &stem);
         LiveSurface::open(&markup, catalog)
             .map(|mut l| {
                 l.set_stretch(stretch);
@@ -389,8 +389,8 @@ mod native {
     }
 
     /// Shift = fine, Ctrl/Cmd = alternate (reset-on-click), as frame's player.
-    fn mods(m: blitz_traits::events::Modifiers) -> frame_live::Modifiers {
-        frame_live::Modifiers {
+    fn mods(m: blitz_traits::events::Modifiers) -> frame::live::Modifiers {
+        frame::live::Modifiers {
             fine: m.shift(),
             alt: m.ctrl() || m.meta(),
             option: m.alt(),

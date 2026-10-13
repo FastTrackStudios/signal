@@ -101,7 +101,7 @@ delay = { workspace = true, features = ["profiles", "ui", "viz"] }
 reverb = { workspace = true, features = ["profiles", "ui", "viz"] }
 # Their painted pictures, for the FX view's devices.
 modulation = { workspace = true, features = ["ui", "viz"] }
-frame-live = { workspace = true }
+frame = { workspace = true, features = ["anyrender-0-11", "live", "theme"] }
 
 # `standalone-rpp` = the standalone backend plus the `.rpp` loader and
 # source decoding — what makes a real project openable with no REAPER in
@@ -129,7 +129,6 @@ anyrender = "0.11"
 anyrender_vello_cpu = { workspace = true }
 # Themes: the mixer's strips drawn from a frame document instead of the
 # painters here, when one is loaded (`skin`).
-theme-runtime.workspace = true
 anyrender_vello = { version = "0.12", optional = true }
 # A frame face's GPU path (`faces::Painters`): the device the desktop
 # renderer hands over (anyrender_vello 0.12 boxes a wgpu_context 0.7

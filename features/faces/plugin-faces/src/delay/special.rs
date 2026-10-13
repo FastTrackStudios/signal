@@ -7,9 +7,9 @@
 //! OVERLAP (how long each reversed grain is, how much they cross) sit next
 //! to time and feedback; tone, drive, duck and mix after.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, draw};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, draw};
+use frame::surface::widgets::Builder;
 
 use super::art;
 use super::parts::{self, Ink, Screen, bind};

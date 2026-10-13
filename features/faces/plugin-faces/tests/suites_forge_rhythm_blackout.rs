@@ -4,8 +4,8 @@
 //! unit keeps to its own namespace, pedals are one height, and no unit
 //! prints a maker's, artist's or product's real name.
 
-use design_lint::{Config, Severity, lint};
-use surface_proto::Source;
+use frame::design::lint::{Config, Severity, lint};
+use frame::surface::proto::Source;
 
 fn suites() -> Vec<(&'static str, Vec<plugin_faces::Face>)> {
     vec![
@@ -78,10 +78,10 @@ fn every_binding_resolves_and_every_param_is_bound() {
                     continue;
                 };
                 // A handle binds its axes, not the control.
-                if let surface_proto::ControlKind::Handle { x, y, wheel, .. } = &c.kind
+                if let frame::surface::proto::ControlKind::Handle { x, y, wheel, .. } = &c.kind
                     && c.binding.is_none()
                 {
-                    let axes: Vec<&surface_proto::Binding> =
+                    let axes: Vec<&frame::surface::proto::Binding> =
                         [x, y, wheel].into_iter().flatten().collect();
                     assert!(!axes.is_empty(), "{}: handle {id} is unbound", f.file);
                     for b in axes {
@@ -252,7 +252,7 @@ fn no_real_names_are_printed() {
             for id in f.scene.walk(f.scene.root) {
                 let Some(n) = f.scene.node(id) else { continue };
                 let mut words = vec![n.name.to_ascii_lowercase()];
-                if let document_proto::NodeKind::Text(t) = &n.kind {
+                if let frame::document::proto::NodeKind::Text(t) = &n.kind {
                     words.push(t.characters.to_ascii_lowercase());
                 }
                 for s in words {
@@ -273,7 +273,7 @@ fn no_real_names_are_printed() {
 
 #[test]
 fn modern_rhythm_knobs_are_gpu_knobs_and_its_readouts_name_their_stops() {
-    use surface_proto::{ControlKind, ParamKind};
+    use frame::surface::proto::{ControlKind, ParamKind};
     let faces = plugin_faces::suite_modern_rhythm::faces();
     for f in &faces {
         // Every hardware knob carries the `knob.3d` shader (the cab's flat

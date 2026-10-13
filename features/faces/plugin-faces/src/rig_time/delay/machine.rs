@@ -5,9 +5,9 @@
 //! (the picture across the top, every control under it) — so each machine
 //! writes only its finish and its picture.
 
-use document_proto::NodeId;
-use surface_kit::draw;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::draw;
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -106,7 +106,7 @@ impl Machine {
     fn ground(&self, b: &mut Builder<'_>, root: NodeId, (w, h): (f64, f64), l: &Look) -> NodeId {
         let mut panel = draw::frame("Panel", 0.0, 0.0, w, h);
         panel.fills = vec![draw::linear(180.0, &l.panel)];
-        panel.corner_radii = document_proto::CornerRadii::uniform(9.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(9.0);
         let panel = b.add(
             root,
             draw::with_effects(
@@ -159,7 +159,7 @@ impl Machine {
         let mut well = draw::frame("Picture", x, y, w, h);
         well.fills = vec![draw::linear(180.0, &l.well)];
         well.clips_content = true;
-        well.corner_radii = document_proto::CornerRadii::uniform(7.0);
+        well.corner_radii = frame::document::proto::CornerRadii::uniform(7.0);
         well.effects = vec![draw::inner_shadow("#000000b0", 0.0, 2.0, 7.0)];
         let well = b.add(panel, well);
         (self.picture)(b, well, (w, h), l, room, dark);
@@ -393,13 +393,17 @@ pub fn flash(n: u32) -> String {
 
 /// The pictures' spring: what follows a knob follows it softly.
 #[must_use]
-pub fn spring() -> document_proto::motion::Dynamics {
-    document_proto::motion::Dynamics::spring(260.0, 28.0)
+pub fn spring() -> frame::document::proto::motion::Dynamics {
+    frame::document::proto::motion::Dynamics::spring(260.0, 28.0)
 }
 
 /// An open stroke outline (no fill) of `n` in `color`, `weight` wide.
 #[must_use]
-pub fn outline(mut n: document_proto::Node, color: &str, weight: f64) -> document_proto::Node {
+pub fn outline(
+    mut n: frame::document::proto::Node,
+    color: &str,
+    weight: f64,
+) -> frame::document::proto::Node {
     n = draw::stroked(n, color, weight);
     n.fills.clear();
     n

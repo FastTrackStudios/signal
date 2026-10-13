@@ -13,13 +13,13 @@
 //! - `tube-drive` — the green overdrive whose switch is a ribbed rubber
 //!   treadle. 172 × 286.
 
-use document_proto::motion::{Dynamics, Motion, Num, Target, Wave};
-use document_proto::{CornerRadii, NodeId};
-use surface_kit::Place;
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::motion;
-use surface_proto::{Binding, ButtonMode, Control, ControlKind, Range, SlotRole, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Num, Target, Wave};
+use frame::document::proto::{CornerRadii, NodeId};
+use frame::surface::kit::Place;
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::motion;
+use frame::surface::proto::{Binding, ButtonMode, Control, ControlKind, Range, SlotRole, Unit};
+use frame::surface::widgets::Builder;
 
 use crate::comp_tube::ui as place;
 use crate::face::{Face, canvas};
@@ -102,7 +102,7 @@ pub(super) fn inter(weight: f64) -> Lettering {
 }
 
 /// The capture's drive — the rig block's `drive`, 0..1.
-fn drive(ns: &str, name: &str) -> surface_proto::ParamInfo {
+fn drive(ns: &str, name: &str) -> frame::surface::proto::ParamInfo {
     ui::param(
         &format!("{ns}/drive"),
         name,
@@ -113,7 +113,7 @@ fn drive(ns: &str, name: &str) -> surface_proto::ParamInfo {
 }
 
 /// The pedal's tone — the drive block's own EQ (to come), 0..1.
-fn tone(ns: &str, name: &str) -> surface_proto::ParamInfo {
+fn tone(ns: &str, name: &str) -> frame::surface::proto::ParamInfo {
     ui::param(
         &format!("{ns}/tone"),
         name,
@@ -123,7 +123,7 @@ fn tone(ns: &str, name: &str) -> surface_proto::ParamInfo {
 }
 
 /// The output — the rig block's output level, dB.
-pub fn level(ns: &str) -> surface_proto::ParamInfo {
+pub fn level(ns: &str) -> frame::surface::proto::ParamInfo {
     ui::param(
         &format!("{ns}/level"),
         "Output",
@@ -133,7 +133,7 @@ pub fn level(ns: &str) -> surface_proto::ParamInfo {
     .featured()
 }
 
-pub(super) fn on(ns: &str) -> surface_proto::ParamInfo {
+pub(super) fn on(ns: &str) -> frame::surface::proto::ParamInfo {
     ui::toggle(&format!("{ns}/on"), "Bypass", true).featured()
 }
 
@@ -1301,14 +1301,14 @@ pub fn cry_baby() -> Face {
             );
             let mut chrome = chrome;
             chrome.corner_radii = if toe {
-                document_proto::CornerRadii {
+                frame::document::proto::CornerRadii {
                     top_left: 14.0,
                     top_right: 14.0,
                     bottom_right: 0.0,
                     bottom_left: 0.0,
                 }
             } else {
-                document_proto::CornerRadii {
+                frame::document::proto::CornerRadii {
                     top_left: 0.0,
                     top_right: 0.0,
                     bottom_right: 14.0,
@@ -1430,7 +1430,7 @@ pub fn cry_baby() -> Face {
             ),
         );
         let mut c = Control::new(ControlKind::Fader {
-            orientation: surface_proto::Orientation::Vertical,
+            orientation: frame::surface::proto::Orientation::Vertical,
         })
         .slot(SlotRole::Thumb, band.0);
         c.binding = Some(ui::bind(&format!("{NS}/position")));
@@ -1692,13 +1692,13 @@ pub fn pitch_voices() -> Face {
                     48.0,
                     11.0,
                     "#facc15",
-                    document_proto::TextAlign::Center,
+                    frame::document::proto::TextAlign::Center,
                 ),
             );
             let c = Control::new(ControlKind::Readout)
                 .slot(SlotRole::Value, value.0)
                 .bound(ui::bind(&format!("{NS}/{st}")))
-                .formatted(surface_proto::ValueFormat::decimals(0));
+                .formatted(frame::surface::proto::ValueFormat::decimals(0));
             b.controls.insert(value, c);
             let f = Place::new("Level")
                 .size(120.0)
@@ -1852,7 +1852,7 @@ fn filter_screen(b: &mut Builder<'_>, screen: NodeId, w: f64, h: f64) {
                 30.0,
                 8.0,
                 "#6b7a99",
-                document_proto::TextAlign::Left,
+                frame::document::proto::TextAlign::Left,
             ),
         );
     }
@@ -1936,7 +1936,7 @@ fn filter_screen(b: &mut Builder<'_>, screen: NodeId, w: f64, h: f64) {
             80.0,
             9.0,
             "#8fa3c8",
-            document_proto::TextAlign::Left,
+            frame::document::proto::TextAlign::Left,
         ),
     );
 }

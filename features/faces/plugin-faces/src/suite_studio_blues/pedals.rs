@@ -9,7 +9,7 @@
 //!   `plate-verb` — Standard, 156 × 286
 //! - `haze-delay` — Large, 286 × 286 (a double-wide delay)
 
-use surface_proto::{Range, Unit};
+use frame::surface::proto::{Range, Unit};
 
 use super::parts::{self, Cap, PEDAL_H, PLUGIN, knob, letter, pedal, stomp, tape, toggle};
 use crate::face::{Face, canvas};
@@ -24,11 +24,11 @@ const STOMP_Y: f64 = 0.79 * H;
 /// Standard width.
 const STD: f64 = 156.0;
 
-fn level(ns: &str, id: &str, name: &str, default: f64) -> surface_proto::ParamInfo {
+fn level(ns: &str, id: &str, name: &str, default: f64) -> frame::surface::proto::ParamInfo {
     ui::percent(&format!("{ns}/{id}"), name, default)
 }
 
-fn on(ns: &str) -> surface_proto::ParamInfo {
+fn on(ns: &str) -> frame::surface::proto::ParamInfo {
     ui::toggle(&format!("{ns}/on"), "Bypass", true).featured()
 }
 
@@ -322,7 +322,7 @@ pub fn short_delay() -> Face {
             7,
             11.0,
             "#dfe9f6",
-            surface_proto::ValueFormat::decimals(1).unit("MS"),
+            frame::surface::proto::ValueFormat::decimals(1).unit("MS"),
             true,
         );
         for (addr, name, x, y, ly) in [
@@ -395,14 +395,14 @@ pub fn haze_delay() -> Face {
         let (dx, dy, dw, dh) = (W * 0.07, H * 0.07, W * 0.62, H * 0.15);
         b.add(
             lid,
-            surface_kit::draw::rounded(
-                surface_kit::draw::rect(
+            frame::surface::kit::draw::rounded(
+                frame::surface::kit::draw::rect(
                     "display bezel",
                     dx,
                     dy,
                     dw,
                     dh,
-                    surface_kit::draw::solid("#0b0b0d"),
+                    frame::surface::kit::draw::solid("#0b0b0d"),
                 ),
                 5.0,
             ),
@@ -415,7 +415,7 @@ pub fn haze_delay() -> Face {
             5,
             dh * 0.5,
             "#ff4636",
-            surface_proto::ValueFormat::decimals(0).unit(""),
+            frame::surface::proto::ValueFormat::decimals(0).unit(""),
             true,
         );
         for (i, (a, u)) in [("FREE", "MS"), ("APP", "BPM"), ("TAP", "BPM")]
@@ -492,12 +492,12 @@ pub fn haze_delay() -> Face {
             "#ff6a5a",
             false,
         );
-        let tap = surface_kit::Place::new("Tap tempo")
+        let tap = frame::surface::kit::Place::new("Tap tempo")
             .size(STOMP_D)
             .bind(ui::bind("haze/tap"))
             .legend("")
             .options(&["side=left", "color=#ff6a5a", "momentary"]);
-        let t = surface_kit::place(b, lid, "switch.stomp_side_led", &tap)
+        let t = frame::surface::kit::place(b, lid, "switch.stomp_side_led", &tap)
             .unwrap_or_else(|e| panic!("{e}"));
         let (tw, th) = b
             .scene

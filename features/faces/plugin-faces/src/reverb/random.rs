@@ -8,9 +8,9 @@
 //! and get their own ringed section on the right; DECAY and SIZE on the
 //! left, the rest along the bottom with the TAIL ladder.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::draw;
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Dial};
 use crate::face::{Face, canvas};

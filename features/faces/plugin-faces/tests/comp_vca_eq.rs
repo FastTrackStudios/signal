@@ -1,8 +1,8 @@
 //! The VCA-compressor and hardware-EQ faces lint clean against their
 //! plugin's merged catalog, and every binding resolves.
 
-use design_lint::{Config, Severity, lint};
-use surface_proto::Source;
+use frame::design::lint::{Config, Severity, lint};
+use frame::surface::proto::Source;
 
 const FILES: &[&str] = &[
     "08-bus-comp",

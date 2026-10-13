@@ -11,16 +11,16 @@
 
 use std::collections::BTreeMap;
 
-use document_proto::{
+use frame::document::proto::{
     Node, NodeId, NodeKind, Paint, ShaderFx, Stroke, StrokeAlign, StrokeCap, StrokeJoin, TextAlign,
     TextCase, TextData, Transform,
 };
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{
     Binding, ButtonMode, Control, ControlKind, EntryId, ParamInfo, Range, SlotRole, Source,
     StreamInfo, StreamKind, Unit, ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 // ── placing ──────────────────────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ fn anchor(b: &Builder<'_>, root: NodeId) -> (f64, f64) {
 /// # Panics
 /// On an unknown component id or variant — faces are literals.
 pub fn put(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, cx: f64, cy: f64) -> NodeId {
-    let root = surface_kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
+    let root = frame::surface::kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
     let (ax, ay) = anchor(b, root);
     move_to(b, root, cx - ax, cy - ay);
     root
@@ -75,7 +75,7 @@ pub fn put(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, cx: f64, cy
 /// # Panics
 /// On an unknown component id or variant.
 pub fn put_at(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, x: f64, y: f64) -> NodeId {
-    let root = surface_kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
+    let root = frame::surface::kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
     move_to(b, root, x, y);
     root
 }
@@ -105,7 +105,7 @@ pub fn panel(
 /// panel's size.
 pub fn fit_root(b: &mut Builder<'_>, root: NodeId, w: f64, h: f64) {
     if let Some(n) = b.scene.node_mut(root) {
-        n.size = document_proto::Size {
+        n.size = frame::document::proto::Size {
             width: w,
             height: h,
         };
@@ -136,7 +136,7 @@ fn children_named(b: &Builder<'_>, id: NodeId, names: &[&str]) -> Vec<NodeId> {
 fn remove(b: &mut Builder<'_>, ids: Vec<NodeId>) {
     for id in ids {
         if b.scene.node(id).is_some() {
-            let _ = b.scene.apply(document_proto::Op::Remove { id });
+            let _ = b.scene.apply(frame::document::proto::Op::Remove { id });
         }
     }
 }
@@ -246,7 +246,7 @@ pub fn value_at(b: &mut Builder<'_>, control: NodeId, cy: f64, ink: Ink<'_>) -> 
     t.name = "value".into();
     let id = b.add(control, t);
     if let Some(c) = b.controls.get_mut(&control) {
-        c.slots.push(surface_proto::Slot {
+        c.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Value,
             node: id.0,
         });
@@ -284,7 +284,7 @@ pub fn label_at(
     let id = b.add(control, t);
     if let Some(c) = b.controls.get_mut(&control) {
         c.slots.retain(|s| s.role != SlotRole::Label);
-        c.slots.push(surface_proto::Slot {
+        c.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Label,
             node: id.0,
         });
@@ -376,7 +376,7 @@ pub fn selector(
         .legend(name)
         .options(labels)
         .bind(bind(addr))
-        .ink(surface_kit::Ink::Color(ink.into()))
+        .ink(frame::surface::kit::Ink::Color(ink.into()))
         .keep_case()
         .touch(TOUCH_MIN);
     let k = put(b, parent, "knob.chicken_head", &p, cx, cy);
@@ -386,8 +386,8 @@ pub fn selector(
 
 /// A stomp footswitch (the kit's), its actuator centred on (`cx`, `cy`).
 pub fn footswitch(b: &mut Builder<'_>, parent: NodeId, p: &Place, (cx, cy): (f64, f64)) -> NodeId {
-    let root =
-        surface_kit::place(b, parent, "switch.footswitch", p).unwrap_or_else(|e| panic!("{e}"));
+    let root = frame::surface::kit::place(b, parent, "switch.footswitch", p)
+        .unwrap_or_else(|e| panic!("{e}"));
     let cap = b.scene.node(root).and_then(|n| {
         n.children.iter().find_map(|c| {
             b.scene.node(*c).filter(|k| k.name == "cap").map(|k| {

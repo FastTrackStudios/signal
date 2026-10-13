@@ -8,10 +8,10 @@
 //!   the five controls and the fade RATE across the bottom, RATE tied to
 //!   its key.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Ink, Place, TOUCH_MIN, draw};
-use surface_proto::{Binding, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Ink, Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Binding, Unit};
+use frame::surface::widgets::Builder;
 
 use super::super::logo;
 use super::super::ui::{self, bind};
@@ -87,7 +87,7 @@ fn build(b: &mut Builder<'_>, root: NodeId, shape: Shape) {
             178.0,
             &[(0.0, "#dde1e5"), (0.5, "#cdd1d6"), (1.0, "#b4b9bf")],
         )];
-        n.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        n.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
     }
     let tall = shape == Shape::Tall;
     let row = if tall {

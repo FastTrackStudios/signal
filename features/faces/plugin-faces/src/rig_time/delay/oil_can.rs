@@ -11,10 +11,10 @@
 //!
 //! Enamel: cream, or oxblood; the can is steel.
 
-use document_proto::NodeId;
-use document_proto::motion::{Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use super::machine::{self, Look, Machine, ON, PERIOD, Room};
 use crate::face::Face;
@@ -157,7 +157,7 @@ fn can(b: &mut Builder<'_>, well: NodeId, (cx, cy, rr): (f64, f64, f64)) {
         0.7,
         &[(0.0, "#2a1d14"), (1.0, "#0a0604")],
     )];
-    inside.corner_radii = document_proto::CornerRadii::uniform(r);
+    inside.corner_radii = frame::document::proto::CornerRadii::uniform(r);
     inside.clips_content = true;
     inside.effects = vec![draw::inner_shadow("#000000e0", 0.0, 2.0, 5.0)];
     let inside = b.add(well, inside);

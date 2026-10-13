@@ -14,11 +14,11 @@
 //! Two finishes: light, frosted pearl with an iridescent edge; dark,
 //! midnight.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_proto::{Axis, Control, ControlKind, HandleAxis};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::proto::{Axis, Control, ControlKind, HandleAxis};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -383,8 +383,8 @@ fn cascade(b: &mut Builder<'_>, well: NodeId, (w, h): (f64, f64), top: f64) {
                 0.9,
                 draw::solid(&ui::alpha(ICE, 0.7)),
             );
-            n.transform = document_proto::Transform::translate(0.0, lh / 2.0 - span);
-            n.size = document_proto::Size {
+            n.transform = frame::document::proto::Transform::translate(0.0, lh / 2.0 - span);
+            n.size = frame::document::proto::Size {
                 width: s.s_min,
                 height: 2.0 * span,
             };
@@ -513,7 +513,7 @@ fn picture(
     let mut well = draw::frame("Cascade", x, y, w, h);
     well.fills = vec![draw::linear(180.0, &l.well)];
     well.clips_content = true;
-    well.corner_radii = document_proto::CornerRadii::uniform(6.0);
+    well.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
     well.effects = vec![draw::inner_shadow("#000000c0", 0.0, 2.0, 7.0)];
     let well = b.add(panel, well);
     // A haze of the climb's light, high where the cascade ends.
@@ -545,7 +545,7 @@ fn picture(
 fn ground(b: &mut Builder<'_>, root: NodeId, (w, h): (f64, f64), l: &Look) -> NodeId {
     let mut panel = draw::frame("Panel", 0.0, 0.0, w, h);
     panel.fills = vec![draw::linear(180.0, &l.panel)];
-    panel.corner_radii = document_proto::CornerRadii::uniform(10.0);
+    panel.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
     let panel = b.add(
         root,
         draw::with_effects(

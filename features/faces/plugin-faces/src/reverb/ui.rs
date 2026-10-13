@@ -4,16 +4,16 @@
 //! colours, a stompbox enclosure, knobs printed in the face's ink, and the
 //! catalog entries these faces declare.
 
-use document_proto::{
+use frame::document::proto::{
     Color, Emission, Node, NodeId, NodeKind, Paint, ShaderFx, Size, Stroke, StrokeCap, StrokeJoin,
     TextAlign, TextCase, Transform,
 };
-use surface_kit::{Ink, Place, TOUCH_MIN, draw};
-use surface_proto::{
+use frame::surface::kit::{Ink, Place, TOUCH_MIN, draw};
+use frame::surface::proto::{
     Binding, Control, ControlKind, Curve, CurvePoint, EntryId, ParamInfo, ParamKind, Range,
     SlotRole, Source, StreamInfo, StreamKind, Unit, ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 
@@ -69,7 +69,7 @@ pub fn put_by(
     cx: f64,
     cy: f64,
 ) -> NodeId {
-    let root = surface_kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
+    let root = frame::surface::kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
     let (ax, ay) = anchor(b, root, names);
     move_to(b, root, cx - ax, cy - ay);
     root
@@ -80,7 +80,7 @@ pub fn put_by(
 /// # Panics
 /// On an unknown component id or variant.
 pub fn put_at(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, x: f64, y: f64) -> NodeId {
-    let root = surface_kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
+    let root = frame::surface::kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
     move_to(b, root, x, y);
     root
 }
@@ -130,7 +130,7 @@ pub fn strip_legend(b: &mut Builder<'_>, control: NodeId) {
     }
     for id in ids {
         if b.scene.node(id).is_some() {
-            let _ = b.scene.apply(document_proto::Op::Remove { id });
+            let _ = b.scene.apply(frame::document::proto::Op::Remove { id });
         }
     }
 }
@@ -157,7 +157,7 @@ pub fn printed(values: &[f64], unit: Unit) -> Range {
     Range {
         min: lo,
         max: hi,
-        scale: surface_proto::Scale::Curve {
+        scale: frame::surface::proto::Scale::Curve {
             curve: Curve::Points { points },
         },
         unit,
@@ -192,7 +192,7 @@ pub fn add_value(b: &mut Builder<'_>, control: NodeId, size: f64, color: &str) -
         n.size.height = h + (size * 1.5).ceil();
     }
     if let Some(c) = b.controls.get_mut(&control) {
-        c.slots.push(surface_proto::Slot {
+        c.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Value,
             node: id.0,
         });
@@ -733,7 +733,7 @@ pub fn display(
         &[(0.0, &blend(tint, "#050607", 0.88)), (1.0, "#040505")],
     )];
     face.clips_content = true;
-    face.corner_radii = document_proto::CornerRadii::uniform(3.0);
+    face.corner_radii = frame::document::proto::CornerRadii::uniform(3.0);
     face.effects = vec![draw::inner_shadow("#000000e0", 0.0, 2.0, 8.0)];
     face.shader = match fx {
         "crt" => shader("crt", 0.35),
@@ -1077,7 +1077,7 @@ pub fn enclosure(
             (1.0, &blend(paint[2], "#000000", 0.6)),
         ],
     )];
-    body.corner_radii = document_proto::CornerRadii::uniform(22.0);
+    body.corner_radii = frame::document::proto::CornerRadii::uniform(22.0);
     let body = b.add(root, body);
     let e = EDGE;
     let mut lid = draw::frame("Lid", e, e, w - 2.0 * e, h - 2.0 * e);
@@ -1094,7 +1094,7 @@ pub fn enclosure(
             ],
         ),
     ];
-    lid.corner_radii = document_proto::CornerRadii::uniform(15.0);
+    lid.corner_radii = frame::document::proto::CornerRadii::uniform(15.0);
     lid.effects = vec![
         draw::inner_shadow("#ffffff40", 0.0, 1.5, 1.0),
         draw::inner_shadow("#00000055", 0.0, -3.0, 6.0),
@@ -1274,7 +1274,7 @@ pub fn flush(b: &mut Builder<'_>, root: NodeId, w: f64, h: f64) {
                 && (n.size.width - w).abs() < 1.0
                 && (n.size.height - h).abs() < 1.0;
             if whole {
-                n.corner_radii = document_proto::CornerRadii::default();
+                n.corner_radii = frame::document::proto::CornerRadii::default();
                 n.stroke.paints.clear();
                 n.stroke.weight = 0.0;
             }

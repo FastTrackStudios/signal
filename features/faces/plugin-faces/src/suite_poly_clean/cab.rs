@@ -11,14 +11,14 @@
 
 use std::fmt::Write as _;
 
-use document_proto::{CornerRadii, NodeId, TextAlign};
-use surface_kit::draw;
-use surface_kit::materials::texture::Relief;
-use surface_proto::{
+use frame::document::proto::{CornerRadii, NodeId, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::kit::materials::texture::Relief;
+use frame::surface::proto::{
     Axis, Binding, ButtonMode, Condition, Control, ControlKind, HandleAxis, Range, SlotRole, Unit,
     ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::parts::{self, Hand, knob};

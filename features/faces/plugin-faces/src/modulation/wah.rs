@@ -9,10 +9,10 @@
 //! the sweep RATE with its lamp for the auto modes, MIX and OUTPUT, and the
 //! engage stomp.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::draw;
-use surface_proto::{Binding, Control, ControlKind, SlotRole};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::proto::{Binding, Control, ControlKind, SlotRole};
+use frame::surface::widgets::Builder;
 
 use super::pedal;
 use crate::face::{Face, canvas};
@@ -161,12 +161,12 @@ fn treadle(b: &mut Builder<'_>, parent: NodeId, ax: f64, ay: f64, len: f64, heel
     );
     // It rocks: the treadle swings past where the position puts it and
     // settles, a spring's lag on the knob's turn (motion).
-    surface_kit::motion::add(
+    frame::surface::kit::motion::add(
         b,
         body,
-        surface_kit::motion::spring_lag(
+        frame::surface::kit::motion::spring_lag(
             "norm(wah/position)",
-            surface_kit::motion::Target::Rotate,
+            frame::surface::kit::motion::Target::Rotate,
             TRAVEL,
         ),
     );
@@ -272,7 +272,7 @@ fn housing(b: &mut Builder<'_>, board: NodeId, x: f64, y: f64, w: f64, h: f64) {
         800.0,
         false,
     );
-    if let document_proto::NodeKind::Text(d) = &mut t.kind {
+    if let frame::document::proto::NodeKind::Text(d) = &mut t.kind {
         d.letter_spacing = 1.0;
     }
     b.add(board, t);
@@ -285,7 +285,7 @@ fn module(b: &mut Builder<'_>, board: NodeId, x: f64, y: f64, w: f64, h: f64) ->
         175.0,
         &[(0.0, "#2e2f34"), (0.5, "#232428"), (1.0, "#18191c")],
     )];
-    m.corner_radii = document_proto::CornerRadii::uniform(14.0);
+    m.corner_radii = frame::document::proto::CornerRadii::uniform(14.0);
     m.effects = vec![
         draw::drop_shadow("#000000c0", 0.0, 8.0, 16.0),
         draw::inner_shadow("#ffffff2a", 0.0, 1.5, 1.0),
@@ -321,7 +321,7 @@ pub fn face() -> Face {
             draw::linear(180.0, &[(0.0, "#1d1d20"), (1.0, "#101012")]),
             draw::radial_at(0.35, 0.5, 0.7, &[(0.0, "#ffffff0c"), (1.0, "#ffffff00")]),
         ];
-        board.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        board.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         let board = b.add(root, board);
         let mut weave = Vec::new();
         let mut yy = 3.0;

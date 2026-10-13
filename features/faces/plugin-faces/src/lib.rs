@@ -71,7 +71,7 @@ pub fn all() -> Vec<Face> {
         if f.plugin == "saturate" {
             comp_look::apply_saturator(&mut f.scene, f.file);
         }
-        let scene = std::mem::replace(&mut f.scene, document_proto::Scene::new("Surface"));
+        let scene = std::mem::replace(&mut f.scene, frame::document::proto::Scene::new("Surface"));
         f.scene = face::stable_ids(scene, &format!("{}/{}", f.plugin, f.file));
     }
     v
@@ -94,7 +94,8 @@ pub fn write_only(out: &std::path::Path, only: &[String]) -> usize {
     let chosen = |file: &str| only.is_empty() || only.iter().any(|o| file.starts_with(o.as_str()));
     for f in faces.iter().filter(|f| chosen(f.file)) {
         let path = out.join(f.plugin).join(format!("{}.frame", f.file));
-        document_io::save_surface(&path, &f.scene).unwrap_or_else(|e| panic!("write face: {e}"));
+        frame::document::io::save_surface(&path, &f.scene)
+            .unwrap_or_else(|e| panic!("write face: {e}"));
     }
     for (plugin, catalog) in catalogs(&faces) {
         let path = out.join(plugin).join(format!("{plugin}.catalog.json"));

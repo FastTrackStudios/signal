@@ -7,10 +7,10 @@
 //! step time in ms and as a note value, TAP beside it. Below, the row:
 //! step time and swing, feedback, stereo spread, tone, duck, mix.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, draw};
-use surface_proto::{ButtonMode, Control, ControlKind, SlotRole};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{ButtonMode, Control, ControlKind, SlotRole};
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, Ink, Screen, bind};
 use crate::face::{Face, canvas};
@@ -305,9 +305,13 @@ pub fn face() -> Face {
         parts::param(
             &a("swing"),
             "Swing",
-            surface_proto::Range {
+            frame::surface::proto::Range {
                 steps: Some(76),
-                ..surface_proto::Range::linear(0.0, 75.0, surface_proto::Unit::Percent)
+                ..frame::surface::proto::Range::linear(
+                    0.0,
+                    75.0,
+                    frame::surface::proto::Unit::Percent,
+                )
             },
             0.0,
         ),

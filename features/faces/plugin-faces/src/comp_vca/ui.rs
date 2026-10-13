@@ -3,15 +3,15 @@
 //! readout windows, filter-shape glyphs, and the catalog entries the faces
 //! bind.
 //!
-//! Everything is plain frame nodes plus `surface_proto::Control`s, the same
+//! Everything is plain frame nodes plus `frame::surface::proto::Control`s, the same
 //! as the kit; these only save each face from repeating the arithmetic.
 
-use document_proto::{Node, NodeId, NodeKind, StrokeAlign, TextAlign, TextCase, Transform};
-use surface_kit::{Place, draw};
-use surface_proto::{
+use frame::document::proto::{Node, NodeId, NodeKind, StrokeAlign, TextAlign, TextCase, Transform};
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{
     Binding, Curve, CurvePoint, EntryId, ParamInfo, Range, SlotRole, StreamInfo, StreamKind, Unit,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 // ── placing ──────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ fn anchor(b: &Builder<'_>, root: NodeId) -> (f64, f64) {
 /// # Panics
 /// On an unknown component id or variant — faces are literals.
 pub fn put(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, cx: f64, cy: f64) -> NodeId {
-    let root = surface_kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
+    let root = frame::surface::kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
     let (ax, ay) = anchor(b, root);
     move_to(b, root, cx - ax, cy - ay);
     root
@@ -59,7 +59,7 @@ pub fn put(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, cx: f64, cy
 /// # Panics
 /// On an unknown component id or variant.
 pub fn put_at(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place, x: f64, y: f64) -> NodeId {
-    let root = surface_kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
+    let root = frame::surface::kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"));
     move_to(b, root, x, y);
     root
 }
@@ -89,7 +89,7 @@ pub fn panel(
 /// panel's size.
 pub fn fit_root(b: &mut Builder<'_>, root: NodeId, w: f64, h: f64) {
     if let Some(n) = b.scene.node_mut(root) {
-        n.size = document_proto::Size {
+        n.size = frame::document::proto::Size {
             width: w,
             height: h,
         };
@@ -110,7 +110,7 @@ pub fn strip_legend(b: &mut Builder<'_>, control: NodeId) {
         c.slots.retain(|s| s.role != SlotRole::Label);
     }
     for id in ids {
-        let _ = b.scene.apply(document_proto::Op::Remove { id });
+        let _ = b.scene.apply(frame::document::proto::Op::Remove { id });
     }
 }
 
@@ -242,7 +242,7 @@ pub fn printed(values: &[f64], unit: Unit) -> Range {
     Range {
         min: lo,
         max: hi,
-        scale: surface_proto::Scale::Curve {
+        scale: frame::surface::proto::Scale::Curve {
             curve: Curve::Points { points },
         },
         unit,
@@ -260,7 +260,7 @@ pub fn add_value(b: &mut Builder<'_>, control: NodeId, size: f64, color: &str) -
         .and_then(|c| c.slots_of(SlotRole::Label).next());
     let below = label.and_then(|l| b.scene.node(NodeId(l))).map_or_else(
         || {
-            let (_, y, _, h) = surface_kit::drawn_bounds(b.scene, control);
+            let (_, y, _, h) = frame::surface::kit::drawn_bounds(b.scene, control);
             y + h
         },
         |n| n.transform.ty + n.size.height,
@@ -282,7 +282,7 @@ pub fn add_value(b: &mut Builder<'_>, control: NodeId, size: f64, color: &str) -
     }
     let id = b.add(control, t);
     if let Some(c) = b.controls.get_mut(&control) {
-        c.slots.push(surface_proto::Slot {
+        c.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Value,
             node: id.0,
         });

@@ -73,7 +73,7 @@ blitz-dom = { workspace = true, features = ["custom-widget"] }
 blitz-traits = { workspace = true }
 bytemuck = { version = "1", features = ["derive"] }
 dioxus-native-dom = { workspace = true }
-frame-live = { workspace = true, features = ["anyrender-0-11"] }
+frame = { workspace = true, features = ["anyrender-0-11", "live"] }
 image = { workspace = true }
 parley = { workspace = true }
 tracing = { workspace = true }

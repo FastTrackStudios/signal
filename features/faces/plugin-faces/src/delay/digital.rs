@@ -11,9 +11,9 @@
 //! filtered voicing's own pair and duck sit between. Wet level on two LED
 //! columns at the right.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, draw};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, draw};
+use frame::surface::widgets::Builder;
 
 use super::art;
 use super::parts::{self, Ink, Screen, bind};

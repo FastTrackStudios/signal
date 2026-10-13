@@ -8,7 +8,7 @@
 
 use std::borrow::Cow;
 
-use library_fs::{FsLibrary, ListQuery, SurfaceStore as _};
+use frame::library::fs::{FsLibrary, ListQuery, SurfaceStore as _};
 use serde_json::json;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
@@ -103,7 +103,7 @@ pub fn respond(lib: &FsLibrary, request: &str) -> Response {
     if let Some(id) = path.strip_prefix("assets/") {
         return match lib.asset(id) {
             Some(a) => {
-                let name = format!("{}.{}", a.id, document_io::extension_for(&a.mime));
+                let name = format!("{}.{}", a.id, frame::document::io::extension_for(&a.mime));
                 (
                     "200 OK",
                     a.mime.into(),
@@ -119,7 +119,7 @@ pub fn respond(lib: &FsLibrary, request: &str) -> Response {
             Ok(s) => {
                 let ext = s.content.format.extension();
                 let name = id.rsplit('/').next().unwrap_or(id);
-                let mime = if s.content.format == library_link::Format::Markup {
+                let mime = if s.content.format == frame::library::link::Format::Markup {
                     "text/plain; charset=utf-8"
                 } else {
                     "application/zip"
@@ -203,13 +203,13 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("frame-library-http-assets-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let mut scene = library_fs::Content::markup_text(
+        let mut scene = frame::library::fs::Content::markup_text(
             r#"<Document><Page><Frame name="Tex" w=10 h=10 /></Page></Document>"#,
         )
         .decode()
         .unwrap();
         let id = scene.add_asset("image/png", b"texture".to_vec());
-        document_io::save_surface(dir.join("tex.frame"), &scene).unwrap();
+        frame::document::io::save_surface(dir.join("tex.frame"), &scene).unwrap();
         let lib = FsLibrary::open(&dir).unwrap();
 
         let (_, _, _, body) = respond(&lib, "GET /index.json HTTP/1.1\r\n\r\n");

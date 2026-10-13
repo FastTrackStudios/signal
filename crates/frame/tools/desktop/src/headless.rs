@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use surface_runtime::Modifiers;
+use frame::surface::runtime::Modifiers;
 
 use crate::input::View;
 use crate::libview::{LibraryView, Outcome};
@@ -31,7 +31,7 @@ struct Shot<'a> {
     player: Player,
     library: Option<LibraryView>,
     error: Option<String>,
-    offscreen: render::offscreen::Offscreen,
+    offscreen: frame::render::offscreen::Offscreen,
     overlay: vello::Scene,
 }
 
@@ -46,7 +46,7 @@ impl Shot<'_> {
     }
 
     /// Render the frame at `t` ms.
-    fn frame(&mut self, t: f64) -> Result<render::offscreen::Pixels, String> {
+    fn frame(&mut self, t: f64) -> Result<frame::render::offscreen::Pixels, String> {
         let (w, h) = self.args.size;
         let view = self.view();
         self.player.tick(t);
@@ -58,7 +58,7 @@ impl Shot<'_> {
             .or_else(|| self.library.as_ref().and_then(LibraryView::banner))
             .or_else(|| self.player.engine_banner());
         if let Some((b, page)) = message.and_then(|m| banner(&m, f64::from(w))) {
-            render::paint_scene_into(
+            frame::render::paint_scene_into(
                 &mut self.overlay,
                 &b,
                 page,
@@ -71,7 +71,7 @@ impl Shot<'_> {
         {
             let at =
                 kurbo::Affine::translate(((f64::from(w) - tw) / 2.0, f64::from(h) - th - 18.0));
-            render::paint_scene_into(
+            frame::render::paint_scene_into(
                 &mut self.overlay,
                 &toast,
                 page,
@@ -98,7 +98,7 @@ impl Shot<'_> {
             self.player.shader_inputs()
         };
         // Time advances with the simulated clock, so a flicker animates.
-        self.offscreen.render_with_effects(&render::fx::Frame {
+        self.offscreen.render_with_effects(&frame::render::fx::Frame {
             transform: view.affine(),
             base,
             fonts: Some(crate::player::fonts()),
@@ -107,7 +107,7 @@ impl Shot<'_> {
             values: Some(&values),
             inputs: Some(&inputs),
             overlay: Some(&self.overlay),
-            ..render::fx::Frame::new(&doc, page, w, h)
+            ..frame::render::fx::Frame::new(&doc, page, w, h)
         })
     }
 }
@@ -165,7 +165,7 @@ fn edit_script(shot: &mut Shot<'_>, script: Script, i: u32, t: f64) -> Result<()
     Ok(())
 }
 
-fn save(px: render::offscreen::Pixels, out: &Path) -> Result<usize, String> {
+fn save(px: frame::render::offscreen::Pixels, out: &Path) -> Result<usize, String> {
     let distinct = {
         let mut seen: Vec<[u8; 4]> = px
             .rgba
@@ -213,7 +213,7 @@ pub fn run(args: &Args) -> Result<(), String> {
         player: Player::new(engine, surface)?,
         library,
         error,
-        offscreen: render::offscreen::Offscreen::new()?,
+        offscreen: frame::render::offscreen::Offscreen::new()?,
         overlay: vello::Scene::new(),
     };
 

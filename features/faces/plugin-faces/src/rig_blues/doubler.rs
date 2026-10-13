@@ -4,12 +4,12 @@
 //! against each other) and a little late (DELAY, the rings they send out
 //! trailing the note's). Bound to `doubler/*` for the engine to take up.
 
-use document_proto::motion::{Dynamics, Motion, Target};
-use document_proto::{CornerRadii, NodeId, ResizeX};
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::motion;
-use surface_proto::{Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::document::proto::{CornerRadii, NodeId, ResizeX};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::motion;
+use frame::surface::proto::{Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::drives::H;

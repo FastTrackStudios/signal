@@ -16,11 +16,11 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use document_proto::{Node, NodeId, NodeKind, Scene, Size, TextAlign, TextData, Transform};
-use surface_kit::{Place, draw, viz};
-use surface_proto::{Binding, Catalog, Control};
-use surface_runtime::Surface;
-use surface_widgets::{Builder, Theme};
+use frame::document::proto::{Node, NodeId, NodeKind, Scene, Size, TextAlign, TextData, Transform};
+use frame::surface::kit::{Place, draw, viz};
+use frame::surface::proto::{Binding, Catalog, Control};
+use frame::surface::runtime::Surface;
+use frame::surface::widgets::{Builder, Theme};
 
 const BG: &str = "#0a0c10";
 const INK: &str = "#e9ecef";
@@ -52,7 +52,7 @@ fn main() {
     for ex in examples() {
         let fm = dir.join(ex.file);
         let cat = dir.join(ex.catalog_file);
-        let text = document_text::print(&ex.surface.to_scene());
+        let text = frame::document::text::print(&ex.surface.to_scene());
         let json = serde_json::to_string_pretty(&ex.catalog).expect("catalogs serialize");
         if let Err(e) = std::fs::write(&fm, text).and_then(|()| std::fs::write(&cat, json + "\n")) {
             eprintln!("make_viz_examples: writing {}: {e}", fm.display());
@@ -87,7 +87,7 @@ impl Doc {
         root.fills = vec![draw::solid(BG)];
         let root_id = root.id;
         scene
-            .apply(document_proto::Op::Insert {
+            .apply(frame::document::proto::Op::Insert {
                 node: root,
                 parent: page,
                 index: 0,
@@ -151,7 +151,7 @@ impl Doc {
             theme: &theme,
         };
         let node =
-            surface_kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
+            frame::surface::kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
         self.scene.node_mut(node).expect("placed").transform = Transform::translate(x, y);
         node
     }
@@ -171,7 +171,7 @@ impl Doc {
                 .bind(Binding::param(*addr))
                 .legend(*legend);
             let knob =
-                surface_kit::place_in_cell(&mut b, self.root, KNOB, &p).expect("knob places");
+                frame::surface::kit::place_in_cell(&mut b, self.root, KNOB, &p).expect("knob places");
             let holder = self
                 .scene
                 .node(knob)
@@ -185,7 +185,7 @@ impl Doc {
 
     /// Size the root to what it holds, plus a margin.
     fn finish(mut self, margin: f64) -> Surface {
-        let (_, _, _, h) = surface_kit::drawn_bounds(&self.scene, self.root);
+        let (_, _, _, h) = frame::surface::kit::drawn_bounds(&self.scene, self.root);
         if let Some(n) = self.scene.node_mut(self.root) {
             n.size = Size {
                 width: n.size.width,
@@ -201,8 +201,8 @@ impl Doc {
 
 fn catalog(
     id: &str,
-    params: Vec<surface_proto::ParamInfo>,
-    streams: Vec<surface_proto::FeedInfo>,
+    params: Vec<frame::surface::proto::ParamInfo>,
+    streams: Vec<frame::surface::proto::FeedInfo>,
 ) -> Catalog {
     Catalog {
         id: id.into(),
@@ -319,14 +319,14 @@ mod tests {
     fn examples_round_trip_through_markup_and_lint_clean() {
         for ex in examples() {
             let scene = ex.surface.to_scene();
-            let text = document_text::print(&scene);
-            let back = document_text::parse(&text, scene.assets.clone())
+            let text = frame::document::text::print(&scene);
+            let back = frame::document::text::parse(&text, scene.assets.clone())
                 .unwrap_or_else(|e| panic!("{}: {e}", ex.file));
             assert_eq!(back, scene, "{}: parse(print(s)) == s", ex.file);
-            let issues = design_lint::lint(&scene, &ex.catalog, &design_lint::Config::default());
+            let issues = frame::design::lint::lint(&scene, &ex.catalog, &frame::design::lint::Config::default());
             let errors: Vec<String> = issues
                 .iter()
-                .filter(|i| i.severity == design_lint::Severity::Error)
+                .filter(|i| i.severity == frame::design::lint::Severity::Error)
                 .map(ToString::to_string)
                 .collect();
             assert!(errors.is_empty(), "{}:\n{}", ex.file, errors.join("\n"));
@@ -340,12 +340,12 @@ mod tests {
     fn frame_cost() {
         for ex in examples() {
             let pristine = ex.surface.scene.clone();
-            let mut rt = surface_runtime::Runtime::new(ex.surface, ex.catalog.clone());
+            let mut rt = frame::surface::runtime::Runtime::new(ex.surface, ex.catalog.clone());
             let n = 300;
             let started = std::time::Instant::now();
             let mut changed = 0;
             for i in 0..n {
-                for f in feed_memory::frames(&ex.catalog.streams, f64::from(i) / 60.0) {
+                for f in frame::feed::memory::frames(&ex.catalog.streams, f64::from(i) / 60.0) {
                     rt.apply_frame(f, f64::from(i) * 16.7);
                 }
                 let frame = rt.frame(f64::from(i) * 16.7);
@@ -361,7 +361,7 @@ mod tests {
             let addr = ex.catalog.params[0].addr.clone();
             let started = std::time::Instant::now();
             for i in 0..n {
-                rt.apply_values([surface_proto::ParamValue {
+                rt.apply_values([frame::surface::proto::ParamValue {
                     addr: addr.clone(),
                     value: f64::from(i) / f64::from(n),
                 }]);
@@ -386,7 +386,7 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{}: {e} (run make_viz_examples)", ex.file));
             let json = std::fs::read_to_string(dir().join(ex.catalog_file)).unwrap();
             let catalog: Catalog = serde_json::from_str(&json).unwrap();
-            let scene = document_text::parse(&text, BTreeMap::new()).unwrap();
+            let scene = frame::document::text::parse(&text, BTreeMap::new()).unwrap();
             let surface = Surface::from_scene(scene);
             assert_eq!(
                 surface.controls.len(),

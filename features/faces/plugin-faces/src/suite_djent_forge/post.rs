@@ -19,13 +19,13 @@
 //!   screen (waveform, loop length, read point, mode, grain / mix / sync
 //!   sections of green-arc dials) above ENGAGE and TEMPO stomps.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::materials::{self, Material, light};
-use surface_kit::{Place, draw};
-use surface_proto::{
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::materials::{self, Material, light};
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{
     Axis, Binding, ButtonMode, Control, ControlKind, HandleAxis, Orientation, SlotRole, ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use super::type_::{fine, legend, mark, name};
 use super::{LED_BLUE, PLUGIN, pedal_knob};
@@ -203,10 +203,10 @@ fn screen(b: &mut Builder<'_>, parent: NodeId, name: &str, r: (f64, f64, f64, f6
         },
     );
     if let Some(n) = b.scene.node_mut(s) {
-        n.stroke = document_proto::Stroke {
+        n.stroke = frame::document::proto::Stroke {
             paints: vec![draw::solid("#8c8f96")],
             weight: 0.8,
-            ..document_proto::Stroke::default()
+            ..frame::document::proto::Stroke::default()
         };
     }
     s
@@ -740,9 +740,13 @@ fn modulator() -> Face {
         parts::param(
             &a("pedal"),
             "Pedal",
-            surface_proto::Range {
+            frame::surface::proto::Range {
                 steps: None,
-                ..surface_proto::Range::linear(0.0, 100.0, surface_proto::Unit::Percent)
+                ..frame::surface::proto::Range::linear(
+                    0.0,
+                    100.0,
+                    frame::surface::proto::Unit::Percent,
+                )
             },
             0.0,
         )
@@ -755,13 +759,13 @@ fn modulator() -> Face {
         parts::param(
             &a("rate_heel"),
             "Rate Heel",
-            surface_proto::Range::linear(0.05, 5.2, surface_proto::Unit::Hz),
+            frame::surface::proto::Range::linear(0.05, 5.2, frame::surface::proto::Unit::Hz),
             1.5,
         ),
         parts::param(
             &a("rate_toe"),
             "Rate Toe",
-            surface_proto::Range::linear(0.05, 5.2, surface_proto::Unit::Hz),
+            frame::surface::proto::Range::linear(0.05, 5.2, frame::surface::proto::Unit::Hz),
             5.0,
         ),
         rk::choice(&a("auto_div"), "Auto Speed", rk::DIVISIONS, 15),
@@ -1181,7 +1185,7 @@ fn shimmer_verb() -> Face {
         parts::param(
             &a("decay"),
             "Decay",
-            surface_proto::Range::log(0.2, 20.0, surface_proto::Unit::Seconds),
+            frame::surface::proto::Range::log(0.2, 20.0, frame::surface::proto::Unit::Seconds),
             2.0,
         )
         .featured(),
@@ -1414,7 +1418,7 @@ fn beam() -> Face {
         parts::param(
             &a("pedal"),
             "Pedal",
-            surface_proto::Range::linear(0.0, 100.0, surface_proto::Unit::Percent),
+            frame::surface::proto::Range::linear(0.0, 100.0, frame::surface::proto::Unit::Percent),
             0.0,
         )
         .featured(),
@@ -1826,7 +1830,7 @@ fn fracture() -> Face {
         parts::param(
             &a("bpm"),
             "Tempo",
-            surface_proto::Range::linear(40.0, 240.0, surface_proto::Unit::Bpm),
+            frame::surface::proto::Range::linear(40.0, 240.0, frame::surface::proto::Unit::Bpm),
             120.0,
         ),
         rk::toggle(&a("on"), "Engage", true).featured(),

@@ -6,23 +6,14 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-surface-kit = { path = "../../../crates/frame/surface/surface-kit" }
-surface-widgets = { path = "../../../crates/frame/surface/surface-widgets" }
-surface-proto = { path = "../../../crates/frame/surface/surface-proto", default-features = false }
-document-proto = { path = "../../../crates/frame/document/document-proto", default-features = false }
-document-text = { path = "../../../crates/frame/document/document-text" }
-render-fonts = { path = "../../../crates/frame/render/render-fonts" }
-document-io = { path = "../../../crates/frame/document/document-io" }
-motion-runtime = { path = "../../../crates/frame/motion/motion-runtime" }
+frame = { path = "../../../crates/frame", features = ["io", "render", "runtime"] }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 skrifa = "0.26"
 
 [dev-dependencies]
-design-lint = { path = "../../../crates/frame/design/design-lint" }
-surface-runtime = { path = "../../../crates/frame/surface/surface-runtime" }
+frame = { path = "../../../crates/frame", features = ["anyrender", "design", "render", "runtime"] }
 # `tests/frame_assets.rs`: a face loaded from disk renders like the one in memory.
-render = { path = "../../../crates/frame/render/render", features = ["anyrender"] }
 kurbo = { workspace = true }
 
 [lints]

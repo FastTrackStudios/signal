@@ -5,10 +5,10 @@
 //! (7-segment digits), `Doto` (dot matrix) — over the unlit segments'
 //! ghosts, so it reads as a lit display at any value.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::draw::{self, family};
-use surface_proto::{Binding, Control, ControlKind, SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::draw::{self, family};
+use frame::surface::proto::{Binding, Control, ControlKind, SlotRole, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::lettering::{Letter, cap_middle, text_in};
 use crate::delay::parts;

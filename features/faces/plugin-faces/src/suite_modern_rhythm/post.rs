@@ -9,9 +9,9 @@
 //! - **Reverb**: dusty rose; MIX and DECAY over low and high cut (printed as
 //!   slope glyphs), the shared title, band and stomp.
 
-use document_proto::{NodeId, TextAlign};
-use surface_proto::ValueFormat;
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::proto::ValueFormat;
+use frame::surface::widgets::Builder;
 
 use crate::delay::parts::{self, Screen};
 use crate::face::{Face, canvas};
@@ -73,12 +73,12 @@ fn delay_2() -> Face {
                 let dx = (f64::from(i) - f64::from(dots - 1) / 2.0) * 13.0;
                 b.add(
                     p,
-                    surface_kit::draw::circle(
+                    frame::surface::kit::draw::circle(
                         "dot",
                         x + dx,
                         51.0,
                         1.3,
-                        surface_kit::draw::solid(INK),
+                        frame::surface::kit::draw::solid(INK),
                     ),
                 );
             }
@@ -200,7 +200,7 @@ fn delay_2() -> Face {
         crate::delay::parts::param(
             &a("bpm"),
             "Tempo",
-            surface_proto::Range::linear(40.0, 300.0, surface_proto::Unit::Bpm),
+            frame::surface::proto::Range::linear(40.0, 300.0, frame::surface::proto::Unit::Bpm),
             120.0,
         ),
         rk::percent(&a("mod"), "Modulation", 20.0),
@@ -238,7 +238,7 @@ fn reverb() -> Face {
         crate::delay::parts::param(
             &a("decay"),
             "Decay",
-            surface_proto::Range::log(0.2, 20.0, surface_proto::Unit::Seconds),
+            frame::surface::proto::Range::log(0.2, 20.0, frame::surface::proto::Unit::Seconds),
             2.5,
         )
         .featured(),

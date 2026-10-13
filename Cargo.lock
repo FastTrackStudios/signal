@@ -4767,37 +4767,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "design-lint"
-version = "0.1.0"
-dependencies = [
- "document-proto",
- "facet",
- "motion-runtime",
- "render",
- "serde",
- "surface-memory",
- "surface-proto",
- "surface-widgets",
-]
-
-[[package]]
-name = "design-session"
-version = "0.1.0"
-dependencies = [
- "design-lint",
- "document-io",
- "document-proto",
- "document-text",
- "render-fonts",
- "serde_json",
- "surface-kit",
- "surface-memory",
- "surface-proto",
- "surface-widgets",
- "uuid",
-]
-
-[[package]]
 name = "diatomic-waker"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5782,81 +5751,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "document-bundle"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "chrono",
- "document-loro",
- "document-proto",
- "facet",
- "facet-styx",
- "figma-import",
- "thiserror 2.0.20",
- "uuid",
- "zip 2.4.2",
-]
-
-[[package]]
 name = "document-features"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
-]
-
-[[package]]
-name = "document-io"
-version = "0.1.0"
-dependencies = [
- "document-bundle",
- "document-proto",
- "document-text",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "document-loro"
-version = "0.1.0"
-dependencies = [
- "crdt",
- "document-proto",
- "figma-import",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "document-proto"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "facet",
- "facet-json",
- "motion-proto",
- "serde",
- "serde_json",
- "surface-proto",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "document-text"
-version = "0.1.0"
-dependencies = [
- "document-proto",
- "figma-import",
- "proptest",
- "serde",
- "serde_json",
- "surface-proto",
- "uuid",
 ]
 
 [[package]]
@@ -6932,29 +6832,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
-name = "feed-dsp"
-version = "0.1.0"
-dependencies = [
- "feed-proto",
-]
-
-[[package]]
-name = "feed-memory"
-version = "0.1.0"
-dependencies = [
- "feed-proto",
-]
-
-[[package]]
-name = "feed-proto"
-version = "0.1.0"
-dependencies = [
- "facet",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "fiat-crypto"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6981,41 +6858,6 @@ dependencies = [
  "serde_repr",
  "serde_with",
  "url",
-]
-
-[[package]]
-name = "figma-import"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "document-proto",
- "figma-api",
- "figma-model",
- "serde_json",
-]
-
-[[package]]
-name = "figma-model"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "figma-api",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
- "zip 2.4.2",
-]
-
-[[package]]
-name = "figma-rest"
-version = "0.1.0"
-dependencies = [
- "figma-api",
- "figma-model",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -7456,31 +7298,66 @@ dependencies = [
 ]
 
 [[package]]
+name = "frame"
+version = "0.1.0"
+dependencies = [
+ "anyrender 0.11.1",
+ "anyrender 0.13.0",
+ "anyrender_svg 0.12.0",
+ "anyrender_svg 0.14.0",
+ "anyrender_vello 0.14.0",
+ "architect",
+ "base64 0.22.1",
+ "blake3",
+ "chrono",
+ "crdt",
+ "facet",
+ "facet-json",
+ "facet-styx",
+ "figma-api",
+ "fixed",
+ "frame",
+ "image",
+ "kurbo 0.13.1",
+ "miniz_oxide 0.8.9",
+ "nice-plug-core",
+ "peniko 0.6.1",
+ "pollster",
+ "proptest",
+ "roxmltree 0.20.0",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "skrifa 0.26.6",
+ "svg",
+ "taffy 0.7.7",
+ "thiserror 2.0.20",
+ "tokio",
+ "uuid",
+ "vello 0.10.0",
+ "vello_cpu",
+ "vox",
+ "vox-core",
+ "vox-websocket",
+ "wgpu",
+ "winit 0.30.13",
+ "zip 2.4.2",
+]
+
+[[package]]
 name = "frame-cli"
 version = "0.1.0"
 dependencies = [
  "architect",
- "design-lint",
- "document-io",
- "document-proto",
- "document-text",
- "feed-memory",
- "figma-import",
- "figma-rest",
+ "frame",
  "image",
  "kurbo 0.13.1",
  "peniko 0.6.1",
  "pollster",
- "render",
  "roxmltree 0.20.0",
  "serde",
  "serde_json",
  "skrifa 0.26.6",
- "surface-kit",
- "surface-memory",
- "surface-proto",
- "surface-runtime",
- "surface-widgets",
  "tokio",
  "vello 0.10.0",
  "winit 0.30.13",
@@ -7491,49 +7368,15 @@ name = "frame-desktop"
 version = "0.1.0"
 dependencies = [
  "architect",
- "design-lint",
- "document-io",
- "document-proto",
- "document-text",
- "feed-memory",
+ "frame",
  "image",
  "kurbo 0.13.1",
- "library-fs",
- "library-link",
  "peniko 0.6.1",
  "pollster",
- "render",
  "serde_json",
- "surface-memory",
- "surface-proto",
- "surface-runtime",
- "surface-widgets",
  "tokio",
  "vello 0.10.0",
  "winit 0.30.13",
-]
-
-[[package]]
-name = "frame-embed"
-version = "0.1.0"
-dependencies = [
- "anyrender 0.11.1",
- "document-proto",
- "image",
- "kurbo 0.13.1",
- "nice-plug-core",
- "peniko 0.6.1",
- "render",
- "render-canvas",
- "render-fonts",
- "serde",
- "skrifa 0.26.6",
- "surface-kit",
- "surface-memory",
- "surface-proto",
- "surface-runtime",
- "surface-widgets",
- "vello_cpu",
 ]
 
 [[package]]
@@ -7541,35 +7384,12 @@ name = "frame-library-server"
 version = "0.1.0"
 dependencies = [
  "architect",
- "document-io",
- "document-proto",
+ "frame",
  "image",
  "kurbo 0.13.1",
- "library-fs",
- "library-link",
  "peniko 0.6.1",
- "render",
  "serde_json",
  "tokio",
-]
-
-[[package]]
-name = "frame-live"
-version = "0.1.0"
-dependencies = [
- "anyrender 0.11.1",
- "anyrender_svg 0.12.0",
- "document-io",
- "document-proto",
- "kurbo 0.13.1",
- "peniko 0.6.1",
- "pollster",
- "render",
- "serde_json",
- "surface-proto",
- "surface-runtime",
- "vello 0.10.0",
- "wgpu",
 ]
 
 [[package]]
@@ -7577,15 +7397,8 @@ name = "frame-mcp"
 version = "0.1.0"
 dependencies = [
  "architect",
- "design-session",
- "document-io",
- "document-proto",
- "library-fs",
- "library-link",
+ "frame",
  "serde_json",
- "surface-memory",
- "surface-proto",
- "surface-runtime",
  "tokio",
 ]
 
@@ -8592,7 +8405,7 @@ dependencies = [
  "facet",
  "facet-json",
  "facet-styx",
- "frame-live",
+ "frame",
  "fts-audio-ui",
  "fts-chrome",
  "futures",
@@ -10806,49 +10619,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
-name = "library-fs"
-version = "0.1.0"
-dependencies = [
- "architect",
- "document-io",
- "document-proto",
- "facet",
- "library-proto",
- "serde",
- "serde_json",
- "surface-proto",
- "tokio",
-]
-
-[[package]]
-name = "library-link"
-version = "0.1.0"
-dependencies = [
- "architect",
- "library-fs",
- "library-proto",
- "surface-proto",
- "tokio",
- "vox-core",
- "vox-websocket",
-]
-
-[[package]]
-name = "library-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "document-bundle",
- "document-proto",
- "document-text",
- "facet",
- "serde",
- "serde_json",
- "surface-proto",
- "vox",
-]
-
-[[package]]
 name = "libredox"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12040,23 +11810,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "motion-proto"
-version = "0.1.0"
-dependencies = [
- "facet",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "motion-runtime"
-version = "0.1.0"
-dependencies = [
- "document-proto",
- "motion-proto",
 ]
 
 [[package]]
@@ -14715,20 +14468,10 @@ dependencies = [
 name = "plugin-faces"
 version = "0.1.0"
 dependencies = [
- "design-lint",
- "document-io",
- "document-proto",
- "document-text",
+ "frame",
  "kurbo 0.13.1",
- "motion-runtime",
- "render",
- "render-fonts",
  "serde_json",
  "skrifa 0.26.6",
- "surface-kit",
- "surface-proto",
- "surface-runtime",
- "surface-widgets",
  "uuid",
 ]
 
@@ -16136,54 +15879,6 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
-
-[[package]]
-name = "render"
-version = "0.1.0"
-dependencies = [
- "anyrender 0.13.0",
- "anyrender_svg 0.14.0",
- "anyrender_vello 0.14.0",
- "base64 0.22.1",
- "document-proto",
- "figma-import",
- "fixed",
- "image",
- "kurbo 0.13.1",
- "peniko 0.6.1",
- "pollster",
- "render-fonts",
- "roxmltree 0.20.0",
- "rust_decimal",
- "serde",
- "serde_json",
- "skrifa 0.26.6",
- "svg",
- "taffy 0.7.7",
- "vello 0.10.0",
- "winit 0.30.13",
-]
-
-[[package]]
-name = "render-canvas"
-version = "0.1.0"
-dependencies = [
- "anyrender 0.11.1",
- "document-proto",
- "kurbo 0.13.1",
- "peniko 0.6.1",
- "render",
- "render-fonts",
- "skrifa 0.26.6",
-]
-
-[[package]]
-name = "render-fonts"
-version = "0.1.0"
-dependencies = [
- "kurbo 0.13.1",
- "skrifa 0.26.6",
-]
 
 [[package]]
 name = "renderdoc-sys"
@@ -17598,7 +17293,7 @@ dependencies = [
  "facet",
  "facet-json",
  "formats",
- "frame-live",
+ "frame",
  "fts-audio-ui",
  "fts-sample",
  "futures-channel",
@@ -17631,7 +17326,6 @@ dependencies = [
  "skrifa 0.42.1",
  "task-dial",
  "tempfile",
- "theme-runtime",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -19778,78 +19472,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "surface-kit"
-version = "0.1.0"
-dependencies = [
- "design-lint",
- "document-proto",
- "document-text",
- "library-proto",
- "miniz_oxide 0.8.9",
- "render",
- "serde_json",
- "surface-memory",
- "surface-proto",
- "surface-runtime",
- "surface-widgets",
-]
-
-[[package]]
-name = "surface-memory"
-version = "0.1.0"
-dependencies = [
- "architect",
- "feed-memory",
- "surface-proto",
- "tokio",
-]
-
-[[package]]
-name = "surface-proto"
-version = "0.1.0"
-dependencies = [
- "architect",
- "facet",
- "feed-proto",
- "serde",
- "serde_json",
- "uuid",
- "vox",
-]
-
-[[package]]
-name = "surface-runtime"
-version = "0.1.0"
-dependencies = [
- "architect",
- "document-proto",
- "kurbo 0.13.1",
- "motion-runtime",
- "peniko 0.6.1",
- "render",
- "surface-memory",
- "surface-proto",
- "tokio",
- "uuid",
- "vello 0.10.0",
- "vox-core",
- "vox-websocket",
-]
-
-[[package]]
-name = "surface-widgets"
-version = "0.1.0"
-dependencies = [
- "document-bundle",
- "document-loro",
- "document-proto",
- "document-text",
- "surface-memory",
- "surface-proto",
- "surface-runtime",
-]
-
-[[package]]
 name = "svg"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20489,26 +20111,6 @@ name = "text-size"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f18aa187839b2bdb1ad2fa35ead8c4c2976b64e4363c386d45ac0f7ee85c9233"
-
-[[package]]
-name = "theme-expr"
-version = "0.1.0"
-dependencies = [
- "kurbo 0.13.1",
-]
-
-[[package]]
-name = "theme-runtime"
-version = "0.1.0"
-dependencies = [
- "document-proto",
- "document-text",
- "kurbo 0.13.1",
- "peniko 0.6.1",
- "render",
- "render-canvas",
- "theme-expr",
-]
 
 [[package]]
 name = "themer"

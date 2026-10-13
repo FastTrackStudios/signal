@@ -11,10 +11,10 @@
 //! On the steel beside each meter: LIMIT/COMPRESS and BYPASS toggles, the
 //! balance test jacks and the ADJUST and METER trims.
 
-use document_proto::NodeId;
-use surface_kit::{Place, draw};
-use surface_proto::{Range, StreamInfo, StreamKind, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{Range, StreamInfo, StreamKind, Unit};
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Ink};
 use crate::face::{Face, canvas};
@@ -100,7 +100,7 @@ pub fn face() -> Face {
     params.push(ui::toggle("varimu/power", "Power", true));
     let mut streams = ui::streams("varimu", "Vari-Mu");
     streams.push(StreamInfo {
-        id: surface_proto::EntryId::new("varimu/gr_r"),
+        id: frame::surface::proto::EntryId::new("varimu/gr_r"),
         name: "Vari-Mu Gain Reduction (Right)".into(),
         kind: StreamKind::GainReduction,
         rate_hz: 30.0,
@@ -220,7 +220,7 @@ fn build(b: &mut Builder<'_>, root: NodeId) {
                 .legend(" ")
                 .sweep(SWEEP)
                 .scale(&[])
-                .touch(surface_kit::TOUCH_MIN)
+                .touch(frame::surface::kit::TOUCH_MIN)
                 .bind(ui::bind(addr)),
             c.0,
             c.1,
@@ -248,7 +248,7 @@ fn build(b: &mut Builder<'_>, root: NodeId) {
                 .legend(" ")
                 .options(&["1", "2", "3", "4", "5"])
                 .sweep(126.0)
-                .touch(surface_kit::TOUCH_MIN)
+                .touch(frame::surface::kit::TOUCH_MIN)
                 .bind(ui::bind(addr)),
             c.0,
             c.1,

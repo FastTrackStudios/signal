@@ -9,15 +9,15 @@
 //!   INPUT and OUTPUT dials in a framed box, bypass and lamp. Tabletop
 //!   rack, 1200 × 200.
 
-use document_proto::{CornerRadii, NodeId};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{Binding, Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{CornerRadii, NodeId};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Binding, Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::parts::{Cap, PLUGIN, knob_scaled, marker, print, print_left, toggle};
 use crate::face::{Face, canvas};
 use crate::reverb::ui;
-use surface_kit::materials::{light, paint};
+use frame::surface::kit::materials::{light, paint};
 
 const W: f64 = 1200.0;
 const INK: &str = "#e2dcd6";
@@ -51,13 +51,13 @@ fn plate(b: &mut Builder<'_>, root: NodeId, h: f64) -> NodeId {
     }
     let mut p = draw::frame("Plate", 0.0, 0.0, W, h);
     p.corner_radii = CornerRadii::uniform(22.0);
-    p.stroke = document_proto::Stroke {
+    p.stroke = frame::document::proto::Stroke {
         paints: vec![draw::linear(
             90.0,
             &[(0.0, "#b8704e"), (0.5, "#4a3434"), (1.0, "#b8704e")],
         )],
         weight: 2.5,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     p.effects = vec![draw::drop_shadow("#000000c0", 0.0, 6.0, 14.0)];
     let p = b.add(root, p);
@@ -349,7 +349,7 @@ pub fn comp() -> Face {
             .scale(LADDER)
             .options(&["gr", LADDER_COLORS])
             .reversed()
-            .ink(surface_kit::Ink::Color(INK.into()))
+            .ink(frame::surface::kit::Ink::Color(INK.into()))
             .keep_case()
             .bind(Binding::stream("comp/gr"));
         let lad = ui::put(b, p, "meter.led_ladder", &ladder, 235.0, 118.0);
@@ -455,10 +455,10 @@ pub fn comp() -> Face {
         .featured(),
         ui::toggle("comp/on", "Compressor", true).featured(),
     ];
-    let streams = vec![surface_proto::StreamInfo {
-        id: surface_proto::EntryId::new("comp/gr"),
+    let streams = vec![frame::surface::proto::StreamInfo {
+        id: frame::surface::proto::EntryId::new("comp/gr"),
         name: "Gain Reduction".into(),
-        kind: surface_proto::StreamKind::GainReduction,
+        kind: frame::surface::proto::StreamKind::GainReduction,
         rate_hz: 30.0,
     }];
     Face {

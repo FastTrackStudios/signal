@@ -5,8 +5,8 @@
 
 use std::collections::BTreeSet;
 
-use design_lint::{Config, Severity, lint};
-use surface_proto::Source;
+use frame::design::lint::{Config, Severity, lint};
+use frame::surface::proto::Source;
 
 fn is_480(file: &str) -> bool {
     file.starts_with("96-verb-480")

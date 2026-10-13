@@ -2,9 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use document_proto::motion::{Motion, Num, Target};
-use document_proto::{Node, NodeKind, Size, Transform};
-use motion_runtime::{ShapeCtx, ShapeRegistry};
+use frame::document::proto::motion::{Motion, Num, Target};
+use frame::document::proto::{Node, NodeKind, Size, Transform};
+use frame::motion::runtime::{ShapeCtx, ShapeRegistry};
 
 /// A vector spanning a `w × h` parent whose outline is shape provider
 /// `provider`'s `part`, redrawn as its inputs change: `fixed` numbers,

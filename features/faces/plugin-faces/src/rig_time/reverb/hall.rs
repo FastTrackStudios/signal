@@ -8,10 +8,10 @@
 //! Beside the drawing, the house: velvet and gilt, the name in a theatre's
 //! serif, and the controls.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -155,10 +155,10 @@ fn hall(b: &mut Builder<'_>, plan: NodeId, w: f64, h: f64, line: &str) {
         hh - 8.0,
         draw::solid(&ui::alpha(line, 0.1)),
     );
-    stage.stroke = document_proto::Stroke {
+    stage.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid(&ui::alpha(line, 0.7))],
         weight: 1.0,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     b.add(g, stage);
     let apron: Vec<(f64, f64)> = (0..=24)
@@ -380,10 +380,10 @@ fn hall(b: &mut Builder<'_>, plan: NodeId, w: f64, h: f64, line: &str) {
     }
     let (tx, ty) = (w - 212.0, h - 28.0);
     let mut tb = draw::rect("title block", tx, ty, 194.0, 20.0, draw::solid("#00000000"));
-    tb.stroke = document_proto::Stroke {
+    tb.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid(&ui::alpha(line, 0.6))],
         weight: 0.8,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     tb.fills.clear();
     b.add(plan, tb);
@@ -414,11 +414,11 @@ fn hall(b: &mut Builder<'_>, plan: NodeId, w: f64, h: f64, line: &str) {
 fn house(b: &mut Builder<'_>, root: NodeId, (w, h): (f64, f64), pile_x: f64, l: &Look) -> NodeId {
     let mut panel = draw::frame("House", 0.0, 0.0, w, h);
     panel.fills = vec![draw::linear(180.0, &l.house)];
-    panel.corner_radii = document_proto::CornerRadii::uniform(6.0);
-    panel.stroke = document_proto::Stroke {
+    panel.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
+    panel.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid(GILT_DIM)],
         weight: 2.0,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     let panel = b.add(root, panel);
     let n = ((w - pile_x) / 4.4).max(0.0).floor();
@@ -443,7 +443,7 @@ fn drawing(
     let mut sheet = draw::frame("Blueprint", px, py, pw, ph);
     sheet.fills = vec![draw::linear(160.0, &[(0.0, l.paper.0), (1.0, l.paper.1)])];
     sheet.clips_content = true;
-    sheet.corner_radii = document_proto::CornerRadii::uniform(3.0);
+    sheet.corner_radii = frame::document::proto::CornerRadii::uniform(3.0);
     sheet.effects = vec![draw::inner_shadow(l.sheet_shadow, 0.0, 2.0, 8.0)];
     let sheet = b.add(panel, sheet);
     hall(b, sheet, pw, ph, l.line);
@@ -458,13 +458,13 @@ fn drawing(
         draw::solid("#00000000"),
     );
     rim.fills.clear();
-    rim.stroke = document_proto::Stroke {
+    rim.stroke = frame::document::proto::Stroke {
         paints: vec![draw::linear(
             90.0,
             &[(0.0, GILT_DIM), (0.5, GILT), (1.0, GILT_DIM)],
         )],
         weight: 2.0,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     b.add(panel, rim);
     sheet

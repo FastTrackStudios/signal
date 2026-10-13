@@ -9,10 +9,10 @@
 //!
 //! Two finishes: light, pale oak with ivory knobs; dark, walnut.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use super::shell::{self, Look, Room, Unit};
 use crate::face::Face;

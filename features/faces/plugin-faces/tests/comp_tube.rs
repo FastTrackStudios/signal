@@ -2,10 +2,10 @@
 //! catalog, binds only what exists, and meters gain reduction so that no
 //! reduction rests on its card's 0, and none prints a maker or model.
 
-use document_proto::Scene;
+use frame::document::proto::Scene;
+use frame::surface::kit::meters::scale::Card;
+use frame::surface::proto::{Catalog, ControlKind, Source, StreamKind};
 use plugin_faces::{Face, catalogs, comp_tube};
-use surface_kit::meters::scale::Card;
-use surface_proto::{Catalog, ControlKind, Source, StreamKind};
 
 fn comp_catalog() -> Catalog {
     catalogs(&plugin_faces::all())
@@ -13,7 +13,12 @@ fn comp_catalog() -> Catalog {
         .expect("comp catalog")
 }
 
-fn controls(scene: &Scene) -> Vec<(&document_proto::Node, &surface_proto::Control)> {
+fn controls(
+    scene: &Scene,
+) -> Vec<(
+    &frame::document::proto::Node,
+    &frame::surface::proto::Control,
+)> {
     scene
         .walk(scene.root)
         .into_iter()
@@ -23,10 +28,10 @@ fn controls(scene: &Scene) -> Vec<(&document_proto::Node, &surface_proto::Contro
 }
 
 fn lint_errors(face: &Face, scene: &Scene, catalog: &Catalog) {
-    let issues = design_lint::lint(scene, catalog, &design_lint::Config::default());
+    let issues = frame::design::lint::lint(scene, catalog, &frame::design::lint::Config::default());
     let errors: Vec<String> = issues
         .iter()
-        .filter(|i| i.severity == design_lint::Severity::Error)
+        .filter(|i| i.severity == frame::design::lint::Severity::Error)
         .map(ToString::to_string)
         .collect();
     assert!(
@@ -59,8 +64,8 @@ fn every_face_lints_without_errors() {
     for face in comp_tube::faces() {
         lint_errors(&face, &face.scene, &catalog);
         // …and so does the markup it is written out as.
-        let text = document_text::print(&face.scene);
-        let parsed = document_text::parse(&text, Default::default())
+        let text = frame::document::text::print(&face.scene);
+        let parsed = frame::document::text::parse(&text, Default::default())
             .unwrap_or_else(|e| panic!("{}: {e}", face.file));
         lint_errors(&face, &parsed, &catalog);
     }

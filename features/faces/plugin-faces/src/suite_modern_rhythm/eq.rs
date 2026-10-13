@@ -11,12 +11,12 @@
 //! (white caps, the original set 65 Hz … 16 kHz). Each finish is a layer
 //! shown while the param picks it; four swatch keys under the case pick one.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, draw};
-use surface_proto::{
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{
     ButtonMode, Condition, Control, ControlKind, Orientation, SlotRole, ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use crate::delay::parts;
 use crate::face::{Face, canvas};
@@ -241,7 +241,7 @@ fn fader(
     );
     let id = rk::letter(b, mod_set, BANDS_MOD[i], (w / 2.0, freq_y - y0), l);
     if let Some(c) = b.controls.get_mut(&root) {
-        c.slots.push(surface_proto::Slot {
+        c.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Label,
             node: id.0,
         });
@@ -302,7 +302,7 @@ fn filter(
         .size(62.0)
         .variant("spun_metal")
         .bind(rk::bind(addr))
-        .touch(surface_kit::TOUCH_MIN)
+        .touch(frame::surface::kit::TOUCH_MIN)
         .options(&look);
     let k = parts::put(b, p, super::knob_id("knob.3d"), &place, cx, cy);
     parts::strip_legend(b, k);
@@ -334,7 +334,7 @@ fn filter(
         t
     });
     if let Some(c) = b.controls.get_mut(&k) {
-        c.slots.push(surface_proto::Slot {
+        c.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Value,
             node: v.0,
         });
@@ -561,7 +561,7 @@ fn nine_band() -> Face {
     });
     // The manual's demonstration setting: −12, 0, +12 across the bands.
     let demo = [-12.0, 0.0, 12.0];
-    let mut params: Vec<surface_proto::ParamInfo> = (1..=9)
+    let mut params: Vec<frame::surface::proto::ParamInfo> = (1..=9)
         .map(|i| {
             rk::db(
                 &a(&format!("b{i}")),

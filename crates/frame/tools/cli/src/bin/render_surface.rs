@@ -48,9 +48,9 @@ fn main() {
 
 #[cfg(feature = "anyrender")]
 fn run() -> Result<(), String> {
-    use surface_proto::{EntryId, ParamAddr, ParamValue, StreamFrame, TextValue};
-    use surface_runtime::Runtime;
-    use surface_widgets::{Options, Theme, surface_for_catalog};
+    use frame::surface::proto::{EntryId, ParamAddr, ParamValue, StreamFrame, TextValue};
+    use frame::surface::runtime::Runtime;
+    use frame::surface::widgets::{Options, Theme, surface_for_catalog};
 
     let mut out = None;
     let mut theme = Theme::stage_dark();
@@ -63,7 +63,7 @@ fn run() -> Result<(), String> {
     let mut scale = 1.0_f64;
     let mut markup: Option<String> = None;
     let mut catalog_path: Option<String> = None;
-    let mut fx = render::fx::Mode::Gpu;
+    let mut fx = frame::render::fx::Mode::Gpu;
     let mut time_s = 0.0_f64;
     let mut frames = 0_usize;
     let mut fps = 30.0_f64;
@@ -207,13 +207,13 @@ fn run() -> Result<(), String> {
             let text = std::fs::read_to_string(path).map_err(|e| format!("reading {path}: {e}"))?;
             serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))?
         }
-        None => surface_memory::demo_catalog(),
+        None => frame::surface::memory::demo_catalog(),
     };
     let surface = match &markup {
         Some(path) => {
             // `.frame` (or legacy `.fm`) with its `.frame.assets/` textures and fonts, or a `.frame` bundle.
-            let scene = document_io::load_surface(path).map_err(|e| e.to_string())?;
-            surface_runtime::Surface::from_scene(scene)
+            let scene = frame::document::io::load_surface(path).map_err(|e| e.to_string())?;
+            frame::surface::runtime::Surface::from_scene(scene)
         }
         None => surface_for_catalog(
             &catalog,
@@ -253,7 +253,7 @@ fn run() -> Result<(), String> {
     } else {
         (0..frames).map(|k| time_s + k as f64 / fps).collect()
     };
-    let mut offscreen = render::offscreen::Offscreen::new()?;
+    let mut offscreen = frame::render::offscreen::Offscreen::new()?;
     let mut shots = Vec::with_capacity(times.len());
     let mut next = 0;
     let (mut w, mut h) = (0, 0);
@@ -296,7 +296,7 @@ fn run() -> Result<(), String> {
             .node(root)
             .and_then(|n| {
                 n.fills.iter().find_map(|p| match &p.kind {
-                    document_proto::PaintKind::Solid { color } => Some(*color),
+                    frame::document::proto::PaintKind::Solid { color } => Some(*color),
                     _ => None,
                 })
             })
@@ -309,15 +309,15 @@ fn run() -> Result<(), String> {
         );
         let values = control_positions(&rt);
         let inputs = rt.shader_inputs();
-        let px = offscreen.render_with_effects(&render::fx::Frame {
+        let px = offscreen.render_with_effects(&frame::render::fx::Frame {
             transform: kurbo::Affine::scale(scale),
             base,
-            fonts: Some(render::FontBook::bundled()),
+            fonts: Some(frame::render::FontBook::bundled()),
             mode: fx,
             time_s: t,
             values: Some(&values),
             inputs: Some(&inputs),
-            ..render::fx::Frame::new(&frame, page, w, h)
+            ..frame::render::fx::Frame::new(&frame, page, w, h)
         })?;
         shots.push(
             image::RgbaImage::from_raw(px.width, px.height, px.rgba).ok_or("bad pixel buffer")?,
@@ -350,8 +350,8 @@ fn run() -> Result<(), String> {
 /// A timed change for an animation: a param set, or a feed's new value.
 #[cfg(feature = "anyrender")]
 enum Change {
-    Set(surface_proto::ParamValue),
-    Stream(surface_proto::StreamFrame),
+    Set(frame::surface::proto::ParamValue),
+    Stream(frame::surface::proto::StreamFrame),
 }
 
 /// The frames as a contact sheet (`columns` wide, left to right, top to
@@ -413,17 +413,17 @@ fn save_animation(
 /// level stream of the catalog that no explicit `--stream` names.
 #[cfg(feature = "anyrender")]
 fn level_frames(
-    catalog: &surface_proto::Catalog,
+    catalog: &frame::surface::proto::Catalog,
     level: Option<f64>,
-    explicit: &[surface_proto::StreamFrame],
-) -> Vec<surface_proto::StreamFrame> {
+    explicit: &[frame::surface::proto::StreamFrame],
+) -> Vec<frame::surface::proto::StreamFrame> {
     let Some(db) = level else { return Vec::new() };
     catalog
         .streams
         .iter()
         .filter(|s| !explicit.iter().any(|f| f.id == s.id))
         .filter_map(|s| match s.kind {
-            surface_proto::StreamKind::Level { channels } => Some(surface_proto::StreamFrame {
+            frame::surface::proto::StreamKind::Level { channels } => Some(frame::surface::proto::StreamFrame {
                 id: s.id.clone(),
                 values: (0..channels.max(1))
                     .map(|c| if c == 0 { db } else { db - 4.0 })
@@ -438,18 +438,18 @@ fn level_frames(
 /// the demo generators at `t` seconds.
 #[cfg(feature = "anyrender")]
 fn demo_frames(
-    catalog: &surface_proto::Catalog,
+    catalog: &frame::surface::proto::Catalog,
     t: f64,
-    skip: &[&surface_proto::EntryId],
-) -> Vec<surface_proto::StreamFrame> {
-    feed_memory::frames(catalog.streams.iter().filter(|s| !skip.contains(&&s.id)), t)
+    skip: &[&frame::surface::proto::EntryId],
+) -> Vec<frame::surface::proto::StreamFrame> {
+    frame::feed::memory::frames(catalog.streams.iter().filter(|s| !skip.contains(&&s.id)), t)
 }
 
 /// Every control's position, for effect shaders' `value`.
 #[cfg(feature = "anyrender")]
 fn control_positions(
-    rt: &surface_runtime::Runtime,
-) -> std::collections::HashMap<document_proto::NodeId, f64> {
+    rt: &frame::surface::runtime::Runtime,
+) -> std::collections::HashMap<frame::document::proto::NodeId, f64> {
     rt.surface()
         .controls
         .iter()
@@ -459,7 +459,7 @@ fn control_positions(
 
 #[cfg(all(test, feature = "anyrender"))]
 mod tests {
-    use surface_proto::{Catalog, EntryId, StreamFrame, StreamInfo, StreamKind};
+    use frame::surface::proto::{Catalog, EntryId, StreamFrame, StreamInfo, StreamKind};
 
     fn stream(id: &str, kind: StreamKind) -> StreamInfo {
         StreamInfo {
@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn demo_feeds_fill_every_feed_not_named() {
         let catalog = Catalog {
-            streams: feed_memory::demo_feeds(),
+            streams: frame::feed::memory::demo_feeds(),
             ..Catalog::default()
         };
         let skip = EntryId::new("demo/gr");

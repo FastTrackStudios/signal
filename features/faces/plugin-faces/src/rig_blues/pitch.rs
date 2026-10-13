@@ -11,12 +11,12 @@
 //! `b_semitones`/`b_level`); C and D are drawn and bound for the engine
 //! to take up (`c_*`, `d_*`).
 
-use document_proto::motion::{Dynamics, Motion, Target};
-use document_proto::{CornerRadii, NodeId, ResizeX, TextAlign};
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::motion;
-use surface_proto::{Range, Unit, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::document::proto::{CornerRadii, NodeId, ResizeX, TextAlign};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::motion;
+use frame::surface::proto::{Range, Unit, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::drives::H;

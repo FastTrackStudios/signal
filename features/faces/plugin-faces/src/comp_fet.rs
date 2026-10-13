@@ -31,13 +31,13 @@
 //! the silkscreen, and draws the plate's hardware (rack slots, screws,
 //! holes).
 
-use document_proto::{Node, NodeId, NodeKind, TextAlign, TextCase, Transform};
-use surface_kit::{Ink, Place, TOUCH_MIN, draw, place};
-use surface_proto::{
+use frame::document::proto::{Node, NodeId, NodeKind, TextAlign, TextCase, Transform};
+use frame::surface::kit::{Ink, Place, TOUCH_MIN, draw, place};
+use frame::surface::proto::{
     Binding, EntryId, MeterTap, ParamInfo, Range, SlotRole, SourceSelect, StreamInfo, StreamKind,
     Unit,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use crate::face::{Face, canvas};
 
@@ -264,7 +264,7 @@ fn at((fx, fy): (f64, f64)) -> (f64, f64) {
 
 fn unit(b: &mut Builder<'_>, root: NodeId, f: &Layout) {
     if let Some(n) = b.scene.node_mut(root) {
-        n.size = document_proto::Size {
+        n.size = frame::document::proto::Size {
             width: W,
             height: H,
         };

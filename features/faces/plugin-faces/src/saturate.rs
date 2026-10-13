@@ -24,10 +24,10 @@ mod transformer;
 mod transistor;
 mod tube;
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, draw};
-use surface_proto::{Condition, Control, ControlKind, ParamInfo, Range, SlotRole, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{Condition, Control, ControlKind, ParamInfo, Range, SlotRole, Unit};
+use frame::surface::widgets::Builder;
 
 use crate::delay::parts;
 use crate::face::Face;
@@ -58,10 +58,10 @@ pub(crate) const OUT_MARKS: &[(f64, &str)] = &[
 ];
 
 /// Output: −24 … +12 dB in whole dB, bipolar about unity.
-pub(crate) fn output(addr: &str) -> surface_proto::ParamInfo {
-    let r = surface_proto::Range {
+pub(crate) fn output(addr: &str) -> frame::surface::proto::ParamInfo {
+    let r = frame::surface::proto::Range {
         steps: Some(37),
-        ..surface_proto::Range::linear(-24.0, 12.0, surface_proto::Unit::Db)
+        ..frame::surface::proto::Range::linear(-24.0, 12.0, frame::surface::proto::Unit::Db)
     };
     crate::delay::parts::param(addr, "Output", r, 0.0)
         .bipolar()

@@ -10,12 +10,12 @@
 //! (the case, its knobs, its print) shown while the param picks it; the
 //! faders, the lever and the pilot are the same on all three.
 
-use document_proto::{CornerRadii, NodeId, TextAlign};
-use surface_kit::{Place, draw};
-use surface_proto::{
+use frame::document::proto::{CornerRadii, NodeId, TextAlign};
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{
     ButtonMode, Condition, Control, ControlKind, ParamInfo, Range, SlotRole, Unit, ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::parts::{self, Cap, knob};
@@ -441,8 +441,8 @@ pub fn face() -> Face {
             let p = Place::new(format!("{label} gain"))
                 .size(145.0)
                 .bind(ui::bind(&format!("eq/g{id}")));
-            let f =
-                surface_kit::place(b, body, "lever.glow_cap", &p).unwrap_or_else(|e| panic!("{e}"));
+            let f = frame::surface::kit::place(b, body, "lever.glow_cap", &p)
+                .unwrap_or_else(|e| panic!("{e}"));
             let fw = b.scene.node(f).map_or(0.0, |n| n.size.width);
             ui::move_to(b, f, x - fw / 2.0, 44.0);
         }

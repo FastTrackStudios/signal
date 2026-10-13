@@ -24,10 +24,10 @@
 //! power toggle's place takes the Sync / Free toggle. The peak lamp glows
 //! with the record level. No maker or model is printed.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Ink as KitInk, Place, TOUCH_MIN, draw};
-use surface_proto::{Control, ControlKind, SlotRole};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Ink as KitInk, Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Control, ControlKind, SlotRole};
+use frame::surface::widgets::Builder;
 
 use super::art;
 use super::parts::{self, Ink, bind};
@@ -167,15 +167,16 @@ fn heads(b: &mut Builder<'_>, panel: NodeId) {
     if let Some(n) = b.scene.node_mut(edge) {
         n.stroke.dash_pattern = vec![7.0, 3.0];
         n.motion = vec![
-            surface_kit::motion::spin("(1.2 + 6*(1 - norm(tape_echo/time)))")
-                .on(surface_kit::motion::Target::DashOffset)
+            frame::surface::kit::motion::spin("(1.2 + 6*(1 - norm(tape_echo/time)))")
+                .on(frame::surface::kit::motion::Target::DashOffset)
                 .range(0.0, -10.0),
-            surface_kit::motion::Motion::new(surface_kit::motion::Target::Y).dynamics(
-                surface_kit::motion::Dynamics::Noise {
-                    rate: surface_kit::motion::Num::Value(2.5),
-                    amount: surface_kit::motion::Num::Expr("0.8*norm(tape_echo/wow)".into()),
-                },
-            ),
+            frame::surface::kit::motion::Motion::new(frame::surface::kit::motion::Target::Y)
+                .dynamics(frame::surface::kit::motion::Dynamics::Noise {
+                    rate: frame::surface::kit::motion::Num::Value(2.5),
+                    amount: frame::surface::kit::motion::Num::Expr(
+                        "0.8*norm(tape_echo/wow)".into(),
+                    ),
+                }),
         ];
     }
     let head_x = [x0 + 30.0, x0 + 60.0, x0 + 88.0, x0 + 116.0];

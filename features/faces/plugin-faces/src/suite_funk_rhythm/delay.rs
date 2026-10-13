@@ -7,10 +7,10 @@
 //! them), an infinity sign, and two stomps: ENGAGE and a momentary TAP
 //! TEMPO, each with its LED.
 
-use document_proto::{NodeId, NodeKind, TextAlign};
-use surface_kit::draw;
-use surface_proto::{Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, NodeKind, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::proto::{Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, BIGBOX_W, PEDAL_H, Type};
 use super::pedals::{self, K};
@@ -138,7 +138,7 @@ pub(super) fn face() -> Face {
         }
         // The tempo to a tenth, as the unit's display prints it.
         if let Some(c) = b.controls.get_mut(&tempo) {
-            c.format = Some(surface_proto::ValueFormat::decimals(1));
+            c.format = Some(frame::surface::proto::ValueFormat::decimals(1));
         }
         for n in [l, tempo, r] {
             dot_matrix(b, n, 700.0);

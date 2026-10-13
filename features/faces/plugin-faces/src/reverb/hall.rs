@@ -10,9 +10,9 @@
 //! Right, the parameters on long-throw faders, the way such a unit's remote
 //! put them: DECAY and SIZE with white caps, MIX red, the rest black.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, draw};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, draw};
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, bind};
 use crate::face::{Face, canvas};
@@ -50,7 +50,7 @@ fn decay_graphic(b: &mut Builder<'_>, face: NodeId, x0: f64, x1: f64, top: f64, 
         })
         .collect();
     let mut grid = ui::strokes("grid", &grid, 0.8, draw::solid(&ui::alpha(VFD, 0.16)));
-    grid.stroke.cap = document_proto::StrokeCap::None;
+    grid.stroke.cap = frame::document::proto::StrokeCap::None;
     grid.stroke.dash_pattern = vec![2.0, 4.0];
     b.add(face, grid);
     ui::line(

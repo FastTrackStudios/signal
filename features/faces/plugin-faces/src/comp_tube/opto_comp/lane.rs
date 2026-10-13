@@ -7,10 +7,10 @@
 //!   jewel and the power knob across the top; the five knobs and the
 //!   attack/release SELECT across the bottom.
 
-use document_proto::NodeId;
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{MeterTap, Range, SourceSelect, StreamInfo, StreamKind, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{MeterTap, Range, SourceSelect, StreamInfo, StreamKind, Unit};
+use frame::surface::widgets::Builder;
 
 use super::super::ui::{self, Ink};
 use super::{CHROME, GAIN, INK, SELECT, SWEEP, THRESHOLD};
@@ -78,7 +78,7 @@ pub fn faces() -> Vec<Face> {
                     ui::toggle("optocomp/power", "Power", true),
                 ]);
                 streams.push(StreamInfo {
-                    id: surface_proto::EntryId::new("optocomp/in"),
+                    id: frame::surface::proto::EntryId::new("optocomp/in"),
                     name: "Opto Compressor Input".into(),
                     kind: StreamKind::Level { channels: 2 },
                     rate_hz: 30.0,
@@ -128,7 +128,7 @@ fn build(b: &mut Builder<'_>, root: NodeId, shape: Shape) {
         &[(0.0, "#0f6aa6"), (0.5, "#0a5d95"), (1.0, "#084f80")],
     );
     if let Some(n) = b.scene.node_mut(panel) {
-        n.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        n.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
     }
     for (x, y) in [
         (12.0, 12.0),

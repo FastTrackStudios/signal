@@ -2,9 +2,9 @@
 
 use std::sync::{Arc, Mutex};
 
-use document_proto::{PaintKind, Scene};
-use library_fs::Previewer;
-use render::offscreen::Offscreen;
+use frame::document::proto::{PaintKind, Scene};
+use frame::library::fs::Previewer;
+use frame::render::offscreen::Offscreen;
 
 /// Thumbnail width, px.
 const WIDTH: f64 = 480.0;
@@ -39,7 +39,7 @@ pub fn previewer() -> Option<Previewer> {
 /// The first page's first top-level node, scaled to [`WIDTH`], as PNG.
 fn thumbnail(gpu: &mut Offscreen, scene: &Scene) -> Result<Vec<u8>, String> {
     let page = *scene.pages().first().ok_or("no page")?;
-    let boxes = render::build_scene_layout_boxes(scene, page);
+    let boxes = frame::render::build_scene_layout_boxes(scene, page);
     let top = scene
         .node(page)
         .and_then(|p| p.children.first().copied())
@@ -64,11 +64,11 @@ fn thumbnail(gpu: &mut Offscreen, scene: &Scene) -> Result<Vec<u8>, String> {
             _ => None,
         })
         .unwrap_or(DARK);
-    let px = gpu.render_with_effects(&render::fx::Frame {
+    let px = gpu.render_with_effects(&frame::render::fx::Frame {
         transform: kurbo::Affine::scale(scale) * kurbo::Affine::translate((-b.x, -b.y)),
         base,
-        fonts: Some(render::FontBook::bundled()),
-        ..render::fx::Frame::new(scene, page, w, h)
+        fonts: Some(frame::render::FontBook::bundled()),
+        ..frame::render::fx::Frame::new(scene, page, w, h)
     })?;
     let img = image::RgbaImage::from_raw(px.width, px.height, px.rgba).ok_or("bad pixel buffer")?;
     let mut out = std::io::Cursor::new(Vec::new());

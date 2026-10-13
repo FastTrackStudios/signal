@@ -1,11 +1,11 @@
 #[cfg(feature = "anyrender")]
-use document_proto::{NodeId, Scene as Document};
+use frame::document::proto::{NodeId, Scene as Document};
 #[cfg(feature = "anyrender")]
 use kurbo::{Affine, Point, Rect};
 #[cfg(feature = "anyrender")]
 use peniko::{Blob, Brush, BrushRef, Color, Fill, FontData, color::palette};
 #[cfg(feature = "anyrender")]
-use render::build_scene_layout_boxes;
+use frame::render::build_scene_layout_boxes;
 #[cfg(feature = "anyrender")]
 use skrifa::{
     MetadataProvider,
@@ -606,7 +606,7 @@ impl ApplicationHandler for App {
 
                 self.scene.reset();
                 let scene_transform = self.transform * self.base_transform;
-                render::paint_scene_into(
+                frame::render::paint_scene_into(
                     &mut self.scene,
                     self.doc.as_ref(),
                     self.root,
@@ -729,10 +729,10 @@ fn run() -> Result<(), String> {
     }
 
     let bytes = std::fs::read(&input).map_err(|e| format!("failed reading {input}: {e}"))?;
-    let doc = figma_import::import_bytes(&bytes)
+    let doc = frame::figma::import::import_bytes(&bytes)
         .map_err(|e| format!("failed importing source document from {input}: {e}"))?;
     let root = match root_figma_id {
-        Some(figma_id) => figma_import::node_for_figma_id(&doc, &figma_id)
+        Some(figma_id) => frame::figma::import::node_for_figma_id(&doc, &figma_id)
             .ok_or_else(|| format!("root figma id not found: {figma_id}"))?,
         None => doc.pages().first().copied().unwrap_or(doc.root),
     };

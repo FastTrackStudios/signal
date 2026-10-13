@@ -3,10 +3,10 @@
 //! the bottom band (the purple pin-point LED over the stomp), and the
 //! small LCD windows.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::draw;
-use surface_proto::{SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::proto::{SlotRole, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use crate::delay::parts::{self, Screen};
 use crate::rigkit::{self as rk, Letter};
@@ -30,7 +30,7 @@ pub fn legend(
     let id = rk::letter(b, control, s, (cx - tx, cy - ty), l);
     if let Some(c) = b.controls.get_mut(&control) {
         c.slots.retain(|s| s.role != SlotRole::Label);
-        c.slots.push(surface_proto::Slot {
+        c.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Label,
             node: id.0,
         });
@@ -88,10 +88,10 @@ pub fn vdc(b: &mut Builder<'_>, p: NodeId, (w, h): (f64, f64), (cx, cy): (f64, f
         draw::solid(color),
     );
     n.fills = Vec::new();
-    n.stroke = document_proto::Stroke {
+    n.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid(color)],
         weight: 0.6,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     b.add(p, n);
     b.add(p, draw::circle("pin", cx, cy, 0.6, draw::solid(color)));
@@ -135,15 +135,15 @@ pub fn stomp(
     if momentary {
         opts.push("momentary".into());
     }
-    let place = surface_kit::Place {
+    let place = frame::surface::kit::Place {
         options: Some(opts),
-        ..surface_kit::Place::new(name)
+        ..frame::surface::kit::Place::new(name)
             .size(d)
             .bind(rk::bind(addr))
-            .touch(surface_kit::TOUCH_MIN)
+            .touch(frame::surface::kit::TOUCH_MIN)
     };
-    let root =
-        surface_kit::place(b, p, "switch.stomp_flat", &place).unwrap_or_else(|e| panic!("{e}"));
+    let root = frame::surface::kit::place(b, p, "switch.stomp_flat", &place)
+        .unwrap_or_else(|e| panic!("{e}"));
     // The nut is centred in the box's switch square: find it by the shadow.
     let at = b.scene.node(root).and_then(|n| {
         n.children.iter().find_map(|c| {

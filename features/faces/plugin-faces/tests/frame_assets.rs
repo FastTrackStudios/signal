@@ -4,9 +4,9 @@
 
 use std::path::PathBuf;
 
-use document_proto::Scene;
+use frame::document::proto::Scene;
+use frame::surface::proto::Catalog;
 use plugin_faces::Face;
-use surface_proto::Catalog;
 
 struct TempDir(PathBuf);
 
@@ -39,13 +39,13 @@ fn textured_faces_round_trip_through_markup_on_disk() {
     let dir = TempDir::new("rt");
     for f in &textured() {
         let path = dir.0.join(format!("{}.frame", f.file));
-        document_io::save_surface(&path, &f.scene).unwrap();
-        let back = document_io::load_surface(&path).unwrap();
+        frame::document::io::save_surface(&path, &f.scene).unwrap();
+        let back = frame::document::io::load_surface(&path).unwrap();
         assert_eq!(back.assets, f.scene.assets, "{}: assets", f.file);
         assert_eq!(back, f.scene, "{}", f.file);
         // The markup stays text: ids, not base64.
         let text = std::fs::read_to_string(&path).unwrap();
-        assert_eq!(text, document_text::print(&f.scene), "{}", f.file);
+        assert_eq!(text, frame::document::text::print(&f.scene), "{}", f.file);
     }
 }
 
@@ -63,9 +63,9 @@ fn size(scene: &Scene) -> (u32, u32) {
 /// the second frame on) a material's shader can paint over its texture
 /// tiles, and it's the textures this compares. `None` without a GPU.
 fn render(scene: &Scene, catalog: &Catalog) -> Option<Vec<u8>> {
-    let mut gpu = render::offscreen::Offscreen::new().ok()?;
-    let rt = surface_runtime::Runtime::new(
-        surface_runtime::Surface::from_scene(scene.clone()),
+    let mut gpu = frame::render::offscreen::Offscreen::new().ok()?;
+    let rt = frame::surface::runtime::Runtime::new(
+        frame::surface::runtime::Surface::from_scene(scene.clone()),
         catalog.clone(),
     );
     let scene = rt.frame(0.0);
@@ -78,13 +78,13 @@ fn render(scene: &Scene, catalog: &Catalog) -> Option<Vec<u8>> {
         .map(|(id, c)| (*id, rt.position(*id, c)))
         .collect();
     let inputs = rt.shader_inputs();
-    let frame = render::fx::Frame {
-        fonts: Some(render::FontBook::bundled()),
+    let frame = frame::render::fx::Frame {
+        fonts: Some(frame::render::FontBook::bundled()),
         transform: kurbo::Affine::IDENTITY,
         values: Some(&values),
         inputs: Some(&inputs),
-        mode: render::fx::Mode::Fallback,
-        ..render::fx::Frame::new(&scene, page, w, h)
+        mode: frame::render::fx::Mode::Fallback,
+        ..frame::render::fx::Frame::new(&scene, page, w, h)
     };
     Some(gpu.render_with_effects(&frame).expect("render").rgba)
 }
@@ -108,8 +108,8 @@ fn a_loaded_face_renders_like_the_one_in_memory() {
         .expect("the room cab");
     let catalog = &catalogs[face.plugin];
     let path = dir.0.join("face.frame");
-    document_io::save_surface(&path, &face.scene).unwrap();
-    let loaded = document_io::load_surface(&path).unwrap();
+    frame::document::io::save_surface(&path, &face.scene).unwrap();
+    let loaded = frame::document::io::load_surface(&path).unwrap();
 
     // The renderer caches decoded images by content, so the loaded face
     // goes first, from a cold cache: had it lost its textures it would
@@ -128,11 +128,11 @@ fn a_loaded_face_renders_like_the_one_in_memory() {
 
     // …and the textures are really in the picture: pointed at assets that
     // aren't there (what loading `.frame` used to amount to), it draws flat.
-    let mut text = document_text::print(&face.scene);
+    let mut text = frame::document::text::print(&face.scene);
     for id in face.scene.assets.keys() {
         text = text.replace(id.0.as_str(), &"0".repeat(64));
     }
-    let flat = document_text::parse(&text, std::collections::BTreeMap::new()).unwrap();
+    let flat = frame::document::text::parse(&text, std::collections::BTreeMap::new()).unwrap();
     let bare = render(&flat, catalog).expect("a GPU");
     let lost = differing(&memory, &bare, 2);
     assert!(

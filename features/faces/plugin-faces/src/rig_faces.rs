@@ -15,9 +15,9 @@
 //! `<ns>/option` its capture choice, and `<ns>/tone` the drive block's own
 //! EQ (to come). Values cross in the params' own units.
 
+use frame::surface::kit::Place;
+use frame::surface::proto::{Range, Unit};
 use serde_json::json;
-use surface_kit::Place;
-use surface_proto::{Range, Unit};
 
 use crate::face::{Face, canvas, face_size};
 use crate::reverb::ui;
@@ -373,7 +373,7 @@ fn spring_viz() -> Face {
         // The algorithm, over the tank.
         let head = b.add(
             root,
-            surface_kit::draw::text(
+            frame::surface::kit::draw::text(
                 "algorithm",
                 "SPRING",
                 0.0,
@@ -381,16 +381,16 @@ fn spring_viz() -> Face {
                 W,
                 12.0,
                 "#c9cdd2",
-                document_proto::TextAlign::Center,
+                frame::document::proto::TextAlign::Center,
             ),
         );
-        let c = surface_proto::Control::new(surface_proto::ControlKind::Readout)
-            .slot(surface_proto::SlotRole::Value, head.0)
+        let c = frame::surface::proto::Control::new(frame::surface::proto::ControlKind::Readout)
+            .slot(frame::surface::proto::SlotRole::Value, head.0)
             .bound(ui::bind("spring/algorithm"));
         b.controls.insert(head, c);
         // The tank, drawn lying down and stood on end.
         let (len, depth) = (H - 44.0, W - 24.0);
-        let mut tank = surface_kit::draw::frame(
+        let mut tank = frame::surface::kit::draw::frame(
             "Tank",
             W / 2.0 - len / 2.0,
             34.0 + (H - 34.0) / 2.0 - depth / 2.0 - 4.0,
@@ -398,8 +398,8 @@ fn spring_viz() -> Face {
             depth,
         );
         tank.clips_content = true;
-        tank.corner_radii = document_proto::CornerRadii::uniform(6.0);
-        let tank = b.add(root, surface_kit::draw::rotated(tank, 90.0));
+        tank.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
+        let tank = b.add(root, frame::surface::kit::draw::rotated(tank, 90.0));
         crate::reverb::spring::tank_art_with(b, tank, &a, len, depth, 2, "");
     });
     let params = vec![
@@ -463,14 +463,14 @@ fn eq() -> Face {
         ]);
         ui::put_at(b, root, "viz.eq_graph", &p, 0.0, 0.0);
     });
-    let mut params = surface_kit::viz::catalog::eq_params("eq", 24);
-    params.extend(surface_kit::viz::catalog::eq_view_params("eq"));
+    let mut params = frame::surface::kit::viz::catalog::eq_params("eq", 24);
+    params.extend(frame::surface::kit::viz::catalog::eq_view_params("eq"));
     Face {
         file: "52-amp-eq",
         plugin: PLUGIN,
         scene,
         params,
-        streams: surface_kit::viz::catalog::eq_streams("eq", 256),
+        streams: frame::surface::kit::viz::catalog::eq_streams("eq", 256),
     }
 }
 
@@ -490,14 +490,14 @@ fn eq_row() -> Face {
         ]);
         ui::put_at(b, root, "viz.eq_graph", &p, 0.0, 0.0);
     });
-    let mut params = surface_kit::viz::catalog::eq_params("eq", 24);
-    params.extend(surface_kit::viz::catalog::eq_view_params("eq"));
+    let mut params = frame::surface::kit::viz::catalog::eq_params("eq", 24);
+    params.extend(frame::surface::kit::viz::catalog::eq_view_params("eq"));
     Face {
         file: "52-amp-eq-row",
         plugin: PLUGIN,
         scene,
         params,
-        streams: surface_kit::viz::catalog::eq_streams("eq", 256),
+        streams: frame::surface::kit::viz::catalog::eq_streams("eq", 256),
     }
 }
 
@@ -624,12 +624,12 @@ fn comp_scope() -> Face {
 /// The compressor scope `w` × `h`; `dials`: Threshold, Ratio, Attack and
 /// Release at a finger's size beside it (the iPad's FX row).
 fn comp_scope_at(file: &'static str, (w, h): (f64, f64), dials: bool) -> Face {
-    use surface_kit::viz::lit_catalog;
+    use frame::surface::kit::viz::lit_catalog;
     let side = if dials { 250.0 } else { 0.0 };
     let scene = canvas("Compressor", move |b, root| {
         ui::fit_root(b, root, w, h);
-        let mut v = surface_kit::draw::frame("Window", 0.0, 0.0, w, h);
-        v.fills = vec![surface_kit::draw::linear(
+        let mut v = frame::surface::kit::draw::frame("Window", 0.0, 0.0, w, h);
+        v.fills = vec![frame::surface::kit::draw::linear(
             180.0,
             &[(0.0, "#0c0d10"), (1.0, "#08090b")],
         )];

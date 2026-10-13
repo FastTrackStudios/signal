@@ -7,8 +7,8 @@
 //! At the foot, a window in the lid onto the board with the BBD chip on it,
 //! between the two stomp switches: BYPASS (its LED is the on lamp) and TAP.
 
-use document_proto::TextAlign;
-use surface_kit::{Place, draw};
+use frame::document::proto::TextAlign;
+use frame::surface::kit::{Place, draw};
 
 use super::art;
 use super::parts::{self, Ink, Screen, bind};

@@ -18,10 +18,10 @@
 //! the meter (the unit uses them to trim the push-pull balance); ZERO reads
 //! gain reduction.
 
-use document_proto::NodeId;
-use surface_kit::{Place, draw};
-use surface_proto::{MeterTap, Range, SourceSelect, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{MeterTap, Range, SourceSelect, Unit};
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Ink};
 use crate::face::{Face, canvas};
@@ -157,7 +157,7 @@ fn build(b: &mut Builder<'_>, root: NodeId) {
             .size(38.0)
             .legend(" ")
             .options(&["On", ""])
-            .ink(surface_kit::Ink::Color("#2a2a28".into()))
+            .ink(frame::surface::kit::Ink::Color("#2a2a28".into()))
             .bind(ui::bind("twinvalve/power")),
     );
     super::opto_leveler::place_toggle(b, on, lx, 110.0);
@@ -188,7 +188,7 @@ fn build(b: &mut Builder<'_>, root: NodeId) {
             .legend(" ")
             .options(&["1", "2"])
             .sweep(60.0)
-            .touch(surface_kit::TOUCH_MIN)
+            .touch(frame::surface::kit::TOUCH_MIN)
             .bind(ui::bind("twinvalve/agc")),
         c.0,
         c.1,
@@ -262,7 +262,7 @@ fn channel(b: &mut Builder<'_>, front: NodeId, ink: Ink<'_>) {
             .legend(" ")
             .options(&["1", "2", "3"])
             .sweep(80.0)
-            .touch(surface_kit::TOUCH_MIN)
+            .touch(frame::surface::kit::TOUCH_MIN)
             .bind(ui::bind(&addr("metering"))),
         c.0,
         c.1,
@@ -295,7 +295,7 @@ fn channel(b: &mut Builder<'_>, front: NodeId, ink: Ink<'_>) {
             .legend(" ")
             .scale(&GAIN_STEPS)
             .sweep(290.0)
-            .touch(surface_kit::TOUCH_MIN)
+            .touch(frame::surface::kit::TOUCH_MIN)
             .bind(ui::bind(&addr("input_gain"))),
         c.0,
         c.1,
@@ -332,7 +332,7 @@ fn channel(b: &mut Builder<'_>, front: NodeId, ink: Ink<'_>) {
             .size(100.0)
             .legend(" ")
             .sweep(280.0)
-            .touch(surface_kit::TOUCH_MIN)
+            .touch(frame::surface::kit::TOUCH_MIN)
             .bind(ui::bind(&addr("threshold"))),
         c.0,
         c.1,
@@ -360,7 +360,7 @@ fn channel(b: &mut Builder<'_>, front: NodeId, ink: Ink<'_>) {
             .legend(" ")
             .options(&["1", "2", "3", "4", "5", "6"])
             .sweep(150.0)
-            .touch(surface_kit::TOUCH_MIN)
+            .touch(frame::surface::kit::TOUCH_MIN)
             .bind(ui::bind(&addr("time_constant"))),
         c.0,
         c.1,

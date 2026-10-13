@@ -9,10 +9,10 @@
 //! own (a tail tab, a range gate, a slide pot, a trim flag), so the decay
 //! is in the hand on the picture as well as on the Time knob.
 
-use document_proto::NodeId;
-use surface_kit::draw;
-use surface_proto::{Axis, Control, ControlKind, HandleAxis};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::draw;
+use frame::surface::proto::{Axis, Control, ControlKind, HandleAxis};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -89,7 +89,7 @@ pub fn well(
     let mut s = draw::frame(name, x, y, w, h);
     s.fills = vec![draw::linear(180.0, fill)];
     s.clips_content = true;
-    s.corner_radii = document_proto::CornerRadii::uniform(r);
+    s.corner_radii = frame::document::proto::CornerRadii::uniform(r);
     s.effects = vec![draw::inner_shadow("#000000b0", 0.0, 2.0, 7.0)];
     b.add(panel, s)
 }
@@ -121,7 +121,7 @@ pub fn decay_handle(
     b.controls
         .insert(h, Control::new(kind).bound(ui::bind(&a("decay"))));
     if let Some(n) = b.scene.node_mut(travel) {
-        n.layout_child.resize_x = Some(document_proto::ResizeX::Stretch);
+        n.layout_child.resize_x = Some(frame::document::proto::ResizeX::Stretch);
     }
     travel
 }
@@ -343,7 +343,7 @@ pub fn panel(
 ) -> NodeId {
     let mut p = draw::frame("Panel", 0.0, 0.0, w, h);
     p.fills = vec![draw::linear(180.0, fill)];
-    p.corner_radii = document_proto::CornerRadii::uniform(r);
+    p.corner_radii = frame::document::proto::CornerRadii::uniform(r);
     b.add(
         root,
         draw::with_effects(

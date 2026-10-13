@@ -8,7 +8,7 @@
 //! drew.
 
 use anyrender::PaintScene;
-use theme_runtime::{AnyRender, Canvas, TextAlign, TextRun};
+use frame::theme::runtime::{AnyRender, Canvas, TextAlign, TextRun};
 use vello::kurbo::{Affine, BezPath, Stroke, Vec2};
 use vello::peniko::{Brush, Fill};
 

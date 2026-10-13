@@ -1616,7 +1616,7 @@ fn zone_at(zones: [Tc; 3], at: f64) -> Tc {
 
 #[cfg(test)]
 mod tests {
-    use theme_runtime::{Schema, Theme};
+    use frame::theme::runtime::{Schema, Theme};
 
     use crate::mcp::Control;
 

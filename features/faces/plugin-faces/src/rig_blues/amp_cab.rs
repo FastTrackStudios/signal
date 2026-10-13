@@ -2,14 +2,14 @@
 //! the head stands on, with a mic on each speaker to drag; the gate pedal
 //! that sits in front of them.
 
-use document_proto::NodeId;
-use surface_kit::Place;
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::materials::cabinet::{self, CabinetSpec, Handle, Kind};
-use surface_kit::materials::light;
-use surface_kit::materials::paint::{Cloth, Grain, Material};
-use surface_proto::{Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::Place;
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::materials::cabinet::{self, CabinetSpec, Handle, Kind};
+use frame::surface::kit::materials::light;
+use frame::surface::kit::materials::paint::{Cloth, Grain, Material};
+use frame::surface::proto::{Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::drives::H as PEDAL_H;

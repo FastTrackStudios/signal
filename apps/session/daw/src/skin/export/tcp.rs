@@ -611,7 +611,7 @@ mod tests {
     #[test]
     fn the_theme_lays_the_row_out_as_row_does() {
         let palette = crate::arrangement::Palette::from_theme(&daw_ui::theming::Theme::dark());
-        let theme = theme_runtime::Theme::from_markup(
+        let theme = frame::theme::runtime::Theme::from_markup(
             &super::super::fts_dark(&palette),
             crate::skin::schema(),
             None,

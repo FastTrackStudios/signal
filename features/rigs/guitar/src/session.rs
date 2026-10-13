@@ -1093,10 +1093,7 @@ impl GuitarRigBackend {
                         // event: a Note On at velocity 0 decodes to Note Off,
                         // and some pedals send exactly that as their *press*
                         // (see `FootswitchEngine::note_switch_is_down`).
-                        Some(
-                            midi::MidiEvent::NoteOn { .. }
-                            | midi::MidiEvent::NoteOff { .. },
-                        ) => {
+                        Some(midi::MidiEvent::NoteOn { .. } | midi::MidiEvent::NoteOff { .. }) => {
                             let [status, key, velocity] = msg.bytes();
                             let down = match (status & 0xF0, velocity) {
                                 (0x90, v) if v > 0 => Some(true),

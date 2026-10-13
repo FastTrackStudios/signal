@@ -22,13 +22,13 @@
 //! putty caps. Under the GPU light the moulding has a satin sheen, the
 //! window its glass and its LEDs bloom; nothing here reads the clock.
 
-use document_proto::{CornerRadii, NodeId, NodeKind, TextAlign, TextCase};
-use surface_kit::draw::{self, family};
-use surface_proto::{
+use frame::document::proto::{CornerRadii, NodeId, NodeKind, TextAlign, TextCase};
+use frame::surface::kit::draw::{self, family};
+use frame::surface::proto::{
     Binding, ButtonMode, Control, ControlKind, Orientation, ParamInfo, Range, SlotRole, Unit,
     ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -307,7 +307,14 @@ fn ghost(b: &mut Builder<'_>, win: NodeId, (x, cy): (f64, f64), cells: usize, si
 }
 
 /// A lit text node in the window's face, set from the left of its box.
-fn lit_node(s: &str, w: f64, size: f64, color: &str, h: f64, upper: bool) -> document_proto::Node {
+fn lit_node(
+    s: &str,
+    w: f64,
+    size: f64,
+    color: &str,
+    h: f64,
+    upper: bool,
+) -> frame::document::proto::Node {
     let l = dots(size, color);
     let mut t = text_in(s, (0.0, h / 2.0 - cap_middle(&l), w), &l, TextAlign::Left);
     t.name = "value".into();

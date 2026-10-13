@@ -9,11 +9,11 @@
 //! stops and the gains read signed; three swatches under the pilot pick
 //! the colourway.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::draw;
-use surface_kit::materials::{Dir, Material, fill};
-use surface_proto::{ButtonMode, Control, ControlKind, Orientation, SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::kit::materials::{Dir, Material, fill};
+use frame::surface::proto::{ButtonMode, Control, ControlKind, Orientation, SlotRole, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::look::KnobLook;
 use super::look::{self, TEAL};
@@ -243,9 +243,14 @@ fn case(b: &mut Builder<'_>, layer: NodeId, (w, h): (f64, f64), i: usize) {
         },
     };
     fill(b, shell, (0.0, 0.0, w, h), 16.0, &m);
-    for n in
-        surface_kit::materials::light::edge("case edge", (0.0, 0.0, w, h), 16.0, 10.0, 1.0, true)
-    {
+    for n in frame::surface::kit::materials::light::edge(
+        "case edge",
+        (0.0, 0.0, w, h),
+        16.0,
+        10.0,
+        1.0,
+        true,
+    ) {
         b.add(shell, n);
     }
 }

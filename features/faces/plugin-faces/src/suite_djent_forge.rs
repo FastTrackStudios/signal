@@ -85,7 +85,7 @@ pub const fn knob(
 /// The suite's lettering.
 pub mod type_ {
     use crate::rigkit::Letter;
-    use surface_kit::draw::family;
+    use frame::surface::kit::draw::family;
 
     /// Model names across a pedal: wide engraved capitals, widely spaced.
     #[must_use]

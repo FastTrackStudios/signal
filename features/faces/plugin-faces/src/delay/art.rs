@@ -6,9 +6,9 @@
 //! Lines are open paths, stroked; a ring cut through a disc (a reel's
 //! windows) is a subpath wound against it (non-zero fill leaves the hole).
 
-use document_proto::{NodeId, StrokeCap, TextAlign};
-use surface_kit::draw;
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, StrokeCap, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, Ink, emit, hexa, mixed};
 
@@ -174,7 +174,7 @@ pub fn reel(
         0.7,
     );
     bands.fills = Vec::new();
-    bands.stroke.align = document_proto::StrokeAlign::Center;
+    bands.stroke.align = frame::document::proto::StrokeAlign::Center;
     b.add(root, draw::with_opacity(bands, 0.25));
     // The flange: a disc with three windows. Windows are holes (wound
     // backwards), so the pack and the deck show through.

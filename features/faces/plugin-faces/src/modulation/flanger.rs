@@ -6,7 +6,7 @@
 //! (tape-style through-zero or bucket-brigade) is a bat switch beside the
 //! rate lamp.
 
-use surface_kit::{Ink, Place};
+use frame::surface::kit::{Ink, Place};
 
 use crate::face::{Face, canvas};
 use crate::reverb::ui::{self, Dial, bind};
@@ -18,7 +18,11 @@ const INK: &str = "#f1ebfb";
 const DIM: &str = "#c4b5e0";
 
 /// The comb: notches across the lid, drawn as a swept response.
-fn comb(b: &mut surface_widgets::Builder<'_>, lid: document_proto::NodeId, cy: f64) {
+fn comb(
+    b: &mut frame::surface::widgets::Builder<'_>,
+    lid: frame::document::proto::NodeId,
+    cy: f64,
+) {
     let (x0, x1) = (36.0, LW - 36.0);
     let pts: Vec<(f64, f64)> = (0..=240)
         .map(|i| {

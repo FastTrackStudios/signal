@@ -2,11 +2,11 @@
 //! catalog, bind only what exists, and wire the unit's behaviour — the GR
 //! needle resting on 0 VU, the ratio bank printed opposite to param order.
 
-use design_lint::{Config, Severity, counts, lint};
-use document_proto::{NodeId, NodeKind, Scene};
+use frame::design::lint::{Config, Severity, counts, lint};
+use frame::document::proto::{NodeId, NodeKind, Scene};
+use frame::surface::kit::meters::scale::Card;
+use frame::surface::proto::{ButtonMode, Catalog, Control, ControlKind, Source};
 use plugin_faces::{Face, catalogs, comp_fet};
-use surface_kit::meters::scale::Card;
-use surface_proto::{ButtonMode, Catalog, Control, ControlKind, Source};
 
 fn comp_catalog() -> Catalog {
     catalogs(&plugin_faces::all())

@@ -6,11 +6,11 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use document_proto::{NodeId, PaintKind, Scene};
-use surface_memory::Memory;
-use surface_proto::{Catalog, ControlKind, ParamAddr, ParamValue, Source as Binding};
-use surface_runtime::sync::{Engine, EngineError, Incoming};
-use surface_runtime::{Bounds, EngineCall, Input, Key, Modifiers, Runtime, Surface, sync};
+use frame::document::proto::{NodeId, PaintKind, Scene};
+use frame::surface::memory::Memory;
+use frame::surface::proto::{Catalog, ControlKind, ParamAddr, ParamValue, Source as Binding};
+use frame::surface::runtime::sync::{Engine, EngineError, Incoming};
+use frame::surface::runtime::{Bounds, EngineCall, Input, Key, Modifiers, Runtime, Surface, sync};
 
 use crate::input::Clicks;
 use crate::remote::{Event, Remote};
@@ -52,8 +52,8 @@ impl Engine for Backend {
 
     async fn request_feeds(
         &self,
-        requests: Vec<surface_proto::FeedRequest>,
-    ) -> Result<Vec<surface_proto::FeedInfo>, EngineError> {
+        requests: Vec<frame::surface::proto::FeedRequest>,
+    ) -> Result<Vec<frame::surface::proto::FeedInfo>, EngineError> {
         match self {
             Self::Local(m) => sync::Local(m).request_feeds(requests).await,
             Self::Remote(r) => r.request_feeds(requests).await,
@@ -74,10 +74,10 @@ impl Built {
     fn new(mut rt: Runtime) -> Result<Self, String> {
         // Carets land where the painted glyphs end.
         rt.set_text_measure(std::sync::Arc::new(
-            |data: &document_proto::TextData, text: &str| {
-                render::text_advance(
+            |data: &frame::document::proto::TextData, text: &str| {
+                frame::render::text_advance(
                     fonts(),
-                    &render::fonts::text_font(data),
+                    &frame::render::fonts::text_font(data),
                     text,
                     data.font_size,
                     data.letter_spacing,
@@ -86,7 +86,7 @@ impl Built {
         ));
         let scene = &rt.surface().scene;
         let page = *scene.pages().first().ok_or("surface has no <Page>")?;
-        let boxes = render::build_scene_layout_boxes(scene, page);
+        let boxes = frame::render::build_scene_layout_boxes(scene, page);
         let tops = scene
             .node(page)
             .map(|p| p.children.clone())
@@ -182,13 +182,13 @@ impl Player {
         if let Backend::Local(engine) = &self.engine {
             // The in-process engine is the truth (other callers may have
             // changed it); only a param mid-drag keeps its optimistic value.
-            let values = surface_proto::SurfaceEngine::values(engine);
+            let values = frame::surface::proto::SurfaceEngine::values(engine);
             rt.apply_values(
                 values
                     .into_iter()
                     .filter(|v| dragging.as_ref() != Some(&v.addr)),
             );
-            rt.apply_texts(surface_proto::SurfaceEngine::texts(engine));
+            rt.apply_texts(frame::surface::proto::SurfaceEngine::texts(engine));
         }
         let b = Built::new(rt)?;
         self.install(b);
@@ -302,7 +302,7 @@ impl Player {
                                 self.catalog_changed = true;
                                 let surface = self.rt.surface().clone();
                                 self.rt = Runtime::new(surface, catalog);
-                                let boxes = render::build_scene_layout_boxes(
+                                let boxes = frame::render::build_scene_layout_boxes(
                                     &self.rt.surface().scene,
                                     self.page,
                                 );
@@ -471,7 +471,7 @@ impl Player {
 
     /// Shader nodes' live inputs this frame (feeds, params, curves).
     #[must_use]
-    pub fn shader_inputs(&self) -> render::fx::FxInputs {
+    pub fn shader_inputs(&self) -> frame::render::fx::FxInputs {
         self.rt.shader_inputs()
     }
 
@@ -490,7 +490,7 @@ impl Player {
     #[must_use]
     pub fn first_knob(&self) -> Option<(NodeId, Bounds)> {
         let s = self.rt.surface();
-        let boxes = render::build_scene_layout_boxes(&s.scene, self.page);
+        let boxes = frame::render::build_scene_layout_boxes(&s.scene, self.page);
         s.scene
             .walk(s.scene.root)
             .into_iter()
@@ -563,8 +563,8 @@ impl Player {
 
 /// The fonts surfaces are set in: frame's bundled book.
 #[must_use]
-pub fn fonts() -> &'static render::FontBook {
-    render::FontBook::bundled()
+pub fn fonts() -> &'static frame::render::FontBook {
+    frame::render::FontBook::bundled()
 }
 
 /// A one-line red banner, `width` logical px wide, as a scene to paint
@@ -576,12 +576,12 @@ pub fn banner(message: &str, width: f64) -> Option<(Scene, NodeId)> {
         r##"<Document><Page><Frame w={width} h=28 clip fill="#c62828e6"><Text x=10 y=6 w={w} h=16 size=12 fill="#ffffff" text={text} /></Frame></Page></Document>"##,
         w = (width - 20.0).max(0.0),
     );
-    let scene = document_text::parse(&src, BTreeMap::new()).ok()?;
+    let scene = frame::document::text::parse(&src, BTreeMap::new()).ok()?;
     let page = *scene.pages().first()?;
     Some((scene, page))
 }
 
-fn bounds(b: &render::LayoutBox) -> Bounds {
+fn bounds(b: &frame::render::LayoutBox) -> Bounds {
     Bounds {
         x: b.x,
         y: b.y,
@@ -624,10 +624,10 @@ fn solid_fill(scene: &Scene, id: NodeId) -> Option<peniko::Color> {
 mod tests {
     use super::*;
     use crate::remote::testing::Server;
-    use surface_widgets::{Options, surface_for_catalog};
+    use frame::surface::widgets::{Options, surface_for_catalog};
 
     fn demo() -> Player {
-        let catalog = surface_memory::demo_catalog();
+        let catalog = frame::surface::memory::demo_catalog();
         Player::new(
             Backend::Local(Memory::demo()),
             surface_for_catalog(&catalog, &Options::default()),
@@ -695,11 +695,11 @@ mod tests {
             vec![EngineCall::SetParam {
                 addr: addr.clone(),
                 value: 0.9,
-                phase: surface_proto::EditPhase::End,
+                phase: frame::surface::proto::EditPhase::End,
             }],
         ))
         .unwrap();
-        let catalog = surface_memory::demo_catalog();
+        let catalog = frame::surface::memory::demo_catalog();
         p.swap(surface_for_catalog(&catalog, &Options::default()))
             .unwrap();
         let (id, _) = p.first_knob().unwrap();
@@ -715,16 +715,16 @@ mod tests {
 
     #[test]
     fn telemetry_matches_the_catalog_streams() {
-        let c = surface_memory::demo_catalog();
-        let frames = feed_memory::frames(&c.streams, 1.25);
+        let c = frame::surface::memory::demo_catalog();
+        let frames = frame::feed::memory::frames(&c.streams, 1.25);
         assert_eq!(frames.len(), c.streams.len());
         assert_eq!(frames[0].values.len(), 2, "stereo out_level");
         // Every feed kind generates, at its shape.
         let all = Catalog {
-            streams: feed_memory::demo_feeds(),
+            streams: frame::feed::memory::demo_feeds(),
             ..Catalog::default()
         };
-        for (f, info) in feed_memory::frames(&all.streams, 2.0)
+        for (f, info) in frame::feed::memory::frames(&all.streams, 2.0)
             .iter()
             .zip(&all.streams)
         {
@@ -769,11 +769,11 @@ mod tests {
 
         // A change made elsewhere (another surface) streams in.
         let other = ParamAddr::new("reverb/mix");
-        surface_proto::SurfaceEngine::set_param(
+        frame::surface::proto::SurfaceEngine::set_param(
             &server.engine,
             other.clone(),
             0.8,
-            surface_proto::EditPhase::End,
+            frame::surface::proto::EditPhase::End,
         )
         .unwrap();
         tick_until(&mut p, &server, |p| {

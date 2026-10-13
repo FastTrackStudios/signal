@@ -6,10 +6,10 @@
 //! Every motif is authored once in a 100 × 100 box facing right and put
 //! down with [`Put`] (where, how big, mirrored or not).
 
-use document_proto::NodeId;
-use surface_kit::draw::family;
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::draw::family;
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::widgets::Builder;
 
 use crate::delay::parts::{self, Ink};
 use crate::rigkit::{self as rk, Letter};
@@ -130,13 +130,13 @@ pub fn stroke(
         draw::solid(color),
     );
     n.fills = Vec::new();
-    n.stroke = document_proto::Stroke {
+    n.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid(color)],
         weight,
-        cap: document_proto::StrokeCap::Round,
-        join: document_proto::StrokeJoin::Round,
-        align: document_proto::StrokeAlign::Center,
-        ..document_proto::Stroke::default()
+        cap: frame::document::proto::StrokeCap::Round,
+        join: frame::document::proto::StrokeJoin::Round,
+        align: frame::document::proto::StrokeAlign::Center,
+        ..frame::document::proto::Stroke::default()
     };
     b.add(parent, n)
 }
@@ -285,7 +285,7 @@ pub fn locks(
             BLACK,
             false,
         );
-        n.stroke.cap = document_proto::StrokeCap::None;
+        n.stroke.cap = frame::document::proto::StrokeCap::None;
         b.add(parent, n);
     }
 }
@@ -492,11 +492,11 @@ pub fn border(
     );
     let mut rim = draw::path("border", 0.0, 0.0, w, h, d, draw::solid(INK));
     rim.fills = Vec::new();
-    rim.stroke = document_proto::Stroke {
+    rim.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid(INK)],
         weight: 1.6,
-        join: document_proto::StrokeJoin::Miter,
-        ..document_proto::Stroke::default()
+        join: frame::document::proto::StrokeJoin::Miter,
+        ..frame::document::proto::Stroke::default()
     };
     b.add(parent, rim);
     // A gap in the top rule for the arrows and the supply legend.
@@ -651,8 +651,8 @@ pub fn stomp(
             .bind(rk::bind(addr))
             .touch(TOUCH_MIN)
     };
-    let root =
-        surface_kit::place(b, parent, "switch.stomp_box", &p).unwrap_or_else(|e| panic!("{e}"));
+    let root = frame::surface::kit::place(b, parent, "switch.stomp_box", &p)
+        .unwrap_or_else(|e| panic!("{e}"));
     let at = b.scene.node(root).and_then(|n| {
         n.children.iter().find_map(|c| {
             b.scene.node(*c).filter(|k| k.name == "washer").map(|k| {
@@ -740,11 +740,11 @@ pub fn hollow_title(
         draw::solid(INK),
     );
     n.fills = Vec::new();
-    n.stroke = document_proto::Stroke {
+    n.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid(INK)],
         weight,
-        join: document_proto::StrokeJoin::Miter,
-        ..document_proto::Stroke::default()
+        join: frame::document::proto::StrokeJoin::Miter,
+        ..frame::document::proto::Stroke::default()
     };
     b.add(parent, n);
 }
@@ -792,9 +792,10 @@ pub fn label_letter(
         .map_or((0.0, 0.0), |n| (n.transform.tx, n.transform.ty));
     let id = rk::letter(b, control, s, (cx - tx, cy - ty), l);
     if let Some(c) = b.controls.get_mut(&control) {
-        c.slots.retain(|s| s.role != surface_proto::SlotRole::Label);
-        c.slots.push(surface_proto::Slot {
-            role: surface_proto::SlotRole::Label,
+        c.slots
+            .retain(|s| s.role != frame::surface::proto::SlotRole::Label);
+        c.slots.push(frame::surface::proto::Slot {
+            role: frame::surface::proto::SlotRole::Label,
             node: id.0,
         });
     }
@@ -855,11 +856,11 @@ pub fn tolex(
         }
         let mut g = draw::path("grain", 0.0, 0.0, w, h, d, draw::solid(color));
         g.fills = Vec::new();
-        g.stroke = document_proto::Stroke {
+        g.stroke = frame::document::proto::Stroke {
             paints: vec![draw::solid(color)],
             weight,
-            cap: document_proto::StrokeCap::Round,
-            ..document_proto::Stroke::default()
+            cap: frame::document::proto::StrokeCap::Round,
+            ..frame::document::proto::Stroke::default()
         };
         let g = b.add(root, g);
         parts::shader(b, g, "lighting", &[("strength", 0.6), ("scale", 1.5)]);

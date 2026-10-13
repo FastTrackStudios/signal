@@ -5,7 +5,7 @@
 //! is a chorus. The lid's artwork is a tone whose pitch swings; the circuit
 //! (the valve-style one or the poly-synth's) is a bat beside the rate lamp.
 
-use surface_kit::{Ink, Place};
+use frame::surface::kit::{Ink, Place};
 
 use crate::face::{Face, canvas};
 use crate::reverb::ui::{self, Dial, bind};
@@ -17,7 +17,11 @@ const INK: &str = "#2f2416";
 const DIM: &str = "#6d5c43";
 
 /// A carrier whose frequency swings: the vibrato, drawn.
-fn swing(b: &mut surface_widgets::Builder<'_>, lid: document_proto::NodeId, cy: f64) {
+fn swing(
+    b: &mut frame::surface::widgets::Builder<'_>,
+    lid: frame::document::proto::NodeId,
+    cy: f64,
+) {
     let (x0, x1) = (40.0, LW - 40.0);
     let mut phase = 0.0;
     let mut pts = Vec::new();

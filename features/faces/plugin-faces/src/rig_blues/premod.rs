@@ -8,12 +8,12 @@
 //! chorus block's (`engine`, CE-2 by default — the classic in front of an
 //! amp), read out on its selector.
 
-use document_proto::motion::{Dynamics, Motion, Target};
-use document_proto::{CornerRadii, ResizeX};
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::motion;
-use surface_proto::{ParamInfo, Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::document::proto::{CornerRadii, ResizeX};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::motion;
+use frame::surface::proto::{ParamInfo, Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use crate::face::{Face, canvas};
@@ -34,12 +34,12 @@ fn a(id: &str) -> String {
 
 fn knob(
     b: &mut Builder<'_>,
-    p: document_proto::NodeId,
+    p: frame::document::proto::NodeId,
     id: &str,
     legend: &str,
     d: f64,
     at: (f64, f64),
-) -> document_proto::NodeId {
+) -> frame::document::proto::NodeId {
     let opts = [
         "color=#16202a",
         "pointer=#7dd3fc",
@@ -296,8 +296,8 @@ const KNOB: [&str; 6] = [
 fn lane(
     tier: kit::Tier,
     back: bool,
-    build: impl FnOnce(&mut Builder<'_>, document_proto::NodeId),
-) -> document_proto::Scene {
+    build: impl FnOnce(&mut Builder<'_>, frame::document::proto::NodeId),
+) -> frame::document::proto::Scene {
     let w = tier.lane_w();
     canvas("Pre Mod", move |b, root| {
         ui::fit_root(b, root, w, kit::H);
@@ -337,7 +337,7 @@ fn lane(
 
 /// The bucket line and the sweep in a window `vw × vh` (a phone lane's
 /// picture): the same machine as the unit's, smaller.
-fn picture(b: &mut Builder<'_>, v: document_proto::NodeId, vw: f64, vh: f64) {
+fn picture(b: &mut Builder<'_>, v: frame::document::proto::NodeId, vw: f64, vh: f64) {
     let cells = 12;
     let (bx, by, bw, bh) = (10.0, 12.0, vw - 20.0, 30.0);
     let row = b.add(v, draw::frame("buckets", bx, by, bw, bh));

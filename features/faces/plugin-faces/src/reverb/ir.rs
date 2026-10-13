@@ -7,9 +7,9 @@
 //! bank sits under the display as a row of machined keys; the shaping
 //! controls, which only re-shape what was recorded, are on the right.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::Place;
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::Place;
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Dial, bind};
 use crate::face::{Face, canvas};

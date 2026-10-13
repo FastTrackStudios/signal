@@ -9,10 +9,12 @@
 //!   the model, on/off, LEVEL, PAN and PHASE; ROOM on/off and its LEVEL in
 //!   the middle.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{Axis, ButtonMode, Control, ControlKind, HandleAxis, SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{
+    Axis, ButtonMode, Control, ControlKind, HandleAxis, SlotRole, ValueFormat,
+};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::art;
@@ -71,7 +73,7 @@ pub fn face() -> Face {
             crate::delay::parts::param(
                 &a(&format!("mic_{m}_position")),
                 &format!("Mic {} Position", m.to_uppercase()),
-                surface_proto::Range::linear(0.0, 1.0, surface_proto::Unit::None),
+                frame::surface::proto::Range::linear(0.0, 1.0, frame::surface::proto::Unit::None),
                 0.5,
             )
             .featured(),
@@ -79,7 +81,7 @@ pub fn face() -> Face {
         params.push(crate::delay::parts::param(
             &a(&format!("mic_{m}_distance")),
             &format!("Mic {} Distance", m.to_uppercase()),
-            surface_proto::Range::linear(0.0, 1.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 1.0, frame::surface::proto::Unit::None),
             0.0,
         ));
         params.push(
@@ -96,7 +98,11 @@ pub fn face() -> Face {
             crate::delay::parts::param(
                 &a(&format!("mic_{m}_pan")),
                 &format!("Mic {} Pan", m.to_uppercase()),
-                surface_proto::Range::linear(-100.0, 100.0, surface_proto::Unit::Percent),
+                frame::surface::proto::Range::linear(
+                    -100.0,
+                    100.0,
+                    frame::surface::proto::Unit::Percent,
+                ),
                 0.0,
             )
             .bipolar(),
@@ -469,10 +475,10 @@ fn mic_handle(
         draw::solid("#000000"),
     );
     mn.fills = Vec::new();
-    mn.stroke = document_proto::Stroke {
+    mn.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid("#2a2a2a")],
         weight: 0.6,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     b.add(h, mn);
     let kind = ControlKind::Handle {

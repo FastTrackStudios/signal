@@ -2,8 +2,8 @@
 //! logo — its weight, slant, tracking, colour and placement — never the
 //! maker's name or model itself.
 
-use document_proto::{NodeId, NodeKind, Paint, TextAlign, TextRun};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, NodeKind, Paint, TextAlign, TextRun};
+use frame::surface::widgets::Builder;
 
 use super::ui;
 
@@ -67,7 +67,7 @@ pub fn mark(
             t.letter_spacing = style.size * style.tracking;
             t.runs = vec![TextRun {
                 text: s.to_string(),
-                fills: vec![Paint::solid(surface_kit::draw::hex(color))],
+                fills: vec![Paint::solid(frame::surface::kit::draw::hex(color))],
                 font_family: None,
                 font_size: Some(style.size),
                 font_weight: Some(style.weight),

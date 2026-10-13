@@ -8,10 +8,10 @@
 //! sits n delay times after the note and falls by the feedback each time
 //! round ([`slide`], [`fall`], [`fade`]).
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -153,7 +153,7 @@ pub fn trace(
     d: String,
     color: &str,
     weight: f64,
-) -> document_proto::Node {
+) -> frame::document::proto::Node {
     draw::stroked(
         draw::path(name, x, y, w, h, d, draw::solid("#00000000")),
         color,
@@ -185,7 +185,7 @@ pub fn closed(pts: &[(f64, f64)]) -> String {
 fn ground(b: &mut Builder<'_>, root: NodeId, d: &Device, (w, h): (f64, f64), l: &Look) -> NodeId {
     let mut panel = draw::frame("Panel", 0.0, 0.0, w, h);
     panel.fills = vec![draw::linear(180.0, &l.panel)];
-    panel.corner_radii = document_proto::CornerRadii::uniform(10.0);
+    panel.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
     let panel = b.add(
         root,
         draw::with_effects(
@@ -201,7 +201,7 @@ fn ground(b: &mut Builder<'_>, root: NodeId, d: &Device, (w, h): (f64, f64), l: 
         // effect lights the sheet, not the picture and knobs.
         let mut sheet = draw::frame("Metal", 0.0, 0.0, w, h);
         sheet.fills = vec![draw::linear(180.0, &l.panel)];
-        sheet.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        sheet.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         let sheet = b.add(panel, sheet);
         kit::steel(b, sheet);
     }
@@ -222,7 +222,7 @@ fn well(
     let mut v = draw::frame("Picture", x, y, w, h);
     v.fills = vec![draw::linear(180.0, &l.well)];
     v.clips_content = true;
-    v.corner_radii = document_proto::CornerRadii::uniform(7.0);
+    v.corner_radii = frame::document::proto::CornerRadii::uniform(7.0);
     v.effects = vec![draw::inner_shadow("#000000b0", 0.0, 2.0, 6.0)];
     let v = b.add(panel, v);
     (d.picture)(b, v, (w, h), l);
@@ -248,7 +248,7 @@ fn well(
         70.0,
         7.0,
         l.light,
-        document_proto::TextAlign::Left,
+        frame::document::proto::TextAlign::Left,
     );
     kit::glass(b, v);
     v

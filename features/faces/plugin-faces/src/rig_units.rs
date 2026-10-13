@@ -7,12 +7,12 @@
 //! The block's top and foot carry its preset and its name on bands of
 //! their own: each unit sits in the middle, between them.
 
-use document_proto::motion::{Motion, Target};
-use document_proto::{NodeId, TextAlign};
+use frame::document::proto::motion::{Motion, Target};
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::motion;
+use frame::surface::widgets::Builder;
 use serde_json::json;
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::motion;
-use surface_widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -22,7 +22,7 @@ use crate::suite_studio_blues::parts::set;
 /// Each unit's params: on (its bypass).
 const NS: &str = "unit";
 
-fn on() -> Vec<surface_proto::ParamInfo> {
+fn on() -> Vec<frame::surface::proto::ParamInfo> {
     vec![ui::toggle(&format!("{NS}/on"), "Bypass", true)]
 }
 
@@ -275,7 +275,7 @@ fn ts808() -> Face {
             180.0,
             &[(0.0, "#2c2c2e"), (0.08, "#18181a"), (1.0, "#0c0c0d")],
         )];
-        tread.corner_radii = document_proto::CornerRadii::uniform(6.0);
+        tread.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         tread.clips_content = true;
         let tread = b.add(v, tread);
         let (mut lit, mut dark) = (Vec::new(), Vec::new());
@@ -336,7 +336,7 @@ fn spring() -> Face {
             let (w, h) = (S - 16.0, 92.0);
             let mut tank = draw::frame("Tank", 8.0, 46.0, w, h);
             tank.clips_content = true;
-            tank.corner_radii = document_proto::CornerRadii::uniform(6.0);
+            tank.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
             let tank = b.add(v, tank);
             crate::reverb::spring::tank_art_with(b, tank, &a, w, h, 2, "");
         },
@@ -345,7 +345,7 @@ fn spring() -> Face {
         ui::param(
             &format!("spring/{id}"),
             name,
-            surface_proto::Range::linear(0.0, 1.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 1.0, frame::surface::proto::Unit::None),
             d,
         )
     };

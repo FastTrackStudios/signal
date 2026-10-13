@@ -4,8 +4,8 @@
 //! and plain stomp switch in the bottom band (the lower 30 %), the switch
 //! in a printed ring.
 
-use document_proto::NodeId;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::art::{self, BLACK, GREEN, INK, Put, RED};
@@ -166,20 +166,20 @@ fn hexagram(b: &mut Builder<'_>, p: NodeId, size: (f64, f64), (cx, cy): (f64, f6
         cy - r * 0.55
     );
     for d in [up, down] {
-        let mut n = surface_kit::draw::path(
+        let mut n = frame::surface::kit::draw::path(
             "sigil",
             0.0,
             0.0,
             size.0,
             size.1,
             d,
-            surface_kit::draw::solid(RED),
+            frame::surface::kit::draw::solid(RED),
         );
         n.fills = Vec::new();
-        n.stroke = document_proto::Stroke {
-            paints: vec![surface_kit::draw::solid("#ff6a5c")],
+        n.stroke = frame::document::proto::Stroke {
+            paints: vec![frame::surface::kit::draw::solid("#ff6a5c")],
             weight: 1.0,
-            ..document_proto::Stroke::default()
+            ..frame::document::proto::Stroke::default()
         };
         b.add(p, n);
     }
@@ -227,7 +227,7 @@ fn boost() -> Face {
             (w / 2.0, 176.0),
             112.0,
             rk::Letter::new(20.0, 400.0, INK)
-                .family(surface_kit::draw::family::PIRATA_ONE)
+                .family(frame::surface::kit::draw::family::PIRATA_ONE)
                 .track(0.22),
         );
         medallion(b, p, size, (w / 2.0, 204.0), 13.0);
@@ -250,7 +250,7 @@ fn boost() -> Face {
 fn medallion(b: &mut Builder<'_>, p: NodeId, size: (f64, f64), (cx, cy): (f64, f64), r: f64) {
     let pts: Vec<(f64, f64)> = (0..16)
         .map(|i| {
-            surface_kit::draw::polar(
+            frame::surface::kit::draw::polar(
                 cx,
                 cy,
                 if i % 2 == 0 { r * 1.25 } else { r * 0.9 },
@@ -260,24 +260,24 @@ fn medallion(b: &mut Builder<'_>, p: NodeId, size: (f64, f64), (cx, cy): (f64, f
         .collect();
     b.add(
         p,
-        surface_kit::draw::path(
+        frame::surface::kit::draw::path(
             "star",
             0.0,
             0.0,
             size.0,
             size.1,
-            surface_kit::draw::polygon(&pts),
-            surface_kit::draw::solid(INK),
+            frame::surface::kit::draw::polygon(&pts),
+            frame::surface::kit::draw::solid(INK),
         ),
     );
     b.add(
         p,
-        surface_kit::draw::circle(
+        frame::surface::kit::draw::circle(
             "star heart",
             cx,
             cy,
             r * 0.8,
-            surface_kit::draw::solid(BLACK),
+            frame::surface::kit::draw::solid(BLACK),
         ),
     );
 }

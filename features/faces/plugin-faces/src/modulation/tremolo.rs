@@ -6,9 +6,9 @@
 //! that lamp, pulsing with the LFO. The shape (opto, stereo, harmonic) is
 //! a three-way selector.
 
-use document_proto::NodeId;
-use surface_kit::draw;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::draw;
+use frame::surface::widgets::Builder;
 
 use crate::face::{Face, canvas};
 use crate::reverb::ui::{self, Dial};

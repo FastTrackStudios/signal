@@ -11,7 +11,7 @@ fn run() -> Result<(), String> {
         .next()
         .ok_or_else(|| "usage: import_diagnostics <figma_export_or_api_json>".to_string())?;
     let bytes = std::fs::read(&input).map_err(|e| format!("failed reading {input}: {e}"))?;
-    let (_doc, diagnostics) = figma_rest::import_figma_bytes_with_diagnostics(&bytes)
+    let (_doc, diagnostics) = frame::figma::rest::import_figma_bytes_with_diagnostics(&bytes)
         .map_err(|e| format!("import failed for {input}: {e}"))?;
     let top = diagnostics
         .top_unsupported_keys(20)

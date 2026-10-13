@@ -1770,11 +1770,11 @@ fn rail_unit(scene: &mut Scene, pen: &Draw<'_>, which: Which, at: Panel) {
     let fields = crate::skin::values(&[
         (
             "unit.name",
-            theme_runtime::Value::text(if fits { name } else { "" }),
+            frame::theme::runtime::Value::text(if fits { name } else { "" }),
         ),
         (
             "unit.bypassed",
-            theme_runtime::Value::Bool(tone.bypass.is(which)),
+            frame::theme::runtime::Value::Bool(tone.bypass.is(which)),
         ),
     ]);
     theme.record_with(
@@ -1840,18 +1840,24 @@ fn unit(scene: &mut Scene, pen: &Draw<'_>, which: Which, at: Panel) {
     let fields = crate::skin::values(&[
         (
             "unit.name",
-            theme_runtime::Value::text(if name_fits { name } else { "" }),
+            frame::theme::runtime::Value::text(if name_fits { name } else { "" }),
         ),
         (
             "unit.value",
-            theme_runtime::Value::text(if value_fits { value } else { "" }),
+            frame::theme::runtime::Value::text(if value_fits { value } else { "" }),
         ),
-        ("unit.bypassed", theme_runtime::Value::Bool(bypassed)),
-        ("unit.glyph", theme_runtime::Value::Bool(mark.is_some())),
-        ("unit.expands", theme_runtime::Value::Bool(expands)),
+        (
+            "unit.bypassed",
+            frame::theme::runtime::Value::Bool(bypassed),
+        ),
+        (
+            "unit.glyph",
+            frame::theme::runtime::Value::Bool(mark.is_some()),
+        ),
+        ("unit.expands", frame::theme::runtime::Value::Bool(expands)),
         (
             "unit.zoom_lit",
-            theme_runtime::Value::Bool(lit == Some(Grip::Zoom(which))),
+            frame::theme::runtime::Value::Bool(lit == Some(Grip::Zoom(which))),
         ),
     ]);
     let (name_ink, _) = header_inks(palette, bypassed);
@@ -2623,20 +2629,25 @@ fn phase_themed(
     let fields = crate::skin::values(&[
         (
             "phase.name",
-            theme_runtime::Value::text(phase.display_name()),
+            frame::theme::runtime::Value::text(phase.display_name()),
         ),
         (
             "phase.tint",
-            theme_runtime::Value::Color(theme_runtime::Rgba::from_rgba8(r, g, b, a)),
+            frame::theme::runtime::Value::Color(frame::theme::runtime::Rgba::from_rgba8(
+                r, g, b, a,
+            )),
         ),
-        ("phase.blank", theme_runtime::Value::Bool(open.is_none())),
+        (
+            "phase.blank",
+            frame::theme::runtime::Value::Bool(open.is_none()),
+        ),
         (
             "phase.shut",
-            theme_runtime::Value::Bool(open.is_some_and(|(shut, _)| shut)),
+            frame::theme::runtime::Value::Bool(open.is_some_and(|(shut, _)| shut)),
         ),
         (
             "phase.held",
-            theme_runtime::Value::Bool(
+            frame::theme::runtime::Value::Bool(
                 open.is_some_and(|(_, lit)| lit == Some(Grip::Phase(phase))),
             ),
         ),
@@ -13636,7 +13647,7 @@ mod themed_tests {
             r##"<Var name="rack.well" value="#0a0a0c" />"##,
             r##"<Var name="rack.well" value="#ff0000" />"##,
         );
-        let theme = theme_runtime::Theme::from_sources(
+        let theme = frame::theme::runtime::Theme::from_sources(
             &[("tokens", &tokens), ("rack", src)],
             crate::skin::schema(),
             None,

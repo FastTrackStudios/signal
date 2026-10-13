@@ -9,11 +9,11 @@
 //! feedback there is; the head lamps flash on their repeats — the n-th
 //! head n times the time after the note, dimmer as the repeats die away.
 
-use document_proto::motion::{Motion, Target};
-use document_proto::{NodeId, TextAlign};
-use surface_kit::meters::scale::Card;
-use surface_kit::{Place, TOUCH_MIN, draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Motion, Target};
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::meters::scale::Card;
+use frame::surface::kit::{Place, TOUCH_MIN, draw, motion};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;

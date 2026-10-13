@@ -3,12 +3,12 @@
 //! the jack glyphs printed along a pedal's top edge, lower-case geometric
 //! lettering, knobs placed by their shaft, and the catalog entries.
 
-use document_proto::{CornerRadii, NodeId, NodeKind, TextAlign};
-use surface_kit::materials::paint::luma;
-use surface_kit::materials::texture::{self, Relief};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{ParamInfo, Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{CornerRadii, NodeId, NodeKind, TextAlign};
+use frame::surface::kit::materials::paint::luma;
+use frame::surface::kit::materials::texture::{self, Relief};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{ParamInfo, Range, Unit};
+use frame::surface::widgets::Builder;
 
 use crate::reverb::ui::{self, blend};
 
@@ -540,7 +540,7 @@ pub fn knob(
         .legend("")
         .touch(TOUCH_MIN)
         .options(cap.opts)
-        .ink(surface_kit::Ink::Color(ink.into()));
+        .ink(frame::surface::kit::Ink::Color(ink.into()));
     let k = ui::put(b, parent, cap.id, &p, cx, cy + cap.drop * d);
     ui::strip_legend(b, k);
     k

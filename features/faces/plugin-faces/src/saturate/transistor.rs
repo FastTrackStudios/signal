@@ -14,10 +14,10 @@
 //! or the fuzz). One stomp switch with its LED, and the part itself
 //! printed beside it — a PNP transistor's symbol.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{Ink as KitInk, Place, draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{Ink as KitInk, Place, draw, motion};
+use frame::surface::widgets::Builder;
 
 use crate::delay::art;
 use crate::delay::parts::{self, Ink, bind};
@@ -62,7 +62,7 @@ fn symbol(b: &mut Builder<'_>, lid: NodeId, (cx, cy): (f64, f64), r: f64, ink: &
         vec![(bar_x, cy + r * 0.22), (kx, ky), (kx, cy + r + 16.0)],
     ];
     let mut leads = parts::lines_node("leads", &leads, wt, ink);
-    leads.stroke.cap = document_proto::StrokeCap::None;
+    leads.stroke.cap = frame::document::proto::StrokeCap::None;
     b.add(lid, leads);
     let mut bar = parts::lines_node(
         "base bar",
@@ -70,7 +70,7 @@ fn symbol(b: &mut Builder<'_>, lid: NodeId, (cx, cy): (f64, f64), r: f64, ink: &
         wt * 2.0,
         ink,
     );
-    bar.stroke.cap = document_proto::StrokeCap::None;
+    bar.stroke.cap = frame::document::proto::StrokeCap::None;
     b.add(lid, bar);
     // PNP: the emitter's arrow points in, toward the bar.
     let (mx, my) = ((bar_x + ex) / 2.0 - 1.0, (cy - r * 0.22 + ey) / 2.0 + 0.5);
@@ -166,7 +166,7 @@ fn trace(
     d: String,
     color: &str,
     weight: f64,
-) -> document_proto::Node {
+) -> frame::document::proto::Node {
     draw::stroked(
         draw::path(name, 0.0, 0.0, w, h, d, draw::solid("#00000000")),
         color,
@@ -592,7 +592,7 @@ pub fn face() -> Face {
     }
 }
 
-fn params() -> Vec<surface_proto::ParamInfo> {
+fn params() -> Vec<frame::surface::proto::ParamInfo> {
     vec![
         parts::percent(&a("drive"), "Gain", 60.0).featured(),
         parts::trim(&a("tone"), "Tone").featured(),

@@ -4,9 +4,9 @@
 //! `knob.render` without it) with the face printing its own scale, legend
 //! and value.
 
-use document_proto::NodeId;
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::widgets::Builder;
 
 use crate::delay::art;
 use crate::delay::parts::{self, Ink};
@@ -96,7 +96,7 @@ pub(crate) fn selector(
         .options(&opts)
         .bind(parts::bind(addr))
         .legend(name)
-        .ink(surface_kit::Ink::Color(ink.into()))
+        .ink(frame::surface::kit::Ink::Color(ink.into()))
         .keep_case()
         .touch(TOUCH_MIN);
     let k = parts::put(b, panel, "knob.3d", &p, cx, cy);

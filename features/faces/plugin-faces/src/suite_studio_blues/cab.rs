@@ -7,15 +7,15 @@
 //! room size is over the cab, the room send, its level and PHASE under it.
 //! Cab, 900 × 900.
 
-use document_proto::{CornerRadii, NodeId, TextAlign};
-use surface_kit::Place;
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::materials::light;
-use surface_kit::materials::paint::{self, Cloth, Grain, Material};
-use surface_proto::{
+use frame::document::proto::{CornerRadii, NodeId, TextAlign};
+use frame::surface::kit::Place;
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::materials::light;
+use frame::surface::kit::materials::paint::{self, Cloth, Grain, Material};
+use frame::surface::proto::{
     Axis, Binding, ButtonMode, Control, ControlKind, HandleAxis, Range, SlotRole, Unit, ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use super::parts::{Cap, PLUGIN, knob, set};
 use crate::face::{Face, canvas};
@@ -120,7 +120,7 @@ fn power(b: &mut Builder<'_>, parent: NodeId, addr: &str, (cx, cy): (f64, f64)) 
             0.0,
             44.0,
             44.0,
-            surface_widgets::sector_path(
+            frame::surface::widgets::sector_path(
                 22.0,
                 23.0,
                 8.0,

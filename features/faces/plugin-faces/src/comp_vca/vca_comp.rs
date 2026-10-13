@@ -19,10 +19,10 @@
 //! The rack face and the host's lane shapes (see [`lane`]) are one layout
 //! read at three sets of [`Spots`], so they share every material.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Ink, Place, TOUCH_MIN, draw};
-use surface_proto::{Binding, ParamInfo, StreamInfo, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Ink, Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Binding, ParamInfo, StreamInfo, Unit};
+use frame::surface::widgets::Builder;
 
 use super::logo;
 use super::ui::{self, bind};

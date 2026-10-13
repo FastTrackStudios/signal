@@ -17,7 +17,7 @@ fn run() -> Result<(), String> {
     use image::RgbaImage;
     use kurbo::Affine;
     use peniko::Color;
-    use render::build_scene_layout_boxes;
+    use frame::render::build_scene_layout_boxes;
     use vello::Scene;
 
     let mut args = std::env::args().skip(1);
@@ -59,10 +59,10 @@ fn run() -> Result<(), String> {
     let export_bbox = extract_export_bbox(&bytes, root_figma_id.as_deref())?;
     let base_color =
         extract_export_base_color(&bytes, root_figma_id.as_deref())?.unwrap_or(Color::WHITE);
-    let doc = figma_import::import_bytes(&bytes)
+    let doc = frame::figma::import::import_bytes(&bytes)
         .map_err(|e| format!("failed importing source document from {input}: {e}"))?;
     let root = match root_figma_id {
-        Some(figma_id) => figma_import::node_for_figma_id(&doc, &figma_id)
+        Some(figma_id) => frame::figma::import::node_for_figma_id(&doc, &figma_id)
             .ok_or_else(|| format!("root figma id not found: {figma_id}"))?,
         None => doc.pages().first().copied().unwrap_or(doc.root),
     };
@@ -120,18 +120,18 @@ fn run() -> Result<(), String> {
     let mut scene = Scene::new();
     let scene_transform = Affine::translate((-min_x, -min_y));
     // The bundled book: Inter (Figma's default) first, then frame's families.
-    render::paint_scene_into(
+    frame::render::paint_scene_into(
         &mut scene,
         &doc,
         root,
         scene_transform,
-        Some(render::FontBook::bundled()),
+        Some(frame::render::FontBook::bundled()),
     );
 
     // Offscreen renders like `Renderer::render_to_texture` (MSAA 8×), but
     // re-renders in bands instead of coming back blank when the scene
     // overflows vello's buffers.
-    let pixels = render::offscreen::Offscreen::new()?
+    let pixels = frame::render::offscreen::Offscreen::new()?
         .render(&scene, width, height, base_color)?
         .rgba;
 

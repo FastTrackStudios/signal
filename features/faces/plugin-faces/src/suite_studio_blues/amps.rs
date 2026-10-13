@@ -15,14 +15,14 @@
 //!   faceplate in a silver frame, black skirted knobs numbered round the
 //!   dial, a script logo, wheat-and-oxblood cloth. Combo, 1000 × 753.
 
-use document_proto::{Node, NodeId};
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::materials::cabinet::{self, CabinetSpec, Handle, Kind};
-use surface_kit::materials::light;
-use surface_kit::materials::paint::{Cloth, Dir, Grain, Material};
-use surface_kit::{Place, TOUCH_MIN};
-use surface_proto::{Binding, Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{Node, NodeId};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::materials::cabinet::{self, CabinetSpec, Handle, Kind};
+use frame::surface::kit::materials::light;
+use frame::surface::kit::materials::paint::{Cloth, Dir, Grain, Material};
+use frame::surface::kit::{Place, TOUCH_MIN};
+use frame::surface::proto::{Binding, Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, Cap, PLUGIN, knob, knob_scaled, print, set};
 use crate::face::{Face, canvas};
@@ -119,7 +119,7 @@ fn jack(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, r: f64) {
 
 /// A slotted screw head.
 fn screw(b: &mut Builder<'_>, parent: NodeId, cx: f64, cy: f64, r: f64) {
-    surface_kit::materials::enclosure::screw(b, parent, cx, cy, r);
+    frame::surface::kit::materials::enclosure::screw(b, parent, cx, cy, r);
 }
 
 /// The pilot/bypass jewel: a kit jewel on `addr`. Its lamp burns steady:
@@ -166,7 +166,7 @@ fn slide(
     ui::put(b, parent, "switch.mini_slide", &p, cx, cy)
 }
 
-fn pct(ns: &str, id: &str, name: &str, default: f64) -> surface_proto::ParamInfo {
+fn pct(ns: &str, id: &str, name: &str, default: f64) -> frame::surface::proto::ParamInfo {
     ui::param(
         &format!("{ns}/{id}"),
         name,
@@ -908,7 +908,7 @@ pub fn lead_head() -> Face {
                     180.0,
                     34.0,
                     "#f4f1ea",
-                    document_proto::TextAlign::Center,
+                    frame::document::proto::TextAlign::Center,
                     &script,
                 ),
                 "#000000a0",
@@ -1142,7 +1142,7 @@ pub fn silk_combo() -> Face {
                     140.0,
                     28.0,
                     "#f2dcd6",
-                    document_proto::TextAlign::Center,
+                    frame::document::proto::TextAlign::Center,
                     &script,
                 ),
                 "#00000080",
@@ -1159,7 +1159,7 @@ pub fn silk_combo() -> Face {
                     140.0,
                     28.0,
                     "#f2dcd6",
-                    document_proto::TextAlign::Center,
+                    frame::document::proto::TextAlign::Center,
                     &script,
                 ),
                 "#00000080",

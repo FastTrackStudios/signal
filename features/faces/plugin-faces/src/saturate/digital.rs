@@ -9,10 +9,10 @@
 //! the crusher's BITS and RATE, TONE and DITHER, and MIX and OUTPUT last.
 //! Output level on two LED columns.
 
-use document_proto::{NodeId, StrokeCap, TextAlign};
-use surface_kit::{Place, draw};
-use surface_proto::{Range, Unit, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, StrokeCap, TextAlign};
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{Range, Unit, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use crate::delay::art;
 use crate::delay::parts::{self, Ink, Screen, bind};
@@ -287,7 +287,7 @@ pub fn face() -> Face {
     }
 }
 
-fn params() -> Vec<surface_proto::ParamInfo> {
+fn params() -> Vec<frame::surface::proto::ParamInfo> {
     vec![
         parts::percent(&a("drive"), "Drive", 40.0).featured(),
         parts::param(
@@ -334,7 +334,7 @@ fn params() -> Vec<surface_proto::ParamInfo> {
     .collect()
 }
 
-fn streams() -> Vec<surface_proto::StreamInfo> {
+fn streams() -> Vec<frame::surface::proto::StreamInfo> {
     vec![parts::level_stream(&a("out"), "Output Level", 2)]
 }
 

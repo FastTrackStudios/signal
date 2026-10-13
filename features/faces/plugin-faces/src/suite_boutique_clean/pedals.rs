@@ -18,9 +18,9 @@
 //!   vibrato on a three-way toggle) — concentric rings; its LED breathes
 //!   at the speed.
 
-use document_proto::NodeId;
-use surface_proto::{Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::proto::{Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::look::KnobLook;
 use super::look::{self, INK, TEAL};
@@ -65,7 +65,7 @@ struct Pedal<'a> {
     extra: Option<fn(&mut Builder<'_>, &Lid)>,
 }
 
-fn build(p: &Pedal<'_>) -> document_proto::Scene {
+fn build(p: &Pedal<'_>) -> frame::document::proto::Scene {
     canvas(p.title, |b, root| {
         let lid = look::stompbox(b, root, (STANDARD_W, PEDAL_H), p.color, "satin", 12.0);
         look::brush_mark(b, lid.id, lid.at(0.5, 0.042), 11.0, INK);
@@ -136,10 +136,10 @@ fn hexes(b: &mut Builder<'_>, plate: NodeId, _: (f64, f64), _: (f64, f64)) {
             let cx = f64::from(col) * dx + if row % 2 == 0 { 0.0 } else { dx / 2.0 };
             let cy = f64::from(row) * dy;
             let hex: Vec<(f64, f64)> = (0..=6)
-                .map(|i| surface_kit::draw::polar(cx, cy, r, 60.0 * f64::from(i)))
+                .map(|i| frame::surface::kit::draw::polar(cx, cy, r, 60.0 * f64::from(i)))
                 .collect();
             let inner: Vec<(f64, f64)> = (0..=6)
-                .map(|i| surface_kit::draw::polar(cx, cy, r * 0.5, 60.0 * f64::from(i)))
+                .map(|i| frame::surface::kit::draw::polar(cx, cy, r * 0.5, 60.0 * f64::from(i)))
                 .collect();
             lines.push(hex);
             lines.push(inner[..4].to_vec());
@@ -158,17 +158,20 @@ fn blocks(b: &mut Builder<'_>, plate: NodeId, (w, h): (f64, f64), _: (f64, f64))
             let cx = f64::from(col) * dx + if row % 2 == 0 { 0.0 } else { dx / 2.0 };
             let cy = f64::from(row) * dy;
             let hex: Vec<(f64, f64)> = (0..=6)
-                .map(|i| surface_kit::draw::polar(cx, cy, r, 60.0 * f64::from(i)))
+                .map(|i| frame::surface::kit::draw::polar(cx, cy, r, 60.0 * f64::from(i)))
                 .collect();
             lines.push(hex);
             // The cube's three edges from the centre.
             for a in [0.0, 120.0, 240.0] {
-                lines.push(vec![(cx, cy), surface_kit::draw::polar(cx, cy, r, a)]);
+                lines.push(vec![
+                    (cx, cy),
+                    frame::surface::kit::draw::polar(cx, cy, r, a),
+                ]);
             }
             // A droplet on each face.
             for a in [60.0, 180.0, 300.0] {
-                let (x, y) = surface_kit::draw::polar(cx, cy, r * 0.5, a);
-                let (tx, ty) = surface_kit::draw::polar(x, y, 3.2, a + 180.0);
+                let (x, y) = frame::surface::kit::draw::polar(cx, cy, r * 0.5, a);
+                let (tx, ty) = frame::surface::kit::draw::polar(x, y, 3.2, a + 180.0);
                 drops.push_str(&format!("M {tx:.2} {ty:.2} Q {:.2} {:.2} {x:.2} {y:.2} Q {:.2} {:.2} {tx:.2} {ty:.2} Z ", x + 2.4, y - 0.5, x - 2.4, y + 0.5));
             }
         }
@@ -176,14 +179,14 @@ fn blocks(b: &mut Builder<'_>, plate: NodeId, (w, h): (f64, f64), _: (f64, f64))
     look::carve(b, plate, &lines, 0.9);
     b.add(
         plate,
-        surface_kit::draw::path(
+        frame::surface::kit::draw::path(
             "droplets",
             0.0,
             0.0,
             w,
             h,
             drops,
-            surface_kit::draw::solid("#3e1b0fb8"),
+            frame::surface::kit::draw::solid("#3e1b0fb8"),
         ),
     );
 }
@@ -206,12 +209,12 @@ const TWO_BY_TWO: [((f64, f64), f64); 4] = [
 ];
 
 /// A 0..100 % control left where the reference leaves it.
-fn down_pct(addr: &str, name: &str) -> surface_proto::ParamInfo {
+fn down_pct(addr: &str, name: &str) -> frame::surface::proto::ParamInfo {
     parts::pct(addr, name, DOWN * 100.0)
 }
 
 /// A ±12 dB control left where the reference leaves it.
-fn down_db(addr: &str, name: &str) -> surface_proto::ParamInfo {
+fn down_db(addr: &str, name: &str) -> frame::surface::proto::ParamInfo {
     parts::db(addr, name, -12.0, 12.0, -12.0 + 24.0 * DOWN)
 }
 

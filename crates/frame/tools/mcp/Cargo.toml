@@ -10,18 +10,12 @@ name = "frame-mcp"
 path = "src/main.rs"
 
 [dependencies]
-design-session = { path = "../../design/design-session" }
-document-proto = { path = "../../document/document-proto", default-features = false }
-document-io = { path = "../../document/document-io" }
-surface-memory = { path = "../../surface/surface-memory" }
-surface-proto = { path = "../../surface/surface-proto" }
-surface-runtime = { path = "../../surface/surface-runtime", features = ["remote"] }
-library-link = { path = "../../library/library-link" }
+frame = { path = "../..", features = ["design", "io", "library", "remote", "runtime"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-library-fs = { path = "../../library/library-fs" }
+frame = { path = "../..", features = ["library"] }
 architect = { workspace = true, features = ["vox", "local"] }
 
 [lints]

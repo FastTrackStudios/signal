@@ -16,10 +16,10 @@
 //! the tape), BIAS (under- or over-biased from the calibrated point),
 //! EMPHASIS, COMPRESSION, and MIX and OUTPUT last.
 
-use document_proto::NodeId;
-use surface_kit::{Place, draw, motion};
-use surface_proto::{Binding, EntryId, Source};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, draw, motion};
+use frame::surface::proto::{Binding, EntryId, Source};
+use frame::surface::widgets::Builder;
 
 use super::hw;
 use crate::delay::art::{self, circle_d, ring_d, sector_d};
@@ -120,7 +120,7 @@ fn reel(
         0.6,
     );
     bands.fills = Vec::new();
-    bands.stroke.align = document_proto::StrokeAlign::Center;
+    bands.stroke.align = frame::document::proto::StrokeAlign::Center;
     b.add(lit, draw::with_opacity(bands, 0.3));
     let turning = b.add(lit, draw::frame("reel turning", 0.0, 0.0, side, side));
     // The flange: aluminium, spun (the conic sheen), three windows.
@@ -178,7 +178,7 @@ fn reel(
         0.7,
     );
     rings.fills = Vec::new();
-    rings.stroke.align = document_proto::StrokeAlign::Center;
+    rings.stroke.align = frame::document::proto::StrokeAlign::Center;
     b.add(turning, rings);
     let mut rim = ring_d(c, c, r - 1.1, r);
     for i in 0..3 {
@@ -564,7 +564,7 @@ pub fn face() -> Face {
     }
 }
 
-fn params() -> Vec<surface_proto::ParamInfo> {
+fn params() -> Vec<frame::surface::proto::ParamInfo> {
     vec![
         parts::percent(&a("drive"), "Record Level", 30.0).featured(),
         parts::trim(&a("bias"), "Bias").featured(),
@@ -580,7 +580,7 @@ fn params() -> Vec<surface_proto::ParamInfo> {
     .collect()
 }
 
-fn streams() -> Vec<surface_proto::StreamInfo> {
+fn streams() -> Vec<frame::surface::proto::StreamInfo> {
     vec![parts::level_stream(&a("out"), "Output Level", 2)]
 }
 

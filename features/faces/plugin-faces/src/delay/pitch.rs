@@ -9,10 +9,10 @@
 //! other in cents. The voicing keys pick plain pitch repeats or shimmer
 //! (each repeat an octave up, fed back into the next).
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::Place;
-use surface_proto::{Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::Place;
+use frame::surface::proto::{Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::art;
 use super::parts::{self, Ink, Screen, bind};

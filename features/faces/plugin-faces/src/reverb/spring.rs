@@ -14,10 +14,10 @@
 //! give it, at a pitch TENSION sets, and rings not at all with the reverb
 //! switched out.
 
-use document_proto::motion::{Dynamics, Motion, Num, Target};
-use document_proto::{Node, NodeId, Stroke, StrokeCap, StrokeJoin};
-use surface_kit::{Place, draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Num, Target};
+use frame::document::proto::{Node, NodeId, Stroke, StrokeCap, StrokeJoin};
+use frame::surface::kit::{Place, draw, motion};
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Dial, bind};
 use crate::animate;
@@ -378,7 +378,7 @@ pub fn face() -> Face {
         );
         let mut tank = draw::frame("Tank", tx, ty, tw, th);
         tank.clips_content = true;
-        tank.corner_radii = document_proto::CornerRadii::uniform(6.0);
+        tank.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         tank.effects = vec![draw::drop_shadow("#000000b0", 0.0, 4.0, 10.0)];
         let tank = b.add(panel, tank);
         tank_art(b, tank, tw, th, 2);
@@ -460,7 +460,7 @@ pub fn rig_face(file: &'static str, plugin: &'static str, w: f64, h: f64) -> Fac
         let (tx, ty, tw, th) = (46.0, 20.0, w - 92.0, h * 0.46);
         let mut tank = draw::frame("Tank", tx, ty, tw, th);
         tank.clips_content = true;
-        tank.corner_radii = document_proto::CornerRadii::uniform(6.0);
+        tank.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         tank.effects = vec![draw::drop_shadow("#000000b0", 0.0, 4.0, 10.0)];
         let tank = b.add(panel, tank);
         tank_art_with(b, tank, &a, tw, th, 2, "");
@@ -489,40 +489,40 @@ pub fn rig_face(file: &'static str, plugin: &'static str, w: f64, h: f64) -> Fac
         ui::param(
             "spring/decay",
             "Dwell",
-            surface_proto::Range::linear(0.0, 1.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 1.0, frame::surface::proto::Unit::None),
             0.35,
         )
         .featured(),
         ui::param(
             "spring/tone",
             "Tone",
-            surface_proto::Range::linear(-1.0, 1.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(-1.0, 1.0, frame::surface::proto::Unit::None),
             0.0,
         )
         .featured(),
         ui::param(
             "spring/damping",
             "Damping",
-            surface_proto::Range::linear(0.0, 1.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 1.0, frame::surface::proto::Unit::None),
             0.3,
         ),
         ui::param(
             "spring/level",
             "Mix",
-            surface_proto::Range::linear(-60.0, 12.0, surface_proto::Unit::Db),
+            frame::surface::proto::Range::linear(-60.0, 12.0, frame::surface::proto::Unit::Db),
             -16.5,
         )
         .featured(),
         ui::param(
             "spring/tension",
             "Tension",
-            surface_proto::Range::linear(0.0, 1.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 1.0, frame::surface::proto::Unit::None),
             0.5,
         ),
         ui::param(
             "spring/modulation",
             "Drip",
-            surface_proto::Range::linear(0.0, 1.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 1.0, frame::surface::proto::Unit::None),
             0.2,
         ),
         ui::toggle("spring/on", "Reverb", true),

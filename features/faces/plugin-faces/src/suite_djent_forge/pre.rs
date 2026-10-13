@@ -8,9 +8,9 @@
 //! maker's mark (invented, in heavy geometric capitals) or a thin printed
 //! rule over a "designed in" line. Rows sit where the reference's do.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::Place;
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::Place;
+use frame::surface::widgets::Builder;
 
 use super::type_::{fine, legend, mark, name};
 use super::{BLUE, LED_BLUE, PLUGIN, pedal_knob};
@@ -166,7 +166,7 @@ fn compressor() -> Face {
             .size(22.0)
             .variant("chrome")
             .bind(rk::bind(&a("intensity")))
-            .touch(surface_kit::TOUCH_MIN);
+            .touch(frame::surface::kit::TOUCH_MIN);
         let dome = parts::put(b, p, "switch.push_dome", &dome, w / 2.0, 62.0);
         rk::label_l(b, dome, "INTENSITY", (w / 2.0, 81.0), lg);
 
@@ -200,7 +200,7 @@ fn compressor() -> Face {
 
 /// A recessed black slot (the GR meter's window).
 fn draw_slot(b: &mut Builder<'_>, parent: NodeId, r: (f64, f64, f64, f64)) -> NodeId {
-    let fill = surface_kit::draw::linear(180.0, &[(0.0, "#050506"), (1.0, "#1c1d20")]);
+    let fill = frame::surface::kit::draw::linear(180.0, &[(0.0, "#050506"), (1.0, "#1c1d20")]);
     parts::well(b, parent, "meter slot", r, fill, r.3 / 2.0)
 }
 
@@ -266,7 +266,7 @@ fn tape_drift() -> Face {
             seg,
             TextAlign::Center,
             None,
-            surface_proto::ValueFormat::decimals(0).unit(" MS"),
+            frame::surface::proto::ValueFormat::decimals(0).unit(" MS"),
         );
         // MS / NOTE: the time runs free or locks to a note.
         let tm = Place::new("Time mode")
@@ -297,7 +297,11 @@ fn tape_drift() -> Face {
         parts::param(
             &a("time"),
             "Time",
-            surface_proto::Range::linear(40.0, 3960.0, surface_proto::Unit::Milliseconds),
+            frame::surface::proto::Range::linear(
+                40.0,
+                3960.0,
+                frame::surface::proto::Unit::Milliseconds,
+            ),
             2000.0,
         )
         .featured(),
@@ -378,12 +382,12 @@ fn tight_drive() -> Face {
         rk::knob_l(b, p, &KNOB, &a("attack"), "Attack", (29.0, 76.0), 104.0, lg);
         rk::knob_l(b, p, &KNOB, &a("drive"), "Drive", (126.0, 74.0), 104.0, lg);
         // The gate: a small translucent knob with a blue lamp under it.
-        let glow = surface_kit::draw::circle(
+        let glow = frame::surface::kit::draw::circle(
             "gate glow",
             78.0,
             88.5,
             14.0,
-            surface_kit::draw::radial(&[
+            frame::surface::kit::draw::radial(&[
                 (0.0, "#8fd0ffcc"),
                 (0.55, "#3f8fe066"),
                 (1.0, "#3f8fe000"),

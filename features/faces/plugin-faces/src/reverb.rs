@@ -34,7 +34,7 @@ mod special;
 pub mod spring;
 pub mod ui;
 
-use surface_proto::{ParamInfo, Range, StreamInfo, Unit};
+use frame::surface::proto::{ParamInfo, Range, StreamInfo, Unit};
 
 use crate::face::Face;
 

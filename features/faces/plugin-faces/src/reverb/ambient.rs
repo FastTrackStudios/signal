@@ -6,9 +6,9 @@
 //! is set by, are the big wing knobs; the engine (Cloud, Bloom, Swell,
 //! Velvet) is on backlit keys; the shaping controls run along the bottom.
 
-use document_proto::NodeId;
-use surface_kit::draw;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::draw;
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Dial};
 use crate::face::{Face, canvas};

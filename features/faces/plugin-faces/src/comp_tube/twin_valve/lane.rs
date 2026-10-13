@@ -9,10 +9,10 @@
 //!   and the AGC switch across the top, and INPUT GAIN, THRESHOLD and TIME
 //!   CONSTANT across the bottom.
 
-use document_proto::NodeId;
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{MeterTap, Range, SourceSelect, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{MeterTap, Range, SourceSelect, Unit};
+use frame::surface::widgets::Builder;
 
 use super::super::ui::{self, Ink};
 use super::{CHROME, GAIN_STEPS, INK, interleave, trim};
@@ -139,7 +139,7 @@ fn build(b: &mut Builder<'_>, root: NodeId, shape: Shape) {
         &[(0.0, "#d6d6d2"), (0.5, "#cacac6"), (1.0, "#bdbdb9")],
     );
     if let Some(n) = b.scene.node_mut(front) {
-        n.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        n.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
     }
 
     // ── The plate ────────────────────────────────────────────────────
@@ -520,7 +520,7 @@ fn grey_strip(b: &mut Builder<'_>, front: NodeId, (w, h): (f64, f64)) {
             .size(44.0)
             .legend(" ")
             .options(&["On", ""])
-            .ink(surface_kit::Ink::Color("#2a2a28".into()))
+            .ink(frame::surface::kit::Ink::Color("#2a2a28".into()))
             .bind(ui::bind("twinvalve/power")),
     );
     super::super::opto_leveler::place_toggle(b, on, lx, 84.0);

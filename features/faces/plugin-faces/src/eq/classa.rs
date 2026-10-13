@@ -14,9 +14,9 @@
 //! The module itself is a tall strip; the rack version's single row is the
 //! layout that fits a plugin window, so that is the one followed here.
 
-use document_proto::NodeId;
-use surface_kit::{Ink, Place, TOUCH_MIN, draw};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Ink, Place, TOUCH_MIN, draw};
+use frame::surface::widgets::Builder;
 
 use super::{paint, screw};
 use crate::comp_vca::ui::{self, Glyph, bind};

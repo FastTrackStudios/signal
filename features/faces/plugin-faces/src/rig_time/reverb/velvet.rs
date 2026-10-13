@@ -10,10 +10,10 @@
 //! Two finishes: light, a dove-grey case lined in lilac velvet; dark, black
 //! velvet in a plum case.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use super::shell::{self, Look, Room, Unit};
 use crate::face::Face;
@@ -157,12 +157,12 @@ fn ground(b: &mut Builder<'_>, root: NodeId, (w, h): (f64, f64), dark: bool) -> 
         draw::solid("#00000000"),
     );
     s.fills.clear();
-    s.corner_radii = document_proto::CornerRadii::uniform(7.0);
-    s.stroke = document_proto::Stroke {
+    s.corner_radii = frame::document::proto::CornerRadii::uniform(7.0);
+    s.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid(f.stitch)],
         weight: 0.8,
         dash_pattern: vec![3.0, 2.5],
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     b.add(panel, s);
     panel
@@ -180,7 +180,7 @@ fn tray(
     let mut t = draw::frame("Tray", x, y, w, h);
     t.fills = vec![draw::linear(165.0, &f.velvet)];
     t.clips_content = true;
-    t.corner_radii = document_proto::CornerRadii::uniform(6.0);
+    t.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
     t.effects = vec![draw::inner_shadow("#000000c0", 0.0, 2.5, 8.0)];
     let t = b.add(panel, t);
     // The pile: crushed, its sheen in soft diagonal bands.
@@ -438,8 +438,8 @@ fn picture(
         draw::solid("#00000000"),
     );
     rim.fills.clear();
-    rim.corner_radii = document_proto::CornerRadii::uniform(7.0);
-    rim.stroke = document_proto::Stroke {
+    rim.corner_radii = frame::document::proto::CornerRadii::uniform(7.0);
+    rim.stroke = frame::document::proto::Stroke {
         paints: vec![draw::linear(
             100.0,
             &[
@@ -450,7 +450,7 @@ fn picture(
             ],
         )],
         weight: 2.5,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     let rim = b.add(panel, rim);
     vec![t, rim]

@@ -8,10 +8,12 @@
 //!   EQ on turned feet — HPF and LPF cup knobs reading OFF, nine pearl
 //!   sliders 65 Hz – 16 kHz reading dB, an orange power toggle and pilot.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{Axis, ButtonMode, Control, ControlKind, HandleAxis, SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{
+    Axis, ButtonMode, Control, ControlKind, HandleAxis, SlotRole, ValueFormat,
+};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use crate::delay::parts::{self, Ink};
@@ -566,7 +568,7 @@ fn mic_column(b: &mut Builder<'_>, root: NodeId, ns: &str, which: &str, x: f64, 
     );
 }
 
-fn mic_params(ns: &str, which: &str, default_mic: usize) -> Vec<surface_proto::ParamInfo> {
+fn mic_params(ns: &str, which: &str, default_mic: usize) -> Vec<frame::surface::proto::ParamInfo> {
     let a = |s: &str| format!("{ns}/{which}_{s}");
     let label = if which == "a" { "Mic A" } else { "Mic B" };
     vec![
@@ -576,9 +578,13 @@ fn mic_params(ns: &str, which: &str, default_mic: usize) -> Vec<surface_proto::P
         rk::percent(&a("distance"), &format!("{label} Distance"), 0.0),
         rk::db(&a("level"), &format!("{label} Level"), -24.0, 12.0, 0.0),
         {
-            let r = surface_proto::Range {
+            let r = frame::surface::proto::Range {
                 steps: Some(201),
-                ..surface_proto::Range::linear(-100.0, 100.0, surface_proto::Unit::Percent)
+                ..frame::surface::proto::Range::linear(
+                    -100.0,
+                    100.0,
+                    frame::surface::proto::Unit::Percent,
+                )
             };
             parts::param(&a("pan"), &format!("{label} Pan"), r, 0.0).bipolar()
         },

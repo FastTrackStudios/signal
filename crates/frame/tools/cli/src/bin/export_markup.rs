@@ -7,7 +7,7 @@
 //! open it in the desktop player (`frame demo.frame`) and edit — the window
 //! hot-reloads on save.
 
-use surface_widgets::{Options, Theme, surface_for_catalog};
+use frame::surface::widgets::{Options, Theme, surface_for_catalog};
 
 fn main() {
     if let Err(err) = run() {
@@ -35,7 +35,7 @@ fn run() -> Result<(), String> {
     }
     let out = out.ok_or("--out <file.frame> is required")?;
 
-    let catalog = surface_memory::demo_catalog();
+    let catalog = frame::surface::memory::demo_catalog();
     let surface = surface_for_catalog(
         &catalog,
         &Options {
@@ -44,9 +44,9 @@ fn run() -> Result<(), String> {
         },
     );
     let scene = surface.to_scene();
-    let text = document_text::print(&scene);
+    let text = frame::document::text::print(&scene);
     // Markup plus its `.frame.assets/` sidecar when the scene carries any.
-    document_io::save_surface(&out, &scene).map_err(|e| format!("writing {e}"))?;
+    frame::document::io::save_surface(&out, &scene).map_err(|e| format!("writing {e}"))?;
     println!(
         "{{\"ok\":true,\"out\":\"{out}\",\"bytes\":{},\"controls\":{}}}",
         text.len(),

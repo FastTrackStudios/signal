@@ -3,7 +3,7 @@
 //! ```text
 //! font_sheet --out fonts.png [--scale 2]
 //! ```
-//! One row per family (`render::fonts::BUNDLED`): its name, what it suits,
+//! One row per family (`frame::render::fonts::BUNDLED`): its name, what it suits,
 //! and a sample set at its lightest, regular and heaviest weights, then
 //! italic; then Inter's weight ramp and Saira's width axis. Everything is
 //! plain `<Text>` nodes set by the renderer's font book — what a surface
@@ -25,8 +25,8 @@ fn main() {
 
 #[cfg(feature = "anyrender")]
 fn run() -> Result<(), String> {
-    use document_proto::{Node, NodeId, Scene, TextAlign};
-    use surface_kit::draw::{self, Lettering};
+    use frame::document::proto::{Node, NodeId, Scene, TextAlign};
+    use frame::surface::kit::draw::{self, Lettering};
 
     let mut out = None;
     let mut scale = 1.0_f64;
@@ -71,7 +71,7 @@ fn run() -> Result<(), String> {
 
     const W: f64 = 1500.0;
     const ROW: f64 = 92.0;
-    let fams = render::fonts::BUNDLED;
+    let fams = frame::render::fonts::BUNDLED;
     let h = 90.0 + fams.len() as f64 * ROW + 250.0;
     let mut scene = Scene::new("Fonts");
     let page = scene.pages()[0];
@@ -283,9 +283,9 @@ fn run() -> Result<(), String> {
     let mut x = 280.0;
     for wd in [50.0, 62.5, 75.0, 87.5, 100.0, 112.5, 125.0] {
         let l = Lettering::family("Saira").weight(700.0).width(wd);
-        let adv = render::text_advance(
-            render::FontBook::bundled(),
-            &render::fonts::FontSpec {
+        let adv = frame::render::text_advance(
+            frame::render::FontBook::bundled(),
+            &frame::render::fonts::FontSpec {
                 family: l.family.clone(),
                 weight: l.weight,
                 style: None,
@@ -375,14 +375,14 @@ fn run() -> Result<(), String> {
 
     let (w, hh) = ((W * scale).ceil() as u32, (h * scale).ceil() as u32);
     let mut vs = vello::Scene::new();
-    render::paint_scene_into(
+    frame::render::paint_scene_into(
         &mut vs,
         &scene,
         page,
         kurbo::Affine::scale(scale),
-        Some(render::FontBook::bundled()),
+        Some(frame::render::FontBook::bundled()),
     );
-    let px = render::offscreen::Offscreen::new()?.render(
+    let px = frame::render::offscreen::Offscreen::new()?.render(
         &vs,
         w,
         hh,

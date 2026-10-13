@@ -832,7 +832,7 @@ pub struct Painters {
 /// One frame face, open: what it was last shown, so a value it is being
 /// dragged through is not pushed back at it every frame.
 pub struct Live {
-    pub surface: frame_live::LiveSurface,
+    pub surface: frame::live::LiveSurface,
     shown: Option<FrameFace>,
     /// Its GPU path, once tried: the texture the renderer knows (and
     /// the size it was registered at), or `Failed` — vectors from then.
@@ -987,7 +987,7 @@ impl Painters {
     }
 
     /// Device `key`'s frame face, open, for the pointer.
-    pub fn frame_mut(&mut self, key: &str) -> Option<&mut frame_live::LiveSurface> {
+    pub fn frame_mut(&mut self, key: &str) -> Option<&mut frame::live::LiveSurface> {
         self.frames.get_mut(key).map(|live| &mut live.surface)
     }
 
@@ -1101,8 +1101,8 @@ impl Painters {
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            let (markup, catalog) = frame_live::face_paths(&dir, &stem);
-            match frame_live::LiveSurface::open(&markup, catalog) {
+            let (markup, catalog) = frame::live::face_paths(&dir, &stem);
+            match frame::live::LiveSurface::open(&markup, catalog) {
                 Ok(mut surface) => {
                     surface.set_animate(true);
                     self.frames.insert(

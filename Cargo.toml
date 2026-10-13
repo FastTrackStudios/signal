@@ -8,6 +8,7 @@
 resolver = "3"
 
 members = [
+    "crates/frame",
     "features/audio/worklet",
     "features/patchbay",
     "features/midi",
@@ -195,36 +196,6 @@ members = [
     "crates/frame/tools/mcp",
     "crates/frame/tools/desktop",
     "crates/frame/tools/library-server",
-    "crates/frame/frame-embed",
-    "crates/frame/frame-live",
-    "crates/frame/design/design-lint",
-    "crates/frame/design/design-session",
-    "crates/frame/document/document-proto",
-    "crates/frame/document/document-loro",
-    "crates/frame/document/document-bundle",
-    "crates/frame/document/document-text",
-    "crates/frame/document/document-io",
-    "crates/frame/feed/feed-proto",
-    "crates/frame/feed/feed-dsp",
-    "crates/frame/feed/feed-memory",
-    "crates/frame/figma/figma-import",
-    "crates/frame/figma/figma-model",
-    "crates/frame/figma/figma-rest",
-    "crates/frame/library/library-proto",
-    "crates/frame/library/library-fs",
-    "crates/frame/library/library-link",
-    "crates/frame/motion/motion-proto",
-    "crates/frame/motion/motion-runtime",
-    "crates/frame/render/render",
-    "crates/frame/render/render-fonts",
-    "crates/frame/render/render-canvas",
-    "crates/frame/surface/surface-proto",
-    "crates/frame/surface/surface-memory",
-    "crates/frame/surface/surface-runtime",
-    "crates/frame/surface/surface-widgets",
-    "crates/frame/surface/surface-kit",
-    "crates/frame/theme/theme-expr",
-    "crates/frame/theme/theme-runtime",
     "features/faces/plugin-faces",
     "xtask/frame",
 ]
@@ -238,6 +209,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/FastTrackStudios/session"
 
 [workspace.dependencies]
+frame = { path = "crates/frame" }
 web-audio-worklet = { path = "features/audio/worklet" }
 patchbay = { path = "features/patchbay" }
 midi = { path = "features/midi" }
@@ -326,11 +298,9 @@ ropey = "1.6"
 # docs/frame-themes.md. A path dep on a local checkout of
 # github.com/FastTrackStudios/frame while the theme runtime is built out;
 # becomes a tagged git dep once frame cuts one.
-theme-runtime = { path = "crates/frame/theme/theme-runtime", features = ["anyrender-0-11"] }
 # A frame face running live: a control surface designed in frame (the
 # rig's pedals, amps and Time blocks, a reverb's machine), painted into
 # the host's scene and played by its pointer — the FX view's devices.
-frame-live = { path = "crates/frame/frame-live", features = ["anyrender-0-11"] }
 
 # ── daw domain (wave 2) ───────────────────────────────────────────────
 # Facade crate — the only public API surface for the daw domain.

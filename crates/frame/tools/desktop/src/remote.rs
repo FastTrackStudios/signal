@@ -13,9 +13,9 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use architect::Backoff;
-use surface_proto::{Catalog, ParamValue};
-use surface_runtime::EngineCall;
-use surface_runtime::sync::{self, Engine, EngineError, Incoming, PumpEnd, Telemetry};
+use frame::surface::proto::{Catalog, ParamValue};
+use frame::surface::runtime::EngineCall;
+use frame::surface::runtime::sync::{self, Engine, EngineError, Incoming, PumpEnd, Telemetry};
 use tokio::sync::mpsc as tmpsc;
 
 /// What the UI thread receives.
@@ -298,8 +298,8 @@ async fn session(
 #[cfg(test)]
 pub mod testing {
     use architect::{LayerRouter, Services as _};
-    use surface_memory::Memory;
-    use surface_runtime::sync;
+    use frame::surface::memory::Memory;
+    use frame::surface::runtime::sync;
 
     /// The mock engine served over a WebSocket on its own thread; `kill`
     /// drops every socket at once, like a crashed engine.
@@ -378,8 +378,8 @@ pub mod testing {
 mod tests {
     use super::testing::Server;
     use super::*;
-    use surface_memory::Memory;
-    use surface_proto::{EditPhase, ParamAddr};
+    use frame::surface::memory::Memory;
+    use frame::surface::proto::{EditPhase, ParamAddr};
 
     /// Drain until `want` matches, ticking the served engine.
     fn wait_for(remote: &mut Remote, engine: &Memory, want: impl Fn(&Event) -> bool) -> Event {

@@ -7,13 +7,13 @@
 //! `dly/feedback` each time; a decay stretches with `verb/decay`. Faces
 //! are free to draw their own instead.
 
-use document_proto::motion::{Dynamics, Motion, Target};
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, draw, motion};
-use surface_proto::{
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, draw, motion};
+use frame::surface::proto::{
     ButtonMode, Condition, Control, ControlKind, ParamInfo, Range, SlotRole, Unit,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 use crate::face::{Face, canvas};
 use crate::reverb::ui::{self, Dial};
@@ -65,7 +65,7 @@ pub const BLOOM: f64 = 16.0;
 /// see the effect contract. Renderers without the stage draw it plainly.
 pub fn effect(b: &mut Builder<'_>, id: NodeId, name: &str, params: &[(&str, f64)]) {
     if let Some(n) = b.scene.node_mut(id) {
-        n.shader = Some(document_proto::ShaderFx {
+        n.shader = Some(frame::document::proto::ShaderFx {
             shader: name.into(),
             params: params.iter().map(|(k, v)| ((*k).to_string(), *v)).collect(),
             inputs: Vec::new(),
@@ -349,7 +349,7 @@ pub fn reverb_params_in(n: &str) -> Vec<ParamInfo> {
 
 /// A delay face: its scene under `file`, with the delay's params.
 #[must_use]
-pub fn delay_face(file: &'static str, scene: document_proto::Scene) -> Face {
+pub fn delay_face(file: &'static str, scene: frame::document::proto::Scene) -> Face {
     Face {
         file,
         plugin: PLUGIN,
@@ -361,7 +361,7 @@ pub fn delay_face(file: &'static str, scene: document_proto::Scene) -> Face {
 
 /// A reverb face: its scene under `file`, with the reverb's params.
 #[must_use]
-pub fn reverb_face(file: &'static str, scene: document_proto::Scene) -> Face {
+pub fn reverb_face(file: &'static str, scene: frame::document::proto::Scene) -> Face {
     Face {
         file,
         plugin: PLUGIN,
@@ -516,7 +516,7 @@ pub fn tier_lane(
     name: &str,
     tier: Tier,
     build: impl FnOnce(&mut Builder<'_>, NodeId),
-) -> document_proto::Scene {
+) -> frame::document::proto::Scene {
     let w = tier.lane_w();
     canvas(name, |b, root| {
         ui::fit_root(b, root, w, H);
@@ -526,7 +526,10 @@ pub fn tier_lane(
 }
 
 /// A lane's canvas: `build` draws into the root, already `W` × `H`.
-pub fn lane(name: &str, build: impl FnOnce(&mut Builder<'_>, NodeId)) -> document_proto::Scene {
+pub fn lane(
+    name: &str,
+    build: impl FnOnce(&mut Builder<'_>, NodeId),
+) -> frame::document::proto::Scene {
     canvas(name, |b, root| {
         ui::fit_root(b, root, W, H);
         build(b, root);
@@ -578,7 +581,7 @@ pub fn nameplate(
         accent,
         TextAlign::Right,
     );
-    if let document_proto::NodeKind::Text(d) = &mut name.kind {
+    if let frame::document::proto::NodeKind::Text(d) = &mut name.kind {
         d.font_family = Some(draw::family::INTER.into());
         d.font_weight = Some(650.0);
     }
@@ -725,7 +728,7 @@ pub fn time_knob(
         draw::frame("time readout", cx - rw / 2.0, ry, rw, rh),
     );
     let mut t = draw::text("value", "", 0.0, 0.0, rw, size, ink, TextAlign::Center);
-    if let document_proto::NodeKind::Text(td) = &mut t.kind {
+    if let frame::document::proto::NodeKind::Text(td) = &mut t.kind {
         td.font_family = Some(draw::family::INTER.into());
         td.font_weight = Some(650.0);
     }
@@ -1326,7 +1329,7 @@ pub fn legend(
 /// A placeholder unit until the machine's own face is drawn: its name, the
 /// selector, the main knobs and the picture.
 #[must_use]
-pub fn stub(ns: &str, name: &str, color: &str, dark: bool) -> document_proto::Scene {
+pub fn stub(ns: &str, name: &str, color: &str, dark: bool) -> frame::document::proto::Scene {
     let ns = ns.to_string();
     let name = name.to_string();
     // The section's colour, whatever the placeholder asked for.
@@ -1340,7 +1343,7 @@ pub fn stub(ns: &str, name: &str, color: &str, dark: bool) -> document_proto::Sc
         };
         let mut panel = draw::frame("Panel", 0.0, 0.0, W, H);
         panel.fills = vec![draw::linear(180.0, &[(0.0, top), (1.0, bottom)])];
-        panel.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
         let panel = b.add(root, panel);
         b.add(
             panel,
@@ -1420,7 +1423,7 @@ pub fn stub(ns: &str, name: &str, color: &str, dark: bool) -> document_proto::Sc
 /// picture, the Time knob (the delay time, or the decay), three knobs in
 /// the row, the nameplate top right, the bypass at its spot.
 #[must_use]
-pub fn stub_small(ns: &str, name: &str, dark: bool, tier: Tier) -> document_proto::Scene {
+pub fn stub_small(ns: &str, name: &str, dark: bool, tier: Tier) -> frame::document::proto::Scene {
     let ns = ns.to_string();
     let name = name.to_string();
     let color = if ns == DLY { BLUE } else { PURPLE }.to_string();
@@ -1445,14 +1448,14 @@ pub fn stub_small(ns: &str, name: &str, dark: bool, tier: Tier) -> document_prot
         };
         let mut panel = draw::frame("Panel", 0.0, 0.0, w, H);
         panel.fills = vec![draw::linear(180.0, &[(0.0, top), (1.0, bottom)])];
-        panel.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
         let panel = b.add(root, panel);
         // The picture, in its window.
         let (vx, vy, vw, vh) = (10.0, 10.0, picture_r(tier) - 18.0, H - 20.0);
         let mut v = draw::frame("View", vx, vy, vw, vh);
         v.fills = vec![draw::linear(180.0, &[(0.0, well.0), (1.0, well.1)])];
         v.clips_content = true;
-        v.corner_radii = document_proto::CornerRadii::uniform(6.0);
+        v.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         v.effects = vec![draw::inner_shadow("#000000c0", 0.0, 2.0, 6.0)];
         let v = b.add(panel, v);
         if ns == DLY {
@@ -1598,7 +1601,7 @@ pub fn seg_readout(
     decimals: u8,
     color: &str,
 ) -> NodeId {
-    use document_proto::{NodeKind, TextData};
+    use frame::document::proto::{NodeKind, TextData};
     let h = (size * 1.3).ceil();
     let root = b.add(
         parent,
@@ -1631,10 +1634,10 @@ pub fn seg_readout(
         root,
         draw::emissive(text("", color), draw::hex(color), 0.9, size * 0.5),
     );
-    let c = surface_proto::Control::new(surface_proto::ControlKind::Readout)
-        .slot(surface_proto::SlotRole::Value, lit.0)
+    let c = frame::surface::proto::Control::new(frame::surface::proto::ControlKind::Readout)
+        .slot(frame::surface::proto::SlotRole::Value, lit.0)
         .bound(ui::bind(addr))
-        .formatted(surface_proto::ValueFormat::decimals(decimals).unit(""));
+        .formatted(frame::surface::proto::ValueFormat::decimals(decimals).unit(""));
     b.controls.insert(root, c);
     root
 }
@@ -1646,7 +1649,7 @@ pub fn seg_readout(
 /// spacing while the picture widens or narrows. Anything spanning the
 /// whole face (its ground) stretches of itself.
 pub fn responsive(b: &mut Builder<'_>, parent: NodeId, stretch: &[NodeId]) {
-    use document_proto::ResizeX;
+    use frame::document::proto::ResizeX;
     let span = |b: &Builder<'_>, id: NodeId| {
         b.scene
             .node(id)
@@ -1723,7 +1726,7 @@ pub fn scale_children(b: &mut Builder<'_>, parent: NodeId) {
             // What spans the window (its frame, its glass) stretches with it.
             && n.size.width < pw * 0.9
         {
-            n.layout_child.resize_x = Some(document_proto::ResizeX::Scale);
+            n.layout_child.resize_x = Some(frame::document::proto::ResizeX::Scale);
         }
     }
 }
@@ -1782,7 +1785,7 @@ pub fn tall_file(base: &str, dark: bool) -> &'static str {
 pub fn tall_lane(
     name: &str,
     build: impl FnOnce(&mut Builder<'_>, NodeId),
-) -> document_proto::Scene {
+) -> frame::document::proto::Scene {
     canvas(name, |b, root| {
         ui::fit_root(b, root, TALL_W, TALL_H);
         build(b, root);
@@ -1970,12 +1973,12 @@ pub fn stub_tall(ns: &str, name: &str, base: &str, dark: bool) -> Face {
     let scene = tall_lane(name, |b, root| {
         let mut panel = draw::frame("Panel", 0.0, 0.0, TALL_W, TALL_H);
         panel.fills = vec![draw::linear(180.0, &[(0.0, top), (1.0, bottom)])];
-        panel.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
         let panel = b.add(root, panel);
         let (px, py, pw, ph) = TALL_PICTURE;
         let mut well = draw::frame("Picture", px, py, pw, ph);
         well.fills = vec![draw::linear(180.0, &[(0.0, "#0c0d10"), (1.0, "#16181d")])];
-        well.corner_radii = document_proto::CornerRadii::uniform(6.0);
+        well.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         well.clips_content = true;
         let well = b.add(panel, well);
         if ns == DLY {

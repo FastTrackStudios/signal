@@ -8,7 +8,7 @@
 //! frame --library ws://127.0.0.1:4050/vox [--surface ID | --browse] [--engine …] [--install-dir DIR]
 //! ```
 //! Runs a control surface live against the in-process mock engine
-//! (`surface_memory::Memory::demo()`): moving meters, knobs/faders/buttons
+//! (`frame::surface::memory::Memory::demo()`): moving meters, knobs/faders/buttons
 //! driven by mouse and keyboard. With no file it plays the surface
 //! generated from the demo catalog (`--theme` picks its look). With a
 //! markup or bundle file it hot-reloads on save — edit the `.frame` (by hand
@@ -50,9 +50,9 @@ mod window;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use surface_runtime::Surface;
-use surface_runtime::sync::Engine as _;
-use surface_widgets::Theme;
+use frame::surface::runtime::Surface;
+use frame::surface::runtime::sync::Engine as _;
+use frame::surface::widgets::Theme;
 
 use crate::libview::LibraryView;
 use crate::player::Backend;
@@ -87,7 +87,7 @@ pub struct Args {
     pub catalogs: Vec<PathBuf>,
     /// Light/shader effects: the GPU stage by default; `--no-fx` = the
     /// vector fallback (soft glows, no shaders).
-    pub fx: render::fx::Mode,
+    pub fx: frame::render::fx::Mode,
     /// `--library URL`: surfaces from a library server.
     pub library: Option<LibraryArg>,
     /// `--screenshot` with a library: stop after this many live updates,
@@ -151,7 +151,7 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
         script: None,
         engine: None,
         catalogs: Vec::new(),
-        fx: render::fx::Mode::Gpu,
+        fx: frame::render::fx::Mode::Gpu,
         library: None,
         updates: 0,
     };
@@ -170,7 +170,7 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
                 }
             }
             "--stats" => out.stats = true,
-            "--no-fx" => out.fx = render::fx::Mode::Fallback,
+            "--no-fx" => out.fx = frame::render::fx::Mode::Fallback,
             "--fx" => out.fx = value()?.parse()?,
             "--size" => {
                 let v = value()?;
@@ -285,13 +285,13 @@ fn sibling_catalogs(dir: &std::path::Path) -> Vec<PathBuf> {
 /// served), as one mock engine.
 fn mock_engine(
     extra: &[PathBuf],
-    served: Vec<surface_proto::Catalog>,
-) -> Result<surface_memory::Memory, String> {
-    let mut catalog = surface_memory::demo_catalog();
+    served: Vec<frame::surface::proto::Catalog>,
+) -> Result<frame::surface::memory::Memory, String> {
+    let mut catalog = frame::surface::memory::demo_catalog();
     let mut all = Vec::new();
     for path in extra {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let c: surface_proto::Catalog =
+        let c: frame::surface::proto::Catalog =
             serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
         eprintln!(
             "frame: mock engine also serves `{}` ({} params) from {}",
@@ -314,7 +314,7 @@ fn mock_engine(
         catalog.streams.extend(c.streams);
         catalog.collections.extend(c.collections);
     }
-    Ok(surface_memory::Memory::new(catalog))
+    Ok(frame::surface::memory::Memory::new(catalog))
 }
 
 /// Every frame document in `dir`, sorted by name.
@@ -322,7 +322,7 @@ fn gallery(dir: &std::path::Path) -> Result<Vec<Source>, String> {
     let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
         .map_err(|e| format!("{}: {e}", dir.display()))?
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| document_io::is_frame_document(p))
+        .filter(|p| frame::document::io::is_frame_document(p))
         .collect();
     paths.sort();
     if paths.is_empty() {
@@ -380,7 +380,7 @@ pub fn start(args: &Args) -> Result<Started, String> {
     let catalog = pollster::block_on(engine.catalog()).map_err(|e| format!("engine: {e}"))?;
     if let (Some(lib), Some(_)) = (&mut library, &args.engine) {
         // Only offer surfaces whose bindings all resolve on this engine.
-        lib.set_fits(&catalog.id, library_link::Signature::of_catalog(&catalog));
+        lib.set_fits(&catalog.id, frame::library::link::Signature::of_catalog(&catalog));
     }
     let loaded = match &mut library {
         Some(lib) => lib.initial().map(|s| s.unwrap_or_else(source::placeholder)),
@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn effects_default_to_gpu() {
-        use render::fx::Mode;
+        use frame::render::fx::Mode;
         assert_eq!(args("s.frame").unwrap().fx, Mode::Gpu);
         assert_eq!(args("s.frame --no-fx").unwrap().fx, Mode::Fallback);
         assert_eq!(args("--fx off s.frame").unwrap().fx, Mode::Off);

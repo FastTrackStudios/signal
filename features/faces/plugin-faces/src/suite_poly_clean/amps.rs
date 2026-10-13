@@ -16,12 +16,12 @@
 //! knobs under tracked capitals and inside printed tick rings, the power
 //! button and its white pilot bar, the maker's scribbled mark.
 
-use document_proto::{CornerRadii, NodeId};
-use surface_kit::draw;
-use surface_kit::materials::light;
-use surface_kit::materials::texture::Relief;
-use surface_proto::{ButtonMode, Control, ControlKind, ParamInfo, SlotRole};
-use surface_widgets::Builder;
+use frame::document::proto::{CornerRadii, NodeId};
+use frame::surface::kit::draw;
+use frame::surface::kit::materials::light;
+use frame::surface::kit::materials::texture::Relief;
+use frame::surface::proto::{ButtonMode, Control, ControlKind, ParamInfo, SlotRole};
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, Cap, knob, switch};
 use super::{PLUGIN, art};

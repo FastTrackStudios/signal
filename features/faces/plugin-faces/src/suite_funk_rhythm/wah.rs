@@ -8,10 +8,10 @@
 //! with the position. Pressing the toe lip engages it (`wah/on`, a
 //! footswitch over the lip), its LED set in the base above.
 
-use document_proto::{Node, NodeId};
-use surface_kit::draw;
-use surface_proto::{ControlKind, Orientation, SlotRole};
-use surface_widgets::Builder;
+use frame::document::proto::{Node, NodeId};
+use frame::surface::kit::draw;
+use frame::surface::proto::{ControlKind, Orientation, SlotRole};
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, TREADLE};
 use super::pedals::PLUGIN;
@@ -27,7 +27,7 @@ fn rounded_rect(
     w: f64,
     h: f64,
     r: f64,
-    fill: document_proto::Paint,
+    fill: frame::document::proto::Paint,
 ) -> Node {
     draw::rounded(draw::rect(name, x, y, w, h, fill), r)
 }
@@ -158,7 +158,7 @@ pub(super) fn face() -> Face {
         let (px, py, pw, ph) = (tx + 19.0, ty + 19.0, tw - 38.0, th - 38.0);
         let mut pad = draw::frame("Tread", px, py, pw, ph);
         pad.fills = vec![draw::linear(180.0, &[(0.0, "#4a4a48"), (1.0, "#3a3a38")])];
-        pad.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        pad.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         pad.clips_content = true;
         pad.effects = vec![draw::inner_shadow("#000000b3", 0.0, 2.0, 5.0)];
         let pad = b.add(root, pad);
@@ -193,7 +193,7 @@ pub(super) fn face() -> Face {
                 draw::solid("#ffffff3d"),
             ),
         );
-        let mut c = surface_proto::Control::new(ControlKind::Fader {
+        let mut c = frame::surface::proto::Control::new(ControlKind::Fader {
             orientation: Orientation::Vertical,
         })
         .slot(SlotRole::Thumb, band.0);
@@ -204,7 +204,7 @@ pub(super) fn face() -> Face {
             root,
             draw::frame("Toe switch", tx + 50.0, 0.0, tw - 100.0, ty),
         );
-        let mut fc = surface_proto::Control::new(ControlKind::footswitch());
+        let mut fc = frame::surface::proto::Control::new(ControlKind::footswitch());
         fc.binding = Some(ui::bind("wah/on"));
         b.controls.insert(lip, fc);
         parts::status_led(

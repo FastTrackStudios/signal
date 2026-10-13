@@ -1,12 +1,12 @@
 //! What every stompbox shares: the enclosure, the rate lamp, the stomp,
 //! and the catalog entries a modulator binds.
 
-use document_proto::motion::{Dynamics, Motion, Num, Target, Wave};
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{draw, motion};
-use surface_proto::SlotRole;
-use surface_proto::{ParamInfo, Range, StreamInfo, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Num, Target, Wave};
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{draw, motion};
+use frame::surface::proto::SlotRole;
+use frame::surface::proto::{ParamInfo, Range, StreamInfo, Unit};
+use frame::surface::widgets::Builder;
 
 use crate::reverb::ui::{self, Dial};
 
@@ -110,7 +110,7 @@ pub fn title(
         800.0,
         false,
     );
-    if let document_proto::NodeKind::Text(d) = &mut t.kind {
+    if let frame::document::proto::NodeKind::Text(d) = &mut t.kind {
         d.letter_spacing = -0.5;
     }
     b.add(lid, t);

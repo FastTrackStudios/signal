@@ -2,8 +2,8 @@
 //! catalog, every control is bound to the page's own entries, and every
 //! page is its unit's form factor.
 
-use design_lint::{Config, Severity, lint};
-use surface_proto::{ControlKind, Source};
+use frame::design::lint::{Config, Severity, lint};
+use frame::surface::proto::{ControlKind, Source};
 
 const PAGES: &[(&str, f64, f64)] = &[
     ("01-pre-gold-boost", 156.0, 286.0),
@@ -136,7 +136,7 @@ fn every_control_is_bound_to_the_pages_own_entries() {
 #[test]
 fn no_brand_names_anywhere() {
     for f in plugin_faces::suite_poly_clean::faces() {
-        let text = document_text::print(&f.scene).to_lowercase();
+        let text = frame::document::text::print(&f.scene).to_lowercase();
         for word in BANNED {
             assert!(!text.contains(word), "{}: prints `{word}`", f.file);
             assert!(

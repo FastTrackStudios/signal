@@ -12,10 +12,10 @@
 //! skirt and turn past a fixed index on the header line, and the POWER
 //! rocker.
 
-use document_proto::{Node, NodeId, TextAlign};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{Binding, ButtonMode, Control, ControlKind, SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{Node, NodeId, TextAlign};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Binding, ButtonMode, Control, ControlKind, SlotRole, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::logo;
 use super::ui::{self, bind};
@@ -239,7 +239,7 @@ pub fn face() -> Face {
         ui::param(
             "charcomp/input",
             "Input",
-            surface_proto::Range::linear(0.0, 10.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 10.0, frame::surface::proto::Unit::None),
             5.0,
         )
         .featured(),
@@ -272,7 +272,13 @@ pub const RATIO_NAMES: &[&str] = RATIOS;
 /// `name`, its INPUT and OUTPUT dials bound to `input` and `output` (a
 /// host may drive a threshold and a level with them) and its IN key to
 /// `on`.
-pub fn unit(ns: &str, name: &str, input: &str, output: &str, on: &str) -> document_proto::Scene {
+pub fn unit(
+    ns: &str,
+    name: &str,
+    input: &str,
+    output: &str,
+    on: &str,
+) -> frame::document::proto::Scene {
     let a = |id: &str| format!("{ns}/{id}");
     canvas("Character Compressor", |b, root| {
         ui::fit_root(b, root, W, H);
@@ -624,7 +630,7 @@ pub fn unit_box(
     on: &str,
     w: f64,
     h: f64,
-) -> document_proto::Scene {
+) -> frame::document::proto::Scene {
     let a = |id: &str| format!("{ns}/{id}");
     canvas("Character Compressor", |b, root| {
         ui::fit_root(b, root, w, h);
@@ -634,7 +640,7 @@ pub fn unit_box(
                 178.0,
                 &[(0.0, "#232427"), (0.5, "#1b1c1e"), (1.0, "#141517")],
             )];
-            n.corner_radii = document_proto::CornerRadii::uniform(6.0);
+            n.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         }
         let pad = (h * 0.045).max(10.0);
         let mid = h * 0.5;
@@ -1027,9 +1033,9 @@ pub fn unit_phone(
     output: &str,
     on: &str,
     back: bool,
-) -> document_proto::Scene {
+) -> frame::document::proto::Scene {
     use crate::rig_time::kit;
-    use document_proto::ResizeX;
+    use frame::document::proto::ResizeX;
     let a = |id: &str| format!("{ns}/{id}");
     let tier = kit::Tier::Phone;
     let (w, h) = (tier.lane_w(), kit::H);
@@ -1041,7 +1047,7 @@ pub fn unit_phone(
                 178.0,
                 &[(0.0, "#232427"), (0.5, "#1b1c1e"), (1.0, "#141517")],
             )];
-            n.corner_radii = document_proto::CornerRadii::uniform(6.0);
+            n.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         }
         // A wider picture than the Time faces': the ladder needs its room.
         let (px, pw) = (12.0, 236.0);

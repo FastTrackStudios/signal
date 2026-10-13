@@ -19,10 +19,10 @@
 
 use std::collections::BTreeMap;
 
-use document_proto::{NodeId, NodeKind, ResizeX, ResizeY, TextAlign};
-use surface_kit::{Place, draw};
-use surface_proto::{Binding, Control, ControlKind, ParamInfo, SlotRole};
-use surface_widgets::{Builder, Theme};
+use frame::document::proto::{NodeId, NodeKind, ResizeX, ResizeY, TextAlign};
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{Binding, Control, ControlKind, ParamInfo, SlotRole};
+use frame::surface::widgets::{Builder, Theme};
 
 use crate::delay::parts;
 use crate::face::{Face, canvas};
@@ -172,8 +172,8 @@ fn pin(b: &mut Builder<'_>, id: NodeId, x: ResizeX, y: ResizeY) {
 
 /// The band params: signal's EQ family over `sc`, band 1 a high-pass.
 fn params() -> Vec<ParamInfo> {
-    let mut v = surface_kit::viz::catalog::eq_params(NS, BANDS);
-    let shapes = surface_kit::viz::catalog::SHAPES.len() as f64 - 1.0;
+    let mut v = frame::surface::kit::viz::catalog::eq_params(NS, BANDS);
+    let shapes = frame::surface::kit::viz::catalog::SHAPES.len() as f64 - 1.0;
     for p in &mut v {
         let Some(k) = p.addr.0.as_str().strip_prefix("sc/b") else {
             continue;
@@ -188,12 +188,12 @@ fn params() -> Vec<ParamInfo> {
             _ => {}
         }
     }
-    v.extend(surface_kit::viz::catalog::eq_view_params(NS));
+    v.extend(frame::surface::kit::viz::catalog::eq_view_params(NS));
     v.push(
         ParamInfo::new(
             format!("{NS}/title"),
             "Title",
-            surface_proto::Range::default(),
+            frame::surface::proto::Range::default(),
         )
         .text()
         .short("Title"),
@@ -209,7 +209,7 @@ fn params() -> Vec<ParamInfo> {
 pub fn face() -> Face {
     let scene = canvas("Sidechain EQ", |b, root| {
         if let Some(n) = b.scene.node_mut(root) {
-            n.size = document_proto::Size {
+            n.size = frame::document::proto::Size {
                 width: W,
                 height: H,
             };
@@ -222,7 +222,7 @@ pub fn face() -> Face {
 
         // The title: the host's name for the unit, a placeholder until then.
         let field = b.add(bg, draw::frame("Title", 12.0, 0.0, 520.0, ROW));
-        let style = |mut n: document_proto::Node| {
+        let style = |mut n: frame::document::proto::Node| {
             if let NodeKind::Text(t) = &mut n.kind {
                 t.font_weight = Some(700.0);
                 t.letter_spacing = 0.4;
@@ -291,7 +291,8 @@ pub fn face() -> Face {
             .node(k)
             .map_or((40.0, 14.0), |n| (n.size.width, n.size.height));
         if let Some(n) = b.scene.node_mut(k) {
-            n.transform = document_proto::Transform::translate(W - 10.0 - kw, (ROW - kh) / 2.0);
+            n.transform =
+                frame::document::proto::Transform::translate(W - 10.0 - kw, (ROW - kh) / 2.0);
         }
         pin(b, k, ResizeX::Right, ResizeY::Top);
 

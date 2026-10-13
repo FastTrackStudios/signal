@@ -24,11 +24,11 @@ pub mod prefx;
 pub mod premod;
 pub mod transpose;
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::Place;
-use surface_kit::draw::{self, Lettering, family};
-use surface_proto::{ButtonMode, Condition, Control, ControlKind, Range, SlotRole, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::Place;
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::proto::{ButtonMode, Condition, Control, ControlKind, Range, SlotRole, Unit};
+use frame::surface::widgets::Builder;
 
 use crate::face::{Face, canvas, embed, face_size};
 use crate::reverb::ui;
@@ -250,7 +250,7 @@ fn section_bar(b: &mut Builder<'_>, root: NodeId, w: f64, current: &[Section], t
         );
         let t = set(b, bar, title, 28.0, BAR_H * 0.64, 20.0, INK, &head, 0.1);
         if let Some(n) = b.scene.node_mut(t) {
-            if let document_proto::NodeKind::Text(d) = &mut n.kind {
+            if let frame::document::proto::NodeKind::Text(d) = &mut n.kind {
                 d.align = TextAlign::Left;
             }
             n.transform.tx = 28.0;
@@ -262,7 +262,7 @@ fn section_bar(b: &mut Builder<'_>, root: NodeId, w: f64, current: &[Section], t
 /// A page `w × h` on the stage background.
 fn page(b: &mut Builder<'_>, root: NodeId, w: f64, h: f64) {
     if let Some(n) = b.scene.node_mut(root) {
-        n.size = document_proto::Size {
+        n.size = frame::document::proto::Size {
             width: w,
             height: h,
         };
@@ -275,8 +275,8 @@ fn page(b: &mut Builder<'_>, root: NodeId, w: f64, h: f64) {
 }
 
 /// The params of every face on a page.
-fn params_of(faces: &[&Face]) -> Vec<surface_proto::ParamInfo> {
-    let mut out: Vec<surface_proto::ParamInfo> = Vec::new();
+fn params_of(faces: &[&Face]) -> Vec<frame::surface::proto::ParamInfo> {
+    let mut out: Vec<frame::surface::proto::ParamInfo> = Vec::new();
     for f in faces {
         for p in &f.params {
             if !out.iter().any(|q| q.addr == p.addr) {
@@ -956,8 +956,8 @@ pub fn row_amp() -> Face {
         ui::choice("amp_r/model", "Amp R", &models, 0),
     ];
     params.extend(params_of(&faces.iter().collect::<Vec<_>>()));
-    params.extend(surface_kit::viz::catalog::eq_params("amp_eq", 24));
-    params.extend(surface_kit::viz::catalog::eq_view_params("amp_eq"));
+    params.extend(frame::surface::kit::viz::catalog::eq_params("amp_eq", 24));
+    params.extend(frame::surface::kit::viz::catalog::eq_view_params("amp_eq"));
     params.push(
         ui::param(
             "gate/threshold",

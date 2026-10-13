@@ -15,10 +15,10 @@
 //! All four: a red illuminated rocker for power, an input jack with its
 //! cable, and a player's scribble (invented) at the right end.
 
-use document_proto::NodeId;
-use surface_kit::materials::{self, Grain, Material, light};
-use surface_kit::{Place, draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::materials::{self, Grain, Material, light};
+use frame::surface::kit::{Place, draw, motion};
+use frame::surface::widgets::Builder;
 
 use crate::delay::parts;
 use crate::face::{Face, canvas};
@@ -799,8 +799,8 @@ fn knob(
         })
         .variant(preset)
         .bind(rk::bind(addr))
-        .touch(surface_kit::TOUCH_MIN)
-        .ink(surface_kit::Ink::Color(ink.into()));
+        .touch(frame::surface::kit::TOUCH_MIN)
+        .ink(frame::surface::kit::Ink::Color(ink.into()));
     let place = Place {
         options: Some(o),
         ..place
@@ -953,7 +953,7 @@ fn power(b: &mut Builder<'_>, root: NodeId, addr: &str, (cx, cy): (f64, f64), h:
         .size(h)
         .variant("red")
         .bind(rk::bind(addr))
-        .touch(surface_kit::TOUCH_MIN);
+        .touch(frame::surface::kit::TOUCH_MIN);
     parts::put(b, root, "switch.lamp_rocker", &p, cx, cy);
 }
 
@@ -966,8 +966,8 @@ fn params(
     ns: &str,
     knobs: &[(&str, &str, f64)],
     toggles: &[(&str, &str, bool)],
-) -> Vec<surface_proto::ParamInfo> {
-    let mut v: Vec<surface_proto::ParamInfo> = knobs
+) -> Vec<frame::surface::proto::ParamInfo> {
+    let mut v: Vec<frame::surface::proto::ParamInfo> = knobs
         .iter()
         .map(|(a, n, d)| {
             let p = rk::dial10(&format!("{ns}/{a}"), n, *d);

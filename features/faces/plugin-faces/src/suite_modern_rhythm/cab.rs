@@ -5,11 +5,13 @@
 //! DISTANCE, MIC LEVEL and PAN on flat dark dials with value arcs, ROOM
 //! SEND and its LEVEL, and PHASE. A mic stands at the upper-left cone.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::draw;
-use surface_kit::materials::{self, Grain, Material, light};
-use surface_proto::{Axis, ButtonMode, Control, ControlKind, HandleAxis, SlotRole, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::kit::materials::{self, Grain, Material, light};
+use frame::surface::proto::{
+    Axis, ButtonMode, Control, ControlKind, HandleAxis, SlotRole, ValueFormat,
+};
+use frame::surface::widgets::Builder;
 
 use crate::delay::parts::{self, Ink};
 use crate::face::{Face, canvas};
@@ -60,7 +62,7 @@ pub fn ui_knob(
         0.0,
         d,
         d,
-        surface_widgets::sector_path(
+        frame::surface::widgets::sector_path(
             d * 0.5,
             d * 0.5,
             d * 0.5 - ring,
@@ -72,8 +74,9 @@ pub fn ui_knob(
     );
     track.name = "track".into();
     b.add(dial, track);
-    let mut arc = document_proto::Node::new(document_proto::NodeKind::Ellipse, "value-arc");
-    arc.size = document_proto::Size {
+    let mut arc =
+        frame::document::proto::Node::new(frame::document::proto::NodeKind::Ellipse, "value-arc");
+    arc.size = frame::document::proto::Size {
         width: d,
         height: d,
     };
@@ -257,7 +260,7 @@ fn mic_power(b: &mut Builder<'_>, p: NodeId, addr: &str, (cx, cy): (f64, f64)) -
         0.0,
         44.0,
         44.0,
-        surface_widgets::sector_path(
+        frame::surface::widgets::sector_path(
             22.0,
             23.0,
             8.0,
@@ -876,14 +879,14 @@ fn four_by_twelve() -> Face {
         crate::delay::parts::param(
             &a("position"),
             "Position",
-            surface_proto::Range::linear(0.0, 1.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 1.0, frame::surface::proto::Unit::None),
             0.5,
         )
         .featured(),
         crate::delay::parts::param(
             &a("distance"),
             "Distance",
-            surface_proto::Range::linear(0.0, 1.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 1.0, frame::surface::proto::Unit::None),
             0.0,
         )
         .featured(),
@@ -891,7 +894,11 @@ fn four_by_twelve() -> Face {
         crate::delay::parts::param(
             &a("pan"),
             "Pan",
-            surface_proto::Range::linear(-100.0, 100.0, surface_proto::Unit::Percent),
+            frame::surface::proto::Range::linear(
+                -100.0,
+                100.0,
+                frame::surface::proto::Unit::Percent,
+            ),
             0.0,
         )
         .bipolar(),

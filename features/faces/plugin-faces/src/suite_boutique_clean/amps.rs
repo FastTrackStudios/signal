@@ -18,11 +18,11 @@
 //!   over a brushed-gold control strip (input, BRIGHT, GAIN, BASS, MIDDLE,
 //!   TREBLE, SHIFT, MASTER, PRESENCE, OUTPUT, POWER).
 
-use document_proto::NodeId;
-use surface_kit::materials::{Dir, Grain, Material, fill};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::ParamInfo;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::materials::{Dir, Grain, Material, fill};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::ParamInfo;
+use frame::surface::widgets::Builder;
 
 use super::look::KnobLook;
 use super::look::{self, TEAL};
@@ -124,7 +124,11 @@ fn push(
     parts::part(b, parent, "button.round_cap", p, &["cap"], at)
 }
 
-fn amp_face(file: &'static str, scene: document_proto::Scene, params: Vec<ParamInfo>) -> Face {
+fn amp_face(
+    file: &'static str,
+    scene: frame::document::proto::Scene,
+    params: Vec<ParamInfo>,
+) -> Face {
     look::face(file, scene, params)
 }
 
@@ -140,9 +144,14 @@ fn covered(
     n.effects = vec![draw::drop_shadow("#00000066", 0.0, 10.0, 22.0)];
     let n = b.add(parent, n);
     fill(b, n, (0.0, 0.0, w, h), r, m);
-    for e in
-        surface_kit::materials::light::edge("covering edge", (0.0, 0.0, w, h), r, 10.0, 1.0, true)
-    {
+    for e in frame::surface::kit::materials::light::edge(
+        "covering edge",
+        (0.0, 0.0, w, h),
+        r,
+        10.0,
+        1.0,
+        true,
+    ) {
         b.add(n, e);
     }
     n
@@ -306,10 +315,10 @@ pub(super) fn blush() -> Face {
             weave.push_str(&format!("M 0 {y:.1} L {gw:.1} {y:.1} ", y = 3.0 * i as f64));
         }
         let mut wn = draw::path("weave", 0.0, 0.0, gw, gh, weave, draw::solid("#00000000"));
-        wn.stroke = document_proto::Stroke {
+        wn.stroke = frame::document::proto::Stroke {
             paints: vec![draw::solid("#ffffff22")],
             weight: 1.0,
-            ..document_proto::Stroke::default()
+            ..frame::document::proto::Stroke::default()
         };
         b.add(grille, wn);
         let cols = 7;
@@ -536,7 +545,7 @@ pub(super) fn ranch() -> Face {
             grille,
             ui::strokes("lattice", &circles, 3.4, draw::solid("#bf954c")),
         );
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "grille recess",
             (0.0, 0.0, gw, gh),
             4.0,
@@ -845,8 +854,8 @@ fn oval(
     y: f64,
     w: f64,
     h: f64,
-    paint: document_proto::Paint,
-) -> document_proto::Node {
+    paint: frame::document::proto::Paint,
+) -> frame::document::proto::Node {
     let mut n = draw::circle(name, x + w / 2.0, y + w / 2.0, w / 2.0, paint);
     n.size.height = h;
     n.transform.ty = y;
@@ -1285,7 +1294,7 @@ pub(super) fn kintsugi() -> Face {
         art.effects = vec![draw::drop_shadow("#ffffff80", 0.0, 1.5, 0.0)];
         let art = b.add(body, art);
         kintsugi_art(b, art, aw, ah);
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "art recess",
             (0.0, 0.0, aw, ah),
             10.0,
@@ -1299,10 +1308,10 @@ pub(super) fn kintsugi() -> Face {
         let (sx, sy, sw, sh) = (25.0, 439.0, w - 50.0, 108.0);
         let mut strip = draw::rounded(draw::frame("Strip", sx, sy, sw, sh), 8.0);
         strip.effects = vec![draw::drop_shadow("#00000080", 0.0, 3.0, 6.0)];
-        strip.stroke = document_proto::Stroke {
+        strip.stroke = frame::document::proto::Stroke {
             paints: vec![draw::solid("#7a5a26")],
             weight: 2.0,
-            ..document_proto::Stroke::default()
+            ..frame::document::proto::Stroke::default()
         };
         let strip = b.add(body, strip);
         fill(
@@ -1315,7 +1324,7 @@ pub(super) fn kintsugi() -> Face {
                 dir: Dir::Horizontal,
             },
         );
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "strip edge",
             (0.0, 0.0, sw, sh),
             8.0,

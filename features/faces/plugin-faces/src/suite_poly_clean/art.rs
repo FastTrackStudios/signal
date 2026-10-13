@@ -12,9 +12,9 @@
 
 use std::f64::consts::{PI, TAU};
 
-use document_proto::{Node, NodeId};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::{Node, NodeId};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use crate::reverb::ui;
 
@@ -43,7 +43,7 @@ impl Rng {
 
 /// A closed shape through `pts` (parent coordinates) as a vector whose box
 /// is the points' extent — so its gradients light this shape alone.
-fn shape(name: &str, pts: &[(f64, f64)], fill: document_proto::Paint) -> Node {
+fn shape(name: &str, pts: &[(f64, f64)], fill: frame::document::proto::Paint) -> Node {
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
     for (x, y) in pts {
         x0 = x0.min(*x);
@@ -281,21 +281,21 @@ pub fn hammered_glass(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
     );
     // The hammered surface's own ripple and the frosting on the glass.
     let full = (0.0, 0.0, w, h);
-    surface_kit::materials::texture::relief(
+    frame::surface::kit::materials::texture::relief(
         b,
         parent,
         full,
         0.0,
-        surface_kit::materials::texture::Relief::Hammered { cells: 10 },
+        frame::surface::kit::materials::texture::Relief::Hammered { cells: 10 },
         0.35,
         1.2,
     );
-    surface_kit::materials::texture::relief(
+    frame::surface::kit::materials::texture::relief(
         b,
         parent,
         full,
         0.0,
-        surface_kit::materials::texture::Relief::Powder { coarse: true },
+        frame::surface::kit::materials::texture::Relief::Powder { coarse: true },
         0.4,
         0.8,
     );
@@ -353,7 +353,7 @@ fn plaster(n: Node, depth: f64) -> Node {
 
 const WHITE: &str = "#eeeeec";
 
-fn white_fill() -> document_proto::Paint {
+fn white_fill() -> frame::document::proto::Paint {
     draw::radial_at(
         0.35,
         0.3,
@@ -788,7 +788,7 @@ pub fn relief_white(b: &mut Builder<'_>, parent: NodeId, w: f64, h: f64) {
 
 // ── the acoustic head's black floral relief ──────────────────────────────
 
-fn black_fill() -> document_proto::Paint {
+fn black_fill() -> frame::document::proto::Paint {
     draw::radial_at(
         0.32,
         0.25,

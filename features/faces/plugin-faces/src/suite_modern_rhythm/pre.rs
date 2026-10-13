@@ -57,19 +57,19 @@ const KNOB_LOOK: &[&str] = &[
 /// A pedal knob `s` with its shaft at `at`, inside the lid's printed ring of
 /// 21 fine dots; no legend (the caller cuts it).
 pub(super) fn place(
-    b: &mut surface_widgets::Builder<'_>,
-    p: document_proto::NodeId,
+    b: &mut frame::surface::widgets::Builder<'_>,
+    p: frame::document::proto::NodeId,
     s: &KnobStyle<'_>,
     addr: &str,
     (cx, cy): (f64, f64),
-) -> document_proto::NodeId {
+) -> frame::document::proto::NodeId {
     let r = s.d / 2.0 * 1.34;
     let dot = (s.d * 0.022).max(0.55);
     let n = 21;
     let d: String = (0..n)
         .map(|i| {
             let a = (f64::from(i) / f64::from(n - 1) - 0.5) * 300.0;
-            let (x, y) = surface_kit::draw::polar(cx, cy, r, a);
+            let (x, y) = frame::surface::kit::draw::polar(cx, cy, r, a);
             format!("M {:.3} {y:.3} A {dot:.3} {dot:.3} 0 1 1 {:.3} {y:.3} A {dot:.3} {dot:.3} 0 1 1 {:.3} {y:.3} Z ", x - dot, x + dot, x - dot)
         })
         .collect();
@@ -79,14 +79,14 @@ pub(super) fn place(
         .map_or((cx * 2.0, cy * 2.0), |n| (n.size.width, n.size.height));
     b.add(
         p,
-        surface_kit::draw::path(
+        frame::surface::kit::draw::path(
             "scale dots",
             0.0,
             0.0,
             w,
             h,
             d,
-            surface_kit::draw::solid(s.ink),
+            frame::surface::kit::draw::solid(s.ink),
         ),
     );
     rk::knob(
@@ -108,13 +108,13 @@ pub(super) fn leg(color: &str) -> Letter<'_> {
 
 /// The shared lid and printing; `ink` is the silkscreen colour.
 pub(super) fn lid<'a>(
-    b: &mut surface_widgets::Builder<'_>,
-    root: document_proto::NodeId,
+    b: &mut frame::surface::widgets::Builder<'_>,
+    root: frame::document::proto::NodeId,
     color: &'a str,
     ink: &'a str,
     title: &str,
     bypass: &str,
-) -> document_proto::NodeId {
+) -> frame::document::proto::NodeId {
     let e = Enclosure::new("standard", color, "satin")
         .base("#1f2022")
         .radius(9.0);
@@ -143,8 +143,8 @@ pub(super) fn lid<'a>(
 /// A knob with its legend above (`above`) or below it.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn dial(
-    b: &mut surface_widgets::Builder<'_>,
-    p: document_proto::NodeId,
+    b: &mut frame::surface::widgets::Builder<'_>,
+    p: frame::document::proto::NodeId,
     ink: &'static str,
     addr: &str,
     name: &str,
@@ -158,12 +158,12 @@ pub(super) fn dial(
 
 /// A mini bat toggle whose nut sits at (`cx`, `cy`).
 pub(super) fn toggle(
-    b: &mut surface_widgets::Builder<'_>,
-    p: document_proto::NodeId,
+    b: &mut frame::surface::widgets::Builder<'_>,
+    p: frame::document::proto::NodeId,
     name: &str,
     addr: &str,
     (cx, cy): (f64, f64),
-) -> document_proto::NodeId {
+) -> frame::document::proto::NodeId {
     // The kit's toggle keeps a caption strip over it: its nut sits 6 px
     // under its box's centre.
     rk::mini_toggle(b, p, name, addr, (cx, cy - 6.0), 11.0, "chrome")

@@ -21,10 +21,10 @@
 //! - `13-rinse-standard-156x286`: *The Rinse* — a reverb with a shimmer
 //!   button (Mix, Decay, low cut, high cut).
 
-use document_proto::NodeId;
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::ParamInfo;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::ParamInfo;
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, KnobLook, Lid, PEDAL_H, STANDARD_W, Type};
 use crate::face::{Face, canvas};
@@ -128,7 +128,7 @@ pub(super) struct Pedal<'a> {
     pub extra: Option<fn(&mut Builder<'_>, &Lid)>,
 }
 
-pub(super) fn standard(p: &Pedal<'_>) -> document_proto::Scene {
+pub(super) fn standard(p: &Pedal<'_>) -> frame::document::proto::Scene {
     canvas(p.title, |b, root| {
         let lid = parts::stompbox_with(
             b,
@@ -201,7 +201,7 @@ fn three(ns: &'static str, names: [(&'static str, &'static str); 3]) -> Vec<K<'s
     ]
 }
 
-fn face(file: &'static str, scene: document_proto::Scene, params: Vec<ParamInfo>) -> Face {
+fn face(file: &'static str, scene: frame::document::proto::Scene, params: Vec<ParamInfo>) -> Face {
     ui::formatted(Face {
         file,
         plugin: PLUGIN,
@@ -501,7 +501,7 @@ pub(super) fn neon() -> Face {
         ui::param(
             "neon/rate",
             "Rate",
-            surface_proto::Range::log(0.1, 10.0, surface_proto::Unit::Hz),
+            frame::surface::proto::Range::log(0.1, 10.0, frame::surface::proto::Unit::Hz),
             1.0,
         )
         .featured(),
@@ -520,7 +520,8 @@ fn shimmer_button(b: &mut Builder<'_>, lid: &Lid) {
         .options(&["nolamp"])
         .legend("")
         .touch(TOUCH_MIN);
-    let k = surface_kit::place(b, lid.id, "button.round_cap", &p).unwrap_or_else(|e| panic!("{e}"));
+    let k = frame::surface::kit::place(b, lid.id, "button.round_cap", &p)
+        .unwrap_or_else(|e| panic!("{e}"));
     ui::strip_legend(b, k);
     parts::centre_on(b, k, (cx, cy));
     parts::centred(
@@ -583,7 +584,7 @@ pub(super) fn rinse() -> Face {
         ui::param(
             "rinse/decay",
             "Decay",
-            surface_proto::Range::log(0.3, 20.0, surface_proto::Unit::Seconds),
+            frame::surface::proto::Range::log(0.3, 20.0, frame::surface::proto::Unit::Seconds),
             parts::log_at(0.3, 20.0, 0.5),
         )
         .featured(),

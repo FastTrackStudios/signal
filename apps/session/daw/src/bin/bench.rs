@@ -2416,9 +2416,9 @@ fn faces_bench(which: &str) {
         let (Some(parent), Some(stem)) = (path.parent(), path.file_name()) else {
             continue;
         };
-        let (markup, catalog) = frame_live::face_paths(parent, &stem.to_string_lossy());
+        let (markup, catalog) = frame::live::face_paths(parent, &stem.to_string_lossy());
         let open = || {
-            let mut s = frame_live::LiveSurface::open(&markup, catalog.clone()).ok()?;
+            let mut s = frame::live::LiveSurface::open(&markup, catalog.clone()).ok()?;
             s.set_animate(true);
             s.set_responsive(true);
             Some(s)

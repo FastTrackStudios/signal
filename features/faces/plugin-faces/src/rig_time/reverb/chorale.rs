@@ -16,11 +16,11 @@
 //! Two finishes, as a choir loft is: light, limestone and gold leaf; dark,
 //! carved walnut and gold.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_proto::{Axis, Control, ControlKind, HandleAxis};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::proto::{Axis, Control, ControlKind, HandleAxis};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -401,8 +401,8 @@ fn formants(b: &mut Builder<'_>, parent: NodeId, (x, y, w, h): (f64, f64, f64, f
         1.5,
         draw::solid(VOICE),
     );
-    edge.transform = document_proto::Transform::translate(x, y);
-    edge.size = document_proto::Size {
+    edge.transform = frame::document::proto::Transform::translate(x, y);
+    edge.size = frame::document::proto::Size {
         width: w,
         height: h,
     };
@@ -543,7 +543,7 @@ fn picture(
     let mut well = draw::frame("Vowel chart", x, y, w, h);
     well.fills = vec![draw::linear(180.0, &l.well)];
     well.clips_content = true;
-    well.corner_radii = document_proto::CornerRadii::uniform(6.0);
+    well.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
     well.effects = vec![draw::inner_shadow("#000000c0", 0.0, 2.0, 7.0)];
     let well = b.add(panel, well);
     let wide = w > 360.0;
@@ -581,7 +581,7 @@ fn picture(
 fn ground(b: &mut Builder<'_>, root: NodeId, (w, h): (f64, f64), l: &Look, foot: bool) -> NodeId {
     let mut panel = draw::frame("Panel", 0.0, 0.0, w, h);
     panel.fills = vec![draw::linear(180.0, &l.panel)];
-    panel.corner_radii = document_proto::CornerRadii::uniform(8.0);
+    panel.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
     let panel = b.add(
         root,
         draw::with_effects(

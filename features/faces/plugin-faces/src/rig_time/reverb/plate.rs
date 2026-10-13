@@ -9,11 +9,11 @@
 //! decay, as the real unit's damper sets it: closer, shorter. While it
 //! plays, the sheet's standing waves shimmer.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_proto::{Axis, Control, ControlKind, HandleAxis};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::proto::{Axis, Control, ControlKind, HandleAxis};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui::{self, Dial, bind};
@@ -363,7 +363,7 @@ fn plate(b: &mut Builder<'_>, tank: NodeId, w: f64, h: f64) {
     // controls in them keep their shape); the rest of the drawing scales.
     for id in [area, travel] {
         if let Some(n) = b.scene.node_mut(id) {
-            n.layout_child.resize_x = Some(document_proto::ResizeX::Stretch);
+            n.layout_child.resize_x = Some(frame::document::proto::ResizeX::Stretch);
         }
     }
     // The motor, fixed at the frame.
@@ -425,7 +425,7 @@ pub fn face_at(dark: bool, tier: kit::Tier) -> Face {
     let scene = kit::tier_lane("Plate", tier, |b, root| {
         let panel = ui::panel(b, root, "panel.painted", paint, w, kit::H, "none");
         if let Some(n) = b.scene.node_mut(panel) {
-            n.corner_radii = document_proto::CornerRadii::uniform(6.0);
+            n.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         }
 
         // ── The plate, through its window ──────────────────────────────
@@ -454,7 +454,7 @@ pub fn face_at(dark: bool, tier: kit::Tier) -> Face {
         let mut tank = draw::frame("Plate", tx, ty, tw, th);
         tank.fills = vec![draw::linear(180.0, &[(0.0, "#1b1d20"), (1.0, "#2b2e32")])];
         tank.clips_content = true;
-        tank.corner_radii = document_proto::CornerRadii::uniform(5.0);
+        tank.corner_radii = frame::document::proto::CornerRadii::uniform(5.0);
         tank.effects = vec![draw::inner_shadow("#000000", 0.0, 3.0, 10.0)];
         let tank = b.add(panel, tank);
         plate(b, tank, tw, th);
@@ -704,7 +704,7 @@ pub fn tall(dark: bool) -> Face {
             "none",
         );
         if let Some(n) = b.scene.node_mut(panel) {
-            n.corner_radii = document_proto::CornerRadii::uniform(6.0);
+            n.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         }
         let (tx, ty, tw, th) = kit::TALL_PICTURE;
         b.add(
@@ -727,7 +727,7 @@ pub fn tall(dark: bool) -> Face {
         let mut tank = draw::frame("Plate", tx, ty, tw, th);
         tank.fills = vec![draw::linear(180.0, &[(0.0, "#1b1d20"), (1.0, "#2b2e32")])];
         tank.clips_content = true;
-        tank.corner_radii = document_proto::CornerRadii::uniform(5.0);
+        tank.corner_radii = frame::document::proto::CornerRadii::uniform(5.0);
         tank.effects = vec![draw::inner_shadow("#000000", 0.0, 3.0, 10.0)];
         let tank = b.add(panel, tank);
         plate(b, tank, tw, th);

@@ -8,7 +8,7 @@
 //! different instrument at +12 than at +7 — gets its own stepped dial
 //! printed in semitones. The shared controls run along the bottom.
 
-use surface_proto::{Range, Unit};
+use frame::surface::proto::{Range, Unit};
 
 use super::ui::{self, Dial};
 use crate::face::{Face, canvas};

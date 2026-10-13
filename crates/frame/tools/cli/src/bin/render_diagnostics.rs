@@ -11,10 +11,10 @@ fn run() -> Result<(), String> {
         .next()
         .ok_or_else(|| "usage: render_diagnostics <figma_export_or_api_json>".to_string())?;
     let bytes = std::fs::read(&input).map_err(|e| format!("failed reading {input}: {e}"))?;
-    let doc = figma_import::import_bytes(&bytes)
+    let doc = frame::figma::import::import_bytes(&bytes)
         .map_err(|e| format!("import failed for {input}: {e}"))?;
     let root = doc.pages().first().copied().unwrap_or(doc.root);
-    let diag = render::collect_render_diagnostics(&doc, root);
+    let diag = frame::render::collect_render_diagnostics(&doc, root);
 
     println!(
         "{{\"input\":\"{}\",\"root\":\"{}\",\"summary\":\"{}\",\"diagnostics\":{{\"totalNodes\":{},\"nonNormalBlendNodes\":{},\"gradientFillNodes\":{},\"imageFillNodes\":{},\"dropShadowNodes\":{},\"innerShadowNodes\":{},\"layerBlurNodes\":{},\"layerBlurApproxNodes\":{},\"backgroundBlurNodes\":{},\"backgroundBlurApproxNodes\":{},\"alphaMaskNodes\":{},\"luminanceMaskNodes\":{}}}}}",

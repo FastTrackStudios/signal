@@ -13,8 +13,8 @@
 //! jack glyphs printed along the top, the stomp low with its white LED to
 //! the right.
 
-use document_proto::NodeId;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::parts::{

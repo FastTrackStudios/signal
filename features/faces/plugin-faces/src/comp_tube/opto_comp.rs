@@ -12,10 +12,10 @@
 //! power knob. White silkscreen, captions in capitals and positions in
 //! lower case, as the unit prints them.
 
-use document_proto::NodeId;
-use surface_kit::{Place, draw};
-use surface_proto::{MeterTap, Range, SourceSelect, StreamInfo, StreamKind, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::{MeterTap, Range, SourceSelect, StreamInfo, StreamKind, Unit};
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Ink};
 use crate::face::{Face, canvas};
@@ -118,7 +118,7 @@ pub fn face() -> Face {
     ];
     let mut streams = ui::streams("optocomp", "Opto Compressor");
     streams.push(StreamInfo {
-        id: surface_proto::EntryId::new("optocomp/in"),
+        id: frame::surface::proto::EntryId::new("optocomp/in"),
         name: "Opto Compressor Input".into(),
         kind: StreamKind::Level { channels: 2 },
         rate_hz: 30.0,
@@ -214,7 +214,7 @@ fn build(b: &mut Builder<'_>, root: NodeId) {
                 .legend(" ")
                 .sweep(SWEEP)
                 .scale(&[])
-                .touch(surface_kit::TOUCH_MIN)
+                .touch(frame::surface::kit::TOUCH_MIN)
                 .bind(ui::bind(addr)),
             c.0,
             c.1,
@@ -281,7 +281,7 @@ fn build(b: &mut Builder<'_>, root: NodeId) {
                     .legend(" ")
                     .options(&["1", "2", "3"])
                     .sweep(SELECT)
-                    .touch(surface_kit::TOUCH_MIN)
+                    .touch(frame::surface::kit::TOUCH_MIN)
                     .bind(ui::bind(addr)),
                 c.0,
                 c.1,
@@ -437,7 +437,7 @@ fn build(b: &mut Builder<'_>, root: NodeId) {
             .legend(" ")
             .options(&["Off", "On"])
             .sweep(40.0)
-            .touch(surface_kit::TOUCH_MIN)
+            .touch(frame::surface::kit::TOUCH_MIN)
             .bind(ui::bind("optocomp/power")),
         c.0,
         c.1,

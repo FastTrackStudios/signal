@@ -32,20 +32,20 @@ fn main() {
 fn run() -> Result<(), String> {
     use std::collections::BTreeMap;
 
-    use document_proto::{
+    use frame::document::proto::{
         AutoLayout, CrossAxisAlign, LayoutDirection, Node, NodeKind, Scene, TextAlign,
     };
-    use surface_kit::draw;
-    use surface_proto::{Binding, EntryId, ParamValue, Source, StreamFrame};
-    use surface_runtime::{Runtime, Surface};
-    use surface_widgets::{Builder, Theme, hug};
+    use frame::surface::kit::draw;
+    use frame::surface::proto::{Binding, EntryId, ParamValue, Source, StreamFrame};
+    use frame::surface::runtime::{Runtime, Surface};
+    use frame::surface::widgets::{Builder, Theme, hug};
 
     let mut out = None;
     let mut family: Option<String> = None;
     let mut only: Vec<String> = Vec::new();
     let mut scale = 1.0_f64;
     let mut swatch = false;
-    let mut fx = render::fx::Mode::Gpu;
+    let mut fx = frame::render::fx::Mode::Gpu;
     let mut save_markup: Option<String> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -134,7 +134,7 @@ fn run() -> Result<(), String> {
             hug_cross: true,
         });
         n.fills = vec![draw::solid("#1b1b1e")];
-        n.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        n.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         let c = b.add(parent, n);
         b.add(
             c,
@@ -152,17 +152,17 @@ fn run() -> Result<(), String> {
         c
     };
 
-    let mut catalog = surface_memory::demo_catalog();
+    let mut catalog = frame::surface::memory::demo_catalog();
     // A gain-reduction stream for the meters that read one.
-    catalog.streams.push(surface_proto::StreamInfo {
+    catalog.streams.push(frame::surface::proto::StreamInfo {
         id: EntryId::new("comp/gr"),
         name: "GR".into(),
-        kind: surface_proto::StreamKind::GainReduction,
+        kind: frame::surface::proto::StreamKind::GainReduction,
         rate_hz: 30.0,
     });
     // What the visualizers bind: an EQ, a compressor, an envelope, a scope.
     let viz_feeds = {
-        use surface_kit::viz::catalog as vc;
+        use frame::surface::kit::viz::catalog as vc;
         catalog.params.extend(
             vc::eq_params("eq", 6)
                 .into_iter()
@@ -175,10 +175,10 @@ fn run() -> Result<(), String> {
                 .into_iter()
                 .filter(|f| f.id.0 != "comp/gr"),
         );
-        feeds.push(surface_proto::FeedInfo::new(
+        feeds.push(frame::surface::proto::FeedInfo::new(
             "scope",
             "Scope",
-            surface_proto::FeedKind::Waveform { len: 512 },
+            frame::surface::proto::FeedKind::Waveform { len: 512 },
         ));
         catalog.streams.extend(feeds.iter().cloned());
         feeds
@@ -242,7 +242,7 @@ fn run() -> Result<(), String> {
             );
         }
     } else {
-        let defs: Vec<_> = surface_kit::components()
+        let defs: Vec<_> = frame::surface::kit::components()
             .into_iter()
             .filter(|c| family.as_deref().is_none_or(|f| c.family.name() == f))
             .filter(|c| only.is_empty() || only.iter().any(|o| c.id.starts_with(o.as_str())))
@@ -286,23 +286,23 @@ fn run() -> Result<(), String> {
                 "viz.adsr" => &["ns=env", "playheads=env/voices"],
                 _ => &[],
             };
-            let place = surface_kit::Place {
+            let place = frame::surface::kit::Place {
                 binding: (def.binds != "none" && def.binds != "params by namespace")
                     .then_some(binding)
                     .or_else(|| (def.id == "viz.eq_graph").then(|| Binding::stream("eq/spectrum"))),
                 inner: Some(Box::new(
-                    surface_kit::Place::new("Bass")
+                    frame::surface::kit::Place::new("Bass")
                         .bind(Binding::param("amp/bass"))
                         .legend("Bass"),
                 )),
                 options: (!options.is_empty())
                     .then(|| options.iter().map(ToString::to_string).collect()),
-                ..surface_kit::Place::new(def.title)
+                ..frame::surface::kit::Place::new(def.title)
             };
             // In a cell the size of its drawing: a tight box's print hangs out.
-            surface_kit::place_in_cell(&mut b, c, def.id, &place)?;
+            frame::surface::kit::place_in_cell(&mut b, c, def.id, &place)?;
             // A material shows every finish it comes in.
-            if def.family == surface_kit::Family::Material {
+            if def.family == frame::surface::kit::Family::Material {
                 for v in def.variants.iter().skip(1) {
                     if per_row == 6 {
                         r = row(&mut b, root, def.family.name());
@@ -310,11 +310,11 @@ fn run() -> Result<(), String> {
                     }
                     per_row += 1;
                     let c = cell(&mut b, r, &format!("{} {v}", def.id));
-                    surface_kit::place_in_cell(
+                    frame::surface::kit::place_in_cell(
                         &mut b,
                         c,
                         def.id,
-                        &surface_kit::Place::new(def.title).variant(*v),
+                        &frame::surface::kit::Place::new(def.title).variant(*v),
                     )?;
                 }
             }
@@ -340,7 +340,7 @@ fn run() -> Result<(), String> {
                         n.fills = vec![draw::solid("#c9c6bd")];
                     }
                 }
-                surface_kit::place_in_cell(&mut b, c, id, &place)?;
+                frame::surface::kit::place_in_cell(&mut b, c, id, &place)?;
             }
         }
     }
@@ -352,21 +352,21 @@ fn run() -> Result<(), String> {
     }
     if let Some(path) = &save_markup {
         // The sheet as markup, for `render_surface --markup` (animations).
-        std::fs::write(path, document_text::print(&scene)).map_err(|e| format!("{path}: {e}"))?;
+        std::fs::write(path, frame::document::text::print(&scene)).map_err(|e| format!("{path}: {e}"))?;
     }
 
     let mut rt = Runtime::new(Surface::from_scene(scene), catalog);
     rt.apply_values([
         ParamValue {
-            addr: surface_proto::ParamAddr::new("delay/mix"),
+            addr: frame::surface::proto::ParamAddr::new("delay/mix"),
             value: 0.62,
         },
         ParamValue {
-            addr: surface_proto::ParamAddr::new("amp/channel"),
+            addr: frame::surface::proto::ParamAddr::new("amp/channel"),
             value: 0.5,
         },
         ParamValue {
-            addr: surface_proto::ParamAddr::new("drive/on"),
+            addr: frame::surface::proto::ParamAddr::new("drive/on"),
             value: 1.0,
         },
     ]);
@@ -392,7 +392,7 @@ fn run() -> Result<(), String> {
         0.0,
     );
     // The visualizers, mid-song.
-    for f in feed_memory::frames(&viz_feeds, 2.3) {
+    for f in frame::feed::memory::frames(&viz_feeds, 2.3) {
         rt.apply_frame(f, 0.0);
     }
     // A reading, sampled for four seconds: the GR history's ring fills.
@@ -400,7 +400,7 @@ fn run() -> Result<(), String> {
         rt.apply_frame(
             StreamFrame {
                 id: EntryId::new("comp/gr"),
-                values: vec![feed_memory::gr_db(f64::from(i) / 60.0) * 1.6],
+                values: vec![frame::feed::memory::gr_db(f64::from(i) / 60.0) * 1.6],
             },
             0.0,
         );
@@ -425,13 +425,13 @@ fn run() -> Result<(), String> {
         .iter()
         .map(|(id, c)| (*id, rt.position(*id, c)))
         .collect();
-    let px = render::offscreen::Offscreen::new()?.render_with_effects(&render::fx::Frame {
+    let px = frame::render::offscreen::Offscreen::new()?.render_with_effects(&frame::render::fx::Frame {
         transform: kurbo::Affine::scale(scale),
         base: peniko::Color::from_rgba8(58, 58, 62, 255),
-        fonts: Some(render::FontBook::bundled()),
+        fonts: Some(frame::render::FontBook::bundled()),
         mode: fx,
         values: Some(&values),
-        ..render::fx::Frame::new(&frame, frame.pages()[0], w, h)
+        ..frame::render::fx::Frame::new(&frame, frame.pages()[0], w, h)
     })?;
     image::RgbaImage::from_raw(px.width, px.height, px.rgba)
         .ok_or("bad pixels")?
@@ -447,9 +447,9 @@ fn run() -> Result<(), String> {
 fn variations(
     family: Option<&str>,
     only: &[String],
-) -> Vec<(String, &'static str, surface_kit::Place, bool)> {
-    use surface_kit::{Ink, Place, TOUCH_MIN};
-    use surface_proto::Binding;
+) -> Vec<(String, &'static str, frame::surface::kit::Place, bool)> {
+    use frame::surface::kit::{Ink, Place, TOUCH_MIN};
+    use frame::surface::proto::Binding;
     let mix = || Binding::param("delay/mix");
     let choice = || Binding::param("amp/channel");
     let level = || Binding::stream("in_level");
@@ -465,7 +465,7 @@ fn variations(
             "gold_knurl",
             "spun_metal",
         ];
-        for name in &surface_kit::materials::knob3d::PRESETS {
+        for name in &frame::surface::kit::materials::knob3d::PRESETS {
             let place = Place::new("Drive")
                 .bind(mix())
                 .size(64.0)

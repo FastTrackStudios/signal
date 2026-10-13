@@ -1,8 +1,8 @@
 //! The reverb and modulation faces lint clean against their plugin's
 //! merged catalog, and every binding resolves to the face's own entries.
 
-use design_lint::{Config, Severity, lint};
-use surface_proto::{ControlKind, Source};
+use frame::design::lint::{Config, Severity, lint};
+use frame::surface::proto::{ControlKind, Source};
 
 const REVERB: &[&str] = &[
     "01-ir",
@@ -159,7 +159,7 @@ fn reverbs_declare_their_levels_and_time_units() {
             assert!(
                 f.params
                     .iter()
-                    .any(|p| p.range.unit == surface_proto::Unit::Seconds),
+                    .any(|p| p.range.unit == frame::surface::proto::Unit::Seconds),
                 "{}: no decay in seconds",
                 f.file
             );
@@ -182,7 +182,12 @@ fn every_stompbox_has_a_rate_lamp_rate_in_hz_and_a_stomp() {
             .iter()
             .find(|p| p.addr.0 == format!("{ns}/rate"))
             .unwrap_or_else(|| panic!("{}: no rate", f.file));
-        assert_eq!(rate.range.unit, surface_proto::Unit::Hz, "{}", f.file);
+        assert_eq!(
+            rate.range.unit,
+            frame::surface::proto::Unit::Hz,
+            "{}",
+            f.file
+        );
         let mut lamp = false;
         let mut stomp = false;
         for id in f.scene.walk(f.scene.root) {

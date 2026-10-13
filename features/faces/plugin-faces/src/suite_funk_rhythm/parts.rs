@@ -7,10 +7,12 @@
 //! Used by both artist-style suites (`suite_funk_rhythm`,
 //! `suite_boutique_clean`).
 
-use document_proto::{NodeId, NodeKind, TextAlign, TextCase};
-use surface_kit::{Ink, Place, TOUCH_MIN, draw};
-use surface_proto::{Axis, Condition, Control, ControlKind, HandleAxis, ParamInfo, Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, NodeKind, TextAlign, TextCase};
+use frame::surface::kit::{Ink, Place, TOUCH_MIN, draw};
+use frame::surface::proto::{
+    Axis, Condition, Control, ControlKind, HandleAxis, ParamInfo, Range, Unit,
+};
+use frame::surface::widgets::Builder;
 
 use crate::reverb::ui;
 
@@ -193,7 +195,7 @@ pub fn knob3d(
 }
 
 /// Give the readout control `id` its own value format.
-pub fn format(b: &mut Builder<'_>, id: NodeId, f: surface_proto::ValueFormat) {
+pub fn format(b: &mut Builder<'_>, id: NodeId, f: frame::surface::proto::ValueFormat) {
     if let Some(c) = b.controls.get_mut(&id) {
         c.format = Some(f);
     }
@@ -295,7 +297,8 @@ pub fn status_led(
             .variant(variant)
             .bind(ui::bind(addr))
     };
-    let k = surface_kit::place(b, parent, "meter.status_led", &p).unwrap_or_else(|e| panic!("{e}"));
+    let k = frame::surface::kit::place(b, parent, "meter.status_led", &p)
+        .unwrap_or_else(|e| panic!("{e}"));
     centre_on(b, k, at);
     k
 }
@@ -333,7 +336,8 @@ pub fn variant_layer(
             TextAlign::Left,
         ),
     );
-    let mut c = Control::new(ControlKind::Readout).slot(surface_proto::SlotRole::Value, value.0);
+    let mut c =
+        Control::new(ControlKind::Readout).slot(frame::surface::proto::SlotRole::Value, value.0);
     c.binding = Some(ui::bind(addr));
     c.show_if = Some(Condition::any_of(addr, &[index as f64]));
     b.controls.insert(layer, c);
@@ -514,7 +518,7 @@ pub fn set(
     w: f64,
     align: TextAlign,
     t: Type<'_>,
-) -> document_proto::Node {
+) -> frame::document::proto::Node {
     let mut n = ui::text(
         "print", s, x, cy, w, t.size, t.color, align, t.weight, false,
     );
@@ -608,8 +612,8 @@ pub fn outlined(
 ) -> NodeId {
     let w = box_w(s, t);
     let mut n = set(s, cx - w / 2.0, cy, w, TextAlign::Center, t);
-    let glow = |dy: f64| document_proto::Effect {
-        kind: document_proto::EffectKind::DropShadow,
+    let glow = |dy: f64| frame::document::proto::Effect {
+        kind: frame::document::proto::EffectKind::DropShadow,
         visible: true,
         color: draw::hex(outline),
         offset_x: 0.0,

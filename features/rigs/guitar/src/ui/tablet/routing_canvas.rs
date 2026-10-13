@@ -495,7 +495,7 @@ mod native {
 
     struct BlockSurface {
         face: String,
-        live: frame_live::LiveSurface,
+        live: frame::live::LiveSurface,
         applied: Vec<(String, f64)>,
         /// Its picture as last painted, in the block's own units (its box
         /// at the origin), and that box's size: appended under the grid's
@@ -557,10 +557,10 @@ mod native {
             .unwrap_or_default()
     }
 
-    fn open_block_face(face: &str) -> Option<frame_live::LiveSurface> {
+    fn open_block_face(face: &str) -> Option<frame::live::LiveSurface> {
         let dir = crate::ui::frame_surface::design_dir().join("rig-faces");
-        let (markup, catalog) = frame_live::face_paths(&dir, face);
-        frame_live::LiveSurface::open(&markup, catalog)
+        let (markup, catalog) = frame::live::face_paths(&dir, face);
+        frame::live::LiveSurface::open(&markup, catalog)
             .map_err(
                 |e| tracing::warn!(target: "frame", face, error = %e, "block face did not open"),
             )

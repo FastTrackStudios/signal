@@ -8,11 +8,11 @@
 //!   between their transducers, shivering as the reverb rings, longer with
 //!   the dwell, the drip glinting — and its knobs.
 
-use document_proto::motion::{Motion, Target};
-use document_proto::{CornerRadii, ResizeX};
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::motion;
-use surface_proto::{Range, Unit};
+use frame::document::proto::motion::{Motion, Target};
+use frame::document::proto::{CornerRadii, ResizeX};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::motion;
+use frame::surface::proto::{Range, Unit};
 
 use super::PLUGIN;
 use super::filters::repeats_screen;
@@ -85,12 +85,12 @@ impl Spots {
 
 /// A Pre FX lane's panel `w` wide in its fill.
 fn lane_panel(
-    b: &mut surface_widgets::Builder<'_>,
-    root: document_proto::NodeId,
+    b: &mut frame::surface::widgets::Builder<'_>,
+    root: frame::document::proto::NodeId,
     w: f64,
-    fill: document_proto::Paint,
+    fill: frame::document::proto::Paint,
     sheen: &str,
-) -> document_proto::NodeId {
+) -> frame::document::proto::NodeId {
     let mut p = draw::frame("Panel", 0.0, 0.0, w, LANE.1);
     p.fills = vec![fill];
     b.add(
@@ -110,7 +110,7 @@ const AQUA_KNOB: [&str; 6] = [
     "skirt_color=#d6d4cc",
 ];
 
-fn aqua_fill() -> document_proto::Paint {
+fn aqua_fill() -> frame::document::proto::Paint {
     draw::linear(
         160.0,
         &[(0.0, "#5fd0e2"), (0.5, "#3fb4c8"), (1.0, "#2c95a8")],
@@ -120,8 +120,8 @@ fn aqua_fill() -> document_proto::Paint {
 /// The Aqua-Puss's head where every Time face has it: the nameplate (its
 /// presets, its name in its bubbly hand), the bypass and the arrow.
 fn aqua_head(
-    b: &mut surface_widgets::Builder<'_>,
-    p: document_proto::NodeId,
+    b: &mut frame::surface::widgets::Builder<'_>,
+    p: frame::document::proto::NodeId,
     tier: kit::Tier,
     sp: &Spots,
     back: bool,
@@ -162,7 +162,7 @@ fn aqua_head(
     kit::flip_arrow_w(b, p, AQUA, tier, sp.w, back, (AQUA_INK, "#ffffff40"));
 }
 
-fn aqua_params() -> Vec<surface_proto::ParamInfo> {
+fn aqua_params() -> Vec<frame::surface::proto::ParamInfo> {
     let mut v = kit::delay_params_in(AQUA);
     v.extend(kit::nameplate_params(AQUA));
     v.extend(kit::flip_params(AQUA));
@@ -292,7 +292,7 @@ const SPRING_KNOB: [&str; 6] = [
     "skirt_color=#100820",
 ];
 
-fn spring_fill() -> document_proto::Paint {
+fn spring_fill() -> frame::document::proto::Paint {
     draw::linear(180.0, &[(0.0, "#2c1850"), (1.0, "#180c30")])
 }
 
@@ -300,10 +300,10 @@ fn spring_fill() -> document_proto::Paint {
 /// between their transducers, shivering as the reverb rings, the drip
 /// glinting. Returns the tank (it takes a lane's width).
 fn tank(
-    b: &mut surface_widgets::Builder<'_>,
-    p: document_proto::NodeId,
+    b: &mut frame::surface::widgets::Builder<'_>,
+    p: frame::document::proto::NodeId,
     (tx, ty, tw, th): (f64, f64, f64, f64),
-) -> document_proto::NodeId {
+) -> frame::document::proto::NodeId {
     const NS: &str = SPRING;
     const COIL: &str = "#c9b8ff";
     let mut t = draw::frame("Tank", tx, ty, tw, th);
@@ -391,8 +391,8 @@ fn tank(
 }
 
 fn spring_head(
-    b: &mut surface_widgets::Builder<'_>,
-    p: document_proto::NodeId,
+    b: &mut frame::surface::widgets::Builder<'_>,
+    p: frame::document::proto::NodeId,
     tier: kit::Tier,
     sp: &Spots,
     back: bool,
@@ -434,7 +434,7 @@ fn spring_head(
     kit::flip_arrow_w(b, p, SPRING, tier, sp.w, back, (SPRING_INK, "#ffffff1c"));
 }
 
-fn spring_params() -> Vec<surface_proto::ParamInfo> {
+fn spring_params() -> Vec<frame::surface::proto::ParamInfo> {
     let mut v = kit::reverb_params_in(SPRING);
     v.extend(kit::nameplate_params(SPRING));
     v.extend(kit::flip_params(SPRING));
@@ -561,7 +561,7 @@ const TREM: &str = "trem";
 #[must_use]
 pub fn tank_trem_phone() -> Face {
     use crate::suite_studio_blues::parts::{Cap, knob as cap_knob, print, toggle};
-    use surface_kit::materials::{light, paint};
+    use frame::surface::kit::materials::{light, paint};
     const INK: &str = "#e2d2c6";
     let tier = kit::Tier::Phone;
     let w = tier.lane_w();
@@ -570,13 +570,13 @@ pub fn tank_trem_phone() -> Face {
         ui::fit_root(b, root, w, h);
         let mut case = draw::frame("Case", 0.0, 0.0, w, h);
         case.corner_radii = CornerRadii::uniform(14.0);
-        case.stroke = document_proto::Stroke {
+        case.stroke = frame::document::proto::Stroke {
             paints: vec![draw::linear(
                 90.0,
                 &[(0.0, "#a8664a"), (0.5, "#5a3a34"), (1.0, "#a8664a")],
             )],
             weight: 3.0,
-            ..document_proto::Stroke::default()
+            ..frame::document::proto::Stroke::default()
         };
         let case = b.add(root, case);
         paint::fill(
@@ -620,13 +620,13 @@ pub fn tank_trem_phone() -> Face {
         let win = b.add(case, win);
         // The cloth wider than its window (the window clips it), so it fills
         // the window however wide the lane is drawn.
-        let mesh = surface_kit::Place {
+        let mesh = frame::surface::kit::Place {
             options: Some(vec![
                 format!("w={}", mw * 2.0),
                 format!("h={mh}"),
                 "r=9".into(),
             ]),
-            ..surface_kit::Place::new("Mesh").variant("mesh")
+            ..frame::surface::kit::Place::new("Mesh").variant("mesh")
         };
         let m = ui::put_at(b, win, "panel.amp_grille", &mesh, 0.0, 0.0);
         if let Some(n) = b.scene.node_mut(m) {

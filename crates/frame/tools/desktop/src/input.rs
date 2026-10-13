@@ -1,7 +1,7 @@
 //! Window ↔ surface geometry and winit → surface input mapping. Pure, so
 //! the host-specific half of the interaction contract is unit-tested.
 
-use surface_runtime::{Bounds, Key, Modifiers};
+use frame::surface::runtime::{Bounds, Key, Modifiers};
 use winit::event::MouseScrollDelta;
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
 

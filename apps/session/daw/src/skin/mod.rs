@@ -9,7 +9,7 @@
 //! **Layered**: `FTS_THEME` is a list of paths (`:`-separated, the base
 //! first), each a file or a folder of them, every one over the ones before
 //! it — so a theme built on another is only the files it changes: one
-//! control, the strip, a colour (`theme_runtime::layer`).
+//! control, the strip, a colour (`frame::theme::runtime::layer`).
 //!
 //! Compiled in `FTS_THEME_MODE` or the documents' first mode, and
 //! **hot-reloaded**: [`poll`] notices any of the files changing (or one
@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use daw_proto::Track;
-use theme_runtime::{Fields, Rgba, Schema, Theme, Value};
+use frame::theme::runtime::{Fields, Rgba, Schema, Theme, Value};
 
 use crate::arrangement::Palette;
 use crate::mcp::Control;

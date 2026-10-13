@@ -1,0 +1,262 @@
+[package]
+name = "frame"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Frame: the design and control-surface engine — documents, surfaces, motion, feeds and themes, with rendering, IO, libraries, Figma import and the live and embedded hosts behind features"
+
+[lints]
+workspace = true
+
+[features]
+default = ["vox"]
+anyrender = ["dep:anyrender", "dep:anyrender_svg", "dep:anyrender_vello", "dep:image", "dep:peniko", "dep:pollster", "dep:skrifa", "dep:vello", "dep:winit", "svg_export"]
+anyrender-0-11 = ["dep:anyrender_0_11", "dep:anyrender_svg_0_12"]
+codec = ["io"]
+cpu = ["dep:image", "dep:vello_cpu"]
+design = ["io", "render", "runtime"]
+dsp = []
+embed = ["cpu", "dep:peniko", "dep:skrifa", "render", "runtime"]
+figma = ["dep:base64", "dep:figma-api", "dep:zip"]
+io = ["dep:chrono", "dep:crdt", "dep:facet-styx", "dep:zip"]
+library = ["architect/local", "architect/platform", "architect/vox", "codec", "dep:architect", "dep:tokio", "dep:vox-core", "dep:vox-websocket", "io", "library-proto-vox"]
+library-proto-vox = ["architect/vox", "dep:vox", "vox"]
+live = ["anyrender", "dep:peniko", "dep:vello", "io", "render", "runtime"]
+nice-plug = ["cpu", "dep:nice-plug-core"]
+remote = ["architect/vox", "dep:architect", "dep:tokio", "dep:vox-core", "dep:vox-websocket", "surface-runtime-vox"]
+render = ["dep:base64", "dep:peniko", "dep:roxmltree", "dep:skrifa", "dep:taffy", "image/gif", "image/jpeg", "image/webp"]
+rpc = ["dep:architect"]
+runtime = ["architect/local", "architect/vox", "dep:architect", "dep:miniz_oxide", "surface-runtime-vox"]
+surface-runtime-rpc = ["rpc"]
+surface-runtime-vox = ["surface-runtime-rpc", "vox"]
+svg_export = ["dep:fixed", "dep:rust_decimal", "dep:svg"]
+theme = ["render"]
+vox = ["architect/vox", "dep:vox", "rpc"]
+
+[dependencies]
+anyrender = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main", optional = true }
+anyrender_0_11 = { package = "anyrender", version = "0.11", optional = true }
+anyrender_svg_0_12 = { package = "anyrender_svg", version = "0.12", optional = true }
+anyrender_svg = { workspace = true, optional = true }
+anyrender_vello = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main", optional = true }
+architect = { workspace = true, optional = true }
+base64 = { version = "0.22", optional = true }
+blake3 = { version = "1" }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std", "wasmbind"], optional = true }
+crdt = { workspace = true, optional = true }
+facet = { workspace = true }
+facet-styx = { version = "5.0.0-rc.7", optional = true }
+figma-api = { workspace = true, optional = true }
+fixed = { version = "1.28", optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+kurbo = { workspace = true }
+miniz_oxide = { version = "0.8", optional = true }
+nice-plug-core = { git = "https://github.com/FastTrackStudios/nice-plug.git", branch = "fts-baseview-03", optional = true }
+peniko = { workspace = true, optional = true }
+pollster = { workspace = true, optional = true }
+roxmltree = { version = "0.20", optional = true }
+rust_decimal = { version = "1.36", optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+skrifa = { version = "0.26", optional = true }
+svg = { version = "0.18", optional = true }
+taffy = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, optional = true }
+uuid = { workspace = true }
+vello = { version = "0.10.0", optional = true }
+vello_cpu = { version = "0.0.9", default-features = false, features = ["std", "u8_pipeline"], optional = true }
+vox = { workspace = true, optional = true }
+vox-core = { workspace = true, optional = true }
+vox-websocket = { workspace = true, optional = true }
+winit = { workspace = true, optional = true }
+zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+
+[dev-dependencies]
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+frame = { path = ".", features = ["anyrender", "cpu", "design", "dsp", "embed", "figma", "io", "library", "live", "render", "runtime", "surface-runtime-rpc", "theme"] }
+architect = { workspace = true, features = ["vox", "local"] }
+facet = { workspace = true }
+facet-json = { version = "0.50.0-rc.7" }
+kurbo = { workspace = true }
+peniko = { workspace = true }
+pollster = { version = "0.4" }
+proptest = { version = "1" }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+vello = { version = "0.10.0" }
+vox-core = { workspace = true }
+vox-websocket = { workspace = true }
+wgpu = { version = "29" }
+
+[[example]]
+name = "strips"
+required-features = ["cpu", "embed", "runtime"]
+
+[[test]]
+name = "end_to_end"
+path = "tests/end_to_end.rs"
+required-features = ["runtime"]
+
+[[test]]
+name = "meters_and_readouts"
+path = "tests/meters_and_readouts.rs"
+required-features = ["runtime"]
+
+[[test]]
+name = "surface_runtime_motion"
+path = "tests/surface_runtime_motion.rs"
+required-features = ["runtime"]
+
+[[test]]
+name = "needle_subtree"
+path = "tests/needle_subtree.rs"
+required-features = ["anyrender", "render", "runtime"]
+
+[[test]]
+name = "plots_and_handles"
+path = "tests/plots_and_handles.rs"
+required-features = ["render", "runtime"]
+
+[[test]]
+name = "remote"
+path = "tests/remote.rs"
+required-features = ["runtime", "surface-runtime-rpc"]
+
+[[test]]
+name = "stepped"
+path = "tests/stepped.rs"
+required-features = ["runtime"]
+
+[[test]]
+name = "persistence"
+path = "tests/persistence.rs"
+required-features = ["io", "runtime"]
+
+[[test]]
+name = "controls"
+path = "tests/controls.rs"
+required-features = ["design", "runtime"]
+
+[[test]]
+name = "eq_graph"
+path = "tests/eq_graph.rs"
+required-features = ["design", "library", "render", "runtime"]
+
+[[test]]
+name = "knobs"
+path = "tests/knobs.rs"
+required-features = ["design", "render", "runtime"]
+
+[[test]]
+name = "lettering"
+path = "tests/lettering.rs"
+required-features = ["render", "runtime"]
+
+[[test]]
+name = "materials"
+path = "tests/materials.rs"
+required-features = ["runtime"]
+
+[[test]]
+name = "meters"
+path = "tests/meters.rs"
+required-features = ["design", "runtime"]
+
+[[test]]
+name = "surface_kit_motion"
+path = "tests/surface_kit_motion.rs"
+required-features = ["runtime"]
+
+[[test]]
+name = "viz"
+path = "tests/viz.rs"
+required-features = ["design", "render", "runtime"]
+
+[[test]]
+name = "viz_lit"
+path = "tests/viz_lit.rs"
+required-features = ["design", "render", "runtime"]
+
+[[test]]
+name = "realtime"
+path = "tests/realtime.rs"
+required-features = ["dsp"]
+
+[[test]]
+name = "golden_primitives"
+path = "tests/golden_primitives.rs"
+required-features = ["figma", "render"]
+
+[[test]]
+name = "components"
+path = "tests/components.rs"
+required-features = ["theme"]
+
+[[test]]
+name = "layers"
+path = "tests/layers.rs"
+required-features = ["theme"]
+
+[[test]]
+name = "shapes"
+path = "tests/shapes.rs"
+required-features = ["theme"]
+
+[[test]]
+name = "slots"
+path = "tests/slots.rs"
+required-features = ["theme"]
+
+[[test]]
+name = "strip"
+path = "tests/strip.rs"
+required-features = ["theme"]
+
+[[example]]
+name = "strip_bench"
+path = "examples/strip_bench.rs"
+required-features = ["theme"]
+
+[[test]]
+name = "bundle"
+path = "tests/bundle.rs"
+required-features = ["figma", "io"]
+
+[[test]]
+name = "loro_scene"
+path = "tests/loro_scene.rs"
+required-features = ["figma", "io"]
+
+[[test]]
+name = "design_lint_motion"
+path = "tests/design_lint_motion.rs"
+required-features = ["design"]
+
+[[test]]
+name = "rules"
+path = "tests/rules.rs"
+required-features = ["design", "runtime"]
+
+[[example]]
+name = "face_bench"
+path = "examples/face_bench.rs"
+required-features = ["live"]
+
+[[example]]
+name = "face_frames"
+path = "examples/face_frames.rs"
+required-features = ["live"]
+
+[[test]]
+name = "harness"
+path = "tests/harness.rs"
+required-features = ["cpu", "embed", "runtime"]
+
+[[test]]
+name = "law"
+path = "tests/law.rs"
+required-features = ["figma"]

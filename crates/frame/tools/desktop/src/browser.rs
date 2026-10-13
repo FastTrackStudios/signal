@@ -3,9 +3,9 @@
 
 use std::collections::BTreeMap;
 
-use document_proto::{Asset, NodeId, Scene};
-use library_link::{Signature, SurfaceMeta};
-use surface_runtime::Bounds;
+use frame::document::proto::{Asset, NodeId, Scene};
+use frame::library::link::{Signature, SurfaceMeta};
+use frame::surface::runtime::Bounds;
 
 /// Grid geometry, scene px.
 const COLS: usize = 4;
@@ -257,7 +257,7 @@ impl Browser {
             )),
             keys = q("arrows select · Enter preview · I install · F fork · B back · Esc quit"),
         );
-        let scene = match document_text::parse(&src, assets) {
+        let scene = match frame::document::text::parse(&src, assets) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("frame: browser scene: {e}");

@@ -2,8 +2,8 @@
 //! catalog, every binding resolves to the face's own params and streams,
 //! and each face keeps to its own namespace.
 
-use design_lint::{Config, Severity, lint};
-use surface_proto::{ParamKind, Source};
+use frame::design::lint::{Config, Severity, lint};
+use frame::surface::proto::{ParamKind, Source};
 
 const DELAY: &[&str] = &[
     "01-digital",
@@ -29,7 +29,7 @@ const SATURATE: &[&str] = &[
 /// The nodes under each emphasis EQ (`viz.eq_graph`, its own tests cover
 /// it): its structural controls bind nothing, its bands bind templated
 /// `<ns>/emph/b{n}_*` addresses.
-fn in_emphasis_eq(f: &plugin_faces::Face) -> Vec<document_proto::NodeId> {
+fn in_emphasis_eq(f: &plugin_faces::Face) -> Vec<frame::document::proto::NodeId> {
     let roots = f
         .scene
         .walk(f.scene.root)
@@ -230,7 +230,7 @@ fn delays_read_their_time_in_ms_and_as_a_note() {
             .unwrap_or_else(|| panic!("{}: no time", f.file));
         assert_eq!(
             time.range.unit,
-            surface_proto::Unit::Milliseconds,
+            frame::surface::proto::Unit::Milliseconds,
             "{}",
             f.file
         );
@@ -264,7 +264,7 @@ fn delays_read_their_time_in_ms_and_as_a_note() {
                 .node(id)
                 .and_then(|n| n.control.as_ref())
                 .is_some_and(|c| {
-                    matches!(c.kind, surface_proto::ControlKind::Readout)
+                    matches!(c.kind, frame::surface::proto::ControlKind::Readout)
                         && c.binding.as_ref().is_some_and(
                             |b| matches!(&b.source, Source::Param { addr } if addr == &time.addr),
                         )
@@ -291,7 +291,12 @@ fn saturators_have_drive_mix_and_output() {
             .iter()
             .find(|p| p.addr.0.ends_with("/output"))
             .expect("output");
-        assert_eq!(out.range.unit, surface_proto::Unit::Db, "{}", f.file);
+        assert_eq!(
+            out.range.unit,
+            frame::surface::proto::Unit::Db,
+            "{}",
+            f.file
+        );
     }
 }
 
@@ -370,7 +375,7 @@ fn saturators_have_an_emphasis_eq() {
             .into_iter()
             .filter_map(|id| f.scene.node(id).and_then(|n| n.control.as_ref()))
             .any(|c| {
-                matches!(c.kind, surface_proto::ControlKind::Button { .. })
+                matches!(c.kind, frame::surface::proto::ControlKind::Button { .. })
                     && c.binding.as_ref().is_some_and(
                         |b| matches!(&b.source, Source::Param { addr } if addr.0 == view),
                     )

@@ -6,20 +6,9 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-figma-rest = { path = "../../figma/figma-rest" }
-figma-import = { path = "../../figma/figma-import" }
-render = { path = "../../render/render" }
-document-proto = { path = "../../document/document-proto", default-features = false }
-document-text = { path = "../../document/document-text" }
-document-io = { path = "../../document/document-io" }
-surface-proto = { path = "../../surface/surface-proto" }
-surface-runtime = { path = "../../surface/surface-runtime", features = ["remote"] }
+frame = { path = "../..", features = ["figma", "io", "remote", "render", "runtime"] }
 tokio = { workspace = true }
 architect = { workspace = true, features = ["vox"] }
-surface-kit = { path = "../../surface/surface-kit" }
-surface-widgets = { path = "../../surface/surface-widgets" }
-surface-memory = { path = "../../surface/surface-memory" }
-feed-memory = { path = "../../feed/feed-memory" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 roxmltree = "0.20"
@@ -33,11 +22,11 @@ pollster = { workspace = true, optional = true }
 
 [features]
 default = ["anyrender", "svg_export"]
-svg_export = ["render/svg_export"]
-anyrender = ["render/anyrender", "dep:kurbo", "dep:peniko", "dep:skrifa", "dep:vello", "dep:winit", "dep:image", "dep:pollster", "svg_export"]
+svg_export = ["frame/render", "frame/svg_export"]
+anyrender = ["frame/anyrender", "frame/render", "dep:kurbo", "dep:peniko", "dep:skrifa", "dep:vello", "dep:winit", "dep:image", "dep:pollster", "svg_export"]
 
 [dev-dependencies]
-design-lint = { path = "../../design/design-lint" }
+frame = { path = "../..", features = ["design"] }
 
 [lints]
 workspace = true

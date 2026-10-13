@@ -2119,13 +2119,21 @@ fn phase_edge(
     if let Some(theme) = theme.as_deref().filter(|t| t.has_role("fx.phase")) {
         let [r, g, b, a] = tint.to_rgba8().to_u8_array();
         let fields = crate::skin::values(&[
-            ("phase.name", theme_runtime::Value::text(name)),
+            ("phase.name", frame::theme::runtime::Value::text(name)),
             (
                 "phase.tint",
-                theme_runtime::Value::Color(theme_runtime::Rgba::from_rgba8(r, g, b, a)),
+                frame::theme::runtime::Value::Color(frame::theme::runtime::Rgba::from_rgba8(
+                    r, g, b, a,
+                )),
             ),
-            ("phase.blank", theme_runtime::Value::Bool(open.is_none())),
-            ("phase.shut", theme_runtime::Value::Bool(open == Some(true))),
+            (
+                "phase.blank",
+                frame::theme::runtime::Value::Bool(open.is_none()),
+            ),
+            (
+                "phase.shut",
+                frame::theme::runtime::Value::Bool(open == Some(true)),
+            ),
         ]);
         if theme.record(
             "fx.phase",
@@ -2257,8 +2265,8 @@ fn edge_chevron(
 
 /// A frame face's modifiers: Shift fine, Ctrl/Cmd the alternate, as
 /// frame's own player has them.
-fn face_mods(e: &BlitzPointerEvent) -> frame_live::Modifiers {
-    frame_live::Modifiers {
+fn face_mods(e: &BlitzPointerEvent) -> frame::live::Modifiers {
+    frame::live::Modifiers {
         fine: e.mods.shift(),
         alt: e.mods.ctrl() || e.mods.meta(),
         option: e.mods.alt(),

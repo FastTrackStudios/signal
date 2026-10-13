@@ -8,10 +8,10 @@
 //!   across the top; COMPRESS / LIMIT, GAIN, PEAK REDUCTION and POWER
 //!   across the bottom.
 
-use document_proto::NodeId;
-use surface_kit::{Ink as KitInk, Place, TOUCH_MIN, draw};
-use surface_proto::{MeterTap, SourceSelect};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Ink as KitInk, Place, TOUCH_MIN, draw};
+use frame::surface::proto::{MeterTap, SourceSelect};
+use frame::surface::widgets::Builder;
 
 use super::super::ui::{self, Ink};
 use super::{CHROME, DIM, INK, RED, place_toggle};
@@ -107,7 +107,7 @@ fn build(b: &mut Builder<'_>, root: NodeId, shape: Shape) {
         &[(0.0, "#cbcdca"), (0.5, "#bfc1be"), (1.0, "#afb1ae")],
     );
     if let Some(n) = b.scene.node_mut(panel) {
-        n.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        n.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
     }
     for (x, y) in [
         (12.0, 12.0),
@@ -248,7 +248,7 @@ fn build(b: &mut Builder<'_>, root: NodeId, shape: Shape) {
 fn restyle_toggle(b: &mut Builder<'_>, sw: NodeId, size: f64) {
     for id in b.scene.walk(sw) {
         if let Some(n) = b.scene.node_mut(id)
-            && let document_proto::NodeKind::Text(t) = &mut n.kind
+            && let frame::document::proto::NodeKind::Text(t) = &mut n.kind
         {
             let grow = size / t.font_size.max(1.0);
             t.font_size = size;

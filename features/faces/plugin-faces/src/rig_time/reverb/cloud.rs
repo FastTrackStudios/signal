@@ -6,10 +6,10 @@
 //! Two finishes: light, a dusk sky on a frosted lavender panel; dark, a
 //! moonlit night on deep indigo.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -289,7 +289,7 @@ pub fn face_at(dark: bool, tier: kit::Tier) -> Face {
         // The frosted panel.
         let mut panel = draw::frame("Panel", 0.0, 0.0, w, kit::H);
         panel.fills = vec![draw::linear(160.0, &l.panel)];
-        panel.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         b.add(
             root,
             draw::with_effects(panel, vec![draw::inner_shadow("#ffffff1a", 0.0, 1.0, 0.0)]),
@@ -307,7 +307,7 @@ pub fn face_at(dark: bool, tier: kit::Tier) -> Face {
         let mut s = draw::frame("Sky", sx, sy, sw, sh);
         s.fills = vec![draw::linear(180.0, &l.sky)];
         s.clips_content = true;
-        s.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        s.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
         s.effects = vec![draw::inner_shadow("#00000066", 0.0, 2.0, 8.0)];
         let s = b.add(panel, s);
         sky(b, s, sw, sh, l, dark);
@@ -427,7 +427,7 @@ pub fn back_at(dark: bool, tier: kit::Tier) -> Face {
     let scene = kit::tier_lane("Cloud", tier, |b, root| {
         let mut panel = draw::frame("Panel", 0.0, 0.0, w, kit::H);
         panel.fills = vec![draw::linear(160.0, &l.panel)];
-        panel.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         b.add(
             root,
             draw::with_effects(panel, vec![draw::inner_shadow("#ffffff1a", 0.0, 1.0, 0.0)]),
@@ -507,7 +507,7 @@ pub fn tall(dark: bool) -> Face {
     let scene = kit::tall_lane("Cloud", |b, root| {
         let mut panel = draw::frame("Panel", 0.0, 0.0, kit::TALL_W, kit::TALL_H);
         panel.fills = vec![draw::linear(160.0, &l.panel)];
-        panel.corner_radii = document_proto::CornerRadii::uniform(10.0);
+        panel.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
         let panel = b.add(
             root,
             draw::with_effects(panel, vec![draw::inner_shadow("#ffffff1a", 0.0, 1.0, 0.0)]),
@@ -516,7 +516,7 @@ pub fn tall(dark: bool) -> Face {
         let mut s = draw::frame("Sky", sx, sy, sw, sh);
         s.fills = vec![draw::linear(180.0, &l.sky)];
         s.clips_content = true;
-        s.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        s.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
         s.effects = vec![draw::inner_shadow("#00000066", 0.0, 2.0, 8.0)];
         let s = b.add(panel, s);
         sky(b, s, sw, sh, l, dark);

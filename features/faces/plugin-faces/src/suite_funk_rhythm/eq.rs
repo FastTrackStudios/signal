@@ -8,11 +8,11 @@
 //! reference's −12 / 0 / +12 pattern), a cream POWER button and its pilot
 //! LED; three swatch keys at the bottom right pick the colourway.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::materials::{Material, fill};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{ButtonMode, Control, ControlKind, Range, SlotRole, Unit, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::materials::{Material, fill};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{ButtonMode, Control, ControlKind, Range, SlotRole, Unit, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, KnobLook, RACK_W, Type};
 use super::pedals::PLUGIN;
@@ -126,9 +126,14 @@ fn case(b: &mut Builder<'_>, layer: NodeId, (w, h): (f64, f64), color: &str) {
             coarse: false,
         },
     );
-    for n in
-        surface_kit::materials::light::edge("case edge", (0.0, 0.0, w, h), 12.0, 8.0, 1.0, true)
-    {
+    for n in frame::surface::kit::materials::light::edge(
+        "case edge",
+        (0.0, 0.0, w, h),
+        12.0,
+        8.0,
+        1.0,
+        true,
+    ) {
         b.add(shell, n);
     }
     // The case's front lip, darker along the bottom.
@@ -242,7 +247,7 @@ pub(super) fn face() -> Face {
                 .size(150.0)
                 .bind(ui::bind(&addr))
                 .touch(TOUCH_MIN);
-            let f = surface_kit::place(b, case, "lever.lit_fader", &p)
+            let f = frame::surface::kit::place(b, case, "lever.lit_fader", &p)
                 .unwrap_or_else(|e| panic!("{e}"));
             parts::centre_on(b, f, (*x, 141.0));
             parts::centred(
@@ -261,8 +266,8 @@ pub(super) fn face() -> Face {
             .options(&["nolamp"])
             .legend("")
             .touch(TOUCH_MIN);
-        let k =
-            surface_kit::place(b, case, "button.round_cap", &p).unwrap_or_else(|e| panic!("{e}"));
+        let k = frame::surface::kit::place(b, case, "button.round_cap", &p)
+            .unwrap_or_else(|e| panic!("{e}"));
         ui::strip_legend(b, k);
         parts::centre_on(b, k, (174.0, 229.0));
         parts::centred(

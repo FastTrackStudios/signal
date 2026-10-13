@@ -13,11 +13,11 @@
 //! Two finishes: light, a conservatory's sage and ivory; dark, the night
 //! garden.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_proto::{Axis, Control, ControlKind, HandleAxis};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::proto::{Axis, Control, ControlKind, HandleAxis};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -184,10 +184,10 @@ fn flower(b: &mut Builder<'_>, parent: NodeId, (cx, cy): (f64, f64), big: f64) {
             petals(r, *n, len, width, turn),
             fill,
         );
-        ring.stroke = document_proto::Stroke {
+        ring.stroke = frame::document::proto::Stroke {
             paints: vec![draw::solid(&ui::alpha("#e9dcff", 0.35 + 0.45 * strength))],
             weight: 0.9,
-            ..document_proto::Stroke::default()
+            ..frame::document::proto::Stroke::default()
         };
         b.add(
             holder,
@@ -461,7 +461,7 @@ fn picture(
     let mut well = draw::frame("Night", x, y, w, h);
     well.fills = vec![draw::linear(180.0, &l.well)];
     well.clips_content = true;
-    well.corner_radii = document_proto::CornerRadii::uniform(6.0);
+    well.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
     well.effects = vec![draw::inner_shadow("#000000c0", 0.0, 2.0, 7.0)];
     let well = b.add(panel, well);
     let wide = w > 360.0;
@@ -501,7 +501,7 @@ fn picture(
 fn ground(b: &mut Builder<'_>, root: NodeId, (w, h): (f64, f64), l: &Look, foot: bool) -> NodeId {
     let mut panel = draw::frame("Panel", 0.0, 0.0, w, h);
     panel.fills = vec![draw::linear(180.0, &l.panel)];
-    panel.corner_radii = document_proto::CornerRadii::uniform(10.0);
+    panel.corner_radii = frame::document::proto::CornerRadii::uniform(10.0);
     let panel = b.add(
         root,
         draw::with_effects(

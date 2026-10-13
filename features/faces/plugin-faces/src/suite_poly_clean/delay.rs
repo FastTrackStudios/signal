@@ -6,9 +6,9 @@
 //! tap-tempo stomps at the corners with their white LEDs, the name
 //! between them.
 
-use document_proto::{NodeId, NodeKind, TextAlign};
-use surface_proto::{ButtonMode, Control, ControlKind, Range, SlotRole, Unit, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, NodeKind, TextAlign};
+use frame::surface::proto::{ButtonMode, Control, ControlKind, Range, SlotRole, Unit, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::parts::{self, BIG_W, BLACK, PEDAL_H, jacks, knob, pedal, switch, word};
@@ -42,7 +42,13 @@ fn column(b: &mut Builder<'_>, lcd: NodeId, addr: &str, opts: &[&str], cx: f64, 
         let cy = top + row * i as f64;
         let cell = b.add(
             lcd,
-            surface_kit::draw::frame(&format!("{o} line"), cx - w / 2.0, cy - row / 2.0, w, row),
+            frame::surface::kit::draw::frame(
+                &format!("{o} line"),
+                cx - w / 2.0,
+                cy - row / 2.0,
+                w,
+                row,
+            ),
         );
         b.add(
             cell,
@@ -135,55 +141,73 @@ pub fn face() -> Face {
             );
             b.add(
                 lid,
-                surface_kit::draw::circle(
+                frame::surface::kit::draw::circle(
                     "guide dot",
                     px(x),
                     py(80.0),
                     1.6,
-                    surface_kit::draw::solid(INK),
+                    frame::surface::kit::draw::solid(INK),
                 ),
             );
         }
         // The LCD.
         let (dx, dy, dw, dh) = (px(187.0), py(110.0), px(460.0), py(128.0));
-        let bezel = surface_kit::draw::rounded(
-            surface_kit::draw::rect(
+        let bezel = frame::surface::kit::draw::rounded(
+            frame::surface::kit::draw::rect(
                 "lcd bezel",
                 dx - 3.0,
                 dy - 3.0,
                 dw + 6.0,
                 dh + 6.0,
-                surface_kit::draw::solid("#0c0c0d"),
+                frame::surface::kit::draw::solid("#0c0c0d"),
             ),
             4.0,
         );
         b.add(
             lid,
-            surface_kit::draw::with_effects(
+            frame::surface::kit::draw::with_effects(
                 bezel,
                 vec![
-                    surface_kit::draw::inner_shadow("#000000", 0.0, 1.0, 2.0),
-                    surface_kit::draw::drop_shadow("#ffffff26", 0.0, 1.0, 0.5),
+                    frame::surface::kit::draw::inner_shadow("#000000", 0.0, 1.0, 2.0),
+                    frame::surface::kit::draw::drop_shadow("#ffffff26", 0.0, 1.0, 0.5),
                 ],
             ),
         );
-        let mut face = surface_kit::draw::frame("LCD", dx, dy, dw, dh);
+        let mut face = frame::surface::kit::draw::frame("LCD", dx, dy, dw, dh);
         face.fills = vec![
-            surface_kit::draw::linear(
+            frame::surface::kit::draw::linear(
                 170.0,
                 &[(0.0, "#5f9990"), (0.5, "#4b837b"), (1.0, "#3c6f68")],
             ),
-            surface_kit::draw::radial_at(0.3, 0.4, 0.5, &[(0.0, "#ffffff14"), (1.0, "#ffffff00")]),
-            surface_kit::draw::radial_at(0.75, 0.7, 0.4, &[(0.0, "#0000001a"), (1.0, "#00000000")]),
+            frame::surface::kit::draw::radial_at(
+                0.3,
+                0.4,
+                0.5,
+                &[(0.0, "#ffffff14"), (1.0, "#ffffff00")],
+            ),
+            frame::surface::kit::draw::radial_at(
+                0.75,
+                0.7,
+                0.4,
+                &[(0.0, "#0000001a"), (1.0, "#00000000")],
+            ),
         ];
         face.clips_content = true;
-        face.corner_radii = document_proto::CornerRadii::uniform(2.0);
-        face.effects = vec![surface_kit::draw::inner_shadow("#0000008c", 0.0, 1.5, 3.0)];
+        face.corner_radii = frame::document::proto::CornerRadii::uniform(2.0);
+        face.effects = vec![frame::surface::kit::draw::inner_shadow(
+            "#0000008c",
+            0.0,
+            1.5,
+            3.0,
+        )];
         let lcd = b.add(lid, face);
-        let lcd = b.add(lcd, surface_kit::draw::frame("backlight", 0.0, 0.0, dw, dh));
+        let lcd = b.add(
+            lcd,
+            frame::surface::kit::draw::frame("backlight", 0.0, 0.0, dw, dh),
+        );
         if let Some(n) = b.scene.node_mut(lcd) {
-            n.emission = Some(document_proto::Emission {
-                color: surface_kit::draw::hex("#6fd0bf"),
+            n.emission = Some(frame::document::proto::Emission {
+                color: frame::surface::kit::draw::hex("#6fd0bf"),
                 intensity: 0.15,
                 radius: 10.0,
             });
@@ -221,7 +245,7 @@ pub fn face() -> Face {
                 && let Some(NodeKind::Text(t)) = b.scene.node_mut(v).map(|n| &mut n.kind)
             {
                 // The LCD's own dot-matrix characters.
-                t.font_family = Some(surface_kit::draw::family::DOTO.into());
+                t.font_family = Some(frame::surface::kit::draw::family::DOTO.into());
                 t.font_weight = Some(800.0);
                 t.font_size *= 1.25;
             }
@@ -236,12 +260,12 @@ pub fn face() -> Face {
             ui::line(b, lid, "guide", &pts, 0.9, INK);
             b.add(
                 lid,
-                surface_kit::draw::circle(
+                frame::surface::kit::draw::circle(
                     "guide dot",
                     px(x0),
                     py(242.0),
                     1.6,
-                    surface_kit::draw::solid(INK),
+                    frame::surface::kit::draw::solid(INK),
                 ),
             );
         }

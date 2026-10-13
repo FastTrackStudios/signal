@@ -8,10 +8,10 @@
 //! the damper's travel), and the output VU. Below the window, the plugin's
 //! additions in a row, and the plate keys.
 
-use document_proto::NodeId;
-use surface_kit::{Place, draw};
-use surface_proto::Unit;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, draw};
+use frame::surface::proto::Unit;
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Dial, bind};
 use crate::face::{Face, canvas};
@@ -351,9 +351,9 @@ pub fn face() -> Face {
         let mut tank = draw::frame("Plate", tx, ty, tw, th);
         tank.fills = vec![draw::linear(180.0, &[(0.0, "#1b1d20"), (1.0, "#2b2e32")])];
         tank.clips_content = true;
-        tank.corner_radii = document_proto::CornerRadii::uniform(5.0);
+        tank.corner_radii = frame::document::proto::CornerRadii::uniform(5.0);
         tank.effects = vec![draw::inner_shadow("#000000", 0.0, 3.0, 10.0)];
-        tank.shader = Some(document_proto::ShaderFx {
+        tank.shader = Some(frame::document::proto::ShaderFx {
             shader: "glass".into(),
             params: std::collections::BTreeMap::from([("strength".to_string(), 0.25)]),
             inputs: Vec::new(),
@@ -385,7 +385,7 @@ pub fn face() -> Face {
             .size(170.0)
             .variant("satin_plate")
             .legend("VU")
-            .bind(surface_proto::Binding::stream("plate/out"));
+            .bind(frame::surface::proto::Binding::stream("plate/out"));
         ui::put(b, panel, "meter.vu_ivory", &vu, 850.0, 126.0);
         ui::silk(b, panel, "Output", 850.0, 198.0, 7.5, INK, 800.0);
 

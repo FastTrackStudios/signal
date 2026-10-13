@@ -11,12 +11,12 @@
 //! Both drive the rig's pitch engine (`semitones`, `cents`); the shifted
 //! signal alone.
 
-use document_proto::motion::{Dynamics, Motion, Target};
-use document_proto::{CornerRadii, NodeId, ResizeX};
-use surface_kit::draw::{self, Lettering, family};
-use surface_kit::motion;
-use surface_proto::{ParamInfo, Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::document::proto::{CornerRadii, NodeId, ResizeX};
+use frame::surface::kit::draw::{self, Lettering, family};
+use frame::surface::kit::motion;
+use frame::surface::proto::{ParamInfo, Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::drives::H;
@@ -69,7 +69,7 @@ fn name_readout(
     size: f64,
     color: &str,
 ) -> NodeId {
-    use document_proto::{NodeKind, TextAlign, TextData};
+    use frame::document::proto::{NodeKind, TextAlign, TextData};
     let h = (size * 1.3).ceil();
     let root = b.add(
         parent,
@@ -90,8 +90,8 @@ fn name_readout(
         };
     }
     let lit = b.add(root, draw::emissive(t, draw::hex(color), 0.7, size * 0.4));
-    let c = surface_proto::Control::new(surface_proto::ControlKind::Readout)
-        .slot(surface_proto::SlotRole::Value, lit.0)
+    let c = frame::surface::proto::Control::new(frame::surface::proto::ControlKind::Readout)
+        .slot(frame::surface::proto::SlotRole::Value, lit.0)
         .bound(ui::bind(addr));
     b.controls.insert(root, c);
     root

@@ -284,7 +284,7 @@ pub struct Mixer {
     /// The theme the strips were recorded with, if any — see `skin`. The
     /// live pass and the hit tests read the same one, so a theme that
     /// reloads mid-frame cannot draw one strip two ways.
-    pub skin: Option<std::sync::Arc<theme_runtime::Theme>>,
+    pub skin: Option<std::sync::Arc<frame::theme::runtime::Theme>>,
     /// `skin::version()` when recorded: a different one is a stale mixer.
     pub skin_version: u64,
     /// Each strip not recorded yet, and what recording it needs — see
@@ -542,10 +542,10 @@ impl Mixer {
             // A live or a touch strip is a different strip; a theme draws
             // one only when it says it does (`$strip.live`, `$strip.touch`)
             // — REAPER's layout has neither.
-            let says = |theme: &theme_runtime::Theme, token: &str| {
+            let says = |theme: &frame::theme::runtime::Theme, token: &str| {
                 theme
                     .token(token)
-                    .and_then(theme_runtime::Value::truthy)
+                    .and_then(frame::theme::runtime::Value::truthy)
                     .unwrap_or(false)
             };
             let by_theme = skin.as_ref().is_some_and(|t| {
@@ -638,7 +638,7 @@ impl Mixer {
 
     /// The theme `row` was drawn with, if it was.
     #[must_use]
-    pub fn themed(&self, row: usize) -> Option<&std::sync::Arc<theme_runtime::Theme>> {
+    pub fn themed(&self, row: usize) -> Option<&std::sync::Arc<frame::theme::runtime::Theme>> {
         self.skin
             .as_ref()
             .filter(|_| self.themed.get(row).copied().unwrap_or(false))
@@ -788,7 +788,7 @@ impl Mixer {
 /// as `strip` draws them, the REAPER part below the rack the theme's.
 fn themed(
     scene: &mut Scene,
-    theme: &theme_runtime::Theme,
+    theme: &frame::theme::runtime::Theme,
     palette: &Palette,
     font: &Font,
     track: &Track,
@@ -897,7 +897,7 @@ struct Record<'a> {
     palette: &'a Palette,
     font: &'a Font,
     /// The theme, when it draws this strip.
-    skin: Option<&'a theme_runtime::Theme>,
+    skin: Option<&'a frame::theme::runtime::Theme>,
     rack: &'a [crate::tone::Which],
     /// The racks' settings, when the recording draws the racks (rather
     /// than the live pass).

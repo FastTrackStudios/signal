@@ -12,12 +12,12 @@
 //! `mod/<block param>`, the tremolo's, vibrato's and rotary's
 //! `motion/<block param>`; `<ns>/on` is the block's bypass.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::proto::{ParamInfo, Range, Unit};
+use frame::surface::widgets::Builder;
 use serde_json::json;
-use surface_kit::{draw, motion};
-use surface_proto::{ParamInfo, Range, Unit};
-use surface_widgets::Builder;
 
 use crate::face::{Face, canvas};
 use crate::reverb::ui;
@@ -170,13 +170,13 @@ fn panel(
     name: &str,
     t: &Theme,
     build: impl FnOnce(&mut Builder<'_>, NodeId),
-) -> document_proto::Scene {
+) -> frame::document::proto::Scene {
     let (fill, edge) = (t.panel, t.edge);
     canvas(name, move |b, root| {
         ui::fit_root(b, root, W, H);
         let mut p = draw::frame("Panel", 0.0, 0.0, W, H);
         p.fills = vec![draw::linear(180.0, &fill)];
-        p.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        p.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
         let p = b.add(
             root,
             draw::with_effects(
@@ -229,7 +229,7 @@ fn view(b: &mut Builder<'_>, parent: NodeId, t: &Theme, l: Lay) -> (NodeId, f64,
     let mut v = draw::frame("View", x, y, w, h);
     v.fills = vec![draw::linear(180.0, &t.window)];
     v.clips_content = true;
-    v.corner_radii = document_proto::CornerRadii::uniform(6.0);
+    v.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
     v.effects = vec![draw::inner_shadow("#00000080", 0.0, 2.0, 6.0)];
     (b.add(parent, v), w, h)
 }
@@ -342,14 +342,16 @@ fn row_item(
                 .dynamics(Dynamics::spring(400.0, 36.0)),
         );
         ui::silk(b, half, word, sw / 4.0, sh / 2.0, size, t.ink, 800.0);
-        let mode = surface_proto::ButtonMode::Select {
+        let mode = frame::surface::proto::ButtonMode::Select {
             index: u32::try_from(i).unwrap_or(0),
             count: 2,
         };
         b.controls.insert(
             half,
-            surface_proto::Control::new(surface_proto::ControlKind::Button { mode })
-                .bound(ui::bind(&a(ns, "fast"))),
+            frame::surface::proto::Control::new(frame::surface::proto::ControlKind::Button {
+                mode,
+            })
+            .bound(ui::bind(&a(ns, "fast"))),
         );
     }
     ui::silk(
@@ -516,8 +518,8 @@ fn header(
         );
         b.controls.insert(
             g,
-            surface_proto::Control::new(surface_proto::ControlKind::Button {
-                mode: surface_proto::ButtonMode::Momentary,
+            frame::surface::proto::Control::new(frame::surface::proto::ControlKind::Button {
+                mode: frame::surface::proto::ButtonMode::Momentary,
             })
             .bound(ui::bind(&a(ns, "flip")))
             .shown_if(kit::standalone(ns)),
@@ -949,7 +951,7 @@ fn tremolo_picture(b: &mut Builder<'_>, v: NodeId, vw: f64, vh: f64, t: &Theme) 
     for (side, phase, color) in [(0_u8, 0.0, GREEN), (1, 0.5, LIME)] {
         let mut clip = draw::frame("tube window", lamp_x, 0.0, span, vh);
         clip.clips_content = true;
-        clip.layout_child.resize_x = Some(document_proto::ResizeX::Stretch);
+        clip.layout_child.resize_x = Some(frame::document::proto::ResizeX::Stretch);
         let clip = b.add(v, clip);
         // Twice the window long, so a widened window stays full.
         let roll = b.add(clip, draw::frame("tube", 0.0, 0.0, 2.0 * span + period, vh));
@@ -1138,7 +1140,7 @@ fn lane(
         let mut v = draw::frame("View", vx, vy, vw, vh);
         v.fills = vec![draw::linear(180.0, &t.window)];
         v.clips_content = true;
-        v.corner_radii = document_proto::CornerRadii::uniform(6.0);
+        v.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         v.effects = vec![draw::inner_shadow("#00000080", 0.0, 2.0, 6.0)];
         let v = b.add(p, v);
         picture(b, v, vw, vh, t);
@@ -1178,7 +1180,7 @@ fn lane(
 fn lane_panel(b: &mut Builder<'_>, root: NodeId, t: &Theme, w: f64) -> NodeId {
     let mut p = draw::frame("Panel", 0.0, 0.0, w, kit::H);
     p.fills = vec![draw::linear(180.0, &t.panel)];
-    p.corner_radii = document_proto::CornerRadii::uniform(8.0);
+    p.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
     b.add(
         root,
         draw::with_effects(

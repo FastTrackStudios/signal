@@ -1,4 +1,4 @@
-use render::{build_scene_layout_boxes, build_scene_primitives};
+use frame::render::{build_scene_layout_boxes, build_scene_primitives};
 use serde_json::json;
 use std::time::Instant;
 
@@ -39,23 +39,23 @@ fn avg(values: &[f64]) -> f64 {
     }
 }
 
-fn count_passes(primitives: &[render::PaintPrimitive]) -> PrimitivePassCounts {
+fn count_passes(primitives: &[frame::render::PaintPrimitive]) -> PrimitivePassCounts {
     let mut out = PrimitivePassCounts::default();
     for p in primitives {
         match p {
-            render::PaintPrimitive::GroupStart { .. } => out.group_start += 1,
-            render::PaintPrimitive::GroupEnd { .. } => out.group_end += 1,
-            render::PaintPrimitive::LayerStart { .. } => out.layer_start += 1,
-            render::PaintPrimitive::LayerEnd { .. } => out.layer_end += 1,
-            render::PaintPrimitive::ClipStart { .. } => out.clip_start += 1,
-            render::PaintPrimitive::ClipEnd { .. } => out.clip_end += 1,
-            render::PaintPrimitive::MaskDefStart { .. } => out.mask_def_start += 1,
-            render::PaintPrimitive::MaskDefEnd { .. } => out.mask_def_end += 1,
-            render::PaintPrimitive::MaskApplyStart { .. } => out.mask_apply_start += 1,
-            render::PaintPrimitive::MaskApplyEnd { .. } => out.mask_apply_end += 1,
-            render::PaintPrimitive::Rect { .. } => out.rect += 1,
-            render::PaintPrimitive::Path { .. } => out.path += 1,
-            render::PaintPrimitive::Text { .. } => out.text += 1,
+            frame::render::PaintPrimitive::GroupStart { .. } => out.group_start += 1,
+            frame::render::PaintPrimitive::GroupEnd { .. } => out.group_end += 1,
+            frame::render::PaintPrimitive::LayerStart { .. } => out.layer_start += 1,
+            frame::render::PaintPrimitive::LayerEnd { .. } => out.layer_end += 1,
+            frame::render::PaintPrimitive::ClipStart { .. } => out.clip_start += 1,
+            frame::render::PaintPrimitive::ClipEnd { .. } => out.clip_end += 1,
+            frame::render::PaintPrimitive::MaskDefStart { .. } => out.mask_def_start += 1,
+            frame::render::PaintPrimitive::MaskDefEnd { .. } => out.mask_def_end += 1,
+            frame::render::PaintPrimitive::MaskApplyStart { .. } => out.mask_apply_start += 1,
+            frame::render::PaintPrimitive::MaskApplyEnd { .. } => out.mask_apply_end += 1,
+            frame::render::PaintPrimitive::Rect { .. } => out.rect += 1,
+            frame::render::PaintPrimitive::Path { .. } => out.path += 1,
+            frame::render::PaintPrimitive::Text { .. } => out.text += 1,
         }
     }
     out
@@ -99,7 +99,7 @@ fn run() -> Result<(), String> {
         let run_start = Instant::now();
 
         let t = Instant::now();
-        let doc = figma_import::import_bytes(&bytes)
+        let doc = frame::figma::import::import_bytes(&bytes)
             .map_err(|e| format!("import failed for {input}: {e}"))?;
         let import_ms = t.elapsed().as_secs_f64() * 1000.0;
 
@@ -127,7 +127,7 @@ fn run() -> Result<(), String> {
         let scene_ms = {
             let t = Instant::now();
             let mut scene = vello::Scene::new();
-            render::paint_primitives_into_scene_with(
+            frame::render::paint_primitives_into_scene_with(
                 &mut scene,
                 &primitives,
                 kurbo::Affine::IDENTITY,

@@ -22,11 +22,11 @@
 //! The valves' glow flickers (a motion on their light), the pilot LED
 //! follows the power switch.
 
-use document_proto::NodeId;
-use surface_kit::materials::{Dir, Grain, Material, fill};
-use surface_kit::{Place, TOUCH_MIN, draw, motion};
-use surface_proto::ParamInfo;
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::materials::{Dir, Grain, Material, fill};
+use frame::surface::kit::{Place, TOUCH_MIN, draw, motion};
+use frame::surface::proto::ParamInfo;
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, HEAD_W, KnobLook, Type};
 use super::pedals::PLUGIN;
@@ -75,7 +75,8 @@ fn power(
         .options(&["nolamp"])
         .legend("")
         .touch(TOUCH_MIN);
-    let k = surface_kit::place(b, parent, "button.round_cap", &p).unwrap_or_else(|e| panic!("{e}"));
+    let k = frame::surface::kit::place(b, parent, "button.round_cap", &p)
+        .unwrap_or_else(|e| panic!("{e}"));
     ui::strip_legend(b, k);
     parts::centre_on(b, k, (x, y));
     parts::status_led(b, parent, addr, 5.0, (x, led_y), led, "dark", None);
@@ -339,7 +340,7 @@ fn zigzag_bars(
         .collect()
 }
 
-fn face(file: &'static str, scene: document_proto::Scene, params: Vec<ParamInfo>) -> Face {
+fn face(file: &'static str, scene: frame::document::proto::Scene, params: Vec<ParamInfo>) -> Face {
     ui::formatted(Face {
         file,
         plugin: PLUGIN,
@@ -400,7 +401,7 @@ pub(super) fn critic() -> Face {
                 scale: 1.4,
             },
         );
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "tolex edge",
             (0.0, 0.0, w, bottom - top),
             10.0,
@@ -510,7 +511,7 @@ pub(super) fn critic() -> Face {
                 draw::solid("#8fb0dc55"),
             ),
         );
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "grille recess",
             (0.0, 0.0, ow, oh),
             0.0,
@@ -520,7 +521,7 @@ pub(super) fn critic() -> Face {
         ) {
             b.add(opening, n);
         }
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "plate edge",
             (0.0, 0.0, gw, gh),
             0.0,
@@ -680,7 +681,7 @@ pub(super) fn engine() -> Face {
                 dir: Dir::Horizontal,
             },
         );
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "box edge",
             (0.0, 0.0, w, bottom),
             26.0,
@@ -714,7 +715,7 @@ pub(super) fn engine() -> Face {
                 vec![draw::drop_shadow("#ffffff66", 0.4, 1.0, 0.5)],
             ),
         );
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "grille recess",
             (0.0, 0.0, gw, gh),
             0.0,
@@ -893,7 +894,7 @@ pub(super) fn desk() -> Face {
                 coarse: false,
             },
         );
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "chassis edge",
             (0.0, 0.0, w, bottom - top),
             30.0,
@@ -951,7 +952,7 @@ pub(super) fn desk() -> Face {
         let mut strip = draw::rounded(draw::frame("faceplate", sx, sy, sw, sh), 12.0);
         strip.fills = vec![draw::linear(180.0, &[(0.0, "#f2ecdd"), (1.0, "#e6dcc6")])];
         let strip = b.add(body, strip);
-        for n in surface_kit::materials::light::edge(
+        for n in frame::surface::kit::materials::light::edge(
             "strip recess",
             (0.0, 0.0, sw, sh),
             12.0,

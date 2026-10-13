@@ -9,10 +9,10 @@
 //! Two finishes, both anodised aluminium catching the light: light,
 //! frosted silver; dark, glacier blue.
 
-use document_proto::NodeId;
-use document_proto::motion::{Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use super::shell::{self, Device, Look};
 use crate::face::Face;

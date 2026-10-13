@@ -4,9 +4,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use surface_proto::Catalog;
-use surface_runtime::Surface;
-use surface_widgets::{Options, Theme, surface_for_catalog};
+use frame::surface::proto::Catalog;
+use frame::surface::runtime::Surface;
+use frame::surface::widgets::{Options, Theme, surface_for_catalog};
 
 #[derive(Debug, Clone)]
 pub enum Source {
@@ -22,7 +22,7 @@ pub enum Source {
 impl Source {
     #[must_use]
     pub fn from_path(path: PathBuf) -> Self {
-        if document_io::Format::of(&path) == Some(document_io::Format::Bundle) {
+        if frame::document::io::Format::of(&path) == Some(frame::document::io::Format::Bundle) {
             Self::Bundle(path)
         } else {
             Self::Markup(path)
@@ -68,7 +68,7 @@ impl Source {
                     ..Options::default()
                 },
             )),
-            Self::Markup(path) | Self::Bundle(path) => document_io::load_surface(path)
+            Self::Markup(path) | Self::Bundle(path) => frame::document::io::load_surface(path)
                 .map(Surface::from_scene)
                 .map_err(|e| e.to_string()),
         }
@@ -81,7 +81,7 @@ impl Source {
 pub fn placeholder() -> Surface {
     const SRC: &str = r##"<Document><Page><Frame w=960 h=360 fill="#0e0f12" /></Page></Document>"##;
     Surface::from_scene(
-        document_text::parse(SRC, BTreeMap::new()).expect("placeholder markup is valid"),
+        frame::document::text::parse(SRC, BTreeMap::new()).expect("placeholder markup is valid"),
     )
 }
 
@@ -96,7 +96,7 @@ pub type Stamp = Option<u64>;
 
 #[must_use]
 pub fn stamp(path: &Path) -> Stamp {
-    document_io::fingerprint(path)
+    frame::document::io::fingerprint(path)
 }
 
 /// Polls a stamp and says when to reload.
@@ -200,9 +200,9 @@ mod tests {
         let f = dir.join("tex.frame");
         let mut scene = placeholder().scene;
         scene.add_asset("font/ttf", b"font one".to_vec());
-        document_io::save_surface(&f, &scene).unwrap();
+        frame::document::io::save_surface(&f, &scene).unwrap();
         let loaded = Source::from_path(f.clone())
-            .load(&surface_memory::demo_catalog())
+            .load(&frame::surface::memory::demo_catalog())
             .unwrap();
         assert_eq!(loaded.scene.assets, scene.assets);
 
@@ -212,7 +212,7 @@ mod tests {
         // Only the sidecar changes (markup doesn't name fonts): still a reload.
         scene.assets.clear();
         scene.add_asset("font/ttf", b"font two, longer".to_vec());
-        document_io::save_surface(&f, &scene).unwrap();
+        frame::document::io::save_surface(&f, &scene).unwrap();
         assert!(w.observe(stamp(&f), t0 + POLL * 2));
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -228,7 +228,7 @@ mod tests {
             std::env::temp_dir().join(format!("frame-desktop-src-kind-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let bundle = dir.join("b.frame");
-        document_io::save_surface_as(&bundle, &placeholder().scene, document_io::Format::Bundle)
+        frame::document::io::save_surface_as(&bundle, &placeholder().scene, frame::document::io::Format::Bundle)
             .unwrap();
         assert!(matches!(Source::from_path(bundle), Source::Bundle(_)));
         let text = dir.join("t.frame");
@@ -252,7 +252,7 @@ mod tests {
         let f = dir.join("bad.frame");
         std::fs::write(&f, "<Document>\n  <Page>\n</Document>").unwrap();
         let err = Source::Markup(f.clone())
-            .load(&surface_memory::demo_catalog())
+            .load(&frame::surface::memory::demo_catalog())
             .unwrap_err();
         assert!(err.starts_with(&format!("{}:", f.display())), "{err}");
         assert!(

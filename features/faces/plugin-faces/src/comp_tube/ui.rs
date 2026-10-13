@@ -2,19 +2,21 @@
 //! by their centre, silkscreen that survives both 1× and 2×, readout
 //! windows, and the catalog entries every face declares.
 
-use document_proto::{Node, NodeId, NodeKind, Paint, TextAlign, TextCase, TextData, Transform};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{
+use frame::document::proto::{
+    Node, NodeId, NodeKind, Paint, TextAlign, TextCase, TextData, Transform,
+};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{
     Binding, Control, ControlKind, ParamInfo, Range, SlotRole, StreamInfo, StreamKind, Unit,
     ValueFormat,
 };
-use surface_widgets::Builder;
+use frame::surface::widgets::Builder;
 
 // ── placing ─────────────────────────────────────────────────────────────
 
 /// Place kit component `id`; panics on a bad id/variant (faces are literals).
 pub fn put(b: &mut Builder<'_>, parent: NodeId, id: &str, p: &Place) -> NodeId {
-    surface_kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"))
+    frame::surface::kit::place(b, parent, id, p).unwrap_or_else(|e| panic!("{e}"))
 }
 
 pub fn size_of(b: &Builder<'_>, id: NodeId) -> (f64, f64) {
@@ -28,7 +30,7 @@ pub fn size_of(b: &Builder<'_>, id: NodeId) -> (f64, f64) {
 pub fn fit_root(b: &mut Builder<'_>, root: NodeId, panel: NodeId) {
     let (w, h) = size_of(b, panel);
     if let Some(n) = b.scene.node_mut(root) {
-        n.size = document_proto::Size {
+        n.size = frame::document::proto::Size {
             width: w,
             height: h,
         };
@@ -192,7 +194,7 @@ pub fn selector(
     let place = p
         .clone()
         .options(labels)
-        .ink(surface_kit::Ink::Color(ink.color.to_string()))
+        .ink(frame::surface::kit::Ink::Color(ink.color.to_string()))
         .touch(TOUCH_MIN);
     rotary_at(b, parent, "knob.chicken_head", &place, at.0, at.1)
 }
@@ -542,7 +544,7 @@ pub fn ring_numerals(
         let (x, y) = draw::polar(cx, cy, r, a);
         let w = width_for(s, &ink);
         let mut node = text_node(s, 0.0, 0.0, w, &ink, TextAlign::Center);
-        node.transform = document_proto::Transform::IDENTITY;
+        node.transform = frame::document::proto::Transform::IDENTITY;
         // A frame turned about the glyphs' middle carries the text round
         // (a renderer turns a frame's subtree, not a text node's own box).
         let h = node.size.height;
@@ -598,14 +600,14 @@ pub fn printed_range(marks: &[(f64, f64)], sweep: f64, unit: Unit) -> Range {
     let (lo, hi) = (marks[0].1, marks[marks.len() - 1].1);
     let points = marks
         .iter()
-        .map(|(a, v)| surface_proto::CurvePoint {
+        .map(|(a, v)| frame::surface::proto::CurvePoint {
             x: (a + sweep / 2.0) / sweep,
             y: (v - lo) / (hi - lo),
         })
         .collect();
     Range {
-        scale: surface_proto::Scale::Curve {
-            curve: surface_proto::Curve::Points { points },
+        scale: frame::surface::proto::Scale::Curve {
+            curve: frame::surface::proto::Curve::Points { points },
         },
         ..Range::linear(lo, hi, unit)
     }
@@ -739,7 +741,7 @@ pub fn silk_slanted(
 ) -> NodeId {
     let w = width_for(s, &ink);
     let mut t = text_node(s, 0.0, 0.0, w, &ink, TextAlign::Left);
-    t.transform = document_proto::Transform::IDENTITY;
+    t.transform = frame::document::proto::Transform::IDENTITY;
     let h = t.size.height;
     let mut holder = draw::frame("silk slant", x, cy - h / 2.0, w, h);
     holder.transform.b = -k;
@@ -850,13 +852,13 @@ pub fn toggle(addr: &str, name: &str, on: bool) -> ParamInfo {
 pub fn streams(face: &str, name: &str) -> Vec<StreamInfo> {
     vec![
         StreamInfo {
-            id: surface_proto::EntryId::new(format!("{face}/gr")),
+            id: frame::surface::proto::EntryId::new(format!("{face}/gr")),
             name: format!("{name} Gain Reduction"),
             kind: StreamKind::GainReduction,
             rate_hz: 30.0,
         },
         StreamInfo {
-            id: surface_proto::EntryId::new(format!("{face}/out")),
+            id: frame::surface::proto::EntryId::new(format!("{face}/out")),
             name: format!("{name} Output"),
             kind: StreamKind::Level { channels: 2 },
             rate_hz: 30.0,

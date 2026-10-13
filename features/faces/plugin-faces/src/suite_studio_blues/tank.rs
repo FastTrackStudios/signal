@@ -5,12 +5,12 @@
 //! SPEED, the subdivision on a small display, SYNC/FREE) and reverb (MIX,
 //! TONE, DECAY, its lamp, on/off). Tabletop, 1200 × 490.
 
-use document_proto::motion::{Dynamics, Motion, Num, Target, Wave};
-use document_proto::{CornerRadii, NodeId};
-use surface_kit::materials::{light, paint};
-use surface_kit::{Place, draw, motion};
-use surface_proto::{Range, SlotRole, Unit, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Num, Target, Wave};
+use frame::document::proto::{CornerRadii, NodeId};
+use frame::surface::kit::materials::{light, paint};
+use frame::surface::kit::{Place, draw, motion};
+use frame::surface::proto::{Range, SlotRole, Unit, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, Cap, PLUGIN, knob, print, print_left, print_right, toggle};
 use crate::face::{Face, canvas};
@@ -142,13 +142,13 @@ pub fn spring_tank_as(t: &Tank) -> Face {
             }
             let mut case = draw::frame("Case", 0.0, 0.0, W, BODY_H);
             case.corner_radii = CornerRadii::uniform(32.0);
-            case.stroke = document_proto::Stroke {
+            case.stroke = frame::document::proto::Stroke {
                 paints: vec![draw::linear(
                     90.0,
                     &[(0.0, "#a8664a"), (0.5, "#5a3a34"), (1.0, "#a8664a")],
                 )],
                 weight: 3.0,
-                ..document_proto::Stroke::default()
+                ..frame::document::proto::Stroke::default()
             };
             case.effects = vec![draw::drop_shadow("#000000c0", 0.0, 8.0, 20.0)];
             let case = b.add(root, case);
@@ -312,7 +312,7 @@ pub fn spring_tank_as(t: &Tank) -> Face {
                 .variant("green")
                 .bind(ui::bind(t.verb_on))
                 .legend("")
-                .touch(surface_kit::TOUCH_MIN);
+                .touch(frame::surface::kit::TOUCH_MIN);
             let j = ui::put(b, case, "button.jewel", &jewel, 1033.0, row);
             ui::strip_legend(b, j);
             print(b, case, "ON", 1101.0, 322.0, 12.0, INK, 500.0, 0.08);
@@ -372,13 +372,13 @@ pub fn spring_tank_compact(t: &Tank, file: &'static str, w: f64, h: f64) -> Face
         ui::fit_root(b, root, w, h);
         let mut case = draw::frame("Case", 0.0, 0.0, w, h);
         case.corner_radii = CornerRadii::uniform(18.0);
-        case.stroke = document_proto::Stroke {
+        case.stroke = frame::document::proto::Stroke {
             paints: vec![draw::linear(
                 90.0,
                 &[(0.0, "#a8664a"), (0.5, "#5a3a34"), (1.0, "#a8664a")],
             )],
             weight: 3.0,
-            ..document_proto::Stroke::default()
+            ..frame::document::proto::Stroke::default()
         };
         let case = b.add(root, case);
         paint::fill(
@@ -559,13 +559,13 @@ pub fn tank_unit(t: &Tank, half: TankHalf, file: &'static str, w: f64, h: f64) -
             ui::fit_root(b, root, w, h);
             let mut case = draw::frame("Case", 0.0, 0.0, w, h);
             case.corner_radii = CornerRadii::uniform(18.0);
-            case.stroke = document_proto::Stroke {
+            case.stroke = frame::document::proto::Stroke {
                 paints: vec![draw::linear(
                     90.0,
                     &[(0.0, "#a8664a"), (0.5, "#5a3a34"), (1.0, "#a8664a")],
                 )],
                 weight: 3.0,
-                ..document_proto::Stroke::default()
+                ..frame::document::proto::Stroke::default()
             };
             let case = b.add(root, case);
             paint::fill(

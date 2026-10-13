@@ -13,11 +13,11 @@
 //! face). Two finishes: light, the oatmeal enamel of a late-seventies
 //! studio unit; dark, black-anodised graphite.
 
-use document_proto::motion::{Dynamics, Motion, Target};
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Ink, Place, draw, motion};
-use surface_proto::{ButtonMode, Control, ControlKind, SlotRole};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Ink, Place, draw, motion};
+use frame::surface::proto::{ButtonMode, Control, ControlKind, SlotRole};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -130,7 +130,7 @@ fn program() -> usize {
 fn faceplate(b: &mut Builder<'_>, root: NodeId, w: f64, l: &Look, ear_w: f64) -> NodeId {
     let mut plate = draw::frame("Faceplate", 0.0, 0.0, w, kit::H);
     plate.fills = vec![draw::linear(180.0, &l.plate)];
-    plate.corner_radii = document_proto::CornerRadii::uniform(4.0);
+    plate.corner_radii = frame::document::proto::CornerRadii::uniform(4.0);
     let plate = b.add(
         root,
         draw::with_effects(
@@ -261,7 +261,7 @@ fn segments(b: &mut Builder<'_>, parent: NodeId, s: &str, (x, cy, w): (f64, f64,
             fill,
             TextAlign::Right,
         );
-        if let document_proto::NodeKind::Text(t) = &mut n.kind {
+        if let frame::document::proto::NodeKind::Text(t) = &mut n.kind {
             t.font_family = Some(draw::family::DSEG7.into());
         }
         n
@@ -818,7 +818,7 @@ pub fn tall(dark: bool) -> Face {
     let scene = kit::tall_lane(NAME, |b, root| {
         let mut plate = draw::frame("Faceplate", 0.0, 0.0, kit::TALL_W, kit::TALL_H);
         plate.fills = vec![draw::linear(180.0, &l.plate)];
-        plate.corner_radii = document_proto::CornerRadii::uniform(4.0);
+        plate.corner_radii = frame::document::proto::CornerRadii::uniform(4.0);
         let plate = b.add(
             root,
             draw::with_effects(plate, vec![draw::inner_shadow("#ffffff26", 0.0, 1.0, 0.0)]),

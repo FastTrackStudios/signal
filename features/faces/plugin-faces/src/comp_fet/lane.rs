@@ -14,10 +14,10 @@
 //! the rack face's own; the addresses are the same `fet/…`, so a host
 //! drives every shape of the unit with one set of params.
 
-use document_proto::{NodeId, NodeKind, Size};
-use surface_kit::{Ink, Place, TOUCH_MIN, draw};
-use surface_proto::{Binding, MeterTap, ParamInfo, SlotRole, SourceSelect};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, NodeKind, Size};
+use frame::surface::kit::{Ink, Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Binding, MeterTap, ParamInfo, SlotRole, SourceSelect};
+use frame::surface::widgets::Builder;
 
 use super::{
     ATTACK, ATTEN, BLACK, INPUT, LATE, Layout, METER, METER_SRC, OUTPUT, POWER, Plate, RATIO,
@@ -128,7 +128,7 @@ fn unit(b: &mut Builder<'_>, root: NodeId, f: &Layout, shape: Shape) {
                 &[(0.0, "#dddedc"), (0.48, "#d1d2d0"), (1.0, "#c2c3c1")],
             )];
         }
-        n.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        n.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
     }
     for (x, y) in [
         (10.0, 10.0),
@@ -496,8 +496,11 @@ fn blue_band(b: &mut Builder<'_>, panel: NodeId, shape: Shape, s: &Spots) {
             90.0,
             &[(0.0, "#1f6a92"), (0.5, "#2675a0"), (1.0, "#1f6a92")],
         )];
-        n.corner_radii =
-            document_proto::CornerRadii::uniform(if shape == Shape::Tall { 4.0 } else { 0.0 });
+        n.corner_radii = frame::document::proto::CornerRadii::uniform(if shape == Shape::Tall {
+            4.0
+        } else {
+            0.0
+        });
     }
     move_to(b, band, x0, if shape == Shape::Tall { 4.0 } else { 0.0 });
     if shape == Shape::Lane {

@@ -20,7 +20,7 @@ fn main() {
         // Compiled before it is written: a theme the mixer would refuse is
         // not worth overwriting a good one with.
         if let Err(errors) =
-            theme_runtime::Theme::from_markup(&markup, session_daw::skin::schema(), None)
+            frame::theme::runtime::Theme::from_markup(&markup, session_daw::skin::schema(), None)
         {
             eprintln!("{out}:");
             for e in errors.iter().take(20) {

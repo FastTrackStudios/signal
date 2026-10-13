@@ -15,10 +15,10 @@
 //! Every frequency pot follows its printed scale — the marks are where the
 //! console prints them, not an even log spread.
 
-use document_proto::NodeId;
-use surface_kit::{Place, TOUCH_MIN};
-use surface_proto::{Binding, Source, Unit, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, TOUCH_MIN};
+use frame::surface::proto::{Binding, Source, Unit, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::paint;
 use crate::comp_vca::ui::{self, bind};
@@ -277,7 +277,7 @@ pub fn face() -> Face {
         for (name, ch, dx) in [("Output L", 0, 0.0), ("Output R", 1, 22.0)] {
             let bind = Binding {
                 source: Source::Stream {
-                    id: surface_proto::EntryId::new("consoleeq/out"),
+                    id: frame::surface::proto::EntryId::new("consoleeq/out"),
                     channel: Some(ch),
                 },
                 ..Binding::stream("consoleeq/out")

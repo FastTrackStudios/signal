@@ -8,10 +8,10 @@
 //! tabletop EQ units at their render's aspect. The view system isn't built
 //! yet, so every unit is one page of its own.
 
-use document_proto::{Node, NodeId, NodeKind, TextAlign, TextCase, TextData};
-use surface_kit::{Ink as KitInk, Place, TOUCH_MIN, draw};
-use surface_proto::{ParamInfo, Range, SlotRole, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{Node, NodeId, NodeKind, TextAlign, TextCase, TextData};
+use frame::surface::kit::{Ink as KitInk, Place, TOUCH_MIN, draw};
+use frame::surface::proto::{ParamInfo, Range, SlotRole, Unit};
+use frame::surface::widgets::Builder;
 
 use crate::delay::parts::{self, Ink};
 
@@ -74,7 +74,7 @@ impl<'a> Enclosure<'a> {
     /// The class's footprint.
     #[must_use]
     pub fn size(&self) -> (f64, f64) {
-        surface_kit::panels::pedal::class_size(self.class)
+        frame::surface::kit::panels::pedal::class_size(self.class)
     }
 }
 
@@ -225,7 +225,7 @@ pub fn label(
     );
     if let Some(c) = b.controls.get_mut(&control) {
         c.slots.retain(|s| s.role != SlotRole::Label);
-        c.slots.push(surface_proto::Slot {
+        c.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Label,
             node: id.0,
         });
@@ -277,7 +277,7 @@ pub fn label_l(
     let id = letter(b, control, s, (cx - tx, cy - ty), l);
     if let Some(c) = b.controls.get_mut(&control) {
         c.slots.retain(|s| s.role != SlotRole::Label);
-        c.slots.push(surface_proto::Slot {
+        c.slots.push(frame::surface::proto::Slot {
             role: SlotRole::Label,
             node: id.0,
         });
@@ -338,7 +338,8 @@ pub fn stomp(
         options: Some(opts),
         ..Place::new(name).size(d).bind(bind(addr)).touch(TOUCH_MIN)
     };
-    let root = surface_kit::place(b, parent, "switch.stomp", &p).unwrap_or_else(|e| panic!("{e}"));
+    let root =
+        frame::surface::kit::place(b, parent, "switch.stomp", &p).unwrap_or_else(|e| panic!("{e}"));
     // Centre the actuator (the `cap`) on the point.
     let cap = b.scene.node(root).and_then(|n| {
         n.children.iter().find_map(|c| {
@@ -486,13 +487,13 @@ pub fn curve(
     }
     let mut n = draw::path(name, 0.0, 0.0, w, h, d, draw::solid(color));
     n.fills = Vec::new();
-    n.stroke = document_proto::Stroke {
+    n.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid(color)],
         weight,
-        cap: document_proto::StrokeCap::Round,
-        join: document_proto::StrokeJoin::Round,
-        align: document_proto::StrokeAlign::Center,
-        ..document_proto::Stroke::default()
+        cap: frame::document::proto::StrokeCap::Round,
+        join: frame::document::proto::StrokeJoin::Round,
+        align: frame::document::proto::StrokeAlign::Center,
+        ..frame::document::proto::Stroke::default()
     };
     b.add(parent, n)
 }
@@ -569,18 +570,18 @@ pub use crate::delay::parts::{DEFAULT_DIV, DIVISIONS};
 
 /// A gain-reduction stream.
 #[must_use]
-pub fn gr_stream(id: &str, name: &str) -> surface_proto::StreamInfo {
-    surface_proto::StreamInfo {
-        id: surface_proto::EntryId::new(id),
+pub fn gr_stream(id: &str, name: &str) -> frame::surface::proto::StreamInfo {
+    frame::surface::proto::StreamInfo {
+        id: frame::surface::proto::EntryId::new(id),
         name: name.into(),
-        kind: surface_proto::StreamKind::GainReduction,
+        kind: frame::surface::proto::StreamKind::GainReduction,
         rate_hz: 30.0,
     }
 }
 
 /// A level stream.
 #[must_use]
-pub fn level_stream(id: &str, name: &str, channels: u8) -> surface_proto::StreamInfo {
+pub fn level_stream(id: &str, name: &str, channels: u8) -> frame::surface::proto::StreamInfo {
     parts::level_stream(id, name, channels)
 }
 
@@ -600,7 +601,7 @@ pub fn gr_dots(
     color: &str,
     rtl: bool,
 ) -> NodeId {
-    use surface_proto::{Control, ControlKind, Curve, CurvePoint};
+    use frame::surface::proto::{Control, ControlKind, Curve, CurvePoint};
     let n = thresholds.len().max(1);
     let pitch = (x1 - x0) / n as f64;
     let h = d + 4.0;
@@ -616,7 +617,7 @@ pub fn gr_dots(
     }
     pts.sort_by(|a, b| a.x.total_cmp(&b.x));
     pts.dedup_by(|a, b| (a.x - b.x).abs() < 1e-9);
-    let mut binding = surface_proto::Binding::stream(stream);
+    let mut binding = frame::surface::proto::Binding::stream(stream);
     binding.curve = Curve::Points { points: pts };
     let mut c = Control::new(ControlKind::Gauge {
         sweep_degrees: 0.0,

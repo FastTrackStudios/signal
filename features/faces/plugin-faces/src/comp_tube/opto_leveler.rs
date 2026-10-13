@@ -11,10 +11,10 @@
 //! OUTPUT +4) — the same knob — over the POWER toggle. Positions are
 //! fractions of the photographed panel.
 
-use document_proto::NodeId;
-use surface_kit::{Ink as KitInk, Place, draw};
-use surface_proto::{MeterTap, SourceSelect};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Ink as KitInk, Place, draw};
+use frame::surface::proto::{MeterTap, SourceSelect};
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Ink};
 use crate::face::{Face, canvas};
@@ -173,7 +173,7 @@ fn build(b: &mut Builder<'_>, root: NodeId) {
                 .legend(" ")
                 .sweep(290.0)
                 .scale(&scale)
-                .touch(surface_kit::TOUCH_MIN)
+                .touch(frame::surface::kit::TOUCH_MIN)
                 .bind(ui::bind(addr)),
             c.0,
             c.1,
@@ -249,7 +249,7 @@ fn build(b: &mut Builder<'_>, root: NodeId) {
             .legend(" ")
             .options(&["+10", "GR", "+4"])
             .sweep(100.0)
-            .touch(surface_kit::TOUCH_MIN)
+            .touch(frame::surface::kit::TOUCH_MIN)
             .bind(ui::bind("opto/meter")),
         sx,
         sy,

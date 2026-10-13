@@ -8,14 +8,14 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use design_lint::{Config, Severity};
-use document_proto::Scene;
-use library_link::{
+use frame::design::lint::{Config, Severity};
+use frame::document::proto::Scene;
+use frame::library::link::{
     Blocking, Event, Follow, ListQuery, PublishMeta, Published, Surface as Stored, SurfaceMeta,
     SurfaceUpdate,
 };
-use surface_proto::Catalog;
-use surface_runtime::Surface;
+use frame::surface::proto::Catalog;
+use frame::surface::runtime::Surface;
 
 /// How long startup waits for the library.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -222,14 +222,14 @@ pub fn accept(
         .decode()
         .map_err(|e| format!("{who} rejected: {e}"))?;
     let errors = |s: &Scene| -> Vec<(String, String)> {
-        design_lint::lint(s, catalog, &Config::default())
+        frame::design::lint::lint(s, catalog, &Config::default())
             .into_iter()
             .filter(|i| i.severity == Severity::Error)
             .map(|i| (i.rule, i.node_name))
             .collect()
     };
     let before = errors(current);
-    let after = design_lint::lint(&scene, catalog, &Config::default());
+    let after = frame::design::lint::lint(&scene, catalog, &Config::default());
     if let Some(new) = after.iter().find(|i| {
         i.severity == Severity::Error && !before.contains(&(i.rule.clone(), i.node_name.clone()))
     }) {
@@ -260,16 +260,16 @@ pub fn install(stored: &Stored, dir: &Path) -> Result<PathBuf, String> {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
     match stored.content.format {
-        library_link::Format::Markup => {
+        frame::library::link::Format::Markup => {
             let text = std::str::from_utf8(&stored.content.bytes)
                 .map_err(|e| format!("{}: not UTF-8: {e}", path.display()))?;
-            document_io::write_markup(&path, text, &stored.content.assets)
+            frame::document::io::write_markup(&path, text, &stored.content.assets)
                 .map_err(|e| e.to_string())?;
         }
-        library_link::Format::Frame => {
+        frame::library::link::Format::Frame => {
             std::fs::write(&path, &stored.content.bytes)
                 .map_err(|e| format!("{}: {e}", path.display()))?;
-            document_io::prune_assets(&path).map_err(|e| e.to_string())?;
+            frame::document::io::prune_assets(&path).map_err(|e| e.to_string())?;
         }
     }
     Ok(path)
@@ -288,7 +288,7 @@ pub fn default_install_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use library_link::{Content, SurfaceMeta};
+    use frame::library::link::{Content, SurfaceMeta};
 
     const GOOD: &str = r##"<Document><Page><Frame name="Panel" w=200 h=100 fill="#101010"><Frame name="Gain" w=60 h=60 control={{"binding":{"curve":"Linear","max":1.0,"min":0.0,"source":{"Param":{"addr":"amp/gain"}}},"kind":{"Knob":{"sweep_degrees":270.0}},"slots":[]}} /></Frame></Page></Document>"##;
 
@@ -308,7 +308,7 @@ mod tests {
     }
 
     fn current() -> Scene {
-        document_text::parse(GOOD, Default::default()).unwrap()
+        frame::document::text::parse(GOOD, Default::default()).unwrap()
     }
 
     #[test]
@@ -316,7 +316,7 @@ mod tests {
         let (_, s) = accept(
             &update(&GOOD.replace("w=200", "w=240")),
             &current(),
-            &surface_memory::demo_catalog(),
+            &frame::surface::memory::demo_catalog(),
         )
         .unwrap();
         assert_eq!(s.controls.len(), 1);
@@ -327,7 +327,7 @@ mod tests {
         let err = accept(
             &update("<Document>\n  <Page>\n"),
             &current(),
-            &surface_memory::demo_catalog(),
+            &frame::surface::memory::demo_catalog(),
         )
         .unwrap_err();
         assert!(err.starts_with("t v2 rejected: "), "{err}");
@@ -348,17 +348,17 @@ mod tests {
         let err = accept(
             &update(&broken),
             &current(),
-            &surface_memory::demo_catalog(),
+            &frame::surface::memory::demo_catalog(),
         )
         .unwrap_err();
         assert!(err.contains("lint[binding]"), "{err}");
         // …but errors the stage already has don't block other edits.
-        let current_broken = document_text::parse(&broken, Default::default()).unwrap();
+        let current_broken = frame::document::text::parse(&broken, Default::default()).unwrap();
         assert!(
             accept(
                 &update(&broken.replace("w=200", "w=220")),
                 &current_broken,
-                &surface_memory::demo_catalog()
+                &frame::surface::memory::demo_catalog()
             )
             .is_ok()
         );
@@ -372,7 +372,7 @@ mod tests {
             surface: None,
         };
         assert!(
-            accept(&gone, &current(), &surface_memory::demo_catalog())
+            accept(&gone, &current(), &frame::surface::memory::demo_catalog())
                 .unwrap_err()
                 .contains("removed")
         );
@@ -409,7 +409,7 @@ mod tests {
             content: Content::markup(&scene),
         };
         let path = install(&stored, &dir).unwrap();
-        assert_eq!(document_io::load_surface(&path).unwrap(), scene);
+        assert_eq!(frame::document::io::load_surface(&path).unwrap(), scene);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

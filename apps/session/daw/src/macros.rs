@@ -206,7 +206,7 @@ pub fn cells(count: usize, at: Panel) -> Vec<Panel> {
 }
 
 /// The theme's page for a knob, most particular first.
-fn page(theme: &theme_runtime::Theme, phase: MixPhase, track: &str) -> Option<String> {
+fn page(theme: &frame::theme::runtime::Theme, phase: MixPhase, track: &str) -> Option<String> {
     let phase = phase.display_name().to_lowercase();
     [
         format!("fx.macro.{phase}.{}", track.to_lowercase()),
@@ -241,14 +241,19 @@ pub fn draw(scene: &mut Scene, palette: &Palette, font: &Font, knob: &Knob<'_>) 
     {
         let [r, g, b, a] = tint.to_rgba8().to_u8_array();
         let fields = crate::skin::values(&[
-            ("macro.name", theme_runtime::Value::text(knob.knob.name)),
-            ("macro.value", theme_runtime::Value::Num(value)),
-            ("macro.says", theme_runtime::Value::text(&says)),
+            (
+                "macro.name",
+                frame::theme::runtime::Value::text(knob.knob.name),
+            ),
+            ("macro.value", frame::theme::runtime::Value::Num(value)),
+            ("macro.says", frame::theme::runtime::Value::text(&says)),
             (
                 "macro.tint",
-                theme_runtime::Value::Color(theme_runtime::Rgba::from_rgba8(r, g, b, a)),
+                frame::theme::runtime::Value::Color(frame::theme::runtime::Rgba::from_rgba8(
+                    r, g, b, a,
+                )),
             ),
-            ("macro.held", theme_runtime::Value::Bool(knob.held)),
+            ("macro.held", frame::theme::runtime::Value::Bool(knob.held)),
         ]);
         if theme.record(
             &role,

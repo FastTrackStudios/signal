@@ -3,10 +3,10 @@
 //! suite's knobs and printed tick rings, brass hardware placed by centre,
 //! and the soft teal lamp.
 
-use document_proto::{Node, NodeId};
-use surface_kit::materials::{Dir, Material, fill};
-use surface_kit::{Ink, Place, TOUCH_MIN, draw};
-use surface_widgets::Builder;
+use frame::document::proto::{Node, NodeId};
+use frame::surface::kit::materials::{Dir, Material, fill};
+use frame::surface::kit::{Ink, Place, TOUCH_MIN, draw};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -27,8 +27,8 @@ pub const SIGNATURE: &str = "Hana K.";
 #[must_use]
 pub fn face(
     file: &'static str,
-    scene: document_proto::Scene,
-    params: Vec<surface_proto::ParamInfo>,
+    scene: frame::document::proto::Scene,
+    params: Vec<frame::surface::proto::ParamInfo>,
 ) -> Face {
     ui::formatted(Face {
         file,
@@ -43,9 +43,9 @@ pub fn face(
 #[must_use]
 pub fn face_with(
     file: &'static str,
-    scene: document_proto::Scene,
-    params: Vec<surface_proto::ParamInfo>,
-    streams: Vec<surface_proto::StreamInfo>,
+    scene: frame::document::proto::Scene,
+    params: Vec<frame::surface::proto::ParamInfo>,
+    streams: Vec<frame::surface::proto::StreamInfo>,
 ) -> Face {
     ui::formatted(Face {
         file,
@@ -93,7 +93,7 @@ pub fn signature(
                 cx - w / 2.0,
                 cy,
                 w,
-                document_proto::TextAlign::Center,
+                frame::document::proto::TextAlign::Center,
                 t,
             ),
             -8.0,
@@ -123,7 +123,7 @@ pub fn emblem(b: &mut Builder<'_>, parent: NodeId, (cx, cy): (f64, f64), r: f64,
 /// into.
 pub fn walnut(b: &mut Builder<'_>, parent: NodeId, (x, y, w, h): (f64, f64, f64, f64)) -> NodeId {
     let mut plate = draw::frame("Walnut", x, y, w, h);
-    plate.corner_radii = document_proto::CornerRadii::uniform(3.5);
+    plate.corner_radii = frame::document::proto::CornerRadii::uniform(3.5);
     plate.clips_content = true;
     plate.effects = vec![draw::drop_shadow("#ffffff66", 0.0, 0.8, 0.0)];
     let plate = b.add(parent, plate);
@@ -147,7 +147,14 @@ pub fn plate_edge(b: &mut Builder<'_>, plate: NodeId) {
         .scene
         .node(plate)
         .map_or((0.0, 0.0), |n| (n.size.width, n.size.height));
-    for n in surface_kit::materials::light::edge("rebate", (0.0, 0.0, w, h), 3.5, 3.0, 1.0, false) {
+    for n in frame::surface::kit::materials::light::edge(
+        "rebate",
+        (0.0, 0.0, w, h),
+        3.5,
+        3.0,
+        1.0,
+        false,
+    ) {
         b.add(plate, n);
     }
     b.add(
@@ -304,7 +311,7 @@ pub fn knob(
 
 /// Give a control's readout its own format (`OFF` at a filter's stop,
 /// `+` on a gain).
-pub fn set_format(b: &mut Builder<'_>, control: NodeId, f: surface_proto::ValueFormat) {
+pub fn set_format(b: &mut Builder<'_>, control: NodeId, f: frame::surface::proto::ValueFormat) {
     if let Some(c) = b.controls.get_mut(&control) {
         c.format = Some(f);
     }
@@ -416,10 +423,10 @@ pub fn slab(
     name: &str,
     (x, y, w, h): (f64, f64, f64, f64),
     r: f64,
-    fills: Vec<document_proto::Paint>,
+    fills: Vec<frame::document::proto::Paint>,
 ) -> Node {
     let mut n = draw::frame(name, x, y, w, h);
     n.fills = fills;
-    n.corner_radii = document_proto::CornerRadii::uniform(r);
+    n.corner_radii = frame::document::proto::CornerRadii::uniform(r);
     n
 }

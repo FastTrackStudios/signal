@@ -9,11 +9,11 @@
 //! Each mic also sits on the cab as a handle: drag it across its speaker
 //! for position (the dust cap out to the edge) and up for distance.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::materials::{Dir, Material, fill};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{ButtonMode, Control, ControlKind, Range, SlotRole, Unit, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::materials::{Dir, Material, fill};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{ButtonMode, Control, ControlKind, Range, SlotRole, Unit, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::parts::{self, CAB, Type};
 use super::pedals::PLUGIN;
@@ -75,9 +75,14 @@ fn cabinet(b: &mut Builder<'_>, parent: NodeId, (x, y, s): (f64, f64, f64), baff
             dir: Dir::Horizontal,
         },
     );
-    for n in
-        surface_kit::materials::light::edge("frame edge", (0.0, 0.0, s, s), 10.0, 6.0, 1.0, true)
-    {
+    for n in frame::surface::kit::materials::light::edge(
+        "frame edge",
+        (0.0, 0.0, s, s),
+        10.0,
+        6.0,
+        1.0,
+        true,
+    ) {
         b.add(frame, n);
     }
     let m = s * 0.07;
@@ -108,7 +113,7 @@ fn cabinet(b: &mut Builder<'_>, parent: NodeId, (x, y, s): (f64, f64, f64), baff
         ],
     )];
     let panel = b.add(frame, panel);
-    for n in surface_kit::materials::light::edge(
+    for n in frame::surface::kit::materials::light::edge(
         "baffle recess",
         (0.0, 0.0, s - 2.0 * m, s - 2.0 * m),
         0.0,

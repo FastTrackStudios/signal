@@ -9,11 +9,11 @@
 //! - Level (`53-trim`): the patch's pan knob over a long-throw console
 //!   fader for its level, on a dB scale.
 
-use document_proto::motion::{Dynamics, Motion, Target};
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{draw, motion};
-use surface_proto::{Control, ControlKind, Orientation, Range, SlotRole, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{draw, motion};
+use frame::surface::proto::{Control, ControlKind, Orientation, Range, SlotRole, Unit};
+use frame::surface::widgets::Builder;
 
 use crate::face::{Face, canvas};
 use crate::reverb::ui;
@@ -194,7 +194,7 @@ fn gate() -> Face {
             &[(0.0, "#07080a"), (0.5, "#111317"), (1.0, "#07080a")],
         )];
         track.clips_content = true;
-        track.corner_radii = document_proto::CornerRadii::uniform(3.0);
+        track.corner_radii = frame::document::proto::CornerRadii::uniform(3.0);
         track.effects = vec![draw::inner_shadow("#000000", 0.0, 2.0, 4.0)];
         let track = b.add(p, track);
         // The level, live: green where it clears the threshold.
@@ -401,7 +401,7 @@ fn gate() -> Face {
         plugin: PLUGIN,
         scene,
         params,
-        streams: surface_kit::viz::catalog::comp_streams("gate", 240),
+        streams: frame::surface::kit::viz::catalog::comp_streams("gate", 240),
     }
 }
 
@@ -575,7 +575,7 @@ fn trim() -> Face {
 /// The gate's type keys — GATE | EXPANDER, each `sw` × `sh` from (`sx`,
 /// `sy`), lettered at `size` — and OPEN / SHUT lit beside them as you play.
 fn gate_header(b: &mut Builder<'_>, p: NodeId, (sx, sy, sw, sh): (f64, f64, f64, f64), size: f64) {
-    use surface_proto::ButtonMode;
+    use frame::surface::proto::ButtonMode;
     // GATE | EXPANDER: the type, over the meter at the left.
     for (i, word) in ["Gate", "Expander"].iter().enumerate() {
         let cell = b.add(
@@ -668,16 +668,16 @@ fn gate_header(b: &mut Builder<'_>, p: NodeId, (sx, sy, sw, sh): (f64, f64, f64,
 /// level across it, shaded shut under the threshold, the threshold a handle
 /// along it. Returns the window (it takes the width).
 fn gate_meter(b: &mut Builder<'_>, p: NodeId, (vx, vy, vw, vh): (f64, f64, f64, f64)) -> NodeId {
-    use document_proto::ResizeX;
+    use frame::document::proto::ResizeX;
     // The meter window.
     let mut v = draw::frame("Meter window", vx, vy, vw, vh);
     v.fills = vec![draw::linear(180.0, &[(0.0, "#0b0c0e"), (1.0, "#060708")])];
     v.clips_content = true;
-    v.corner_radii = document_proto::CornerRadii::uniform(8.0);
+    v.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
     v.effects = vec![draw::inner_shadow("#000000c0", 0.0, 2.0, 6.0)];
     let v = b.add(p, v);
     let (mx, my, mw, mh) = (14.0, 30.0, vw - 28.0, vh - 44.0);
-    let stretched = |mut n: document_proto::Node| {
+    let stretched = |mut n: frame::document::proto::Node| {
         n.layout_child.resize_x = Some(ResizeX::Stretch);
         n
     };
@@ -687,7 +687,7 @@ fn gate_meter(b: &mut Builder<'_>, p: NodeId, (vx, vy, vw, vh): (f64, f64, f64, 
         &[(0.0, "#07080a"), (0.5, "#111317"), (1.0, "#07080a")],
     )];
     track.clips_content = true;
-    track.corner_radii = document_proto::CornerRadii::uniform(5.0);
+    track.corner_radii = frame::document::proto::CornerRadii::uniform(5.0);
     track.effects = vec![draw::inner_shadow("#000000", 0.0, 2.0, 4.0)];
     let track = b.add(v, stretched(track));
     // The level, live, rising to the right.
@@ -972,11 +972,9 @@ pub fn gate_row() -> Face {
         let mut p = draw::frame("Panel", 0.0, 0.0, w, h);
         p.fills = vec![draw::linear(180.0, &[(0.0, "#14181e"), (1.0, "#0c0f13")])];
         let p = b.add(root, p);
-        let place = surface_kit::Place::new("Gate").size(w - side).options(&[
-            "ns=gate",
-            &format!("h={h}"),
-            "len=240",
-        ]);
+        let place = frame::surface::kit::Place::new("Gate")
+            .size(w - side)
+            .options(&["ns=gate", &format!("h={h}"), "len=240"]);
         ui::put_at(b, p, "viz.gate", &place, 0.0, 0.0);
         let knob = [
             "color=#1b1e23",
@@ -1037,7 +1035,7 @@ pub fn gate_row() -> Face {
         plugin: PLUGIN,
         scene,
         params,
-        streams: surface_kit::viz::catalog::comp_streams("gate", 240),
+        streams: frame::surface::kit::viz::catalog::comp_streams("gate", 240),
     }
 }
 
@@ -1348,6 +1346,6 @@ pub fn gate_phone(back: bool) -> Face {
         plugin: PLUGIN,
         scene,
         params,
-        streams: surface_kit::viz::catalog::comp_streams("gate", 240),
+        streams: frame::surface::kit::viz::catalog::comp_streams("gate", 240),
     }
 }

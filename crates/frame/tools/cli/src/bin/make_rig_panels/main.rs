@@ -39,11 +39,11 @@ use std::collections::BTreeMap;
 use std::f32::consts::TAU;
 use std::path::PathBuf;
 
-use document_proto::{NodeId, Scene, Transform};
-use surface_kit::{Place, draw, viz};
-use surface_proto::{Catalog, FeedInfo, FeedKind, ParamInfo, ParamKind};
-use surface_runtime::Surface;
-use surface_widgets::{Builder, Theme};
+use frame::document::proto::{NodeId, Scene, Transform};
+use frame::surface::kit::{Place, draw, viz};
+use frame::surface::proto::{Catalog, FeedInfo, FeedKind, ParamInfo, ParamKind};
+use frame::surface::runtime::Surface;
+use frame::surface::widgets::{Builder, Theme};
 
 /// The rig row's box in `rig_shot`'s 1600 × 1000 window.
 pub const ORIGIN: (f64, f64) = (285.0, 95.0);
@@ -388,13 +388,13 @@ type Clip = (f64, f64, f64, f64);
 
 struct Doc {
     scene: Scene,
-    controls: BTreeMap<NodeId, surface_proto::Control>,
+    controls: BTreeMap<NodeId, frame::surface::proto::Control>,
     root: NodeId,
     theme: Theme,
 }
 
 impl Doc {
-    fn add(&mut self, parent: NodeId, node: document_proto::Node) -> NodeId {
+    fn add(&mut self, parent: NodeId, node: frame::document::proto::Node) -> NodeId {
         Builder {
             scene: &mut self.scene,
             controls: &mut self.controls,
@@ -411,7 +411,7 @@ impl Doc {
             theme: &self.theme,
         };
         let node =
-            surface_kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
+            frame::surface::kit::place(&mut b, self.root, id, p).unwrap_or_else(|e| panic!("{id}: {e}"));
         self.scene.node_mut(node).expect("placed").transform =
             Transform::translate(x - ORIGIN.0, y - ORIGIN.1);
         node
@@ -427,7 +427,7 @@ impl Doc {
     }
 }
 
-fn paint_of(fill: &chrome_types::Fill) -> Option<document_proto::Paint> {
+fn paint_of(fill: &chrome_types::Fill) -> Option<frame::document::proto::Paint> {
     match fill {
         chrome_types::Fill::None => None,
         chrome_types::Fill::Solid(c) => Some(draw::solid(c)),
@@ -438,7 +438,7 @@ fn paint_of(fill: &chrome_types::Fill) -> Option<document_proto::Paint> {
 #[must_use]
 pub fn surface() -> Surface {
     use chrome_types::Item;
-    use document_proto::{Stroke, StrokeAlign, StrokeCap, StrokeJoin};
+    use frame::document::proto::{Stroke, StrokeAlign, StrokeCap, StrokeJoin};
     let mut scene = Scene::new("Rig Panels");
     let page = scene.pages()[0];
     let mut root = draw::frame("Rig Panels", 0.0, 0.0, ROW.0, ROW.1);
@@ -446,7 +446,7 @@ pub fn surface() -> Surface {
     root.clips_content = true;
     let root_id = root.id;
     scene
-        .apply(document_proto::Op::Insert {
+        .apply(frame::document::proto::Op::Insert {
             node: root,
             parent: page,
             index: 0,
@@ -599,7 +599,7 @@ fn main() {
         }
     }
     let surface = surface();
-    let text = document_text::print(&surface.to_scene());
+    let text = frame::document::text::print(&surface.to_scene());
     let json = serde_json::to_string_pretty(&catalog()).expect("catalogs serialize");
     let lines: Vec<String> = feeds(t)
         .into_iter()
@@ -648,13 +648,13 @@ mod tests {
             "one kit component per rig widget"
         );
         let scene = surface().to_scene();
-        let text = document_text::print(&scene);
-        let back = document_text::parse(&text, scene.assets.clone()).expect("parses");
+        let text = frame::document::text::print(&scene);
+        let back = frame::document::text::parse(&text, scene.assets.clone()).expect("parses");
         assert_eq!(back, scene);
-        let issues = design_lint::lint(&scene, &catalog(), &design_lint::Config::default());
+        let issues = frame::design::lint::lint(&scene, &catalog(), &frame::design::lint::Config::default());
         let errors: Vec<String> = issues
             .iter()
-            .filter(|i| i.severity == design_lint::Severity::Error)
+            .filter(|i| i.severity == frame::design::lint::Severity::Error)
             .map(ToString::to_string)
             .collect();
         assert!(errors.is_empty(), "{}", errors.join("\n"));
@@ -668,7 +668,7 @@ mod tests {
             .expect("run make_rig_panels");
         let json = std::fs::read_to_string(dir().join("rig-panels.catalog.json")).unwrap();
         let catalog: Catalog = serde_json::from_str(&json).unwrap();
-        let surface = Surface::from_scene(document_text::parse(&text, BTreeMap::new()).unwrap());
+        let surface = Surface::from_scene(frame::document::text::parse(&text, BTreeMap::new()).unwrap());
         assert_eq!(
             surface.controls.len(),
             super::surface().controls.len(),
@@ -682,14 +682,14 @@ mod tests {
                 surface.scene.node(*id).map_or("?", |n| n.name.as_str())
             );
         }
-        let mut rt = surface_runtime::Runtime::new(surface, catalog);
+        let mut rt = frame::surface::runtime::Runtime::new(surface, catalog);
         let feeds = std::fs::read_to_string(dir().join("rig-panels.feeds")).unwrap();
         for line in feeds.lines().filter(|l| !l.is_empty()) {
             let (id, v) = line.split_once('=').unwrap();
             let values = v.split(',').map(|x| x.parse::<f64>().unwrap()).collect();
             rt.apply_frame(
-                surface_proto::StreamFrame {
-                    id: surface_proto::EntryId::new(id),
+                frame::surface::proto::StreamFrame {
+                    id: frame::surface::proto::EntryId::new(id),
                     values,
                 },
                 0.0,

@@ -11,9 +11,9 @@
 //! (decoration) the power switch. Positions are fractions of the panel
 //! measured off the photographs.
 
-use document_proto::NodeId;
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::widgets::Builder;
 
 use super::{paint, screw};
 use crate::comp_vca::ui::{self, bind};
@@ -270,7 +270,7 @@ pub fn face() -> Face {
         ui::param(
             "progeq/bandwidth",
             "Bandwidth",
-            surface_proto::Range::linear(0.0, 10.0, surface_proto::Unit::None),
+            frame::surface::proto::Range::linear(0.0, 10.0, frame::surface::proto::Unit::None),
             5.0,
         ),
         ui::db("progeq/high_atten", "High Atten", 0.0, 16.0, 0.0),

@@ -9,10 +9,10 @@
 //!
 //! Two finishes: light, a naval console's pale grey; dark, gunmetal.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use super::shell::{self, Look, Room, Unit};
 use crate::face::Face;
@@ -205,7 +205,7 @@ fn ppi(b: &mut Builder<'_>, well: NodeId, (cx, cy, r): (f64, f64, f64), f: &Fini
     );
     let mut face = draw::frame("PPI", cx - r, cy - r, 2.0 * r, 2.0 * r);
     face.clips_content = true;
-    face.corner_radii = document_proto::CornerRadii::uniform(r);
+    face.corner_radii = frame::document::proto::CornerRadii::uniform(r);
     let face = b.add(well, face);
     // Range rings and bearings, printed on the tube.
     let rings: Vec<Vec<(f64, f64)>> = (1..=4)

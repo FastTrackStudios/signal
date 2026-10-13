@@ -1,9 +1,9 @@
 //! Blackout Gain post-FX: the delay and the reverb, in the pre-FX boxes'
 //! black and white line-art.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::draw;
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::draw;
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::art::{self, BLACK, GREEN, INK, Put};
@@ -41,11 +41,11 @@ fn hexagram(b: &mut Builder<'_>, p: NodeId, size: (f64, f64), (cx, cy): (f64, f6
             draw::solid(INK),
         );
         n.fills = Vec::new();
-        n.stroke = document_proto::Stroke {
+        n.stroke = frame::document::proto::Stroke {
             paints: vec![draw::solid(INK)],
             weight: 1.6,
-            join: document_proto::StrokeJoin::Miter,
-            ..document_proto::Stroke::default()
+            join: frame::document::proto::StrokeJoin::Miter,
+            ..frame::document::proto::Stroke::default()
         };
         b.add(p, n);
     }
@@ -125,7 +125,7 @@ fn delay() -> Face {
             seg,
             TextAlign::Left,
             None,
-            surface_proto::ValueFormat::labels(rk::DIVISIONS),
+            frame::surface::proto::ValueFormat::labels(rk::DIVISIONS),
         );
         rk::lcd::readout(
             b,
@@ -136,7 +136,7 @@ fn delay() -> Face {
             seg,
             TextAlign::Right,
             None,
-            surface_proto::ValueFormat::decimals(1).unit("BPM"),
+            frame::surface::proto::ValueFormat::decimals(1).unit("BPM"),
         );
 
         art::title_max(b, p, "DELAY", (w / 2.0, 186.0), 92.0, 40.0);
@@ -196,7 +196,7 @@ fn delay() -> Face {
         crate::delay::parts::param(
             &a("tempo"),
             "Tempo",
-            surface_proto::Range::linear(40.0, 240.0, surface_proto::Unit::Bpm),
+            frame::surface::proto::Range::linear(40.0, 240.0, frame::surface::proto::Unit::Bpm),
             120.0,
         ),
         rk::toggle(&a("on"), "Engage", true).featured(),

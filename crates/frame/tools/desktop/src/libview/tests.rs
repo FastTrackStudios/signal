@@ -6,10 +6,10 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use architect::Services as _;
-use library_fs::{FsLibrary, SurfaceStore as _};
-use library_link::Served;
-use surface_memory::Memory;
-use surface_runtime::Modifiers;
+use frame::library::fs::{FsLibrary, SurfaceStore as _};
+use frame::library::link::Served;
+use frame::surface::memory::Memory;
+use frame::surface::runtime::Modifiers;
 
 use super::*;
 use crate::player::Backend;
@@ -52,7 +52,7 @@ fn tick_until(
 
 fn gain(player: &Player) -> f64 {
     player
-        .engine_value(&surface_proto::ParamAddr::new("amp/gain"))
+        .engine_value(&frame::surface::proto::ParamAddr::new("amp/gain"))
         .unwrap()
 }
 
@@ -110,7 +110,7 @@ fn edits_swap_in_place_and_bad_ones_are_refused() {
         }
     );
     assert_eq!(
-        library_link::scene_name(player.scene()).as_deref(),
+        frame::library::link::scene_name(player.scene()).as_deref(),
         Some("Edited")
     );
     assert!(
@@ -136,7 +136,7 @@ fn edits_swap_in_place_and_bad_ones_are_refused() {
     };
     assert!(why.starts_with("live v3 rejected: "), "{why}");
     assert_eq!(
-        library_link::scene_name(player.scene()).as_deref(),
+        frame::library::link::scene_name(player.scene()).as_deref(),
         Some("Edited"),
         "not blanked"
     );
@@ -150,7 +150,7 @@ fn edits_swap_in_place_and_bad_ones_are_refused() {
         matches!(o, Outcome::Applied { version: 4, .. })
     });
     assert_eq!(
-        library_link::scene_name(player.scene()).as_deref(),
+        frame::library::link::scene_name(player.scene()).as_deref(),
         Some("Fixed")
     );
 
@@ -211,14 +211,14 @@ fn browse_mode_opens_a_surface_by_click() {
     view.open_selected(&mut player);
     assert_eq!(view.mode(), Mode::Preview);
     assert_eq!(
-        library_link::scene_name(player.scene()).as_deref(),
+        frame::library::link::scene_name(player.scene()).as_deref(),
         Some("Two")
     );
     view.back();
     // The first tile sits at the grid's first slot.
     assert!(view.click((40.0, 130.0), &mut player));
     assert_eq!(
-        library_link::scene_name(player.scene()).as_deref(),
+        frame::library::link::scene_name(player.scene()).as_deref(),
         Some("One")
     );
 }

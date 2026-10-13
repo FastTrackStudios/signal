@@ -15,11 +15,11 @@
 //! Two finishes: light, the pale blue-grey enamel of an eighties studio
 //! rack; dark, black anodising.
 
-use document_proto::motion::{Dynamics, Motion, Target};
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{draw, motion};
-use surface_proto::{Axis, Control, ControlKind, HandleAxis};
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{draw, motion};
+use frame::surface::proto::{Axis, Control, ControlKind, HandleAxis};
+use frame::surface::widgets::Builder;
 
 use crate::face::Face;
 use crate::reverb::ui;
@@ -154,7 +154,7 @@ impl Scope {
 fn faceplate(b: &mut Builder<'_>, root: NodeId, w: f64, l: &Look) -> NodeId {
     let mut plate = draw::frame("Faceplate", 0.0, 0.0, w, kit::H);
     plate.fills = vec![draw::linear(180.0, &l.plate)];
-    plate.corner_radii = document_proto::CornerRadii::uniform(4.0);
+    plate.corner_radii = frame::document::proto::CornerRadii::uniform(4.0);
     let plate = b.add(
         root,
         draw::with_effects(
@@ -774,7 +774,7 @@ pub fn tall(dark: bool) -> Face {
     let scene = kit::tall_lane(NAME, |b, root| {
         let mut plate = draw::frame("Faceplate", 0.0, 0.0, kit::TALL_W, kit::TALL_H);
         plate.fills = vec![draw::linear(180.0, &l.plate)];
-        plate.corner_radii = document_proto::CornerRadii::uniform(4.0);
+        plate.corner_radii = frame::document::proto::CornerRadii::uniform(4.0);
         let plate = b.add(
             root,
             draw::with_effects(plate, vec![draw::inner_shadow("#ffffff26", 0.0, 1.0, 0.0)]),

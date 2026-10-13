@@ -7,11 +7,11 @@
 //!
 //! A walnut cabinet, lit in the Motion group's pink.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_proto::{ParamInfo, Range, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::proto::{ParamInfo, Range, Unit};
+use frame::surface::widgets::Builder;
 
 use super::{MOTION, PINK, Spec, Theme};
 use crate::face::Face;

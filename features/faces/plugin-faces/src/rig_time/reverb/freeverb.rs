@@ -11,10 +11,10 @@
 //! Two finishes: light, a lilac board in a pale enclosure; dark, a purple
 //! board in black anodised aluminium.
 
-use document_proto::NodeId;
-use document_proto::motion::{Dynamics, Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Dynamics, Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use super::shell::{self, Look, Room, Unit};
 use crate::face::Face;

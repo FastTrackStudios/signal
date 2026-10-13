@@ -14,11 +14,11 @@
 //! slows the taps' fall, WALLS brightens them, and they light with the
 //! output level.
 
-use document_proto::motion::{Dynamics, Motion, Num, Target};
-use document_proto::{Node, NodeId, Stroke, StrokeCap, StrokeJoin};
-use surface_kit::{Place, draw, motion};
-use surface_proto::Unit;
-use surface_widgets::Builder;
+use frame::document::proto::motion::{Dynamics, Motion, Num, Target};
+use frame::document::proto::{Node, NodeId, Stroke, StrokeCap, StrokeJoin};
+use frame::surface::kit::{Place, draw, motion};
+use frame::surface::proto::Unit;
+use frame::surface::widgets::Builder;
 
 use super::ui::{self, Dial, bind};
 use crate::animate;
@@ -194,7 +194,7 @@ pub fn face() -> Face {
     let decay = ui::param(
         "room/decay",
         "Decay",
-        surface_proto::Range::log(0.2, 4.0, Unit::Seconds),
+        frame::surface::proto::Range::log(0.2, 4.0, Unit::Seconds),
         0.8,
     )
     .featured();
@@ -221,7 +221,7 @@ pub fn face() -> Face {
         let (px, py, pw, ph) = (50.0, 54.0, 560.0, 140.0);
         let mut plate = draw::frame("Room", px, py, pw, ph);
         plate.fills = vec![draw::linear(180.0, &[(0.0, "#16191c"), (1.0, "#202428")])];
-        plate.corner_radii = document_proto::CornerRadii::uniform(6.0);
+        plate.corner_radii = frame::document::proto::CornerRadii::uniform(6.0);
         plate.clips_content = true;
         plate.effects = vec![
             draw::inner_shadow("#000000c0", 0.0, 2.0, 7.0),

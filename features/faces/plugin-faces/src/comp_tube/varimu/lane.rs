@@ -9,10 +9,10 @@
 //!   and each side's LIMIT and BYPASS between them, and the sub-panel's two
 //!   rows of fin knobs and its toggle cluster across the bottom.
 
-use document_proto::NodeId;
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{Range, StreamInfo, StreamKind, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Range, StreamInfo, StreamKind, Unit};
+use frame::surface::widgets::Builder;
 
 use super::super::ui::{self, Ink};
 use super::{CHROME, INK, SWEEP};
@@ -100,7 +100,7 @@ pub fn faces() -> Vec<Face> {
                 params.push(ui::toggle("varimu/link", "Sep / Link", true).short("Link"));
                 params.push(ui::toggle("varimu/power", "Power", true));
                 streams.push(StreamInfo {
-                    id: surface_proto::EntryId::new("varimu/gr_r"),
+                    id: frame::surface::proto::EntryId::new("varimu/gr_r"),
                     name: "Vari-Mu Gain Reduction (Right)".into(),
                     kind: StreamKind::GainReduction,
                     rate_hz: 30.0,
@@ -159,7 +159,7 @@ fn build(b: &mut Builder<'_>, root: NodeId, shape: Shape) {
         &[(0.0, "#8b8591"), (0.5, "#7a7480"), (1.0, "#68626d")],
     );
     if let Some(n) = b.scene.node_mut(panel) {
-        n.corner_radii = document_proto::CornerRadii::uniform(8.0);
+        n.corner_radii = frame::document::proto::CornerRadii::uniform(8.0);
     }
     match shape {
         Shape::Lane => lane(b, panel, (w, h)),

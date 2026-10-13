@@ -20,8 +20,8 @@
 
 use std::collections::BTreeMap;
 
-use document_proto::{Node, NodeId, NodeKind, Scene, ShaderFx};
-use surface_proto::ControlKind;
+use frame::document::proto::{Node, NodeId, NodeKind, Scene, ShaderFx};
+use frame::surface::proto::ControlKind;
 
 const PLATE: &str = include_str!("comp_look/plate.wgsl");
 const KNOB: &str = include_str!("comp_look/knob.wgsl");
@@ -343,7 +343,7 @@ fn plate_light(scene: &mut Scene, plate: NodeId, shader: &str, l: &Look) {
         .max()
         .unwrap_or(0);
     let mut n = Node::new(NodeKind::Frame, "plate light");
-    n.size = document_proto::Size {
+    n.size = frame::document::proto::Size {
         width: w,
         height: h,
     };

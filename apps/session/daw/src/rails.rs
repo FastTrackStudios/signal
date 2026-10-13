@@ -259,7 +259,7 @@ struct Pen<'a, P: PaintScene> {
     palette: &'a Palette,
     font: &'a Font,
     icons: &'a mut crate::icons::Icons,
-    theme: Option<&'a theme_runtime::Theme>,
+    theme: Option<&'a frame::theme::runtime::Theme>,
     at: (Option<Action>, Option<Action>),
 }
 
@@ -268,7 +268,7 @@ fn ground(
     painter: &mut impl PaintScene,
     palette: &Palette,
     font: &Font,
-    theme: Option<&theme_runtime::Theme>,
+    theme: Option<&frame::theme::runtime::Theme>,
     frame: Frame,
 ) {
     let Frame { width, height, .. } = frame;
@@ -368,23 +368,23 @@ impl<P: PaintScene> Pen<'_, P> {
         if let Some(theme) = theme.filter(|t| t.has_role(BUTTON)) {
             let size_box = (slot.width(), slot.height());
             let fields = crate::skin::values(&[
-                ("button.label", theme_runtime::Value::text(&label)),
+                ("button.label", frame::theme::runtime::Value::text(&label)),
                 (
                     "button.label_size",
-                    theme_runtime::Value::Num(f64::from(size)),
+                    frame::theme::runtime::Value::Num(f64::from(size)),
                 ),
-                ("button.on", theme_runtime::Value::Bool(item.on)),
+                ("button.on", frame::theme::runtime::Value::Bool(item.on)),
                 (
                     "button.hover",
-                    theme_runtime::Value::Bool(state == Interaction::Hover),
+                    frame::theme::runtime::Value::Bool(state == Interaction::Hover),
                 ),
                 (
                     "button.pressed",
-                    theme_runtime::Value::Bool(state == Interaction::Pressed),
+                    frame::theme::runtime::Value::Bool(state == Interaction::Pressed),
                 ),
                 (
                     "button.has_icon",
-                    theme_runtime::Value::Bool(cell.is_some()),
+                    frame::theme::runtime::Value::Bool(cell.is_some()),
                 ),
             ]);
             let place = Affine::translate((slot.x0, slot.y0));

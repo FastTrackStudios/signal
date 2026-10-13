@@ -9,10 +9,10 @@
 //!
 //! Hammertone: silver-grey, or bottle green; the drum is steel.
 
-use document_proto::NodeId;
-use document_proto::motion::{Motion, Target};
-use surface_kit::{draw, motion};
-use surface_widgets::Builder;
+use frame::document::proto::NodeId;
+use frame::document::proto::motion::{Motion, Target};
+use frame::surface::kit::{draw, motion};
+use frame::surface::widgets::Builder;
 
 use super::machine::{self, Look, Machine, ON, PERIOD, Room};
 use crate::face::Face;

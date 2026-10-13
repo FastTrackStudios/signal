@@ -11,10 +11,10 @@
 //! as far as those detents go. The meter's needle rests at the left stop
 //! and swings right as the reduction deepens (0 → 20 dB).
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Ink, Place, TOUCH_MIN, draw};
-use surface_proto::{Binding, Unit};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Ink, Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Binding, Unit};
+use frame::surface::widgets::Builder;
 
 use super::logo;
 use super::ui::{self, bind};

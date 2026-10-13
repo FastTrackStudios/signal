@@ -9,10 +9,10 @@
 //! black knob in a printed 0–10 scale, and the four inputs (HIGH / LOW ×
 //! channel I / II) at the right — the cable's plug shows which is in use.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::{Place, TOUCH_MIN, draw, motion};
-use surface_proto::{ButtonMode, Control, ControlKind, SlotRole};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::{Place, TOUCH_MIN, draw, motion};
+use frame::surface::proto::{ButtonMode, Control, ControlKind, SlotRole};
+use frame::surface::widgets::Builder;
 
 use super::PLUGIN;
 use super::art;

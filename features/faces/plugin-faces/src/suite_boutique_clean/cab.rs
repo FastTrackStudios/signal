@@ -10,11 +10,11 @@
 //! for position and up for distance. The top row of speakers sits in the
 //! same place in every cab, so the mics stay on their cones.
 
-use document_proto::{NodeId, TextAlign};
-use surface_kit::materials::{Grain, Material, fill};
-use surface_kit::{Place, TOUCH_MIN, draw};
-use surface_proto::{Range, Unit, ValueFormat};
-use surface_widgets::Builder;
+use frame::document::proto::{NodeId, TextAlign};
+use frame::surface::kit::materials::{Grain, Material, fill};
+use frame::surface::kit::{Place, TOUCH_MIN, draw};
+use frame::surface::proto::{Range, Unit, ValueFormat};
+use frame::surface::widgets::Builder;
 
 use super::look::{self, TEAL};
 use crate::face::{Face, canvas};
@@ -125,7 +125,9 @@ fn shell(
     n.effects = vec![draw::drop_shadow("#0000004d", 0.0, 12.0, 24.0)];
     let n = b.add(parent, n);
     fill(b, n, (0.0, 0.0, w, h), r, m);
-    for e in surface_kit::materials::light::edge("edge", (0.0, 0.0, w, h), r, 8.0, 1.0, true) {
+    for e in
+        frame::surface::kit::materials::light::edge("edge", (0.0, 0.0, w, h), r, 8.0, 1.0, true)
+    {
         b.add(n, e);
     }
     n
@@ -271,10 +273,10 @@ fn brown(b: &mut Builder<'_>, layer: NodeId) {
         vec![draw::solid("#0d0b09")],
     );
     grille.clips_content = true;
-    grille.stroke = document_proto::Stroke {
+    grille.stroke = frame::document::proto::Stroke {
         paints: vec![draw::solid("#e6dccb")],
         weight: 5.0,
-        ..document_proto::Stroke::default()
+        ..frame::document::proto::Stroke::default()
     };
     let g = b.add(s, grille);
     let pitch = 22.0;
@@ -521,7 +523,7 @@ pub(super) fn face() -> Face {
             .bind(ui::bind("cab/model"))
             .options(&["Cream 4×12", "Brown 4×12", "Blush 2×10"])
             .keep_case();
-        let s = surface_kit::place(b, root, "button.square_bank", &sel)
+        let s = frame::surface::kit::place(b, root, "button.square_bank", &sel)
             .unwrap_or_else(|e| panic!("{e}"));
         ui::strip_legend(b, s);
         parts::centre_on(b, s, (CAB / 2.0, 670.0));

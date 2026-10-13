@@ -11,8 +11,8 @@
 use std::time::{Duration, Instant};
 
 use architect::{LayerRouter, Services as _};
-use surface_memory::Memory;
-use surface_runtime::sync::serve_ws;
+use frame::surface::memory::Memory;
+use frame::surface::runtime::sync::serve_ws;
 
 fn main() {
     let mut port = 4040u16;
