@@ -27,8 +27,8 @@ use dawfile_reaper::builder::{ReaperProjectBuilder, TrackBuilder};
 use dawfile_reaper::types::track::MasterSendSettings;
 use dynamic_template::colors::{groups, guitars, orchestra, synths, vocals};
 
-use crate::library::{LibrarySong, Stem};
-use crate::rpp::{
+use crate::vault_sync::library::{LibrarySong, Stem};
+use crate::vault_sync::rpp::{
     FALLBACK_LENGTH_SECONDS, source_type_for, tempo_from_chart, wav_duration_seconds, wav_sibling,
 };
 

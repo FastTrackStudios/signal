@@ -9,6 +9,9 @@ description = "Session: setlists, songs, the live session's sync, the song libra
 workspace = true
 
 [features]
+# Task vault notes and live-setlist projects from the Song Library
+# (session::vault_sync; native only).
+vault-sync = ["dep:serde_json"]
 default = ["vox"]
 collab = ["engine", "net"]
 desktop = ["dioxus", "dock-dioxus/web"]
@@ -22,6 +25,7 @@ vox = []
 web = ["dioxus", "dock-dioxus/web"]
 
 [dependencies]
+serde_json = { workspace = true, optional = true }
 architect = { workspace = true, features = ["local", "platform", "vox"] }
 architect-ui = { workspace = true, optional = true }
 chatterbox-rs = { git = "https://github.com/bearcove/cbx", optional = true }

@@ -3,7 +3,7 @@
 //! Loads songs (from a `type: setlist` note's `[[wikilink]]`s, or bare
 //! titles for a quick test), builds each song's real Master Setlist
 //! Template project in-process
-//! (`session_vault_sync::live_bus::build_live_rpp` — the exact generator
+//! (`session::vault_sync::live_bus::build_live_rpp` — the exact generator
 //! `session-vault-sync build-project --live` writes to disk, just not
 //! written here) and loads it via
 //! `daw_standalone::project_loader::load_rpp_via_bay` — a real RPP
@@ -30,9 +30,9 @@ use daw_standalone::Standalone;
 use daw_standalone::audio_engine::AudioEngine;
 use daw_standalone::media_bay::ProjectRelativeResolver;
 use daw_standalone::project_loader::load_rpp_via_bay;
-use session_vault_sync::library::{self, LibrarySong};
-use session_vault_sync::live_bus;
-use session_vault_sync::setlist::{parse_setlist_links, resolve_song};
+use session::vault_sync::library::{self, LibrarySong};
+use session::vault_sync::live_bus;
+use session::vault_sync::setlist::{parse_setlist_links, resolve_song};
 
 #[derive(Parser)]
 #[command(

@@ -8,9 +8,9 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use session_vault_sync::library::{self, LibrarySong};
-use session_vault_sync::setlist::resolve_song;
-use session_vault_sync::{live_bus, rpp, vault};
+use session::vault_sync::library::{self, LibrarySong};
+use session::vault_sync::setlist::resolve_song;
+use session::vault_sync::{live_bus, rpp, vault};
 
 #[derive(Parser)]
 #[command(

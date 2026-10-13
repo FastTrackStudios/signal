@@ -57,12 +57,12 @@ use session::services::setlist_service::{
     SetlistServiceStreamClient, setlist_service_stream_service_descriptor,
     stream_serve as setlist_service_stream_serve,
 };
+use session::vault_sync::library::LibrarySong;
+use session::vault_sync::live_bus;
 use session::{
     SetlistServiceClient, SetlistServiceImpl, serve_setlist_service,
     setlist_service_service_descriptor,
 };
-use session_vault_sync::library::LibrarySong;
-use session_vault_sync::live_bus;
 
 /// Which folder each open project's stems live in — set at
 /// `load_setlist` time (structure only, no decode yet), read by the

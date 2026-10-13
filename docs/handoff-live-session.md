@@ -29,7 +29,7 @@ FTS_SESSION_VIEW=overview just app "../sessions/Worship Set.setlist" "" organize
 just app "../sessions/imported/God, I'm Just Grateful/God, I'm Just Grateful.RPP"   # one song (quoting handles the ')
 just prepare ../sessions/imported/*/*.RPP        # prepare songs into .session ahead of time
 FTS_SESSION_REPREPARE=1 ./target/release-fast/prepare "<Song>.RPP"   # re-prepare one (after a chart or .lrc change)
-cargo run -p session-cli -- lyrics fetch <Song>.RPP [--pick N --force]  # synced lyrics → <Song>.lrc
+cargo run -p session-desktop --features cli --bin session -- lyrics fetch <Song>.RPP [--pick N --force]  # synced lyrics → <Song>.lrc
 ```
 
 - `just app` builds `release-fast`, wraps the binary in
@@ -121,7 +121,7 @@ Keyflow language/engine changes (keyflow + daw's keyflow-proto):
   belongs to the section it overlaps most), `slides(sections, 2)`,
   `from_items`, `stamp_lines` (onto the Lyrics track, created before HITS
   in the Keyflow folder), `Anchor` + `align`.
-- **Fetch** — `session lyrics fetch` (apps/session/cli/src/lyrics/): LRCLIB (no
+- **Fetch** — `session lyrics fetch` (apps/session/desktop/src/bin/session/lyrics/): LRCLIB (no
   auth), provider trait with room for Spotify/Deezer/Musixmatch; title +
   artists from the `.kf` header; picks the version nearest the song's
   SONGSTART→SONGEND length (`--pick N` to override). All 8 songs have a
@@ -283,7 +283,7 @@ daw's tag) and drop the path entries. Data outside git: the songs' `.kf`,
 |---|---|
 | lyrics model, anchors, stamping | `features/session/session/src/lyrics.rs` |
 | lyrics panel (3 views, dropdown) | `apps/session/daw/src/lyrics_panel.rs` |
-| lyrics fetcher (LRCLIB) | `apps/session/cli/src/lyrics/` |
+| lyrics fetcher (LRCLIB) | `apps/session/desktop/src/bin/session/lyrics/` |
 | prepare, stamp_lyrics, apply_chart | `apps/session/daw/src/prepare.rs` |
 | the Overview layout | `apps/session/daw/src/shell.rs` (`OverviewLayout`) |
 | the desktop shell (views, editor toggle, contexts) | `apps/session/desktop/src/native/shell.rs` |
@@ -317,8 +317,8 @@ task share folder <root-id> --label demo --documents
 
 # Proxies and the guide library (Ogg)
 cd session
-cargo run -p session-cli -- proxies "../sessions/imported/<Song>"
-cargo run -p session-cli -- guide-library ~/.config/fts/guide-samples /tmp/guide-ogg
+cargo run -p session-desktop --features cli --bin session -- proxies "../sessions/imported/<Song>"
+cargo run -p session-desktop --features cli --bin session -- guide-library ~/.config/fts/guide-samples /tmp/guide-ogg
 
 # The web bundle (release + wasm-opt, ~2 min), and a static server on :8765
 just web-daw                      # optionally: SESSION RPP CHART to bake a session in

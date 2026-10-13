@@ -8,9 +8,9 @@
 
 use std::path::{Path, PathBuf};
 
-use session_vault_sync::library::{self, LibrarySong};
-use session_vault_sync::setlist::{parse_setlist_links, resolve_song};
-use session_vault_sync::vault::{song_link_name, write_setlist_note};
+use session::vault_sync::library::{self, LibrarySong};
+use session::vault_sync::setlist::{parse_setlist_links, resolve_song};
+use session::vault_sync::vault::{song_link_name, write_setlist_note};
 
 /// Named track-library roots. Each root's songs live under
 /// `root/Tracks`; its setlist notes are saved under `root/Setlists`

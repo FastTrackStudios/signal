@@ -3,7 +3,7 @@
 //! pull the `[[wikilink]]` targets out of a note's body, then resolve
 //! each target against a known song library.
 
-use crate::library::LibrarySong;
+use crate::vault_sync::library::LibrarySong;
 
 /// Extract `[[Target]]`/`[[Target|alias]]`/`[[Target#section]]` wikilink
 /// targets from a setlist note's body, one per line.

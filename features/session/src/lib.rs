@@ -25,6 +25,10 @@ pub mod proto;
 pub mod sync;
 #[cfg(feature = "ui")]
 pub mod ui;
+/// Task vault notes and live-setlist projects from the Song Library
+/// (the `session-vault-sync` and `session-player` tools).
+#[cfg(all(feature = "vault-sync", not(target_arch = "wasm32")))]
+pub mod vault_sync;
 
 // Re-export session-proto so app crates can use `crate::` instead of
 // `crate::proto::` directly. `setlist` / `song` are NOT re-exported here:

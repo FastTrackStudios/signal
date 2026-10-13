@@ -21,10 +21,57 @@ authors = ["FastTrackStudio"]
 # Fast-iteration build:
 #   cargo run -p session-desktop --no-default-features --features charts
 
+[[bin]]
+name = "session"
+path = "src/bin/session/main.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "session-player"
+path = "src/bin/session-player.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "session-vault-sync"
+path = "src/bin/session-vault-sync.rs"
+required-features = ["cli"]
+
 [features]
 # Two axes here -- Session and Charts. (The monorepo had a third, Signal;
 # it ships from the signal repo now.)
 default = ["session", "charts", "native"]
+# The command-line tools (src/bin/): `session` (drive a real REAPER's
+# setlist), `session-player` (the live multitrack setlist player) and
+# `session-vault-sync` (Task vault notes from the Song Library).
+cli = [
+    "daw?/reaper",
+    "dawfile-reaper?/peaks-ogg",
+    "dawfile-reaper?/peaks-wav",
+    "dep:chrono",
+    "dep:clap",
+    "dep:daw",
+    "dep:daw-proto",
+    "dep:daw-standalone",
+    "dep:dawfile-reaper",
+    "dep:eyre",
+    "dep:fts-sample",
+    "dep:keyflow",
+    "dep:libc",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:session",
+    "dep:tokio",
+    "dep:ureq",
+    "dep:vox",
+    "dep:vox-stream",
+    "session?/library",
+    "session?/reaper",
+    "session?/vault-sync",
+    "tokio?/macros",
+    "tokio?/net",
+    "tokio?/rt-multi-thread",
+    "tokio?/time",
+]
 # The app on Blitz (dioxus-native): the panels-and-views shell with our own
 # title bar — see docs/app-on-blitz.md. Desktop only for now (iOS follows);
 # without it the desktop build launches the WRY app as before.
@@ -60,7 +107,7 @@ session-domain = [
     "dep:daw",
     "dep:daw-control",
     "dep:daw-standalone",
-    "dep:session-vault-sync",
+    "session?/vault-sync",
     "dep:architect",
     "architect/local",
     "architect/iroh",
@@ -138,6 +185,13 @@ rfd = { version = "0.17", optional = true }
 dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The command-line tools' own (feature `cli`).
+chrono = { workspace = true, optional = true }
+clap = { workspace = true, features = ["derive"], optional = true }
+fts-sample = { workspace = true, features = ["engine-native", "mapped"], optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+ureq = { version = "2", optional = true }
 tracing-subscriber.workspace = true
 # The Blitz shell (feature `native`): the renderer, the studio panels, and
 # winit for the window's title bar.
@@ -210,10 +264,6 @@ daw-control = { workspace = true, optional = true }
 # loads a setlist's songs this way instead of hand-seeding stems.
 # "session-file": `--engine --project Song.session` (engine_open.rs).
 daw-standalone = { workspace = true, features = ["bootstrap", "audio", "rpp-project", "rpp-loader", "session-file"], optional = true }
-# The Home page's library/setlist scanner — reuses the exact scan/RPP-
-# build/note-writing code the `session-vault-sync` and `session-player`
-# CLIs already use, rather than re-implementing it here.
-session-vault-sync = { path = "../vault-sync", optional = true }
 
 # ── iPhone (dx build --platform ios) — the phone shell ──
 [target.'cfg(target_os = "ios")'.dependencies]

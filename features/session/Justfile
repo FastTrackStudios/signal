@@ -55,7 +55,7 @@ web-dev: tailwind-web
 
 # Run the session CLI
 cli *ARGS:
-    cargo run -p session-cli -- {{ARGS}}
+    cargo run -p session-desktop --features cli --bin session -- {{ARGS}}
 
 # ── Aliases ──────────────────────────────────────────────────────────────
 

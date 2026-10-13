@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 
 use session::SetlistServiceClient;
 use session::services::setlist_service::SetlistServiceStreamClient;
-use session_vault_sync::library::LibrarySong;
+use session::vault_sync::library::LibrarySong;
 
 const SOCKET_DIR: &str = "/tmp";
 const SOCKET_PREFIX: &str = "fts-daw-";

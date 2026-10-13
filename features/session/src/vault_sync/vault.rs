@@ -32,7 +32,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use crate::library::LibrarySong;
+use crate::vault_sync::library::LibrarySong;
 
 /// Render a `type: song` note body for one library song.
 pub fn song_note_markdown(song: &LibrarySong) -> String {

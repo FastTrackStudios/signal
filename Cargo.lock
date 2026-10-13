@@ -17207,28 +17207,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "session-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "daw",
- "dawfile-reaper",
- "eyre",
- "fts-sample",
- "keyflow",
- "libc",
- "serde",
- "serde_json",
- "session",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "ureq 2.12.1",
- "vox",
- "vox-stream",
-]
-
-[[package]]
 name = "session-daw"
 version = "0.1.0"
 dependencies = [
@@ -17347,6 +17325,8 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "block2 0.6.2",
+ "chrono",
+ "clap",
  "collection-proto",
  "daw",
  "daw-control",
@@ -17359,6 +17339,7 @@ dependencies = [
  "dirs",
  "eyre",
  "fts-chrome",
+ "fts-sample",
  "futures-timer",
  "getrandom 0.3.4",
  "js-sys",
@@ -17372,13 +17353,15 @@ dependencies = [
  "objc2-media-player",
  "objc2-ui-kit 0.3.2",
  "rfd",
+ "serde",
+ "serde_json",
  "session",
  "session-daw",
- "session-vault-sync",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "ureq 2.12.1",
  "utils",
  "vox",
  "vox-core",
@@ -17418,34 +17401,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "session-player"
-version = "0.1.0"
-dependencies = [
- "clap",
- "daw-proto",
- "daw-standalone",
- "session-vault-sync",
- "tokio",
-]
-
-[[package]]
 name = "session-reaper-xtask"
 version = "0.1.0"
 dependencies = [
  "daw",
-]
-
-[[package]]
-name = "session-vault-sync"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "dawfile-reaper",
- "dynamic-template",
- "monarchy",
- "serde",
- "serde_json",
 ]
 
 [[package]]

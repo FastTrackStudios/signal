@@ -26,7 +26,7 @@ use dynamic_template::apply::{
 use dynamic_template::buses::is_bus_name;
 use dynamic_template::{TemplateTarget as _, apply_buses, bus_for_path, buses_for_paths};
 
-use crate::library::LibrarySong;
+use crate::vault_sync::library::LibrarySong;
 
 pub fn source_type_for(path: &Path) -> SourceType {
     match path
