@@ -1,0 +1,91 @@
+# Record 2 toolbar — double-wide (60x30) text buttons for the track-manager
+# add actions, graded indigo→emerald by hierarchy depth (outer → inner),
+# plus square up/down-rank arrows.
+#   fts-icons build examples/record.toml --install
+
+[settings]
+resource_paths = ["~/.fts-dev"]
+width = 60                # double-wide default for this file
+
+[defaults.all]
+icon_size = 25
+bg_size = 28
+corner_radius = 6
+
+[defaults.normal]
+icon = "#ffffff"
+
+[defaults.hover]
+border = "#ffffffaa"
+border_width = 1.5
+
+[defaults.clicked]
+border = "#ffffff"
+border_width = 2.5
+
+# --- track-manager add buttons (hierarchy: Arrange ⊃ Performer ⊃ Multi-Mic ⊃ Channel ⊃ Layer) ---
+
+[[icon]]
+file = "fts_rec_add_arrange"
+source = "text:+ARRANGE"
+assign = "_FTS_SESSION_TRACK_MANAGER_ADD_ARRANGEMENT"
+  [icon.normal]
+  bg = "#6366F1"          # indigo-500
+
+[[icon]]
+file = "fts_rec_add_performer"
+source = "text:+PERFORMER"
+assign = "_FTS_SESSION_TRACK_MANAGER_ADD_PERFORMER"
+  [icon.normal]
+  bg = "#3B82F6"          # blue-500
+
+[[icon]]
+file = "fts_rec_add_multimic"
+source = "text:+ MULTI-/MIC"    # plus centered, two-line label
+assign = "_FTS_SESSION_TRACK_MANAGER_ADD_MULTI_MIC"
+  [icon.normal]
+  bg = "#0891B2"          # cyan-600
+
+[[icon]]
+file = "fts_rec_add_channel"
+source = "text:+CHANNEL"
+assign = "_FTS_SESSION_TRACK_MANAGER_ADD_CHANNEL"
+  [icon.normal]
+  bg = "#0D9488"          # teal-600
+
+[[icon]]
+file = "fts_rec_add_layer"
+source = "text:+LAYER"
+assign = "_FTS_SESSION_TRACK_MANAGER_ADD_LAYER"
+  [icon.normal]
+  bg = "#10B981"          # emerald-500
+
+# --- rank buttons (double-wide like the rest — toolbar lives on the sidebar) ---
+
+[[icon]]
+file = "fts_rec_rank_up"
+source = "mdi:chevron-double-up"
+assign = "42680"
+  [icon.normal]
+  bg = "#475569"          # slate-600
+
+[[icon]]
+file = "fts_rec_rank_down"
+source = "mdi:chevron-double-down"
+assign = "42681"
+  [icon.normal]
+  bg = "#475569"
+
+[[icon]]
+file = "fts_rec_rank_up_pos"
+source = "mdi:chevron-double-up + mdi:map-marker"   # rank + position pin
+assign = "43176"
+  [icon.normal]
+  bg = "#6366F1"          # indigo-500 — position-specific pair
+
+[[icon]]
+file = "fts_rec_rank_down_pos"
+source = "mdi:chevron-double-down + mdi:map-marker"
+assign = "43177"
+  [icon.normal]
+  bg = "#6366F1"

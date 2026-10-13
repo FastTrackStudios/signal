@@ -1,0 +1,121 @@
+0	Guide	86
+0	Keyflow	86
+0	Percussion	86
+1	Shaker	30
+1	Tambourine	30
+1	Claps	30
+0	Bass	86
+1	Guitar	86
+2	DI	30
+2	Amp	30
+1	Synth	86
+2	Sub	30
+2	Synth	30
+0	Electric	86
+1	Rhythm	86
+2	Main	86
+3	L	86
+4	DI	133
+4	Pedalboard	133
+4	Amp 1	86
+5	SM57	133
+5	Royer	133
+4	Amp 2	86
+5	SM57	133
+5	Royer	133
+3	R	86
+4	DI	133
+4	Pedalboard	133
+4	Amp 1	86
+5	SM57	133
+5	Royer	133
+4	Amp 2	86
+5	SM57	133
+5	Royer	133
+2	Octave	86
+3	L	86
+4	DI	133
+4	Pedalboard	133
+4	Amp 1	86
+5	SM57	133
+5	Royer	133
+4	Amp 2	86
+5	SM57	133
+5	Royer	133
+3	R	86
+4	DI	133
+4	Pedalboard	133
+4	Amp 1	86
+5	SM57	133
+5	Royer	133
+4	Amp 2	86
+5	SM57	133
+5	Royer	133
+1	Lead	86
+2	L	30
+2	R	30
+1	Solo	86
+2	Main	133
+2	Harmony	133
+0	Acoustic	86
+1	Steel	133
+1	Nylon	133
+1	Nashville	133
+0	Keys	86
+1	Piano	133
+1	Rhodes	133
+1	Wurli	133
+1	Organ	133
+0	Synths	86
+1	Sub Bass Synth	133
+1	Texture	133
+1	SY Arps	86
+2	Arp	133
+1	SY Pads	86
+2	Pad	133
+1	SY Leads	86
+2	Lead Synth	133
+1	SY Chords	86
+2	Chord	133
+0	Choir	86
+1	Soprano	86
+2	EN	30
+2	ES	30
+2	PT	30
+1	Alto	86
+2	EN	30
+2	ES	30
+2	PT	30
+1	Tenor	86
+2	EN	30
+2	ES	30
+2	PT	30
+1	Bass	86
+2	EN	30
+2	ES	30
+2	PT	30
+0	Orchestra	86
+1	Winds	86
+2	Flute	30
+2	Oboe	30
+2	Clarinet	30
+2	Bassoon	30
+1	Brass	86
+2	Trumpets	30
+2	Horns	30
+2	Trombones	30
+2	Tuba	30
+1	Strings	86
+2	Violin 1	30
+2	Violin 2	30
+2	Viola	30
+2	Cello	30
+2	Bass	30
+1	Orch Percussion	86
+2	Timpani	30
+0	HEADPHONE MIXES	86
+1	HP Engineer	30
+1	HP Producer	30
+1	HP Broadcast	30
+0	TALKBACK	86
+1	TB Engineer	30

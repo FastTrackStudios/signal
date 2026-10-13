@@ -1,0 +1,34 @@
+[package]
+name = "kit-sheet"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Contact sheets of the controls as the plugins actually wear them"
+
+# Nothing depends on this and it ships nothing. It exists so there is ONE
+# place that can see every plugin's faces at once: the UI crates all depend on
+# fts-audio-ui, so a sheet living there cannot import them back. Knob art is
+# judged by comparison — the same style at two diameters on two panel colours
+# is the comparison that matters — and that is impossible to see while the
+# faces are in five separate crates.
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+dioxus = { workspace = true }
+dioxus-test = { workspace = true }
+fts-audio-ui = { workspace = true }
+comp-ui = { workspace = true, features = ["native"] }
+delay-ui = { workspace = true, features = ["native"] }
+eq-ui = { workspace = true, features = ["native"] }
+reverb-ui = { workspace = true, features = ["native"] }
+saturate-ui = { workspace = true, features = ["native"] }
+comp-profiles = { path = "../../../features/fx/comp/comp-profiles" }
+delay-profiles = { workspace = true }
+reverb-profiles = { workspace = true }
+saturate-profiles = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -1,0 +1,38 @@
+<Document>
+  <Page name="rack.unit">
+    <Frame name="Unit" w=130 h=80>
+      <Rectangle name="Well" w=130 h=80 bind:w="w" bind:h="h" bind:fill="$rack.well" />
+      <Frame name="%body" x=2 y=12 w=126 h=66 bind:y="h > 24 ? 12 : 2" bind:w="w - 4" bind:h="h > 24 ? h - 14 : h - 4" />
+      <Rectangle name="Bypass" w=130 h=80 bind:w="w" bind:h="h" bind:fill="alpha($rack.well, 0.78)" bind:visible="unit.bypassed" />
+      <Frame name="Head" x=2 y=2 w=126 h=10 bind:w="w - 4" bind:visible="h > 24">
+        <Frame name="%glyph" w=11 h=10 bind:visible="unit.glyph" />
+        <Text name="Name" x=-1 y=0.4 w=400 h=11 size=7 bind:x="unit.glyph ? 10 : -1" bind:text="unit.name" bind:fill="unit.bypassed ? alpha($text.faint, 0.55) : $text.faint">EQ</Text>
+        <Text name="Value" x=-275 y=0.4 w=400 h=11 size=7 text-align="right" bind:x="pw - (unit.expands ? 10 : 0) - 401" bind:text="unit.value" bind:fill="unit.bypassed ? $text.faint : $text.dim">0 dB</Text>
+        <Vector name="Expand" x=119 y=1.5 w=7 h=7 geometry="M 3.85 0 L 7 0 L 7 3.15 M 0 3.85 L 0 7 L 3.15 7" stroke-weight=1.1 stroke-cap="round" stroke-join="round" bind:x="pw - 8" bind:stroke="unit.zoom_lit ? $text : $text.faint" bind:visible="unit.expands" />
+      </Frame>
+    </Frame>
+  </Page>
+  <Page name="rack.rail">
+    <Frame name="Row" w=60 h=80>
+      <Rectangle name="Well" x=1 y=1 w=58 h=78 bind:w="w - 2" bind:h="h - 2" bind:fill="alpha($rack.well, 0.5)" />
+      <Text name="Name" x=2 y=3.4 w=400 h=11 size=7 bind:text="unit.name" bind:visible="h > 26" bind:fill="unit.bypassed ? alpha($text.faint, 0.55) : $text.faint">EQ</Text>
+      <Frame name="%body" x=3 y=13 w=54 h=64 bind:y="h > 26 ? 13 : 3" bind:w="w - 6" bind:h="h > 26 ? h - 16 : h - 6" />
+      <Rectangle name="Bypass" w=60 h=80 bind:w="w" bind:h="h" bind:fill="alpha($rack.well, 0.78)" bind:visible="unit.bypassed" />
+    </Frame>
+  </Page>
+  <Page name="rack.phase">
+    <Frame name="Phase" w=130 h=15>
+      <Rectangle name="Ground" w=130 h=15 bind:w="w" bind:h="h" bind:fill="phase.blank ? alpha($rack.well, 0.5) : (phase.held ? $field : $rack.well)" />
+      <Rectangle name="Tint" w=2 h=15 bind:h="h" bind:fill="phase.blank ? alpha(phase.tint, 0.35) : phase.tint" />
+      <Text name="Name" x=5 y=-0.4 w=400 h=12 size=8 bind:y="h - 11.4" bind:text="phase.name" bind:fill="phase.blank ? alpha($text.faint, 0.35) : (phase.held ? $text : $text.dim)">Tone</Text>
+      <Frame name="Open" x=118 y=5.58 w=7 h=4 bind:x="w - 12.2" bind:y="h / 2 - 1.92" bind:visible="!phase.blank && !phase.shut">
+        <Vector name="Left" w=7 h=4 geometry="M 0 3.84 L 3.2 0" stroke-weight=1.4 stroke-cap="round" stroke-join="round" bind:stroke="phase.held ? $text : $text.faint" />
+        <Vector name="Right" w=7 h=4 geometry="M 3.2 0 L 6.4 3.84" stroke-weight=1.4 stroke-cap="round" stroke-join="round" bind:stroke="phase.held ? $text : $text.faint" />
+      </Frame>
+      <Frame name="Shut" x=118 y=5.58 w=7 h=4 bind:x="w - 12.2" bind:y="h / 2 - 1.92" bind:visible="!phase.blank && phase.shut">
+        <Vector name="Left" w=7 h=4 geometry="M 0 0 L 3.2 3.84" stroke-weight=1.4 stroke-cap="round" stroke-join="round" bind:stroke="phase.held ? $text : $text.faint" />
+        <Vector name="Right" w=7 h=4 geometry="M 3.2 3.84 L 6.4 0" stroke-weight=1.4 stroke-cap="round" stroke-join="round" bind:stroke="phase.held ? $text : $text.faint" />
+      </Frame>
+    </Frame>
+  </Page>
+</Document>

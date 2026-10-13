@@ -1,0 +1,148 @@
+[Empty TCP area toolbar]
+icon_1=toolbar_misc_drum.png
+item_0=40702 Insert track
+item_1=0 _FTS_SESSION_CREATE_NEW_DRUM_KIT FTS: Session - Tracks - Create New Drum Kit
+
+[Floating toolbar 1]
+default=2bcb4157b56ed885
+icon_0=text_wide
+item_0=-4 Organize 1
+title=Organize 1
+
+[Floating toolbar 10]
+item_0=-4 Record 1
+title=Record 1
+
+[Floating toolbar 11]
+item_0=-4 Record 2
+title=Record 2
+
+[Floating toolbar 12]
+item_0=-4 Record 3
+title=Record 3
+
+[Floating toolbar 13]
+item_0=-4 Edit 1
+title=Edit 1
+
+[Floating toolbar 14]
+item_0=-4 Edit 2
+title=Edit 2
+
+[Floating toolbar 15]
+item_0=-4 Edit 3
+title=Edit 3
+
+[Floating toolbar 16]
+item_0=-4 Mix 1
+title=Mix 1
+
+[Floating toolbar 17]
+item_0=-4 Mix 2
+title=Mix 2
+
+[Floating toolbar 18]
+item_0=-4 Mix 3
+title=Mix 3
+
+[Floating toolbar 19]
+item_0=-4 Master 1
+title=Master 1
+
+[Floating toolbar 2]
+default=2bcb4157b56ed885
+icon_0=text_wide
+item_0=-4 Organize 2
+title=Organize 2
+
+[Floating toolbar 20]
+item_0=-4 Master 2
+title=Master 2
+
+[Floating toolbar 21]
+item_0=-4 Master 3
+title=Master 3
+
+[Floating toolbar 22]
+item_0=-4 Live 1
+title=Live 1
+
+[Floating toolbar 23]
+item_0=-4 Live 2
+title=Live 2
+
+[Floating toolbar 24]
+item_0=-4 Live 3
+title=Live 3
+
+[Floating toolbar 25]
+item_0=-4 Video 1
+title=Video 1
+
+[Floating toolbar 26]
+item_0=-4 Video 2
+title=Video 2
+
+[Floating toolbar 27]
+item_0=-4 Video 3
+title=Video 3
+
+[Floating toolbar 3]
+default=2bcb4157b56ed885
+icon_0=text_wide
+item_0=-4 Organize 3
+title=Organize 3
+
+[Floating toolbar 32]
+item_0=41101 Edit me
+item_1=_FTS_INPUT_TOGGLE Toggle FTS-Input Interception
+item_2=_FTS_INPUT_TOGGLE_PASSTHROUGH Toggle FTS-Input Passthrough Mode
+item_3=_FTS_INPUT_TOGGLE_DEBUG_LOGGING Toggle FTS-Input Debug Logging (logs all keys to console)
+item_4=_FTS_INPUT_DEBUG_MOUSE_CONTEXT Toggle Debug Mouse Context (logs MM_CTX on every click)
+item_5=_FTS_INPUT_DEV_RESET_ITEM_CLICK_MODIFIERS Reset Media Item Click Modifiers to defaults
+item_6=_FTS_INPUT_TOGGLE_STATUS_PANEL FTS: Toggle Input Status Panel
+
+[Floating toolbar 4]
+item_0=-4 Write 1
+title=Write 1
+
+[Floating toolbar 5]
+item_0=-4 Write 2
+title=Write 2
+
+[Floating toolbar 6]
+item_0=-4 Write 3
+title=Write 3
+
+[Floating toolbar 7]
+item_0=-4 Produce 1
+title=Produce 1
+
+[Floating toolbar 8]
+item_0=-4 Produce 2
+title=Produce 2
+
+[Floating toolbar 9]
+item_0=-4 Produce 3
+title=Produce 3
+
+[Main toolbar]
+item_0=40023 New project...
+item_1=40025 Open project...
+item_2=40026 Save project
+item_3=40021 Project settings...
+item_4=40029 Undo
+item_5=40030 Redo
+item_6=40364 Enable metronome
+item_7=42616 Marquee selection
+item_8=-1
+item_9=40041 Enable auto-crossfade
+item_10=1156 Enable item and track media/razor edit grouping
+item_11=1162 Toggle ripple editing
+item_12=40070 Move envelope points with media items
+item_13=40145 Show arrange view grid
+item_14=1157 Enable snapping
+item_15=1135 Enable locking
+item_16=42618 Razor editing
+item_17=_FTS_MODE_SELECTOR FTS: Mode Selector
+

@@ -1,0 +1,24 @@
+@import "tailwindcss";
+@import "./fts-theme.css";
+
+/* Tailwind input for signal-web.
+ *
+ * The landing page embeds the REAL rig control surfaces. signal-keys-ui is
+ * styled entirely inline (0 `class:`, 44 `style:`) and needs nothing here.
+ * signal-guitar-ui is the opposite — 104 `class:` — so without this sheet
+ * its ControlView renders as unstyled text over a bare graph, which is
+ * exactly what it did before this file existed.
+ *
+ * Paths are relative to apps/web/. Deliberately narrower than
+ * apps/desktop/input.css: only the crates this site actually mounts, so
+ * the sheet stays small on a page people load over mobile data.
+ *
+ * Output: assets/tailwind-signal.css (`just web-tailwind`), inlined by
+ * src/main.rs. Committed, the same way apps/desktop commits its sheet —
+ * a landing page should not need a CSS toolchain to build.
+ */
+@source "./src/**/*.rs";
+@source "../../features/rigs/guitar/ui/src/**/*.rs";
+@source "../../features/rigs/keys/ui/src/**/*.rs";
+@source "../../crates/signal/widgets/src/**/*.rs";
+@source "../../libs/ui/*/src/**/*.rs";

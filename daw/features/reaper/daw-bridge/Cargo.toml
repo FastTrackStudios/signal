@@ -1,0 +1,78 @@
+[package]
+name = "daw-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+[lib]
+crate-type = ["cdylib"]
+name = "reaper_daw_bridge"
+path = "src/lib.rs"
+
+[dependencies]
+# DAW facade (REAPER impl). The UI host is provided by the pinned direct
+# daw-reaper-dioxus dependency below so local dioxus work cannot break bridge.
+daw = { workspace = true, features = ["reaper"] }
+# Direct dep so we can construct ReaperDockHost in plugin_main.
+daw-reaper-dioxus = { workspace = true }
+daw-proto = { workspace = true }
+daw-audio-sync = { workspace = true }
+uuid = { workspace = true }
+
+# RT-aware allocator
+daw-allocator.workspace = true
+
+# ROAM service framework
+vox.workspace = true
+vox-stream.workspace = true
+architect = { workspace = true, features = ["vox"] }
+
+# Async runtime
+tokio = { workspace = true, features = ["net", "rt-multi-thread"] }
+
+# REAPER bindings
+reaper-high.workspace = true
+reaper-medium.workspace = true
+reaper-low.workspace = true
+reaper-macros.workspace = true
+
+# Main thread dispatch
+crossbeam-channel.workspace = true
+fragile.workspace = true
+
+# Project file import (Ableton/ProTools/AAF/DAWproject → REAPER conversion)
+dawfile-ableton = { workspace = true }
+dawfile-protools = { workspace = true }
+dawfile-aaf = { workspace = true }
+dawfile-dawproject = { workspace = true }
+dawfile-reaper = { workspace = true }
+
+# Observability
+tracing.workspace = true
+tracing-subscriber.workspace = true
+eyre = "0.6"
+
+# Sync stack — engine + peer mesh. Default-on so reaper-test multi-instance
+# tests have the runtime available; production users that don't want it can
+# disable the feature.
+daw-synchronization = { workspace = true, optional = true }
+daw-network = { workspace = true, optional = true }
+
+[features]
+default = ["sync"]
+sync = ["dep:daw-synchronization", "dep:daw-network"]
+
+[dev-dependencies]
+eyre = "0.6"
+# Integration-test harness via the daw facade's `test-harness` feature
+# (replaces the former `reaper-test` crate).
+daw = { workspace = true, features = ["reaper", "test-harness"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

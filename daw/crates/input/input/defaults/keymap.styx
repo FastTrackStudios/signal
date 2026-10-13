@@ -1,0 +1,183 @@
+{
+  "modes": {
+    "normal": { "display_name": "NORMAL" },
+    "insert": { "display_name": "INSERT", "passthrough_text": true },
+    "visual": { "display_name": "VISUAL" }
+  },
+  "keymap": {
+    "normal": {
+      "Escape": "input.cancel",
+      "i": "mode:insert",
+      "v": "mode:visual",
+      ":": "fts.standalone.command_palette",
+      "h": "cursor.left",
+      "j": "cursor.down",
+      "k": "cursor.up",
+      "l": "cursor.right",
+      "w": "motion:word",
+      "b": "motion:back_word",
+      "0": "motion:line_start",
+      "$": "motion:line_end",
+      "g g": "motion:doc_start",
+      "Shift+g": "motion:doc_end",
+      "d": "operator:delete",
+      "c": "operator:change",
+      "y": "operator:yank"
+    },
+    "insert": {
+      "Escape": "mode:normal"
+    },
+    "visual": {
+      "Escape": "mode:normal",
+      "d": "operator:delete",
+      "y": "operator:yank"
+    },
+    "editor": {
+      "z x": "FTS_EDITOR_VIEW_MEMAGIC",
+      "z i": "FTS_EDITOR_VIEW_FIT_ITEM",
+      "z n": "FTS_EDITOR_VIEW_FIT_NOTES",
+      "z c": "FTS_EDITOR_VIEW_CENTER",
+      "z t": "FTS_EDITOR_VIEW_TOP",
+      "z b": "FTS_EDITOR_VIEW_BOTTOM",
+      "z r": "FTS_EDITOR_VIEW_RESET",
+      "a r": "FTS_EDITOR_RAZOR_REVERSE",
+      "a Ctrl+r": "FTS_EDITOR_RAZOR_REVERSE_PITCHES",
+      "a v": "FTS_EDITOR_RAZOR_INVERT",
+      "a x": "FTS_EDITOR_RAZOR_DELETE_CONTENTS",
+      "a d": "FTS_EDITOR_RAZOR_DUPLICATE",
+      "a s": "FTS_EDITOR_RAZOR_SELECT_CONTENTS",
+      "a u": "FTS_EDITOR_RAZOR_UNSELECT_CONTENTS",
+      "a f": "FTS_EDITOR_RAZOR_FULL_LANE",
+      "a p": "FTS_EDITOR_RAZOR_SPLIT",
+      "a c": "FTS_EDITOR_RAZOR_CLEAR_LANE",
+      "a q": "FTS_EDITOR_RAZOR_CLEAR",
+      "a 2": "FTS_EDITOR_RAZOR_DOUBLE",
+      "a h": "FTS_EDITOR_RAZOR_HALVE",
+      "v u": "FTS_EDITOR_VELOCITY_RAMP_UP",
+      "v d": "FTS_EDITOR_VELOCITY_RAMP_DOWN",
+      "v s": "FTS_EDITOR_VELOCITY_RAMP_SMOOTH",
+      "v a": "FTS_EDITOR_VELOCITY_ACCENT",
+      "v c": "FTS_EDITOR_VELOCITY_COMPRESS",
+      "v e": "FTS_EDITOR_VELOCITY_EXPAND",
+      "v r": "FTS_EDITOR_VELOCITY_HUMANISE",
+      "v f": "FTS_EDITOR_VELOCITY_FLATTEN",
+      "v p": "FTS_EDITOR_VELOCITY_PANEL",
+      "c 1": "FTS_EDITOR_CHORD_DEGREE_1",
+      "c 2": "FTS_EDITOR_CHORD_DEGREE_2",
+      "c 3": "FTS_EDITOR_CHORD_DEGREE_3",
+      "c 4": "FTS_EDITOR_CHORD_DEGREE_4",
+      "c 5": "FTS_EDITOR_CHORD_DEGREE_5",
+      "c 6": "FTS_EDITOR_CHORD_DEGREE_6",
+      "c 7": "FTS_EDITOR_CHORD_DEGREE_7",
+      "c t": "FTS_EDITOR_CHORD_TONIC_UP",
+      "c g": "FTS_EDITOR_CHORD_TONIC_DOWN",
+      "c s": "FTS_EDITOR_CHORD_MODE_NEXT",
+      "c a": "FTS_EDITOR_CHORD_MODE_PREV",
+      "c d": "FTS_EDITOR_CHORD_DEPTH_NEXT",
+      "c f": "FTS_EDITOR_CHORD_DEPTH_PREV",
+      "c i": "FTS_EDITOR_CHORD_INVERSION_NEXT",
+      "c u": "FTS_EDITOR_CHORD_INVERSION_PREV",
+      "c o": "FTS_EDITOR_CHORD_OCTAVE_UP",
+      "c l": "FTS_EDITOR_CHORD_OCTAVE_DOWN",
+      "g q": "FTS_EDITOR_GRID_MEASURE",
+      "g w": "FTS_EDITOR_GRID_HALF",
+      "g e": "FTS_EDITOR_GRID_QUARTER",
+      "g r": "FTS_EDITOR_GRID_EIGHTH",
+      "g f": "FTS_EDITOR_GRID_SIXTEENTH",
+      "g 1": "FTS_EDITOR_GRID_MEASURE",
+      "g 2": "FTS_EDITOR_GRID_HALF",
+      "g 3": "FTS_EDITOR_GRID_QUARTER",
+      "g 4": "FTS_EDITOR_GRID_EIGHTH",
+      "g 5": "FTS_EDITOR_GRID_SIXTEENTH",
+      "g g": "FTS_EDITOR_GRID_TOGGLE",
+      "g d": "FTS_EDITOR_GRID_DOTTED",
+      "g t": "FTS_EDITOR_GRID_TRIPLET",
+      "g a": "FTS_EDITOR_GRID_ADAPTIVE",
+      "t a": "FTS_EDITOR_TAKES_ALIGN",
+      "h": "FTS_EDITOR_CURSOR_LEFT_MEASURE",
+      "l": "FTS_EDITOR_CURSOR_RIGHT_MEASURE",
+      "Ctrl+h": "FTS_EDITOR_CURSOR_LEFT_GRID",
+      "Ctrl+l": "FTS_EDITOR_CURSOR_RIGHT_GRID",
+      "Ctrl+Shift+h": "FTS_EDITOR_CURSOR_LEFT_SELECT",
+      "Ctrl+Shift+l": "FTS_EDITOR_CURSOR_RIGHT_SELECT",
+      "Shift+h": "FTS_EDITOR_CURSOR_NOTES_SHORTEN",
+      "Shift+l": "FTS_EDITOR_CURSOR_NOTES_LENGTHEN",
+      "j": "FTS_EDITOR_CURSOR_TRACK_NEXT",
+      "k": "FTS_EDITOR_CURSOR_TRACK_PREV"
+    }
+  },
+  "keymap_context": {
+    "normal": [
+      {
+        "when": "tab:performance",
+        "bindings": {
+          "Space": "FTS_SESSION_TOGGLE_PLAYBACK",
+          "Shift+l": "FTS_SESSION_TOGGLE_SONG_LOOP",
+          "Right": "FTS_SESSION_SMART_NEXT",
+          "Left": "FTS_SESSION_SMART_PREVIOUS",
+          "Down": "FTS_SESSION_NEXT_SONG",
+          "Up": "FTS_SESSION_PREVIOUS_SONG"
+        }
+      },
+      {
+        "when": "tab:chart",
+        "bindings": {
+          "i": "mode:insert",
+          "h": "chart.cursor.left",
+          "j": "chart.cursor.down",
+          "k": "chart.cursor.up",
+          "l": "chart.cursor.right",
+          "w": "chart.cursor.word_forward",
+          "b": "chart.cursor.word_backward",
+          "0": "chart.cursor.line_start",
+          "$": "chart.cursor.line_end"
+        }
+      },
+      {
+        "when": "tab:rig",
+        "bindings": {
+          "1": "fts.rig.snapshot.recall_1",
+          "2": "fts.rig.snapshot.recall_2",
+          "3": "fts.rig.snapshot.recall_3",
+          "4": "fts.rig.snapshot.recall_4",
+          "5": "fts.rig.snapshot.recall_5",
+          "6": "fts.rig.snapshot.recall_6",
+          "7": "fts.rig.snapshot.recall_7",
+          "8": "fts.rig.snapshot.recall_8",
+          "9": "fts.rig.snapshot.recall_9",
+          "Shift+1": "fts.rig.snapshot.save_1",
+          "Shift+2": "fts.rig.snapshot.save_2",
+          "Shift+3": "fts.rig.snapshot.save_3",
+          "Shift+4": "fts.rig.snapshot.save_4",
+          "Shift+5": "fts.rig.snapshot.save_5",
+          "Shift+6": "fts.rig.snapshot.save_6",
+          "Shift+7": "fts.rig.snapshot.save_7",
+          "Shift+8": "fts.rig.snapshot.save_8",
+          "Shift+9": "fts.rig.snapshot.save_9"
+        }
+      }
+    ]
+  },
+  "mouse": {
+    "normal": {
+      "Left.Click": "mouse.primary",
+      "Right.Click": "mouse.context_menu"
+    }
+  },
+  "scroll": {
+    "normal": {
+      "ScrollY": "view.vscroll",
+      "ScrollX": "view.hscroll",
+      "Shift+Scroll": "view.hscroll",
+      "Alt+Scroll": "view.zoom_v",
+      "Alt+Shift+Scroll": "view.zoom_h",
+      "Ctrl+Alt+Scroll": "view.zoom_both"
+    },
+    "editor": {
+      "ScrollY": "view.vscroll",
+      "ScrollX": "view.hscroll",
+      "Shift+Scroll": "view.hscroll",
+      "Ctrl+Shift+Scroll": "edit.nudge_time"
+    }
+  }
+}

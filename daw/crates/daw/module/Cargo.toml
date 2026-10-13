@@ -1,0 +1,22 @@
+[package]
+name = "daw-module"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Module-system primitives — DawModule trait, ActionDef, PanelDef. Leaf crate so UI host adapters (daw-reaper-dioxus etc.) can depend on it without cycling through the daw facade."
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+[dependencies]
+# Direct (not the workspace `full`-featured tokio) so wasm consumers of
+# this leaf crate (e.g. keyflow, which depends on it unconditionally) don't
+# drag in mio/net — same reasoning architect's own tokio dep documents.
+tokio = { version = "1", default-features = false, features = ["rt"] }
+tracing.workspace = true
+
+[lints]
+workspace = true

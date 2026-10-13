@@ -1,0 +1,85 @@
+[package]
+name = "saturate-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Saturation GUI — the five circuits, each with its own panel"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# The painted visualisers (`viz`): a picture per circuit and a multiband
+# overview, as plain vector painters into an `anyrender::Scene`. No Blitz
+# widget and no shader — the consumer paints them into its own scene — so
+# this pulls in no GPU stack and stays wasm-portable. The pictures are
+# measured off the DSP, which is what `saturate-dsp/analysis` is for.
+viz = [
+    "dep:anyrender",
+    "dep:kurbo",
+    "dep:peniko",
+    "dep:multiband-dsp",
+    "saturate-dsp/analysis",
+]
+native = [
+    "dep:nice-plug",
+    "dep:fts-plug-ui",
+    "dep:nice-plug-dioxus",
+    "dep:architect-ui",
+    "dep:atomic_float",
+    "dep:parking_lot",
+    # The shared EQ surface — the emphasis EQ view embeds eq-ui's EqGraph
+    # (fx.embed-eq.one-surface).
+    "dep:eq-ui",
+    "eq-ui/native",
+]
+
+[dependencies]
+architect-ui = { workspace = true, optional = true }
+fts-audio-ui = { workspace = true }
+nice-plug = { workspace = true, optional = true }
+fts-plug-ui = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+atomic_float = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+saturate-profiles = { workspace = true }
+saturate-dsp = { workspace = true }
+anyrender = { workspace = true, optional = true }
+kurbo = { workspace = true, optional = true }
+peniko = { workspace = true, optional = true }
+dsp-core = { workspace = true }
+multiband-dsp = { workspace = true, optional = true }
+eq-ui = { workspace = true, optional = true }
+crossbeam-channel = { workspace = true }
+dioxus = { workspace = true }
+
+[[test]]
+name = "screenshots"
+required-features = ["native"]
+
+[[test]]
+name = "emphasis_eq"
+required-features = ["native"]
+
+[[test]]
+name = "sat_viz"
+required-features = ["viz"]
+
+[[example]]
+name = "sat_sheet"
+required-features = ["viz"]
+
+[dev-dependencies]
+# The visualiser's offscreen path: replay a painted scene on the CPU, so the
+# tests can look at pixels and the contact sheet can write PNGs without a GPU.
+anyrender_vello_cpu = { workspace = true }
+png = { workspace = true }
+dioxus = { workspace = true }
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[test]]
+name = "param_round_trip"
+required-features = ["native"]

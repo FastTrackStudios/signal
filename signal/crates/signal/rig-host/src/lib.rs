@@ -1,0 +1,568 @@
+//! Shared daw-backed host for signal live rigs.
+//!
+//! Every live rig (guitar, bass, drums, keys, synth) is **a tiny daw project
+//! running on daw's realtime audio engine**: a seeded one-off project, one or
+//! more tracks whose FX slots carry the rig's `PluginInstance`s, a
+//! [`Meters`] bank for post-fader peaks, and a rolling transport so the
+//! renderer runs every block. Before this crate each rig engine hand-rolled
+//! that bootstrap (`GuitarRig`, `SamplerRig`, `KeysRig` — three private
+//! copies); [`RigProject`] + [`RigHost`] are the one shared implementation.
+//!
+//! ```no_run
+//! use signal_rig_host::RigProject;
+//! # fn main() -> eyre::Result<()> {
+//! let project = RigProject::new("FTS Keys");
+//! let track = project.add_track("Keys")?;
+//! let fx = project.add_fx_slot(&track, "keys")?;
+//! let host = project.start_output(&daw_audio_io::AudioIoPrefs::default())?;
+//! let meters = host.install_meters(1);
+//! // … insert PluginInstances into `fx` via host.daw() …
+//! host.play();
+//! # Ok(()) }
+//! ```
+//!
+//! The build order is the one every rig already used and must keep:
+//! **tracks + slots → engine → meters → instruments → play**. [`RigProject`]
+//! (pre-engine) and [`RigHost`] (post-engine) encode that ordering in types.
+//!
+//! Also home to the small cross-rig utilities every backend copy-pasted:
+//! poison-tolerant locking ([`lock::LockExt`]), panic payload text
+//! ([`lock::panic_message`]), the styx config-dir store ([`store`]), and the
+//! process-unique project guid ([`uuid_string`]).
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::{Arc, Mutex};
+
+use daw::service::ProjectInfo;
+use daw::service::handle::DawHandle as _;
+use daw::standalone::Standalone;
+#[cfg(not(target_arch = "wasm32"))]
+use daw::standalone::audio_engine::AudioEngine;
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(target_os = "linux", target_os = "macos", target_os = "ios")
+))]
+use daw::standalone::audio_engine::DuplexAudioEngine;
+#[cfg(not(target_arch = "wasm32"))]
+use daw::standalone::metering::Meters;
+#[cfg(not(target_arch = "wasm32"))]
+use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
+#[cfg(not(target_arch = "wasm32"))]
+use daw_audio_io::AudioIoPrefs;
+#[cfg(not(target_arch = "wasm32"))]
+use daw_audio_io::duplex::EngineStats;
+
+pub mod gestures;
+pub mod lock;
+/// Instrumented MIDI attach.
+///
+/// The one wide event every rig emits when it (re)attaches hardware MIDI.
+/// Native only: it wraps the midir backend.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod midi;
+/// The process-wide shared MIDI input — one set of OS clients fanned out to
+/// every rig, instead of each rig opening its own.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod midi_hub;
+pub mod midi_learn;
+pub mod mixer;
+pub mod store;
+pub mod tempo;
+
+/// A realtime engine the host can run on.
+///
+/// Implemented by daw's cpal [`AudioEngine`] and (on Linux with the `pipewire`
+/// feature) the native duplex `pw_filter` engine. The engine type is a
+/// [`RigHost`] type parameter so output-only hosts stay `Sync` (the duplex
+/// engine owns raw `PipeWire` pointers and is `Send`-only — rigs that use it
+/// already serialize through a `Mutex`).
+#[cfg(not(target_arch = "wasm32"))]
+pub trait HostedEngine: Sized {
+    /// Open the engine with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the engine fails to initialize.
+    fn open(
+        daw: Standalone,
+        project_guid: String,
+        shared: Arc<TransportShared>,
+        prefs: &AudioIoPrefs,
+    ) -> eyre::Result<Self>;
+    fn sample_rate(&self) -> u32;
+    /// Live realtime metrics (render time / block size / xruns) — only the
+    /// native duplex engine surfaces these.
+    fn stats(&self) -> Option<Arc<EngineStats>> {
+        None
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl HostedEngine for AudioEngine {
+    fn open(
+        daw: Standalone,
+        project_guid: String,
+        shared: Arc<TransportShared>,
+        prefs: &AudioIoPrefs,
+    ) -> eyre::Result<Self> {
+        Self::with_project_prefs(daw, project_guid, shared, prefs)
+            .map_err(|e| eyre::eyre!("rig host: audio engine failed: {e}"))
+    }
+    fn sample_rate(&self) -> u32 {
+        Self::sample_rate(self)
+    }
+    // The cpal engine counts its callbacks too (iOS runs on it): without
+    // them a rig's audio watchdog sees no blocks rendered, takes the engine
+    // for stalled two seconds in, and drops and reopens it over and over.
+    fn stats(&self) -> Option<Arc<EngineStats>> {
+        Self::stats(self)
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
+impl HostedEngine for DuplexAudioEngine {
+    fn open(
+        daw: Standalone,
+        project_guid: String,
+        shared: Arc<TransportShared>,
+        prefs: &AudioIoPrefs,
+    ) -> eyre::Result<Self> {
+        Self::with_project_prefs(daw, project_guid, shared, prefs)
+            .map_err(|e| eyre::eyre!("rig host: audio engine failed: {e}"))
+    }
+    fn sample_rate(&self) -> u32 {
+        Self::sample_rate(self)
+    }
+    fn stats(&self) -> Option<Arc<EngineStats>> {
+        Some(Self::stats(self))
+    }
+}
+
+/// The duplex host's engine: one realtime callback that reads the input and
+/// writes the output in the same cycle — `PipeWire` `pw_filter` on Linux, a
+/// CoreAudio HAL IOProc on macOS, one RemoteIO unit on iOS. The cpal engine (elsewhere) runs input and
+/// output as two streams bridged by a ring, and that ring is latency: it
+/// drains one block per output callback, so every frame queued in it by a
+/// stall or a start-up offset stays queued for as long as the stream runs.
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(target_os = "linux", target_os = "macos", target_os = "ios")
+))]
+pub type DuplexEngine = DuplexAudioEngine;
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    not(any(target_os = "linux", target_os = "macos", target_os = "ios"))
+))]
+pub type DuplexEngine = AudioEngine;
+
+/// The native output-only engine ([`start_output_native`](RigProject::start_output_native)):
+/// the duplex engine with no input (on a laptop the "default input" is its
+/// microphone), which reports its render time and every overrun — the cpal
+/// engine reported neither. CoreAudio's buffer size is one per process per
+/// device, so an output-only engine only ever lowers it
+/// (`DuplexConfig::buffer_lower_only`): a keys rig asking for 256 frames on
+/// the interface the guitar rig plays through at 64 keeps 64.
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(target_os = "linux", target_os = "macos")
+))]
+pub type OutputEngine = DuplexAudioEngine;
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    not(any(target_os = "linux", target_os = "macos"))
+))]
+pub type OutputEngine = AudioEngine;
+
+/// A running duplex (live-input) rig host — `Send`-only under the native
+/// engines; serialize access through a `Mutex` like the guitar rig.
+#[cfg(not(target_arch = "wasm32"))]
+pub type DuplexRigHost = RigHost<DuplexEngine>;
+
+/// A running native output-only rig host (the keys rig).
+#[cfg(not(target_arch = "wasm32"))]
+pub type OutputRigHost = RigHost<OutputEngine>;
+
+/// A seeded rig project **before** the engine opens.
+///
+/// Add tracks and reserve FX slots here, then start the engine
+/// ([`start_output`](Self::start_output) / [`start_duplex`](Self::start_duplex))
+/// to get a [`RigHost`].
+pub struct RigProject {
+    daw: Standalone,
+    project_guid: String,
+}
+
+impl RigProject {
+    /// Seed a fresh one-off project named `project_name` and make it current
+    /// (so the track/FX services target it).
+    #[must_use]
+    pub fn new(project_name: &str) -> Self {
+        let daw = Standalone::new();
+        let project_guid = uuid_string();
+        daw.seed_project(ProjectInfo {
+            guid: project_guid.clone(),
+            name: project_name.to_string(),
+            path: String::new(),
+        });
+        daw.set_current_project(&project_guid);
+        Self { daw, project_guid }
+    }
+
+    /// Seed a fresh one-off project named `project_name` on an EXISTING
+    /// `Standalone` and make it current. The headless variant of
+    /// [`new`](Self::new): the caller owns the backend (e.g. the browser
+    /// worklet's `WebRenderer` daw) and drives rendering itself — no engine
+    /// is ever started on this project.
+    #[must_use]
+    pub fn on(daw: &Standalone, project_name: &str) -> Self {
+        let daw = daw.clone();
+        let project_guid = uuid_string();
+        daw.seed_project(ProjectInfo {
+            guid: project_guid.clone(),
+            name: project_name.to_string(),
+            path: String::new(),
+        });
+        daw.set_current_project(&project_guid);
+        Self { daw, project_guid }
+    }
+
+    /// The underlying daw service handle (cheap to clone).
+    #[must_use]
+    pub const fn daw(&self) -> &Standalone {
+        &self.daw
+    }
+
+    /// The seeded project's guid.
+    #[must_use]
+    pub fn project_guid(&self) -> &str {
+        &self.project_guid
+    }
+
+    /// Add a track; returns its guid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the track cannot be added to the project.
+    pub fn add_track(&self, name: &str) -> eyre::Result<String> {
+        add_track(&self.daw, name)
+    }
+
+    /// Arm `track` to monitor hardware input `channel` — what makes daw's
+    /// engine open a live input stream and feed the track's bus.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input cannot be armed.
+    pub fn arm_input(&self, track_guid: &str, channel: u32) -> eyre::Result<()> {
+        self.daw
+            .current()
+            .track(track_guid)
+            .arm_audio_input(channel)
+            .map_err(|e| eyre::eyre!("rig host: set record input failed: {e}"))
+    }
+
+    /// Reserve one FX slot on `track` (the add + guid-fetch dance); returns
+    /// the slot's guid — constant for the project's life, so swapping the
+    /// instance behind it never rebuilds the renderer's snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the FX slot cannot be added to the track.
+    pub fn add_fx_slot(&self, track_guid: &str, label: &str) -> eyre::Result<String> {
+        add_fx_slot(&self.daw, track_guid, label)
+    }
+
+    /// Open the output-only realtime engine (a sampler/synth generates,
+    /// never records) and return the running host. `prefs.sample_rate == 0`
+    /// requests 48 kHz (the rig default); `want_input` is forced off.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine fails to initialize.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn start_output(self, prefs: &AudioIoPrefs) -> eyre::Result<RigHost> {
+        let mut io = prefs.clone();
+        io.want_input = false;
+        self.start_with::<AudioEngine>(&io)
+    }
+
+    /// Open the output-only engine on the **native** backend — the `PipeWire`
+    /// `pw_filter` engine on Linux, the cpal engine elsewhere.
+    ///
+    /// Prefer this to [`start_output`](Self::start_output) for any instrument
+    /// that has to keep up with a player. cpal's node lands in the graph as an
+    /// `async` stream serviced from the main loop, and it xruns under a load
+    /// its own average says it can carry: measured on the keys rig at a 5.3 ms
+    /// budget, ~0.6 ms mean render time and ~66 xruns per SECOND, while the
+    /// guitar rig's `pw_filter` node in the same process took zero. The native
+    /// backend runs the callback on the realtime data loop instead, and is the
+    /// only path that reports [`stats`](RigHost::stats) — an instrument whose
+    /// xruns nobody can see is an instrument nobody can fix.
+    ///
+    /// `want_input` is forced off; the backend still opens one (unused)
+    /// capture port, which costs nothing.
+    ///
+    /// `node_name` is the graph node this engine registers as, and it must be
+    /// unique in the process: the backend's linker finds the ports to wire to
+    /// the device BY NAME, so two engines sharing one leaves the second node
+    /// unlinked and silent — a rig whose UI and MIDI are perfect and whose
+    /// meters never move.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine fails to initialize.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn start_output_native(
+        self,
+        prefs: &AudioIoPrefs,
+        node_name: &str,
+    ) -> eyre::Result<OutputRigHost> {
+        let mut io = prefs.clone();
+        io.want_input = false;
+        io.node_name = node_name.to_string();
+        self.start_with::<OutputEngine>(&io)
+    }
+
+    /// Open the duplex (live input → FX chain → output) engine — see
+    /// [`DuplexEngine`]. `want_input` is forced on.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the audio engine fails to initialize.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn start_duplex(self, prefs: &AudioIoPrefs) -> eyre::Result<DuplexRigHost> {
+        let mut io = prefs.clone();
+        io.want_input = true;
+        self.start_with::<DuplexEngine>(&io)
+    }
+
+    /// [`start_duplex`](Self::start_duplex), honouring `prefs.want_input`:
+    /// with it off the engine opens its output only (a rig played from an
+    /// injected signal, with no interface to play into it).
+    ///
+    /// # Errors
+    ///
+    /// As [`start_duplex`](Self::start_duplex).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn start_duplex_as_given(self, prefs: &AudioIoPrefs) -> eyre::Result<DuplexRigHost> {
+        self.start_with::<DuplexEngine>(prefs)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn start_with<E: HostedEngine>(self, io: &AudioIoPrefs) -> eyre::Result<RigHost<E>> {
+        request_low_latency_quantum(io);
+        let req_rate = if io.sample_rate != 0 {
+            io.sample_rate
+        } else {
+            48_000
+        };
+        let shared = Arc::new(TransportShared::new(req_rate, 120.0));
+        let engine = E::open(
+            self.daw.clone(),
+            self.project_guid.clone(),
+            shared.clone(),
+            io,
+        )?;
+        let sample_rate = engine.sample_rate();
+        Ok(RigHost {
+            daw: self.daw,
+            project_guid: self.project_guid,
+            shared,
+            engine,
+            meters: Mutex::new(Meters::new(0)),
+            sample_rate,
+        })
+    }
+}
+
+/// A running rig host: the daw project + realtime engine + meters + transport
+/// behind every live rig. Owns the engine (drop = stop audio).
+///
+/// The default engine parameter is the output-only cpal engine (`Sync`, so a
+/// sampler rig can share the host freely); [`DuplexRigHost`] is the live-input
+/// variant.
+#[cfg(not(target_arch = "wasm32"))]
+pub struct RigHost<E: HostedEngine = AudioEngine> {
+    daw: Standalone,
+    project_guid: String,
+    shared: Arc<TransportShared>,
+    engine: E,
+    /// Latest installed meter bank (re-installable when the track set grows).
+    meters: Mutex<Arc<Meters>>,
+    sample_rate: u32,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<E: HostedEngine> RigHost<E> {
+    /// The underlying daw service handle (cheap to clone) — insert plugin
+    /// instances, push live MIDI, drive `Tracks`/`FxChains`/`Routing` here.
+    pub const fn daw(&self) -> &Standalone {
+        &self.daw
+    }
+
+    pub fn project_guid(&self) -> &str {
+        &self.project_guid
+    }
+
+    /// The engine's resolved sample rate.
+    pub const fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    /// Install a fresh [`Meters`] bank with `cells` cells (one per metered
+    /// track, in project track order) and hand it to the renderer. Re-install
+    /// after adding tracks; the renderer reads the bank fresh each block.
+    pub fn install_meters(&self, cells: usize) -> Arc<Meters> {
+        let meters = Meters::new(cells);
+        self.daw.set_meters(meters.clone());
+        *self
+            .meters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = meters.clone();
+        meters
+    }
+
+    /// The most recently installed meter bank.
+    pub fn meters(&self) -> Arc<Meters> {
+        self.meters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Roll the transport so the renderer runs (and audio flows) every block.
+    pub fn play(&self) {
+        self.shared.set_play_state(PlayStateRepr::Playing);
+    }
+
+    /// The shared transport handle.
+    pub const fn transport(&self) -> &Arc<TransportShared> {
+        &self.shared
+    }
+
+    /// Live realtime metrics (render time / block size / xruns) — only the
+    /// native duplex engine surfaces these; `None` under cpal.
+    pub fn stats(&self) -> Option<Arc<EngineStats>> {
+        self.engine.stats()
+    }
+
+    /// Add a track after the engine opened (the per-track sampler API grows
+    /// its project live); returns its guid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the track cannot be added to the project.
+    pub fn add_track(&self, name: &str) -> eyre::Result<String> {
+        add_track(&self.daw, name)
+    }
+
+    /// Reserve one FX slot on `track` after the engine opened.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the FX slot cannot be added to the track.
+    pub fn add_fx_slot(&self, track_guid: &str, label: &str) -> eyre::Result<String> {
+        add_fx_slot(&self.daw, track_guid, label)
+    }
+}
+
+fn add_track(daw: &Standalone, name: &str) -> eyre::Result<String> {
+    daw.current()
+        .add_track(name)
+        .map(|t| t.guid().to_string())
+        .map_err(|e| eyre::eyre!("rig host: add track '{name}' failed: {e}"))
+}
+
+fn add_fx_slot(daw: &Standalone, track_guid: &str, label: &str) -> eyre::Result<String> {
+    daw.current()
+        .track(track_guid)
+        .add_fx_slot(label)
+        .map(daw::service::handle::FxSlotHandle::into_guid)
+        .map_err(|e| eyre::eyre!("rig host: reserve fx slot '{label}' failed: {e}"))
+}
+
+/// Low latency under the JACK/PipeWire shim.
+///
+/// Ask `PipeWire` for the quantum before the JACK client connects (the client
+/// can't set the buffer there). No-op unless built with the `jack` feature, or
+/// when `PIPEWIRE_LATENCY` is already set / no buffer size is requested.
+#[cfg(not(target_arch = "wasm32"))]
+pub const fn request_low_latency_quantum(prefs: &AudioIoPrefs) {
+    #[cfg(feature = "jack")]
+    {
+        if prefs.buffer_size != 0 && std::env::var_os("PIPEWIRE_LATENCY").is_none() {
+            let rate = if prefs.sample_rate != 0 {
+                prefs.sample_rate
+            } else {
+                48_000
+            };
+            let buf = prefs.buffer_size;
+            unsafe { std::env::set_var("PIPEWIRE_LATENCY", format!("{buf}/{rate}")) };
+            tracing::info!(quantum = %format!("{buf}/{rate}"), "rig host: requesting PipeWire low-latency quantum");
+        }
+    }
+    #[cfg(not(feature = "jack"))]
+    let _ = prefs;
+}
+
+/// Process-unique guid string for rig project guids — shared by every rig
+/// host so ids never collide within one engine process.
+#[must_use]
+pub fn uuid_string() -> String {
+    uuid::new_v4_string()
+}
+
+mod uuid {
+    //! Minimal UUIDv4-ish string generator — avoids pulling the `uuid` crate
+    //! just for rig project guids. Not cryptographically strong; only needs
+    //! to be unique within this process.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    #[cfg(not(target_arch = "wasm32"))]
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn new_v4_string() -> String {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        let c = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let pid = u64::from(std::process::id());
+        format!("signal-rig-{nanos:x}-{pid:x}-{c:x}")
+    }
+
+    /// wasm32: `SystemTime::now()` / `process::id()` are unsupported in the
+    /// AudioWorklet scope — a process-local counter is unique enough (the
+    /// guid only has to be unique within this instance's `Standalone`).
+    #[cfg(target_arch = "wasm32")]
+    pub fn new_v4_string() -> String {
+        let c = COUNTER.fetch_add(1, Ordering::Relaxed);
+        format!("signal-rig-wasm-{c:x}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uuid_strings_are_process_unique() {
+        let a = uuid_string();
+        let b = uuid_string();
+        assert_ne!(a, b);
+        assert!(a.starts_with("signal-rig-"));
+    }
+
+    /// Device-free: the pre-engine stage seeds a project and builds tracks +
+    /// constant-guid FX slots.
+    #[test]
+    fn project_builds_tracks_and_slots() {
+        let project = RigProject::new("Rig Host Test");
+        let track = project.add_track("In").expect("add track");
+        let a = project.add_fx_slot(&track, "slot-0").expect("slot 0");
+        let b = project.add_fx_slot(&track, "slot-1").expect("slot 1");
+        assert_ne!(a, b, "each reserved slot gets its own guid");
+    }
+}

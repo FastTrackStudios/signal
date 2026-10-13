@@ -1,0 +1,20 @@
+---
+source: tests/multitrack_examples/bon_jovi_you_give_love_a_bad_name.rs
+assertion_line: 42
+expression: structure.to_tree_string()
+---
+-Drums: [Drums.PNT.L.wav, Drums.PNT.R.wav]
+-Percussion: [095 Pop Tamb.L.wav, 095 Pop Tamb.R.wav]
+-Bass: [Bass.wav]
+-Guitars
+--Electric
+---Slide: [Guitar Slide.wav]
+---Solo: [Guitar Solo.wav]
+--Acoustic: [Acoustic.Right.wav, Acoustic.wav]
+---Mando: [Mando.wav]
+--Banjo: [banjo.One.wav, banjo.Solo.wav, banjo.Two.wav]
+-Fiddle: [Fiddle PNT.L.wav, Fiddle PNT.R.wav]
+-Vocals
+--Lead: [Vocal.Tune.Lead.wav]
+--BGVs: [Vocal.Harmony.One.wav, Vocal.Harmony.Two.wav]
+-Reference: [You Give Love A Bad Name.PRINT.L.wav, You Give Love A Bad Name.PRINT.R.wav]

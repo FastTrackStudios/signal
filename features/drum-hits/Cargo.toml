@@ -1,0 +1,19 @@
+[package]
+name = "drum-hits"
+description = "Finding drum hits on a kit's close mics and triggers: the envelope gate, calibration of a mic against its trigger, the two fused into hits with a confidence, and bleed rejection for a piece with no working trigger. Pure DSP over sample slices — the app reads the audio and writes the hit markers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+num-traits = { workspace = true }
+rayon = { workspace = true }
+
+[dev-dependencies]
+hound = "3.5"
+
+[lints]
+workspace = true

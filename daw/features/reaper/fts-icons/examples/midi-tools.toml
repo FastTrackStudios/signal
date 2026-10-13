@@ -1,0 +1,43 @@
+# Toolbar icons for the midi-tools panels (features/midi-tools).
+#   fts-icons build examples/midi-tools.toml --install
+#
+# Square 30px glyph buttons rather than the double-wide text style the
+# session toolbars use: these are two tools, not a catalogue, and they sit
+# next to REAPER's own MIDI-editor buttons where a wide text button would
+# look out of place.
+#
+# The glyphs echo each panel's own preview — a bar chart for the velocity
+# strip, a staircase for the arpeggiator's climbing piano roll — so the
+# button and the window it opens read as the same thing.
+
+[settings]
+resource_paths = ["~/.fts-dev"]
+
+[defaults.all]
+icon_size = 20
+bg_size = 26
+corner_radius = 6
+
+[defaults.normal]
+icon = "#e6e6e6"
+
+[defaults.hover]
+icon = "#ffd75e"
+border = "#ffffffaa"
+border_width = 1.5
+
+[defaults.clicked]
+icon = "#ffffff"
+bg = "#d2691eaa"
+border = "#ffffff"
+border_width = 2.5
+
+[[icon]]
+file = "fts_midi_velocity"
+source = "tabler:chart-bar"
+assign = "_FTS_MIDI_VELOCITY"
+
+[[icon]]
+file = "fts_midi_arp"
+source = "tabler:stairs"
+assign = "_FTS_MIDI_ARP"

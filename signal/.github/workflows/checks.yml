@@ -1,0 +1,84 @@
+# signal — the one PR/push gate.
+#
+# Toolchain comes from the repo flake: every step runs under
+# `nix develop .#ci -c`. `--accept-flake-config` picks up the
+# fasttrackstudio.cachix.org substituter from flake.nix nixConfig — keep it
+# seeded via cache-devshell.yml or the first job of the day pays the full
+# toolchain build.
+#
+# Deliberately simpler than the monorepo gate it replaces: that one drove
+# `cargo rail plan` to pick affected crates out of a 238-member workspace.
+# These workspaces are small enough to just build.
+
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NIX_DEV: nix develop --accept-flake-config .#ci -c
+
+jobs:
+  check:
+    name: Build + test
+    # The repo's own self-hosted runner on THEBATTLESHIP (NixOS, nix
+    # preinstalled). The build tree persists in $CI_CACHE_DIR between runs,
+    # which replaces the rust-cache round trip.
+    runs-on: [self-hosted, signal]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Persistent target dir
+        run: |
+          dir="${CI_CACHE_DIR:-$HOME/cargo-target}/checks"
+          mkdir -p "$dir"
+          echo "CARGO_TARGET_DIR=$dir" >> "$GITHUB_ENV"
+          echo "target dir: $dir ($(du -sh "$dir" 2>/dev/null | cut -f1))"
+      - name: Sibling repos (the ../ checkouts the [patch] sections build from)
+        run: scripts/ci-siblings.sh
+      - name: Manifests + lockfile
+        run: ${NIX_DEV} cargo metadata --locked --format-version 1 > /dev/null
+      - name: cargo fmt --check
+        run: ${NIX_DEV} cargo fmt --all --check
+      - name: cargo check --workspace
+        run: ${NIX_DEV} cargo check --workspace
+      - name: wasm check (browser remote)
+        run: |
+          ${NIX_DEV} cargo check -p signal-desktop \
+            --target wasm32-unknown-unknown --no-default-features --features signal
+      - name: cargo nextest
+        run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast
+
+      # Advisory only — DOES NOT BLOCK. The strict clippy config (pedantic +
+      # nursery + the panic denies, with no allow-list underneath) is adopted
+      # in Cargo.toml, but the tree does not pass it yet: 84 of 116 packages
+      # still have findings, overwhelmingly casts, indexing and integer
+      # arithmetic in per-sample DSP math. Those are slated for an algorithm
+      # rewrite rather than thousands of individual edits, so failing the gate
+      # on them would block every unrelated PR for months.
+      #
+      # The point of running it anyway is that the number stays visible and can
+      # only go down. Read the job summary for the per-crate and per-lint
+      # breakdown, and note the crash-safety section — panics and audio-thread
+      # hazards are called out separately from style findings.
+      #
+      # `--cap-lints warn` is REQUIRED, not a softening: under `deny` a crate
+      # aborts at its first error and every crate downstream of it goes
+      # unlinted, so a deny-level count is a floor rather than a total. The same
+      # tree measured 1,615 that way and 14,356 capped to warn.
+      #
+      # When a crate is genuinely clean, add it to a blocking `-p` list here so
+      # it cannot regress. That ratchet is the migration path off this step.
+      - name: cargo clippy (advisory, does not block)
+        continue-on-error: true
+        run: |
+          ${NIX_DEV} cargo clippy --workspace --no-deps --all-targets --keep-going \
+            --message-format=json -- --cap-lints warn \
+            | ${NIX_DEV} python3 .github/scripts/clippy-report.py

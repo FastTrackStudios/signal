@@ -1,0 +1,19 @@
+[package]
+name = "stretch-dsp"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Time-stretch and pitch-shift engine — a real-time phase vocoder that changes tempo and pitch independently"
+
+[lints]
+workspace = true
+
+# Platform note: an FFT engine, so not `no_std` — the same exemption as
+# reverb-dsp and trigger-dsp. It allocates at construction only: every
+# buffer, spectrum and FFT scratch is sized in `Stretcher::new`, and
+# `render` / `seek` allocate nothing.
+
+[dependencies]
+realfft = { workspace = true }
+dsp-core = { workspace = true }

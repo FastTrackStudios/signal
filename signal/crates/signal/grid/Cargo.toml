@@ -1,0 +1,18 @@
+[package]
+name = "signal-grid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# Headless grid view-model: `GridSlot` + the pure conversions from domain
+# templates/chains into grid slots. Extracted from signal-browser so the
+# grid UI can run on wasm — this crate depends only on the wasm-clean
+# proto layer (no facade, no filesystem, no threads).
+
+[lints]
+workspace = true
+
+[dependencies]
+signal-proto.workspace = true
+uuid = { version = "1", features = ["v4"] }

@@ -1,0 +1,13 @@
+[package]
+name = "gate"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "gate — facade over gate-dsp: the drum gate (source modes, look-ahead, shaped release, HF de-bleed) that apps and plugins depend on."
+
+[lints]
+workspace = true
+
+[dependencies]
+gate-dsp = { workspace = true }

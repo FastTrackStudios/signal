@@ -1,0 +1,84 @@
+/// Reaper Core Pack
+/// Essential Reaper workflow shortcuts and quick actions.
+
+pack {
+    name "reaper-core"
+    version "1.0.0"
+    author "FastTrackStudios"
+    description "Core Reaper workflow shortcuts"
+}
+
+tags (
+    {path "reaper/quick", name "Quick Actions", description "Frequently used Reaper actions", color "#89dceb"}
+)
+
+items (
+    {
+        id "quick-bounce"
+        label "Bounce Selection"
+        sub "Render selected area to new item"
+        icon "B"
+        tags ("reaper/quick" "reaper/actions")
+        search_fields ("bounce" "render" "consolidate" "glue")
+        actions {
+            enter       {name "Bounce in place", exec "reaper:40601"}
+            shift_enter {name "Bounce to new track", exec "reaper:41999"}
+        }
+    }
+    {
+        id "quick-freeze"
+        label "Freeze Tracks"
+        sub "Freeze selected tracks to save CPU"
+        icon "F"
+        tags ("reaper/quick" "reaper/actions/track")
+        search_fields ("freeze" "render" "cpu" "offline")
+        actions {
+            enter       {name "Freeze", exec "reaper:41654"}
+            shift_enter {name "Unfreeze", exec "reaper:41644"}
+        }
+    }
+    {
+        id "quick-normalize"
+        label "Normalize Items"
+        sub "Normalize selected items"
+        icon "N"
+        tags ("reaper/quick" "reaper/actions/item")
+        search_fields ("normalize" "loudness" "volume" "level")
+        actions {
+            enter       {name "Normalize", exec "reaper:40108"}
+            shift_enter {name "Normalize (loudness)", exec "reaper:_SWS_NORMALIZE1"}
+        }
+    }
+    {
+        id "quick-split"
+        label "Split at Cursor"
+        sub "Split items at edit cursor"
+        icon "S"
+        tags ("reaper/quick" "reaper/actions/edit")
+        search_fields ("split" "cut" "slice" "divide")
+        actions {
+            enter       {name "Split items", exec "reaper:40012"}
+            shift_enter {name "Split at time selection", exec "reaper:40061"}
+        }
+    }
+    {
+        id "quick-metronome"
+        label "Metronome"
+        sub "Toggle metronome click"
+        icon "M"
+        tags ("reaper/quick" "reaper/actions/transport")
+        search_fields ("metronome" "click" "tempo" "beat")
+        actions {
+            enter       {name "Toggle", exec "reaper:40364"}
+            shift_enter {name "Settings", exec "reaper:40363"}
+        }
+    }
+)
+
+magic_words (
+    {keyword "Q", preset "Quick Actions"}
+)
+
+presets (
+    {name "Quick Actions", include ("reaper/quick")}
+)

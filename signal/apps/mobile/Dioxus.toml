@@ -1,0 +1,10 @@
+# dx config for the phone app (`dx serve --platform android`).
+[application]
+# Blitz runs in Android's NativeActivity, not dx's default WryActivity
+# (a WebView): our manifest and activity.
+android_manifest = "android/AndroidManifest.xml"
+android_main_activity = "android/MainActivity.kt"
+
+[bundle]
+identifier = "app.fasttrackstudio.signal"
+publisher = "FastTrackStudio"

@@ -1,0 +1,7 @@
+name "Ableton Live"
+description "Ableton Live — Live-style keyboard shortcuts"
+version 0.1.0
+
+sections (
+    transport.styx
+)

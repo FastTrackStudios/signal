@@ -1,0 +1,44 @@
+[package]
+name = "daw-perf-test"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "REAPER extension that benchmarks native reaper-rs vs DAW RPC (individual + batch)"
+
+[lib]
+crate-type = ["cdylib"]
+name = "reaper_daw_perf_test"
+path = "src/lib.rs"
+
+[dependencies]
+# DAW facade (reaper impl for native benchmarks)
+daw = { workspace = true, features = ["reaper"] }
+# Direct access to BatchExecutor for in-process benchmarks (no socket)
+daw-reaper = { workspace = true, default-features = true }
+
+# REAPER bindings
+reaper-high.workspace = true
+reaper-medium.workspace = true
+reaper-low.workspace = true
+reaper-macros.workspace = true
+
+# Async runtime (for RPC benchmarks)
+tokio = { workspace = true, features = ["net", "rt-multi-thread"] }
+
+# VOX RPC client (connect to daw-bridge socket)
+vox.workspace = true
+
+# Main thread dispatch
+crossbeam-channel.workspace = true
+fragile.workspace = true
+
+# VOX stream transport (for socket connection)
+vox-stream.workspace = true
+
+# Observability
+tracing.workspace = true
+tracing-subscriber.workspace = true
+eyre = "0.6"
+
+[lints]
+workspace = true

@@ -1,0 +1,90 @@
+bindings (
+    // Core editing
+    {keys s,       action 40757, desc "Split items at cursor"}
+    {keys d,       action 40006, desc "Delete selected items"}
+
+    // Drum quantize: `q` quantizes the kit over the folded kit rows
+    // selected (or the time selection) with the settings the Quantize
+    // panel last applied (every mic cut before each hit and moved
+    // together, the kit kept in phase); Shift+Q opens the panel — a
+    // section, its groove, the settings, Preview and Apply. A profile
+    // binding `q` has it over macro recording.
+    {keys q, action "FTS_QUANTIZE_DRUMS", desc "Quantize the kit with the last settings",
+     mnemonic "Q for Quantize",
+     why "A kit is many mics of one performance: cutting and moving them apart would put it out of phase with itself, so the kit quantizes as one — and once a section's settings are judged, the next is one key."}
+    {keys "<A-q>", action "FTS_REVERT_DRUMS", desc "Put the drums back as played (the edit undone, the hit markers kept)",
+     mnemonic "Alt+Q to un-quantize",
+     why "A fill the quantize made worse goes back to how it was played, its hit markers left to drag into place by hand."}
+    {keys "<S-q>", action "FTS_QUANTIZE_PANEL", desc "The Quantize panel: a section on its grid, by its groove",
+     mnemonic "Shift+Q for the Quantize settings",
+     why "Quantizing drums is judged section by section, so the panel shows the section's groove and previews before anything moves."}
+
+    // Gain staging — every recorded track at the reference kit's levels
+    // (GGD Modern & Massive 2), as item volume: nothing rendered, so
+    // Alt+G puts every staged item back as it was recorded.
+    {keys "<S-g>", action "FTS_GAIN_STAGE", desc "Gain stage the session (item volume)",
+     mnemonic "Shift+G for Gain",
+     why "Staged to one reference, every song's kit hits the same processing the same way; as item volume it never touches the audio."}
+    {keys "<A-g>", action "FTS_GAIN_STAGE_CLEAR", desc "Clear gain staging (item volume back to 1)",
+     mnemonic "Alt+G undoes Shift+G"}
+
+    // Comping — draw a razor over a folded kit row (or a track with
+    // lanes), then Ctrl+N takes that range from take N onto the comp lane
+    // of every mic in the folder at once: one performance, in phase.
+    {keys "<C-1>", action "FTS_COMP_TAKE_1", desc "Comp the razor from take 1"}
+    {keys "<C-2>", action "FTS_COMP_TAKE_2", desc "Comp the razor from take 2"}
+    {keys "<C-3>", action "FTS_COMP_TAKE_3", desc "Comp the razor from take 3"}
+    {keys "<C-4>", action "FTS_COMP_TAKE_4", desc "Comp the razor from take 4"}
+    {keys "<C-5>", action "FTS_COMP_TAKE_5", desc "Comp the razor from take 5"}
+    {keys "<C-6>", action "FTS_COMP_TAKE_6", desc "Comp the razor from take 6"}
+    {keys "<C-7>", action "FTS_COMP_TAKE_7", desc "Comp the razor from take 7"}
+    {keys "<C-8>", action "FTS_COMP_TAKE_8", desc "Comp the razor from take 8"}
+    {keys "<C-9>", action "FTS_COMP_TAKE_9", desc "Comp the razor from take 9"}
+
+    // Smart duplicate — copy selection forward by its own measure span
+    // (group + color preserving, tempo-aware). Replaces stock "Duplicate
+    // items" (41295) on Ctrl+D.
+    {keys "<C-d>",  action "_FTS_SMART_DUPLICATE", desc "Smart duplicate",
+     mnemonic "D for Duplicate",
+     why "Ctrl+D duplicates in every editor; the FTS action places the copy a full measure-span later so repeated hits build a section on the grid."}
+
+    // Glue items within the time selection
+    {keys "<C-S-g>", action 42432, desc "Glue items within time selection",
+     mnemonic "G for Glue",
+     why "Ctrl+Shift+G glues the selection's items into one within the time selection."}
+
+    // Expression editor — `e` loads the selected item (audio or MIDI)
+    // into the FTS Expression Editor and shows the panel. One key in,
+    // same key out: `e` again on the same item (or with nothing
+    // selected) closes it; a different item switches to it. `E` keeps
+    // the stock MIDI editor reachable; inside it, `e`/`E` close it
+    // (bound in midi.styx).
+    {keys e,       action "FTS_EXPRESSION_EDITOR_OPEN", desc "Expression Editor on selected item (again: close)"}
+    {keys "<S-e>", action 40153, desc "Open selected item in MIDI editor"}
+    {keys "<delete>",     action 40697, desc "Delete"}
+    {keys "<backspace>",  action 40697, desc "Delete"}
+    {keys "<escape>",     action 40020, desc "Remove time selection and loop points"}
+
+    // Standard edit shortcuts
+    {keys "<C-x>",   action 40059, desc "Cut items/tracks/envelope points"}
+    {keys "<C-c>",   action 40698, desc "Copy items"}
+    {keys "<C-v>",   action 42398, desc "Paste items/tracks"}
+    {keys "<C-a>",   action 40035, desc "Select all items/tracks/envelope points"}
+
+    // Single-key editing
+    {keys x,       action 40059, desc "Cut selected items"}
+    {keys c,       action 1068, desc "Transport: toggle repeat"}
+    {keys p,       action 40058, desc "Paste items"}
+
+    // Edit options
+    {keys "<A-s>",   action 1157, desc "Toggle snapping"}
+
+    // Undo/redo
+    {keys u,       action 40029, desc "Undo"}
+    {keys "<C-z>",   action 40029, desc "Undo"}
+    {keys "<M-z>",   action 40029, desc "Undo"}
+    {keys "<C-M-z>", action 40072, desc "Show undo history window"}
+    {keys "<C-r>",   action 40030, desc "Redo"}
+    {keys "<C-S-z>", action 40030, desc "Redo"}
+
+)

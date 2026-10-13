@@ -1,0 +1,70 @@
+[profile.default]
+slow-timeout = { period = "30s", terminate-after = 1 }
+
+# The expression editor's screenshot harness paints ~49 scenes through a
+# CPU rasterizer in one test, so it is legitimately minutes long rather
+# than hung. Without this the suite is red out of the box on a clean
+# tree, which trains everyone to ignore a red run.
+[[profile.default.overrides]]
+filter = 'test(=shoot_every_scene)'
+slow-timeout = { period = "60s", terminate-after = 10 }
+
+# The fill detector's album check decodes six real drum sessions and
+# runs detection over each — 55 s measured on a loaded 32-core box — so
+# it is slow for the same reason: it does real work, and it finishes.
+# Headroom for a slower runner, still short enough to catch a hang.
+[[profile.default.overrides]]
+filter = 'test(=fills_land_where_a_drummer_puts_them)'
+slow-timeout = { period = "60s", terminate-after = 5 }
+
+# Its sibling, which opens one album session and runs the same detector
+# over it. Thirteen seconds alone and thirty-one beside the test above,
+# because that one now analyses its six songs at once and the two of
+# them compete for the same cores. It did fit in the default thirty
+# until then — so this override is the cost of that speed-up, and it is
+# worth saying so rather than leaving a number that looks arbitrary.
+[[profile.default.overrides]]
+filter = 'test(=protecting_fills_keeps_them_out_of_the_quantize)'
+slow-timeout = { period = "60s", terminate-after = 5 }
+
+# The golden session's eleven scene renders: each is a real GPU frame of
+# a 233-track session drawn through the bench binary — about ninety
+# seconds for the set, and it grows every time the golden session gains
+# a shape. Slow because it draws eleven pictures, not because it is
+# stuck; a hang is still caught inside ten minutes.
+#
+# The period is deliberately well above the measured time rather than
+# just above it: on a loaded box this test and the fill detector run
+# alongside a full workspace build, and a timeout that only just fits
+# on an idle machine goes red under load, which teaches everyone to
+# rerun a red suite instead of reading it.
+[[profile.default.overrides]]
+filter = 'test(=every_scene_renders_to_its_committed_fixture)'
+slow-timeout = { period = "60s", terminate-after = 10 }
+
+# The folder-item zoom renders: real GPU frames through the bench, like
+# the scenes above and slow for the same reason. It fitted the default
+# thirty seconds on an idle box and does not on a busy one — measured at
+# 3s idle and 30s while this machine was carrying an unrelated CUDA
+# build at load 82 on 32 cores.
+#
+# Raised on the principle the block above states rather than to make a
+# red run green: a timeout that only just fits when nothing else is
+# running teaches everyone to rerun a red suite instead of reading it.
+# Ten minutes still catches a hang.
+[[profile.default.overrides]]
+filter = 'test(=every_zoom_renders_to_its_committed_fixture)'
+slow-timeout = { period = "60s", terminate-after = 10 }
+
+# The folder-item picture: one more real GPU frame through the bench,
+# and the last of that family without a raised timeout — it fitted the
+# default thirty seconds until a loaded box (load 107 on 32 cores) took
+# it to 30.04. Six seconds idle.
+#
+# Same principle as its siblings above: a timeout that only just fits on
+# an idle machine goes red under load, and a suite that goes red for
+# reasons unrelated to the code teaches everyone to rerun it instead of
+# reading it.
+[[profile.default.overrides]]
+filter = 'test(=a_hidden_child_replays_the_picture_and_a_muted_one_changes_it)'
+slow-timeout = { period = "60s", terminate-after = 10 }

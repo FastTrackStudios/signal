@@ -1,0 +1,26 @@
+[package]
+name = "unison-plugin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "FTS Unison — audio-domain unison / double-tracking engine (the same voices signal's synths use)"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+nice-plug = { workspace = true, features = ["vst3"] }
+pitch-dsp = { workspace = true }
+audiocore-dsp = { workspace = true }
+
+[features]
+default = ["export"]
+# The CLAP / VST3 entry points. A host linking this plugin in-process
+# (the session engine's built-in FX) turns it off: every plugin exports
+# the same `clap_entry` / `GetPluginFactory` symbols, and two in one
+# binary collide.
+export = []

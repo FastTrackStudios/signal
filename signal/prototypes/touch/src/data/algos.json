@@ -1,0 +1,1056 @@
+{
+ "block:compressor/Comp Off": "off",
+ "block:gate/Gate Off": "off",
+ "block:delay/Delay Off": "off",
+ "block:delay/Sun Slap": "Tape",
+ "block:delay/Country Slap": "Analog",
+ "block:delay/Blues Slap": "Analog",
+ "block:delay/Rockabilly Slap": "Tape",
+ "block:delay/Room Echo": "Tape",
+ "block:delay/Quarter Bed": "Tape",
+ "block:delay/Quarter Support": "Digital",
+ "block:delay/Dotted Eighth": "Tape",
+ "block:delay/Crunch Dotted": "Analog",
+ "block:delay/Eighth Pulse": "Digital",
+ "block:delay/Triplet Air": "Tape",
+ "block:delay/Lead Quarter": "Tape",
+ "block:delay/Lead Dotted": "Tape",
+ "block:delay/Rock Lead": "Tape",
+ "block:delay/Gilmour Lead": "Digital",
+ "block:delay/Gilmour Echorec": "Drum",
+ "block:delay/Blues Lead": "Analog",
+ "block:delay/Warm Analog": "Analog",
+ "block:delay/Metal Lead": "Digital",
+ "block:delay/Metal Lead Wide": "Digital",
+ "block:delay/Metal Rhythm": "Digital",
+ "block:delay/Ambient Wash": "Tape",
+ "block:delay/Ambient Dotted": "Tape",
+ "block:delay/Swell Pad": "Tape",
+ "block:delay/Swell Dotted": "Tape",
+ "block:delay/Shimmer Echo": "Shimmer",
+ "block:delay/Edge Dotted Eighth": "Digital",
+ "block:delay/Edge Quarter": "Digital",
+ "block:delay/Streets Dotted Eighth": "Digital",
+ "block:delay/Pride Dotted Eighth": "Digital",
+ "block:delay/Edge Dual 1": "Digital",
+ "block:delay/Edge Dual 2": "Digital",
+ "block:reverb/Reverb Off": "off",
+ "block:reverb/Glue Room": "Room",
+ "block:reverb/Small Room": "Room",
+ "block:reverb/Tight Room": "Room",
+ "block:reverb/Funk Air": "Room",
+ "block:reverb/Deluxe Spring": "Spring",
+ "block:reverb/Vintage Spring": "Spring",
+ "block:reverb/Surf Spring": "Spring",
+ "block:reverb/Studio Plate": "Plate",
+ "block:reverb/Lead Plate": "Plate",
+ "block:reverb/Bright Plate": "Plate",
+ "block:reverb/Worship Hall": "Hall",
+ "block:reverb/Concert Hall": "Hall",
+ "block:reverb/Lead Hall": "Hall",
+ "block:reverb/Ambient Hall": "Hall",
+ "block:reverb/Arena Wash": "Hall",
+ "block:reverb/Cathedral Pad": "Hall",
+ "block:reverb/Bloom Pad": "Bloom",
+ "block:reverb/Cloud Swell": "Cloud",
+ "block:reverb/Auto Swell": "Swell",
+ "block:reverb/Hint Shimmer": "Shimmer",
+ "block:reverb/Heaven Shimmer": "Shimmer",
+ "block:reverb/Fender Spring": "Spring",
+ "block:chorus/Dry Chorus": "Juno",
+ "block:delay/Flute Cascade": "Digital",
+ "block:delay/Flute Eighths": "Digital",
+ "block:delay/Rainbow Dotted": "Digital",
+ "block:reverb/Rainbow Hall": "Hall",
+ "block:delay/Flute Octave Echo": "Ice",
+ "block:delay/Flute Wash": "Tape",
+ "Time/Dry/Dry": [],
+ "Time/Ambience/Glue": [
+  {
+   "block": "VERB 1",
+   "preset": "Glue Room",
+   "algo": "Room"
+  }
+ ],
+ "Time/Ambience/Room": [
+  {
+   "block": "VERB 1",
+   "preset": "Small Room",
+   "algo": "Room"
+  }
+ ],
+ "Time/Ambience/Chamber": [],
+ "Time/Ambience/Plate": [
+  {
+   "block": "VERB 1",
+   "preset": "Studio Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Time/Ambience/Hall": [
+  {
+   "block": "VERB 1",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Ambience/Funk": [
+  {
+   "block": "VERB 1",
+   "preset": "Funk Air",
+   "algo": "Room"
+  }
+ ],
+ "Time/Slapback/Slap": [
+  {
+   "block": "DLY 1",
+   "preset": "Country Slap",
+   "algo": "Analog"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Glue Room",
+   "algo": "Room"
+  }
+ ],
+ "Time/Slapback/Sun": [
+  {
+   "block": "DLY 1",
+   "preset": "Sun Slap",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Deluxe Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Time/Slapback/Blues": [
+  {
+   "block": "DLY 1",
+   "preset": "Blues Slap",
+   "algo": "Analog"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Deluxe Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Time/Slapback/Rockabilly": [
+  {
+   "block": "DLY 1",
+   "preset": "Rockabilly Slap",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Studio Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Time/Slapback/Country": [
+  {
+   "block": "DLY 1",
+   "preset": "Country Slap",
+   "algo": "Analog"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Quarter Bed",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Deluxe Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Time/Spring/Deluxe": [
+  {
+   "block": "VERB 1",
+   "preset": "Deluxe Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Time/Spring/Vintage": [
+  {
+   "block": "VERB 1",
+   "preset": "Vintage Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Time/Spring/Surf": [
+  {
+   "block": "VERB 1",
+   "preset": "Surf Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Time/Rhythmic/Quarter": [
+  {
+   "block": "VERB 1",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Rhythmic/Dotted Eighth": [
+  {
+   "block": "DLY 1",
+   "preset": "Dotted Eighth",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Rhythmic/Dotted + Quarter": [
+  {
+   "block": "DLY 1",
+   "preset": "Dotted Eighth",
+   "algo": "Tape"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Quarter Support",
+   "algo": "Digital"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Glue Room",
+   "algo": "Room"
+  },
+  {
+   "block": "VERB 2",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Rhythmic/Eighth": [
+  {
+   "block": "DLY 1",
+   "preset": "Eighth Pulse",
+   "algo": "Digital"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Studio Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Time/Rhythmic/Triplet": [
+  {
+   "block": "DLY 1",
+   "preset": "Triplet Air",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Rhythmic/Crunch Dotted": [
+  {
+   "block": "DLY 1",
+   "preset": "Crunch Dotted",
+   "algo": "Analog"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Studio Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Time/Rhythmic/Ping-Pong": [
+  {
+   "block": "VERB 1",
+   "preset": "Concert Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Lead/Quarter": [
+  {
+   "block": "DLY 1",
+   "preset": "Lead Quarter",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Lead Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Lead/Dotted": [
+  {
+   "block": "DLY 1",
+   "preset": "Lead Dotted",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Lead Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Lead/Rock": [
+  {
+   "block": "DLY 1",
+   "preset": "Rock Lead",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Lead Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Time/Lead/Gilmour": [
+  {
+   "block": "DLY 1",
+   "preset": "Gilmour Lead",
+   "algo": "Digital"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Concert Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Lead/Echorec": [
+  {
+   "block": "DLY 1",
+   "preset": "Gilmour Echorec",
+   "algo": "Drum"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Lead Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Time/Lead/Blues": [
+  {
+   "block": "DLY 1",
+   "preset": "Blues Lead",
+   "algo": "Analog"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Deluxe Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Time/Lead/Warm Analog": [
+  {
+   "block": "DLY 1",
+   "preset": "Warm Analog",
+   "algo": "Analog"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Lead Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Time/Lead/Rainbow Road": [
+  {
+   "block": "DLY 1",
+   "preset": "Rainbow Dotted",
+   "algo": "Digital"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Rainbow Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Metal/Rhythm": [
+  {
+   "block": "DLY 1",
+   "preset": "Metal Rhythm",
+   "algo": "Digital"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Tight Room",
+   "algo": "Room"
+  }
+ ],
+ "Time/Metal/Lead": [
+  {
+   "block": "DLY 1",
+   "preset": "Metal Lead",
+   "algo": "Digital"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Metal Lead Wide",
+   "algo": "Digital"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Lead Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Time/Ambient/Delay Flute": [
+  {
+   "block": "DLY 1",
+   "preset": "Flute Cascade",
+   "algo": "Digital"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Flute Eighths",
+   "algo": "Digital"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Cathedral Pad",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Ambient/Dotted": [
+  {
+   "block": "DLY 1",
+   "preset": "Ambient Dotted",
+   "algo": "Tape"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Quarter Bed",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Ambient Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Ambient/Wash": [
+  {
+   "block": "DLY 1",
+   "preset": "Ambient Wash",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Cathedral Pad",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Ambient/Arena": [
+  {
+   "block": "DLY 1",
+   "preset": "Dotted Eighth",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Arena Wash",
+   "algo": "Hall"
+  }
+ ],
+ "Time/Ambient/Shimmer": [
+  {
+   "block": "DLY 1",
+   "preset": "Ambient Dotted",
+   "algo": "Tape"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Shimmer Echo",
+   "algo": "Shimmer"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  },
+  {
+   "block": "VERB 2",
+   "preset": "Hint Shimmer",
+   "algo": "Shimmer"
+  }
+ ],
+ "Time/Ambient/Bloom": [
+  {
+   "block": "VERB 1",
+   "preset": "Bloom Pad",
+   "algo": "Bloom"
+  }
+ ],
+ "Time/Ambient/Choir": [
+  {
+   "block": "DLY 1",
+   "preset": "Ambient Dotted",
+   "algo": "Tape"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Quarter Bed",
+   "algo": "Tape"
+  }
+ ],
+ "Time/Swells/Swells": [
+  {
+   "block": "DLY 1",
+   "preset": "Swell Pad",
+   "algo": "Tape"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Cloud Swell",
+   "algo": "Cloud"
+  }
+ ],
+ "Time/Swells/Shimmer Swells": [
+  {
+   "block": "DLY 1",
+   "preset": "Swell Dotted",
+   "algo": "Tape"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Shimmer Echo",
+   "algo": "Shimmer"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Heaven Shimmer",
+   "algo": "Shimmer"
+  }
+ ],
+ "Time/Swells/Auto Swell": [
+  {
+   "block": "VERB 1",
+   "preset": "Auto Swell",
+   "algo": "Swell"
+  }
+ ],
+ "Time/U2 Edge/Streets": [
+  {
+   "block": "DLY 1",
+   "preset": "Streets Dotted Eighth",
+   "algo": "Digital"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/U2 Edge/Dotted + Quarter": [
+  {
+   "block": "DLY 1",
+   "preset": "Edge Dotted Eighth",
+   "algo": "Digital"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Edge Quarter",
+   "algo": "Digital"
+  }
+ ],
+ "Time/U2 Edge/Edge Dual": [
+  {
+   "block": "DLY 1",
+   "preset": "Edge Dual 1",
+   "algo": "Digital"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Edge Dual 2",
+   "algo": "Digital"
+  },
+  {
+   "block": "VERB 1",
+   "preset": "Concert Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Time/U2 Edge/Pride": [
+  {
+   "block": "DLY 1",
+   "preset": "Pride Dotted Eighth",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/Off/Off": [],
+ "Delay/Slapback/Country": [
+  {
+   "block": "DLY 1",
+   "preset": "Country Slap",
+   "algo": "Analog"
+  }
+ ],
+ "Delay/Slapback/Sun": [
+  {
+   "block": "DLY 1",
+   "preset": "Sun Slap",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Slapback/Blues": [
+  {
+   "block": "DLY 1",
+   "preset": "Blues Slap",
+   "algo": "Analog"
+  }
+ ],
+ "Delay/Slapback/Rockabilly": [
+  {
+   "block": "DLY 1",
+   "preset": "Rockabilly Slap",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Slapback/Slap + Quarter": [
+  {
+   "block": "DLY 1",
+   "preset": "Country Slap",
+   "algo": "Analog"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Quarter Bed",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Doubler/Doubler": [],
+ "Delay/Doubler/Doubler + Slap": [
+  {
+   "block": "DLY 2",
+   "preset": "Blues Slap",
+   "algo": "Analog"
+  }
+ ],
+ "Delay/Doubler/Room Echo": [
+  {
+   "block": "DLY 1",
+   "preset": "Room Echo",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Rhythmic/Quarter": [],
+ "Delay/Rhythmic/Dotted Eighth": [
+  {
+   "block": "DLY 1",
+   "preset": "Dotted Eighth",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Rhythmic/Eighth": [
+  {
+   "block": "DLY 1",
+   "preset": "Eighth Pulse",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/Rhythmic/Triplet": [
+  {
+   "block": "DLY 1",
+   "preset": "Triplet Air",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Rhythmic/Dotted + Quarter": [
+  {
+   "block": "DLY 1",
+   "preset": "Dotted Eighth",
+   "algo": "Tape"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Quarter Support",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/Rhythmic/Crunch Dotted": [
+  {
+   "block": "DLY 1",
+   "preset": "Crunch Dotted",
+   "algo": "Analog"
+  }
+ ],
+ "Delay/Rhythmic/Ping-Pong": [],
+ "Delay/Lead/Quarter": [
+  {
+   "block": "DLY 1",
+   "preset": "Lead Quarter",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Lead/Dotted": [
+  {
+   "block": "DLY 1",
+   "preset": "Lead Dotted",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Lead/Rock": [
+  {
+   "block": "DLY 1",
+   "preset": "Rock Lead",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Lead/Gilmour": [
+  {
+   "block": "DLY 1",
+   "preset": "Gilmour Lead",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/Lead/Echorec": [
+  {
+   "block": "DLY 1",
+   "preset": "Gilmour Echorec",
+   "algo": "Drum"
+  }
+ ],
+ "Delay/Lead/Blues": [
+  {
+   "block": "DLY 1",
+   "preset": "Blues Lead",
+   "algo": "Analog"
+  }
+ ],
+ "Delay/Lead/Warm Analog": [
+  {
+   "block": "DLY 1",
+   "preset": "Warm Analog",
+   "algo": "Analog"
+  }
+ ],
+ "Delay/Lead/Rainbow Road": [
+  {
+   "block": "DLY 1",
+   "preset": "Rainbow Dotted",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/Metal/Rhythm": [
+  {
+   "block": "DLY 1",
+   "preset": "Metal Rhythm",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/Metal/Lead": [
+  {
+   "block": "DLY 1",
+   "preset": "Metal Lead",
+   "algo": "Digital"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Metal Lead Wide",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/Ambient/Flute": [
+  {
+   "block": "DLY 1",
+   "preset": "Flute Cascade",
+   "algo": "Digital"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Flute Eighths",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/Ambient/Wash": [
+  {
+   "block": "DLY 1",
+   "preset": "Ambient Wash",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Ambient/Dotted": [
+  {
+   "block": "DLY 1",
+   "preset": "Ambient Dotted",
+   "algo": "Tape"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Quarter Bed",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Ambient/Shimmer": [
+  {
+   "block": "DLY 1",
+   "preset": "Ambient Dotted",
+   "algo": "Tape"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Shimmer Echo",
+   "algo": "Shimmer"
+  }
+ ],
+ "Delay/Ambient/Reverse": [],
+ "Delay/Swells/Swell Pad": [
+  {
+   "block": "DLY 1",
+   "preset": "Swell Pad",
+   "algo": "Tape"
+  }
+ ],
+ "Delay/Swells/Swell Dotted": [
+  {
+   "block": "DLY 1",
+   "preset": "Swell Dotted",
+   "algo": "Tape"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Shimmer Echo",
+   "algo": "Shimmer"
+  }
+ ],
+ "Delay/U2 Edge/Dotted + Quarter": [
+  {
+   "block": "DLY 1",
+   "preset": "Edge Dotted Eighth",
+   "algo": "Digital"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Edge Quarter",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/U2 Edge/Streets": [
+  {
+   "block": "DLY 1",
+   "preset": "Streets Dotted Eighth",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/U2 Edge/Pride": [
+  {
+   "block": "DLY 1",
+   "preset": "Pride Dotted Eighth",
+   "algo": "Digital"
+  }
+ ],
+ "Delay/U2 Edge/Edge Dual": [
+  {
+   "block": "DLY 1",
+   "preset": "Edge Dual 1",
+   "algo": "Digital"
+  },
+  {
+   "block": "DLY 2",
+   "preset": "Edge Dual 2",
+   "algo": "Digital"
+  }
+ ],
+ "Reverb/Off/Off": [],
+ "Reverb/Room/Glue": [
+  {
+   "block": "VERB 1",
+   "preset": "Glue Room",
+   "algo": "Room"
+  }
+ ],
+ "Reverb/Room/Small": [
+  {
+   "block": "VERB 1",
+   "preset": "Small Room",
+   "algo": "Room"
+  }
+ ],
+ "Reverb/Room/Tight": [
+  {
+   "block": "VERB 1",
+   "preset": "Tight Room",
+   "algo": "Room"
+  }
+ ],
+ "Reverb/Room/Chamber": [],
+ "Reverb/Room/Funk": [
+  {
+   "block": "VERB 1",
+   "preset": "Funk Air",
+   "algo": "Room"
+  }
+ ],
+ "Reverb/Spring/Deluxe": [
+  {
+   "block": "VERB 1",
+   "preset": "Deluxe Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Reverb/Spring/Vintage": [
+  {
+   "block": "VERB 1",
+   "preset": "Vintage Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Reverb/Spring/Surf": [
+  {
+   "block": "VERB 1",
+   "preset": "Surf Spring",
+   "algo": "Spring"
+  }
+ ],
+ "Reverb/Plate/Studio": [
+  {
+   "block": "VERB 1",
+   "preset": "Studio Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Reverb/Plate/Lead": [
+  {
+   "block": "VERB 1",
+   "preset": "Lead Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Reverb/Plate/Bright": [
+  {
+   "block": "VERB 1",
+   "preset": "Bright Plate",
+   "algo": "Plate"
+  }
+ ],
+ "Reverb/Hall/Worship": [
+  {
+   "block": "VERB 1",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Hall/Concert": [
+  {
+   "block": "VERB 1",
+   "preset": "Concert Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Hall/Lead": [
+  {
+   "block": "VERB 1",
+   "preset": "Lead Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Hall/Room + Hall": [
+  {
+   "block": "VERB 1",
+   "preset": "Glue Room",
+   "algo": "Room"
+  },
+  {
+   "block": "VERB 2",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Hall/Rainbow Road": [
+  {
+   "block": "VERB 1",
+   "preset": "Rainbow Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Ambient/Flute": [
+  {
+   "block": "VERB 1",
+   "preset": "Cathedral Pad",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Ambient/Hall": [
+  {
+   "block": "VERB 1",
+   "preset": "Ambient Hall",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Ambient/Arena": [
+  {
+   "block": "VERB 1",
+   "preset": "Arena Wash",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Ambient/Cathedral": [
+  {
+   "block": "VERB 1",
+   "preset": "Cathedral Pad",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Ambient/Bloom": [
+  {
+   "block": "VERB 1",
+   "preset": "Bloom Pad",
+   "algo": "Bloom"
+  }
+ ],
+ "Reverb/Ambient/Cloud": [
+  {
+   "block": "VERB 1",
+   "preset": "Cloud Swell",
+   "algo": "Cloud"
+  }
+ ],
+ "Reverb/Ambient/Room + Cathedral": [
+  {
+   "block": "VERB 1",
+   "preset": "Glue Room",
+   "algo": "Room"
+  },
+  {
+   "block": "VERB 2",
+   "preset": "Cathedral Pad",
+   "algo": "Hall"
+  }
+ ],
+ "Reverb/Shimmer/Hint": [
+  {
+   "block": "VERB 1",
+   "preset": "Hint Shimmer",
+   "algo": "Shimmer"
+  }
+ ],
+ "Reverb/Shimmer/Heaven": [
+  {
+   "block": "VERB 1",
+   "preset": "Heaven Shimmer",
+   "algo": "Shimmer"
+  }
+ ],
+ "Reverb/Shimmer/Hall + Shimmer": [
+  {
+   "block": "VERB 1",
+   "preset": "Worship Hall",
+   "algo": "Hall"
+  },
+  {
+   "block": "VERB 2",
+   "preset": "Hint Shimmer",
+   "algo": "Shimmer"
+  }
+ ],
+ "Reverb/Shimmer/Choir": [],
+ "Reverb/Swell/Auto Swell": [
+  {
+   "block": "VERB 1",
+   "preset": "Auto Swell",
+   "algo": "Swell"
+  }
+ ]
+}

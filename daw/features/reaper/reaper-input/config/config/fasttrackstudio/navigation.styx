@@ -1,0 +1,41 @@
+bindings (
+    // Standard arrow-key navigation
+    {keys "<left>",  action 40838, desc "Move edit cursor to current/previous measure (no seek)"}
+    {keys "<right>", action 40837, desc "Move edit cursor to next measure (no seek)"}
+    {keys "<up>",    action 40286, desc "Select previous track"}
+    {keys "<down>",  action 40285, desc "Select next track"}
+
+    // Vim-style cursor movement
+    {keys h,       action 40838, desc "Move edit cursor to current/previous measure (no seek)"}
+    {keys l,       action 40837, desc "Move edit cursor to next measure (no seek)"}
+    {keys j,       action 40285, desc "Select next track"}
+    {keys k,       action 40286, desc "Select previous track"}
+
+    // Jump navigation
+    {keys "<C-h>",   action 40646, desc "Move cursor left to grid division"}
+    {keys "<C-l>",   action 40647, desc "Move cursor right to grid division"}
+    {keys "<C-S-h>", action "_SWS_MOVECURSELLEFT", desc "Move cursor left creating time selection by grid"}
+    {keys "<C-S-l>", action "_SWS_MOVECURSELRIGHT", desc "Move cursor right creating time selection by grid"}
+    {keys 0,       action 40042, desc "Go to start of project"}
+    {keys "<S-h>",   action "FTS_MOVE_CURSOR_LEFT_CREATING_TIME_SELECTION_BY_MEASURE", desc "Move cursor left creating time selection by measure"}
+    {keys "<S-l>",   action "FTS_MOVE_CURSOR_RIGHT_CREATING_TIME_SELECTION_BY_MEASURE", desc "Move cursor right creating time selection by measure"}
+
+    // Selection extension
+    {keys "<S-j>",   action 40421, desc "Extend selection to next track"}
+    {keys "<S-k>",   action 40420, desc "Extend selection to previous track"}
+
+    // A page of bars at a time (FTS Session: SESSION_STEP)
+    {keys "[",       action "FTS_STEP_PREV", desc "View the page of bars before"}
+    {keys "]",       action "FTS_STEP_NEXT", desc "View the next page of bars"}
+    {keys "<S-{>",   action "FTS_POI_PREV", desc "The point of interest before"}
+    {keys "<S-}>",   action "FTS_POI_NEXT", desc "The next point of interest"}
+    {keys "<S-|>",   action "FTS_POI_TOGGLE", desc "Tick the point of interest off, or open it again"}
+
+    // Markers
+    {keys m,       action 40157, desc "Insert marker at cursor"}
+    {keys "<C-m>",   action 40172, desc "Go to previous marker"}
+
+    // Global
+    {keys "<A-,>",   action 40021, desc "Open project settings"}
+    {keys "<A-S-,>", action 40099, desc "Open audio device configuration"}
+)

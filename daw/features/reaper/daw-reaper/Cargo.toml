@@ -1,0 +1,101 @@
+[package]
+name = "daw-reaper"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+[lib]
+path = "src/lib.rs"
+
+# This is a library crate, not a cell binary.
+# The REAPER implementation runs in-process within the reaper-extension.
+
+[dependencies]
+daw-proto = { workspace = true }
+daw-audio-sync = { workspace = true }
+# `PublishGate` — which of daw-audio-sync's per-buffer snapshots the
+# `TransportSync` positions stream sends.
+daw-transport-sync = { workspace = true }
+uuid = { workspace = true }
+architect = { workspace = true, features = ["vox", "local"] }
+vox.workspace = true
+vox-stream.workspace = true
+tracing.workspace = true
+# `rt` for `tokio::task::spawn` in socket_publisher (was `moire::task::spawn`).
+# `time` for the TransportSync position pump's tick.
+tokio = { workspace = true, features = ["net", "rt", "time"] }
+
+# RPP chunk parsing/serialization for chunk-based FX manipulation. This is
+# the RPP *output* serializer — mandatory, used by every importer.
+dawfile-reaper = { workspace = true }
+base64 = "0.22.1"
+
+# Source-format importers (format → RPP). Each is optional and gated by an
+# `import-<format>` feature so a specialized build (e.g. a Pro-Tools-only
+# converter) compiles only the parsers it needs. `default = import-all`
+# preserves the historical "all formats" behaviour for the facade + tests.
+dawfile-ableton = { workspace = true, optional = true }
+dawfile-protools = { workspace = true, optional = true }
+dawfile-aaf = { workspace = true, optional = true }
+dawfile-dawproject = { workspace = true, optional = true }
+
+# REAPER bindings for actual DAW control
+reaper-high.workspace = true
+reaper-medium.workspace = true
+reaper-low.workspace = true
+enumflags2.workspace = true
+camino = "1"
+libloading = "0.8"
+crossbeam-channel.workspace = true
+daw-control = { workspace = true }
+eyre.workspace = true
+facet-json.workspace = true
+
+# Typed SWELL Window/Hwnd wrappers from FTS reaper-lib. Used by the
+# window-geometry helpers (nudge / resize / center) so our action set
+# rides on the same primitives the rest of FTS's reaper-side UIs use.
+swell-ui.workspace = true
+
+# Cross-platform monitor topology enumeration for screenset capture.
+# Desktop-only: display-info 0.5 declares its smithay/wayland stack
+# without target gating, which drags (and breaks) wayland on iOS
+# builds — and screensets are a desktop-REAPER concern anyway.
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
+display-info = "0.5"
+
+[dev-dependencies]
+expression-editor-tools.workspace = true
+expression-editor-daw.workspace = true
+
+daw-control = { workspace = true }
+daw-proto = { workspace = true }
+base64 = "0.22.1"
+# Integration-test harness — now folded into the `daw` facade behind the
+# `test-harness` feature (replaces the former `reaper-test` crate).
+# `standalone-audio` for the take-peaks parity test: the same fixture
+# through the standalone backend, compared against REAPER's answer.
+daw = { workspace = true, features = ["test-harness", "standalone-audio"] }
+eyre.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+vox.workspace = true
+
+[features]
+default = ["all-formats"]
+# Every source-format importer (historical behaviour; what the facade's
+# `convert` feature and the test suite expect).
+all-formats = ["protools", "ableton", "aaf", "dawproject"]
+# Each flag gates that format's conversion support. `protools` covers both
+# directions (import + the RPP→PT `project_export` path + the PT plugin-state
+# bridge); the others are import-only today.
+protools = ["dep:dawfile-protools"]
+ableton = ["dep:dawfile-ableton"]
+aaf = ["dep:dawfile-aaf"]
+dawproject = ["dep:dawfile-dawproject"]
+
+[lints]
+workspace = true

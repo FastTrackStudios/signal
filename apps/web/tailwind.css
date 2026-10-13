@@ -1,0 +1,96 @@
+/*
+ * Tailwind input for the Session site.
+ *
+ * Compiled to `assets/tailwind.css` by `just tailwind`, which is
+ * gitignored build output — `asset!()` demands it at compile time, so a
+ * fresh clone must run that recipe (or `just web` / `just ci`, which
+ * depend on it) before `cargo check` will pass.
+ *
+ * `architect-ui` ships a prebuilt utilities sheet (`UTILITIES_CSS`) but
+ * that is only guaranteed to cover architect-ui's own components — this
+ * crate's own markup and session-ui's performance-view components need
+ * their classes generated too, so this compiles ONE sheet covering
+ * everything actually rendered, following keyflow's `apps/web/tailwind.css`
+ * pattern for the same reason: a `@source` matching nothing fails
+ * SILENTLY (fewer classes, not an error), so every real source is named
+ * explicitly below.
+ */
+
+/* `source(none)` disables Tailwind v4's automatic content detection,
+ * which is rooted at the working directory and would make the output
+ * depend on where the build ran from. Every source is named explicitly
+ * below, so the result is identical from any cwd. */
+@import "tailwindcss" source(none);
+
+/* The design tokens (--background, --border, --muted-foreground, …) that
+ * architect-ui's own components resolve against. Symlinked from the
+ * resolved architect-ui checkout by `just tailwind` (git dep — no stable
+ * path on disk). */
+@import "./.tailwind-src/architect-ui/assets/fts-theme.css";
+
+/* This crate's own markup. */
+@source "./src/**/*.rs";
+
+/* session-ui is a LOCAL path dep (crates/session/ui) — a literal relative
+ * glob works directly, no `.tailwind-src` symlink needed. */
+@source "../../crates/session/ui/src/**/*.rs";
+
+/* architect-ui: a git dep with no stable path on disk. */
+@source "./.tailwind-src/architect-ui/src/**/*.rs";
+
+/* The site is dark-only by design. fts-theme.css only flips these tokens
+ * inside `@media (prefers-color-scheme: dark)` — there is no `.dark`
+ * class variant to opt into — so a visitor whose OS/browser prefers light
+ * gets the light palette (session-ui's PerformanceLayout/Sidebar/
+ * TransportPanel render through `bg-background`/`text-foreground`/etc.,
+ * i.e. these exact tokens: this is why `/demo` rendered white). Force the
+ * dark values unconditionally by re-declaring them in a plain (non-media)
+ * `:root` block declared AFTER the fts-theme.css import — same selector,
+ * later in source order, always wins regardless of system preference.
+ * Values copied verbatim from fts-theme.css's dark block; keep in sync if
+ * that file's dark palette changes. */
+:root {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.5058 0.2066 27.85);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.439 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+  --signal-safe: oklch(0.65 0.19 145);
+  --signal-warn: oklch(0.75 0.16 85);
+  --signal-danger: oklch(0.6 0.22 28);
+  --signal-override: oklch(0.68 0.16 55);
+  --signal-automation: oklch(0.65 0.15 145);
+  --signal-mod: oklch(0.58 0.2 290);
+  --signal-slot-a: oklch(0.65 0.15 250);
+  --signal-slot-b: oklch(0.68 0.16 55);
+  --signal-quick: oklch(0.6 0.15 250);
+  --signal-full: oklch(0.55 0.18 300);
+}
+

@@ -1,0 +1,28 @@
+[package]
+name = "daw-transport-sync"
+description = "Keep several transports playing as one: a shared clock, clock-stamped playheads, and drift correction — for any DAW backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# The host-agnostic core of sample-accurate multi-machine playback. No
+# REAPER, no sockets, no async runtime: a backend implements
+# `TransportBackend` (REAPER in daw-audio-sync, the standalone engine in
+# daw-standalone), a carrier moves the numbers (UDP multicast on a LAN in
+# daw-audio-sync, iroh/vox in Session), and this crate does the maths in
+# between — the per-buffer snapshot, the clock offset, where a peer is
+# playing now, and what to do about the difference.
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+
+# `std::time::Instant` panics in a browser; `web-time`'s is the same clock
+# API over `performance.now()`.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1"
+
+[lints]
+workspace = true

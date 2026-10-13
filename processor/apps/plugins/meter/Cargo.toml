@@ -1,0 +1,29 @@
+[package]
+name = "meter-plugin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "FTS Meter — LUFS / true-peak / correlation / goniometer / spectrum metering plugin"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+nice-plug = { workspace = true, features = ["vst3"] }
+nice-plug-dioxus.workspace = true
+dioxus = { workspace = true }
+meter-dsp = { workspace = true }
+meter-ui = { workspace = true }
+parking_lot = { workspace = true }
+
+[features]
+default = ["export"]
+# The CLAP / VST3 entry points. A host linking this plugin in-process
+# (the session engine's built-in FX) turns it off: every plugin exports
+# the same `clap_entry` / `GetPluginFactory` symbols, and two in one
+# binary collide.
+export = []

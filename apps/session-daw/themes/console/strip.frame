@@ -1,0 +1,98 @@
+<Document>
+  <Page name="mcp.strip">
+    <Frame name="Strip" w=86 h=400>
+      <Rectangle name="Ground" w=86 h=400 bind:w="w" bind:h="h" bind:fill="track.ground" />
+      <Rectangle name="Edge" w=1 h=400 bind:h="h" bind:fill="track.edge" bind:visible="track.has_edge" />
+      <Rectangle name="Selected" w=86 h=2 bind:fill="$accent" bind:w="w" bind:visible="track.selected && !ui.rack" />
+      <Rectangle name="Band" y=33 w=86 h=87 bind:w="w" bind:y="0" bind:h="98" bind:fill="track.tint" />
+      <Frame name="Input" x=6 w=75 h=16 bind:x="6" bind:y="((h - 12 - 26) - 16) - 19" bind:w="(w >= 172 ? 86 : w) - 12" bind:visible="!ui.mixing && ((w >= 172 ? 86 : w) >= 78)" fill="#0a0a0c">
+        <Text name="Label" x=3 y=2.5 w=400 h=14 size=10 fill="#a1a1aa" bind:text="track.input">Input</Text>
+        <Vector name="Caret" y=6 w=7 h=4 geometry="M 0 0 L 7 0 L 3.5 4 Z" fill="#71717a" bind:x="pw - 9" />
+      </Frame>
+      <Rectangle name="Number band" w=86 h=12 bind:w="w" bind:y="h - 12" bind:fill="track.band" />
+      <Text name="Number" x=-1 w=86 h=13 size=9 text-align="center" fill="#a1a1aa" bind:w="w" bind:y="h - 12 + 2.04 - 1" bind:text="fmt(track.number)">1</Text>
+      <Vector name="Fold open" w=14 h=12 geometry="M 4 4.2 L 7 7.8 L 10 4.2 Z" fill="#a1a1aa" bind:y="h - 12" bind:visible="track.folder && !track.collapsed" />
+      <Vector name="Fold shut" w=14 h=12 geometry="M 5.2 3 L 8.8 6 L 5.2 9 Z" fill="#a1a1aa" bind:y="h - 12" bind:visible="track.folder && track.collapsed" />
+      <Frame name="@name" w=10 h=10 bind:x="0" bind:y="(h - 12 - 26)" bind:w="w" bind:h="26" />
+      <Frame name="@folder" w=10 h=10 bind:x="0" bind:y="h - 12" bind:w="14" bind:h="12" />
+      <Frame name="@fader" w=10 h=10 bind:x="(((w >= 172 ? 86 : w) - 30) / 2)" bind:y="128" bind:w="30" bind:h="max((h - 12 - 26) - 3 - (!ui.mixing ? (((w >= 172 ? 86 : w) >= 78) ? 37 : 19) : 0) - 128, 0)" />
+      <Frame name="@clip" w=10 h=10 bind:x="(((w >= 172 ? 86 : w) - 30) / 2)" bind:y="128" bind:w="30" bind:h="5" bind:visible="max((h - 12 - 26) - 3 - (!ui.mixing ? (((w >= 172 ? 86 : w) >= 78) ? 37 : 19) : 0) - 128, 0) > 0" />
+      <Instance name="@pan" of="pan" w=24 h=25 bind:x="(((w >= 172 ? 86 : w) - 24) / 2)" bind:y="101" bind:visible="w >= 26" arg:value="track.pan" />
+      <Instance name="@fx" of="fx" w=72 h=22 bind:x="(w - (((w >= 172 ? 86 : w) >= 46) ? max(w - 14, 36) : 26)) / 2" bind:y="4" bind:w="(((w >= 172 ? 86 : w) >= 46) ? max(w - 14, 36) : 26)" bind:visible="w >= 26 && ((w >= 172 ? 86 : w) >= 46)" arg:count="track.fx" />
+      <Instance name="@fx" of="fx.compact" w=26 h=22 bind:x="(w - (((w >= 172 ? 86 : w) >= 46) ? max(w - 14, 36) : 26)) / 2" bind:y="4" bind:visible="w >= 26 && !((w >= 172 ? 86 : w) >= 46)" arg:count="track.fx" />
+      <Instance name="@routing" of="routing" w=28 h=22 bind:x="max((((w >= 172 ? 86 : w) - 28) / 2), 1)" bind:y="28" bind:visible="w >= 30" arg:parent_send="track.parent_send" arg:sends="track.sends" arg:receives="track.receives" />
+      <Instance name="@arm" of="arm" w=20 h=20 bind:x="(((w >= 172 ? 86 : w) - 20) / 2)" bind:y="((h - 12 - 26) - 16)" bind:visible="!ui.mixing && w >= 22" arg:armed="track.armed" />
+      <Instance name="@monitor" of="monitor" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) - 20) / 2) + 20" bind:y="((h - 12 - 26) - 16)" bind:visible="!ui.mixing && (w >= 172 ? 86 : w) >= 66 && track.armed" arg:mode="track.monitor" />
+      <Instance name="@mute" of="mute" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) - 21) / 2)" bind:y="74" arg:on="track.mute" />
+      <Instance name="@solo" of="solo" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) - 21) / 2)" bind:y="52" arg:on="track.solo" />
+      <Rectangle name="Name selected" x=2 w=82 h=2 fill="#38bdf8" bind:w="w - 4" bind:y="(h - 12 - 26)" bind:visible="track.selected" />
+      <Text name="Name" x=-1 w=86 h=16 size=11 text-align="center" bind:w="w" bind:y="(h - 12 - 26) + 13 + track.label_size / 3 - 0.8 * track.label_size - 1" bind:size="track.label_size" bind:text="track.label" bind:fill="track.solo ? #eab308 : track.mute ? #71717a : track.selected ? #e4e4e7 : #a1a1aa">Track</Text>
+      <Frame name="Scale" w=24 h=200 bind:x="max((((w >= 172 ? 86 : w) - 30) / 2) - 24, 1)" bind:y="128" bind:h="max((h - 12 - 26) - 3 - (!ui.mixing ? (((w >= 172 ? 86 : w) >= 78) ? 37 : 19) : 0) - 128, 0)" bind:visible="((w >= 172 ? 86 : w) >= 46) && max((h - 12 - 26) - 3 - (!ui.mixing ? (((w >= 172 ? 86 : w) >= 78) ? 37 : 19) : 0) - 128, 0) > 0">
+        <Rectangle name="Tick +6" x=19 w=5 h=1 bind:y="ph * (1 - 0.9117647058823529) - 0.5" bind:visible="true" bind:fill="meter.peak >= 0.9117647058823529 ? #f16430c8 : #71717a5a" />
+        <Text name="Mark +6" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.9117647058823529) + 2.6666666666666665 - 6.4 - 1" bind:visible="true" bind:fill="meter.peak >= 0.9117647058823529 ? #f16430 : #71717a">+6</Text>
+        <Rectangle name="Tick 0" x=19 w=5 h=1 bind:y="ph * (1 - 0.8235294117647058) - 0.5" bind:visible="(ph >= 113.5 ? true : false)" bind:fill="meter.peak >= 0.8235294117647058 ? #f3841cc8 : #71717a5a" />
+        <Text name="Mark 0" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.8235294117647058) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 113.5 ? true : false)" bind:fill="meter.peak >= 0.8235294117647058 ? #f3841c : #71717a">0</Text>
+        <Rectangle name="Tick 6" x=19 w=5 h=1 bind:y="ph * (1 - 0.7352941176470589) - 0.5" bind:visible="(ph >= 57 ? true : false)" bind:fill="meter.peak >= 0.7352941176470589 ? #f19f0dc8 : #71717a5a" />
+        <Text name="Mark 6" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.7352941176470589) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 57 ? true : false)" bind:fill="meter.peak >= 0.7352941176470589 ? #f19f0d : #71717a">6</Text>
+        <Rectangle name="Tick 18" x=19 w=5 h=1 bind:y="ph * (1 - 0.5588235294117647) - 0.5" bind:visible="(ph >= 28.5 ? true : false)" bind:fill="meter.peak >= 0.5588235294117647 ? #bfa820c8 : #71717a5a" />
+        <Text name="Mark 18" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.5588235294117647) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 28.5 ? true : false)" bind:fill="meter.peak >= 0.5588235294117647 ? #bfa820 : #71717a">18</Text>
+        <Rectangle name="Tick 30" x=19 w=5 h=1 bind:y="ph * (1 - 0.38235294117647056) - 0.5" bind:visible="(ph >= 57 ? true : (ph >= 28.5 ? false : (ph >= 19 ? true : false)))" bind:fill="meter.peak >= 0.38235294117647056 ? #8eb134c8 : #71717a5a" />
+        <Text name="Mark 30" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.38235294117647056) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 57 ? true : (ph >= 28.5 ? false : (ph >= 19 ? true : false)))" bind:fill="meter.peak >= 0.38235294117647056 ? #8eb134 : #71717a">30</Text>
+        <Rectangle name="Tick 42" x=19 w=5 h=1 bind:y="ph * (1 - 0.20588235294117646) - 0.5" bind:visible="(ph >= 28.5 ? true : (ph >= 19 ? false : (ph >= 14.5 ? true : false)))" bind:fill="meter.peak >= 0.20588235294117646 ? #5cba47c8 : #71717a5a" />
+        <Text name="Mark 42" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.20588235294117646) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 28.5 ? true : (ph >= 19 ? false : (ph >= 14.5 ? true : false)))" bind:fill="meter.peak >= 0.20588235294117646 ? #5cba47 : #71717a">42</Text>
+        <Rectangle name="Tick 54" x=19 w=5 h=1 bind:y="ph * (1 - 0.029411764705882353) - 0.5" bind:visible="(ph >= 57 ? true : (ph >= 14.5 ? false : (ph >= 11.5 ? true : false)))" bind:fill="meter.peak >= 0.029411764705882353 ? #2ac35bc8 : #71717a5a" />
+        <Text name="Mark 54" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.029411764705882353) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 57 ? true : (ph >= 14.5 ? false : (ph >= 11.5 ? true : false)))" bind:fill="meter.peak >= 0.029411764705882353 ? #2ac35b : #71717a">54</Text>
+      </Frame>
+      <Frame name="Fader" w=30 h=200 bind:x="(((w >= 172 ? 86 : w) - 30) / 2)" bind:y="128" bind:h="max((h - 12 - 26) - 3 - (!ui.mixing ? (((w >= 172 ? 86 : w) >= 78) ? 37 : 19) : 0) - 128, 0)" bind:visible="(h >= 157 ? true : false) && max((h - 12 - 26) - 3 - (!ui.mixing ? (((w >= 172 ? 86 : w) >= 78) ? 37 : 19) : 0) - 128, 0) > 0">
+        <Rectangle name="Groove" x=14.5 y=0.5 w=1 h=100 fill="#050506" bind:h="ph - 1" />
+        <Rectangle name="Lit left" x=10.5 w=4 h=200 bind:h="ph" bind:inset-top="ph - 0.5 - (ph - 1) * clamp(meter.left, 0, 1)" bind:inset-bottom="0.5" bind:visible="(ph - 1) * clamp(meter.left, 0, 1) > 0.5" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#22c55e","position":0},{"color":"#22c55e","position":0.5238234996795654},{"color":"#f59e0b","position":0.5938235521316528},{"color":"#f59e0b","position":0.7002940773963928},{"color":"#ef4444","position":0.7702941298484802},{"color":"#ef4444","position":0.7885293960571289},{"color":"#f58585","position":0.8235294222831726},{"color":"#f58585","position":1}],"transform":{"a":0,"b":1,"c":-1,"d":0,"tx":0,"ty":1}}}}]} />
+        <Rectangle name="Hold left" x=10.5 w=4 h=2 bind:y="max((ph - 1) * -clamp(meter.hold_left, 0, 1) + ph - 0.5 - 1, 0.5)" bind:fill="clamp(meter.hold_left, 0, 1) <= 0.75 ? mix(#22c55e, #f59e0b, clamp(meter.hold_left, 0, 1) / 0.75) : mix(#f59e0b, #ef4444, (clamp(meter.hold_left, 0, 1) - 0.75) / 0.25)" bind:visible="meter.hold_left > 0.001" />
+        <Rectangle name="Lit right" x=15.5 w=4 h=200 bind:h="ph" bind:inset-top="ph - 0.5 - (ph - 1) * clamp(meter.right, 0, 1)" bind:inset-bottom="0.5" bind:visible="(ph - 1) * clamp(meter.right, 0, 1) > 0.5" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#22c55e","position":0},{"color":"#22c55e","position":0.5238234996795654},{"color":"#f59e0b","position":0.5938235521316528},{"color":"#f59e0b","position":0.7002940773963928},{"color":"#ef4444","position":0.7702941298484802},{"color":"#ef4444","position":0.7885293960571289},{"color":"#f58585","position":0.8235294222831726},{"color":"#f58585","position":1}],"transform":{"a":0,"b":1,"c":-1,"d":0,"tx":0,"ty":1}}}}]} />
+        <Rectangle name="Hold right" x=15.5 w=4 h=2 bind:y="max((ph - 1) * -clamp(meter.hold_right, 0, 1) + ph - 0.5 - 1, 0.5)" bind:fill="clamp(meter.hold_right, 0, 1) <= 0.75 ? mix(#22c55e, #f59e0b, clamp(meter.hold_right, 0, 1) / 0.75) : mix(#f59e0b, #ef4444, (clamp(meter.hold_right, 0, 1) - 0.75) / 0.25)" bind:visible="meter.hold_right > 0.001" />
+        <Rectangle name="Groove over" x=14.5 y=0.5 w=1 h=100 fill="#050506d2" bind:h="ph - 1" />
+        <Rectangle name="Clip latch" x=10.5 y=0.5 w=9 h=5 radius=1.6666666666666667 fill="#f58585" bind:visible="meter.clip" />
+        <Frame name="Cap" w=27 h=53 bind:x="4.200000000000001" bind:y="clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0))" bind:scale="min(42.4, ph * 0.5) / 53">
+          <Rectangle x=3 y=47 w=19 h=4 radius=2.7 fill="#00000033" />
+          <Rectangle x=2 y=5 w=21 h=43 radius=4.32 fill="#19191b" />
+          <Rectangle x=3 y=6 w=19 h=7 radius=3.5100000000000002 fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#262629","position":0},{"color":"#18181a","position":0.6499999761581421},{"color":"#101012","position":1}],"transform":{"a":0,"b":-5.857142857142857,"c":5.857142857142857,"d":0,"tx":2.770676691729323,"ty":0}}}}]} />
+          <Rectangle x=3 y=40 w=19 h=7 radius=3.5100000000000002 fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#262629","position":0},{"color":"#18181a","position":0.6499999761581421},{"color":"#101012","position":1}],"transform":{"a":0,"b":-5.857142857142857,"c":5.857142857142857,"d":0,"tx":2.770676691729323,"ty":-4.857142857142857}}}}]} />
+          <Rectangle x=3 y=13 w=4 h=27 fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#262629","position":0},{"color":"#18181a","position":0.6499999761581421},{"color":"#101012","position":1}],"transform":{"a":0,"b":-1.5185185185185186,"c":1.5185185185185186,"d":0,"tx":0.0092592592592593,"ty":-0.25925925925925924}}}}]} />
+          <Rectangle x=18 y=13 w=4 h=27 fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#262629","position":0},{"color":"#18181a","position":0.6499999761581421},{"color":"#101012","position":1}],"transform":{"a":0,"b":-1.5185185185185186,"c":1.5185185185185186,"d":0,"tx":-3.7407407407407405,"ty":-0.25925925925925924}}}}]} />
+          <Rectangle x=6 y=12 w=1 h=29 fill="#0c0c0e" />
+          <Rectangle x=18 y=12 w=1 h=29 fill="#0c0c0e" />
+          <Rectangle x=6 y=12 w=13 h=1 fill="#0c0c0e" />
+          <Rectangle x=6 y=40 w=13 h=1 fill="#0c0c0e" />
+          <Rectangle x=4 y=6 w=17 h=1 fill="#59595b" />
+          <Rectangle x=4 y=7 w=17 h=1 fill="#3d3d3f" />
+          <Rectangle x=9.97 y=16 w=5.0600000000000005 h=1 fill="#5e5e60" />
+          <Rectangle x=9.97 y=18 w=5.0600000000000005 h=1 fill="#606063" />
+          <Rectangle x=9.97 y=20 w=5.0600000000000005 h=1 fill="#626265" />
+          <Rectangle x=9.97 y=22 w=5.0600000000000005 h=1 fill="#656568" />
+          <Rectangle x=9.97 y=24 w=5.0600000000000005 h=1 fill="#67676a" />
+          <Rectangle x=7 y=26 w=11 h=1 fill="#3c3c3e" />
+          <Rectangle x=9.97 y=28 w=5.0600000000000005 h=1 fill="#6c6c6f" />
+          <Rectangle x=9.97 y=30 w=5.0600000000000005 h=1 fill="#6e6e71" />
+          <Rectangle x=9.97 y=32 w=5.0600000000000005 h=1 fill="#707074" />
+          <Rectangle x=9.97 y=34 w=5.0600000000000005 h=1 fill="#737376" />
+          <Rectangle x=9.97 y=36 w=5.0600000000000005 h=1 fill="#757579" />
+        </Frame>
+        <Rectangle name="Readout" x=33 w=40 h=13 fill="#0a0a0c" bind:y="max(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) / 2 - 6.5, 0)" bind:w="track.volume_label_w" bind:visible="ui.pressed == \"fader\"" />
+        <Text name="Readout value" x=35 w=400 h=13 size=9 fill="#e4e4e7" bind:y="max(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) / 2 - 6.5, 0) + 9 - 7.2 - 1" bind:text="track.volume_label" bind:visible="ui.pressed == \"fader\"">0.0</Text>
+        <Rectangle name="Through left" x=10.5 w=4 h=200 bind:h="ph" bind:inset-top="max(((ph - 1) * -clamp(meter.left, 0, 1) + ph - 0.5), (clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.24528301886792453))" bind:inset-bottom="ph - min(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.7547169811320755, ph - 0.5)" bind:visible="min(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.7547169811320755, ph - 0.5) - max(((ph - 1) * -clamp(meter.left, 0, 1) + ph - 0.5), (clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.24528301886792453)) >= 0.5" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#22c55e82","position":0},{"color":"#f59e0b82","position":0.75},{"color":"#ef444482","position":1}],"transform":{"a":0,"b":1,"c":-1,"d":0,"tx":0,"ty":1}}}}]} />
+        <Rectangle name="Through right" x=15.5 w=3.1000000000000014 h=200 bind:h="ph" bind:inset-top="max(((ph - 1) * -clamp(meter.right, 0, 1) + ph - 0.5), (clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.24528301886792453))" bind:inset-bottom="ph - min(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.7547169811320755, ph - 0.5)" bind:visible="min(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.7547169811320755, ph - 0.5) - max(((ph - 1) * -clamp(meter.right, 0, 1) + ph - 0.5), (clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.24528301886792453)) >= 0.5" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#22c55e82","position":0},{"color":"#f59e0b82","position":0.75},{"color":"#ef444482","position":1}],"transform":{"a":0,"b":1,"c":-1,"d":0,"tx":0,"ty":1}}}}]} />
+      </Frame>
+    </Frame>
+  </Page>
+  <Page name="mcp.rackback">
+    <Frame name="Back" w=86 h=300>
+      <Rectangle name="Ground" w=86 h=300 bind:w="w" bind:h="h" bind:fill="track.ground" />
+      <Rectangle name="Edge" w=1 h=300 bind:h="h" bind:fill="track.edge" bind:visible="track.has_edge" />
+      <Rectangle name="Selected" w=86 h=2 bind:w="w" bind:fill="$accent" bind:visible="track.selected" />
+    </Frame>
+  </Page>
+  <Page name="mcp.step">
+    <Frame name="Step" w=86 h=12>
+      <Rectangle name="Band" w=86 h=12 bind:w="w" bind:h="h" bind:fill="folder.tint" />
+    </Frame>
+  </Page>
+</Document>

@@ -1,0 +1,21 @@
+[package]
+name = "signal-widgets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Shared Blitz-safe Dioxus widgets for signal rig UIs — knob, arc geometry"
+
+[lints]
+workspace = true
+
+[dependencies]
+signal-proto.workspace = true
+dioxus.workspace = true
+# `platform::sleep` — the switches' hold timer, native and wasm alike.
+architect = { workspace = true, features = ["platform"] }
+
+[dev-dependencies]
+# Headless Blitz: presses hit-tested and delivered as the app gets them.
+dioxus-test.workspace = true
+tokio.workspace = true

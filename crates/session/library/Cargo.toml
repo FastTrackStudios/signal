@@ -1,0 +1,28 @@
+[package]
+name = "session-library"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+description = "The song library in Task: songs, their charts, setlists, and each song's session as a File Root"
+
+[dependencies]
+collection-proto = { workspace = true, features = ["vox"] }
+resources-proto.workspace = true
+links-proto.workspace = true
+files-proto.workspace = true
+files-client.workspace = true
+task-dial.workspace = true
+vox-core.workspace = true
+eyre.workspace = true
+futures-util.workspace = true
+# The library id rule (slugify) lives with the live session's code.
+session-sync = { path = "../sync" }
+# `sync` only: a page has no tokio runtime (timers are architect::platform).
+tokio = { version = "1.48", default-features = false, features = ["sync"] }
+architect = { workspace = true, features = ["platform"] }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true

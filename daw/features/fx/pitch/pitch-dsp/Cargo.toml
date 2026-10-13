@@ -1,0 +1,32 @@
+[package]
+name = "pitch-dsp"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+audiocore-dsp = { workspace = true }
+realfft = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+criterion = "0.5"
+hound = "3.5"
+rustfft = "6.2"
+
+[[bench]]
+name = "throughput"
+harness = false
+
+[[bench]]
+name = "quality"
+harness = false
+
+
+[features]
+default = []
+# Links the system `rubberband` library (Rubber Band Library FFI).
+# Off by default so the workspace builds without the system dep;
+# Algorithm::Rubberband falls back to WSOLA when disabled.
+rubberband = []

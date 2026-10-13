@@ -1,0 +1,782 @@
+# Browser keys rig — `/rigs/keys/worship`
+
+The keys rig playable entirely in the browser: samples streamed in as ogg
+proxy packs, MIDI from WebMIDI (or bundled demo files), audio rendered in an
+AudioWorklet by the same engine the native workstation uses. Reachable over
+tailscale from the engine box (`fasttrackstudio --engine` on :4040,
+`embed-web`); the public `fasttrackstudio.app/rigs/keys/worship` mapping is a
+later serving concern.
+
+## Architecture (decided)
+
+Reuse, don't reinvent:
+
+- **Renderer**: the existing `WebRenderer` worklet
+  (`daw-standalone/src/audio_engine/web.rs`, features `decode,web`). The
+  keys rig is `Hosting::Lanes` = N daw tracks each with one `KeysInstrument`
+  in its fx slot, and `KeysInstrument` already implements the
+  `daw::plugin::PluginInstance` trait the wasm `ProjectRenderer` FX stage
+  calls. Seed the lane project, `insert_plugin_instance`, render.
+- **Sample format**: kind-6 ogg-vorbis proxy packs (decode = symphonia,
+  pure Rust, wasm-clean; encode stays native-only). The full Worship proxy
+  set is built (~2.4 GB; synth/choir lanes are 3–20 MB each, Keyscape
+  pianos 330–840 MB).
+- **Transport**: the existing `PackLibrary` RPC over the same `/vox`
+  WebSocket the remote UI opens — `read(name, variant, start)` already does
+  chunked transfer + resume-from-offset.
+- **MIDI file playback**: preset SMFs parsed with the daw-proto SMF parser
+  and laid as MIDI items on the lane tracks; the wasm-clean
+  `render/midi.rs` transport path plays them — same code path as the
+  native workstation, sample-accurate, loop/stop for free.
+
+## Phases
+
+- **W1** — `fts-sample` split: `engine-core` (wasm-clean: open pack from
+  bytes via `PackBytes`, decode flac/ogg/pcm, budget) vs `engine-native`
+  (mmap, rayon preload, encoders, prefetch threads); `engine` aliases
+  native so no consumer changes. IN FLIGHT.
+- **W2** — headless rig: `KeysRig::open_headless(sample_rate, &LaneProgram)`
+  (no cpal / `AudioIoPrefs`), signal-sampler's native-only deps cfg-gated
+  (or a `signal-sampler-core` leaf if gating sprawls); wasm live-MIDI queue
+  in `render/mod.rs` (plain `RefCell<VecDeque<_>>` — the worklet scope is
+  single-threaded) + `#[wasm_bindgen] noteOn/noteOff/cc/pitchBend/panic` on
+  `WebRenderer`; worklet messages `open_lanes { program }`,
+  `attach_pack { name, bytes }`, `midi`. DONE — target-gating (no core
+  crate needed): signal-sampler / signal-rig-host / signal-plugin-host
+  compile for wasm32 as-is (native halves in
+  `[target.'cfg(not(wasm32))'.dependencies]` + `#[cfg]`), packs-from-bytes
+  via `signal_sampler::pack_registry`, and the worklet-with-keys entry is
+  the NEW crate `signal-keys-worklet` (features/rigs/keys/worklet —
+  daw-standalone can't dep signal-sampler, the arrow runs the other way):
+  `KeysWorklet` = `WebRenderer` + `KeysRig::open_headless_on` +
+  `attachPack/openLanes/reloadLanes/noteOn/…`. The wasm queue is a
+  `Mutex<VecDeque<_>>` on `Standalone` (not `RefCell` — keeps `Standalone:
+  Sync`; uncontended in the single-threaded worklet), drained per block.
+- **W3** — browser app phase (the fts dx web build):
+  - Route: a `/rigs/keys/:profile` URL branch in `launch_app` (alongside
+    `collection_browser`'s pathname sniffing), mounting the existing
+    wasm-clean `signal_keys_ui::KeysRigRemote` backed by a LOCAL client
+    talking to the worklet (same UI as the remote rig; only the transport
+    differs).
+  - **Soundsource Manager**: a TOP-BAR BUTTON, out of the way — icon with
+    an aggregate progress badge (spinner/`n/m` while streaming, quiet when
+    ready), opening a popover of per-pack rows: name, size, progress bar,
+    state `queued → streaming → verifying → ready / failed`, retry/delete
+    actions, total footprint. Lanes light up as their pack turns ready
+    (synths playable in seconds; pianos fill in behind).
+  - **Persistence**: pack BYTES in OPFS (`packs/<name>.<variant>.signalpack`
+    + `.part` in flight — mirror of native `pack_client.rs`: resume +
+    sha256 verify); download LEDGER in IndexedDB (expected size, sha,
+    bytes landed, state). Both survive refresh; on boot the ledger drives
+    auto-resume via `read(start = bytes_landed)`. Ask
+    `navigator.storage.persist()` so packs aren't evicted.
+  - **Demo MIDI player**: in the same popover — 2–3 bundled preset SMFs
+    (authored programmatically; mind add_notes quarter-note units), each
+    with play/loop/stop and a target (whole rig or one lane). The no-hardware
+    smoke test.
+  - **WebMIDI**: `navigator.requestMIDIAccess()` via web-sys (add
+    MidiAccess/MidiInput/MidiMessageEvent features), raw 3-byte messages
+    forwarded to the worklet port. Converges with the demo player on the
+    same input seam.
+- **W4** — staging/serving. DONE — ONE engine binary serves the whole rig:
+  - `just keys-worklet-wasm` (Justfile): release wasm build of
+    `signal-keys-worklet` + `wasm-bindgen --target web --out-name
+    signal_keys_worklet` into `apps/desktop/web-dist/worklet/`,
+    plus daw-standalone's `examples/web_worklet/processor.js` copied
+    verbatim as `keys_processor.js` (it is already keys-aware — `entry:
+    'keys'` + the keys message kinds — and the glue URL arrives in the
+    init message, so nothing is hardcoded). Yields exactly the three URLs
+    `web_keys_rig.rs` expects: `/worklet/keys_processor.js`,
+    `/worklet/signal_keys_worklet.js`, `/worklet/signal_keys_worklet_bg.wasm`.
+  - `just web-stage` now runs the worklet staging after the dx copy, so
+    every staged bundle carries the worklet.
+  - `just keys-web` = web-stage, then `cargo build --release -p
+    fasttrackstudio --features embed-web` (staging FIRST — embed-web
+    `include_dir!`s `web-dist/` at compile time). Default features stay
+    on, so the engine has the keys backend + PackLibrary.
+  - No serving fixes were needed: `architect::host`'s embedded fallback
+    already handles nested paths (`include_dir::get_file`), serves
+    `application/wasm` for `.wasm`, and falls back to `index.html` for
+    SPA routes like `/rigs/keys/worship`. PackLibrary scans
+    `/run/media/AudioHaven/Signal/Libraries` by default
+    (`FTS_PACK_LIBRARY` overrides) — the Worship proxy tree included.
+  - Run it: `just keys-web`, then `target/release/fasttrackstudio
+    --engine` (binds `0.0.0.0:4040`; `SIGNAL_ENGINE_ADDR` overrides) and
+    open `http://<tailnet-host>:4040/rigs/keys/worship`.
+  - Smoke-tested headless (scratch port via
+    `SIGNAL_ENGINE_ADDR=127.0.0.1:14041`): `/health` → ok;
+    `/rigs/keys/worship` → 200 SPA index (`text/html`);
+    `/worklet/signal_keys_worklet_bg.wasm` → 200 `application/wasm`,
+    5.75 MB; the processor + glue js → 200 `text/javascript`; `/vox` →
+    101 Switching Protocols; pack library scanned 8433 packs.
+
+- **W5 — Playwright end-to-end test** — DONE (+ interactive browser-tools
+  verification during development):
+  - Lives at `apps/desktop/e2e/` (`@playwright/test` ~1.59, pinned
+    to the chromium-1217 revision the flake's `PLAYWRIGHT_BROWSERS_PATH`
+    nix store carries). Run: `just keys-web-e2e` (expects
+    `target/release/fasttrackstudio` to exist — `just keys-web` builds it;
+    needs the real pack library or `FTS_PACK_LIBRARY`). A globalSetup
+    picks a free scratch port, spawns the release binary with
+    `SIGNAL_ENGINE_ADDR`, waits on `/health`, and teardown kills that
+    exact pid — never port 4040.
+  - Three serial tests, ONE browser context (so OPFS/IDB persist for the
+    reload): **boot** (click `rig-start`, `state()` → running → ready,
+    the three smallest Worship proxies — Choir Women / Big Berthas /
+    Prophet 5 — stream to `ready` with bytes == total; never waits on the
+    full ~2.4 GB set); **audio out** (`audioState()==='running'`,
+    `noteOn` chord then `demo-play-0` via the soundsource popover, each
+    drives `masterPeak() > 0.001`; popover screenshot saved to
+    test-results); **refresh-resume** (reload + restart: the cached packs
+    return `ready` with bytes == total from OPFS, no re-stream — observed
+    ~15 s, dominated by the worklet re-boot, not streaming).
+  - Chromium launches with `--autoplay-policy=no-user-gesture-required` —
+    the page-side AudioContext runs without a gesture, so `masterPeak()`
+    is a real audio-out proof (CDP input can't grant user activation).
+  - The fixture-pack idea below stays open for CI; the suite currently
+    runs against the real library (the three proxies total ~19 MB, boot
+    ≈ 1.8 min, whole suite ≈ 2 min).
+  - Original sketch:
+  - A real-browser test that proves the whole chain: launch the engine
+    binary on an ephemeral port serving the embedded web bundle → open
+    `/rigs/keys/worship` in chromium
+    (`--autoplay-policy=no-user-gesture-required` so the AudioContext can
+    start) → wait for a FIXTURE pack to stream and turn `ready` in the
+    Soundsource Manager → drive the demo MIDI player → assert audio.
+  - **Fixture pack**: a tiny bundled `.signalpack` (few hundred KB, built
+    by the fts-sample test encoder) served by a test pack root, so CI never
+    needs AudioHaven or a 500 MB piano.
+  - **Audio assertion**: the page exposes rig state + master peak to JS
+    (e.g. `window.__ftsRig = { state, packStates, masterPeak() }` fed by
+    the same status the UI renders) — the test polls `masterPeak() > 0`
+    while the demo file plays; plus screenshots of the manager popover
+    states (streaming / ready) as visual artifacts.
+  - Also covers refresh-resume: reload mid-download, assert the ledger
+    resumes from the stored offset rather than restarting.
+  - Lives in `apps/desktop/e2e/` (package.json + playwright
+    config); its own `just` target (e.g. `just keys-web-e2e`) that builds
+    web-stage + the worklet, starts the engine on a scratch port, runs
+    playwright, tears down. CI job is separate from the cargo gates (needs
+    node + chromium).
+  - This imposes on W3: stable `data-testid` attributes on the top-bar
+    button, per-pack rows, and demo player controls; and the JS state hook
+    above.
+
+- **W6 — packs out of wasm memory (attach-by-handle) + warm-on-note** —
+  DONE. All NINE Worship packs attach; `PackPhase::Deferred` no longer
+  occurs with the stock set.
+  - **`PackBytes::External { id, len }`** (fts-sample): pack bytes that
+    live OUTSIDE the process, reachable only through a pluggable
+    process-global reader (`cache::set_external_pack_reader`,
+    `Box<dyn Fn(u32, u64, &mut [u8]) -> bool + Send + Sync>` — fts-sample
+    never deps wasm-bindgen). Every pack read goes through
+    `PackBytes::read_range(offset, len) -> Cow<[u8]>` (borrowed for
+    Mapped/Owned, copied through the reader for External); `Deref` panics
+    on External by design, and `Pcm::sample`/`warm`/`StreamedSample::open`
+    carry non-trapping guards. `SignalPcmPack::open_external(id, len)`
+    parses header + index through the reader; audio entries **materialize
+    per entry** at decode time (`load_pack_sample` copies just the entry's
+    span to an Owned buffer, so streaming/mapped windows never see
+    External). Native `Pcm::Mapped`/mmap paths byte-for-byte unchanged.
+  - **Worklet protocol**: `attach_pack` no longer copies bytes into wasm —
+    keys_processor.js keeps the transferred buffer in `this.packs`
+    (id → Uint8Array, JS heap, outside the 4 GB), serves
+    `globalThis.__ftsPackRead(id, offset, len) → subarray|null`, and calls
+    `attachPackExternal(key, id, byteLength)`
+    (`pack_registry::install_external`). The wasm-side reader closure
+    captures nothing (re-resolves the hook per call), so it satisfies
+    `Send + Sync`. A re-attach under the same key frees the superseded
+    buffer. The old byte-copy `attachPack` stays for compatibility.
+  - **Page guard**: the 1.5 GB `WASM_PACK_RESIDENT_CAP` refusal is
+    replaced by a 6 GB `JS_PACK_RESIDENT_SANITY_CAP` (tab-memory realism —
+    pack bytes cost wasm linear memory ~0 now); `Deferred` stays in the
+    enum for pathological sets, relabelled "past the tab-memory sanity
+    cap".
+  - **Warm-on-note**: the decoded-PCM budget (768 MB on wasm) still bounds
+    preload coverage, and the audio render DROPS a voice whose sample is
+    not resident. `KeysRig::warm_note(note, vel)` walks every lane's
+    render tree (`RenderNode::warm_note_samples`, zone-filtered) and
+    decodes the needed sample on the control side; `KeysWorklet::midi`/
+    `noteOn` call it on note-on **before** queueing the event (between
+    render quanta — a cold key's first press may decode audibly late
+    once). Warm charges the budget past its ceiling; well past it
+    (limit + 1/8) the warmed engine sheds largest-first back to the limit.
+  - e2e: the boot test now waits for **all** pack rows `ready` (≥ 9,
+    none deferred/failed, 300 s budget — observed ~1.7 min for the full
+    ~2.4 GB set from local disk); the audio test adds a high C7
+    `noteOn(96)` assertion exercising warm-on-note beyond preload
+    coverage. Suite green 3×, ~2.2 min.
+
+- **W7 — network range streaming with musical prioritization** — DONE.
+  A pack becomes PLAYABLE in seconds and gains detail as it streams;
+  misses driven by actual playing jump the queue.
+  - **Proto** (`signal-packs-proto`): `read_range(name, variant,
+    range: String /* "start+len", PackRange's Display/FromStr */, tx)`
+    streams exactly one range (absolute offsets, contiguous,
+    stream-close = range done); `pack_plan(name, variant, start, tx)`
+    streams the plan as the UTF-8 bytes of facet-json
+    `Vec<PackSegment>` where each `PackSegment{start, len, rank: u64,
+    label}` tiles the file exactly once (total + sha256 come from the
+    `packs()` listing). `read` additionally accepts VIRTUAL names —
+    `"plan:<name>"` and `"range:<start>+<len>:<name>"` — that route to
+    the same two operations over `read`'s exact signature; the browser
+    client uses those. (The dedicated methods are exercised natively —
+    `pack-library/tests/plan_roundtrip.rs` and the `pack_probe`
+    example's `plan:`/`planfirst:` modes.)
+  - **The 4040 trap (a whole debugging arc, recorded so nobody repeats
+    it)**: the wasm `server_url()` used to redirect ANY local page not
+    on :4040 to `ws://127.0.0.1:4040/vox` (a dx-dev-server
+    convenience) — so the e2e's page silently drove the LIVE studio
+    engine, and every new RPC failed with phantom phon schema-compat
+    errors ("writer and reader schema kinds differ" = an old binary
+    without the methods; later `NotFound` = its `read` seeing the
+    virtual name). The heuristic now redirects only the known dx dev
+    ports (8080/8087), and both e2e suites pin
+    `fts.signal-engine-ws-url` in localStorage to their scratch engine.
+    The streamed/virtual wire shapes were kept anyway — proven, and
+    resume-friendly.
+  - **Planner** (`signal_sampler::pack_plan`, served by
+    `signal-pack-library`, memoized per pack): rank 0 = the exact bytes
+    `SignalPcmPack::open` reads — the 64-byte header plus the index span
+    (`SignalPcmPack::index_span()`, new) with its embedded spec — TWO
+    segments, since the index sits at the file end. Ranks 1.. are one
+    audio entry each: velocity-layer distance from the middle layer
+    first, then |key − 60| middle-out, then rr (0 first); zone mode reads
+    the embedded spec's zones, convention mode parses filenames; unknown
+    entries go last in file order; defensive `gap` segments keep coverage
+    exact. Unit-tested natively (rank-0-only bytes literally `open_bytes`
+    successfully; ordering; exact tiling).
+  - **Client** (`web_packs.rs` + `web_keys_rig.rs`): packs ≤ 32 MB keep
+    the W6 whole-file path; larger packs go progressive — plan + a plan
+    LEDGER in IndexedDB (`plan:<name>.<variant>`, received-segment
+    bitmap) + sparse bytes at true offsets in OPFS
+    (`….signalpack.sparse`, commit-every-16MB, ledger marks segments only
+    after a commit). Rank-0 fetches first, then
+    `attach_pack_progressive` → the row turns `playable` ("playable —
+    loading detail n%") and the lanes reload; detail segments stream in
+    rank order over ONE reused connection, CONCURRENT with the small
+    packs' whole-file streams. At 100%: whole-file sha256 (when known),
+    rename into place, ordinary ready ledger — the next boot attaches it
+    as a normal cached pack. Refresh-resume replays committed segments
+    from the sparse file (contiguous runs, few reads) and fetches the
+    rest.
+  - **Worklet** (`keys_processor.js`): `this.packs` entries are either a
+    whole Uint8Array (W6) or a sparse `{len, segs}` store fed by
+    fire-and-forget `pack_segment {id, start, bytes}` (page-allocated ids
+    from 2^20; exactly-adjacent segments coalesce). `__ftsPackRead`
+    serves covered ranges (plan segments are whole entries, so
+    single-segment hits are the norm), records uncovered ones in a
+    bounded deduped miss list, and returns null — the engine drops that
+    voice silently and retries next press (fts-sample never
+    negative-caches a failed load, so NO reload is needed when the bytes
+    arrive). `take_misses` drains the list; the page polls ~1 Hz and
+    bumps the covering plan segments to the queue front.
+  - **Resolution**: one rig-wide number — delivered sample segments over
+    total sample segments across every referenced pack (rank-0 excluded;
+    whole-file packs all-or-nothing). Prominent in the top bar
+    (`data-testid="rig-resolution"`, amber `RESOLUTION n%` bar →
+    quiet green `FULL RESOLUTION`), and `__ftsRig.resolution()`.
+  - **e2e** (`keys_rig_progressive.spec.ts`, its own cleared context):
+    piano playable < 30 s with bytes ≪ total; the HEADLINE — middle C
+    sounds (other lanes muted via the new `lane-row-*`/`lane-mute-*`
+    testids) while the pack is still `playable` and resolution < 100;
+    an extreme note (24) silent at first then sounding within 60 s via
+    the miss path; everything `ready`, resolution 100, FULL RESOLUTION
+    rendered. The W6 suite runs unchanged before it.
+
+- **W8 — the Audio panel: latency visibility + render-load tracing** —
+  DONE.
+  - **Render load, measured in the processor** (keys_processor.js):
+    `this.renderer.render(...)` in `process()` is timed with the
+    polyfill's Date.now-backed clock (~1 ms resolution vs a ~2.67 ms
+    quantum — a single call's reading is 0-or-1 quantization noise), so
+    the numbers are AGGREGATED: render ms summed over a 250-quantum
+    window (~0.7 s @ 48 kHz) and divided by the window's AUDIO time
+    (quanta × 128000/sampleRate ms) — never by wall time between
+    `process()` calls, which includes the browser's callback pacing and
+    would understate load. Per-window worst single-quantum cost (coarse
+    but spike-catching) and a monotonic quantum counter ride along. All
+    preallocated numbers — nothing allocates per quantum. New message
+    `audio_stats { replyTo }` → `{ load, worstMs, quanta, sampleRate,
+    voices }`.
+  - **Voice count**: `SampleEngine::active_voices()` already existed
+    (`VoicePool::active_count`, a `Vec::len`); W8 added the shallow walk
+    up — `RenderNode::active_voices()` (sums `SamplerInstrument` leaves;
+    synth backends keep private voice vecs and are not counted) and
+    `KeysRig::active_voices()` (per-lane `edit_lane`, same seam as
+    `warm_note`), exported as `KeysWorklet::activeVoices`.
+  - **Latency, page-side**: `ctx.baseLatency` + `ctx.outputLatency` read
+    via Reflect (the getters aren't in the app's web-sys feature set),
+    refreshed by a dedicated 2 Hz `audio_stats` poll (the load window
+    only turns over every ~0.7 s; 10 Hz would re-read the same window).
+  - **latencyHint** (interactive | balanced | playback): stored in
+    localStorage `fts.keys-latency-hint`, applied at `boot_worklet` via
+    `AudioContextOptions` (the option object Reflect-set — the web-sys
+    union setter shape varies by version; feature `AudioContextOptions`
+    added for `new_with_context_options`). Changing it runs an IN-PAGE
+    re-boot, not a reload: close the old context, drop the worklet,
+    re-run `boot_rig` — cached lane program (IndexedDB) + OPFS packs
+    mean no network. Poll loops carry the worklet signal and park
+    themselves when superseded. (Known benign race: a pack attach still
+    in flight from the old boot can stamp its row Ready in the new
+    list — same pack, same totals.)
+  - **Panel**: a top-bar "Audio" button (`audio-button`) opens
+    `audio-popover`: sample rate, quantum, base/output/total latency ms,
+    the render-load bar (`audio-load`; green < 60%, amber < 90%, red
+    past), worst-quantum ms, voices (when ≥ 0), the hint selector
+    (`audio-latency-hint`), quanta/uptime. `__ftsRig` gains
+    `renderLoad()`, `latencyMs()`, `audioStats()` (JSON) — reading the
+    thread-local hook state, so they survive the re-boot uninstalled.
+  - **e2e**: the audio test asserts `renderLoad()` ∈ (0, 0.9) and
+    `latencyMs() > 0` while the demo plays and screenshots the popover;
+    a fourth serial test flips the hint to `playback` and proves the rig
+    recovers (state, cached packs, `audioState() === 'running'`, a note
+    still moves the master peak) — the re-boot path's regression test.
+
+- **W9 — full UI parity: the page body is `signal_keys_ui::KeysRigRemote`**
+  — DONE. The same remote component the desktop (`rig_view.rs`) and phone
+  mount, backed by REAL `KeysRigClient`/`KeysRigStreamClient` vox clients
+  — served locally, in-process, in the tab.
+  - **Transport (choice (a))**: architect's `LocalServer` works on wasm —
+    it carries its own in-memory `Link` (`architect/src/memory_link.rs`,
+    wasm-only, built exactly for "the in-process browser engine's `!Send`
+    backend") and the `#[architect::rpc]` derive relaxes backend bounds to
+    `MaybeSendSync` (empty on wasm). So no seam in signal-keys-ui at all:
+    `web_keys_backend.rs` implements the `KeysRig` trait +
+    `KeysRigStreamSource` + `Services` (`layers![Service, StreamService]`,
+    `CurrentThreadDispatcher`), `LocalServer::serve(into_router(), scope)`
+    establishes the two typed clients, and the page provides them in
+    context precisely as `rig_view.rs` does over the network. The UI
+    cannot tell it isn't remote.
+  - **`WebKeysBackend`** (apps/desktop/src/web_keys_backend.rs):
+    state page-side, audio in the worklet. Real: status (peaks/voices/ctx
+    state), mixer (engines/lanes from the lane program; gains, mutes,
+    solos with native solo semantics, master trim — dB → linear onto the
+    worklet's folder/lane tracks), tree, engine order, trigger/pitch
+    bend/mod wheel (raw MIDI to the worklet), `midi_ports`/`set_midi_port`
+    (WebMIDI input selection, checked per message), `midi_recent` (a ring
+    fed by the ONE `Worklet::midi` seam — WebMIDI, demo player, on-screen
+    keys, `trigger`), start/stop (AudioContext resume/suspend),
+    `lane_program_wire` (the cached program). Honest stubs (engine-side
+    state only): preset library (ONE row — the resolved profile),
+    `load_preset`/`set_layer_patch`/`set_layer_variant`/`clear_layer`
+    (`last_error` says why), macros/Global Controls (empty lists — they
+    drive engine DSP rebuilds), per-module gain/enable (lanes run one
+    fused instrument in-tab), stacks (empty; `perform_mode` stored),
+    drones. The full table is in the module docs.
+  - **Events**: a local `PubSub::sliding(64)` hub. The 10 Hz peak poll is
+    the meter pump (Status + queued Midi each tick); Mixer/Tree/Library/
+    Perform publish on change — the UI's reactive paths light up as packs
+    attach (`update_row` mirrors pack usability onto lane `live` flags).
+  - **Chrome/layout**: the W3–W8 header (RESOLUTION, Soundsources popover
+    incl. demo player, Audio panel) stays; `fts_chrome::provide_chrome()`
+    + a `PanelRail` at the remote's right edge make the rig's Routing and
+    MIDI-monitor panels openable; below the remote sits a compact footer
+    with the on-screen octave and the **compat lane strip** — kept VISIBLE
+    and functional (per-lane volume/mute now routed through the backend so
+    the remote mixer and the strip stay coherent; strip state re-syncs
+    from the backend every peak tick). All `lane-row-*`/`lane-mute-*`
+    testids (and `data-pack-name`) live there unchanged; every other
+    testid + the `__ftsRig` hook untouched.
+  - **Clients survive the latency-hint re-boot**: the backend is stable;
+    `install` refreshes its shared state, `set_worklet(None → new)` swaps
+    the audio path, the mounted remote never re-establishes.
+  - Verified: both e2e suites 8/8 green twice; a manual playwright probe
+    confirms the remote mounts (perform strip, engine cards, patches) and
+    that a mute clicked in the remote mixer round-trips through the
+    in-process RPC to the worklet and back out to the strip.
+  - Parity scope, per region: **full** — mixer zooms' faders/mutes/solos/
+    meters, tree/routing panel, MIDI monitor + keyboard lights, perform
+    mode buttons, on-screen input; **partial** — layer/engine zoom render
+    with empty macro panels and one module slot (no Global Controls DSP
+    in-tab), browser lists the single resolved profile; **absent by
+    honest stub** — preset loading, stacks, drones, module editing (all
+    engine-side state; the methods answer with current state and
+    `last_error` text where a click would otherwise lie).
+
+### W10 — full telemetry (DONE)
+
+Every FTS process exports logs/traces/metrics via OTLP to the live
+collector (the Task observability stack: collector → Tempo/Loki,
+Grafana on top), the same `architect_telemetry` pattern as task-server.
+
+- **The env contract**: export is doubly opt-in — the `otel` cargo
+  feature on `architect-telemetry` carries the dependency weight, and at
+  runtime nothing initializes unless `OTEL_EXPORTER_OTLP_ENDPOINT` is
+  set. The exporter speaks **http/protobuf**, so the endpoint is the
+  collector's HTTP port: `http://127.0.0.1:4318` (NOT gRPC 4317).
+  Unsetting the var silently disables all export; console logs are
+  unaffected. `RUST_LOG` keeps working exactly as before (EnvFilter with
+  the same per-binary defaults).
+- **Service names**: `signal-engine` (`signal-desktop --engine`, incl. the
+  systemd `signal-engine` unit, which now sets the endpoint in its
+  `Environment=`), `signal` (desktop GUI), `fts-patchbay`
+  (`fts-patchbay`), `fts-cli` (`fts`). The name is passed to
+  `architect_telemetry` at init and wins over `OTEL_SERVICE_NAME`.
+- **Wide events**: architect's per-RPC span is the wide event
+  (`TransportRpc/get_state`, `KeysRigSvc/lane_program_wire`, … appear as
+  root traces in Tempo). Enrichments ride `architect_telemetry::wide::set`:
+  the pack library sets `pack.name` / `pack.variant` /
+  `pack.range_start` / `pack.range_len` / `pack.plan_cached`; the keys
+  backend sets `keys.profile` / `keys.pack_count` / `keys.lane_count` on
+  `lane_program_wire`.
+- **Finding FTS in Grafana** (Explore):
+  - Loki: `{service_name="fts-engine"}`
+  - Tempo (TraceQL): `{ resource.service.name = "fts-engine" }`, e.g.
+    `{ resource.service.name = "fts-engine" && span.pack.name != "" }`
+- Browser-side telemetry (wasm page errors → engine) is a follow-up;
+  `architect_telemetry` is no-op stubs on wasm today.
+
+### W11 — field fixes: output latency, layout fit, the app shell, MIDI hot-plug (DONE)
+
+Two tailnet field reports ("needs to be live playable, like a 256 buffer";
+"dead space left + horizontal scroll on my screen") plus two mid-pass
+addenda (use the app's real chrome; hot-plugged controllers never work).
+
+- **Output latency**: the render path was already quantum-tight; the felt
+  latency was the OUTPUT pipeline (observed base 13.7 ms + output
+  32–45 ms under `interactive`). The hint set grew NUMERIC choices —
+  `low` → `AudioContextOptions.latencyHint = 0.005` (seconds, double) and
+  `ultra` → `0.0027` (~one quantum) — same Reflect path, same
+  `fts.keys-latency-hint` key; the page DEFAULTS to `low` now
+  (`interactive` proved conservative). The Audio panel keeps the achieved
+  base/output readout and adds a one-line tip when outputLatency > 20 ms
+  (`audio-latency-tip`): "launch the browser with
+  `--audio-buffer-size=256`" — past that point the browser's output
+  buffer is the wall and only launching it smaller moves it. (A
+  sampleRate-vs-device mismatch readout was skipped — not cheaply
+  detectable.) Note for the e2e suite: under `low` the browser wakes the
+  worklet per 1–2 quanta instead of batches, and the processor's ~1 ms
+  clock rounds isolated calls up — `renderLoad()` reads 0.8–1.1 on a
+  healthy box, so the load assertion is `< 1.5` (runaway CPU still reads
+  several×).
+- **Layout**: `KeysRigRemote`'s natural width is ~2360–2420 px (the
+  mixer's engine-card band: `flex: 0 0 auto` cards whose min-content
+  escapes through flex ancestors, so the page grew a horizontal scrollbar
+  on anything narrower and the body scrolled the rig off the left edge).
+  Fix is WEB-SIDE ONLY: a `ScaleToFit` wrapper (`#keys-fit-outer` /
+  `#keys-fit-inner`) measures the unscaled layout via `scrollWidth`
+  (transform-independent) against the frame's room and applies
+  `transform: scale(room/natural)` with `transform-origin: top left`,
+  inner width pinned at the natural width and inner height grown by 1/s
+  so the scaled box exactly fills the outer (overflow hidden — the page
+  NEVER scrolls sideways). Wider-than-natural viewports keep scale 1 and
+  the fluid layout fills edge to edge. Two traps encoded in comments:
+  style declarations are patched per-property, so BOTH branches must name
+  the transform (a stale `scale(0.52)` survived the wide branch until
+  made symmetric); and content growth widens `scrollWidth` without
+  resizing any observed box, so a 1 s `setInterval` backs up the
+  ResizeObserver.
+- **The app shell**: the page's hand-rolled top bar is gone. The page
+  mounts `fts_chrome::AppFrame` + `TopBar` + `IconRail` + `PanelRail` —
+  the SAME shell the desktop app builds in main.rs — and registers its
+  widgets through the chrome seams: crumbs `Keys ▸ {profile}`; the
+  Resolution pill (`rig-resolution`, amber `RESOLUTION n%` → green
+  `FULL RESOLUTION`) and the master meter as status items; Soundsources
+  (incl. demo player + MIDI section) and Audio as PANELS on the right
+  rail beside the rig's own Routing/MIDI. Two additive seams were added
+  to fts-chrome for the e2e contract: `PanelSpec::testid(..)` (a
+  `data-testid` on the rail's toggle button — `ssm-button` /
+  `audio-button` live there now) and `StatusItem::tagged(testid, item)`
+  (a wrapping variant rendered as a testid'd span). Publishing happens
+  from a LEAF component (`KeysChrome`) so the 10 Hz meter tick re-renders
+  only it and the TopBar, not the whole page tree. Every prior testid and
+  the `__ftsRig` hook survive.
+- **WebMIDI hot-plug**: `init_webmidi` used to enumerate once — a
+  controller connected after page load was invisible. Now the MIDIAccess
+  is kept, `statechange` re-walks the live input map (new ports get the
+  forwarding handler, gone ports drop out; the raw JS closure only pokes
+  an mpsc channel — the re-walk and Signal writes run in the spawned
+  task, inside the runtime). A rejected `requestMIDIAccess` is SAID:
+  "MIDI permission blocked — allow it in the address bar"
+  (`midi-status`), distinct from "no MIDI devices". The port gate
+  defaults to OMNI (`midi_port: None`). e2e proofs (no hardware in CI):
+  `__ftsRig.midiInputs()` / `midiHotplugArmed()` / `midiOmni()`; note
+  this chromium only grants Web MIDI with BOTH playwright permissions
+  `['midi', 'midi-sysex']`.
+- **e2e**: the latency test also flips through `low` (stored pref +
+  full recovery); new serial tests assert the WebMIDI plumbing and the
+  viewport fit at 1366×768 and 1920×1080 (no horizontal overflow,
+  `#keys-fit-inner` starts inside the viewport and fits it).
+
+### W12 — realtime-safe worklet: NOTHING decodes on the audio thread
+
+The field bug: "audio goes silent every time I play a new note." Root
+cause — in an `AudioWorkletGlobalScope` there is only ONE thread: the
+message-port handlers run on the audio rendering thread between quanta.
+Two paths decoded there anyway:
+
+1. `warm_note` on every note-on (W6) — a cold key synchronously
+   ogg-decoded its sample (plus the `__ftsPackRead` JS→wasm copy) across
+   all lanes, stalling `process()` for tens–hundreds of ms. The output
+   underran and every sounding voice dropped.
+2. `preload_samples` ran synchronously in the worklet on every lane
+   reload (rig.rs even said "the caller is the control side of the
+   worklet" — which IS the render thread) — seconds of stall every time a
+   pack turned ready mid-play.
+
+The fix — a **decoder worker**: a second instance of the same
+`signal-keys-worklet` wasm module in a plain module Worker
+(`keys_decoder_worker.js`, staged beside the processor), wired to the
+worklet by ONE `MessageChannel` (`warmPort` in the init — the page main
+thread is not in the warm loop).
+
+- **Worklet (audio side)**: note-ons RESOLVE ONLY —
+  `KeysRig::missing_note_samples` (the resolve half of `warm_note`, zone-
+  filtered walk, no decode) queues `(layer, path)` pairs, drained per
+  quantum by the processor and posted on `warmPort`. Decoded PCM comes
+  back as `pcm` messages → `KeysWorklet::insertPcm` — one bounded memcpy
+  + a map insert (`SampleCache::insert_decoded`, publishing an audio
+  snapshot); the same past-ceiling + shed-largest budget semantics as the
+  old warm (`RenderNode::insert_decoded_sample`). Lane reloads no longer
+  preload at all on wasm.
+- **Worker (decode side)**: mirrors `open_lanes` / `reload_lanes` /
+  attaches, decodes via `KeysWorklet::decodePathPcm` (decode + take —
+  the worker's own cache stays flat), and paces sends on `pcm_ack` (a
+  flood of memcpys between quanta would itself glitch). Pack bytes are
+  NOT resident in the worker: its `__ftsPackRead` misses fetch ranges
+  from the SAME OPFS files the page maintains (whole files freely;
+  sparse files only within page-pushed COMMITTED ranges — an OPFS hole
+  reads as zeros and must never reach a decode), LRU-bounded at 256 MB.
+  Un-serveable ranges surface to the page as `net_miss` → the existing
+  bump-the-network-queue path, plus a FORCED sparse commit when the
+  bytes were delivered-but-uncommitted (else a warm waits for the next
+  16 MB flush). Background coverage fill (`coverage_samples` — playable
+  order, lanes interleaved round-robin) streams PCM in until the budget
+  refuses an insert.
+- **Hard telemetry (the proof)**: the processor counts real underruns
+  via `currentFrame` discontinuities (the browser only calls `process()`
+  for quanta it plays; a jump = an audible dropout), times every message
+  handler (worst ms + kind — handlers share the audio thread), and
+  reports warm-queue depth + PCM inserts/refusals. All of it rides
+  `audio_stats` → the Audio panel (`audio-glitches` testid: green 0 /
+  red count) and `__ftsRig.audioStats()`. The page resets the counters
+  on suspend/resume transitions it causes (`reset_audio_stats`).
+- **e2e**: `realtime: cold-note warms never glitch the audio thread` —
+  sustains a chord, hammers 12 cold extremes across both ends of the
+  keyboard, asserts the chord stays audible through every press,
+  `glitches` delta == 0, `worstHandlerMs` < 20, and `pcmInserts` > 0
+  (the worker really decoded). This test FAILS against the pre-W12 code.
+  The miss-driven progressive test budget went 60 → 90 s (full-suite
+  congestion flaked it within seconds of the wire).
+
+Follow-ups noted: chunked `insertPcm` if worst-quantum telemetry ever
+shows the single memcpy spiking on huge samples; SharedArrayBuffer pack
+stores (COOP/COEP) would let worklet and worker share one byte copy.
+
+### W13 — the unrestricted rig: shared memory, real streamer threads (PLAN)
+
+W12 removed decode from the audio thread by shipping PCM in from a worker,
+but that design is fighting the platform rather than using it, and it has a
+hard ceiling: every sample the rig can play must be FULLY DECODED inside the
+4 GB wasm address space. A 2.4 GB proxy set decodes to far more than that,
+so "a sample library in every slot" is not reachable by raising the budget.
+Nor is it reachable by copying PCM over `postMessage` — every handoff lands
+on the audio thread as a memcpy.
+
+The native engine already solves this exactly the way Kontakt does (DFD):
+samples stay COMPRESSED, each zone keeps a small decoded head resident, and a
+background **streamer thread pool** fills chunks ahead of the playhead. The
+audio thread only ever reads memory. `fts-sample` HAS this
+(`stream.rs`: `StreamedSample`, `wanted` bitmask, `streamer()` pool) — it is
+compiled out on wasm purely because wasm32-unknown-unknown has no threads,
+which is why the wasm arm used to decode inline (the W12 field bug).
+
+So the target is not a new design; it is making the EXISTING design compile
+and run in the browser:
+
+1. **Cross-origin isolation** — serve `Cross-Origin-Opener-Policy:
+   same-origin` + `Cross-Origin-Embedder-Policy: require-corp` from the
+   engine. That unlocks `SharedArrayBuffer`, the precondition for everything
+   below. Needs an `architect::host` change (the web bundle + fallback are
+   served there), so: local `[patch]` to develop, tag, bump. Self-hosted
+   assets only, so `require-corp` costs us nothing.
+2. **Shared wasm memory** — build `signal-keys-worklet` with
+   `+atomics,+bulk-memory,+mutable-globals` and `-Z build-std` (nightly;
+   `fts.rustNightly` already exists in the flake for phon-jit). The PAGE
+   creates the shared `WebAssembly.Memory`; the worklet and N decoder
+   workers instantiate the SAME module over it. Then a worker writes decoded
+   chunks directly into the heap the audio thread reads — no postMessage, no
+   memcpy, no `insertPcmChunk`, no residency dance. The whole W12 warm/PCM
+   protocol collapses into `streamer().enqueue()`.
+3. **Wire the streamer pool to those threads** — `stream.rs`'s
+   `#[cfg(feature = "engine-native")]` arms become "has threads" arms.
+   `request()` sets its wanted bit and wakes a streamer via `Atomics.notify`;
+   chunk fills happen off-thread exactly as they do natively.
+4. **Memory then stops being the constraint**: resident cost is heads +
+   in-flight chunks (tens of MB), not decoded libraries (many GB). Every
+   slot can hold a library because nothing is fully decoded. The PCM budget
+   stays as a cap on the eager path, not as the thing that decides whether a
+   note sounds.
+5. **SIMD** (`+simd128`, stable, no isolation needed) — nine lanes of sampler
+   + FX render in ONE thread, so DSP throughput is the headroom. Landed
+   ahead of the rest since it is a build flag; judge it by `renderLoad()`.
+
+Latency, honestly: "zero" is not physical — the floor is one render quantum
+(128 frames ≈ 2.7 ms) plus the browser's output buffer. What IS achievable is
+never exceeding that floor: no stall, no underrun, no growth under load. The
+underrun counter and `worstHandlerMs` from W12 are how each step gets judged.
+
+### W14 — SharedArrayBuffer pack transport (SHIPPED) + streamer workers (still blocked)
+
+**Shipped and measured: pack bytes now live in a `SharedArrayBuffer`.**
+`cached_pack_shared` reads the OPFS file straight into a SAB in 32 MB
+slices and `attach_pack_shared` hands that one buffer to the worklet (and
+to the workers, when they are on). Result on the full Worship set: 9/9
+packs ready, worst audio-thread handler 61 ms, zero glitches, and decoded
+PCM residency **426 MB → 54 MB** — shared pack bytes mean far less has to
+be decoded into wasm memory at all.
+
+Two traps, both paid for in frozen tabs:
+
+- **Never read-then-copy into a SAB.** The obvious version (read the pack
+  to an ArrayBuffer, copy into a SAB) holds BOTH at peak: ~4.8 GB on this
+  set, 3.4 GB RSS observed, renderer wedged. Read slice-by-slice into the
+  SAB instead. A pack that was just DOWNLOADED keeps the old transfer path
+  — its bytes are already in hand, and copying them would double again;
+  the next boot picks it up from OPFS as shared.
+- **`StreamedSample::request` must keep the `queued` guard on wasm too.**
+  It is called from `sample()` on every read that misses a chunk —
+  thousands per block per voice — so an unguarded enqueue buries the
+  workers in duplicate jobs and allocates an `Arc` per call. The native
+  arm has always had the guard three lines above; the wasm arm did not.
+
+**The streamer workers are still OFF by default, and that is a measured
+decision.** With them on the tab freezes shortly after they come up, every
+time, no error surfacing; the identical build with them off is healthy.
+Known so far: pack-byte locality is FIXED (that was W14's premise), and a
+worker must init with `thread_stack_size` or it re-runs the module's main
+initialisation — globals, allocator — over the shared heap. Fixing that
+did not fix the freeze.
+
+Prime suspect next: **init order.** Exactly one instance may run main init;
+every other must come up as a thread. `spawn()` currently posts init to
+the workers BEFORE the worklet instantiates, so a worker can start against
+a heap whose allocator was never initialised. Spawn them after the worklet
+reports `ready` and re-measure.
+
+### W14 (superseded notes) — collapsing the copy path into shared memory
+
+The remaining copy is the decoder worker: it opens/decodes zones in its OWN
+wasm heap and ships PCM back over a MessagePort. With shared memory that
+should be unnecessary — and `SampleCache` IS `Send + Sync` (verified by a
+compile-time assertion), so a streamer worker can hold a cache handle and
+`cache.get(path)` straight into the map the audio thread reads.
+
+Built: an OPEN-jobs ring beside the chunk ring in `stream_wasm`
+(`enqueue_open`, drained before chunk fills — a note waiting on an unopened
+zone is SILENT, a chunk fill belongs to a voice already sounding),
+`RenderNode::queue_note_opens`, `KeysRig::queue_note_opens`, and the
+`opensQueued` / `zonesOpened` / `streamerDepth` counters.
+
+**It does not complete, and the counters say exactly why**: `opensQueued`
+46, `zonesOpened` 0, `streamerDropped` 0. The audio thread enqueues; the
+worker can never finish the job. **Pack BYTES live on the worklet's JS
+heap** (W6 attach-by-handle — `this.packs` in keys_processor.js, reached
+through the `__ftsPackRead` hook installed in that scope). A streamer
+worker shares the wasm heap but NOT that JS heap, so its `cache.get` cannot
+read pack bytes at all.
+
+So the blocker is not threads or memory — both work — it is **pack-byte
+locality**. To finish this:
+
+- Move pack bytes into a **SharedArrayBuffer** per pack (NOT wasm linear
+  memory — the Worship set is ~2.4 GB against a 4 GB address space, which
+  is exactly why W6 put them on the JS heap). Every thread installs a
+  `__ftsPackRead` over the same SAB, and the worker's `cache.get`
+  completes.
+- Only then can `queue_warm_requests` drop the decoder-worker call.
+
+Until that lands, note-on takes BOTH paths: it enqueues the open (harmless,
+and it exercises the plumbing) AND asks the decoder worker, which is what
+actually makes a cold note sound. Taking only the new path made far-out
+cold notes silent — enqueued, never opened.
+
+**DONE — the suite is green (7/7), including the `realtime` test: a chord
+sustained through twelve cold notes at both ends of the keyboard with ZERO
+underruns and no audio-thread handler over 20 ms while playing.**
+
+Final numbers across the whole effort — worst audio-thread handler
+3804 ms → **62 ms** (boot, while packs attach; steady-state playing rebuilds
+nothing), decoded-PCM residency 1535 MB pinned at the ceiling → **426 MB**
+working, all nine packs loaded.
+
+How the last step actually went, since the plan above guessed wrong:
+
+- **The renderer no longer blocks** — `plugin_instances` is taken with
+  `try_lock`; on contention the block renders WITHOUT its plugin stage
+  (dry for one 2.7 ms quantum, inaudible next to an underrun click). This
+  is right for native too: a blocking acquire in an audio callback is a
+  latent dropout on any platform.
+- **The rig cannot move to a control thread at all.** Verified with a
+  compile-time `Send` assertion rather than assumed: `KeysRig` holds a vox
+  `SinkSlot` (`Arc<dyn ChannelSink>`), which vox makes single-threaded on
+  wasm. Step 2 as written above is NOT implementable without changing vox
+  — a vendored crates.io dep, a much larger blast radius.
+- **So the work moved instead of the rig.** Eager zone-opening on the audio
+  thread is down to 2 (each zone costs ~26 ms there), and the DECODER
+  WORKER pre-warms a bounded 48-zone middle-out window off-thread. That is
+  the division of labour the design wanted anyway: the audio thread
+  compiles trees and inserts instruments, the worker decodes.
+- **The realtime test measures the right phase.** `worstHandlerMs` is
+  monotonic since boot, so it was judging PLAYING against BOOT's worst
+  handler. It now zeroes the counters first (`__ftsRig.resetAudioStats()`);
+  the 20 ms bar itself was not relaxed.
+
+Remaining, for whoever picks this up: the 62 ms is boot-time lane building.
+It would still be audible if a pack landed mid-performance. Removing it
+means making `KeysRig` `Send` on wasm — i.e. a vox change — which is a
+project, not a tweak.
+
+**Status (measured, not assumed).** Landed and proven in a real browser:
+cross-origin isolation (`crossOriginIsolated === true`), `SharedArrayBuffer`,
+a shared `WebAssembly.Memory`, the `build-std` + atomics + TLS wasm build,
+and a streamer worker that instantiates over the shared heap and reports
+`ready`. Worst audio-thread handler went 3804 ms → 527 ms and the PCM budget
+came off its ceiling (1535 → 687 MB) once eager zone-opening was capped.
+e2e: audio out passes again; the `realtime` test correctly still FAILS on
+`worstHandlerMs < 20`, which is the item below.
+
+**What remains, and the constraint it has to respect.** The 527 ms is
+`reload_lanes` — building lane instruments and opening packs — and it runs
+on the audio thread because the worklet has no other. Moving it to a control
+worker over the shared heap is the fix, but naively it would only RELOCATE
+the stall: `audio_engine/render/mod.rs` takes a blocking `lock()` on
+`plugin_instances` every block, so a control thread holding that mutex for
+half a second blocks the render just as badly (and on wasm a contended
+`std::sync::Mutex` parks via `memory_atomic_wait32` — blocking the audio
+thread, which is exactly what must never happen).
+
+Two halves, and both are needed:
+
+1. **The renderer must never block on the plugin map** — `try_lock`, and on
+   contention render that block without the plugin stage. Missing one 2.7 ms
+   block of FX is inaudible; blocking the callback is a dropout. This is a
+   change to the SHARED daw renderer, so it affects native too (where the
+   same reasoning holds — the contention window is a map insert).
+2. **Then the control work moves to a worker thread.** The expensive part
+   (`KeysInstrument::new` — compile, pack open, bounded preload) already
+   happens OUTSIDE the lock; only the `insert_plugin_instance` is inside it.
+   So once (1) is true, a control worker can rebuild lanes while the audio
+   thread keeps rendering, contending only for a microsecond-scale insert.
+   This needs the worklet's `rig` reachable from another thread (today it is
+   a `RefCell` in `KeysWorklet`), which is the real work.
+
+Risks to weigh before starting: nightly + `build-std` for the worklet crate
+(the rest of the tree stays stable 1.94); `require-corp` breaks any
+cross-origin asset (we have none); AudioWorklet cannot spawn workers itself,
+so threads are page-spawned and handed in; and wasm32 still caps the SHARED
+memory at 4 GB — fine, because streaming keeps residency small.
+
+## Open questions / later
+
+- Piano-lane weight on travel links: consider a lower-quality travel
+  variant (`transcode --quality 0.4`) or per-sample range streaming (the
+  pack index gives entry offsets; `read(start)` can fetch ranges — DFD over
+  the network).
+- `Worship PHAT Bass` lane has no pack anywhere (the `.prt_omn` gap) — the
+  lane is silent natively too; browser matches native until that pack is
+  built.
+- COOP/COEP headers on the engine's axum server if SharedArrayBuffer
+  streaming into the worklet is adopted later; v1 transfers assembled pack
+  bytes into the worklet via postMessage (transferable).

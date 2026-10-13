@@ -1,0 +1,196 @@
+// Worship — the live worship profile.
+//
+// MODEL (see the `stacks-footswitch-model` design note):
+//   Profile → Stack → Patch → (Preset, Scene)
+//
+// • `patches` is the profile's pool of tones. Each patch points at a PRESET
+//   SCENE (the amp/cab core — an Amp block whose NAM model is an ML Sound Lab
+//   full-rig capture) and then appends its own blocks: its effects.
+//
+// • A block has two axes: `block_type` (@Amp, @Reverb, @Delay, @Pitch …) — what
+//   it is — and a realization (`nam` / `ir` / `plugin`) — how it's built. Empty
+//   realization = a PLACEHOLDER (kept for structure, skipped at install). The
+//   effects below are placeholders; drop a `plugin "…"` in to make them live.
+//
+// • The global TIME-BYPASS footswitch bypasses every block in the Time category
+//   (@Reverb / @Delay / @Freeze) — so "Funk" is just Clean with Time off. Pitch
+//   (@Pitch / POG) and modulation (@Chorus / @Trem) survive it.
+//
+// • `stacks` are the 8 footswitches; each is an ordered patch rotation (press
+//   to engage, re-press to rotate within the stack).
+
+name Worship
+default_patch 0
+
+patches (
+    // ── Stack 1 · Clean ──────────────────────────────────────────────
+    {
+        name Main
+        preset "Fender Deluxe Reverb"
+        scene Clean
+        chain (
+            { block_type @Reverb, name "Hall" }
+            { block_type @Delay, name "Delay" }
+        )
+    }
+    {
+        // Funk = the clean core, dry. (Or just hit Time-bypass on Main.)
+        name Funk
+        preset "Roland JC-120"
+        scene Clean
+    }
+    {
+        name Effects
+        preset "Fender Deluxe Reverb"
+        scene Clean
+        chain (
+            { block_type @Reverb, name "Shimmer" }
+            { block_type @Delay, name "Delay" }
+            { block_type @Chorus, name "Chorus" }
+        )
+    }
+
+    // ── Stack 2 · Crunch ─────────────────────────────────────────────
+    {
+        name Crunch
+        preset "Vox AC30"
+        scene Drive
+        chain ( { block_type @Reverb, name "Room" } )
+    }
+    {
+        name Edge
+        preset "Vox AC30"
+        scene Drive
+        chain ( { block_type @Delay, name "Dotted Delay" } )
+    }
+    {
+        name Chug
+        preset "Marshall JCM800"
+        scene Drive
+    }
+
+    // ── Stack 3 · Drive ──────────────────────────────────────────────
+    {
+        name Drive
+        preset "Marshall JCM800"
+        scene Drive
+        chain ( { block_type @Reverb, name "Plate" } )
+    }
+
+    // ── Stack 4 · Lead ───────────────────────────────────────────────
+    {
+        name Lead
+        preset "Friedman BE-100"
+        scene Lead
+        chain (
+            { block_type @Delay, name "Delay" }
+            { block_type @Reverb, name "Hall" }
+        )
+        output_trim_db -1.0
+    }
+    {
+        name "POG Lead"
+        preset "Friedman BE-100"
+        scene Lead
+        chain (
+            { block_type @Pitch, name "POG" }
+            { block_type @Delay, name "Delay" }
+        )
+        output_trim_db -1.0
+    }
+    {
+        name "Delayed Lead"
+        preset "Friedman BE-100"
+        scene Lead
+        chain (
+            { block_type @Delay, name "Long Delay" }
+            { block_type @Reverb, name "Hall" }
+        )
+        output_trim_db -1.0
+    }
+    {
+        name Extreme
+        preset "Peavey 5150"
+        scene Lead
+        chain ( { block_type @Delay, name "Delay" } )
+        output_trim_db -2.0
+    }
+
+    // ── Stack 5 · Ambient ────────────────────────────────────────────
+    {
+        name "Super Verb"
+        preset "Fender Deluxe Reverb"
+        scene Clean
+        chain (
+            { block_type @Reverb, name "Big Hall" }
+            { block_type @Reverb, name "Shimmer" }
+        )
+    }
+    {
+        name Delay
+        preset "Fender Deluxe Reverb"
+        scene Clean
+        chain ( { block_type @Delay, name "Swell Delay" } )
+    }
+    {
+        name Craze
+        preset "Fender Deluxe Reverb"
+        scene Clean
+        chain (
+            { block_type @Reverb, name "Reverse Verb" }
+            { block_type @Modulation, name "Warp" }
+        )
+    }
+    {
+        name Swells
+        preset "Roland JC-120"
+        scene Clean
+        chain (
+            { block_type @Volume, name "Volume Swell" }
+            { block_type @Reverb, name "Hall" }
+        )
+    }
+    {
+        name Tremolo
+        preset "Fender Deluxe Reverb"
+        scene Clean
+        chain (
+            { block_type @Trem, name "Tremolo" }
+            { block_type @Reverb, name "Spring" }
+        )
+    }
+
+    // ── Stack 6 · Special / Stack 7 · POG / Stack 8 · Aux ────────────
+    {
+        name Special
+        preset "Mesa Dual Rectifier"
+        scene Lead
+        chain ( { block_type @Delay, name "Delay" } )
+        output_trim_db -2.0
+    }
+    {
+        name POG
+        preset "Friedman BE-100"
+        scene Lead
+        chain (
+            { block_type @Pitch, name "POG +1 oct" }
+            { block_type @Reverb, name "Hall" }
+        )
+    }
+    {
+        name "Aux Clean"
+        preset "Roland JC-120"
+        scene Clean
+    }
+)
+
+stacks (
+    { name Clean,   patches ( Main "Funk" Effects ) }
+    { name Crunch,  patches ( Crunch Edge Chug ) }
+    { name Drive,   patches ( Drive ) }
+    { name Lead,    patches ( Lead "POG Lead" "Delayed Lead" Extreme ) }
+    { name Ambient, patches ( "Super Verb" Delay Craze Swells Tremolo ) }
+    { name Special, patches ( Special ) }
+    { name POG,     patches ( POG ) }
+    { name Aux,     patches ( "Aux Clean" ) }
+)

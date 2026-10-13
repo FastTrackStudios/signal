@@ -1,0 +1,16 @@
+// EXAMPLE worship song (placeholder until the real songlist lands).
+//
+// A Song is an ordered list of Sections. Each Section points at a patch in a
+// Profile (here "Worship") by name — so the section steps the rig to that tone.
+// Loading the song builds a one-stack-per-section profile you can step through.
+
+name "Amazing Grace"
+artist "Traditional"
+default_section 0
+sections (
+    { name Intro,    profile Worship, patch Funk }
+    { name "Verse 1", profile Worship, patch Main }
+    { name Chorus,   profile Worship, patch Crunch }
+    { name Bridge,   profile Worship, patch Lead }
+    { name Outro,    profile Worship, patch "Super Verb" }
+)

@@ -1,0 +1,41 @@
+which_key (
+    {
+        prefix "<A-f>",
+        label "Semantic FX Manager",
+        entries (
+            {key f, label "FX Search", action "fx:search"}
+            {key e, label "EQ / Relational", children (
+                {key r, label "Rescue EQ", action "fx:rescue_eq"}
+                {key q, label "Relational EQ", action "fx:relational_eq"}
+            )}
+            {key t, label "Treatment", children (
+                {key p, label "De-Clip", action "fx:declip"}
+                {key c, label "De-Click", action "fx:declick"}
+                {key t, label "Tuning", action "fx:tuning"}
+                {key a, label "Time-Alignment", action "fx:time_alignment"}
+                {key l, label "Live Tuner", action "fx:live_tuner"}
+            )}
+            {key g, label "Gate", children (
+                {key g, label "Gate", action "fx:gate"}
+            )}
+            {key c, label "Compression", children (
+                {key c, label "Control Compressor", action "fx:control_compressor"}
+                {key t, label "Tonal Compressor", action "fx:tonal_compressor"}
+            )}
+            {key s, label "Saturation / Separation", children (
+                {key s, label "Saturation", action "fx:saturation"}
+                {key c, label "Clipper", action "fx:clipper"}
+            )}
+            {key p, label "Parallel Processing", children (
+                {key f, label "Parallel Filters", action "fx:parallel_filters"}
+                {key c, label "Parallel Compressor", action "fx:parallel_compressor"}
+                {key p, label "Panning Plugin", action "fx:panning"}
+            )}
+            {key d, label "De-essing / Polish", children (
+                {key s, label "De-Esser", action "fx:deesser"}
+                {key r, label "Resonance Suppressor", action "fx:resonance_suppressor"}
+            )}
+            {key r, label "Reverb", action "fx:reverb"}
+        )
+    }
+)

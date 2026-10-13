@@ -1,0 +1,270 @@
+//! The rig as a tree of nodes, each with the presets it can be recalled as.
+//!
+//! # Why this is not the chain strip
+//!
+//! [`crate::chain`] and the control surface both render `LiveBlock` — a flat
+//! list of the blocks that process audio. That is the right shape for playing
+//! and the wrong one for *choosing*: a Module has nowhere to appear in a flat
+//! list, so nothing but a drive slot could ever offer a preset.
+//!
+//! This renders `LiveNode`, which is the whole tree the rig resolved —
+//! containers included, in order, with their depth. A preset picker sits on
+//! any node that has more than one, whatever level it is.
+//!
+//! # A preset is a variant
+//!
+//! "Preset" is the player's word for what the domain calls a variant of a
+//! node: a pedal's captures, an amp's models, a module's combinations. One
+//! mechanism, so one picker, and it reads the same wherever it appears.
+//!
+//! Only nodes with a real choice get one. A node with a single default has
+//! nothing to pick between, and a dropdown with one entry is noise.
+
+use dioxus::prelude::*;
+use signal_proto::live_node::{LiveNode, LivePreset};
+
+/// The node tree with a preset picker on every node that has a choice.
+///
+/// Takes what to *do* rather than who to talk to: every rig has its own wire
+/// contract, and the tree is the same tree in all of them. `on_select` fires
+/// with `(node id, preset id)`, `on_save` with `(node id, preset name)`.
+#[component]
+pub fn PresetTree(
+    nodes: Vec<LiveNode>,
+    on_select: EventHandler<(String, String)>,
+    on_save: EventHandler<(String, String)>,
+    /// Put a different node in this slot: `(node id, replacement id)`.
+    on_replace: EventHandler<(String, String)>,
+) -> Element {
+    if nodes.is_empty() {
+        return rsx! {
+            div {
+                class: "h-full flex items-center justify-center text-muted-foreground text-sm",
+                "No rig loaded."
+            }
+        };
+    }
+
+    rsx! {
+        div { class: "h-full min-h-0 overflow-y-auto p-3 flex flex-col gap-1",
+            for node in nodes {
+                NodeRow { node: node.clone(), on_select, on_save, on_replace }
+            }
+        }
+    }
+}
+
+/// One node: its name, what kind of thing it is, and its presets.
+#[component]
+fn NodeRow(
+    node: LiveNode,
+    on_select: EventHandler<(String, String)>,
+    on_save: EventHandler<(String, String)>,
+    on_replace: EventHandler<(String, String)>,
+) -> Element {
+    // Depth as an indent, so the tree reads as a tree. Inline rather than a
+    // Tailwind class because the value is computed — see the repo's UI rules
+    // on why signal surfaces carry their layout-critical styles inline.
+    let indent = format!("margin-left: {}px;", node.depth.min(8) * 14);
+    let is_container = !node.is_block;
+
+    rsx! {
+        div {
+            class: "flex items-center gap-2 py-1 px-2 rounded-md border border-border/60 bg-card/60",
+            style: "{indent}",
+
+            // What kind of thing this is. A container's role is the useful
+            // word ("module"); a block's type is (“Reverb”), since every
+            // block's role is the same.
+            span {
+                class: "shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground",
+                if is_container {
+                    "{node.role}"
+                } else {
+                    {node.block_type.map_or_else(|| "block".to_string(), |t| format!("{t:?}").to_lowercase())}
+                }
+            }
+
+            span {
+                class: if node.bypassed {
+                    "flex-1 min-w-0 truncate text-sm line-through opacity-50"
+                } else if is_container {
+                    "flex-1 min-w-0 truncate text-sm font-semibold"
+                } else {
+                    "flex-1 min-w-0 truncate text-sm"
+                },
+                "{node.name}"
+            }
+
+            if node.bypassed {
+                span { class: "shrink-0 text-[10px] text-muted-foreground", "bypassed" }
+            }
+
+            // What sits here, then which setting of it. Two pickers because
+            // they are two different questions — "a different pedal" and
+            // "the same pedal, its other capture" — and a player asks them
+            // separately.
+            if node.alternatives.len() > 1 {
+                SlotPicker {
+                    node: node.id.clone(),
+                    alternatives: node.alternatives.clone(),
+                    current: node.name.clone(),
+                    on_replace,
+                }
+            }
+
+            if node.presets.len() > 1 {
+                PresetPicker {
+                    node: node.id.clone(),
+                    presets: node.presets.clone(),
+                    current: node.preset_id.clone(),
+                    on_select,
+                }
+            }
+
+            SavePreset { node: node.id.clone(), name: node.name.clone(), on_save }
+        }
+    }
+}
+
+/// Which node sits in this slot.
+///
+/// Selected by name rather than id, because the slot holds *that node* and
+/// its id is the thing being chosen — there is nothing else to match against.
+#[component]
+fn SlotPicker(
+    node: String,
+    alternatives: Vec<LivePreset>,
+    current: String,
+    on_replace: EventHandler<(String, String)>,
+) -> Element {
+    rsx! {
+        crate::picker::Picker {
+            options: alternatives.iter().map(|a| a.name.clone()).collect::<Vec<String>>(),
+            selected: alternatives
+                .iter()
+                .position(|a| a.name == current)
+                .map_or(u32::MAX, |i| i as u32),
+            placeholder: "—".to_string(),
+            width: "10rem".to_string(),
+            on_select: {
+                let node = node.clone();
+                // The wire wants the id, not the position: a list reorders the
+                // moment a capture is imported, and an index into it would then
+                // choose the wrong node, silently.
+                let ids: Vec<String> = alternatives.iter().map(|a| a.id.clone()).collect();
+                move |i: u32| {
+                    if let Some(id) = ids.get(i as usize) {
+                        on_replace.call((node.clone(), id.clone()));
+                    }
+                }
+            },
+        }
+    }
+}
+
+/// The picker itself — presets by **id**, never by list position.
+///
+/// A list's order changes the moment a capture is imported; an index into it
+/// does not survive that, and the wrong pedal setting is a silent failure.
+#[component]
+fn PresetPicker(
+    node: String,
+    presets: Vec<LivePreset>,
+    current: String,
+    on_select: EventHandler<(String, String)>,
+) -> Element {
+    rsx! {
+        crate::picker::Picker {
+            options: presets.iter().map(|p| p.name.clone()).collect::<Vec<String>>(),
+            selected: presets
+                .iter()
+                .position(|p| p.id == current)
+                .map_or(u32::MAX, |i| i as u32),
+            placeholder: "—".to_string(),
+            width: "12rem".to_string(),
+            on_select: {
+                let node = node.clone();
+                // By id, for the reason in the docs above.
+                let ids: Vec<String> = presets.iter().map(|p| p.id.clone()).collect();
+                move |i: u32| {
+                    if let Some(id) = ids.get(i as usize) {
+                        on_select.call((node.clone(), id.clone()));
+                    }
+                }
+            },
+        }
+    }
+}
+
+/// Save what a node sounds like now as a preset of it.
+///
+/// The gesture the rig has never had. Every knob move is already recorded as
+/// an override on the active patch — silently and permanently — so a player
+/// could tweak endlessly and keep nothing by name. This is the other half:
+/// name it, and it becomes a preset of that node, recallable from the picker
+/// beside this button.
+#[component]
+fn SavePreset(node: String, name: String, on_save: EventHandler<(String, String)>) -> Element {
+    let mut naming = use_signal(|| false);
+    let mut draft = use_signal(String::new);
+
+    // A plain fn rather than a closure, so both the Enter key and the button
+    // can call it without fighting over one `FnMut`.
+    fn save(
+        on_save: EventHandler<(String, String)>,
+        mut naming: Signal<bool>,
+        mut draft: Signal<String>,
+        node: String,
+    ) {
+        let preset = draft().trim().to_string();
+        if preset.is_empty() {
+            return;
+        }
+        naming.set(false);
+        draft.set(String::new());
+        on_save.call((node, preset));
+    }
+
+    if !naming() {
+        return rsx! {
+            button {
+                class: "shrink-0 px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground",
+                title: "Save {name}'s current settings as a preset",
+                onclick: move |_| naming.set(true),
+                "Save"
+            }
+        };
+    }
+
+    rsx! {
+        div { class: "shrink-0 flex items-center gap-1",
+            input {
+                class: "w-28 bg-background border border-border rounded px-1.5 py-0.5 text-xs",
+                placeholder: "Preset name",
+                autofocus: true,
+                value: "{draft}",
+                oninput: move |e| draft.set(e.value()),
+                onkeydown: {
+                    let node = node.clone();
+                    move |e: KeyboardEvent| match e.key() {
+                        Key::Enter => save(on_save, naming, draft, node.clone()),
+                        Key::Escape => {
+                            naming.set(false);
+                            draft.set(String::new());
+                        }
+                        _ => {}
+                    }
+                },
+            }
+            button {
+                class: "px-1.5 py-0.5 rounded bg-accent text-accent-foreground text-[10px]",
+                onclick: {
+                    let node = node.clone();
+                    move |_| save(on_save, naming, draft, node.clone())
+                },
+                "Keep"
+            }
+        }
+    }
+}

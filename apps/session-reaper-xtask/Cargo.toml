@@ -1,0 +1,13 @@
+[package]
+name = "session-reaper-xtask"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# The harness itself. `test-harness` is what exposes `daw::test`, the
+# `#[reaper_test]` macro and this runner; `reaper` is NOT enabled,
+# because nothing here loads inside REAPER — this process starts one and
+# talks to it over a socket.
+daw = { workspace = true, features = ["test-harness"] }

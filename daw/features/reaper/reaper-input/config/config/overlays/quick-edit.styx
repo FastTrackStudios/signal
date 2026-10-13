@@ -1,0 +1,26 @@
+// Quick-Edit mode overlay — active while the quick-edit workflow is on.
+//
+// Lower-half left-drag → slip edit (move item contents). DRAG contexts only
+// accept built-in mouse behaviors ("N m"), never custom actions — per the
+// SetMouseModifier SDK, custom actions ("N c") are valid only on click /
+// double-click contexts. So the "split at mouse" half of the click-then-slip
+// gesture must come from an ARMED action (42577), which fires on mouse-down;
+// the held drag then slips via the modifier below. See quick-edit.styx.
+
+name        quick-edit
+description "Quick-Edit mode — lower-half drag slips item contents"
+priority    60
+
+mouse_settings (
+    // Item drag → slip edit (move item contents), both halves. The split is
+    // injected by FTS on click-down (armed_click, intercept_clicks) and then
+    // the click passes through so this slip drag runs on the split-off right
+    // piece — one click-drag = split + slip, anywhere on the item.
+    {ctx MM_CTX_ITEM,      mods "", behavior "3 m", desc "Slip edit (move item contents)"}
+    {ctx MM_CTX_ITEMLOWER, mods "", behavior "3 m", desc "Slip edit (move item contents)"}
+
+    // Optional: make a plain tap on the lower half split under the mouse
+    // (custom actions ARE allowed on click contexts). Uncomment to enable —
+    // note a tap then splits instead of selecting; a press-drag still slips.
+    // {ctx MM_CTX_ITEMLOWER_CLK, mods "", behavior "42577 c", desc "Split under mouse (select right)"}
+)

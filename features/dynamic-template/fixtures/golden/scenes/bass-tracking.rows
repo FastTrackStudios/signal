@@ -1,0 +1,267 @@
+0	Guide	86
+0	Keyflow	86
+0	Drums	86
+1	Unassigned	86
+2	Kick	86
+3	Sum	86
+4	In	86
+4	Out	86
+4	Trig	86
+4	Sample	86
+3	Sub	86
+3	Verb	86
+4	Room	86
+2	Snare	86
+3	Sum	86
+4	Top	86
+4	Bottom	86
+4	Trig	86
+4	Sample	86
+4	Fund	86
+3	Verb	86
+4	Plate	86
+4	Hall	86
+4	Nonlin	86
+2	Toms	86
+3	Tom 1	86
+4	T1	86
+4	T1 Trig	86
+4	T1 Sample	86
+4	Fund	86
+3	Tom 2	86
+4	T2	86
+4	T2 Trig	86
+4	T2 Sample	86
+4	Fund	86
+3	Tom 3	86
+4	T3	86
+4	T3 Trig	86
+4	T3 Sample	86
+4	Fund	86
+3	Tom 4	86
+4	T4	86
+4	T4 Trig	86
+4	T4 Sample	86
+4	Fund	86
+3	Verb	86
+4	Room	86
+4	Nonlin	86
+2	Cymbals	86
+3	OH	86
+3	Hi-Hat	86
+3	Ride	86
+2	Rooms	86
+3	Rooms	86
+3	Rooms Far	86
+2	Process	30
+3	Compress	30
+4	Dry	30
+4	Tight	30
+4	Punch	30
+4	Smash	30
+4	Crunch	30
+3	FX	30
+4	Room Sim	30
+4	Verb	30
+5	Wood Room	30
+5	Music Club	30
+5	Stadium	30
+5	RMX 16	30
+5	Nonlin	30
+5	Brick Wall	30
+0	Percussion	86
+1	Unassigned	86
+2	Shaker	86
+2	Tambourine	86
+2	Claps	86
+0	Bass	86
+1	Unassigned	86
+2	Guitar	86
+3	DI	133
+3	Amp	133
+2	Synth	86
+3	Sub	133
+3	Synth	133
+0	Electric	86
+1	Unassigned	86
+2	Rhythm	86
+3	Main	86
+4	L	86
+5	DI	86
+5	Pedalboard	86
+5	Amp 1	86
+6	SM57	86
+6	Royer	86
+5	Amp 2	86
+6	SM57	86
+6	Royer	86
+4	R	86
+5	DI	86
+5	Pedalboard	86
+5	Amp 1	86
+6	SM57	86
+6	Royer	86
+5	Amp 2	86
+6	SM57	86
+6	Royer	86
+3	Octave	86
+4	L	86
+5	DI	86
+5	Pedalboard	86
+5	Amp 1	86
+6	SM57	86
+6	Royer	86
+5	Amp 2	86
+6	SM57	86
+6	Royer	86
+4	R	86
+5	DI	86
+5	Pedalboard	86
+5	Amp 1	86
+6	SM57	86
+6	Royer	86
+5	Amp 2	86
+6	SM57	86
+6	Royer	86
+2	Lead	86
+3	L	30
+3	R	30
+2	Solo	86
+3	Main	86
+3	Harmony	86
+0	Acoustic	86
+1	Unassigned	86
+2	Steel	86
+2	Nylon	86
+2	Nashville	86
+0	Keys	86
+1	Unassigned	86
+2	Piano	86
+2	Rhodes	86
+2	Wurli	86
+2	Organ	86
+0	Synths	86
+1	Unassigned	86
+2	Sub Bass Synth	86
+2	Texture	86
+2	SY Arps	86
+3	Arp	86
+2	SY Pads	86
+3	Pad	86
+2	SY Leads	86
+3	Lead Synth	86
+2	SY Chords	86
+3	Chord	86
+0	Vocals	86
+1	Unassigned	86
+2	Ron	86
+3	Main	86
+4	EN	86
+4	ES	86
+4	PT	86
+3	DBL	86
+4	EN	86
+4	ES	86
+4	PT	86
+2	Belen	86
+3	Main	86
+4	EN	86
+4	ES	86
+3	DBL	86
+4	EN	86
+4	ES	86
+2	Aline	86
+3	Main	86
+4	PT	86
+3	DBL	86
+4	PT	86
+2	Vox FX	86
+3	Delay	86
+4	Slap	86
+4	Short	86
+4	Long	86
+4	Throw	86
+3	Verb	86
+4	Room	86
+4	Short	86
+4	Long	86
+4	Moment	86
+4	Throw	86
+3	Wide	86
+3	Pitch	86
+4	Oct+	86
+4	Oct-	86
+2	VOX EN	86
+2	VOX ES	86
+2	VOX PT	86
+0	BGVs	86
+1	Unassigned	86
+2	Octave Up	86
+3	EN	86
+3	ES	86
+3	PT	86
+2	Octave Down	86
+3	EN	86
+3	ES	86
+3	PT	86
+2	Higher Harmony	86
+3	EN	86
+3	ES	86
+3	PT	86
+2	Lower Harmony	86
+3	EN	86
+3	ES	86
+3	PT	86
+2	Hey	86
+3	All 1	86
+3	All 2	86
+3	All 3	86
+3	All 4	86
+3	All 5	86
+3	All 6	86
+3	All 7	86
+3	All 8	86
+0	Choir	86
+1	Unassigned	86
+2	Soprano	86
+3	EN	86
+3	ES	86
+3	PT	86
+2	Alto	86
+3	EN	86
+3	ES	86
+3	PT	86
+2	Tenor	86
+3	EN	86
+3	ES	86
+3	PT	86
+2	Bass	86
+3	EN	86
+3	ES	86
+3	PT	86
+0	Orchestra	86
+1	Unassigned	86
+2	Winds	86
+3	Flute	86
+3	Oboe	86
+3	Clarinet	86
+3	Bassoon	86
+2	Brass	86
+3	Trumpets	86
+3	Horns	86
+3	Trombones	86
+3	Tuba	86
+2	Strings	86
+3	Violin 1	86
+3	Violin 2	86
+3	Viola	86
+3	Cello	86
+3	Bass	86
+2	Orch Percussion	86
+3	Timpani	86
+0	HEADPHONE MIXES	86
+1	HP Engineer	86
+1	HP Producer	86
+1	HP Broadcast	86
+0	TALKBACK	86
+1	TB Engineer	86

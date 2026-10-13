@@ -1,0 +1,34 @@
+meta {
+    id fts-input-config
+    version 2026-04-05
+    description "FTS Input plugin runtime configuration"
+}
+
+schema {
+    @ @object{
+        /// Which keyboard/mouse profile to activate.
+        ///
+        /// Valid values: @FastTrackStudio | @Logic | @ProTools
+        profile @InputProfile
+
+        /// Whether the input handler starts enabled.
+        ///
+        /// Set to true if you want FTS Input active as soon as REAPER loads.
+        enabled @bool
+
+        /// Consume key events that the handler processes.
+        ///
+        /// When true, matched keys are swallowed so REAPER never sees them.
+        /// Set to false for passthrough/debug mode.
+        eat_handled_keys @bool
+
+        /// Write verbose input-event logging to /tmp/reaper-fts-input.log
+        debug_logging @bool
+    }
+
+    InputProfile @enum{
+        FastTrackStudio @unit
+        Logic @unit
+        ProTools @unit
+    }
+}

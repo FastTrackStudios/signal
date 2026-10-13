@@ -1,0 +1,17 @@
+[package]
+name = "razor"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Razor edit areas — rectangles of time by row, and the set algebra over them"
+
+# No dependencies, deliberately.
+#
+# A razor area is a rectangle of time and rows and nothing else: it says
+# nothing about what is inside it, which is why the expression editor
+# can use it over notes and the arrangement over items. The moment this
+# grows a dependency on either of their models it stops being shared.
+
+[lints]
+workspace = true

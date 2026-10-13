@@ -1,0 +1,9 @@
+// Pro Tools transport — stub (not fully ported).
+
+bindings (
+    {keys "<space>",    action 40044, desc "Play / Stop"}
+    {keys "<enter>",      action 40042, desc "Go to start of project"}
+    {keys "<kp_enter>",   action 1007,  desc "Play"}
+    {keys "<kp_0>",       action 1016,  desc "Stop"}
+    {keys "<kp_*>",       action 40046, desc "Toggle record"}
+)

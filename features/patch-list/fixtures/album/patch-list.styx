@@ -1,0 +1,105 @@
+// The golden album's patch list (docs/spec/session/workflows.md,
+// flow.patch-list.plan): every input the reference session records, by
+// performer, then by the kind of source they play, then by channel or
+// mic. Values are input ROLES — names the studio profile resolves to a
+// device channel — so the same list tracks the album in any room that
+// has a profile.
+//
+// A kit is the drummer's rig of kind drums, keyed `piece/mic`; a bass
+// is a rig of kind bass keyed by channel; a MIDI source is an entry
+// giving the device and channel directly.
+
+performers {
+    cody {
+        guitar {
+            di "DI 3"
+            pedalboard "DI 4"
+            amp-a/57 "Mic 5"
+            amp-a/121 "Mic 6"
+            amp-b/57 "Mic 7"
+            amp-b/121 "Mic 8"
+        }
+    }
+    john {
+        guitar {
+            di "DI 5"
+            pedalboard "DI 6"
+            amp-a/57 "Mic 9"
+            amp-a/121 "Mic 10"
+        }
+        keys {
+            synth @midi{device "Prophet-6", channel 1}
+        }
+    }
+    ron {
+        vocal {
+            main "Vocal 1"
+        }
+        keys {
+            nord "Nord"
+        }
+    }
+    belen {
+        vocal {
+            main "Vocal 2"
+        }
+    }
+    aline {
+        vocal {
+            main "Vocal 3"
+        }
+    }
+    drummer {
+        drums {
+            kick/in "Kick In"
+            kick/out "Kick Out"
+            kick/trig "Kick Trig"
+            snare/top "Snare Top"
+            snare/bottom "Snare Bottom"
+            snare/trig "Snare Trig"
+            toms/t1 "Tom 1"
+            toms/t2 "Tom 2"
+            toms/t3 "Tom 3"
+            cymbals/oh "OH"
+            cymbals/hi-hat "Hi-Hat"
+            cymbals/ride "Ride"
+            rooms/rooms "Rooms"
+            rooms/far "Rooms Far"
+        }
+    }
+    bassist {
+        bass {
+            di "DI 1"
+            amp "Mic 11"
+        }
+    }
+    // Two talkback mics on the one Talkback role — allowed because the
+    // profile marks it shared.
+    engineer {
+        talkback {
+            mic "Talkback"
+        }
+    }
+    producer {
+        talkback {
+            mic "Talkback"
+        }
+    }
+}
+
+// One headphone bus per performer, plus the engineer's and the
+// producer's (mix plus talkback) and the broadcast feed (mix only).
+// `output` is the bus role in the profile's outputs table; `for` is
+// who hears it — one name, or several for a shared bus.
+headphones {
+    cody {output "HP 1", for (cody)}
+    john {output "HP 2", for (john)}
+    ron {output "HP 3", for (ron)}
+    belen {output "HP 4", for (belen)}
+    aline {output "HP 5", for (aline)}
+    drummer {output "HP 6", for (drummer)}
+    bassist {output "HP 7", for (bassist)}
+    engineer {output "HP Engineer", for (engineer)}
+    producer {output "HP Producer", for (producer)}
+    broadcast {output "Broadcast", for (broadcast)}
+}

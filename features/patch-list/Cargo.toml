@@ -1,0 +1,55 @@
+[package]
+name = "patch-list"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "The patch list: an album's inputs by performer, resolved through a studio profile"
+
+# What this is. The patch list (spec #48, decision #29) is a styx file
+# beside an album's sessions naming every input the album records —
+# performer → source kind → channel or mic → input role — and the
+# headphone buses with who each is for. A studio profile, kept per
+# machine in the app config directory, owns the role vocabulary and
+# resolves a role to a device channel. This crate is the data: the
+# types, the files, the lowering to `(selector, role)` entries, the
+# validation, and (#57) applying a plan to a session, the session
+# override layered on top, and the applied/stale bookkeeping in
+# project ext-state. The view that shows one (`session-daw`) sits on
+# top of it.
+
+[dependencies]
+# `indexmap` so a document keeps its authored order: the Patch List
+# view lists performers the way the list does, and the scene engine
+# orders performer rows by it.
+facet = { workspace = true, features = ["indexmap"] }
+facet-styx = { workspace = true }
+indexmap = { workspace = true }
+# The selector vocabulary an entry lowers into — the scene engine's.
+dynamic-template = { workspace = true }
+# The facade apply drives: `Tracks::set_record_input`, one undo block
+# via `Projects`, and the project-scoped `ExtState` the applied copy
+# and the override live in. The proto crate directly rather than the
+# `daw` facade: apply needs the trait surface, not a backend.
+daw-proto = { workspace = true }
+# The apply span's wide-event fields (`patch.applied`, `patch.unpatched`,
+# `patch.unused`) — logging-best-practices skill, CLAUDE.md.
+architect-telemetry = { workspace = true }
+# The applied copy's timestamp.
+chrono = { workspace = true }
+dirs = "6"
+gethostname = "1"
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# Parsing a document to a tree for schema validation in the tests —
+# the same rc facet-styx is pinned to.
+styx-tree = "5.0.0-rc.5"
+# The apply scenario test drives the facade against a real backend with
+# no REAPER in the picture.
+daw-standalone = { workspace = true }
+
+[lints]
+workspace = true

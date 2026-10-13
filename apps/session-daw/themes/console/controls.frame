@@ -1,0 +1,496 @@
+<Document>
+  <Page name="controls">
+    <Component name="pan" w=24 h=25 arg:value="0">
+      <Frame name="Pan" x=5 y=35 w=24 h=25 bind:x="0" bind:y="0" bind:visible="true">
+        <Vector w=24 h=25 geometry="M21.369999999999997,12.08 C21.369999999999997,17.254908105914534 17.174908105914533,21.45 12,21.45 C6.8250918940854675,21.45 2.6300000000000026,17.254908105914534 2.630000000000001,12.080000000000002 C2.629999999999999,6.9050918940854675 6.825091894085465,2.7100000000000026 11.999999999999998,2.710000000000001 C17.174908105914533,2.709999999999999 21.369999999999997,6.905091894085464 21.369999999999997,12.079999999999998" fill="#151517" />
+        <Vector w=24 h=25 geometry="M6.470424971121197,17.6095750288788 C3.416525009626266,14.55567506738387 3.416525009626268,9.604324932616128 6.470424971121199,6.550424971121198 C9.52432493261613,3.496525009626268 14.475675067383872,3.496525009626268 17.529575028878803,6.550424971121199 C20.583474990373734,9.60432493261613 20.58347499037373,14.55567506738387 17.529575028878803,17.6095750288788" stroke-weight=2.4 stroke-join="round" bind:stroke="$hardware.edge" />
+        <Vector name="Value" w=24 h=25 geometry="M 0 0" bind:stroke="$pan" stroke-weight=2.4 stroke-join="round" bind:geometry="arc(12, 12.08, 7.82, 0, clamp(arg.value, -1, 1) * 135)" bind:visible="abs(clamp(arg.value, -1, 1) * 135) > 0.5" />
+        <Frame name="Face Normal" w=24 h=25 bind:visible="!(ui.pressed == \"pan\" || (ui.hover == \"pan\" && ui.pressed == \"\"))">
+          <Vector w=24 h=25 geometry="M18.27,12.08 C18.27,15.542825381439073 15.462825381439075,18.349999999999998 12,18.349999999999998 C8.537174618560927,18.349999999999998 5.730000000000002,15.542825381439075 5.730000000000001,12.08 C5.73,8.617174618560927 8.537174618560925,5.810000000000002 11.999999999999998,5.810000000000001 C15.462825381439073,5.8100000000000005 18.269999999999996,8.617174618560925 18.27,12.079999999999998" bind:fill="$hardware" />
+        </Frame>
+        <Frame name="Face Hover" w=24 h=25 bind:visible="(ui.hover == \"pan\" && ui.pressed == \"\")">
+          <Vector w=24 h=25 geometry="M18.27,12.08 C18.27,15.542825381439073 15.462825381439075,18.349999999999998 12,18.349999999999998 C8.537174618560927,18.349999999999998 5.730000000000002,15.542825381439075 5.730000000000001,12.08 C5.73,8.617174618560927 8.537174618560925,5.810000000000002 11.999999999999998,5.810000000000001 C15.462825381439073,5.8100000000000005 18.269999999999996,8.617174618560925 18.27,12.079999999999998" bind:fill="lift($hardware, 0.32)" />
+        </Frame>
+        <Frame name="Face Pressed" w=24 h=25 bind:visible="ui.pressed == \"pan\"">
+          <Vector w=24 h=25 geometry="M18.27,12.08 C18.27,15.542825381439073 15.462825381439075,18.349999999999998 12,18.349999999999998 C8.537174618560927,18.349999999999998 5.730000000000002,15.542825381439075 5.730000000000001,12.08 C5.73,8.617174618560927 8.537174618560925,5.810000000000002 11.999999999999998,5.810000000000001 C15.462825381439073,5.8100000000000005 18.269999999999996,8.617174618560925 18.27,12.079999999999998" fill="#15151b" />
+        </Frame>
+        <Vector name="Pointer" x=12 y=12.08 w=1 h=1 geometry="M -0.9960000000000004 -5.5699999999999985 L 0.9960000000000004 -5.5699999999999985 L 0.9960000000000004 -4.3100000000000005 L -0.9960000000000004 -4.3100000000000005 Z" bind:fill="$pan" bind:rotation="clamp(arg.value, -1, 1) * 135" />
+        <Vector w=24 h=25 geometry="M16.06,12.05 C16.06,14.292276084313022 14.242276084313021,16.11 12,16.11 C9.757723915686979,16.11 7.94,14.292276084313022 7.94,12.05 C7.94,9.80772391568698 9.757723915686977,7.990000000000002 12,7.990000000000001 C14.24227608431302,7.99 16.06,9.807723915686978 16.06,12.049999999999999" bind:fill="$hardware.mark" />
+      </Frame>
+    </Component>
+    <Component name="fx" w=72 h=22 arg:count="0">
+      <Frame name="FX Empty Normal" w=72 h=22 bind:x="0" bind:y="0" bind:w="pw" bind:visible="true && true && arg.count == 0 && !(ui.pressed == \"fx\" || (ui.hover == \"fx\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 bind:fill="$plate" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 bind:fill="$hardware.edge" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 bind:fill="darken($hardware.mark, 0.45)" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.33), 0.61)" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Empty Hover" w=72 h=22 bind:x="0" bind:y="0" bind:w="pw" bind:visible="true && true && arg.count == 0 && (ui.hover == \"fx\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 bind:fill="$plate" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 bind:fill="$hardware.edge" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 bind:fill="darken($hardware.mark, 0.45)" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.33), 0.61)" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Empty Pressed" w=72 h=22 bind:x="0" bind:y="0" bind:w="pw" bind:visible="true && true && arg.count == 0 && ui.pressed == \"fx\"">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 bind:fill="$plate" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 bind:fill="$hardware.edge" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 bind:fill="darken($hardware.mark, 0.45)" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.33), 0.61)" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Active Normal" w=72 h=22 bind:x="0" bind:y="0" bind:w="pw" bind:visible="true && true && arg.count > 0 && !(ui.pressed == \"fx\" || (ui.hover == \"fx\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 bind:fill="$plate" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 bind:fill="$hardware.edge" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 bind:fill="$accent" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.78), 0.87)" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Active Hover" w=72 h=22 bind:x="0" bind:y="0" bind:w="pw" bind:visible="true && true && arg.count > 0 && (ui.hover == \"fx\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 bind:fill="$plate" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 bind:fill="$hardware.edge" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 bind:fill="$accent" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.78), 0.87)" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Active Pressed" w=72 h=22 bind:x="0" bind:y="0" bind:w="pw" bind:visible="true && true && arg.count > 0 && ui.pressed == \"fx\"">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 bind:fill="$plate" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 bind:fill="$hardware.edge" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 bind:fill="$accent" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.78), 0.87)" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+    </Component>
+    <Component name="fx.compact" w=26 h=22 arg:count="0">
+      <Frame name="FX compact Empty Normal" w=26 h=22 bind:x="0" bind:y="0" bind:visible="true && !false && arg.count == 0 && !(ui.pressed == \"fx\" || (ui.hover == \"fx\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=1 w=26 h=20 radius=2.6399999999999997 bind:fill="$plate" />
+        <Rectangle x=0.5 y=1.5 w=25 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 />
+        <Rectangle x=21 y=7 w=2 h=8 radius=1 bind:fill="darken($hardware.mark, 0.45)" />
+        <Text x=-191.5 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.33), 0.61)">FX</Text>
+      </Frame>
+      <Frame name="FX compact Empty Hover" w=26 h=22 bind:x="0" bind:y="0" bind:visible="true && !false && arg.count == 0 && (ui.hover == \"fx\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=1 w=26 h=20 radius=2.6399999999999997 bind:fill="$plate" />
+        <Rectangle x=0.5 y=1.5 w=25 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 />
+        <Rectangle x=21 y=7 w=2 h=8 radius=1 bind:fill="darken($hardware.mark, 0.45)" />
+        <Text x=-191.5 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.33), 0.61)">FX</Text>
+      </Frame>
+      <Frame name="FX compact Empty Pressed" w=26 h=22 bind:x="0" bind:y="0" bind:visible="true && !false && arg.count == 0 && ui.pressed == \"fx\"">
+        <Rectangle x=0 y=1 w=26 h=20 radius=2.6399999999999997 bind:fill="$plate" />
+        <Rectangle x=0.5 y=1.5 w=25 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 />
+        <Rectangle x=21 y=7 w=2 h=8 radius=1 bind:fill="darken($hardware.mark, 0.45)" />
+        <Text x=-191.5 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.33), 0.61)">FX</Text>
+      </Frame>
+      <Frame name="FX compact Active Normal" w=26 h=22 bind:x="0" bind:y="0" bind:visible="true && !false && arg.count > 0 && !(ui.pressed == \"fx\" || (ui.hover == \"fx\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=1 w=26 h=20 radius=2.6399999999999997 bind:fill="$plate" />
+        <Rectangle x=0.5 y=1.5 w=25 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 />
+        <Rectangle x=21 y=7 w=2 h=8 radius=1 bind:fill="$accent" />
+        <Text x=-191.5 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.78), 0.87)">FX</Text>
+      </Frame>
+      <Frame name="FX compact Active Hover" w=26 h=22 bind:x="0" bind:y="0" bind:visible="true && !false && arg.count > 0 && (ui.hover == \"fx\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=1 w=26 h=20 radius=2.6399999999999997 bind:fill="$plate" />
+        <Rectangle x=0.5 y=1.5 w=25 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 />
+        <Rectangle x=21 y=7 w=2 h=8 radius=1 bind:fill="$accent" />
+        <Text x=-191.5 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.78), 0.87)">FX</Text>
+      </Frame>
+      <Frame name="FX compact Active Pressed" w=26 h=22 bind:x="0" bind:y="0" bind:visible="true && !false && arg.count > 0 && ui.pressed == \"fx\"">
+        <Rectangle x=0 y=1 w=26 h=20 radius=2.6399999999999997 bind:fill="$plate" />
+        <Rectangle x=0.5 y=1.5 w=25 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=2.6399999999999997 />
+        <Rectangle x=21 y=7 w=2 h=8 radius=1 bind:fill="$accent" />
+        <Text x=-191.5 y=5.1 w=400 h=14.5 size=10.5 text-align="center" bind:fill="alpha(lighten($hardware.mark, 0.78), 0.87)">FX</Text>
+      </Frame>
+    </Component>
+    <Component name="routing" w=28 h=22 arg:parent_send="true" arg:sends="0" arg:receives="0">
+      <Frame name="Routing head 0 Normal" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends == 0 && arg.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 0 Hover" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends == 0 && arg.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 0 Pressed" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends == 0 && arg.receives == 0 && ui.pressed == \"routing\"">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 1 Normal" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends == 0 && arg.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 1 Hover" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends == 0 && arg.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 1 Pressed" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends == 0 && arg.receives == 0 && ui.pressed == \"routing\"">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 2 Normal" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends > 0 && arg.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 2 Hover" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends > 0 && arg.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 2 Pressed" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends > 0 && arg.receives == 0 && ui.pressed == \"routing\"">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 3 Normal" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends > 0 && arg.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 3 Hover" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends > 0 && arg.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 3 Pressed" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends > 0 && arg.receives == 0 && ui.pressed == \"routing\"">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+      </Frame>
+      <Frame name="Routing head 4 Normal" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends == 0 && arg.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 4 Hover" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends == 0 && arg.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 4 Pressed" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends == 0 && arg.receives > 0 && ui.pressed == \"routing\"">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 5 Normal" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends == 0 && arg.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 5 Hover" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends == 0 && arg.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 5 Pressed" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends == 0 && arg.receives > 0 && ui.pressed == \"routing\"">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 6 Normal" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends > 0 && arg.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 6 Hover" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends > 0 && arg.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 6 Pressed" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && !arg.parent_send && arg.sends > 0 && arg.receives > 0 && ui.pressed == \"routing\"">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="alpha(darken($hardware.mark, 0.29), 0.49)" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 7 Normal" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends > 0 && arg.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 7 Hover" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends > 0 && arg.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+      <Frame name="Routing head 7 Pressed" w=28 h=22 bind:x="0" bind:y="0" bind:visible="true && arg.parent_send && arg.sends > 0 && arg.receives > 0 && ui.pressed == \"routing\"">
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 bind:fill="$plate" />
+        <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3.52 />
+        <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 bind:fill="$sheen" />
+        <Rectangle x=5 y=6 w=4 h=10 radius=2 bind:fill="$route.out" />
+        <Rectangle x=12 y=6 w=4 h=10 radius=2 bind:fill="$route.send" />
+        <Rectangle x=19 y=6 w=4 h=10 radius=2 bind:fill="$route.recv" />
+      </Frame>
+    </Component>
+    <Component name="arm" w=20 h=20 arg:armed="false" arg:behind="track.ground">
+      <Frame name="Arm Panel false Normal" w=20 h=20 bind:x="0" bind:y="0" bind:visible="true && !arg.armed && !(ui.pressed == \"arm\" || (ui.hover == \"arm\" && ui.pressed == \"\"))">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#ceced3","position":0},{"color":"#c3c3c9","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="arg.behind" />
+      </Frame>
+      <Frame name="Arm Panel false Hover" w=20 h=20 bind:x="0" bind:y="0" bind:visible="true && !arg.armed && (ui.hover == \"arm\" && ui.pressed == \"\")">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#d5d5d9","position":0},{"color":"#ccccd1","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="arg.behind" />
+      </Frame>
+      <Frame name="Arm Panel false Pressed" w=20 h=20 bind:x="0" bind:y="0" bind:visible="true && !arg.armed && ui.pressed == \"arm\"">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#bbbbbf","position":0},{"color":"#acacb1","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="arg.behind" />
+      </Frame>
+      <Frame name="Arm Panel true Normal" w=20 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.armed && !(ui.pressed == \"arm\" || (ui.hover == \"arm\" && ui.pressed == \"\"))">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#f26666","position":0},{"color":"#ef4444","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="arg.behind" />
+      </Frame>
+      <Frame name="Arm Panel true Hover" w=20 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.armed && (ui.hover == \"arm\" && ui.pressed == \"\")">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#f47d7d","position":0},{"color":"#f16060","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="arg.behind" />
+      </Frame>
+      <Frame name="Arm Panel true Pressed" w=20 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.armed && ui.pressed == \"arm\"">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#da5f5f","position":0},{"color":"#d23c3c","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="arg.behind" />
+      </Frame>
+    </Component>
+    <Component name="monitor" w=21 h=20 arg:mode="0">
+      <Frame name="Monitor Off Normal" w=21 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.mode == 0 && !(ui.pressed == \"monitor\" || (ui.hover == \"monitor\" && ui.pressed == \"\"))">
+        <Vector w=21 h=20 geometry="M7.300000000000001,10 C7.300000000000001,11.623717164502533 5.956854249492381,12.940000000000001 4.300000000000001,12.940000000000001 C2.643145750507621,12.940000000000001 1.3000000000000012,11.623717164502533 1.3000000000000007,10 C1.3000000000000003,8.376282835497468 2.64314575050762,7.0600000000000005 4.3,7.06 C5.95685424949238,7.059999999999999 7.300000000000001,8.376282835497467 7.300000000000001,10" bind:fill="darken($hardware.mark, 0.33)" />
+        <Vector w=21 h=20 geometry="M8.029996039173126,5.432208753335284 C9.80518235200081,6.259991725658768 10.940000000000001,8.041298620381491 10.940000000000001,10 C10.940000000000001,11.958701379618509 9.80518235200081,13.740008274341232 8.029996039173126,14.567791246664715" stroke-weight=2 stroke-join="round" bind:stroke="darken($hardware.mark, 0.33)" />
+        <Vector w=21 h=20 geometry="M9.183743893725236,2.95798849472523 C11.920489459334581,4.234153910390601 13.67,6.980335373088133 13.67,10 C13.67,13.019664626911867 11.920489459334581,15.765846089609399 9.183743893725236,17.042011505274772" stroke-weight=2.2 stroke-join="round" bind:stroke="darken($hardware.mark, 0.33)" />
+      </Frame>
+      <Frame name="Monitor Off Hover" w=21 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.mode == 0 && (ui.hover == \"monitor\" && ui.pressed == \"\")">
+        <Vector w=21 h=20 geometry="M7.300000000000001,10 C7.300000000000001,11.623717164502533 5.956854249492381,12.940000000000001 4.300000000000001,12.940000000000001 C2.643145750507621,12.940000000000001 1.3000000000000012,11.623717164502533 1.3000000000000007,10 C1.3000000000000003,8.376282835497468 2.64314575050762,7.0600000000000005 4.3,7.06 C5.95685424949238,7.059999999999999 7.300000000000001,8.376282835497467 7.300000000000001,10" bind:fill="darken($hardware.mark, 0.1)" />
+        <Vector w=21 h=20 geometry="M8.029996039173126,5.432208753335284 C9.80518235200081,6.259991725658768 10.940000000000001,8.041298620381491 10.940000000000001,10 C10.940000000000001,11.958701379618509 9.80518235200081,13.740008274341232 8.029996039173126,14.567791246664715" stroke-weight=2 stroke-join="round" bind:stroke="darken($hardware.mark, 0.1)" />
+        <Vector w=21 h=20 geometry="M9.183743893725236,2.95798849472523 C11.920489459334581,4.234153910390601 13.67,6.980335373088133 13.67,10 C13.67,13.019664626911867 11.920489459334581,15.765846089609399 9.183743893725236,17.042011505274772" stroke-weight=2.2 stroke-join="round" bind:stroke="darken($hardware.mark, 0.1)" />
+      </Frame>
+      <Frame name="Monitor Off Pressed" w=21 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.mode == 0 && ui.pressed == \"monitor\"">
+        <Vector w=21 h=20 geometry="M7.300000000000001,10 C7.300000000000001,11.623717164502533 5.956854249492381,12.940000000000001 4.300000000000001,12.940000000000001 C2.643145750507621,12.940000000000001 1.3000000000000012,11.623717164502533 1.3000000000000007,10 C1.3000000000000003,8.376282835497468 2.64314575050762,7.0600000000000005 4.3,7.06 C5.95685424949238,7.059999999999999 7.300000000000001,8.376282835497467 7.300000000000001,10" bind:fill="darken($hardware.mark, 0.1)" />
+        <Vector w=21 h=20 geometry="M8.029996039173126,5.432208753335284 C9.80518235200081,6.259991725658768 10.940000000000001,8.041298620381491 10.940000000000001,10 C10.940000000000001,11.958701379618509 9.80518235200081,13.740008274341232 8.029996039173126,14.567791246664715" stroke-weight=2 stroke-join="round" bind:stroke="darken($hardware.mark, 0.1)" />
+        <Vector w=21 h=20 geometry="M9.183743893725236,2.95798849472523 C11.920489459334581,4.234153910390601 13.67,6.980335373088133 13.67,10 C13.67,13.019664626911867 11.920489459334581,15.765846089609399 9.183743893725236,17.042011505274772" stroke-weight=2.2 stroke-join="round" bind:stroke="darken($hardware.mark, 0.1)" />
+      </Frame>
+      <Frame name="Monitor Normal Normal" w=21 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.mode == 1 && !(ui.pressed == \"monitor\" || (ui.hover == \"monitor\" && ui.pressed == \"\"))">
+        <Vector w=21 h=20 geometry="M7.300000000000001,10 C7.300000000000001,11.623717164502533 5.956854249492381,12.940000000000001 4.300000000000001,12.940000000000001 C2.643145750507621,12.940000000000001 1.3000000000000012,11.623717164502533 1.3000000000000007,10 C1.3000000000000003,8.376282835497468 2.64314575050762,7.0600000000000005 4.3,7.06 C5.95685424949238,7.059999999999999 7.300000000000001,8.376282835497467 7.300000000000001,10" bind:fill="$text" />
+        <Vector w=21 h=20 geometry="M8.029996039173126,5.432208753335284 C9.80518235200081,6.259991725658768 10.940000000000001,8.041298620381491 10.940000000000001,10 C10.940000000000001,11.958701379618509 9.80518235200081,13.740008274341232 8.029996039173126,14.567791246664715" stroke-weight=2 stroke-join="round" bind:stroke="$text" />
+        <Vector w=21 h=20 geometry="M9.183743893725236,2.95798849472523 C11.920489459334581,4.234153910390601 13.67,6.980335373088133 13.67,10 C13.67,13.019664626911867 11.920489459334581,15.765846089609399 9.183743893725236,17.042011505274772" stroke-weight=2.2 stroke-join="round" bind:stroke="$text" />
+      </Frame>
+      <Frame name="Monitor Normal Hover" w=21 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.mode == 1 && (ui.hover == \"monitor\" && ui.pressed == \"\")">
+        <Vector w=21 h=20 geometry="M7.300000000000001,10 C7.300000000000001,11.623717164502533 5.956854249492381,12.940000000000001 4.300000000000001,12.940000000000001 C2.643145750507621,12.940000000000001 1.3000000000000012,11.623717164502533 1.3000000000000007,10 C1.3000000000000003,8.376282835497468 2.64314575050762,7.0600000000000005 4.3,7.06 C5.95685424949238,7.059999999999999 7.300000000000001,8.376282835497467 7.300000000000001,10" bind:fill="$text" />
+        <Vector w=21 h=20 geometry="M8.029996039173126,5.432208753335284 C9.80518235200081,6.259991725658768 10.940000000000001,8.041298620381491 10.940000000000001,10 C10.940000000000001,11.958701379618509 9.80518235200081,13.740008274341232 8.029996039173126,14.567791246664715" stroke-weight=2 stroke-join="round" bind:stroke="$text" />
+        <Vector w=21 h=20 geometry="M9.183743893725236,2.95798849472523 C11.920489459334581,4.234153910390601 13.67,6.980335373088133 13.67,10 C13.67,13.019664626911867 11.920489459334581,15.765846089609399 9.183743893725236,17.042011505274772" stroke-weight=2.2 stroke-join="round" bind:stroke="$text" />
+      </Frame>
+      <Frame name="Monitor Normal Pressed" w=21 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.mode == 1 && ui.pressed == \"monitor\"">
+        <Vector w=21 h=20 geometry="M7.300000000000001,10 C7.300000000000001,11.623717164502533 5.956854249492381,12.940000000000001 4.300000000000001,12.940000000000001 C2.643145750507621,12.940000000000001 1.3000000000000012,11.623717164502533 1.3000000000000007,10 C1.3000000000000003,8.376282835497468 2.64314575050762,7.0600000000000005 4.3,7.06 C5.95685424949238,7.059999999999999 7.300000000000001,8.376282835497467 7.300000000000001,10" bind:fill="$text" />
+        <Vector w=21 h=20 geometry="M8.029996039173126,5.432208753335284 C9.80518235200081,6.259991725658768 10.940000000000001,8.041298620381491 10.940000000000001,10 C10.940000000000001,11.958701379618509 9.80518235200081,13.740008274341232 8.029996039173126,14.567791246664715" stroke-weight=2 stroke-join="round" bind:stroke="$text" />
+        <Vector w=21 h=20 geometry="M9.183743893725236,2.95798849472523 C11.920489459334581,4.234153910390601 13.67,6.980335373088133 13.67,10 C13.67,13.019664626911867 11.920489459334581,15.765846089609399 9.183743893725236,17.042011505274772" stroke-weight=2.2 stroke-join="round" bind:stroke="$text" />
+      </Frame>
+      <Frame name="Monitor NotWhenPlaying Normal" w=21 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.mode == 2 && !(ui.pressed == \"monitor\" || (ui.hover == \"monitor\" && ui.pressed == \"\"))">
+        <Vector w=21 h=20 geometry="M7.300000000000001,10 C7.300000000000001,11.623717164502533 5.956854249492381,12.940000000000001 4.300000000000001,12.940000000000001 C2.643145750507621,12.940000000000001 1.3000000000000012,11.623717164502533 1.3000000000000007,10 C1.3000000000000003,8.376282835497468 2.64314575050762,7.0600000000000005 4.3,7.06 C5.95685424949238,7.059999999999999 7.300000000000001,8.376282835497467 7.300000000000001,10" bind:fill="$monitor.tape" />
+        <Vector w=21 h=20 geometry="M8.029996039173126,5.432208753335284 C9.80518235200081,6.259991725658768 10.940000000000001,8.041298620381491 10.940000000000001,10 C10.940000000000001,11.958701379618509 9.80518235200081,13.740008274341232 8.029996039173126,14.567791246664715" stroke-weight=2 stroke-join="round" bind:stroke="$monitor.tape" />
+        <Vector w=21 h=20 geometry="M9.183743893725236,2.95798849472523 C11.920489459334581,4.234153910390601 13.67,6.980335373088133 13.67,10 C13.67,13.019664626911867 11.920489459334581,15.765846089609399 9.183743893725236,17.042011505274772" stroke-weight=2.2 stroke-join="round" bind:stroke="darken($hardware.mark, 0.33)" />
+      </Frame>
+      <Frame name="Monitor NotWhenPlaying Hover" w=21 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.mode == 2 && (ui.hover == \"monitor\" && ui.pressed == \"\")">
+        <Vector w=21 h=20 geometry="M7.300000000000001,10 C7.300000000000001,11.623717164502533 5.956854249492381,12.940000000000001 4.300000000000001,12.940000000000001 C2.643145750507621,12.940000000000001 1.3000000000000012,11.623717164502533 1.3000000000000007,10 C1.3000000000000003,8.376282835497468 2.64314575050762,7.0600000000000005 4.3,7.06 C5.95685424949238,7.059999999999999 7.300000000000001,8.376282835497467 7.300000000000001,10" bind:fill="$monitor.tape" />
+        <Vector w=21 h=20 geometry="M8.029996039173126,5.432208753335284 C9.80518235200081,6.259991725658768 10.940000000000001,8.041298620381491 10.940000000000001,10 C10.940000000000001,11.958701379618509 9.80518235200081,13.740008274341232 8.029996039173126,14.567791246664715" stroke-weight=2 stroke-join="round" bind:stroke="$monitor.tape" />
+        <Vector w=21 h=20 geometry="M9.183743893725236,2.95798849472523 C11.920489459334581,4.234153910390601 13.67,6.980335373088133 13.67,10 C13.67,13.019664626911867 11.920489459334581,15.765846089609399 9.183743893725236,17.042011505274772" stroke-weight=2.2 stroke-join="round" bind:stroke="darken($hardware.mark, 0.1)" />
+      </Frame>
+      <Frame name="Monitor NotWhenPlaying Pressed" w=21 h=20 bind:x="0" bind:y="0" bind:visible="true && arg.mode == 2 && ui.pressed == \"monitor\"">
+        <Vector w=21 h=20 geometry="M7.300000000000001,10 C7.300000000000001,11.623717164502533 5.956854249492381,12.940000000000001 4.300000000000001,12.940000000000001 C2.643145750507621,12.940000000000001 1.3000000000000012,11.623717164502533 1.3000000000000007,10 C1.3000000000000003,8.376282835497468 2.64314575050762,7.0600000000000005 4.3,7.06 C5.95685424949238,7.059999999999999 7.300000000000001,8.376282835497467 7.300000000000001,10" bind:fill="$monitor.tape" />
+        <Vector w=21 h=20 geometry="M8.029996039173126,5.432208753335284 C9.80518235200081,6.259991725658768 10.940000000000001,8.041298620381491 10.940000000000001,10 C10.940000000000001,11.958701379618509 9.80518235200081,13.740008274341232 8.029996039173126,14.567791246664715" stroke-weight=2 stroke-join="round" bind:stroke="$monitor.tape" />
+        <Vector w=21 h=20 geometry="M9.183743893725236,2.95798849472523 C11.920489459334581,4.234153910390601 13.67,6.980335373088133 13.67,10 C13.67,13.019664626911867 11.920489459334581,15.765846089609399 9.183743893725236,17.042011505274772" stroke-weight=2.2 stroke-join="round" bind:stroke="darken($hardware.mark, 0.1)" />
+      </Frame>
+    </Component>
+    <Component name="mute" w=21 h=20 arg:on="false">
+      <Frame name="M false Normal" w=21 h=20 bind:x="0" bind:y="0" bind:visible="!arg.on && !(ui.pressed == \"mute\" || (ui.hover == \"mute\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="$hardware" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">M</Text>
+      </Frame>
+      <Frame name="M false Hover" w=21 h=20 bind:x="0" bind:y="0" bind:visible="!arg.on && (ui.hover == \"mute\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="lift($hardware, 0.25)" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">M</Text>
+      </Frame>
+      <Frame name="M false Pressed" w=21 h=20 bind:x="0" bind:y="0" bind:visible="!arg.on && ui.pressed == \"mute\"">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="$hardware" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">M</Text>
+      </Frame>
+      <Frame name="M true Normal" w=21 h=20 bind:x="0" bind:y="0" bind:visible="arg.on && !(ui.pressed == \"mute\" || (ui.hover == \"mute\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="$mute" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">M</Text>
+      </Frame>
+      <Frame name="M true Hover" w=21 h=20 bind:x="0" bind:y="0" bind:visible="arg.on && (ui.hover == \"mute\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="lift($mute, 0.25)" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">M</Text>
+      </Frame>
+      <Frame name="M true Pressed" w=21 h=20 bind:x="0" bind:y="0" bind:visible="arg.on && ui.pressed == \"mute\"">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="$mute" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">M</Text>
+      </Frame>
+    </Component>
+    <Component name="solo" w=21 h=20 arg:on="false">
+      <Frame name="S false Normal" w=21 h=20 bind:x="0" bind:y="0" bind:visible="!arg.on && !(ui.pressed == \"solo\" || (ui.hover == \"solo\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="$hardware" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">S</Text>
+      </Frame>
+      <Frame name="S false Hover" w=21 h=20 bind:x="0" bind:y="0" bind:visible="!arg.on && (ui.hover == \"solo\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="lift($hardware, 0.25)" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">S</Text>
+      </Frame>
+      <Frame name="S false Pressed" w=21 h=20 bind:x="0" bind:y="0" bind:visible="!arg.on && ui.pressed == \"solo\"">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="$hardware" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">S</Text>
+      </Frame>
+      <Frame name="S true Normal" w=21 h=20 bind:x="0" bind:y="0" bind:visible="arg.on && !(ui.pressed == \"solo\" || (ui.hover == \"solo\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="$solo" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">S</Text>
+      </Frame>
+      <Frame name="S true Hover" w=21 h=20 bind:x="0" bind:y="0" bind:visible="arg.on && (ui.hover == \"solo\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="lift($solo, 0.25)" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">S</Text>
+      </Frame>
+      <Frame name="S true Pressed" w=21 h=20 bind:x="0" bind:y="0" bind:visible="arg.on && ui.pressed == \"solo\"">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 bind:fill="$solo" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" bind:stroke="$hardware.edge" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" bind:fill="lighten($hardware.mark, 0.26)">S</Text>
+      </Frame>
+    </Component>
+    <Component name="phase" w=16 h=16 arg:on="false">
+      <Frame name="Phase false Normal" w=16 h=16 bind:visible="!arg.on && !(ui.pressed == \"phase\" || (ui.hover == \"phase\" && ui.pressed == \"\"))">
+        <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#18181b" />
+        <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+        <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+      </Frame>
+      <Frame name="Phase false Hover" w=16 h=16 bind:visible="!arg.on && (ui.hover == \"phase\" && ui.pressed == \"\")">
+        <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#1e1e22" />
+        <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+        <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+      </Frame>
+      <Frame name="Phase false Pressed" w=16 h=16 bind:visible="!arg.on && ui.pressed == \"phase\"">
+        <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#18181b" />
+        <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+        <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+      </Frame>
+      <Frame name="Phase true Normal" w=16 h=16 bind:visible="arg.on && !(ui.pressed == \"phase\" || (ui.hover == \"phase\" && ui.pressed == \"\"))">
+        <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#38bdf8" />
+        <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+        <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+      </Frame>
+      <Frame name="Phase true Hover" w=16 h=16 bind:visible="arg.on && (ui.hover == \"phase\" && ui.pressed == \"\")">
+        <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#46ecff" />
+        <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+        <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+      </Frame>
+      <Frame name="Phase true Pressed" w=16 h=16 bind:visible="arg.on && ui.pressed == \"phase\"">
+        <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#38bdf8" />
+        <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+        <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+      </Frame>
+    </Component>
+    <Component name="volume" w=24 h=24 arg:value="0">
+      <Vector w=24 h=24 geometry="M12,26.85 C5.499608494491563,26.85 0.23000000000000043,20.792412665210634 0.22999999999999865,13.320000000000002 C0.22999999999999687,5.8475873347893685 5.499608494491559,-0.2099999999999973 11.999999999999998,-0.20999999999999908 C18.500391505508436,-0.21000000000000085 23.77,5.847587334789363 23.770000000000003,13.319999999999997 C23.770000000000003,20.79241266521063 18.500391505508443,26.849999999999994 12.000000000000004,26.85" fill={[{"kind":{"RadialGradient":{"stops":[{"color":"#00000026","position":0.8999999761581421},{"color":"#00000000","position":1}],"transform":{"a":1.1275,"b":0,"c":0,"d":1.1275,"tx":-0.06374999999999997,"ty":-0.008749999999999961}}}}]} />
+      <Vector w=24 h=24 geometry="M23,12 C23,18.075132248138726 18.07513224813873,23 12,23 C5.9248677518612745,23 1.0000000000000018,18.07513224813873 1,12.000000000000002 C0.9999999999999982,5.924867751861275 5.924867751861272,1.0000000000000018 11.999999999999998,1 C18.075132248138726,0.9999999999999982 23,5.924867751861271 23,11.999999999999996" fill="#0f0f10" />
+      <Vector w=24 h=24 geometry="M8.921818710068983,20.457233587073176 C4.817576990160958,18.963411766793133 2.3782970080261467,14.738454903849936 3.1367302228901277,10.437166400997627 C3.8951634377541087,6.135877898145319 7.63235718880557,3.0000000000000018 11.999999999999998,3 C16.367642811194425,2.9999999999999982 20.10483656224589,6.135877898145317 20.86326977710987,10.437166400997626 C21.621702991973855,14.738454903849933 19.182423009839045,18.96341176679313 15.07818128993102,20.457233587073176" stroke-weight=3.5 stroke-join="round" stroke="#232324" />
+      <Frame name="Face Normal" w=24 h=24 bind:visible="!(ui.pressed == \"volume\" || (ui.hover == \"volume\" && ui.pressed == \"\"))">
+        <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#212124","position":0},{"color":"#17171a","position":1}],"transform":{"a":0,"b":-0.625,"c":0.625,"d":0,"tx":0.8125,"ty":0.1875}}}}]} />
+        <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" stroke-weight=0.8 stroke-join="round" stroke="#27272a" />
+      </Frame>
+      <Frame name="Face Hover" w=24 h=24 bind:visible="(ui.hover == \"volume\" && ui.pressed == \"\")">
+        <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#29292d","position":0},{"color":"#1f1f23","position":1}],"transform":{"a":0,"b":-0.625,"c":0.625,"d":0,"tx":0.8125,"ty":0.1875}}}}]} />
+        <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" stroke-weight=0.8 stroke-join="round" stroke="#27272a" />
+      </Frame>
+      <Frame name="Face Pressed" w=24 h=24 bind:visible="ui.pressed == \"volume\"">
+        <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#1e1e24","position":0},{"color":"#14141a","position":1}],"transform":{"a":0,"b":-0.625,"c":0.625,"d":0,"tx":0.8125,"ty":0.1875}}}}]} />
+        <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" stroke-weight=0.8 stroke-join="round" stroke="#27272a" />
+      </Frame>
+      <Vector name="Value" w=24 h=24 geometry="M 0 0" stroke="#38bdf8" stroke-weight=3.5 stroke-join="round" bind:geometry="arc(12, 12, 9, -160, 320 * clamp(arg.value, 0, 1))" bind:visible="arg.value > 0" />
+    </Component>
+    <Component name="volume.fader" w=24 h=8 arg:value="0">
+      <Rectangle name="Track" y=3 w=24 h=2 radius=1 fill="#26262b" />
+      <Rectangle name="Level" y=3 w=24 h=2 radius=1 fill="#38bdf88c" bind:w="24 * clamp(arg.value, 0, 1)" bind:visible="24 * clamp(arg.value, 0, 1) > 0.5" />
+      <Ellipse name="Thumb" y=1 w=6 h=6 fill="#d4d4d8" bind:x="clamp(24 * clamp(arg.value, 0, 1) - 3, 0, 18)" />
+    </Component>
+    <Component name="pan.line" w=24 h=8 arg:value="0">
+      <Rectangle name="Track" y=3 w=24 h=2 radius=1 fill="#26262b" />
+      <Rectangle name="Centre" x=11.5 y=1 w=1 h=6 fill="#3f3f46" />
+      <Rectangle name="Value" x=12 y=3 w=1 h=2 radius=1 fill="#eab3088c" bind:x="min(12 + 10 * clamp(arg.value, -1, 1), 12)" bind:w="abs(10 * clamp(arg.value, -1, 1))" bind:visible="abs(10 * clamp(arg.value, -1, 1)) > 0.5" />
+      <Ellipse name="Thumb" y=1 w=6 h=6 fill="#d4d4d8" bind:x="clamp(12 + 10 * clamp(arg.value, -1, 1) - 3, 0, 18)" />
+    </Component>
+  </Page>
+</Document>

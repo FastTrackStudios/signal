@@ -1,0 +1,291 @@
+//! Time-preserving pitch shift for whole-tone-grid fill.
+//!
+//! CSS-family libraries sample only 6 of 12 pitch classes; the other ~half of
+//! notes were historically filled by *resampling* (playing the sample faster/
+//! slower), which changes duration — so a legato transition landing on an
+//! off-grid note (E4, F4, …) arrived early/late in wall-clock time, off the
+//! musical grid. Instead the voice now plays at true speed (arrival lands
+//! exactly as recorded) and shifts pitch here, decoupled from playback rate.
+//!
+//! Ported from `pitch-dsp`'s barberpole `AllpassShifter` (Dattorro/Schroeder,
+//! Eventide-H3000-style): two read heads sweep a circular buffer at a rate set
+//! by the pitch ratio, cubic-interpolated, crossfaded so the windows sum to 1.
+//! **No added latency** in steady state — which keeps the arrival predictor
+//! exact with no compensation term — and **no hot-path allocation** (the ring
+//! buffer is sized once at construction). If the slight barberpole chorusing
+//! is audible on long exposed sustains, swap in a granular shifter (with a
+//! latency-compensation term on the arrival hold).
+//!
+//! Steady state is the operative phrase: the delay line must be PRIMED before
+//! the first `tick` (see [`STARTUP_HISTORY`]) or the first ~80 ms are silent.
+
+use std::f64::consts::PI;
+
+const BUFFER_SIZE: usize = 8192;
+
+/// Grid points in the crossfade table. At 4096 the linear-interpolation error
+/// is below 1e-6 — inaudible in a gain window, and far cheaper than `sin`.
+const CROSSFADE_N: usize = 4096;
+
+/// `sin²(πφ)` sampled on `[0, 1]`, built once.
+fn crossfade_table() -> &'static [f64; CROSSFADE_N + 1] {
+    static TABLE: std::sync::OnceLock<Box<[f64; CROSSFADE_N + 1]>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut t = Box::new([0.0f64; CROSSFADE_N + 1]);
+        for (i, v) in t.iter_mut().enumerate() {
+            let s = (PI * i as f64 / CROSSFADE_N as f64).sin();
+            *v = s * s;
+        }
+        t
+    })
+}
+/// Cubic interpolation needs 2 samples on each side.
+const MARGIN: f64 = 4.0;
+const SWEEP_LEN: f64 = (BUFFER_SIZE as f64) - MARGIN * 2.0;
+
+/// How much history [`PitchShifter::prime`] wants before the first `tick`.
+///
+/// The two heads sweep in antiphase, and the crossfade `sin²(πφ)` is ZERO at
+/// φ = 0 and 1 — so the head carrying full gain at startup is the one at
+/// mid-sweep, half a buffer behind the write pointer. Start it against an
+/// empty buffer and it reads silence, and keeps reading silence until its
+/// drifting offset meets the growing history — `STARTUP_HISTORY / ratio`
+/// samples, 80.5 ms at 48 kHz for a semitone up, ending in an abrupt jump
+/// when real audio finally appears. Every off-grid note spoke 80 ms late that
+/// way, which on a whole-tone sampling grid is half of all notes.
+pub const STARTUP_HISTORY: usize = BUFFER_SIZE / 2;
+
+/// Fixed-ratio, time-preserving pitch shifter (one audio channel).
+pub struct PitchShifter {
+    /// Pitch ratio: 1.0 = unity, 2^(cents/1200). 0.5 = octave down.
+    ratio: f64,
+    buf: Vec<f64>,
+    write: usize,
+    /// Sweep phase for head A [0,1); head B trails 0.5 ahead.
+    sweep_a: f64,
+    sweep_b: f64,
+}
+
+impl PitchShifter {
+    /// Build a shifter for the given pitch offset in cents (100 = a semitone).
+    #[must_use]
+    pub fn new(cents: f64) -> Self {
+        Self {
+            ratio: 2.0f64.powf(cents / 1200.0),
+            buf: vec![0.0; BUFFER_SIZE],
+            write: 0,
+            sweep_a: 0.0,
+            sweep_b: 0.5,
+        }
+    }
+
+    /// True when this shifter is effectively unity (caller can bypass).
+    #[must_use]
+    pub fn is_unity(cents: f64) -> bool {
+        cents.abs() < 0.5
+    }
+
+    /// Frames of the sample that must be fed through the shifter BEFORE its
+    /// output is the intended content — the startup latency, in input frames.
+    ///
+    /// The full-gain head starts [`STARTUP_HISTORY`] behind the write pointer
+    /// and its offset drifts at `|1 − ratio|` per sample, so it reaches the
+    /// first frame ever written after `STARTUP_HISTORY / ratio` frames (the
+    /// drift adds for a shift up and subtracts for a shift down). Until then
+    /// its output belongs to earlier sample content — or, with nothing
+    /// earlier, to silence.
+    ///
+    /// So a voice that wants frame `S` to be heard at tick 0 must feed frames
+    /// `S .. S + startup_frames()` first and then continue from there;
+    /// [`Voice::prime_pitch_shifters`](crate::engine::voice::Voice::prime_pitch_shifters)
+    /// does exactly that.
+    #[must_use]
+    pub fn startup_frames(&self) -> usize {
+        (STARTUP_HISTORY as f64 / self.ratio).ceil() as usize
+    }
+
+    /// Pre-fill the delay line with `history` (the sample frames immediately
+    /// BEFORE the voice's first output frame) so the read heads see real audio
+    /// from the first tick — no empty-buffer startup ramp/jump (which clicks,
+    /// especially on pitch-up where the heads read far back). Feed at most one
+    /// buffer's worth; the newest samples end at the write head.
+    pub fn prime(&mut self, history: &[f32]) {
+        let n = history.len().min(BUFFER_SIZE - 1);
+        for &s in &history[history.len() - n..] {
+            self.write_sample(s as f64);
+        }
+    }
+
+    #[inline]
+    fn write_sample(&mut self, x: f64) {
+        self.write = (self.write + 1) % BUFFER_SIZE;
+        self.buf[self.write] = x;
+    }
+
+    /// Catmull-Rom read `offset` samples behind the write head.
+    #[inline]
+    fn read_cubic(&self, offset: f64) -> f64 {
+        let read = self.write as f64 - offset;
+        let base = read.floor();
+        let frac = read - base;
+        let i1 = base.rem_euclid(BUFFER_SIZE as f64) as usize;
+        let i0 = (i1 + BUFFER_SIZE - 1) % BUFFER_SIZE;
+        let i2 = (i1 + 1) % BUFFER_SIZE;
+        let i3 = (i1 + 2) % BUFFER_SIZE;
+        let (y0, y1, y2, y3) = (self.buf[i0], self.buf[i1], self.buf[i2], self.buf[i3]);
+        let a0 = y3 - y2 - y0 + y1;
+        let a1 = y0 - y1 - a0;
+        let a2 = y2 - y0;
+        let a3 = y1;
+        ((a0 * frac + a1) * frac + a2) * frac + a3
+    }
+
+    /// The `sin²(πφ)` crossfade window, read from a table.
+    ///
+    /// This runs once per sample per head. `f64::sin` is ~30 ns, which is
+    /// nothing until a 20-note chord has a few hundred voices ticking two
+    /// heads each — it measured ~5% of the whole audio thread. The table is
+    /// linearly interpolated and both heads read the SAME curve, so the pair
+    /// stays complementary (`sin²(πφ) + sin²(π(φ+½)) = 1`) exactly as before.
+    #[inline]
+    fn crossfade(phase: f64) -> f64 {
+        let table = crossfade_table();
+        let x = phase.clamp(0.0, 1.0) * CROSSFADE_N as f64;
+        let i = x as usize;
+        let frac = x - i as f64;
+        let a = table[i.min(CROSSFADE_N)];
+        let b = table[(i + 1).min(CROSSFADE_N)];
+        a + (b - a) * frac
+    }
+
+    #[inline]
+    fn phase_to_offset(phase: f64, drift: f64) -> f64 {
+        if drift >= 0.0 {
+            MARGIN + phase * SWEEP_LEN
+        } else {
+            MARGIN + (1.0 - phase) * SWEEP_LEN
+        }
+    }
+
+    /// Shift one sample. Returns the wet (fully shifted) output.
+    #[inline]
+    pub fn tick(&mut self, input: f32) -> f32 {
+        self.write_sample(input as f64);
+
+        let drift = 1.0 - self.ratio;
+        let phase_inc = drift.abs().max(0.0001) / SWEEP_LEN;
+        self.sweep_a += phase_inc;
+        self.sweep_b += phase_inc;
+        if self.sweep_a >= 1.0 {
+            self.sweep_a -= 1.0;
+        }
+        if self.sweep_b >= 1.0 {
+            self.sweep_b -= 1.0;
+        }
+
+        let a = self.read_cubic(Self::phase_to_offset(self.sweep_a, drift));
+        let b = self.read_cubic(Self::phase_to_offset(self.sweep_b, drift));
+        (a * Self::crossfade(self.sweep_a) + b * Self::crossfade(self.sweep_b)) as f32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Zero-crossing period of a mono signal, in samples (rough pitch probe).
+    fn mean_period(x: &[f32], skip: usize) -> f64 {
+        let mut last = None;
+        let mut sum = 0.0;
+        let mut n = 0;
+        for i in (skip + 1)..x.len() {
+            if x[i - 1] <= 0.0 && x[i] > 0.0 {
+                if let Some(p) = last {
+                    sum += (i - p) as f64;
+                    n += 1;
+                }
+                last = Some(i);
+            }
+        }
+        if n == 0 { 0.0 } else { sum / n as f64 }
+    }
+
+    #[test]
+    fn shifts_pitch_up_a_semitone_without_changing_length() {
+        let sr = 48000.0f32;
+        let f = 220.0f32;
+        let n = sr as usize; // 1 second — length is fixed (time-preserving)
+        let mut up = PitchShifter::new(100.0); // +1 semitone
+        let mut dry = Vec::with_capacity(n);
+        let mut wet = Vec::with_capacity(n);
+        for i in 0..n {
+            let s = (2.0 * std::f32::consts::PI * f * i as f32 / sr).sin() * 0.5;
+            dry.push(s);
+            wet.push(up.tick(s));
+        }
+        assert_eq!(wet.len(), dry.len(), "duration must be preserved");
+        let pd = mean_period(&dry, 9000);
+        let pw = mean_period(&wet, 9000);
+        // +1 semitone → period shorter by 2^(-1/12) ≈ 0.944.
+        let ratio = pw / pd;
+        assert!(
+            (ratio - 0.9439).abs() < 0.02,
+            "expected ~0.944 period ratio for +1 semitone, got {ratio:.4} (pd={pd:.2} pw={pw:.2})"
+        );
+    }
+
+    /// A primed shifter speaks on its FIRST tick.
+    ///
+    /// Unprimed it does not: the full-gain head starts half a buffer behind
+    /// the write pointer, reads the empty ring, and stays silent for
+    /// `STARTUP_HISTORY / ratio` samples — 80.5 ms at 48 kHz for a semitone
+    /// up. Every fresh off-grid note was late by exactly that, which the
+    /// pitch-accuracy tests above could not see because they skip the first
+    /// 9000 samples before measuring.
+    #[test]
+    fn primed_shifter_speaks_immediately() {
+        let sr = 48000.0f32;
+        let f = 220.0f32;
+        let sine = |i: usize| (2.0 * std::f32::consts::PI * f * i as f32 / sr).sin() * 0.5;
+
+        // The engine feeds `startup_frames()` of the sample through the
+        // shifter and then continues from there (`prime_pitch_shifters`).
+        let mut up = PitchShifter::new(100.0);
+        let startup = up.startup_frames();
+        let history: Vec<f32> = (0..startup).map(sine).collect();
+        up.prime(&history);
+
+        let first_ms = 5;
+        let n = (sr as usize * first_ms) / 1000;
+        let peak = (0..n)
+            .map(|i| up.tick(sine(startup + i)).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            peak > 0.1,
+            "primed shifter must produce audio within {first_ms} ms; peak was {peak:.4}"
+        );
+
+        // And the unprimed path is what that guards against.
+        let mut cold = PitchShifter::new(100.0);
+        let cold_peak = (0..n)
+            .map(|i| cold.tick(sine(i)).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            cold_peak < 0.01,
+            "an unprimed shifter is expected to be silent at startup — if this \
+             fails the barberpole's startup changed and priming may be moot \
+             (cold peak {cold_peak:.4})"
+        );
+    }
+
+    #[test]
+    fn finite_and_bounded() {
+        let mut s = PitchShifter::new(-100.0);
+        for i in 0..48000 {
+            let x = (2.0 * std::f32::consts::PI * 82.0 * i as f32 / 48000.0).sin() * 0.9;
+            let y = s.tick(x);
+            assert!(y.is_finite());
+            assert!(y.abs() < 4.0);
+        }
+    }
+}

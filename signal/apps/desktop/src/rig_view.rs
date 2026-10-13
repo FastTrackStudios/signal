@@ -1,0 +1,721 @@
+//! Signal workspace — rig picker + the chosen rig's remote.
+//!
+//! The picker chooses which rig to load (guitar is the only real one so
+//! far; the rest of the swarm — tracks, keys, drums, bass, vocals — are
+//! listed as coming). The guitar rig connects to a running signal engine
+//! over a vox WebSocket (<ws://127.0.0.1:4040/vox> by default) and mounts
+//! the same `GuitarRigRemote` the browser remote uses — the desktop
+//! app is just another remote of the headless core. Connection lifecycle
+//! is lifted from `apps/signal-web`: retry until the core answers,
+//! watchdog-ping while connected, and on engine death tear down +
+//! remount fresh.
+
+use dioxus::prelude::*;
+use signal_drums_proto::drum::{DrumRigClient, DrumRigStreamClient};
+use signal_drums_ui::DrumRigRemote;
+use signal_guitar_proto::audio::AudioSettingsClient;
+use signal_guitar_proto::rig::{RigClient, RigStreamClient};
+use signal_guitar_ui::GuitarRigRemote;
+use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
+use signal_keys_ui::KeysRigRemote;
+use signal_synth_proto::synth::{SynthRigClient, SynthRigStreamClient};
+use signal_synth_ui::SynthRigRemote;
+use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
+
+/// Compiled Tailwind for the signal UI components (built by `just
+/// tailwind` from ../input.css). This is the app's single comprehensive
+/// sheet — `SessionChrome` inlines the same file for the session UI.
+const SIGNAL_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
+
+use architect::iroh_link::iroh;
+
+use crate::remote::{EngineTarget, engine_iroh_id, establish, store_engine_iroh_id};
+use crate::rigs::{Rig, RigMenu, available};
+
+/// How this app gets a rig to talk to.
+///
+/// Both arms end in the same three typed clients, because the embedded engine
+/// is served over an in-memory link through the very same router the network
+/// one exposes. The core cannot tell which it is — the detachable-GUI rule
+/// holds either way, and every view below here is unchanged.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum EngineMode {
+    /// In-process. No child, no port, no discovery — opening a rig plays it.
+    Embedded,
+    /// A separate `signal-desktop --engine`, supervised or already running.
+    /// Survives this window closing and can be reached from other machines.
+    Supervised,
+}
+
+impl EngineMode {
+    /// Desktop defaults to embedded; the web build can only ever be a remote.
+    ///
+    /// Read fresh rather than cached so flipping the preference takes effect
+    /// on the next rig open instead of the next launch.
+    pub(crate) fn current() -> Self {
+        if cfg!(target_arch = "wasm32") {
+            return Self::Supervised;
+        }
+        match crate::prefs::get("signal-engine-mode").as_deref() {
+            Some("supervised") => Self::Supervised,
+            _ => Self::Embedded,
+        }
+    }
+
+    pub(crate) fn store(self) {
+        crate::prefs::set(
+            "signal-engine-mode",
+            match self {
+                Self::Embedded => "embedded",
+                Self::Supervised => "supervised",
+            },
+        );
+    }
+}
+
+/// Everything the guitar page renders from.
+///
+/// The TONE3000 pair is optional and the rig three are not: an engine
+/// without the tone service is an older engine, and it should still play.
+/// The Tones page renders its disconnected shell in that case.
+type GuitarClients = (
+    RigClient,
+    RigStreamClient,
+    AudioSettingsClient,
+    Option<Tone3000Client>,
+    Option<Tone3000StreamClient>,
+);
+
+/// One connect attempt for every client the page uses.
+async fn connect_once(target: &EngineTarget) -> Option<GuitarClients> {
+    let rig: RigClient = establish(target).await?;
+    let stream: RigStreamClient = establish(target).await?;
+    let settings: AudioSettingsClient = establish(target).await?;
+    let tones: Option<Tone3000Client> = establish(target).await;
+    let tones_stream: Option<Tone3000StreamClient> = establish(target).await;
+    Some((rig, stream, settings, tones, tones_stream))
+}
+
+/// The in-process rig's clients, bootstrapping it on first use.
+///
+/// Bootstrap is blocking and opens an audio device, so it runs on a blocking
+/// thread rather than stalling the UI runtime. It is idempotent: the engine is
+/// a process-wide `OnceLock`, so a reconnect or a remount reuses the running
+/// rig instead of opening the device a second time.
+#[cfg(not(target_arch = "wasm32"))]
+async fn embedded_clients() -> Option<GuitarClients> {
+    if crate::rig_engine::engine().is_none() {
+        let started = tokio::task::spawn_blocking(crate::rig_engine::bootstrap_blocking)
+            .await
+            .map_err(|e| tracing::error!("embedded rig bootstrap panicked: {e}"))
+            .ok()?;
+        if let Err(e) = started {
+            tracing::error!("embedded rig engine failed to start: {e:?}");
+            return None;
+        }
+    }
+    let e = crate::rig_engine::engine()?;
+    Some((
+        e.rig.clone(),
+        e.stream.clone(),
+        e.settings.clone(),
+        e.tones.clone(),
+        e.tones_stream.clone(),
+    ))
+}
+
+/// Open a URL in the user's own browser.
+///
+/// The one capability the tone browser cannot supply for itself: the
+/// authorization page is a web application, and every surface here reaches a
+/// browser differently. Native shells hand it to the desktop environment; the
+/// web build is already in a browser and opens a tab.
+pub(crate) fn open_externally(url: String) {
+    if url.is_empty() {
+        return;
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        // A popup blocker may refuse this, but the click that led here is a
+        // user gesture, which is the condition browsers actually check.
+        let open = dioxus::document::eval(
+            r"const url = await dioxus.recv(); window.open(url, '_blank', 'noopener');",
+        );
+        let _ = open.send(url);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        // No `open`/`opener` crate: this is one call per platform, and the
+        // dependency would be larger than the function.
+        let program = if cfg!(target_os = "macos") {
+            "open"
+        } else if cfg!(target_os = "windows") {
+            "explorer"
+        } else {
+            "xdg-open"
+        };
+        match std::process::Command::new(program).arg(&url).spawn() {
+            Ok(_) => tracing::info!(program, "opened a URL in the system browser"),
+            Err(e) => tracing::warn!(program, %e, "could not open the system browser"),
+        }
+    }
+}
+
+// ── Rig picker ──────────────────────────────────────────────────────────────
+//
+// The rig list itself lives in `crate::rigs` — one catalogue the phone shell
+// renders too, so the two menus cannot drift apart again.
+
+#[component]
+pub fn SignalWorkspace() -> Element {
+    let mut selected = use_signal(crate::rigs::load_last);
+    // Level 1 of the chrome: which rig. Switching rigs is rare, so it lives
+    // in the top bar only — the "Guitar ▾" crumb's menu — not in a rail.
+    let level = fts_chrome::use_chrome_level(1);
+
+    let pick = use_callback(move |rig: Option<Rig>| {
+        selected.set(rig);
+        crate::rigs::store_last(rig);
+    });
+
+    let Some(kind) = selected() else {
+        level.crumbs(vec![fts_chrome::Crumb::here("Rigs")]);
+        return rsx! {
+            RigMenu { phone: false, on_pick: move |rig| pick.call(Some(rig)) }
+        };
+    };
+
+    // The rig crumb picks any sibling rig, and "Rigs" goes back to the picker.
+    level.crumbs(vec![
+        fts_chrome::Crumb::new("Rigs", Callback::new(move |()| pick.call(None))),
+        fts_chrome::Crumb::here(kind.label()).with_menu(
+            Rig::ALL
+                .iter()
+                .copied()
+                .filter(|k| available(*k))
+                .map(|k| {
+                    (
+                        k.label().to_string(),
+                        k == kind,
+                        Callback::new(move |()| pick.call(Some(k))),
+                    )
+                })
+                .collect(),
+        ),
+    ]);
+
+    rsx! {
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+            match kind {
+                // The bass is the guitar rig's engine and screens, playing
+                // the bass's library.
+                Rig::Guitar => rsx! { GuitarRigView { instrument: "guitar" } },
+                Rig::Bass => rsx! { GuitarRigView { instrument: "bass" } },
+                Rig::Drums => rsx! { DrumRigView {} },
+                Rig::Ekit => rsx! { crate::ekit_view::EkitView {} },
+                Rig::Space => rsx! { crate::space_view::SpaceView {} },
+                Rig::Keys => rsx! { KeysRigView {} },
+                Rig::Synth => rsx! { SynthRigView {} },
+                // Listed in the menu as not-yet; unreachable unless someone
+                // hands us `--rig vocals`.
+                Rig::Vocals => rsx! {
+                    div { style: "flex: 1; display: flex; align-items: center; justify-content: center; \
+                                  font-size: 13px; color: #71717a;",
+                        "The vocal chain has no engine yet."
+                    }
+                },
+            }
+        }
+    }
+}
+
+/// Point the rig at a remote engine: paste its iroh endpoint id (the
+/// engine logs it and writes ~/.config/signal/iroh-endpoint-id) and the
+/// app dials it p2p from any network. Saved to
+/// ~/.config/fts/signal-engine-iroh-id; clearing falls back to the
+/// local WebSocket.
+#[component]
+fn RemoteEngineForm(generation: Signal<u32>) -> Element {
+    let mut input = use_signal(String::new);
+    let mut error = use_signal(String::new);
+    let remote_active = engine_iroh_id().is_some();
+
+    rsx! {
+        div { style: "display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 14px; padding: 12px; border: 1px solid #1c1c1f; border-radius: 10px;",
+            span { style: "font-size: 11px; color: #a1a1aa;", "Remote engine (iroh endpoint id)" }
+            div { style: "display: flex; gap: 6px;",
+                input {
+                    style: "width: 340px; padding: 4px 8px; border-radius: 6px; background: #111113; color: #e4e4e7; border: 1px solid #27272a; font-size: 11px; font-family: monospace;",
+                    placeholder: "endpoint id from the engine's startup log",
+                    value: "{input}",
+                    oninput: move |e| input.set(e.value()),
+                }
+                button {
+                    style: "padding: 4px 10px; border-radius: 6px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px; cursor: pointer;",
+                    onclick: move |_| {
+                        let raw = input();
+                        let raw = raw.trim();
+                        if raw.parse::<iroh::EndpointId>().is_ok() {
+                            store_engine_iroh_id(Some(raw));
+                            error.set(String::new());
+                            generation += 1;
+                        } else {
+                            error.set("not a valid iroh endpoint id".to_string());
+                        }
+                    },
+                    "Connect"
+                }
+                if remote_active {
+                    button {
+                        style: "padding: 4px 10px; border-radius: 6px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px; cursor: pointer;",
+                        onclick: move |_| {
+                            store_engine_iroh_id(None);
+                            error.set(String::new());
+                            generation += 1;
+                        },
+                        "Use local"
+                    }
+                }
+            }
+            if !error().is_empty() {
+                span { style: "font-size: 11px; color: #ef4444;", "{error}" }
+            }
+        }
+    }
+}
+
+// ── Guitar rig remote ───────────────────────────────────────────────────────
+
+/// The guitar rig — and the bass, which is the same rig as another
+/// instrument (`instrument`: `guitar`, `bass`): the engine is told which
+/// once connected, and again when the menu picks the other.
+#[component]
+fn GuitarRigView(instrument: &'static str) -> Element {
+    // The window's width over its height, for the rig's wide layout (the
+    // whole rig on an ultrawide). Blitz has no resize events, so it is
+    // polled from the window a few times a second.
+    let mut aspect = use_signal(|| 1.0_f64);
+    use_context_provider(|| signal_guitar_ui::WindowAspect(aspect));
+    // Its size in points, for the form factor (a phone held sideways lays
+    // the chain out a page at a time).
+    #[allow(unused_mut)]
+    let mut size = use_signal(|| (0.0_f64, 0.0_f64));
+    use_context_provider(|| signal_guitar_ui::WindowSize(size));
+    #[cfg(all(not(any(target_arch = "wasm32", target_os = "ios")), not(feature = "webview")))]
+    {
+        let window = dioxus_native::use_window();
+        use_future(move || {
+            let window = window.clone();
+            async move {
+                loop {
+                    let px = window.surface_size();
+                    if px.height > 0 {
+                        let a = f64::from(px.width) / f64::from(px.height);
+                        if (*aspect.peek() - a).abs() > 0.01 {
+                            aspect.set(a);
+                        }
+                        let scale = window.scale_factor().max(0.1);
+                        let pt = (f64::from(px.width) / scale, f64::from(px.height) / scale);
+                        let was = *size.peek();
+                        if (was.0 - pt.0).abs() > 1.0 || (was.1 - pt.1).abs() > 1.0 {
+                            size.set(pt);
+                        }
+                    }
+                    architect::platform::sleep(std::time::Duration::from_millis(300)).await;
+                }
+            }
+        });
+    }
+    let mut attempts = use_signal(|| 0u32);
+    let mut generation = use_signal(|| 0u32);
+    // The engine was up and went away (vs never seen) — changes the copy.
+    let mut lost = use_signal(|| false);
+
+    let clients = use_resource(move || {
+        let generation = generation();
+        async move {
+            // Embedded: the rig runs here, so there is nothing to dial, retry
+            // or auto-start. Bootstrap failure falls through to the remote
+            // path rather than dead-ending — an engine may already be up.
+            #[cfg(not(target_arch = "wasm32"))]
+            if EngineMode::current() == EngineMode::Embedded {
+                if let Some(c) = embedded_clients().await {
+                    attempts.set(0);
+                    return (generation, c);
+                }
+                tracing::warn!("embedded rig unavailable — falling back to a remote engine");
+            }
+
+            let target = EngineTarget::current();
+            // Opening a rig IS the intent to run it: when the target is the
+            // local engine and nothing answers, start it ourselves (native
+            // only — the web build can only connect). An engine started via
+            // CLI/systemd/another machine is simply connected to.
+            #[cfg(not(target_arch = "wasm32"))]
+            let mut autostart = matches!(
+                &target,
+                EngineTarget::Ws(url) if url.contains("127.0.0.1") || url.contains("localhost")
+            );
+            loop {
+                if let Some(c) = connect_once(&target).await {
+                    attempts.set(0);
+                    return (generation, c);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                if autostart {
+                    autostart = false;
+                    if !crate::engines::signal_running() {
+                        match crate::engines::start_signal() {
+                            Ok(_) => tracing::info!("rig open: auto-started the signal engine"),
+                            Err(e) => tracing::warn!("rig open: engine auto-start failed: {e}"),
+                        }
+                    }
+                }
+                attempts += 1;
+                architect::platform::sleep(std::time::Duration::from_millis(1200)).await;
+            }
+        }
+    });
+
+    // Watchdog: ping the rig every 1.5 s. Two consecutive failures =
+    // engine down → bump the generation (reconnect loop + full remount).
+    use_future(move || async move {
+        let mut fails = 0u32;
+        loop {
+            architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
+            let current = clients.peek().as_ref().cloned();
+            let Some((g, (rig, _, _, _, _))) = current else {
+                fails = 0;
+                continue;
+            };
+            if g != *generation.peek() {
+                fails = 0;
+                continue;
+            }
+            if rig.status().await.is_ok() {
+                fails = 0;
+                lost.set(false);
+            } else {
+                fails += 1;
+                if fails >= 2 {
+                    tracing::warn!("rig core lost — reconnecting");
+                    fails = 0;
+                    lost.set(true);
+                    generation += 1; // restarts the connect resource
+                }
+            }
+        }
+    });
+
+    let state = clients
+        .read()
+        .as_ref()
+        .filter(|(g, _)| *g == generation())
+        .map(|(_, c)| c.clone());
+    // The instrument, said to the engine whenever it is connected afresh or
+    // the menu picks the other one.
+    use_effect(use_reactive!(|instrument| {
+        let rig = clients.read().as_ref().map(|(_, (rig, ..))| rig.clone());
+        if let Some(rig) = rig {
+            spawn(async move {
+                let _ = rig.set_instrument(instrument.to_string()).await;
+            });
+        }
+    }));
+    rsx! {
+        document::Style { {SIGNAL_TAILWIND} }
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+            match state {
+                Some((rig, stream, settings, tones, tones_stream)) => {
+                    let _ = provide_context(rig);
+                    let _ = provide_context(stream);
+                    let _ = provide_context(settings);
+                    // The Tones page reads these; absent ones leave it in its
+                    // disconnected state rather than failing to mount.
+                    if let Some(tones) = tones {
+                        let _ = provide_context(tones);
+                    }
+                    if let Some(tones_stream) = tones_stream {
+                        let _ = provide_context(tones_stream);
+                    }
+                    // Signing in means handing a page to a real browser —
+                    // this shell's way of doing that.
+                    let _ = provide_context(signal_tone3000_ui::UrlOpener::new(open_externally));
+                    rsx! { GuitarRigRemote { key: "{generation}" } }
+                }
+                None => rsx! {
+                    div { style: "display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; flex: 1;",
+                        span {
+                            style: if lost() {
+                                "width: 12px; height: 12px; border-radius: 999px; background: #ef4444;"
+                            } else {
+                                "width: 12px; height: 12px; border-radius: 999px; background: #22c55e;"
+                            }
+                        }
+                        span { style: "font-size: 13px; font-weight: 600; color: #e4e4e7;",
+                            if lost() { "Engine down — reconnecting…" } else { "Looking for the signal engine…" }
+                        }
+                        span { style: "font-size: 11px; font-family: monospace; color: #71717a;", "{EngineTarget::current().label()}" }
+                        if attempts() > 0 {
+                            span { style: "font-size: 11px; color: #71717a;",
+                                if cfg!(target_arch = "wasm32") {
+                                    "Start the engine on its machine (desktop app or `fts signal engine`) and this view will connect on its own."
+                                } else {
+                                    "Starting the engine… (an engine started elsewhere — CLI, another machine — connects here too)"
+                                }
+                            }
+                        }
+                        RemoteEngineForm { generation }
+                    }
+                },
+            }
+        }
+    }
+}
+
+/// The drum rig remote: connect over the shared `/vox` endpoint (same engine,
+/// same router as guitar), provide the two clients in context, and mount
+/// `DrumRigRemote`. On the local engine we auto-start it if nothing answers,
+/// exactly like [`GuitarRigView`].
+#[component]
+fn DrumRigView() -> Element {
+    let mut generation = use_signal(|| 0u32);
+    let clients = use_resource(move || {
+        let generation = generation();
+        async move {
+            let target = EngineTarget::current();
+            #[cfg(not(target_arch = "wasm32"))]
+            let mut autostart = matches!(
+                &target,
+                EngineTarget::Ws(url) if url.contains("127.0.0.1") || url.contains("localhost")
+            );
+            loop {
+                let rig: Option<DrumRigClient> = establish(&target).await;
+                let stream: Option<DrumRigStreamClient> = establish(&target).await;
+                if let (Some(rig), Some(stream)) = (rig, stream) {
+                    return (generation, (rig, stream));
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                if autostart {
+                    autostart = false;
+                    if !crate::engines::signal_running() {
+                        let _ = crate::engines::start_signal();
+                    }
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(1200)).await;
+            }
+        }
+    });
+
+    // Watchdog: reconnect on core loss.
+    use_future(move || async move {
+        let mut fails = 0u32;
+        loop {
+            architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
+            let current = clients.peek().as_ref().cloned();
+            let Some((g, (rig, _))) = current else {
+                fails = 0;
+                continue;
+            };
+            if g != *generation.peek() {
+                fails = 0;
+                continue;
+            }
+            if rig.status().await.is_ok() {
+                fails = 0;
+            } else {
+                fails += 1;
+                if fails >= 2 {
+                    fails = 0;
+                    generation += 1;
+                }
+            }
+        }
+    });
+
+    let state = clients
+        .read()
+        .as_ref()
+        .filter(|(g, _)| *g == generation())
+        .map(|(_, c)| c.clone());
+    rsx! {
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+            match state {
+                Some((rig, stream)) => {
+                    let _ = provide_context(rig);
+                    let _ = provide_context(stream);
+                    rsx! { DrumRigRemote {} }
+                }
+                None => rsx! {
+                    div { style: "display: flex; align-items: center; justify-content: center; gap: 10px; flex: 1; color: #71717a; font-size: 13px;",
+                        "Connecting to the drum engine…"
+                    }
+                },
+            }
+        }
+    }
+}
+
+/// The keys rig remote: connect over the shared `/vox` endpoint, provide the
+/// two clients in context, and mount `KeysRigRemote`. Auto-starts the local
+/// engine if nothing answers, like the other rigs.
+#[component]
+fn KeysRigView() -> Element {
+    let mut generation = use_signal(|| 0u32);
+    let clients = use_resource(move || {
+        let generation = generation();
+        async move {
+            let target = EngineTarget::current();
+            #[cfg(not(target_arch = "wasm32"))]
+            let mut autostart = matches!(
+                &target,
+                EngineTarget::Ws(url) if url.contains("127.0.0.1") || url.contains("localhost")
+            );
+            loop {
+                let rig: Option<KeysRigClient> = establish(&target).await;
+                let stream: Option<KeysRigStreamClient> = establish(&target).await;
+                if let (Some(rig), Some(stream)) = (rig, stream) {
+                    return (generation, (rig, stream));
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                if autostart {
+                    autostart = false;
+                    if !crate::engines::signal_running() {
+                        let _ = crate::engines::start_signal();
+                    }
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(1200)).await;
+            }
+        }
+    });
+
+    // Watchdog: reconnect on core loss.
+    use_future(move || async move {
+        let mut fails = 0u32;
+        loop {
+            architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
+            let current = clients.peek().as_ref().cloned();
+            let Some((g, (rig, _))) = current else {
+                fails = 0;
+                continue;
+            };
+            if g != *generation.peek() {
+                fails = 0;
+                continue;
+            }
+            if rig.status().await.is_ok() {
+                fails = 0;
+            } else {
+                fails += 1;
+                if fails >= 2 {
+                    fails = 0;
+                    generation += 1;
+                }
+            }
+        }
+    });
+
+    let state = clients
+        .read()
+        .as_ref()
+        .filter(|(g, _)| *g == generation())
+        .map(|(_, c)| c.clone());
+    rsx! {
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+            match state {
+                Some((rig, stream)) => {
+                    let _ = provide_context(rig);
+                    let _ = provide_context(stream);
+                    rsx! { KeysRigRemote {} }
+                }
+                None => rsx! {
+                    div { style: "display: flex; align-items: center; justify-content: center; gap: 10px; flex: 1; color: #71717a; font-size: 13px;",
+                        "Connecting to the keys engine…"
+                    }
+                },
+            }
+        }
+    }
+}
+
+/// The synth rig remote: connect over the shared `/vox` endpoint, provide the
+/// two clients in context, and mount `SynthRigRemote`. Auto-starts the local
+/// engine if nothing answers, like the other rigs.
+#[component]
+fn SynthRigView() -> Element {
+    let mut generation = use_signal(|| 0u32);
+    let clients = use_resource(move || {
+        let generation = generation();
+        async move {
+            let target = EngineTarget::current();
+            #[cfg(not(target_arch = "wasm32"))]
+            let mut autostart = matches!(
+                &target,
+                EngineTarget::Ws(url) if url.contains("127.0.0.1") || url.contains("localhost")
+            );
+            loop {
+                let rig: Option<SynthRigClient> = establish(&target).await;
+                let stream: Option<SynthRigStreamClient> = establish(&target).await;
+                if let (Some(rig), Some(stream)) = (rig, stream) {
+                    return (generation, (rig, stream));
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                if autostart {
+                    autostart = false;
+                    if !crate::engines::signal_running() {
+                        let _ = crate::engines::start_signal();
+                    }
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(1200)).await;
+            }
+        }
+    });
+
+    // Watchdog: reconnect on core loss.
+    use_future(move || async move {
+        let mut fails = 0u32;
+        loop {
+            architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
+            let current = clients.peek().as_ref().cloned();
+            let Some((g, (rig, _))) = current else {
+                fails = 0;
+                continue;
+            };
+            if g != *generation.peek() {
+                fails = 0;
+                continue;
+            }
+            if rig.status().await.is_ok() {
+                fails = 0;
+            } else {
+                fails += 1;
+                if fails >= 2 {
+                    fails = 0;
+                    generation += 1;
+                }
+            }
+        }
+    });
+
+    let state = clients
+        .read()
+        .as_ref()
+        .filter(|(g, _)| *g == generation())
+        .map(|(_, c)| c.clone());
+    rsx! {
+        div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+            match state {
+                Some((rig, stream)) => {
+                    let _ = provide_context(rig);
+                    let _ = provide_context(stream);
+                    rsx! { SynthRigRemote {} }
+                }
+                None => rsx! {
+                    div { style: "display: flex; align-items: center; justify-content: center; gap: 10px; flex: 1; color: #71717a; font-size: 13px;",
+                        "Connecting to the synth engine…"
+                    }
+                },
+            }
+        }
+    }
+}

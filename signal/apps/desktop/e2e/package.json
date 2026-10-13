@@ -1,0 +1,11 @@
+{
+  "name": "fts-keys-web-e2e",
+  "private": true,
+  "description": "Playwright end-to-end suite for the browser keys rig (W5). Expects target/release/fasttrackstudio to exist (build with `just keys-web`).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "~1.59.0"
+  }
+}

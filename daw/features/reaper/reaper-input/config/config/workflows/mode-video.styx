@@ -1,0 +1,5 @@
+// Video mode workflow. id = "mode-video", name = "Mode Video".
+// Skeleton — see mode-organize.styx for the override-block menu.
+
+name        "Video"
+description "Sync to picture / video editing."

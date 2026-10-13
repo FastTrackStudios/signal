@@ -1,0 +1,12 @@
+// Mouse click/drag modifier overrides.
+// action values correspond to REAPER's built-in mouse modifier action names.
+// Ctrl+fade on Linux (use <M-> for macOS).
+
+mouse (
+    {ctx @MediaItemLeftEdge,   modifiers "",    action edge_resize,  desc "Resize item from left edge"}
+    {ctx @MediaItemRightEdge,  modifiers "",    action edge_resize,  desc "Resize item from right edge"}
+    {ctx @MediaItemBottomHalf, modifiers "<A->",  action copy_item,    desc "Copy item on drag (Alt+drag)"}
+    {ctx @MediaItemLeftEdge,   modifiers "<S->",  action slip_edit,    desc "Slip edit from left edge"}
+    {ctx @MediaItemRightEdge,  modifiers "<S->",  action slip_edit,    desc "Slip edit from right edge"}
+    {ctx @MediaItemFade,       modifiers "<C->",  action fade_adjust,  desc "Adjust fade curve (Ctrl+click)"}
+)

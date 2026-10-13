@@ -1,0 +1,21 @@
+[package]
+name = "midicore-wasm"
+version.workspace = true
+edition = "2021"          # matches the rest of midicore
+authors.workspace = true
+license.workspace = true
+description = "Web MIDI input backend for midicore — one MIDIAccess, a midimessage listener on every selected input."
+
+# The browser only. Other targets get an empty crate so the workspace still
+# builds there; `midicore::native` picks this on wasm32.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+midicore-proto.workspace = true
+tracing = { workspace = true }
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true, features = [
+    "Event", "EventTarget", "Navigator", "Window",
+    "MidiAccess", "MidiInput", "MidiInputMap", "MidiMessageEvent", "MidiPort",
+    "MidiPortDeviceState",
+] }

@@ -1,0 +1,123 @@
+# Section/marker icons for the Organize 1 toolbar (sidebar, double-wide) —
+# full section name on the canonical FTS color (music-catalog sections.rs +
+# keyflow marker colors). Song boundaries use flag glyphs.
+#   fts-icons build examples/sections.toml --install
+
+[settings]
+resource_paths = ["~/.fts-dev"]
+width = 60
+
+[defaults.all]
+icon_size = 25
+bg_size = 28
+corner_radius = 6
+
+[defaults.hover]
+border = "#ffffffaa"
+border_width = 1.5
+
+[defaults.clicked]
+border = "#ffffff"
+border_width = 2.5
+
+# --- markers (keyflow_actions.rs default_color) ---
+
+[[icon]]
+file = "fts_sec_count_in"
+source = "text:COUNT-IN"
+assign = "_FTS_SESSION_INSERT_COUNT_IN_MARKER"
+  [icon.normal]
+  icon = "#ffffff"
+  bg = "#EC4899"        # pink-500
+
+[[icon]]
+file = "fts_sec_start"
+source = "text:=START"
+assign = "_FTS_SESSION_INSERT_START_MARKER"
+  [icon.normal]
+  icon = "#ffffff"
+  bg = "#737373"        # neutral-500
+
+[[icon]]
+file = "fts_sec_songstart"
+source = "mdi:flag"              # start flag
+assign = "_FTS_SESSION_INSERT_SONGSTART_MARKER"
+  [icon.normal]
+  icon = "#ffffff"
+  bg = "#22C55E"        # green-500
+  icon_size = 24
+
+[[icon]]
+file = "fts_sec_songend"
+source = "mdi:flag-checkered"    # finish flag
+assign = "_FTS_SESSION_INSERT_SONGEND_MARKER"
+  [icon.normal]
+  icon = "#ffffff"
+  bg = "#475569"        # slate-600
+  icon_size = 24
+
+[[icon]]
+file = "fts_sec_end"
+source = "text:=END"
+assign = "_FTS_SESSION_INSERT_END_MARKER"
+  [icon.normal]
+  icon = "#ffffff"
+  bg = "#DC2626"        # red-600
+
+# --- sections (music-catalog sections.rs::colors) ---
+
+[[icon]]
+file = "fts_sec_intro"
+source = "text:INTRO"
+assign = "_FTS_SESSION_INSERT_INTRO_REGION"
+  [icon.normal]
+  icon = "#0F172A"
+  bg = "#38BDF8"        # sky-400
+
+[[icon]]
+file = "fts_sec_verse"
+source = "text:VERSE"
+assign = "_FTS_SESSION_INSERT_VERSE_REGION"
+  [icon.normal]
+  icon = "#0F172A"
+  bg = "#4ADE80"        # green-400
+
+[[icon]]
+file = "fts_sec_prechorus"
+source = "text:PRE-CH"
+assign = "_FTS_SESSION_INSERT_PRE_CHORUS_REGION"
+  [icon.normal]
+  icon = "#0F172A"
+  bg = "#FACC15"        # yellow-400
+
+[[icon]]
+file = "fts_sec_chorus"
+source = "text:CHORUS"
+assign = "_FTS_SESSION_INSERT_CHORUS_REGION"
+  [icon.normal]
+  icon = "#ffffff"
+  bg = "#3B82F6"        # blue-500
+
+[[icon]]
+file = "fts_sec_bridge"
+source = "text:BRIDGE"
+assign = "_FTS_SESSION_INSERT_BRIDGE_REGION"
+  [icon.normal]
+  icon = "#0F172A"
+  bg = "#C084FC"        # purple-400
+
+[[icon]]
+file = "fts_sec_outro"
+source = "text:OUTRO"
+assign = "_FTS_SESSION_INSERT_OUTRO_REGION"
+  [icon.normal]
+  icon = "#0F172A"
+  bg = "#FBBF24"        # amber-400
+
+[[icon]]
+file = "fts_sec_ending"
+source = "text:ENDING"
+assign = "_FTS_SESSION_INSERT_END_REGION"
+  [icon.normal]
+  icon = "#ffffff"
+  bg = "#475569"        # slate-600

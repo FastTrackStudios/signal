@@ -1,0 +1,21 @@
+[package]
+name = "expression-editor-guitarpro"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Guitar Pro import for the expression editor — GP files onto the note model and the string row space"
+
+[dependencies]
+expression-editor-core = { workspace = true }
+# The parser is a dependency, not a build (#160). MIT, safe Rust, reads
+# gp3/4/5, gpx and gp. Pinned: one maintainer, 0.x — our own domain
+# types stay at the facade so a change over there is a conversion
+# change, not a model change.
+guitarpro = "=0.4.2"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+guitarpro = "=0.4.2"

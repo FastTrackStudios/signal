@@ -1,0 +1,13 @@
+[package]
+name = "stretch"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Tempo and pitch, independently — the time-stretch / pitch-shift a host runs per voice"
+
+[lints]
+workspace = true
+
+[dependencies]
+stretch-dsp = { workspace = true }

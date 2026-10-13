@@ -1,0 +1,50 @@
+// A studio profile, `studios/<name>.styx` in the app config directory
+// (docs/spec/session/workflows.md, flow.patch-list.studio-profiles;
+// decision session #29).
+//
+// The room's role vocabulary: what the patch list's input roles and
+// bus roles come to on this room's device. A patchbay endpoint on a
+// role is optional and only patchbay reads it.
+
+meta {
+    id https://fasttrackstudio.app/schema/studio
+    version 2026-09-14
+    description "A studio profile: the room's inputs and outputs by role"
+}
+
+schema {
+    @ @object{
+        /// Input role -> what the device has there.
+        inputs @optional(@map(@Input))
+        /// Bus role -> the output pair it goes to.
+        outputs @optional(@map(@Output))
+        /// Roles more than one patch-list entry may name (a talkback).
+        shared @optional(@seq(@string))
+    }
+
+    /// A hardware input by 0-based device channel, or a MIDI device.
+    Input @enum{
+        audio @object{
+            channel @int{min 0}
+            patchbay @optional(@Endpoint)
+        }
+        midi @object{
+            device @string
+            channel @optional(@int{min 1, max 16})
+            patchbay @optional(@Endpoint)
+        }
+    }
+
+    /// A 0-based output pair.
+    Output @object{
+        left @int{min 0}
+        right @int{min 0}
+        patchbay @optional(@Endpoint)
+    }
+
+    /// A port on the live graph, as patchbay names it.
+    Endpoint @object{
+        node @string
+        port @string
+    }
+}

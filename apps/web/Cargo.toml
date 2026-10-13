@@ -1,0 +1,81 @@
+[package]
+name = "session-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "session.fasttrackstudio.app — the Session landing page and live setlist demo"
+
+[dependencies]
+# The facade — never session-proto directly (crate-facade rule, see
+# crates/session/CLAUDE.md). Gives the /demo route the Praise chart
+# importer, the demo-fixture generator, and the setlist service types.
+session = { workspace = true }
+# Dioxus performance-view chrome (PerformanceLayout/PerformanceSidebar/
+# TransportPanel) and the global signals it reads — the real desktop
+# player UI, `#[cfg(target_arch = "wasm32")]`-split throughout.
+session-ui = { workspace = true, features = ["web"] }
+architect-ui = { workspace = true }
+
+# In-process backend bootstrap for /demo — same shape as
+# apps/desktop/src/session_engine.rs, minus RPP loading and the audio
+# engine (the demo has no real audio files; the transport's soft clock
+# already advances the playhead on wall-clock ticks with no device
+# attached — proven wasm-safe, see daw-standalone/src/transport.rs).
+daw = { workspace = true }
+daw-proto = { workspace = true }
+daw-standalone = { workspace = true, features = ["bootstrap"] }
+architect = { workspace = true, features = ["vox", "platform"] }
+vox = { workspace = true }
+
+# `launch` on the base dep rather than a platform feature: both halves
+# of a fullstack build go through `LaunchBuilder` — the browser one to
+# mount, the server one to render for `dx build --ssg`.
+#
+# `fullstack` is deliberately NOT here; it belongs to `server` alone.
+dioxus = { workspace = true, features = ["launch", "router"] }
+
+# Direct, only so the `web` feature can turn on `hydrate` — the client
+# half of static generation, which adopts the pre-rendered DOM instead of
+# throwing it away and re-rendering.
+dioxus-web = { workspace = true, optional = true }
+
+# The guide, as a static site. `ssg` is the page model `build.rs`
+# codegens; `ssg-ui` renders it. Nothing here parses markdown at runtime.
+ssg = { workspace = true }
+ssg-ui = { workspace = true }
+
+eyre = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Only reachable via daw::init_from_parts's native overload, which this
+# crate never actually calls at runtime (it only ever runs as wasm32) —
+# present so a plain host `cargo check` type-checks the cfg-split.
+tokio = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tracing-wasm = "0.2"
+console_error_panic_hook = "0.1"
+# getrandom 0.3 (transitive via uuid/ahash) needs its js backend on wasm32.
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[build-dependencies]
+# Reads docs/guides/session and codegens the page table. The whole build
+# script is one call to it.
+ssg-build = { workspace = true }
+
+[features]
+default = ["web"]
+# `dioxus-web/hydrate` rather than `dioxus/fullstack`, which is the usual
+# way to turn it on. Fullstack carries the server-function *client*
+# transport — reqwest 0.12 — and this tree already has 0.13 through iroh;
+# two reqwest majors in one wasm binary is a hundred `duplicate symbol:
+# intounderlyingsource_*` errors out of rust-lld. The site calls no
+# server functions from the browser.
+web = ["dioxus/web", "dep:dioxus-web", "dioxus-web/hydrate"]
+# The server half, alive only for the length of `dx build --ssg`.
+server = ["dioxus/server", "dioxus/fullstack"]
+
+[lints]
+workspace = true

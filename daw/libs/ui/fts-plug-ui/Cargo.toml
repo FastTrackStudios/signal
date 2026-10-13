@@ -1,0 +1,19 @@
+[package]
+name = "fts-plug-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"
+description = "Shared Dioxus editor chrome for the FTS plugin suite — param adapter, skins, sections, plugin shell"
+
+[dependencies]
+atomic_float = { workspace = true }
+audiocore-core = { workspace = true }
+dioxus = { workspace = true }
+architect-ui = { workspace = true }
+fts-audio-ui = { workspace = true }
+nice-plug = { workspace = true }
+nice-plug-dioxus = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,25 @@
+// Grid — left-hand ergonomic prefix `g` so the right hand stays on the mouse.
+// Division (QWER row, largest → smallest): q w e r
+// Toggles (home row + nearby): g (grid), s (swing), m (measure), d (dotted),
+//   t (triplet), f (framerate).
+which_key (
+    {
+        prefix g,
+        label "Grid",
+        entries (
+            // Division
+            {key q, label "1 (Whole)",     action 40781}  // Grid: Set to 1
+            {key w, label "1/2 (Half)",    action 40780}  // Grid: Set to 1/2
+            {key e, label "1/8 (Eighth)",  action 40778}  // Grid: Set to 1/8
+            {key r, label "1/16",          action 40776}  // Grid: Set to 1/16
+
+            // Toggles
+            {key g, label "Toggle Grid Lines",     action 40145}                  // Options: Toggle grid lines
+            {key s, label "Toggle Swing Grid",     action 42304}                  // Grid: Toggle swing grid
+            {key m, label "Toggle Measure Grid",   action 40725}                  // Grid: Toggle measure grid
+            {key d, label "Toggle Dotted Grid",    action "_SWS_AWTOGGLEDOTTED"}  // SWS dotted-grid toggle
+            {key t, label "Toggle Triplet Grid",   action "_SWS_AWTOGGLETRIPLET"} // SWS triplet-grid toggle
+            {key f, label "Toggle Framerate Grid", action 41885}                  // Grid: Toggle framerate grid
+        )
+    }
+)

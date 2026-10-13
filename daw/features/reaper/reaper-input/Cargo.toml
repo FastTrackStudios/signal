@@ -1,0 +1,51 @@
+[package]
+name = "reaper-input"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "REAPER bridge/runtime for the input crate"
+
+[features]
+# Eagerly create wgpu/Vello overlay surfaces at profile load and config
+# reload so the overlay appears without a one-frame stall on first use.
+# Disable when loaded into a host (e.g. REAPER extension at plugin_main
+# time) where the surface allocation can fail because the host window
+# isn't ready yet — the overlay still gets created lazily on first show.
+default = ["overlay-prewarm"]
+overlay-prewarm = []
+
+[dependencies]
+input = { workspace = true }
+input-config-proto = { workspace = true }
+input-dioxus = { workspace = true }
+input-keybinds = { workspace = true }
+reaper-high = { workspace = true }
+reaper-medium = { workspace = true }
+reaper-low = { workspace = true }
+swell-ui = { workspace = true }
+tracing = { workspace = true }
+facet = { workspace = true }
+facet-json = { workspace = true }
+facet-styx = { workspace = true, features = ["figue"] }
+figue = { workspace = true }
+enumflags2 = { workspace = true }
+once_cell = { workspace = true }
+helgoboss-midi = { workspace = true }
+camino = { workspace = true }
+reaper-embed = { workspace = true }
+reaper-dioxus = { workspace = true }
+# Standalone Blitz window launch for the `keybind-editor` binary —
+# workspace-pinned blitz rev (one blitz tree-wide).
+dioxus-native = { workspace = true }
+architect-ui = { workspace = true }
+daw = { workspace = true }
+vello = { workspace = true }
+reaper-kbd = { workspace = true }
+reaper-config = { workspace = true }
+reaper-hwnd = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "daw-actions"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+# The `daw` facade (not daw-proto directly): these modules drive a live
+# backend — `daw::reaper::Reaper` — on top of the service traits, which is
+# exactly why they can't live in daw-proto (daw-reaper depends on it).
+daw = { workspace = true, features = ["reaper"] }
+daw-reaper = { workspace = true }
+architect = { workspace = true, features = ["vox"] }
+# Canonical 128-slot group partition (music_catalog::groups).
+music-catalog = { workspace = true }
+eyre = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+[lints]
+workspace = true

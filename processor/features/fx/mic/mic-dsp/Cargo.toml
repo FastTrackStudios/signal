@@ -1,0 +1,17 @@
+[package]
+name = "mic-dsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "mic-dsp — dual-capsule microphone modelling: a front/rear capsule pair rendered as a modelled mic (pattern, axis, proximity, low cut) from measured responses."
+
+[lints]
+workspace = true
+
+[dependencies]
+dsp-core = { workspace = true }
+realfft = { workspace = true }
+
+[dev-dependencies]
+hound = "3.5"

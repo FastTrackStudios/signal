@@ -1,0 +1,1071 @@
+<Document>
+  <Variables modes="dark">
+    <Var name="text" value="#e4e4e7" />
+    <Var name="text.dim" value="#a1a1aa" />
+    <Var name="text.faint" value="#71717a" />
+    <Var name="accent" value="#38bdf8" />
+    <Var name="mute" value="#ef4444" />
+    <Var name="solo" value="#eab308" />
+    <Var name="rec" value="#ef4444" />
+    <Var name="meter.safe" value="#22c55e" />
+    <Var name="meter.warn" value="#f59e0b" />
+    <Var name="meter.danger" value="#ef4444" />
+    <Var name="field" value="#0a0a0c" />
+    <Var name="combo" value="#0a0a0c" />
+    <Var name="hardware" value="#18181b" />
+    <Var name="hardware.edge" value="#27272a" />
+    <Var name="hardware.mark" value="#c3c3c9" />
+    <Var name="surface" value="#09090b" />
+    <Var name="surface.sunken" value="#0a0a0c" />
+    <Var name="border" value="#27272a" />
+    <Var name="editor.bg" value="#0a0a0c" />
+    <Var name="editor.row_a" value="#121215" />
+    <Var name="editor.row_b" value="#101013" />
+    <Var name="editor.grid_beat" value="#ffffff14" />
+    <Var name="editor.grid_sub" value="#ffffff24" />
+    <Var name="editor.panel" value="#18181b" />
+    <Var name="editor.panel_border" value="#1d1d21" />
+    <Var name="editor.border_strong" value="#0a0a0c" />
+    <Var name="editor.surface_inset" value="#0a0a0c" />
+    <Var name="editor.surface_bar" value="#09090b" />
+    <Var name="editor.gutter_bg" value="#0a0a0c" />
+    <Var name="editor.key_white" value="#09090b" />
+    <Var name="editor.key_black" value="#0a0a0c" />
+    <Var name="editor.key_label" value="#a1a1aa" />
+    <Var name="editor.text" value="#e4e4e7" />
+    <Var name="editor.text_dim" value="#a1a1aa" />
+    <Var name="editor.text_bright" value="#e4e4e7" />
+    <Var name="editor.text_faint" value="#5a5a5a" />
+    <Var name="editor.accent" value="#38bdf8" />
+    <Var name="editor.selected" value="#38bdf8" />
+    <Var name="editor.playhead" value="#38bdf8" />
+    <Var name="editor.razor" value="#22d3ee" />
+    <Var name="editor.gold" value="#eab308" />
+    <Var name="editor.zone" value="#ef4444" />
+    <Var name="editor.reference" value="#7c8598" />
+    <Var name="editor.handle" value="#c2c6ce" />
+    <Var name="editor.control" value="#09090b" />
+    <Var name="editor.control_active" value="#38bdf88c" />
+    <Var name="editor.control_hover" value="#0a0a0c" />
+    <Var name="editor.control_selected" value="#3a4a52" />
+    <Var name="editor.octave_line" value="#3a3a4d" />
+    <Var name="editor.peaks" value="#5b8def" />
+    <Var name="sheen" value="#ffffff12" />
+    <Var name="editor.pitch_0" value="#ef4444" />
+    <Var name="editor.pitch_1" value="#f97316" />
+    <Var name="editor.pitch_2" value="#f59e0b" />
+    <Var name="editor.pitch_3" value="#eab308" />
+    <Var name="editor.pitch_4" value="#84cc16" />
+    <Var name="editor.pitch_5" value="#22c55e" />
+    <Var name="editor.pitch_6" value="#14b8a6" />
+    <Var name="editor.pitch_7" value="#06b6d4" />
+    <Var name="editor.pitch_8" value="#3b82f6" />
+    <Var name="editor.pitch_9" value="#6366f1" />
+    <Var name="editor.pitch_10" value="#a855f7" />
+    <Var name="editor.pitch_11" value="#ec4899" />
+    <Var name="editor.drum_kick" value="#ef4444" />
+    <Var name="editor.drum_snare" value="#f59e0b" />
+    <Var name="editor.drum_tom" value="#a3e635" />
+    <Var name="editor.drum_hat" value="#22d3ee" />
+    <Var name="editor.drum_ride" value="#60a5fa" />
+    <Var name="editor.drum_cymbal" value="#f472b6" />
+    <Var name="editor.drum_other" value="#c084fc" />
+  </Variables>
+  <Page name="mcp.strip">
+    <Frame name="Strip" w=86 h=400>
+      <Rectangle name="Ground" w=86 h=400 bind:w="w" bind:h="h" bind:fill="track.ground" />
+      <Rectangle name="Edge" w=1 h=400 bind:h="h" bind:fill="track.edge" bind:visible="track.has_edge" />
+      <Rectangle name="Selected" w=86 h=2 bind:fill="$accent" bind:w="w" bind:visible="track.selected && !ui.rack" />
+      <Rectangle name="Band" y=33 w=86 h=87 bind:w="w" bind:y="33" bind:h="(mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))" bind:fill="track.tint" />
+      <Frame name="Input" x=6 w=75 h=16 bind:x="6" bind:y="(33 + (mixer.h >= 260 ? 33 : 6) + 2)" bind:w="min(w - 12, 75)" bind:visible="((w >= 172 ? 86 : w) >= 60) && (mixer.h >= 350 ? true : false) && track.armed" fill="#0a0a0c">
+        <Text name="Label" x=3 y=2.5 w=400 h=14 size=10 fill="#a1a1aa" bind:text="track.input">Input</Text>
+        <Vector name="Caret" y=6 w=7 h=4 geometry="M 0 0 L 7 0 L 3.5 4 Z" fill="#71717a" bind:x="pw - 9" />
+      </Frame>
+      <Rectangle name="Number band" w=86 h=12 bind:w="w" bind:y="h - 12" bind:fill="track.band" />
+      <Text name="Number" x=-1 w=86 h=13 size=9 text-align="center" fill="#a1a1aa" bind:w="w" bind:y="h - 12 + 2.04 - 1" bind:text="fmt(track.number)">1</Text>
+      <Vector name="Fold open" w=14 h=12 geometry="M 4 4.2 L 7 7.8 L 10 4.2 Z" fill="#a1a1aa" bind:y="h - 12" bind:visible="track.folder && !track.collapsed" />
+      <Vector name="Fold shut" w=14 h=12 geometry="M 5.2 3 L 8.8 6 L 5.2 9 Z" fill="#a1a1aa" bind:y="h - 12" bind:visible="track.folder && track.collapsed" />
+      <Frame name="Pan" x=5 y=35 w=24 h=25 bind:x="5" bind:y="35" bind:visible="((w >= 172 ? 86 : w) >= 60) && (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)) > 26">
+        <Vector w=24 h=25 geometry="M21.369999999999997,12.08 C21.369999999999997,17.254908105914534 17.174908105914533,21.45 12,21.45 C6.8250918940854675,21.45 2.6300000000000026,17.254908105914534 2.630000000000001,12.080000000000002 C2.629999999999999,6.9050918940854675 6.825091894085465,2.7100000000000026 11.999999999999998,2.710000000000001 C17.174908105914533,2.709999999999999 21.369999999999997,6.905091894085464 21.369999999999997,12.079999999999998" fill="#151517" />
+        <Vector w=24 h=25 geometry="M6.470424971121197,17.6095750288788 C3.416525009626266,14.55567506738387 3.416525009626268,9.604324932616128 6.470424971121199,6.550424971121198 C9.52432493261613,3.496525009626268 14.475675067383872,3.496525009626268 17.529575028878803,6.550424971121199 C20.583474990373734,9.60432493261613 20.58347499037373,14.55567506738387 17.529575028878803,17.6095750288788" stroke-weight=2.4 stroke-join="round" stroke="#27272a" />
+        <Vector name="Value" w=24 h=25 geometry="M 0 0" stroke="#eab308" stroke-weight=2.4 stroke-join="round" bind:geometry="arc(12, 12.08, 7.82, 0, clamp(track.pan, -1, 1) * 135)" bind:visible="abs(clamp(track.pan, -1, 1) * 135) > 0.5" />
+        <Frame name="Face Normal" w=24 h=25 bind:visible="!(ui.pressed == \"pan\" || (ui.hover == \"pan\" && ui.pressed == \"\"))">
+          <Vector w=24 h=25 geometry="M18.27,12.08 C18.27,15.542825381439073 15.462825381439075,18.349999999999998 12,18.349999999999998 C8.537174618560927,18.349999999999998 5.730000000000002,15.542825381439075 5.730000000000001,12.08 C5.73,8.617174618560927 8.537174618560925,5.810000000000002 11.999999999999998,5.810000000000001 C15.462825381439073,5.8100000000000005 18.269999999999996,8.617174618560925 18.27,12.079999999999998" fill="#18181b" />
+        </Frame>
+        <Frame name="Face Hover" w=24 h=25 bind:visible="(ui.hover == \"pan\" && ui.pressed == \"\")">
+          <Vector w=24 h=25 geometry="M18.27,12.08 C18.27,15.542825381439073 15.462825381439075,18.349999999999998 12,18.349999999999998 C8.537174618560927,18.349999999999998 5.730000000000002,15.542825381439075 5.730000000000001,12.08 C5.73,8.617174618560927 8.537174618560925,5.810000000000002 11.999999999999998,5.810000000000001 C15.462825381439073,5.8100000000000005 18.269999999999996,8.617174618560925 18.27,12.079999999999998" fill="#202024" />
+        </Frame>
+        <Frame name="Face Pressed" w=24 h=25 bind:visible="ui.pressed == \"pan\"">
+          <Vector w=24 h=25 geometry="M18.27,12.08 C18.27,15.542825381439073 15.462825381439075,18.349999999999998 12,18.349999999999998 C8.537174618560927,18.349999999999998 5.730000000000002,15.542825381439075 5.730000000000001,12.08 C5.73,8.617174618560927 8.537174618560925,5.810000000000002 11.999999999999998,5.810000000000001 C15.462825381439073,5.8100000000000005 18.269999999999996,8.617174618560925 18.27,12.079999999999998" fill="#15151b" />
+        </Frame>
+        <Vector name="Pointer" x=12 y=12.08 w=1 h=1 geometry="M -0.9960000000000004 -5.5699999999999985 L 0.9960000000000004 -5.5699999999999985 L 0.9960000000000004 -4.3100000000000005 L -0.9960000000000004 -4.3100000000000005 Z" fill="#eab308" bind:rotation="clamp(track.pan, -1, 1) * 135" />
+        <Vector w=24 h=25 geometry="M16.06,12.05 C16.06,14.292276084313022 14.242276084313021,16.11 12,16.11 C9.757723915686979,16.11 7.94,14.292276084313022 7.94,12.05 C7.94,9.80772391568698 9.757723915686977,7.990000000000002 12,7.990000000000001 C14.24227608431302,7.99 16.06,9.807723915686978 16.06,12.049999999999999" fill="#c3c3c9" />
+      </Frame>
+      <Frame name="FX Empty Normal" w=72 h=22 bind:x="7" bind:y="9" bind:w="max(w - 14, 36)" bind:visible="((w >= 172 ? 86 : w) >= 60) && track.fx == 0 && !(ui.pressed == \"fx\" || (ui.hover == \"fx\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 fill="#00000059" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 fill="#27272a" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 fill="#6b6b6f" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#d7d7db9c" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Empty Hover" w=72 h=22 bind:x="7" bind:y="9" bind:w="max(w - 14, 36)" bind:visible="((w >= 172 ? 86 : w) >= 60) && track.fx == 0 && (ui.hover == \"fx\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 fill="#00000059" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 fill="#27272a" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 fill="#6b6b6f" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#d7d7db9c" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Empty Pressed" w=72 h=22 bind:x="7" bind:y="9" bind:w="max(w - 14, 36)" bind:visible="((w >= 172 ? 86 : w) >= 60) && track.fx == 0 && ui.pressed == \"fx\"">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 fill="#00000059" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 fill="#27272a" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 fill="#6b6b6f" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#d7d7db9c" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Active Normal" w=72 h=22 bind:x="7" bind:y="9" bind:w="max(w - 14, 36)" bind:visible="((w >= 172 ? 86 : w) >= 60) && track.fx > 0 && !(ui.pressed == \"fx\" || (ui.hover == \"fx\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 fill="#00000059" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 fill="#27272a" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 fill="#38bdf8" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#f2f2f3de" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Active Hover" w=72 h=22 bind:x="7" bind:y="9" bind:w="max(w - 14, 36)" bind:visible="((w >= 172 ? 86 : w) >= 60) && track.fx > 0 && (ui.hover == \"fx\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 fill="#00000059" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 fill="#27272a" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 fill="#38bdf8" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#f2f2f3de" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="FX Active Pressed" w=72 h=22 bind:x="7" bind:y="9" bind:w="max(w - 14, 36)" bind:visible="((w >= 172 ? 86 : w) >= 60) && track.fx > 0 && ui.pressed == \"fx\"">
+        <Rectangle x=0 y=1 w=72 h=20 radius=2.6399999999999997 fill="#00000059" bind:w="1 * pw + 0" />
+        <Rectangle x=0.5 y=1.5 w=71 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 bind:w="1 * pw + -1" />
+        <Rectangle x=56 y=3 w=1 h=16 fill="#27272a" bind:x="1 * pw + -16" />
+        <Rectangle x=62 y=6 w=4 h=10 radius=2 fill="#38bdf8" bind:x="1 * pw + -10" />
+        <Text x=-173 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#f2f2f3de" bind:x="0.5 * pw + -8 + -201">FX</Text>
+      </Frame>
+      <Frame name="Routing 0 Normal" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends == 0 && track.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#212124" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 0 Hover" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends == 0 && track.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#29292d" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 0 Pressed" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends == 0 && track.receives == 0 && ui.pressed == \"routing\"">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#1e1e24" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 1 Normal" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends == 0 && track.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#212124" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 1 Hover" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends == 0 && track.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#29292d" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 1 Pressed" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends == 0 && track.receives == 0 && ui.pressed == \"routing\"">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#1e1e24" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 2 Normal" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends > 0 && track.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#212124" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 2 Hover" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends > 0 && track.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#29292d" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 2 Pressed" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends > 0 && track.receives == 0 && ui.pressed == \"routing\"">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#1e1e24" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 3 Normal" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends > 0 && track.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#212124" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 3 Hover" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends > 0 && track.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#29292d" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 3 Pressed" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends > 0 && track.receives == 0 && ui.pressed == \"routing\"">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#1e1e24" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#838387" />
+      </Frame>
+      <Frame name="Routing 4 Normal" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends == 0 && track.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#212124" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 4 Hover" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends == 0 && track.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#29292d" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 4 Pressed" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends == 0 && track.receives > 0 && ui.pressed == \"routing\"">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#1e1e24" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 5 Normal" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends == 0 && track.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#212124" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 5 Hover" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends == 0 && track.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#29292d" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 5 Pressed" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends == 0 && track.receives > 0 && ui.pressed == \"routing\"">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#1e1e24" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 6 Normal" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends > 0 && track.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#212124" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 6 Hover" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends > 0 && track.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#29292d" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 6 Pressed" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.parent_send && track.sends > 0 && track.receives > 0 && ui.pressed == \"routing\"">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#1e1e24" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#838387" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 7 Normal" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends > 0 && track.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#212124" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 7 Hover" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends > 0 && track.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#29292d" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Routing 7 Pressed" w=23 h=32 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.parent_send && track.sends > 0 && track.receives > 0 && ui.pressed == \"routing\"">
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 radius=3.68 fill="#1e1e24" />
+        <Rectangle x=1.48 y=1.48 w=20.04 h=27.04 stroke-weight=0.96 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.68 />
+        <Rectangle x=2.84 y=1.96 w=17.32 h=1.28 fill="#ffffff12" />
+        <Rectangle x=6 y=6 w=11 h=4 radius=2 fill="#38bdf8" />
+        <Rectangle x=6 y=13 w=11 h=4 radius=2 fill="#f59e0b" />
+        <Rectangle x=6 y=20 w=11 h=4 radius=2 fill="#ef4444" />
+      </Frame>
+      <Frame name="Arm Mixer false Normal" w=36 h=24 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 17.496" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.armed && !(ui.pressed == \"arm\" || (ui.hover == \"arm\" && ui.pressed == \"\"))">
+        <Vector w=36 h=24 geometry="M28.9984,12.499200000000002 C28.9984,18.849590967454397 23.850390967454395,23.997600000000002 17.5,23.997600000000002 C11.149609032545607,23.997600000000002 6.001600000000002,18.849590967454397 6.0016,12.499200000000004 C6.001599999999998,6.14880903254561 11.149609032545605,1.0008000000000035 17.499999999999996,1.0008000000000017 C23.85039096745439,1.0008 28.998399999999997,6.148809032545605 28.9984,12.499199999999998" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M6.0016,14.207999999999998 L2.9992,17.20800018310547 L2.9992,24 L32.0008,24 L32.0008,17.20800018310547 L28.9984,14.207999999999998 Z" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M24.95,12.5 C24.95,16.61452138623941 21.61452138623941,19.95 17.5,19.95 C13.38547861376059,19.950000000000003 10.05,16.61452138623941 10.05,12.500000000000002 C10.049999999999999,8.38547861376059 13.385478613760588,5.050000000000001 17.5,5.05 C21.61452138623941,5.049999999999999 24.95,8.385478613760588 24.95,12.499999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#ceced3","position":0},{"color":"#c3c3c9","position":1}],"transform":{"a":0,"b":-0.6208333333333332,"c":0.6208333333333332,"d":0,"tx":0.3104166666666666,"ty":0.21041666666666667}}}}]} />
+        <Vector w=36 h=24 geometry="M21.17,12.5 C21.17,14.526885031879011 19.52688503187901,16.169999999999998 17.5,16.17 C15.473114968120989,16.17 13.83,14.526885031879011 13.83,12.5 C13.83,10.473114968120989 15.473114968120989,8.83 17.5,8.83 C19.52688503187901,8.83 21.169999999999998,10.473114968120989 21.17,12.499999999999998" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Mixer false Hover" w=36 h=24 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 17.496" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.armed && (ui.hover == \"arm\" && ui.pressed == \"\")">
+        <Vector w=36 h=24 geometry="M28.9984,12.499200000000002 C28.9984,18.849590967454397 23.850390967454395,23.997600000000002 17.5,23.997600000000002 C11.149609032545607,23.997600000000002 6.001600000000002,18.849590967454397 6.0016,12.499200000000004 C6.001599999999998,6.14880903254561 11.149609032545605,1.0008000000000035 17.499999999999996,1.0008000000000017 C23.85039096745439,1.0008 28.998399999999997,6.148809032545605 28.9984,12.499199999999998" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M6.0016,14.207999999999998 L2.9992,17.20800018310547 L2.9992,24 L32.0008,24 L32.0008,17.20800018310547 L28.9984,14.207999999999998 Z" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M24.95,12.5 C24.95,16.61452138623941 21.61452138623941,19.95 17.5,19.95 C13.38547861376059,19.950000000000003 10.05,16.61452138623941 10.05,12.500000000000002 C10.049999999999999,8.38547861376059 13.385478613760588,5.050000000000001 17.5,5.05 C21.61452138623941,5.049999999999999 24.95,8.385478613760588 24.95,12.499999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#d5d5d9","position":0},{"color":"#ccccd1","position":1}],"transform":{"a":0,"b":-0.6208333333333332,"c":0.6208333333333332,"d":0,"tx":0.3104166666666666,"ty":0.21041666666666667}}}}]} />
+        <Vector w=36 h=24 geometry="M21.17,12.5 C21.17,14.526885031879011 19.52688503187901,16.169999999999998 17.5,16.17 C15.473114968120989,16.17 13.83,14.526885031879011 13.83,12.5 C13.83,10.473114968120989 15.473114968120989,8.83 17.5,8.83 C19.52688503187901,8.83 21.169999999999998,10.473114968120989 21.17,12.499999999999998" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Mixer false Pressed" w=36 h=24 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 17.496" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="((w >= 172 ? 86 : w) >= 78) && !track.armed && ui.pressed == \"arm\"">
+        <Vector w=36 h=24 geometry="M28.9984,12.499200000000002 C28.9984,18.849590967454397 23.850390967454395,23.997600000000002 17.5,23.997600000000002 C11.149609032545607,23.997600000000002 6.001600000000002,18.849590967454397 6.0016,12.499200000000004 C6.001599999999998,6.14880903254561 11.149609032545605,1.0008000000000035 17.499999999999996,1.0008000000000017 C23.85039096745439,1.0008 28.998399999999997,6.148809032545605 28.9984,12.499199999999998" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M6.0016,14.207999999999998 L2.9992,17.20800018310547 L2.9992,24 L32.0008,24 L32.0008,17.20800018310547 L28.9984,14.207999999999998 Z" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M24.95,12.5 C24.95,16.61452138623941 21.61452138623941,19.95 17.5,19.95 C13.38547861376059,19.950000000000003 10.05,16.61452138623941 10.05,12.500000000000002 C10.049999999999999,8.38547861376059 13.385478613760588,5.050000000000001 17.5,5.05 C21.61452138623941,5.049999999999999 24.95,8.385478613760588 24.95,12.499999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#bbbbbf","position":0},{"color":"#acacb1","position":1}],"transform":{"a":0,"b":-0.6208333333333332,"c":0.6208333333333332,"d":0,"tx":0.3104166666666666,"ty":0.21041666666666667}}}}]} />
+        <Vector w=36 h=24 geometry="M21.17,12.5 C21.17,14.526885031879011 19.52688503187901,16.169999999999998 17.5,16.17 C15.473114968120989,16.17 13.83,14.526885031879011 13.83,12.5 C13.83,10.473114968120989 15.473114968120989,8.83 17.5,8.83 C19.52688503187901,8.83 21.169999999999998,10.473114968120989 21.17,12.499999999999998" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Mixer true Normal" w=36 h=24 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 17.496" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && !(ui.pressed == \"arm\" || (ui.hover == \"arm\" && ui.pressed == \"\"))">
+        <Vector w=36 h=24 geometry="M28.9984,12.499200000000002 C28.9984,18.849590967454397 23.850390967454395,23.997600000000002 17.5,23.997600000000002 C11.149609032545607,23.997600000000002 6.001600000000002,18.849590967454397 6.0016,12.499200000000004 C6.001599999999998,6.14880903254561 11.149609032545605,1.0008000000000035 17.499999999999996,1.0008000000000017 C23.85039096745439,1.0008 28.998399999999997,6.148809032545605 28.9984,12.499199999999998" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M6.0016,14.207999999999998 L2.9992,17.20800018310547 L2.9992,24 L32.0008,24 L32.0008,17.20800018310547 L28.9984,14.207999999999998 Z" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M24.95,12.5 C24.95,16.61452138623941 21.61452138623941,19.95 17.5,19.95 C13.38547861376059,19.950000000000003 10.05,16.61452138623941 10.05,12.500000000000002 C10.049999999999999,8.38547861376059 13.385478613760588,5.050000000000001 17.5,5.05 C21.61452138623941,5.049999999999999 24.95,8.385478613760588 24.95,12.499999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#f26666","position":0},{"color":"#ef4444","position":1}],"transform":{"a":0,"b":-0.6208333333333332,"c":0.6208333333333332,"d":0,"tx":0.3104166666666666,"ty":0.21041666666666667}}}}]} />
+        <Vector w=36 h=24 geometry="M21.17,12.5 C21.17,14.526885031879011 19.52688503187901,16.169999999999998 17.5,16.17 C15.473114968120989,16.17 13.83,14.526885031879011 13.83,12.5 C13.83,10.473114968120989 15.473114968120989,8.83 17.5,8.83 C19.52688503187901,8.83 21.169999999999998,10.473114968120989 21.17,12.499999999999998" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Mixer true Hover" w=36 h=24 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 17.496" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && (ui.hover == \"arm\" && ui.pressed == \"\")">
+        <Vector w=36 h=24 geometry="M28.9984,12.499200000000002 C28.9984,18.849590967454397 23.850390967454395,23.997600000000002 17.5,23.997600000000002 C11.149609032545607,23.997600000000002 6.001600000000002,18.849590967454397 6.0016,12.499200000000004 C6.001599999999998,6.14880903254561 11.149609032545605,1.0008000000000035 17.499999999999996,1.0008000000000017 C23.85039096745439,1.0008 28.998399999999997,6.148809032545605 28.9984,12.499199999999998" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M6.0016,14.207999999999998 L2.9992,17.20800018310547 L2.9992,24 L32.0008,24 L32.0008,17.20800018310547 L28.9984,14.207999999999998 Z" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M24.95,12.5 C24.95,16.61452138623941 21.61452138623941,19.95 17.5,19.95 C13.38547861376059,19.950000000000003 10.05,16.61452138623941 10.05,12.500000000000002 C10.049999999999999,8.38547861376059 13.385478613760588,5.050000000000001 17.5,5.05 C21.61452138623941,5.049999999999999 24.95,8.385478613760588 24.95,12.499999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#f47d7d","position":0},{"color":"#f16060","position":1}],"transform":{"a":0,"b":-0.6208333333333332,"c":0.6208333333333332,"d":0,"tx":0.3104166666666666,"ty":0.21041666666666667}}}}]} />
+        <Vector w=36 h=24 geometry="M21.17,12.5 C21.17,14.526885031879011 19.52688503187901,16.169999999999998 17.5,16.17 C15.473114968120989,16.17 13.83,14.526885031879011 13.83,12.5 C13.83,10.473114968120989 15.473114968120989,8.83 17.5,8.83 C19.52688503187901,8.83 21.169999999999998,10.473114968120989 21.17,12.499999999999998" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Mixer true Pressed" w=36 h=24 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 17.496" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && ui.pressed == \"arm\"">
+        <Vector w=36 h=24 geometry="M28.9984,12.499200000000002 C28.9984,18.849590967454397 23.850390967454395,23.997600000000002 17.5,23.997600000000002 C11.149609032545607,23.997600000000002 6.001600000000002,18.849590967454397 6.0016,12.499200000000004 C6.001599999999998,6.14880903254561 11.149609032545605,1.0008000000000035 17.499999999999996,1.0008000000000017 C23.85039096745439,1.0008 28.998399999999997,6.148809032545605 28.9984,12.499199999999998" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M6.0016,14.207999999999998 L2.9992,17.20800018310547 L2.9992,24 L32.0008,24 L32.0008,17.20800018310547 L28.9984,14.207999999999998 Z" bind:fill="track.ground" />
+        <Vector w=36 h=24 geometry="M24.95,12.5 C24.95,16.61452138623941 21.61452138623941,19.95 17.5,19.95 C13.38547861376059,19.950000000000003 10.05,16.61452138623941 10.05,12.500000000000002 C10.049999999999999,8.38547861376059 13.385478613760588,5.050000000000001 17.5,5.05 C21.61452138623941,5.049999999999999 24.95,8.385478613760588 24.95,12.499999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#da5f5f","position":0},{"color":"#d23c3c","position":1}],"transform":{"a":0,"b":-0.6208333333333332,"c":0.6208333333333332,"d":0,"tx":0.3104166666666666,"ty":0.21041666666666667}}}}]} />
+        <Vector w=36 h=24 geometry="M21.17,12.5 C21.17,14.526885031879011 19.52688503187901,16.169999999999998 17.5,16.17 C15.473114968120989,16.17 13.83,14.526885031879011 13.83,12.5 C13.83,10.473114968120989 15.473114968120989,8.83 17.5,8.83 C19.52688503187901,8.83 21.169999999999998,10.473114968120989 21.17,12.499999999999998" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Panel false Normal" w=20 h=20 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 10" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="!((w >= 172 ? 86 : w) >= 78) && w >= 22 && !track.armed && !(ui.pressed == \"arm\" || (ui.hover == \"arm\" && ui.pressed == \"\"))">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#ceced3","position":0},{"color":"#c3c3c9","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Panel false Hover" w=20 h=20 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 10" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="!((w >= 172 ? 86 : w) >= 78) && w >= 22 && !track.armed && (ui.hover == \"arm\" && ui.pressed == \"\")">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#d5d5d9","position":0},{"color":"#ccccd1","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Panel false Pressed" w=20 h=20 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 10" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="!((w >= 172 ? 86 : w) >= 78) && w >= 22 && !track.armed && ui.pressed == \"arm\"">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#bbbbbf","position":0},{"color":"#acacb1","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Panel true Normal" w=20 h=20 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 10" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="!((w >= 172 ? 86 : w) >= 78) && w >= 22 && track.armed && !(ui.pressed == \"arm\" || (ui.hover == \"arm\" && ui.pressed == \"\"))">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#f26666","position":0},{"color":"#ef4444","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Panel true Hover" w=20 h=20 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 10" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="!((w >= 172 ? 86 : w) >= 78) && w >= 22 && track.armed && (ui.hover == \"arm\" && ui.pressed == \"\")">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#f47d7d","position":0},{"color":"#f16060","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Arm Panel true Pressed" w=20 h=20 bind:x="((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 10" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:visible="!((w >= 172 ? 86 : w) >= 78) && w >= 22 && track.armed && ui.pressed == \"arm\"">
+        <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#da5f5f","position":0},{"color":"#d23c3c","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+        <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" bind:fill="track.ground" />
+      </Frame>
+      <Frame name="Monitor Off Normal" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && track.monitor == 0 && !(ui.pressed == \"monitor\" || (ui.hover == \"monitor\" && ui.pressed == \"\"))">
+        <Vector w=21 h=20 geometry="M10.5,16.2 C8.876282835497468,16.2 7.5600000000000005,14.856854249492379 7.56,13.2 C7.559999999999999,11.54314575050762 8.876282835497467,10.2 10.5,10.2 C12.123717164502532,10.2 13.44,11.543145750507618 13.440000000000001,13.2 C13.440000000000001,14.856854249492379 12.123717164502533,16.2 10.500000000000002,16.2" fill="#838387" />
+        <Vector w=21 h=20 geometry="M5.932208753335284,9.470003960826874 C6.759991725658768,7.694817647999191 8.541298620381491,6.56 10.5,6.56 C12.458701379618509,6.56 14.240008274341232,7.694817647999191 15.067791246664715,9.470003960826874" stroke-weight=2 stroke-join="round" stroke="#838387" />
+        <Vector w=21 h=20 geometry="M3.45798849472523,8.316256106274764 C4.734153910390601,5.579510540665419 7.480335373088133,3.83 10.5,3.83 C13.519664626911867,3.83 16.265846089609397,5.57951054066542 17.542011505274772,8.316256106274766" stroke-weight=2.2 stroke-join="round" stroke="#838387" />
+      </Frame>
+      <Frame name="Monitor Off Hover" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && track.monitor == 0 && (ui.hover == \"monitor\" && ui.pressed == \"\")">
+        <Vector w=21 h=20 geometry="M10.5,16.2 C8.876282835497468,16.2 7.5600000000000005,14.856854249492379 7.56,13.2 C7.559999999999999,11.54314575050762 8.876282835497467,10.2 10.5,10.2 C12.123717164502532,10.2 13.44,11.543145750507618 13.440000000000001,13.2 C13.440000000000001,14.856854249492379 12.123717164502533,16.2 10.500000000000002,16.2" fill="#b0b0b5" />
+        <Vector w=21 h=20 geometry="M5.932208753335284,9.470003960826874 C6.759991725658768,7.694817647999191 8.541298620381491,6.56 10.5,6.56 C12.458701379618509,6.56 14.240008274341232,7.694817647999191 15.067791246664715,9.470003960826874" stroke-weight=2 stroke-join="round" stroke="#b0b0b5" />
+        <Vector w=21 h=20 geometry="M3.45798849472523,8.316256106274764 C4.734153910390601,5.579510540665419 7.480335373088133,3.83 10.5,3.83 C13.519664626911867,3.83 16.265846089609397,5.57951054066542 17.542011505274772,8.316256106274766" stroke-weight=2.2 stroke-join="round" stroke="#b0b0b5" />
+      </Frame>
+      <Frame name="Monitor Off Pressed" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && track.monitor == 0 && ui.pressed == \"monitor\"">
+        <Vector w=21 h=20 geometry="M10.5,16.2 C8.876282835497468,16.2 7.5600000000000005,14.856854249492379 7.56,13.2 C7.559999999999999,11.54314575050762 8.876282835497467,10.2 10.5,10.2 C12.123717164502532,10.2 13.44,11.543145750507618 13.440000000000001,13.2 C13.440000000000001,14.856854249492379 12.123717164502533,16.2 10.500000000000002,16.2" fill="#b0b0b5" />
+        <Vector w=21 h=20 geometry="M5.932208753335284,9.470003960826874 C6.759991725658768,7.694817647999191 8.541298620381491,6.56 10.5,6.56 C12.458701379618509,6.56 14.240008274341232,7.694817647999191 15.067791246664715,9.470003960826874" stroke-weight=2 stroke-join="round" stroke="#b0b0b5" />
+        <Vector w=21 h=20 geometry="M3.45798849472523,8.316256106274764 C4.734153910390601,5.579510540665419 7.480335373088133,3.83 10.5,3.83 C13.519664626911867,3.83 16.265846089609397,5.57951054066542 17.542011505274772,8.316256106274766" stroke-weight=2.2 stroke-join="round" stroke="#b0b0b5" />
+      </Frame>
+      <Frame name="Monitor Normal Normal" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && track.monitor == 1 && !(ui.pressed == \"monitor\" || (ui.hover == \"monitor\" && ui.pressed == \"\"))">
+        <Vector w=21 h=20 geometry="M10.5,16.2 C8.876282835497468,16.2 7.5600000000000005,14.856854249492379 7.56,13.2 C7.559999999999999,11.54314575050762 8.876282835497467,10.2 10.5,10.2 C12.123717164502532,10.2 13.44,11.543145750507618 13.440000000000001,13.2 C13.440000000000001,14.856854249492379 12.123717164502533,16.2 10.500000000000002,16.2" fill="#e4e4e7" />
+        <Vector w=21 h=20 geometry="M5.932208753335284,9.470003960826874 C6.759991725658768,7.694817647999191 8.541298620381491,6.56 10.5,6.56 C12.458701379618509,6.56 14.240008274341232,7.694817647999191 15.067791246664715,9.470003960826874" stroke-weight=2 stroke-join="round" stroke="#e4e4e7" />
+        <Vector w=21 h=20 geometry="M3.45798849472523,8.316256106274764 C4.734153910390601,5.579510540665419 7.480335373088133,3.83 10.5,3.83 C13.519664626911867,3.83 16.265846089609397,5.57951054066542 17.542011505274772,8.316256106274766" stroke-weight=2.2 stroke-join="round" stroke="#e4e4e7" />
+      </Frame>
+      <Frame name="Monitor Normal Hover" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && track.monitor == 1 && (ui.hover == \"monitor\" && ui.pressed == \"\")">
+        <Vector w=21 h=20 geometry="M10.5,16.2 C8.876282835497468,16.2 7.5600000000000005,14.856854249492379 7.56,13.2 C7.559999999999999,11.54314575050762 8.876282835497467,10.2 10.5,10.2 C12.123717164502532,10.2 13.44,11.543145750507618 13.440000000000001,13.2 C13.440000000000001,14.856854249492379 12.123717164502533,16.2 10.500000000000002,16.2" fill="#e4e4e7" />
+        <Vector w=21 h=20 geometry="M5.932208753335284,9.470003960826874 C6.759991725658768,7.694817647999191 8.541298620381491,6.56 10.5,6.56 C12.458701379618509,6.56 14.240008274341232,7.694817647999191 15.067791246664715,9.470003960826874" stroke-weight=2 stroke-join="round" stroke="#e4e4e7" />
+        <Vector w=21 h=20 geometry="M3.45798849472523,8.316256106274764 C4.734153910390601,5.579510540665419 7.480335373088133,3.83 10.5,3.83 C13.519664626911867,3.83 16.265846089609397,5.57951054066542 17.542011505274772,8.316256106274766" stroke-weight=2.2 stroke-join="round" stroke="#e4e4e7" />
+      </Frame>
+      <Frame name="Monitor Normal Pressed" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && track.monitor == 1 && ui.pressed == \"monitor\"">
+        <Vector w=21 h=20 geometry="M10.5,16.2 C8.876282835497468,16.2 7.5600000000000005,14.856854249492379 7.56,13.2 C7.559999999999999,11.54314575050762 8.876282835497467,10.2 10.5,10.2 C12.123717164502532,10.2 13.44,11.543145750507618 13.440000000000001,13.2 C13.440000000000001,14.856854249492379 12.123717164502533,16.2 10.500000000000002,16.2" fill="#e4e4e7" />
+        <Vector w=21 h=20 geometry="M5.932208753335284,9.470003960826874 C6.759991725658768,7.694817647999191 8.541298620381491,6.56 10.5,6.56 C12.458701379618509,6.56 14.240008274341232,7.694817647999191 15.067791246664715,9.470003960826874" stroke-weight=2 stroke-join="round" stroke="#e4e4e7" />
+        <Vector w=21 h=20 geometry="M3.45798849472523,8.316256106274764 C4.734153910390601,5.579510540665419 7.480335373088133,3.83 10.5,3.83 C13.519664626911867,3.83 16.265846089609397,5.57951054066542 17.542011505274772,8.316256106274766" stroke-weight=2.2 stroke-join="round" stroke="#e4e4e7" />
+      </Frame>
+      <Frame name="Monitor NotWhenPlaying Normal" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && track.monitor == 2 && !(ui.pressed == \"monitor\" || (ui.hover == \"monitor\" && ui.pressed == \"\"))">
+        <Vector w=21 h=20 geometry="M10.5,16.2 C8.876282835497468,16.2 7.5600000000000005,14.856854249492379 7.56,13.2 C7.559999999999999,11.54314575050762 8.876282835497467,10.2 10.5,10.2 C12.123717164502532,10.2 13.44,11.543145750507618 13.440000000000001,13.2 C13.440000000000001,14.856854249492379 12.123717164502533,16.2 10.500000000000002,16.2" fill="#f08c2e" />
+        <Vector w=21 h=20 geometry="M5.932208753335284,9.470003960826874 C6.759991725658768,7.694817647999191 8.541298620381491,6.56 10.5,6.56 C12.458701379618509,6.56 14.240008274341232,7.694817647999191 15.067791246664715,9.470003960826874" stroke-weight=2 stroke-join="round" stroke="#f08c2e" />
+        <Vector w=21 h=20 geometry="M3.45798849472523,8.316256106274764 C4.734153910390601,5.579510540665419 7.480335373088133,3.83 10.5,3.83 C13.519664626911867,3.83 16.265846089609397,5.57951054066542 17.542011505274772,8.316256106274766" stroke-weight=2.2 stroke-join="round" stroke="#838387" />
+      </Frame>
+      <Frame name="Monitor NotWhenPlaying Hover" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && track.monitor == 2 && (ui.hover == \"monitor\" && ui.pressed == \"\")">
+        <Vector w=21 h=20 geometry="M10.5,16.2 C8.876282835497468,16.2 7.5600000000000005,14.856854249492379 7.56,13.2 C7.559999999999999,11.54314575050762 8.876282835497467,10.2 10.5,10.2 C12.123717164502532,10.2 13.44,11.543145750507618 13.440000000000001,13.2 C13.440000000000001,14.856854249492379 12.123717164502533,16.2 10.500000000000002,16.2" fill="#f08c2e" />
+        <Vector w=21 h=20 geometry="M5.932208753335284,9.470003960826874 C6.759991725658768,7.694817647999191 8.541298620381491,6.56 10.5,6.56 C12.458701379618509,6.56 14.240008274341232,7.694817647999191 15.067791246664715,9.470003960826874" stroke-weight=2 stroke-join="round" stroke="#f08c2e" />
+        <Vector w=21 h=20 geometry="M3.45798849472523,8.316256106274764 C4.734153910390601,5.579510540665419 7.480335373088133,3.83 10.5,3.83 C13.519664626911867,3.83 16.265846089609397,5.57951054066542 17.542011505274772,8.316256106274766" stroke-weight=2.2 stroke-join="round" stroke="#b0b0b5" />
+      </Frame>
+      <Frame name="Monitor NotWhenPlaying Pressed" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed && track.monitor == 2 && ui.pressed == \"monitor\"">
+        <Vector w=21 h=20 geometry="M10.5,16.2 C8.876282835497468,16.2 7.5600000000000005,14.856854249492379 7.56,13.2 C7.559999999999999,11.54314575050762 8.876282835497467,10.2 10.5,10.2 C12.123717164502532,10.2 13.44,11.543145750507618 13.440000000000001,13.2 C13.440000000000001,14.856854249492379 12.123717164502533,16.2 10.500000000000002,16.2" fill="#f08c2e" />
+        <Vector w=21 h=20 geometry="M5.932208753335284,9.470003960826874 C6.759991725658768,7.694817647999191 8.541298620381491,6.56 10.5,6.56 C12.458701379618509,6.56 14.240008274341232,7.694817647999191 15.067791246664715,9.470003960826874" stroke-weight=2 stroke-join="round" stroke="#f08c2e" />
+        <Vector w=21 h=20 geometry="M3.45798849472523,8.316256106274764 C4.734153910390601,5.579510540665419 7.480335373088133,3.83 10.5,3.83 C13.519664626911867,3.83 16.265846089609397,5.57951054066542 17.542011505274772,8.316256106274766" stroke-weight=2.2 stroke-join="round" stroke="#b0b0b5" />
+      </Frame>
+      <Frame name="M false Normal" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="!track.mute && !(ui.pressed == \"mute\" || (ui.hover == \"mute\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#18181b" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">M</Text>
+      </Frame>
+      <Frame name="M false Hover" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="!track.mute && (ui.hover == \"mute\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#1e1e22" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">M</Text>
+      </Frame>
+      <Frame name="M false Pressed" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="!track.mute && ui.pressed == \"mute\"">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#18181b" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">M</Text>
+      </Frame>
+      <Frame name="M true Normal" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="track.mute && !(ui.pressed == \"mute\" || (ui.hover == \"mute\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#ef4444" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">M</Text>
+      </Frame>
+      <Frame name="M true Hover" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="track.mute && (ui.hover == \"mute\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#ff5555" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">M</Text>
+      </Frame>
+      <Frame name="M true Pressed" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="track.mute && ui.pressed == \"mute\"">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#ef4444" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">M</Text>
+      </Frame>
+      <Frame name="S false Normal" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="!track.solo && !(ui.pressed == \"solo\" || (ui.hover == \"solo\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#18181b" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">S</Text>
+      </Frame>
+      <Frame name="S false Hover" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="!track.solo && (ui.hover == \"solo\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#1e1e22" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">S</Text>
+      </Frame>
+      <Frame name="S false Pressed" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="!track.solo && ui.pressed == \"solo\"">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#18181b" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">S</Text>
+      </Frame>
+      <Frame name="S true Normal" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="track.solo && !(ui.pressed == \"solo\" || (ui.hover == \"solo\" && ui.pressed == \"\"))">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#eab308" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">S</Text>
+      </Frame>
+      <Frame name="S true Hover" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="track.solo && (ui.hover == \"solo\" && ui.pressed == \"\")">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#ffe00a" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">S</Text>
+      </Frame>
+      <Frame name="S true Pressed" w=21 h=20 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:visible="track.solo && ui.pressed == \"solo\"">
+        <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#eab308" />
+        <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        <Text x=-190.5 y=4.5 w=400 h=14 size=10 text-align="center" fill="#d3d3d7">S</Text>
+      </Frame>
+      <Rectangle name="Name selected" x=2 w=82 h=2 fill="#38bdf8" bind:w="w - 4" bind:y="(h - 12 - 26)" bind:visible="track.selected" />
+      <Text name="Name" x=-1 w=86 h=16 size=11 text-align="center" bind:w="w" bind:y="(h - 12 - 26) + 13 + track.label_size / 3 - 0.8 * track.label_size - 1" bind:size="track.label_size" bind:text="track.label" bind:fill="track.solo ? #eab308 : track.mute ? #71717a : track.selected ? #e4e4e7 : #a1a1aa">Track</Text>
+      <Frame name="Scale" w=24 h=200 bind:x="max((((w >= 172 ? 86 : w) - 30) / 2) - 24, 1)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3)" bind:h="clamp((h - 12 - 26) - 3 - (((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3), 0, max(h - 33 - (h >= 260 ? 33 : 6) - (h >= 400 ? 54 : (h >= 350 ? 42 : 22)) - 47, 0))" bind:visible="((w >= 172 ? 86 : w) >= 60) && (h >= 157 ? true : false) && clamp((h - 12 - 26) - 3 - (((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3), 0, max(h - 33 - (h >= 260 ? 33 : 6) - (h >= 400 ? 54 : (h >= 350 ? 42 : 22)) - 47, 0)) > 0">
+        <Rectangle name="Tick +6" x=19 w=5 h=1 bind:y="ph * (1 - 0.9117647058823529) - 0.5" bind:visible="true" bind:fill="meter.peak >= 0.9117647058823529 ? #f16430c8 : #71717a5a" />
+        <Text name="Mark +6" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.9117647058823529) + 2.6666666666666665 - 6.4 - 1" bind:visible="true" bind:fill="meter.peak >= 0.9117647058823529 ? #f16430 : #71717a">+6</Text>
+        <Rectangle name="Tick 0" x=19 w=5 h=1 bind:y="ph * (1 - 0.8235294117647058) - 0.5" bind:visible="(ph >= 113.5 ? true : false)" bind:fill="meter.peak >= 0.8235294117647058 ? #f3841cc8 : #71717a5a" />
+        <Text name="Mark 0" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.8235294117647058) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 113.5 ? true : false)" bind:fill="meter.peak >= 0.8235294117647058 ? #f3841c : #71717a">0</Text>
+        <Rectangle name="Tick 6" x=19 w=5 h=1 bind:y="ph * (1 - 0.7352941176470589) - 0.5" bind:visible="(ph >= 57 ? true : false)" bind:fill="meter.peak >= 0.7352941176470589 ? #f19f0dc8 : #71717a5a" />
+        <Text name="Mark 6" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.7352941176470589) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 57 ? true : false)" bind:fill="meter.peak >= 0.7352941176470589 ? #f19f0d : #71717a">6</Text>
+        <Rectangle name="Tick 18" x=19 w=5 h=1 bind:y="ph * (1 - 0.5588235294117647) - 0.5" bind:visible="(ph >= 28.5 ? true : false)" bind:fill="meter.peak >= 0.5588235294117647 ? #bfa820c8 : #71717a5a" />
+        <Text name="Mark 18" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.5588235294117647) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 28.5 ? true : false)" bind:fill="meter.peak >= 0.5588235294117647 ? #bfa820 : #71717a">18</Text>
+        <Rectangle name="Tick 30" x=19 w=5 h=1 bind:y="ph * (1 - 0.38235294117647056) - 0.5" bind:visible="(ph >= 57 ? true : (ph >= 28.5 ? false : (ph >= 19 ? true : false)))" bind:fill="meter.peak >= 0.38235294117647056 ? #8eb134c8 : #71717a5a" />
+        <Text name="Mark 30" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.38235294117647056) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 57 ? true : (ph >= 28.5 ? false : (ph >= 19 ? true : false)))" bind:fill="meter.peak >= 0.38235294117647056 ? #8eb134 : #71717a">30</Text>
+        <Rectangle name="Tick 42" x=19 w=5 h=1 bind:y="ph * (1 - 0.20588235294117646) - 0.5" bind:visible="(ph >= 28.5 ? true : (ph >= 19 ? false : (ph >= 14.5 ? true : false)))" bind:fill="meter.peak >= 0.20588235294117646 ? #5cba47c8 : #71717a5a" />
+        <Text name="Mark 42" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.20588235294117646) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 28.5 ? true : (ph >= 19 ? false : (ph >= 14.5 ? true : false)))" bind:fill="meter.peak >= 0.20588235294117646 ? #5cba47 : #71717a">42</Text>
+        <Rectangle name="Tick 54" x=19 w=5 h=1 bind:y="ph * (1 - 0.029411764705882353) - 0.5" bind:visible="(ph >= 57 ? true : (ph >= 14.5 ? false : (ph >= 11.5 ? true : false)))" bind:fill="meter.peak >= 0.029411764705882353 ? #2ac35bc8 : #71717a5a" />
+        <Text name="Mark 54" x=-192.5 w=400 h=12 size=8 text-align="center" bind:y="ph * (1 - 0.029411764705882353) + 2.6666666666666665 - 6.4 - 1" bind:visible="(ph >= 57 ? true : (ph >= 14.5 ? false : (ph >= 11.5 ? true : false)))" bind:fill="meter.peak >= 0.029411764705882353 ? #2ac35b : #71717a">54</Text>
+      </Frame>
+      <Frame name="Fader" w=30 h=200 bind:x="(((w >= 172 ? 86 : w) - 30) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3)" bind:h="clamp((h - 12 - 26) - 3 - (((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3), 0, max(h - 33 - (h >= 260 ? 33 : 6) - (h >= 400 ? 54 : (h >= 350 ? 42 : 22)) - 47, 0))" bind:visible="(h >= 157 ? true : false) && clamp((h - 12 - 26) - 3 - (((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3), 0, max(h - 33 - (h >= 260 ? 33 : 6) - (h >= 400 ? 54 : (h >= 350 ? 42 : 22)) - 47, 0)) > 0">
+        <Rectangle name="Groove" x=14.5 y=0.5 w=1 h=100 fill="#050506" bind:h="ph - 1" />
+        <Rectangle name="Lit left" x=10.5 w=4 h=200 bind:h="ph" bind:inset-top="ph - 0.5 - (ph - 1) * clamp(meter.left, 0, 1)" bind:inset-bottom="0.5" bind:visible="(ph - 1) * clamp(meter.left, 0, 1) > 0.5" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#22c55e","position":0},{"color":"#22c55e","position":0.5238234996795654},{"color":"#f59e0b","position":0.5938235521316528},{"color":"#f59e0b","position":0.7002940773963928},{"color":"#ef4444","position":0.7702941298484802},{"color":"#ef4444","position":0.7885293960571289},{"color":"#f58585","position":0.8235294222831726},{"color":"#f58585","position":1}],"transform":{"a":0,"b":1,"c":-1,"d":0,"tx":0,"ty":1}}}}]} />
+        <Rectangle name="Hold left" x=10.5 w=4 h=2 bind:y="max((ph - 1) * -clamp(meter.hold_left, 0, 1) + ph - 0.5 - 1, 0.5)" bind:fill="clamp(meter.hold_left, 0, 1) <= 0.75 ? mix(#22c55e, #f59e0b, clamp(meter.hold_left, 0, 1) / 0.75) : mix(#f59e0b, #ef4444, (clamp(meter.hold_left, 0, 1) - 0.75) / 0.25)" bind:visible="meter.hold_left > 0.001" />
+        <Rectangle name="Lit right" x=15.5 w=4 h=200 bind:h="ph" bind:inset-top="ph - 0.5 - (ph - 1) * clamp(meter.right, 0, 1)" bind:inset-bottom="0.5" bind:visible="(ph - 1) * clamp(meter.right, 0, 1) > 0.5" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#22c55e","position":0},{"color":"#22c55e","position":0.5238234996795654},{"color":"#f59e0b","position":0.5938235521316528},{"color":"#f59e0b","position":0.7002940773963928},{"color":"#ef4444","position":0.7702941298484802},{"color":"#ef4444","position":0.7885293960571289},{"color":"#f58585","position":0.8235294222831726},{"color":"#f58585","position":1}],"transform":{"a":0,"b":1,"c":-1,"d":0,"tx":0,"ty":1}}}}]} />
+        <Rectangle name="Hold right" x=15.5 w=4 h=2 bind:y="max((ph - 1) * -clamp(meter.hold_right, 0, 1) + ph - 0.5 - 1, 0.5)" bind:fill="clamp(meter.hold_right, 0, 1) <= 0.75 ? mix(#22c55e, #f59e0b, clamp(meter.hold_right, 0, 1) / 0.75) : mix(#f59e0b, #ef4444, (clamp(meter.hold_right, 0, 1) - 0.75) / 0.25)" bind:visible="meter.hold_right > 0.001" />
+        <Rectangle name="Groove over" x=14.5 y=0.5 w=1 h=100 fill="#050506d2" bind:h="ph - 1" />
+        <Rectangle name="Clip latch" x=10.5 y=0.5 w=9 h=5 radius=1.6666666666666667 fill="#f58585" bind:visible="meter.clip" />
+        <Frame name="Cap" w=27 h=53 bind:x="4.200000000000001" bind:y="clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0))" bind:scale="min(42.4, ph * 0.5) / 53">
+          <Rectangle x=3 y=47 w=19 h=4 radius=2.7 fill="#00000033" />
+          <Rectangle x=2 y=5 w=21 h=43 radius=4.32 fill="#19191b" />
+          <Rectangle x=3 y=6 w=19 h=7 radius=3.5100000000000002 fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#262629","position":0},{"color":"#18181a","position":0.6499999761581421},{"color":"#101012","position":1}],"transform":{"a":0,"b":-5.857142857142857,"c":5.857142857142857,"d":0,"tx":2.770676691729323,"ty":0}}}}]} />
+          <Rectangle x=3 y=40 w=19 h=7 radius=3.5100000000000002 fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#262629","position":0},{"color":"#18181a","position":0.6499999761581421},{"color":"#101012","position":1}],"transform":{"a":0,"b":-5.857142857142857,"c":5.857142857142857,"d":0,"tx":2.770676691729323,"ty":-4.857142857142857}}}}]} />
+          <Rectangle x=3 y=13 w=4 h=27 fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#262629","position":0},{"color":"#18181a","position":0.6499999761581421},{"color":"#101012","position":1}],"transform":{"a":0,"b":-1.5185185185185186,"c":1.5185185185185186,"d":0,"tx":0.0092592592592593,"ty":-0.25925925925925924}}}}]} />
+          <Rectangle x=18 y=13 w=4 h=27 fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#262629","position":0},{"color":"#18181a","position":0.6499999761581421},{"color":"#101012","position":1}],"transform":{"a":0,"b":-1.5185185185185186,"c":1.5185185185185186,"d":0,"tx":-3.7407407407407405,"ty":-0.25925925925925924}}}}]} />
+          <Rectangle x=6 y=12 w=1 h=29 fill="#0c0c0e" />
+          <Rectangle x=18 y=12 w=1 h=29 fill="#0c0c0e" />
+          <Rectangle x=6 y=12 w=13 h=1 fill="#0c0c0e" />
+          <Rectangle x=6 y=40 w=13 h=1 fill="#0c0c0e" />
+          <Rectangle x=4 y=6 w=17 h=1 fill="#59595b" />
+          <Rectangle x=4 y=7 w=17 h=1 fill="#3d3d3f" />
+          <Rectangle x=9.97 y=16 w=5.0600000000000005 h=1 fill="#5e5e60" />
+          <Rectangle x=9.97 y=18 w=5.0600000000000005 h=1 fill="#606063" />
+          <Rectangle x=9.97 y=20 w=5.0600000000000005 h=1 fill="#626265" />
+          <Rectangle x=9.97 y=22 w=5.0600000000000005 h=1 fill="#656568" />
+          <Rectangle x=9.97 y=24 w=5.0600000000000005 h=1 fill="#67676a" />
+          <Rectangle x=7 y=26 w=11 h=1 fill="#3c3c3e" />
+          <Rectangle x=9.97 y=28 w=5.0600000000000005 h=1 fill="#6c6c6f" />
+          <Rectangle x=9.97 y=30 w=5.0600000000000005 h=1 fill="#6e6e71" />
+          <Rectangle x=9.97 y=32 w=5.0600000000000005 h=1 fill="#707074" />
+          <Rectangle x=9.97 y=34 w=5.0600000000000005 h=1 fill="#737376" />
+          <Rectangle x=9.97 y=36 w=5.0600000000000005 h=1 fill="#757579" />
+        </Frame>
+        <Rectangle name="Readout" x=33 w=40 h=13 fill="#0a0a0c" bind:y="max(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) / 2 - 6.5, 0)" bind:w="track.volume_label_w" bind:visible="ui.pressed == \"fader\"" />
+        <Text name="Readout value" x=35 w=400 h=13 size=9 fill="#e4e4e7" bind:y="max(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) / 2 - 6.5, 0) + 9 - 7.2 - 1" bind:text="track.volume_label" bind:visible="ui.pressed == \"fader\"">0.0</Text>
+        <Rectangle name="Through left" x=10.5 w=4 h=200 bind:h="ph" bind:inset-top="max(((ph - 1) * -clamp(meter.left, 0, 1) + ph - 0.5), (clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.24528301886792453))" bind:inset-bottom="ph - min(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.7547169811320755, ph - 0.5)" bind:visible="min(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.7547169811320755, ph - 0.5) - max(((ph - 1) * -clamp(meter.left, 0, 1) + ph - 0.5), (clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.24528301886792453)) >= 0.5" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#22c55e82","position":0},{"color":"#f59e0b82","position":0.75},{"color":"#ef444482","position":1}],"transform":{"a":0,"b":1,"c":-1,"d":0,"tx":0,"ty":1}}}}]} />
+        <Rectangle name="Through right" x=15.5 w=3.1000000000000014 h=200 bind:h="ph" bind:inset-top="max(((ph - 1) * -clamp(meter.right, 0, 1) + ph - 0.5), (clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.24528301886792453))" bind:inset-bottom="ph - min(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.7547169811320755, ph - 0.5)" bind:visible="min(clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.7547169811320755, ph - 0.5) - max(((ph - 1) * -clamp(meter.right, 0, 1) + ph - 0.5), (clamp(ph - ph * clamp(track.fader, 0, 1) - min(42.4, ph * 0.5) / 2, 0, max(ph - min(42.4, ph * 0.5), 0)) + min(42.4, ph * 0.5) * 0.24528301886792453)) >= 0.5" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#22c55e82","position":0},{"color":"#f59e0b82","position":0.75},{"color":"#ef444482","position":1}],"transform":{"a":0,"b":1,"c":-1,"d":0,"tx":0,"ty":1}}}}]} />
+      </Frame>
+      <Frame name="@name" w=10 h=10 bind:x="0" bind:y="(h - 12 - 26)" bind:w="w" bind:h="26" />
+      <Frame name="@folder" w=10 h=10 bind:x="0" bind:y="h - 12" bind:w="14" bind:h="12" />
+      <Frame name="@fader" w=10 h=10 bind:x="(((w >= 172 ? 86 : w) - 30) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3)" bind:w="30" bind:h="clamp((h - 12 - 26) - 3 - (((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3), 0, max(h - 33 - (h >= 260 ? 33 : 6) - (h >= 400 ? 54 : (h >= 350 ? 42 : 22)) - 47, 0))" />
+      <Frame name="@clip" w=10 h=10 bind:x="(((w >= 172 ? 86 : w) - 30) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3)" bind:w="30" bind:h="5" bind:visible="clamp((h - 12 - 26) - 3 - (((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) : max((((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 20, (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)))) + 3), 0, max(h - 33 - (h >= 260 ? 33 : 6) - (h >= 400 ? 54 : (h >= 350 ? 42 : 22)) - 47, 0)) > 0" />
+      <Frame name="@pan" w=10 h=10 bind:x="5" bind:y="35" bind:w="24" bind:h="(33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) - 35" bind:visible="((w >= 172 ? 86 : w) >= 60) && (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22)) > 26" />
+      <Frame name="@fx" w=10 h=10 bind:x="7" bind:y="9" bind:w="max(w - 14, 36)" bind:h="24" bind:visible="((w >= 172 ? 86 : w) >= 60)" />
+      <Frame name="@routing" w=10 h=10 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) - 1" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 23 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:w="23" bind:h="32" bind:visible="((w >= 172 ? 86 : w) >= 78)" />
+      <Frame name="@solo" w=10 h=10 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + ((20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0)) + 21 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:w="21" bind:h="20" />
+      <Frame name="@mute" w=10 h=10 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + (20 + ((((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 60)) ? 4 : 0))" bind:w="21" bind:h="20" />
+      <Frame name="@monitor" w=10 h=10 bind:x="(((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2)" bind:y="(((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) + 3 - 20" bind:w="21" bind:h="20" bind:visible="((w >= 172 ? 86 : w) >= 78) && track.armed" />
+      <Frame name="@arm" w=10 h=10 bind:x="((w >= 172 ? 86 : w) >= 78) ? ((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 17.496 : ((((w >= 172 ? 86 : w) >= 78) ? (w >= 172 ? 86 : w) - 31 : max((w >= 172 ? 86 : w) - 21, 0) / 2) + 10.5) - 10" bind:y="((w >= 172 ? 86 : w) >= 78) ? (((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1) : (((w >= 172 ? 86 : w) >= 78) ? (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 6.791999816894531 - 24 : (33 + (mixer.h >= 260 ? 33 : 6) + (mixer.h >= 400 ? 54 : (mixer.h >= 350 ? 42 : 22))) + 1)" bind:w="((w >= 172 ? 86 : w) >= 78) ? 36 : 20" bind:h="((w >= 172 ? 86 : w) >= 78) ? 24 : 20" bind:visible="((w >= 172 ? 86 : w) >= 78) || !((w >= 172 ? 86 : w) >= 78) && w >= 22" />
+    </Frame>
+  </Page>
+  <Page name="tcp.row">
+    <Frame name="Row" w=343 h=70>
+      <Rectangle name="Tint" w=343 h=70 bind:w="w" bind:h="h" bind:fill="track.tint" />
+      <Rectangle name="Gutter" x=296 w=47 h=70 bind:h="h" fill="#09090b" />
+      <Frame name="Body" w=343 h=70 bind:w="w" bind:h="h" bind:visible="h >= 11">
+        <Rectangle name="Column" w=20 h=70 bind:w="row.indent + 20" bind:h="h" fill="#0a0a0c" />
+        <Frame name="%steps" w=343 h=70 bind:w="w" bind:h="h" />
+        <Rectangle name="Rail" w=20 h=70 bind:x="row.indent" bind:h="h" bind:fill="track.band" />
+        <Rectangle name="Rule" x=20 w=1 h=70 bind:x="row.indent + 20" bind:h="h" fill="#27272a" />
+        <Rectangle name="Edge" x=341 w=1 h=70 bind:x="w - 2" bind:h="h" fill="#27272a" />
+        <Frame name="Folder mark" w=9 h=7 bind:x="row.indent + (20 - 9 * clamp(h / 18, 0.4, 1)) / 2" bind:y="2 * clamp(h / 18, 0.4, 1)" bind:visible="track.folder" bind:scale="clamp(h / 18, 0.4, 1)">
+          <Vector w=9 h=7 geometry="M0,0 L4,0 L4,2 L9,2 L9,7 L0,7 Z" fill="#a1a1aa" />
+        </Frame>
+        <Text name="Number" w=400 h=15 size=11 bind:x="row.number_x - 1" bind:y="row.number_baseline - 0.8 * row.number_size - 1" bind:size="row.number_size" bind:text="row.number" bind:fill="(luma(track.band) > 0.179 ? #000000 : #e8e8ea)" bind:visible="row.has_number">1</Text>
+        <Frame name="%icon" w=16 h=16 bind:x="row.icon_x" bind:y="row.icon_y" bind:w="row.icon_size" bind:h="row.icon_size" bind:visible="row.icon" />
+        <Text name="Name" w=400 h=15 size=11 bind:x="57 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + (h >= 58 ? 24 : min(24, max(h - 2, 1))) / 2 + 0.35 * row.name_size - 0.8 * row.name_size - 1" bind:size="row.name_size" bind:text="row.name" bind:fill="track.selected ? #e4e4e7 : #a1a1aa">Track</Text>
+        <Frame name="Row two" w=343 h=70 bind:visible="h >= 58 && track.armed">
+          <Rectangle name="Input FX" x=56 y=34 w=34 h=20 fill="#0a0a0c" />
+          <Text x=-128 y=39 w=400 h=14 size=10 text-align="center" fill="#71717a">FX</Text>
+          <Rectangle name="Input" x=91 y=34 w=195 h=20 fill="#0a0a0c" />
+          <Text name="Input name" x=-12.5 y=38.2 w=400 h=15 size=11 text-align="center" bind:text="row.input" fill="#a1a1aa">None</Text>
+          <Vector name="Caret" x=272 y=42 w=7 h=4 geometry="M 0 0 L 7 0 L 3.5 4 Z" fill="#71717a" />
+        </Frame>
+        <Frame name="M false Normal" w=21 h=20 bind:x="298" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="!track.mute && !(ui.pressed == \"mute\" || (ui.hover == \"mute\" && ui.pressed == \"\"))" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#18181b" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="M letter" w=400 h=14 size=10 bind:x="298 + 6.18603515625 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="!track.mute && !(ui.pressed == \"mute\" || (ui.hover == \"mute\" && ui.pressed == \"\"))">M</Text>
+        <Frame name="M false Hover" w=21 h=20 bind:x="298" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="!track.mute && (ui.hover == \"mute\" && ui.pressed == \"\")" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#1e1e22" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="M letter" w=400 h=14 size=10 bind:x="298 + 6.18603515625 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="!track.mute && (ui.hover == \"mute\" && ui.pressed == \"\")">M</Text>
+        <Frame name="M false Pressed" w=21 h=20 bind:x="298" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="!track.mute && ui.pressed == \"mute\"" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#18181b" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="M letter" w=400 h=14 size=10 bind:x="298 + 6.18603515625 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="!track.mute && ui.pressed == \"mute\"">M</Text>
+        <Frame name="M true Normal" w=21 h=20 bind:x="298" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="track.mute && !(ui.pressed == \"mute\" || (ui.hover == \"mute\" && ui.pressed == \"\"))" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#ef4444" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="M letter" w=400 h=14 size=10 bind:x="298 + 6.18603515625 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="track.mute && !(ui.pressed == \"mute\" || (ui.hover == \"mute\" && ui.pressed == \"\"))">M</Text>
+        <Frame name="M true Hover" w=21 h=20 bind:x="298" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="track.mute && (ui.hover == \"mute\" && ui.pressed == \"\")" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#ff5555" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="M letter" w=400 h=14 size=10 bind:x="298 + 6.18603515625 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="track.mute && (ui.hover == \"mute\" && ui.pressed == \"\")">M</Text>
+        <Frame name="M true Pressed" w=21 h=20 bind:x="298" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="track.mute && ui.pressed == \"mute\"" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#ef4444" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="M letter" w=400 h=14 size=10 bind:x="298 + 6.18603515625 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="track.mute && ui.pressed == \"mute\"">M</Text>
+        <Frame name="S false Normal" w=21 h=20 bind:x="320" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="!track.solo && !(ui.pressed == \"solo\" || (ui.hover == \"solo\" && ui.pressed == \"\"))" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#18181b" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="S letter" w=400 h=14 size=10 bind:x="320 + 7.326171875 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="!track.solo && !(ui.pressed == \"solo\" || (ui.hover == \"solo\" && ui.pressed == \"\"))">S</Text>
+        <Frame name="S false Hover" w=21 h=20 bind:x="320" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="!track.solo && (ui.hover == \"solo\" && ui.pressed == \"\")" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#1e1e22" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="S letter" w=400 h=14 size=10 bind:x="320 + 7.326171875 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="!track.solo && (ui.hover == \"solo\" && ui.pressed == \"\")">S</Text>
+        <Frame name="S false Pressed" w=21 h=20 bind:x="320" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="!track.solo && ui.pressed == \"solo\"" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#18181b" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="S letter" w=400 h=14 size=10 bind:x="320 + 7.326171875 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="!track.solo && ui.pressed == \"solo\"">S</Text>
+        <Frame name="S true Normal" w=21 h=20 bind:x="320" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="track.solo && !(ui.pressed == \"solo\" || (ui.hover == \"solo\" && ui.pressed == \"\"))" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#eab308" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="S letter" w=400 h=14 size=10 bind:x="320 + 7.326171875 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="track.solo && !(ui.pressed == \"solo\" || (ui.hover == \"solo\" && ui.pressed == \"\"))">S</Text>
+        <Frame name="S true Hover" w=21 h=20 bind:x="320" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="track.solo && (ui.hover == \"solo\" && ui.pressed == \"\")" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#ffe00a" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="S letter" w=400 h=14 size=10 bind:x="320 + 7.326171875 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="track.solo && (ui.hover == \"solo\" && ui.pressed == \"\")">S</Text>
+        <Frame name="S true Pressed" w=21 h=20 bind:x="320" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:visible="track.solo && ui.pressed == \"solo\"" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)">
+          <Rectangle x=0 y=0 w=21 h=20 radius=3 fill="#eab308" />
+          <Rectangle x=0.5 y=0.5 w=20 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3 />
+        </Frame>
+        <Text name="S letter" w=400 h=14 size=10 bind:x="320 + 7.326171875 - 1" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2 + 13.5 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 0.8 * 10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20) - 1" bind:size="10 * (min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" fill="#d3d3d7" bind:visible="track.solo && ui.pressed == \"solo\"">S</Text>
+        <Frame name="FX Empty Normal" w=36 h=22 bind:x="248" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.fx == 0 && !(ui.pressed == \"fx\" || (ui.hover == \"fx\" && ui.pressed == \"\"))">
+          <Rectangle x=0 y=1 w=36 h=20 radius=2.6399999999999997 fill="#00000059" />
+          <Rectangle x=0.5 y=1.5 w=35 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 />
+          <Rectangle x=20 y=3 w=1 h=16 fill="#27272a" />
+          <Rectangle x=26 y=6 w=4 h=10 radius=2 fill="#6b6b6f" />
+          <Text x=-191 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#d7d7db9c">FX</Text>
+        </Frame>
+        <Frame name="FX Empty Hover" w=36 h=22 bind:x="248" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.fx == 0 && (ui.hover == \"fx\" && ui.pressed == \"\")">
+          <Rectangle x=0 y=1 w=36 h=20 radius=2.6399999999999997 fill="#00000059" />
+          <Rectangle x=0.5 y=1.5 w=35 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 />
+          <Rectangle x=20 y=3 w=1 h=16 fill="#27272a" />
+          <Rectangle x=26 y=6 w=4 h=10 radius=2 fill="#6b6b6f" />
+          <Text x=-191 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#d7d7db9c">FX</Text>
+        </Frame>
+        <Frame name="FX Empty Pressed" w=36 h=22 bind:x="248" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.fx == 0 && ui.pressed == \"fx\"">
+          <Rectangle x=0 y=1 w=36 h=20 radius=2.6399999999999997 fill="#00000059" />
+          <Rectangle x=0.5 y=1.5 w=35 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 />
+          <Rectangle x=20 y=3 w=1 h=16 fill="#27272a" />
+          <Rectangle x=26 y=6 w=4 h=10 radius=2 fill="#6b6b6f" />
+          <Text x=-191 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#d7d7db9c">FX</Text>
+        </Frame>
+        <Frame name="FX Active Normal" w=36 h=22 bind:x="248" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.fx > 0 && !(ui.pressed == \"fx\" || (ui.hover == \"fx\" && ui.pressed == \"\"))">
+          <Rectangle x=0 y=1 w=36 h=20 radius=2.6399999999999997 fill="#00000059" />
+          <Rectangle x=0.5 y=1.5 w=35 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 />
+          <Rectangle x=20 y=3 w=1 h=16 fill="#27272a" />
+          <Rectangle x=26 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Text x=-191 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#f2f2f3de">FX</Text>
+        </Frame>
+        <Frame name="FX Active Hover" w=36 h=22 bind:x="248" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.fx > 0 && (ui.hover == \"fx\" && ui.pressed == \"\")">
+          <Rectangle x=0 y=1 w=36 h=20 radius=2.6399999999999997 fill="#00000059" />
+          <Rectangle x=0.5 y=1.5 w=35 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 />
+          <Rectangle x=20 y=3 w=1 h=16 fill="#27272a" />
+          <Rectangle x=26 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Text x=-191 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#f2f2f3de">FX</Text>
+        </Frame>
+        <Frame name="FX Active Pressed" w=36 h=22 bind:x="248" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.fx > 0 && ui.pressed == \"fx\"">
+          <Rectangle x=0 y=1 w=36 h=20 radius=2.6399999999999997 fill="#00000059" />
+          <Rectangle x=0.5 y=1.5 w=35 h=19 stroke-weight=1 stroke-align="center" stroke-join="round" stroke="#27272a" radius=2.6399999999999997 />
+          <Rectangle x=20 y=3 w=1 h=16 fill="#27272a" />
+          <Rectangle x=26 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Text x=-191 y=5.1 w=400 h=14.5 size=10.5 text-align="center" fill="#f2f2f3de">FX</Text>
+        </Frame>
+        <Frame name="Routing 0 Normal" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends == 0 && track.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 0 Hover" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends == 0 && track.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 0 Pressed" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends == 0 && track.receives == 0 && ui.pressed == \"routing\"">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 1 Normal" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends == 0 && track.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 1 Hover" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends == 0 && track.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 1 Pressed" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends == 0 && track.receives == 0 && ui.pressed == \"routing\"">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 2 Normal" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends > 0 && track.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 2 Hover" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends > 0 && track.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 2 Pressed" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends > 0 && track.receives == 0 && ui.pressed == \"routing\"">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 3 Normal" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends > 0 && track.receives == 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 3 Hover" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends > 0 && track.receives == 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 3 Pressed" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends > 0 && track.receives == 0 && ui.pressed == \"routing\"">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+        </Frame>
+        <Frame name="Routing 4 Normal" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends == 0 && track.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 4 Hover" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends == 0 && track.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 4 Pressed" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends == 0 && track.receives > 0 && ui.pressed == \"routing\"">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 5 Normal" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends == 0 && track.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 5 Hover" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends == 0 && track.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 5 Pressed" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends == 0 && track.receives > 0 && ui.pressed == \"routing\"">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 6 Normal" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends > 0 && track.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 6 Hover" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends > 0 && track.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 6 Pressed" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && !track.parent_send && track.sends > 0 && track.receives > 0 && ui.pressed == \"routing\"">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#8a8a8f7d" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 7 Normal" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends > 0 && track.receives > 0 && !(ui.pressed == \"routing\" || (ui.hover == \"routing\" && ui.pressed == \"\"))">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 7 Hover" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends > 0 && track.receives > 0 && (ui.hover == \"routing\" && ui.pressed == \"\")">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Routing 7 Pressed" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && track.parent_send && track.sends > 0 && track.receives > 0 && ui.pressed == \"routing\"">
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 radius=3.52 fill="#00000059" />
+          <Rectangle x=0.32999999999999996 y=1.33 w=27.34 h=19.34 stroke-weight=0.6599999999999999 stroke-align="center" stroke-join="round" stroke="#27272a" radius=3.52 />
+          <Rectangle x=2.24 y=1.66 w=23.52 h=0.88 fill="#ffffff12" />
+          <Rectangle x=5 y=6 w=4 h=10 radius=2 fill="#38bdf8" />
+          <Rectangle x=12 y=6 w=4 h=10 radius=2 fill="#f59e0b" />
+          <Rectangle x=19 y=6 w=4 h=10 radius=2 fill="#ef4444" />
+        </Frame>
+        <Frame name="Phase false Normal" w=16 h=16 bind:x="320" bind:y="h - 24" bind:visible="h >= 94 && !track.phase && !(ui.pressed == \"phase\" || (ui.hover == \"phase\" && ui.pressed == \"\"))">
+          <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#18181b" />
+          <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+          <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+        </Frame>
+        <Frame name="Phase false Hover" w=16 h=16 bind:x="320" bind:y="h - 24" bind:visible="h >= 94 && !track.phase && (ui.hover == \"phase\" && ui.pressed == \"\")">
+          <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#1e1e22" />
+          <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+          <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+        </Frame>
+        <Frame name="Phase false Pressed" w=16 h=16 bind:x="320" bind:y="h - 24" bind:visible="h >= 94 && !track.phase && ui.pressed == \"phase\"">
+          <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#18181b" />
+          <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+          <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+        </Frame>
+        <Frame name="Phase true Normal" w=16 h=16 bind:x="320" bind:y="h - 24" bind:visible="h >= 94 && track.phase && !(ui.pressed == \"phase\" || (ui.hover == \"phase\" && ui.pressed == \"\"))">
+          <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#38bdf8" />
+          <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+          <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+        </Frame>
+        <Frame name="Phase true Hover" w=16 h=16 bind:x="320" bind:y="h - 24" bind:visible="h >= 94 && track.phase && (ui.hover == \"phase\" && ui.pressed == \"\")">
+          <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#46ecff" />
+          <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+          <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+        </Frame>
+        <Frame name="Phase true Pressed" w=16 h=16 bind:x="320" bind:y="h - 24" bind:visible="h >= 94 && track.phase && ui.pressed == \"phase\"">
+          <Vector w=16 h=16 geometry="M16,8 C16,12.418277998646346 12.418277998646348,16 8,16 C3.581722001353654,16 0.0000000000000008881784197001252,12.418277998646348 0,8.000000000000002 C0,3.581722001353654 3.5817220013536515,0.0000000000000008881784197001252 7.999999999999998,0 C12.418277998646346,-0.0000000000000017763568394002505 15.999999999999998,3.5817220013536515 16,7.999999999999998" fill="#38bdf8" />
+          <Vector w=16 h=16 geometry="M13.5,8 C13.5,11.037566124069363 11.037566124069365,13.5 8,13.5 C4.962433875930637,13.5 2.500000000000001,11.037566124069365 2.5,8 C2.499999999999999,4.962433875930637 4.9624338759306355,2.500000000000001 7.999999999999999,2.5 C11.037566124069363,2.499999999999999 13.5,4.9624338759306355 13.5,7.999999999999998" stroke-weight=1.3 stroke-join="round" stroke="#d3d3d7" />
+          <Vector w=16 h=16 geometry="M2.5,13.5 L13.5,2.5" stroke-weight=1.3 stroke-join="round" stroke-cap="round" stroke="#d3d3d7" />
+        </Frame>
+        <Frame name="Arm false Normal" w=20 h=20 bind:x="36 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 20) / 2" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && ui.recording && !track.armed && !(ui.pressed == \"arm\" || (ui.hover == \"arm\" && ui.pressed == \"\"))">
+          <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#ceced3","position":0},{"color":"#c3c3c9","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+          <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" fill="#0a0a0c" />
+        </Frame>
+        <Frame name="Arm false Hover" w=20 h=20 bind:x="36 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 20) / 2" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && ui.recording && !track.armed && (ui.hover == \"arm\" && ui.pressed == \"\")">
+          <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#d5d5d9","position":0},{"color":"#ccccd1","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+          <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" fill="#0a0a0c" />
+        </Frame>
+        <Frame name="Arm false Pressed" w=20 h=20 bind:x="36 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 20) / 2" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && ui.recording && !track.armed && ui.pressed == \"arm\"">
+          <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#bbbbbf","position":0},{"color":"#acacb1","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+          <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" fill="#0a0a0c" />
+        </Frame>
+        <Frame name="Arm true Normal" w=20 h=20 bind:x="36 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 20) / 2" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && ui.recording && track.armed && !(ui.pressed == \"arm\" || (ui.hover == \"arm\" && ui.pressed == \"\"))">
+          <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#f26666","position":0},{"color":"#ef4444","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+          <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" fill="#0a0a0c" />
+        </Frame>
+        <Frame name="Arm true Hover" w=20 h=20 bind:x="36 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 20) / 2" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && ui.recording && track.armed && (ui.hover == \"arm\" && ui.pressed == \"\")">
+          <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#f47d7d","position":0},{"color":"#f16060","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+          <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" fill="#0a0a0c" />
+        </Frame>
+        <Frame name="Arm true Pressed" w=20 h=20 bind:x="36 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 20) / 2" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && ui.recording && track.armed && ui.pressed == \"arm\"">
+          <Vector w=20 h=20 geometry="M17.4,10 C17.4,14.086907148747871 14.086907148747873,17.4 10,17.4 C5.91309285125213,17.400000000000002 2.6000000000000005,14.086907148747873 2.5999999999999996,10.000000000000002 C2.5999999999999988,5.91309285125213 5.913092851252127,2.6000000000000005 9.999999999999998,2.5999999999999996 C14.08690714874787,2.5999999999999988 17.4,5.913092851252127 17.4,9.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#da5f5f","position":0},{"color":"#d23c3c","position":1}],"transform":{"a":0,"b":-0.7399999999999999,"c":0.7399999999999999,"d":0,"tx":0.36999999999999994,"ty":0.12999999999999998}}}}]} />
+          <Vector w=20 h=20 geometry="M13.379999999999999,10 C13.379999999999999,11.866722454428082 11.866722454428082,13.379999999999999 10,13.379999999999999 C8.133277545571918,13.38 6.620000000000001,11.866722454428082 6.62,10 C6.619999999999999,8.13327754557192 8.133277545571918,6.620000000000001 10,6.62 C11.86672245442808,6.619999999999999 13.379999999999999,8.133277545571918 13.379999999999999,10" fill="#0a0a0c" />
+        </Frame>
+        <Frame name="Volume knob" w=24 h=24 bind:x="169 - 12 * min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 22, 1)" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:scale="min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 22, 1)" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)">
+          <Vector w=24 h=24 geometry="M12,26.85 C5.499608494491563,26.85 0.23000000000000043,20.792412665210634 0.22999999999999865,13.320000000000002 C0.22999999999999687,5.8475873347893685 5.499608494491559,-0.2099999999999973 11.999999999999998,-0.20999999999999908 C18.500391505508436,-0.21000000000000085 23.77,5.847587334789363 23.770000000000003,13.319999999999997 C23.770000000000003,20.79241266521063 18.500391505508443,26.849999999999994 12.000000000000004,26.85" fill={[{"kind":{"RadialGradient":{"stops":[{"color":"#00000026","position":0.8999999761581421},{"color":"#00000000","position":1}],"transform":{"a":1.1275,"b":0,"c":0,"d":1.1275,"tx":-0.06374999999999997,"ty":-0.008749999999999961}}}}]} />
+          <Vector w=24 h=24 geometry="M23,12 C23,18.075132248138726 18.07513224813873,23 12,23 C5.9248677518612745,23 1.0000000000000018,18.07513224813873 1,12.000000000000002 C0.9999999999999982,5.924867751861275 5.924867751861272,1.0000000000000018 11.999999999999998,1 C18.075132248138726,0.9999999999999982 23,5.924867751861271 23,11.999999999999996" fill="#0f0f10" />
+          <Vector w=24 h=24 geometry="M8.921818710068983,20.457233587073176 C4.817576990160958,18.963411766793133 2.3782970080261467,14.738454903849936 3.1367302228901277,10.437166400997627 C3.8951634377541087,6.135877898145319 7.63235718880557,3.0000000000000018 11.999999999999998,3 C16.367642811194425,2.9999999999999982 20.10483656224589,6.135877898145317 20.86326977710987,10.437166400997626 C21.621702991973855,14.738454903849933 19.182423009839045,18.96341176679313 15.07818128993102,20.457233587073176" stroke-weight=3.5 stroke-join="round" stroke="#232324" />
+          <Frame name="Face Normal" w=24 h=24 bind:visible="!(ui.pressed == \"volume\" || (ui.hover == \"volume\" && ui.pressed == \"\"))">
+            <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#212124","position":0},{"color":"#17171a","position":1}],"transform":{"a":0,"b":-0.625,"c":0.625,"d":0,"tx":0.8125,"ty":0.1875}}}}]} />
+            <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" stroke-weight=0.8 stroke-join="round" stroke="#27272a" />
+          </Frame>
+          <Frame name="Face Hover" w=24 h=24 bind:visible="(ui.hover == \"volume\" && ui.pressed == \"\")">
+            <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#29292d","position":0},{"color":"#1f1f23","position":1}],"transform":{"a":0,"b":-0.625,"c":0.625,"d":0,"tx":0.8125,"ty":0.1875}}}}]} />
+            <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" stroke-weight=0.8 stroke-join="round" stroke="#27272a" />
+          </Frame>
+          <Frame name="Face Pressed" w=24 h=24 bind:visible="ui.pressed == \"volume\"">
+            <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" fill={[{"kind":{"LinearGradient":{"stops":[{"color":"#1e1e24","position":0},{"color":"#14141a","position":1}],"transform":{"a":0,"b":-0.625,"c":0.625,"d":0,"tx":0.8125,"ty":0.1875}}}}]} />
+            <Vector w=24 h=24 geometry="M19.5,12 C19.5,16.14213562373095 16.14213562373095,19.5 12,19.5 C7.857864376269051,19.5 4.500000000000001,16.14213562373095 4.5,12.000000000000002 C4.499999999999999,7.857864376269051 7.857864376269048,4.500000000000001 11.999999999999998,4.5 C16.142135623730947,4.499999999999999 19.5,7.857864376269048 19.5,11.999999999999998" stroke-weight=0.8 stroke-join="round" stroke="#27272a" />
+          </Frame>
+          <Vector name="Value" w=24 h=24 geometry="M 0 0" stroke="#38bdf8" stroke-weight=3.5 stroke-join="round" bind:geometry="arc(12, 12, 9, -160, 320 * clamp(track.fader, 0, 1))" bind:visible="track.fader > 0" />
+        </Frame>
+        <Frame name="Pan" w=24 h=25 bind:x="184" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 25 * min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 25, 1)) / 2" bind:scale="min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 25, 1)" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)">
+          <Vector w=24 h=25 geometry="M21.369999999999997,12.08 C21.369999999999997,17.254908105914534 17.174908105914533,21.45 12,21.45 C6.8250918940854675,21.45 2.6300000000000026,17.254908105914534 2.630000000000001,12.080000000000002 C2.629999999999999,6.9050918940854675 6.825091894085465,2.7100000000000026 11.999999999999998,2.710000000000001 C17.174908105914533,2.709999999999999 21.369999999999997,6.905091894085464 21.369999999999997,12.079999999999998" fill="#151517" />
+          <Vector w=24 h=25 geometry="M6.470424971121197,17.6095750288788 C3.416525009626266,14.55567506738387 3.416525009626268,9.604324932616128 6.470424971121199,6.550424971121198 C9.52432493261613,3.496525009626268 14.475675067383872,3.496525009626268 17.529575028878803,6.550424971121199 C20.583474990373734,9.60432493261613 20.58347499037373,14.55567506738387 17.529575028878803,17.6095750288788" stroke-weight=2.4 stroke-join="round" stroke="#27272a" />
+          <Vector name="Value" w=24 h=25 geometry="M 0 0" stroke="#eab308" stroke-weight=2.4 stroke-join="round" bind:geometry="arc(12, 12.08, 7.82, 0, clamp(track.pan, -1, 1) * 135)" bind:visible="abs(clamp(track.pan, -1, 1) * 135) > 0.5" />
+          <Frame name="Face Normal" w=24 h=25 bind:visible="!(ui.pressed == \"pan\" || (ui.hover == \"pan\" && ui.pressed == \"\"))">
+            <Vector w=24 h=25 geometry="M18.27,12.08 C18.27,15.542825381439073 15.462825381439075,18.349999999999998 12,18.349999999999998 C8.537174618560927,18.349999999999998 5.730000000000002,15.542825381439075 5.730000000000001,12.08 C5.73,8.617174618560927 8.537174618560925,5.810000000000002 11.999999999999998,5.810000000000001 C15.462825381439073,5.8100000000000005 18.269999999999996,8.617174618560925 18.27,12.079999999999998" fill="#18181b" />
+          </Frame>
+          <Frame name="Face Hover" w=24 h=25 bind:visible="(ui.hover == \"pan\" && ui.pressed == \"\")">
+            <Vector w=24 h=25 geometry="M18.27,12.08 C18.27,15.542825381439073 15.462825381439075,18.349999999999998 12,18.349999999999998 C8.537174618560927,18.349999999999998 5.730000000000002,15.542825381439075 5.730000000000001,12.08 C5.73,8.617174618560927 8.537174618560925,5.810000000000002 11.999999999999998,5.810000000000001 C15.462825381439073,5.8100000000000005 18.269999999999996,8.617174618560925 18.27,12.079999999999998" fill="#202024" />
+          </Frame>
+          <Frame name="Face Pressed" w=24 h=25 bind:visible="ui.pressed == \"pan\"">
+            <Vector w=24 h=25 geometry="M18.27,12.08 C18.27,15.542825381439073 15.462825381439075,18.349999999999998 12,18.349999999999998 C8.537174618560927,18.349999999999998 5.730000000000002,15.542825381439075 5.730000000000001,12.08 C5.73,8.617174618560927 8.537174618560925,5.810000000000002 11.999999999999998,5.810000000000001 C15.462825381439073,5.8100000000000005 18.269999999999996,8.617174618560925 18.27,12.079999999999998" fill="#15151b" />
+          </Frame>
+          <Vector name="Pointer" x=12 y=12.08 w=1 h=1 geometry="M -0.9960000000000004 -5.5699999999999985 L 0.9960000000000004 -5.5699999999999985 L 0.9960000000000004 -4.3100000000000005 L -0.9960000000000004 -4.3100000000000005 Z" fill="#eab308" bind:rotation="clamp(track.pan, -1, 1) * 135" />
+          <Vector w=24 h=25 geometry="M16.06,12.05 C16.06,14.292276084313022 14.242276084313021,16.11 12,16.11 C9.757723915686979,16.11 7.94,14.292276084313022 7.94,12.05 C7.94,9.80772391568698 9.757723915686977,7.990000000000002 12,7.990000000000001 C14.24227608431302,7.99 16.06,9.807723915686978 16.06,12.049999999999999" fill="#c3c3c9" />
+        </Frame>
+        <Rectangle name="Name hover" w=97 h=1 bind:x="58 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + (h >= 58 ? 24 : min(24, max(h - 2, 1))) - 1" bind:w="max(155 - (58 + row.indent), 0)" fill="#38bdf8" bind:visible="!!(ui.pressed == \"name\" || (ui.hover == \"name\" && ui.pressed == \"\"))" />
+        <Frame name="@name" w=10 h=10 bind:x="58 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="max(155 - (58 + row.indent), 0)" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" />
+        <Frame name="@folder" w=10 h=10 bind:x="row.indent" bind:y="0" bind:w="20" bind:h="h" />
+        <Frame name="@fx" w=10 h=10 bind:x="248" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="36" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" />
+        <Frame name="@routing" w=10 h=10 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="26" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" />
+        <Frame name="@pan" w=10 h=10 bind:x="184" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="25" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" />
+        <Frame name="@volume" w=10 h=10 bind:x="169 - (((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) ? 24 * min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 22, 1) : 24) / 2" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="(((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) ? 24 * min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 22, 1) : 24)" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" />
+        <Frame name="@arm" w=10 h=10 bind:x="36 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 20) / 2" bind:w="20" bind:h="20" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && ui.recording" />
+        <Frame name="@solo" w=10 h=10 bind:x="320" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:w="21" bind:h="min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)" />
+        <Frame name="@mute" w=10 h=10 bind:x="298" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:w="21" bind:h="min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)" />
+        <Frame name="@phase" w=10 h=10 bind:x="320" bind:y="h - 24" bind:w="16" bind:h="16" bind:visible="h >= 94" />
+      </Frame>
+    </Frame>
+  </Page>
+  <Page name="editor.bar">
+    <Frame name="Bar" w=1200 h=30>
+      <Rectangle name="Ground" w=1200 h=30 bind:w="w" bind:h="h" bind:fill="$editor.surface_bar" />
+      <Rectangle name="Rule" y=29 w=1200 h=1 bind:y="h - 1" bind:w="w" bind:fill="$editor.panel_border" />
+    </Frame>
+  </Page>
+  <Page name="editor.button">
+    <Frame name="Button" w=80 h=24>
+      <Rectangle name="Plate" w=80 h=24 radius=3 bind:w="w" bind:h="h" bind:visible="!button.readout || button.on" bind:fill="button.on ? $editor.control_active : (button.hover ? $editor.control_hover : $editor.control)" />
+      <Rectangle name="Sheen" x=1 y=1 w=78 h=1 bind:w="w - 2" bind:visible="!button.readout" bind:fill="$sheen" />
+      <Text name="Label" w=80 h=14 size=10 text-align="center" bind:w="w" bind:y="h / 2 - 6.5" bind:text="button.label" bind:fill="!button.enabled ? $text.faint : (button.on ? $editor.text_bright : $editor.text)">Button</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.keys">
+    <Frame name="Keys" w=54 h=400>
+      <Rectangle name="Bed" w=54 h=400 bind:w="w" bind:h="h" bind:fill="key.piano ? $editor.key_white : $editor.surface_bar" />
+      <Rectangle name="Edge" x=53 w=1 h=400 bind:x="w - 1" bind:h="h" bind:fill="$editor.panel_border" />
+    </Frame>
+  </Page>
+  <Page name="editor.key">
+    <Frame name="Key" w=54 h=12>
+      <Rectangle name="Lane" w=53 h=12 bind:w="w - 1" bind:h="h" bind:visible="!key.piano" bind:fill="key.black ? $editor.key_black : $editor.key_white" />
+      <Rectangle name="Black" w=33 h=12 radius=1.5 bind:w="(w - 1) * 0.62" bind:h="h" bind:visible="key.piano && key.black" bind:fill="$editor.key_black" />
+      <Rectangle name="Shine" x=1 w=31 h=1 bind:w="(w - 1) * 0.62 - 2" bind:y="h - 2" bind:visible="key.piano && key.black" bind:fill="$sheen" />
+      <Rectangle name="Part" w=53 h=0.5 bind:w="w - 1" bind:visible="!(key.piano && key.black)" bind:fill="$editor.panel_border" />
+      <Text name="Name" w=49 h=12 size=9 text-align="right" bind:w="w - 5" bind:y="h / 2 - 5.5" bind:visible="key.labelled" bind:text="key.label" bind:fill="$editor.key_label">C4</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.keygroup">
+    <Frame name="Group" w=54 h=24>
+      <Rectangle name="Brace" x=1 y=2 w=1.5 h=20 bind:h="h - 4" bind:fill="$editor.text_dim" />
+      <Text name="Name" x=5 w=46 h=12 size=9 bind:y="h / 2 - 5.5" bind:text="group.label" bind:fill="$editor.text_dim">T1</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.ruler">
+    <Frame name="Ruler" w=1200 h=28>
+      <Rectangle name="Ground" w=1200 h=28 bind:w="w" bind:h="h" bind:fill="$editor.surface_bar" />
+      <Rectangle name="Rule" y=27 w=1200 h=1 bind:y="h - 1" bind:w="w" bind:fill="$editor.panel_border" />
+      <Rectangle name="Gutter edge" x=53 w=1 h=28 bind:h="h" bind:fill="$editor.panel_border" />
+    </Frame>
+  </Page>
+  <Page name="editor.tick">
+    <Frame name="Tick" w=60 h=28>
+      <Rectangle name="Line" w=1 h=22 bind:y="tick.bar ? 6 : h - 7" bind:h="tick.bar ? h - 6 : 7" bind:fill="tick.bar ? $editor.text_dim : $editor.grid_sub" />
+      <Text name="Number" x=4 y=3 w=54 h=12 size=9 bind:visible="tick.labelled" bind:text="tick.label" bind:fill="$editor.text_dim">1</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.marker">
+    <Frame name="Marker" w=160 h=28>
+      <Rectangle name="Flag" y=2 w=6 h=6 radius=1 bind:fill="$editor.gold" />
+      <Text name="Name" x=8 w=150 h=12 size=9 bind:y="h - 15" bind:text="marker.label" bind:fill="$editor.gold">Verse</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.strip">
+    <Frame name="Strip" w=1200 h=96>
+      <Rectangle name="Ground" w=1200 h=96 bind:w="w" bind:h="h" bind:fill="$editor.surface_bar" />
+      <Rectangle name="Top rule" w=1200 h=1 bind:w="w" bind:fill="$editor.panel_border" />
+      <Rectangle name="Gutter" w=54 h=96 bind:h="h" bind:fill="$editor.gutter_bg" />
+      <Rectangle name="Gutter edge" x=53 w=1 h=96 bind:h="h" bind:fill="$editor.panel_border" />
+      <Text name="Lane" x=6 y=6 w=46 h=12 size=9 bind:text="strip.label" bind:fill="$editor.text_dim">Velocity</Text>
+      <Rectangle name="Quarter" x=54 y=72 w=1146 h=1 bind:y="h * 0.75" bind:w="w - 54" bind:fill="$editor.grid_sub" />
+      <Rectangle name="Half" x=54 y=48 w=1146 h=1 bind:y="h * 0.5" bind:w="w - 54" bind:fill="$editor.grid_beat" />
+      <Rectangle name="Three quarters" x=54 y=24 w=1146 h=1 bind:y="h * 0.25" bind:w="w - 54" bind:fill="$editor.grid_sub" />
+    </Frame>
+  </Page>
+  <Page name="editor.menu">
+    <Frame name="Menu" w=220 h=200>
+      <Rectangle name="Shadow" x=0 y=3 w=220 h=200 radius=6 bind:w="w" bind:h="h" fill="#00000066" />
+      <Rectangle name="Panel" w=220 h=200 radius=6 bind:w="w" bind:h="h" bind:fill="$editor.panel" />
+      <Rectangle name="Edge" w=220 h=1 radius=6 bind:w="w" bind:fill="$sheen" />
+    </Frame>
+  </Page>
+  <Page name="editor.menuitem">
+    <Frame name="Item" w=220 h=22>
+      <Rectangle name="Rule" x=6 y=-2 w=208 h=1 bind:w="w - 12" bind:visible="menu.rule" bind:fill="$editor.panel_border" />
+      <Rectangle name="Hover" x=3 w=214 h=22 radius=4 bind:w="w - 6" bind:h="h" bind:visible="menu.hover" bind:fill="$editor.control_active" />
+      <Text name="Label" x=10 w=150 h=14 size=11 bind:y="h / 2 - 7" bind:text="menu.label" bind:fill="menu.enabled ? (menu.hover ? $editor.text_bright : $editor.text) : $text.faint">Quantize</Text>
+      <Text name="Key" x=150 w=60 h=14 size=10 text-align="right" bind:x="w - 70" bind:y="h / 2 - 6.5" bind:text="menu.shortcut" bind:fill="$editor.text_dim">Q</Text>
+    </Frame>
+  </Page>
+</Document>

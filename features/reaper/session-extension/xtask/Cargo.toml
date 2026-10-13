@@ -1,0 +1,19 @@
+[package]
+name = "session-extension-xtask"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "session-extension-xtask"
+path = "src/main.rs"
+
+[dependencies]
+# `test-harness` gates `daw::test::runner` (TestRunner/TestPackage/
+# ExtensionPackage) — the same shared orchestration `daw-reaper-xtask`
+# (in the `daw` repo) uses for its own `daw-bridge` rig.
+daw = { workspace = true, features = ["test-harness"] }
+
+[lints]
+workspace = true

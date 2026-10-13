@@ -1,0 +1,20 @@
+---
+source: modules/dynamic-template/tests/multitrack_examples/stevie_wonder_superstition.rs
+assertion_line: 47
+expression: structure.to_tree_string()
+---
+-Drums
+--Drum Kit
+---Kick: [006 Kick_01.wav]
+---Snare: [007 Snare_01.wav]
+---Cymbals
+----OH: [008 Overhead Hats_01.wav]
+-----Ride: [009 Overhead Ride_01.wav]
+--Electronic Kit: [017 Elec Gui 1 DI_01.wav, 018 Elec Gui 1 Amp Sim_01.wav, ... and 6 more]
+-Bass: [015 Bass DI_01.wav, 016 Bass Amp Sim_01.wav]
+-Horns: [011 Horn Vocal 1_01.wav, 012 Horn Vocal 2_01.wav, ... and 2 more]
+--Saxophone: [001 Soprano sax_01.wav, 002 Alto sax_01.wav, ... and 2 more]
+-Vocals: [010 Lead Vocal_01.wav]
+-Choir: [003 Alto (uni tenor)_01.wav]
+-Orchestra: [011 Horn Vocal 1_01.wav, 012 Horn Vocal 2_01.wav, ... and 2 more]
+-Reference: [Superstition Mix 1_01.wav]

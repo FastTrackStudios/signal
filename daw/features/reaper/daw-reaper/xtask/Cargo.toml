@@ -1,0 +1,18 @@
+[package]
+name = "daw-reaper-xtask"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "REAPER integration-test runner for the daw domain (daw::test harness + daw-bridge); invoked via `just daw-reaper-test`"
+
+[[bin]]
+name = "daw-reaper-xtask"
+path = "src/main.rs"
+
+[dependencies]
+# Test-runner orchestration lives at `daw::test::runner` behind the
+# `test-harness` feature.
+daw = { workspace = true, features = ["test-harness"] }
+
+[lints]
+workspace = true

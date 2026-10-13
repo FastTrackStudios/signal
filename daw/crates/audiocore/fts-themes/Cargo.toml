@@ -1,0 +1,10 @@
+[package]
+name = "fts-themes"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move workspace edition; migrate deliberately
+description = "Theme engine + FastTrack branded themes for all plugin profiles"
+
+[dependencies]
+audiocore-core = { workspace = true }

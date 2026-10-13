@@ -1,0 +1,55 @@
+bindings (
+    // Windows
+    {keys "<C-M-m>",      action 40078, desc "Toggle mixer visible"}
+    {keys "<M-v>",        action 40549, desc "Show / hide all floating FX windows"}
+    {keys "<C-M-x>",      action 40271, desc "Show media explorer"}
+
+    // Actions
+    {keys "?",            action 40420, desc "Show action list"}
+    {keys "<F4>",         action 40420, desc "Show action list"}
+
+    // Project tabs
+    {keys "<C-w>",        action 40031, desc "Close current project tab"}
+    {keys "<C-tab>",      action 40861, desc "Next project tab"}
+    {keys "<C-S-tab>",    action 40862, desc "Previous project tab"}
+
+    // File operations
+    {keys "<C-n>",        action 40023, desc "New project"}
+    {keys "<C-o>",        action 40025, desc "Open project"}
+    {keys "<C-s>",        action 40026, desc "Save project"}
+    {keys "<C-M-s>",      action 40022, desc "Save project as"}
+
+    // Render
+    {keys "<C-M-r>",      action 40015, desc "Render project to disk"}
+
+    // Automation
+    {keys a,            action 40400, desc "Toggle automation visible in arrange"}
+    {keys v,            action 40406, desc "Show volume envelope for tracks"}
+    {keys "<S-v>",        action 40407, desc "Show pan envelope for tracks"}
+
+    // Snap / grid
+    {keys "<M-s>",        action 1157,  desc "Toggle snapping"}
+    {keys "<M-g>",        action 40145, desc "Toggle grid lines"}
+
+    // Preferences
+    {keys "<C-p>",        action 40016, desc "Open preferences"}
+
+    // Screensets
+    {keys "<C-F1>",       action 40454, desc "Load screenset 1"}
+    {keys "<C-F2>",       action 40455, desc "Load screenset 2"}
+    {keys "<C-F3>",       action 40456, desc "Load screenset 3"}
+    {keys "<C-F4>",       action 40457, desc "Load screenset 4"}
+    {keys "<C-F5>",       action 40458, desc "Load screenset 5"}
+    {keys "<C-F6>",       action 40459, desc "Load screenset 6"}
+    {keys "<C-F7>",       action 40460, desc "Load screenset 7"}
+    {keys "<C-F8>",       action 40461, desc "Load screenset 8"}
+    {keys "<C-F9>",       action 40462, desc "Load screenset 9"}
+    {keys "<C-F10>",      action 40463, desc "Load screenset 10"}
+
+    // Fullscreen
+    {keys "<M-enter>",    action 40346, desc "Toggle fullscreen"}
+
+    // FX
+    {keys f,            action 40291, desc "Show FX chain for track"}
+    {keys "<S-f>",        action 40549, desc "Show / hide all FX windows"}
+)

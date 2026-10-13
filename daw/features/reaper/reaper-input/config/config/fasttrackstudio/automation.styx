@@ -1,0 +1,91 @@
+// `a` — Automation modes + envelope management.
+//
+// Top-level keys cover the things you reach for constantly:
+//   • Automation MODES (read/touch/latch/write/...) — c/r/t/l/p/w/g/b
+//   • Envelope VISIBILITY (show/hide active or all) — a/s/h + uppercase
+//   • Per-track envelope TOGGLES (visible) — v/n/m/T
+// Submenus group the rest:
+//   • `a e` → Point operations (insert/delete/reduce/select/copy)
+//   • `a d` → Display modes (single lane / lanes / show-only-selected)
+//   • `a f` → Last-touched FX parameter envelope
+//   • `a k` → Take envelopes (volume/pan/mute/pitch)
+//   • `a o` → Open/view envelopes for context
+which_key (
+    {
+        prefix a,
+        label "Automation & Envelopes",
+        entries (
+            // ── Automation modes (global override) ─────────────────────────
+            {key c, label "Trim/Read",          action 40878}
+            {key r, label "Read",               action 40879}
+            {key t, label "Touch",              action 40880}
+            {key l, label "Latch",              action 40881}
+            {key p, label "Latch Preview",      action 42022}
+            {key w, label "Write",              action 40882}
+            {key g, label "No Override",        action 40876}
+            {key b, label "Toggle Bypass All",  action 40908}
+
+            // ── Envelope visibility (selected vs all) ──────────────────────
+            // lowercase = selected tracks, uppercase = all tracks
+            {key a, label "Show Active (Sel)",   action 40888}  // Envelope: Show all active envelopes for tracks
+            {key s, label "Show Active (All)",   action 40926}  // Envelope: Toggle show all active envelopes for all tracks
+            {key A, label "Show All (Sel)",      action 41148}  // Envelope: Show all envelopes for tracks
+            {key S, label "Show All (All)",      action 41149}  // Envelope: Show all envelopes for all tracks
+            {key h, label "Hide All (Sel)",      action 40889}  // Envelope: Hide all envelopes for tracks
+            {key H, label "Hide All (All)",      action 41150}  // Envelope: Hide all envelopes for all tracks
+
+            // ── Per-track envelope toggles (visible) ──────────────────────
+            {key v, label "Toggle Volume Env",   action 40406}  // Track: Toggle track volume envelope visible
+            {key n, label "Toggle Pan Env",      action 40407}  // Track: Toggle track pan envelope visible
+            {key m, label "Toggle Mute Env",     action 40867}  // Track: Toggle track mute envelope visible
+            {key T, label "Toggle Trim Env",     action 42020}  // Track: Toggle track trim envelope visible
+
+            // ── Point operations ──────────────────────────────────────────
+            {key e, label "Edit Points", children (
+                {key i, label "Insert at Cursor",            action 40106}  // Envelope: Insert new point at current position (do not remove nearby)
+                {key I, label "Insert in All Visible",       action 40064}  // Envelope: Insert new point at current position to all visible track envelopes
+                {key x, label "Add/Edit Exact at Cursor",    action 40152}  // Envelope: Add/edit envelope point value exactly at cursor
+                {key d, label "Delete in Time Selection",   action 40089}  // Envelope: Delete all points in time selection
+                {key D, label "Delete Selected Points",      action 40333}  // Envelope: Delete all selected points
+                {key r, label "Reduce Points...",            action 40887}  // Envelope: Reduce number of points...
+                {key R, label "Reduce by Half",              action 42199}  // Envelope: Reduce number of points by half
+                {key s, label "Select in Time Selection",    action 40330}  // Envelope: Select points in time selection
+                {key a, label "Select All Points",           action 40332}  // Envelope: Select all points
+                {key u, label "Unselect All Points",         action 40331}  // Envelope: Unselect (clear selection of) all points
+                {key c, label "Copy in Time Selection",      action 40324}  // Envelope: Copy points within time selection
+                {key y, label "Cut in Time Selection",       action 40325}  // Envelope: Cut points within time selection
+                {key f, label "Invert (Flip) Selected",      action 40334}  // Envelope: Invert selected points
+                {key z, label "Reset Selected to Zero",      action 40415}  // Envelope: Reset selected points to zero/center
+            )}
+
+            // ── Display modes ─────────────────────────────────────────────
+            {key d, label "Display", children (
+                {key d, label "Toggle Hide/Display Selected", action 40884} // Envelope: Toggle hide/display selected envelope
+                {key l, label "Toggle Separate Lane (Sel)",   action 40851} // Envelope: Toggle display in separate lane for selected envelope
+                {key L, label "Toggle Lanes for Tracks",      action 40891} // Envelope: Toggle display all visible envelopes in lanes for tracks
+            )}
+
+            // ── Last-touched FX parameter envelope ────────────────────────
+            {key f, label "Last-Touched FX Env", children (
+                {key s, label "Show/Hide Envelope",          action 41142}  // FX: Show/hide track/take envelope for last touched FX parameter
+                {key a, label "Arm",                         action 41984}  // FX: Arm track/take envelope for last touched FX parameter
+                {key b, label "Activate/Bypass",             action 41983}  // FX: Activate/bypass track/take envelope for last touched FX parameter
+            )}
+
+            // ── Take envelopes ────────────────────────────────────────────
+            {key k, label "Take Envelopes", children (
+                {key v, label "Take Volume Envelope",        action 40693}  // Take: Toggle take volume envelope
+                {key p, label "Take Pan Envelope",           action 40694}  // Take: Toggle take pan envelope
+                {key m, label "Take Mute Envelope",          action 40695}  // Take: Toggle take mute envelope
+                {key t, label "Take Pitch Envelope",         action 41612}  // Take: Toggle take pitch envelope
+            )}
+
+            // ── View envelopes for context ────────────────────────────────
+            {key o, label "Open Envelopes", children (
+                {key t, label "Envs for Last Touched Track", action 40292}  // Track: View envelopes for current/last touched track
+                {key i, label "Take Envs for Last Item",     action 41974}  // Take: View take envelopes for last touched/first selected item
+                {key e, label "Envs (Track + Item)",         action 40019}  // Envelopes: View envelopes for last touched track/item
+            )}
+        )
+    }
+)

@@ -1,0 +1,14 @@
+[package]
+name = "dsp-golden"
+version.workspace = true
+edition = "2024"
+authors.workspace = true
+license.workspace = true
+description = "Golden-master + realtime-safety harness for the fx DSP cores. Dev-dependency only: it proves a refactor changed no samples and allocated nothing."
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+dsp-core = { workspace = true }

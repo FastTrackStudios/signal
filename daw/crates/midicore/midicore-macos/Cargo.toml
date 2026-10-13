@@ -1,0 +1,17 @@
+[package]
+name = "midicore-macos"
+version.workspace = true
+edition = "2021"          # matches the rest of midicore
+authors.workspace = true
+license.workspace = true
+description = "Native CoreMIDI input backend for midicore — ONE client with ONE input port that every selected source is connected to."
+
+# CoreMIDI is macOS-only. Other platforms get an empty crate so the
+# workspace still builds there; `midicore::native` picks this on macOS.
+[target.'cfg(target_os = "macos")'.dependencies]
+midicore-proto.workspace = true
+# Already in the tree through midir's CoreMIDI backend — same version.
+coremidi = "0.9"
+# The run loop CoreMIDI delivers its setup changes on (see `run`).
+core-foundation = "0.10"
+tracing = { workspace = true }

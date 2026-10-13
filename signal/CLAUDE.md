@@ -1,0 +1,373 @@
+# FastTrackStudio — Repo Instructions
+
+**This repo is the SIGNAL product** — the signal-chain / rig / plugin
+domain, and the Signal desktop + iOS app built from `apps/desktop`. It was
+split out in August 2026; Task, the framework, the third-party forks, and
+the daw/session/keyflow domains all live elsewhere now.
+
+| repo | holds | consumed as |
+|---|---|---|
+| **signal** (here) | the signal domain (`crates/signal/*`), fx, sampler, nam, rigs, plugin-host, the reaper signal extension, and `apps/desktop` (the Signal app + its headless engine) | — |
+| [processor](https://github.com/FastTrackStudios/processor) | the DSP, the effects and the CLAP/VST3 plugins — `features/fx/*`, the plugin faces, the standalone host | git dep, tag `v0.1.1` |
+| [daw](https://github.com/FastTrackStudios/daw) | the daw domain, `fts-chrome`, `engine-launcher`, `daw-proto` | git dep, tag `v0.0.2` |
+| [session](https://github.com/FastTrackStudios/session) | setlists, songs, the guide | git dep, tag `v0.0.2` |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui`, `architect-story-*`, `architect-telemetry` | git dep, tag `v0.1.1` |
+| [task](https://github.com/FastTrackStudios/task) | the Task product + the Editor stack | git dep, `branch = "main"` (repin to a tag) |
+| [vendor](https://github.com/FastTrackStudios/vendor) | `phon`, `phon-jit`, `styx-format` forks (pinned rc.5) | `[patch.crates-io]`, tag `v0.1.0` |
+
+One root Cargo workspace (115 members), one lockfile, one `target/`, one
+flake. Intra-repo dependencies are path deps in root
+`[workspace.dependencies]`, consumed as `x.workspace = true`. Cross-repo
+dependencies are **git deps pinned to a tag**.
+
+**Co-developing across repos**: override the tag with a local checkout
+rather than pushing a tag to test:
+
+```toml
+[patch."https://github.com/FastTrackStudios/architect"]
+architect = { path = "../architect/architect" }
+```
+
+Commit those overrides freely on a working branch while co-developing.
+**Never push with a local `[patch]` in place** — the paths are
+machine-specific. Before pushing, squash the branch's commits and swap
+each override for the tagged (or branch-pinned) git dep it stands in for.
+
+**The dependency arrow is bidirectional** (a deliberate choice): this repo
+takes `editor`, `editor-keyflow*`, `view-knowledge-graph`,
+`collection-proto` and `attachments-proto` from task, while task takes
+`daw`, `session`, `keyflow*`, `engraver`, `input`, `actions-*`, `song` and
+`dioxus-test` from here. Cargo's package graph stays acyclic, but a change
+spanning both repos needs two bumps in sequence — land here, tag, bump
+there. Use the local `[patch]` while developing; only the release needs
+the round trip.
+
+## Layout
+
+```
+crates/    domain cores — daw, session, keyflow, signal (facade+proto+
+           ui+live+storage+...), midicore, input, audiocore,
+           patchbay (PipeWire studio routing: facade+proto+ui)
+features/  capabilities — audio, sync, dawfile, reaper, standalone,
+           surfaces, daw-ui, guide, engraver, dynamic-template,
+           rigs, sampler, nam, plugin-host,
+           expression-editor, chord-tool, song,
+           launcher/ (fts-launcher — the REAPER DawModule glue; the
+           launcher engine itself is architect-launcher-*)
+libs/      infra libraries — dock, nice-plug, utils,
+           installer-core, neural-amp-modeler, monarchy, devtools,
+           ui/ (fts-plug-ui, fts-audio-ui — the audio-specific UI that
+           did NOT move to architect-ui, plus a vendored copy of
+           fts-theme.css that Tailwind builds @import),
+           vendor/ (dioxus-test, facet-swift, world)
+apps/      desktop (signal-desktop — THE app: the Signal desktop GUI;
+           `signal-desktop --engine` = the headless signal engine; the dx
+           web build is the browser remote, embeddable in the binary via
+           feature embed-web. Renamed from `fasttrackstudio` in Aug 2026
+           when the app became Signal-only; the iOS app builds from this
+           same crate),
+           cli (signal-cli — the `signal` command; `signal tone3000
+           search|show|fetch` browses the catalog and pulls captures into
+           the NAM library without a GUI), fts-convert, plugins/, web
+docs/      cross-domain guides (facet, styx, tracey, spec/)
+```
+
+**The FX left in September 2026.** `features/fx/*`, the plugin faces and
+the CLAP/VST3 bundles now live in
+[processor](https://github.com/FastTrackStudios/processor), so that signal
+and session can both use the effects without depending on each other.
+Signal takes back what it needs as a tagged git dep: `fx-blocks` (the FX
+as native `PluginInstance` blocks — it was `signal-fx`), `eq-dsp`,
+`reverb-dsp`, `eq-ui` and `pattern-ui`.
+
+Two things deliberately did NOT go. **NAM** reads as an effect and is not
+one — it needs `signal-proto`, `signal-space`, `signal-sampler` and the
+Tone3000 model browser — so `features/nam` and `apps/plugins/nam` stay.
+**macromod** sits under `features/fx/` and is not an effect either: it is
+the macro/modulation data model, and its types are embedded in
+signal-proto's wire format.
+
+Signal still ships three plugins of its own: `signal`, `guide` and `nam`.
+The bundler (`apps/plugins/xtask`) is in both repos for that reason.
+
+**architect is a separate repo** as of the August 2026 split. Framework
+changes are made there, tagged, and pulled in by bumping the tag here —
+with a local `[patch]` override for the edit/test loop. `architect-ui`
+(formerly `fts-ui`) and `architect-story-*` (formerly `fts-story-*`) went
+with it; `fts-plug-ui` and `fts-audio-ui` stayed here because they link
+`audiocore-core` and `nice-plug`.
+
+## Licence
+
+**GPL-3.0-or-later.** The workspace `license` field, every FTS-owned
+crate, and `LICENSE` at the root all say so; a new crate inherits it via
+`license.workspace = true` and should not declare its own.
+
+Two vendored crates keep the licence of the code they vendor, because it
+is not ours to change: `libs/vendor/world` (WORLD vocoder, M. Morise,
+BSD-3-Clause) and `libs/vendor/dioxus-test` (DioxusLabs, MIT OR
+Apache-2.0). Anything else vendored follows the same rule.
+
+Incoming code must be GPL-compatible: MIT, BSD and Apache-2.0 sources can
+be brought in (keeping their copyright notice and licence text), and the
+combined work is GPL. Code cannot go the other way — this is a one-way
+door, which is why the tree was MIT OR Apache-2.0 until August 2026.
+
+## Rules
+
+- **Path deps within this repo; tagged git deps across repos.** If a
+  `[patch]` block's URL is a repo that no longer exists, it is either dead
+  (delete it) or load-bearing for a *transitive* git dep. Check the
+  lockfile before touching — and note that a `[patch]` **cannot rename a
+  crate**. That is what briefly broke `fts-launcher` at the split: its
+  `launcher-ui` dep wanted a crate literally named `fts-ui`, with nothing
+  left to redirect to, so it resolved a stale Codeberg copy carrying its
+  own dioxus. Fixed by vendoring the engine into architect as
+  `architect-launcher-*` (v0.2.0), where it is an ordinary path dep on
+  `architect-ui`. `fts-launcher` is now only the REAPER DawModule glue.
+- **`default-features = false` cannot be applied to a workspace-inherited
+  dep.** Put it on the `[workspace.dependencies]` entry, not the consumer.
+- **`include_str!` / `@import` across a repo boundary does not work.** A
+  git dep has no stable path on disk, and these are invisible to cargo's
+  dependency graph, so they fail at compile time rather than resolution
+  time. Export the bytes from the owning crate instead — that is what
+  `architect_ui::THEME_CSS` is. (This class of break bit the split three
+  times.)
+  (The last dead patch table — keyflow.git for Editor.git — died
+  when Editor was imported in-tree 2026-07-10.)
+- **Architect idiom everywhere**: services are `#[architect::rpc]`
+  traits; live updates are `#[subscribe]` streams served from
+  `architect::PubSub` hubs (never Tx-parameter subscriptions or
+  reverse-dispatch "client services"); transports are
+  `architect::axum_ws` + `LayerRouter` server-side and
+  `vox_core::initiator_on(link).establish::<Client>()` client-side.
+  `session/` is the reference conversion; `signal/` was born this way.
+- Async (moire is retired — Jul 2026): `tokio::sync::*` for locks/channels
+  (`Mutex`/`RwLock`/`broadcast`/`watch`/`mpsc`); `architect::platform::{spawn,
+  sleep, timeout}` for tasks/timers — the wasm-cfg-split seam (tokio on native,
+  `spawn_local`/browser timers on wasm). Drop the old moire instrumentation
+  name-arg on constructors.
+- Each domain has its own CLAUDE.md with domain rules; read it before
+  working in that domain.
+
+## Build
+
+Everything builds from the repo root (one workspace):
+
+```bash
+cargo check --workspace                          # the whole tree
+cargo build -p signal-desktop                   # THE app (GUI; `--engine` = headless signal engine)
+cargo build -p signal-cli                        # the `signal` CLI (signal tone3000 status|login|search|show|fetch)
+cargo check -p signal-desktop --target wasm32-unknown-unknown --no-default-features --features signal  # browser remote (web build)
+```
+
+Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
+carries the FTS 1.94 toolchain pin, `dx`, wasm target, tailwindcss, and
+the native headers (alsa, pipewire, jack). Also
+mold and cargo-sweep (see build performance below).
+
+**Build performance / disk** — read the `build-performance` skill before
+touching a `[profile.*]` knob in the root Cargo.toml, benchmarking a
+build-time change, or when the dev disk fills up. The short version:
+
+- Dev debuginfo is `line-tables-only` + `split-debuginfo = "unpacked"`
+  (98% of a debug binary was DWARF; the fat test binary went 1.62 GB →
+  211 MB). Need a debugger? `--profile dev-dbg`.
+- mold is the Linux linker — after pulling, `direnv reload` or links
+  fail with `cannot find -fuse-ld=mold`. Note that
+  `target.<triple>.rustflags` REPLACES `build.rustflags`; it does not
+  merge, so a new global rustflag must go in both.
+- Dependencies build at opt-level 1, with an explicit allowlist back at
+  3 for audio-thread crates. A dev run of the rig must never xrun — if
+  one does, run `--release` or extend the allowlist, never raise
+  `package."*"` wholesale.
+- Cargo never GCs `target/`. `just disk`, `just sweep`, `just sweep-all`.
+  Never delete another agent's worktree target dir.
+- There is no `RUSTC_WRAPPER`. sccache was removed (Aug 2026): measured
+  0% hits across worktrees, so it never deduped what actually costs
+  disk, and it breaks every `dx build` / `dx serve` — sccache refuses
+  dx's rustc shim with "Compiler not supported". Do not reintroduce it
+  without solving that.
+- Benchmarking: check `uptime` / `pgrep -c rustc` first — other agents
+  and background `cargo rail` runs on this 32-core box will invalidate
+  an A/B silently.
+
+Live rig: `cargo build -p signal-desktop` from the repo root →
+`target/debug/signal-desktop --engine` (ws://:4040/vox); browser remote
+= the fts web build (`just web-stage` stages it to
+apps/desktop/web-dist/, embedded by `--features embed-web`),
+config in `~/.config/signal/rig/*.styx`. Deployed: `just rig-install` →
+ONE binary at `~/.local/lib/fts/signal-desktop` behind the
+`signal-engine` systemd user unit.
+
+## Signal domain rules (from the dissolved signal/CLAUDE.md)
+
+Signal is the signal-chain / plugin-management domain: `crates/signal/*`
+(facade `signal` + proto/ui/live/storage/controller/import/browser/grid/
+grid-ui/daw-bridge/tone3000{,-proto,-ui}), `features/{fx,rigs,sampler,nam,
+plugin-host}`, `features/reaper/signal-*`, the engine mode of `apps/desktop`. The `signal`
+facade is the only public API surface: apps depend on `signal`,
+`signal-ui`, or `signal-sampler`, never on the internal domain crates.
+Docs: `crates/signal/docs/` (DESIGN.md, DOMAIN.md, tone3000.md).
+
+**Detachable GUI (STRICT)**: the rig core is 100% headless; every GUI is
+a vox remote via architect (`signal-guitar-proto` is the wire contract;
+`signal-desktop --engine` serves the router; browser/desktop/tablet UIs are clients).
+
+**GUI rendering** — signal UI must render identically standalone, as a
+VST3/CLAP plugin, and embedded in REAPER, so all contexts share one
+pipeline: `nice-plug-dioxus` → Blitz (Vello + wgpu) → baseview:
+
+- Never `dioxus::desktop::LaunchBuilder` (WebKit/WRY breaks VST parity);
+  standalone windows use `nice_plug_dioxus::open_standalone_with_state`.
+- **Inline styles only in signal UI crates** — Blitz does not load
+  external CSS files reliably. Inline `style="..."` or embed CSS as a
+  static string via `document::Style { {CSS_STR} }`; never
+  `document::Stylesheet { href: ... }`, no Tailwind `asset!()` calls
+  (embed via `include_str!()`).
+- Components must render correctly without Tailwind — explicit style
+  values for layout-critical properties; Tailwind classes are additive
+  only (built via `just tailwind` → `apps/desktop/assets/tailwind-signal.css`).
+- Root `App` components take no props (context via `use_context_provider`)
+  so the same component works standalone and as a plugin editor.
+
+**CSS Blitz does not support** — the desktop app renders on Blitz/Vello
+(`dioxus_native::launch_cfg`), not a WebView, so the browser's CSS is not
+the target. Current status: <https://blitz.is/status/css>. The ones that
+bite this repo, with what to write instead:
+
+| unsupported | instead |
+|---|---|
+| `position: fixed` (and `sticky`, `static`) | an absolute box positions against its *immediate parent*; for overlays, mount at the root and use `position: absolute; inset: 0` there, or close on `focusout` rather than covering the window |
+| `overflow: auto` (`overflow-y-auto`, …) | `overflow-y: scroll` for a pane that scrolls (supported — scrollbars, wheel, `scroll` event); `overflow: hidden` to clip |
+| `text-overflow` / `truncate` | `overflow: hidden` clips |
+| CSS `fill:` / `stroke:` on SVG | SVG *presentation attributes* (`fill: "none"`, `stroke_width: "2"`) work — style geometry there, not in `style` |
+| `vertical-align`, `text-shadow`, `mix-blend-mode`, 3D transforms, multi-column, container queries, scroll-snap, custom cursors, `border-image` | no substitute; design without them |
+
+`filter: blur`/`drop-shadow` work on the vello backend only. The full
+support matrix, the layout rules that keep a surface inside its window, and
+how to check a change live in the **`blitz-design` skill** — load it before
+building or refactoring signal UI.
+
+A WebView escape hatch exists (`signal-desktop --features webview`) but nothing
+painted can mount under it — see the launch docs in `apps/desktop`.
+
+**Platform targets** — processing-core crates (`daw-audio-graph`,
+signal DSP cores in `features/fx/*-dsp`, sampler engine) must support
+native, WASM/AudioWorklet, and embedded `no_std`:
+
+- `#![no_std]` + `alloc` compatible; gate unavoidable `std` behind an
+  additive `std` feature.
+- No heap allocation on the hot path — pre-allocate at `reset()`;
+  `process()` never calls `Vec::push`/`Box::new`.
+- No threads — the graph is driven synchronously by whichever callback
+  owns it. No task spawning (`architect::platform::spawn` / `tokio`) inside
+  processing crates.
+- No platform I/O in processing crates — `cpal`/`web-sys`/MIDI drivers
+  live only in adapter crates (the engine mode, web builds, future embedded).
+- Keep the `AudioNode: Send` bound.
+
+**RPC**: service traits use `#[architect::rpc]`; max 4 params per method
+(Facet constraint); `Tx<T>`/`Rx<T>` for streaming.
+
+## Active modernization queue
+
+(Items 1–4 are DONE as of 2026-07-14 — the five daw subscriptions are
+`#[subscribe]` streams, the app embeds daw-standalone + session
+in-process, the guide lives at features/guide with TTS. Newest completed
+item: the architect CRDT doc-sync rework for vox 0.10 channel scoping —
+held-open sync/presence calls, `SyncDown::Attached` envelope; see
+crates/signal/docs/detachable-gui.md. Kept below for context until the
+queue is refilled.)
+
+1. **daw streams**: convert the five Tx-parameter subscriptions
+   (track / tempo_map / event_bus / marker / region — all
+   `subscribe(project: ProjectContext, tx)`) to `#[subscribe]` streams.
+   Design: events carry their `ProjectContext` (most already embed
+   project ids), subscribers filter client-side; per-service PubSub hub
+   on each backend (daw-standalone + daw-reaper), pumps replacing the
+   per-subscriber spawn loops — exactly the session SetlistService
+   conversion. ~29 subscriber call sites in daw-control/consumers.
+2. **fasttrackstudio app = daw-standalone player**: embed
+   daw-standalone (bootstrap + audio features) + the session domain
+   in-process so the live setlist is DATA the app can PLAY — transport
+   over the setlist without REAPER. session facade already dev-deps
+   this combination (memory-link bootstrap) — promote it to the app.
+3. **FTS-Guide → session feature**: port
+   legacy FTS-Plugins/apps/fts-guide (~3k lines: click_player,
+   count_player, guide_player, trigger_scheduler, count-in
+   calculator/pattern) into `session/features/guide` as a portable
+   engine (drop the REAPER cdylib shell; drive it from song sections +
+   tempo map). Click + guide tracks become session data.
+4. **TTS in the guide**: bearcove/cbx (`chatterbox-rs` — local ONNX
+   Chatterbox TTS, lib + CLI). Embed as an optional session feature to
+   speak section names / notes into the guide bus ("Chorus in 2…").
+   Pre-render section cues to wav at setlist-build time (TTS is not
+   realtime-safe); cache by text hash next to the styx library.
+
+## Phase 2
+
+1. ~~Root workspace: merge domain workspaces into one root Cargo.toml.~~
+   DONE — all waves complete; apps/desktop, FastTrackStudio and
+   Plugins dissolved in the finale wave (legacy remnants parked in
+2. Feature-gate heavy backends (reaper, standalone-audio) so cold builds
+   only compile what's used.
+3. ~~Retire `FastTrackStudio/apps/*`.~~ DONE — the legacy app is parked;
+   `apps/installer` (fts-installer) survived as a root member.
+4. ~~Root flake.nix.~~ DONE — adopted signal's flake at the root
+   (dioxus-flake toolchain, rust 1.94 + wasm, pipewire/jack shells).
+
+### Dedup queue
+
+- keyflow-daw-analysis's daw types → daw-proto only
+- audio-controls (vendored) → fold into features/daw-ui or delete after
+  signal-ui migrates off it
+- signal-audio remnants, duplicate wav/resampler helpers → libs/utils
+  or audiocore-dsp
+- three CLIs → one `fts` CLI in apps/ (subcommands)
+
+## Logging & tracing — wide events, ALWAYS
+
+Before writing ANY log or debug output, load the
+`logging-best-practices` skill (`.claude/skills/logging-best-practices/`
+— read `rules/fts-rust.md` first). The rules are not optional:
+
+- **The span IS the wide event.** `architect` opens one span per vox
+  RPC, `tower_http` one per HTTP request. Enrich it with
+  `architect_telemetry::wide::set("namespace.field", value)` — one
+  context-rich event per request, never scattered log lines.
+- **Never `println!`/`eprintln!`/`dbg!` in server or library code** —
+  not in committed code, and not as debug scaffolding either. To chase
+  a bug, reproduce it in a failing unit test (the artifact that
+  outlives the session) or query the span fields; if you must watch a
+  live process, use `tracing` with structured fields behind `RUST_LOG`
+  and delete it before committing.
+- Follow the established field names (`org.slug`, `auth.*`, `perm.*`,
+  `media.*`, `share.*`); record the **shape**, never the secret (no
+  tokens, no passwords, no raw note paths/URIs in fields).
+- Denials/refusals get ONE `tracing::warn!` line (alertable); allowed
+  outcomes ride the span only.
+- New surface = new fields: any new HTTP route or RPC service must set
+  its outcome fields on the span the way `authorize_media`
+  (`media.authorized`, `media.auth_via`) and the share gate
+  (`share.outcome`, `share.target_kind`) do.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `FastTrackStudios/FastTrackStudio`, via the `gh` CLI.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, unchanged: `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`.
+See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Per-domain `CONTEXT.md` files, written by `/domain-modeling` when a term
+actually needs resolving. (The root `CONTEXT-MAP.md` pointing at them was
+removed — it indexed files that never got written.) See
+`docs/agents/domain.md`.

@@ -1,0 +1,19 @@
+<Document>
+  <Page name="rails">
+    <Frame name="Rails" w=1200 h=800>
+      <Rectangle name="Top" w=1200 h=30 bind:w="w" bind:fill="$rail.ground" />
+      <Rectangle name="Left" w=44 h=800 bind:h="h" bind:fill="$rail.ground" />
+      <Rectangle name="Right" x=1156 w=44 h=800 bind:x="w - 44" bind:h="h" bind:fill="$rail.ground" />
+      <Rectangle name="Top rule" y=30 w=1200 h=1 bind:w="w" bind:fill="$rail.rule" />
+      <Rectangle name="Left rule" x=44 y=30 w=1 h=770 bind:h="h - 30" bind:fill="$rail.rule" />
+      <Rectangle name="Right rule" x=1155 y=30 w=1 h=770 bind:x="w - 45" bind:h="h - 30" bind:fill="$rail.rule" />
+    </Frame>
+  </Page>
+  <Page name="rail.button">
+    <Frame name="Button" w=38 h=37>
+      <Rectangle name="Plate" w=38 h=37 bind:w="w" bind:h="h" bind:visible="!button.has_icon" bind:fill="button.on ? $accent : (button.hover || button.pressed ? mix($rail.button, $accent, 0.25) : $rail.button)" />
+      <Text name="Label" x=-1 w=38 h=14 size=10 text-align="center" bind:w="w" bind:y="h / 2 + button.label_size / 3 - 0.8 * button.label_size - 1" bind:size="button.label_size" bind:text="button.label" bind:visible="!button.has_icon" bind:fill="button.on ? (luma($accent) > 0.179 ? #000000 : #e8e8ea) : $text.dim">Label</Text>
+      <Frame name="%icon" w=38 h=37 bind:w="w" bind:h="h" bind:visible="button.has_icon" />
+    </Frame>
+  </Page>
+</Document>

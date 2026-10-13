@@ -1,0 +1,12 @@
+[package]
+name = "audiocore-gui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move workspace edition; migrate deliberately
+description = "Shared Dioxus audio GUI components for FTS plugins — Blitz-compatible, inline-styled"
+
+[dependencies]
+nice-plug = { workspace = true }
+nice-plug-dioxus = { workspace = true }
+parking_lot = "0.12"

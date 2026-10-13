@@ -1,0 +1,52 @@
+// Fixed-item-lanes and takes management.
+//
+// Top-level:
+//   t       → Track lanes: Play only next lane         (42482)
+//   <S-t>   → Track lanes: Play only previous lane     (42481)
+//
+// `<A-t>` (Option/Alt + t) opens the management menu. `case_insensitive`
+// lets the user keep Alt held while picking children.
+bindings (
+    {keys t,      action 42482, desc "Track lanes: Play only next lane"}
+    {keys "<S-t>",  action 42481, desc "Track lanes: Play only previous lane"}
+)
+
+which_key (
+    {
+        prefix "<A-t>",
+        label "Lanes & Takes",
+        case_insensitive true,
+        entries (
+            // ── Take navigation ────────────────────────────────────────────
+            {key n, label "Next Take",       action 40125}  // Take: Switch items to next take
+            {key p, label "Previous Take",   action 40126}  // Take: Switch items to previous take
+
+            // ── Take operations ────────────────────────────────────────────
+            {key d, label "Duplicate Active Take",       action 40639}  // Take: Duplicate active take
+            {key D, label "Delete Active Take",          action 40129}  // Take: Delete active take from items
+            {key c, label "Crop to Active Take",         action 40131}  // Take: Crop to active take in items
+            {key e, label "Explode Takes in Place",      action 40642}  // Take: Explode takes of items in place
+            {key i, label "Implode Items → Takes",       action 40543}  // Take: Implode items on same track into takes
+            {key I, label "Implode Across Tracks",       action 40438}  // Take: Implode items across tracks into takes
+            {key v, label "Paste as Takes",              action 40603}  // Take: Paste as takes in items
+            {key m, label "Toggle Take Mute Envelope",   action 40695}  // Take: Toggle take mute envelope
+
+            // ── Fixed-lane submenu ─────────────────────────────────────────
+            {key l, label "Lanes", children (
+                {key t, label "Toggle Fixed Item Lanes",     action 42430}  // Track properties: Toggle fixed item lanes
+                {key u, label "Move Items Up One Lane",      action 40068}  // Track lanes: Move items up one lane
+                {key d, label "Move Items Down One Lane",    action 40107}  // Track lanes: Move items down one lane
+                {key T, label "Move Items to Top Lane",      action 42587}  // Track lanes: Move items to top lane
+                {key B, label "Move Items to Bottom Lane",   action 42588}  // Track lanes: Move items to bottom lane
+                {key s, label "Select Items in Lane (Mouse)", action 42469} // Track lanes: Select items in lane under mouse
+                {key p, label "Play Only Lane (Mouse)",       action 42478} // Track lanes: Play only lane under mouse
+                {key a, label "Play All Lanes (Mouse Track)", action 42479} // Track lanes: Play all lanes for track under mouse
+                {key n, label "Play Only Next Lane",          action 42482} // Track lanes: Play only next lane
+                {key P, label "Play Only Previous Lane",      action 42481} // Track lanes: Play only previous lane
+                {key x, label "Explode Takes → Fixed Lanes",  action 42635} // Take: Explode takes on selected tracks to fixed lanes
+                {key i, label "Implode Fixed Lanes → Takes",  action 42637} // Take: Implode selected fixed lane tracks to takes
+                {key c, label "Move Active Comp to Top Lane", action 41378} // Comp takes: Move active comp to top lane
+            )}
+        )
+    }
+)

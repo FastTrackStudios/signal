@@ -1,0 +1,2626 @@
+//! Tree-render runtime for the composition tree ([`crate::rig_node`]).
+//!
+//! Compiles a [`Container`] into a [`RenderNode`] tree of boxed processors, then
+//! renders audio by walking it: a **Serial** container chains its children
+//! (output of N → input of N+1), a **Parallel** container sums them. A leaf
+//! **Block** becomes its audio backend — a NAM/IR/plugin/sample-library, or a
+//! built-in `Native` DSP — or, when the block is still a placeholder, a
+//! **pass-through** (audio flows through untouched). So the same routing
+//! renders correctly today (placeholders = silence/thru) and gains sound as
+//! each block type's DSP is implemented.
+//!
+//! **Control-rate modulation (the `ModMatrix`).** Containers carry
+//! `ModRoute`s (`source → "Block.param"` at a depth). At compile time each
+//! route is resolved: the source becomes a `ModSource` (a modulator block —
+//! LFO/Envelope — or a MIDI performance source), the target becomes a
+//! `(leaf, param id)` pair via the backend's reported parameter names. At
+//! render time the engine ticks every source once per block and applies
+//! `base + depth × value` to each target as a parameter write — block-rate
+//! control, the same rate FX plugins receive automation.
+//!
+//! Headless / offline: `process` allocates scratch, so it's for tests and bring-up
+//! rather than the realtime callback (which will pre-allocate). MIDI events are
+//! delivered to every node; sources consume note on/off, effects ignore them.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use crate::rig::{RigBlock, build_block, build_sample_source};
+use signal_proto::node_resolve::{Resolved, ResolvedContent};
+
+use crate::rig_node::{Combine, Container, Role, Zone};
+use crate::soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
+use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent, PluginParamInfo};
+
+/// A compiled leaf's audio backend.
+///
+/// **Source slots hold their generator directly** (no [`SoundsourceLeaf`]
+/// adapter round-trip inside the tree); processors and hosted plugins keep
+/// the general [`PluginInstance`] leaf role. The adapter remains only at
+/// graph boundaries that need a true `PluginInstance` (FX chains — see
+/// `build_block`).
+pub enum LeafBackend {
+    /// A generator (Oscillator / Wavetable / Sample / `PhysicalModel` / Audio).
+    Source(Box<dyn Soundsource>),
+    /// A processor or hosted plugin — the general leaf.
+    Plugin(Box<dyn PluginInstance>),
+}
+
+impl LeafBackend {
+    /// The generator kind when this leaf is a source slot.
+    #[must_use]
+    pub fn soundsource_kind(&self) -> Option<SoundsourceKind> {
+        match self {
+            Self::Source(s) => Some(s.kind()),
+            Self::Plugin(_) => None,
+        }
+    }
+
+    fn prepare(&mut self, sample_rate: f64, block_size: u32) {
+        match self {
+            Self::Source(s) => {
+                s.prepare(sample_rate.max(1.0) as f32, block_size as usize);
+            }
+            Self::Plugin(p) => {
+                let _ = p.prepare(sample_rate, block_size);
+            }
+        }
+    }
+
+    fn process(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) {
+        match self {
+            Self::Source(s) => s.render(in_l, in_r, out_l, out_r, events),
+            Self::Plugin(p) => {
+                let _ = p.process_block(in_l, in_r, out_l, out_r, events);
+            }
+        }
+    }
+
+    /// The parameter table with LIVE values in `default` (build-time block
+    /// params applied) — mod routes modulate around these bases. Sources
+    /// already report live state through `Soundsource::params`.
+    fn params_snapshot(&mut self) -> Vec<PluginParamInfo> {
+        match self {
+            Self::Source(s) => s.params(),
+            Self::Plugin(p) => {
+                let mut ps = p.params();
+                for info in &mut ps {
+                    if let Some(v) = p.param_value(info.id) {
+                        info.default = v;
+                    }
+                }
+                ps
+            }
+        }
+    }
+}
+
+/// Build the compiled tree's backend for one block at `sample_rate`, or
+/// `None` when the block is a placeholder or an unimplemented `Native` type
+/// (→ pass-through). Source blocks come back as bare [`Soundsource`]s.
+pub(crate) fn build_leaf_backend(block: &RigBlock, sample_rate: u32) -> Option<LeafBackend> {
+    if !block.has_backend() {
+        return None;
+    }
+    if block.is_native() {
+        // Generators first (held directly), then the native processor table.
+        if let Some(src) = crate::native::build_native_source(block, sample_rate) {
+            return Some(LeafBackend::Source(src));
+        }
+        crate::native::build_native(block, sample_rate).map(LeafBackend::Plugin)
+    } else if block.is_sample() {
+        // Sample library → the Sample Soundsource, held directly.
+        build_sample_source(block, sample_rate)
+            .map_err(|e| tracing::warn!(error = %e, "node_render: sample source build failed"))
+            .ok()
+            .map(|(inst, _name)| LeafBackend::Source(Box::new(inst)))
+    } else {
+        // NAM / IR / hosted plugin via the shared loader.
+        build_block(block, sample_rate)
+            .map_err(|e| tracing::warn!(error = %e, "node_render: backend build failed"))
+            .ok()
+            .map(|built| LeafBackend::Plugin(built.boxed))
+    }
+}
+
+/// Build the audio backend for one block as a render-tree [`PluginInstance`].
+///
+/// `None` when the block is a placeholder or an unimplemented `Native` type
+/// (→ pass-through). Sources are wrapped in the
+/// generic [`SoundsourceLeaf`] — this is the graph-boundary form; the
+/// compiled tree itself uses `build_leaf_backend` and holds sources
+/// directly.
+#[must_use]
+pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn PluginInstance>> {
+    build_leaf_backend(block, sample_rate).map(|backend| match backend {
+        LeafBackend::Source(src) => {
+            Box::new(SoundsourceLeaf::from_boxed(src)) as Box<dyn PluginInstance>
+        }
+        LeafBackend::Plugin(p) => p,
+    })
+}
+
+// ── The mod engine ───────────────────────────────────────────────────────────
+
+mod modmatrix;
+
+pub use modmatrix::ModEngine;
+use modmatrix::{ModCompiler, build_arp};
+
+/// A container gain at or below this (dB) is off: exactly zero.
+pub const OFF_DB: f32 = -120.0;
+
+/// A compiled, renderable node mirroring the container tree.
+pub enum RenderNode {
+    /// A leaf (`inst = None` for a placeholder pass-through): a **source**
+    /// generator held directly, or a processor/plugin — see [`LeafBackend`].
+    /// `id` indexes the mod engine's per-leaf write table.
+    Leaf {
+        id: usize,
+        inst: Option<LeafBackend>,
+    },
+    /// Children chained in order.
+    Serial(Vec<Self>),
+    /// Children summed.
+    Parallel(Vec<Self>),
+    /// A keyboard-routed subtree: incoming MIDI is filtered + velocity-scaled by
+    /// the [`Zone`] (key split + velocity crossfade) before reaching `inner`.
+    /// This is the central-MIDI-input router, expressed in the render tree.
+    Zoned { zone: Zone, inner: Box<Self> },
+    /// Container volume: input trim applied before `inner`, output fader after.
+    Gain {
+        input: f32,
+        output: f32,
+        /// Live fader cell (linear gain in `f32` bits), multiplied on top of
+        /// `output` when present. Engine/Layer containers get one so a mixer
+        /// can ride their faders — and mute them — without recompiling the
+        /// tree (a recompile would re-open every sample pack).
+        cell: Option<Arc<AtomicU32>>,
+        /// Post-fader peak cell (linear, `f32` bits) — what this container is
+        /// actually putting out, for a meter beside its fader. Written on the
+        /// audio thread with its own decay (see `METER_RELEASE_S`) so any
+        /// number of readers can sample it without stealing each other's peak.
+        meter: Option<Arc<AtomicU32>>,
+        /// This container is muted AND has finished decaying, so `inner` is
+        /// not processed at all — see the `Gain` arm of `process_inner`.
+        /// Audio-thread state, reset the moment the fader comes back up.
+        asleep: bool,
+        inner: Box<Self>,
+    },
+    /// A subtree whose output also feeds one or more send buses (unity gain).
+    SendTap { buses: Vec<usize>, inner: Box<Self> },
+    /// A send-bus **return**: `inner` processes the bus content and its
+    /// output is summed with the pass-through main signal (send/return
+    /// semantics — the main chain is not re-processed by the return).
+    BusInject { bus: usize, inner: Box<Self> },
+    /// The tree root when any mod routes or send buses resolved: ticks the
+    /// [`ModEngine`] each block and threads its parameter writes + bus
+    /// buffers down the tree.
+    Modulated {
+        engine: Box<ModEngine>,
+        inner: Box<Self>,
+    },
+}
+
+// ── Audio-thread scratch ──────────────────────────────────────────────────
+//
+// Every one of these buffers used to be a `vec![]` inside `process_inner`,
+// i.e. a heap allocation per node per block on the audio thread — a Serial
+// node alone took four, and they are taken while the tree is being walked,
+// so a deep patch allocated dozens of times per callback. Allocation is not
+// realtime-safe (the allocator can take a lock and, worse, can block), which
+// is the rule stated in CLAUDE.md for exactly this code.
+//
+// Pooled per thread rather than stored per node so the enum keeps its shape:
+// `Serial`/`Parallel` stay tuple variants and the dozen walker arms that
+// match them are untouched. Only the audio thread renders, and a buffer is
+// never held across a recursive call — taken, filled, handed back — so the
+// pool is a plain free-list with no borrow held during the walk.
+//
+// Steady state allocates nothing: capacity is reached within the first
+// blocks and `clear` + `resize` on a big-enough buffer only writes zeros.
+// The same reasoning as `PRIME_SCRATCH` in `engine::voice`.
+thread_local! {
+    static AUDIO_SCRATCH: std::cell::RefCell<Vec<Vec<f32>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static EVENT_SCRATCH: std::cell::RefCell<Vec<Vec<PluginMidiEvent>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static PARAM_SCRATCH: std::cell::RefCell<Vec<Vec<(u32, f64)>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A zeroed scratch buffer of `frames` samples.
+fn scratch(frames: usize) -> Vec<f32> {
+    let mut b = AUDIO_SCRATCH
+        .with(|s| s.borrow_mut().pop())
+        .unwrap_or_default();
+    b.clear();
+    b.resize(frames, 0.0);
+    b
+}
+
+/// A scratch buffer holding the first `frames` of `src` (zero-padded).
+fn scratch_from(src: &[f32], frames: usize) -> Vec<f32> {
+    let mut b = scratch(frames);
+    let n = frames.min(src.len());
+    b[..n].copy_from_slice(&src[..n]);
+    b
+}
+
+fn recycle(b: Vec<f32>) {
+    AUDIO_SCRATCH.with(|s| s.borrow_mut().push(b));
+}
+
+fn event_scratch() -> Vec<PluginMidiEvent> {
+    let mut b = EVENT_SCRATCH
+        .with(|s| s.borrow_mut().pop())
+        .unwrap_or_default();
+    b.clear();
+    b
+}
+
+fn recycle_events(b: Vec<PluginMidiEvent>) {
+    EVENT_SCRATCH.with(|s| s.borrow_mut().push(b));
+}
+
+fn param_scratch() -> Vec<(u32, f64)> {
+    let mut b = PARAM_SCRATCH
+        .with(|s| s.borrow_mut().pop())
+        .unwrap_or_default();
+    b.clear();
+    b
+}
+
+fn recycle_params(b: Vec<(u32, f64)>) {
+    PARAM_SCRATCH.with(|s| s.borrow_mut().push(b));
+}
+
+/// Per-block render context threaded down the tree: mod-engine parameter
+/// writes (per leaf) + send-bus buffers.
+#[derive(Default)]
+struct RenderCtx {
+    writes: Vec<Vec<(u32, f64)>>,
+    bus_l: Vec<Vec<f32>>,
+    bus_r: Vec<Vec<f32>>,
+}
+
+/// Output level below which a MUTED container is treated as finished and
+/// stops being rendered (see the `Gain` arm of `process_inner`). The same
+/// ~-84 dBFS the voice pool calls inaudible (`RETIRE_FLOOR`): a branch
+/// sleeps exactly when what is left in it would not be worth hearing even
+/// un-muted. Set lower and it never sleeps at all, because a decaying tail
+/// sits above it indefinitely.
+const SLEEP_FLOOR: f32 = 6.0e-5;
+
+/// Meter release: how long a peak takes to fall by `1/e`. The audio thread
+/// applies it per block, so a meter reads the same however often it is polled.
+const METER_RELEASE_S: f32 = 0.3;
+/// Rate the block-rate meter decay is figured at. The render tree doesn't
+/// carry the device rate down to a [`RenderNode::Gain`]; being a factor of two
+/// out only makes the fall-back visibly faster or slower, never wrong.
+const METER_RATE_HZ: f32 = 48_000.0;
+
+/// How a live cell is addressed: **role and name together**.
+///
+/// Name alone is not an address — a one-lane engine is conventionally named after its lane
+/// ("Pad" holding "Pad"), and keying by name gave the engine and its layer the
+/// same cell, so whichever the mixer wrote last silently won (the lane's mute,
+/// solo and fader all lost to the engine's trim).
+pub type CellId = (Role, String);
+
+/// Live fader + meter cells for a compiled tree, keyed by [`CellId`].
+///
+/// Engine, Layer and module containers get one each. A mixer writes linear gain into
+/// the fader cells to ride faders and mute lanes with no recompile, and reads
+/// the meter cells to draw what each container is putting out — see
+/// [`RenderNode::Gain`].
+#[derive(Clone, Default)]
+pub struct GainCells {
+    gains: HashMap<CellId, Arc<AtomicU32>>,
+    peaks: HashMap<CellId, Arc<AtomicU32>>,
+}
+
+impl GainCells {
+    /// The cell for one container, if the tree had it.
+    #[must_use]
+    pub fn get(&self, role: Role, name: &str) -> Option<&Arc<AtomicU32>> {
+        self.gains.get(&(role, name.to_string()))
+    }
+
+    /// Set a container's live gain (linear; `0.0` = muted).
+    #[must_use]
+    pub fn set(&self, role: Role, name: &str, gain: f32) -> bool {
+        match self.gains.get(&(role, name.to_string())) {
+            Some(cell) => {
+                cell.store(gain.max(0.0).to_bits(), Ordering::Relaxed);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Every addressable container.
+    pub fn names(&self) -> impl Iterator<Item = (Role, &str)> {
+        self.gains.keys().map(|(role, name)| (*role, name.as_str()))
+    }
+
+    /// A container's post-fader peak (linear, already decaying) — `0.0` when
+    /// the tree has no such container.
+    #[must_use]
+    pub fn peak(&self, role: Role, name: &str) -> f32 {
+        self.peaks
+            .get(&(role, name.to_string()))
+            .map_or(0.0, |c| f32::from_bits(c.load(Ordering::Relaxed)))
+    }
+
+    /// Every metered container and its current peak — the payload a mixer
+    /// publishes at meter rate.
+    #[must_use]
+    pub fn peaks(&self) -> Vec<(Role, String, f32)> {
+        self.peaks
+            .iter()
+            .map(|((role, name), cell)| {
+                (
+                    *role,
+                    name.clone(),
+                    f32::from_bits(cell.load(Ordering::Relaxed)),
+                )
+            })
+            .collect()
+    }
+}
+
+impl RenderNode {
+    /// Compile a container tree into a render tree at `sample_rate`,
+    /// resolving its `ModMatrix` routes. A container with a non-full [`Zone`]
+    /// is wrapped in [`RenderNode::Zoned`] so only its in-window notes reach it.
+    #[must_use]
+    pub fn compile(container: &Container, sample_rate: u32) -> Self {
+        Self::compile_with_cells(container, sample_rate).0
+    }
+
+    /// As [`compile`](Self::compile), also returning the [`GainCells`] for the
+    /// tree's Engine/Layer containers — the mixer's live fader handles.
+    ///
+    /// Goes **through the domain**: the tree is lifted into a `NodeLibrary`,
+    /// resolved, and the resolved form is what compiles. There is one render
+    /// implementation and it reads
+    /// [`Resolved`](signal_proto::node_resolve::Resolved), so a container is
+    /// no longer a second model the audio path understands — it is an input
+    /// that gets converted, like anything else.
+    ///
+    /// That the conversion is faithful is not assumed: the lift is covered by
+    /// round-trip tests on both rigs, so a loss shows up as a failing test
+    /// rather than as a rig that sounds different.
+    #[must_use]
+    pub fn compile_with_cells(container: &Container, sample_rate: u32) -> (Self, GainCells) {
+        let lifted = crate::to_node::lift(container);
+        match signal_proto::node_resolve::resolve(&lifted.library, &lifted.root, None) {
+            Ok((resolved, _)) => Self::compile_node(&resolved, sample_rate),
+            // A tree that was just lifted cannot fail to resolve — its root
+            // is in the library by construction and a lift cannot build a
+            // cycle. Silence beats a panic on the load path either way.
+            Err(e) => {
+                tracing::warn!(error = %e, "node_render: lifted tree did not resolve");
+                (Self::Serial(Vec::new()), GainCells::default())
+            }
+        }
+    }
+
+    /// Compile a resolved node tree — the domain form, and the only thing
+    /// this module actually renders.
+    #[must_use]
+    pub fn compile_node(resolved: &Resolved, sample_rate: u32) -> (Self, GainCells) {
+        let mut mc = ModCompiler::new(sample_rate);
+        mc.collect_buses(resolved);
+        let mut cells = GainCells::default();
+        let root = Self::compile_resolved(resolved, sample_rate, &mut mc, &mut cells);
+        (Self::finish(root, mc, resolved, sample_rate), cells)
+    }
+
+    fn finish(root: Self, mc: ModCompiler, resolved: &Resolved, sample_rate: u32) -> Self {
+        // Always wrap: the ModEngine is also the tree's live-edit address
+        // book (leaf/source registries + parameter overlay), so even a
+        // route-less tree keeps it — an empty tick is a few clears.
+        let bus_count = mc.buses.len();
+        let (leaf_names, leaf_params): (Vec<_>, Vec<_>) = mc
+            .leaves
+            .into_iter()
+            .map(|(_, name, params)| (name, params))
+            .unzip();
+        Self::Modulated {
+            engine: Box::new(ModEngine {
+                sources: mc.sources,
+                source_paths: mc.source_paths,
+                routes: mc.routes,
+                scales: mc.scales,
+                leaf_paths: mc.leaf_paths,
+                leaf_names,
+                leaf_params,
+                overlay: Vec::new(),
+                writes: Vec::new(),
+                bus_l: vec![Vec::new(); bus_count],
+                bus_r: vec![Vec::new(); bus_count],
+                tempo_bpm: 120.0,
+                tempo_followers: mc.tempo_followers,
+                followed_bpm: 0.0,
+                sample_rate: sample_rate as f32,
+                arp: build_arp(resolved),
+            }),
+            inner: Box::new(root),
+        }
+    }
+
+    /// Compile one resolved node; `mc` accumulates leaves, modulator scope
+    /// and resolved routes, `cells` the live fader handles.
+    fn compile_resolved(
+        node: &Resolved,
+        sample_rate: u32,
+        mc: &mut ModCompiler,
+        cells: &mut GainCells,
+    ) -> Self {
+        // A leaf is a processor, wherever it sits.
+        if let ResolvedContent::Leaf { .. } = &node.content {
+            return Self::compile_leaf(node, sample_rate, mc);
+        }
+        // A bypassed subtree renders as a pass-through (no leaves, no routes).
+        if node.bypassed {
+            return Self::Serial(Vec::new());
+        }
+        // Bring this node's modulators into scope (its name is on the path
+        // first, so their live address includes this node).
+        mc.path.push(node.name.to_lowercase());
+        let scope_mark = mc.scope.len();
+        for m in &node.modulators {
+            let block = crate::from_node::to_block(m);
+            if let Some(idx) = mc.instantiate(&block) {
+                // Under both keys, because a route may name its source
+                // either way: authored by name, stored by id once resolved.
+                // Registering only the name is what broke every envelope
+                // route the moment routes started resolving to ids.
+                mc.scope.push((m.name.to_lowercase(), idx));
+                mc.scope.push((m.id.as_str().to_lowercase(), idx));
+            }
+        }
+
+        let subtree_start = mc.leaves.len();
+        let children = match &node.content {
+            ResolvedContent::Children(children) => children.as_slice(),
+            ResolvedContent::Leaf { .. } => &[],
+        };
+        let kids = children
+            .iter()
+            .map(|child| Self::compile_resolved(child, sample_rate, mc, cells))
+            .collect();
+        let subtree: Vec<usize> = (subtree_start..mc.leaves.len()).collect();
+
+        // Resolve this node's routes against its own subtree.
+        mc.resolve_routes(&node.mod_routes, &subtree);
+
+        mc.scope.truncate(scope_mark);
+        mc.path.pop();
+
+        let base = match node.combine {
+            Combine::Serial => Self::Serial(kids),
+            Combine::Parallel => Self::Parallel(kids),
+        };
+        let container = node;
+        let mut node = if container.zone.is_full() {
+            base
+        } else {
+            Self::Zoned {
+                zone: container.zone,
+                inner: Box::new(base),
+            }
+        };
+        // Container volumes: input trim + output fader (dB → linear). Engine
+        // and Layer containers always get a Gain node carrying a live cell,
+        // whatever their authored dB, so a mixer can ride them at run time.
+        // Engines and Layers always get a live fader; so does any container
+        // the engine marks with `module_level` (its modules), so a mixer can
+        // ride and mute individual modules inside a layer.
+        let live = matches!(container.role, Role::Engine | Role::Layer)
+            || container.settings.iter().any(|p| p.name == "module_level");
+        if container.input_db != 0.0 || container.output_db != 0.0 || live {
+            let id: CellId = (container.role, container.name.clone());
+            let cell = live.then(|| {
+                let cell = Arc::new(AtomicU32::new(1.0f32.to_bits()));
+                cells.gains.insert(id.clone(), cell.clone());
+                cell
+            });
+            // Anything with a live fader also gets a meter: the pair is what a
+            // mixer strip is — what you set, beside what came out.
+            let meter = live.then(|| {
+                let cell = Arc::new(AtomicU32::new(0.0f32.to_bits()));
+                cells.peaks.insert(id, cell.clone());
+                cell
+            });
+            // A gain at or below the floor is OFF — exactly zero, so the
+            // branch sleeps (see the `Gain` arm of `process_inner`). An
+            // imported Omnisphere patch's unused layers are built at −200 dB:
+            // 1e-10, not zero, so they took every note and rendered every
+            // voice (their oscillators, envelopes and filters) to be
+            // multiplied by nothing — ~10% of the keys rig's render.
+            let db_gain = |db: f32| if db <= OFF_DB { 0.0 } else { 10f32.powf(db / 20.0) };
+            node = Self::Gain {
+                asleep: false,
+                input: db_gain(container.input_db),
+                output: db_gain(container.output_db),
+                cell,
+                meter,
+                inner: Box::new(node),
+            };
+        }
+        // This container is a send target → it becomes a bus return.
+        if let Some(bus) = mc.bus_for(container) {
+            node = Self::BusInject {
+                bus,
+                inner: Box::new(node),
+            };
+        }
+        // This container sends its output to buses.
+        let taps: Vec<usize> = container
+            .sends
+            .iter()
+            .filter_map(|s| mc.bus_by_key(&s.target.key()))
+            .collect();
+        if !taps.is_empty() {
+            node = Self::SendTap {
+                buses: taps,
+                inner: Box::new(node),
+            };
+        }
+        node
+    }
+
+    /// A resolved leaf as its backend, registered in the mod engine's
+    /// address book.
+    fn compile_leaf(leaf: &Resolved, sample_rate: u32, mc: &mut ModCompiler) -> Self {
+        let block = crate::from_node::to_block(leaf);
+        let mut inst = build_leaf_backend(&block, sample_rate);
+        // Snapshot the params with their LIVE values (build-time block
+        // params applied) — routes modulate around these bases.
+        let params = inst
+            .as_mut()
+            .map(LeafBackend::params_snapshot)
+            .unwrap_or_default();
+        let id = mc.leaves.len();
+        // Tempo-synced parameters, resolved to the processor's param ids now
+        // so a tempo change is a plain write on the audio thread.
+        for p in &block.params {
+            let (hz, target) = match (p.name.strip_prefix("sync_ms_"), p.name.strip_prefix("sync_hz_")) {
+                (Some(t), _) => (false, t),
+                (_, Some(t)) => (true, t),
+                _ => continue,
+            };
+            let Ok(beats) = p.value.parse::<f32>() else { continue };
+            if let Some(param_id) = params
+                .iter()
+                .find(|i| i.name.eq_ignore_ascii_case(target))
+                .map(|i| i.id)
+            {
+                mc.tempo_followers.push(modmatrix::TempoFollower { leaf: id, param_id, beats, hz });
+            }
+        }
+        mc.leaves.push((
+            leaf.id.as_str().to_string(),
+            leaf.name.to_lowercase(),
+            params,
+        ));
+        mc.leaf_paths.push(mc.path.clone());
+        let node = Self::Leaf { id, inst };
+        // A block can also be a send target (e.g. the global Rotary).
+        match mc
+            .bus_by_key(&leaf.id.as_str().to_lowercase())
+            .or_else(|| mc.bus_by_key(&leaf.name.to_lowercase()))
+        {
+            Some(bus) => Self::BusInject {
+                bus,
+                inner: Box::new(node),
+            },
+            None => node,
+        }
+    }
+
+    // ── Live editing (control thread, under the host's plugin-map lock) ──
+    //
+    // The compiled tree keeps its address book (leaf/source registries) in
+    // the root [`ModEngine`]; these methods resolve `(module, target)` there
+    // and either write the parameter overlay / envelope sources, or reach a
+    // sampler source instance for its own setters. All are cheap and safe
+    // against the renderer: the host serializes access through the same
+    // plugin-map lock that guards `process_block`.
+
+    fn root_engine(&mut self) -> Option<&mut ModEngine> {
+        match self {
+            Self::Modulated { engine, .. } => Some(engine),
+            _ => None,
+        }
+    }
+
+    /// Set a leaf block parameter live (normalized 0..1), addressed by the
+    /// owning `module` container + the block's display name. Persists until
+    /// the next set; modulation routes on the same parameter ride on top.
+    pub fn set_leaf_param(&mut self, module: &str, leaf: &str, param: &str, value: f64) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_leaf_param(module, leaf, param, value))
+    }
+
+    /// A leaf parameter's current base (normalized 0..1): the live overlay
+    /// if one is set, else the value the block was built with — what
+    /// [`set_leaf_param`](Self::set_leaf_param) would be moving it from.
+    /// `None` when the leaf or parameter is not in this tree.
+    pub fn leaf_param_value(&mut self, module: &str, leaf: &str, param: &str) -> Option<f64> {
+        let (id, pid, overlaid) = {
+            let e = self.root_engine()?;
+            let id = e.find_leaf(module, leaf)?;
+            let pkey = param.to_lowercase();
+            let pid = e.leaf_params[id]
+                .iter()
+                .find(|p| p.name.to_lowercase() == pkey)?
+                .id;
+            let overlaid = e
+                .overlay
+                .get(id)
+                .and_then(|o| o.iter().find(|(p, _)| *p == pid))
+                .map(|(_, v)| *v);
+            (id, pid, overlaid)
+        };
+        if overlaid.is_some() {
+            return overlaid;
+        }
+        match self.leaf_backend_mut(id)? {
+            LeafBackend::Plugin(p) => p.param_value(pid),
+            LeafBackend::Source(_) => None,
+        }
+    }
+
+    /// Live-update a modulator envelope's ADSR ("amp env" / "filter env"),
+    /// addressed by its owning `module` container.
+    pub fn set_env(&mut self, module: &str, name: &str, params: crate::native::AdsrParams) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_env(module, name, params))
+    }
+
+    /// Live-update an LFO source's rate and wave (see `ModEngine::set_lfo`).
+    pub fn set_lfo(
+        &mut self,
+        module: &str,
+        name: &str,
+        rate_hz: f32,
+        wave: Option<crate::native::LfoWave>,
+        fade_s: Option<f32>,
+    ) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_lfo(module, name, rate_hz, wave, fade_s))
+    }
+
+    /// The routes from source `name` in `module`, as lower-cased
+    /// `(leaf, param)` (see `ModEngine::routes_from`).
+    pub fn routes_from(&mut self, module: &str, name: &str) -> Vec<(String, String)> {
+        self.root_engine()
+            .map(|e| e.routes_from(module, name))
+            .unwrap_or_default()
+    }
+
+    /// Live-update an envelope source's delay and hold (seconds).
+    pub fn set_env_timing(&mut self, module: &str, name: &str, delay_s: f32, hold_s: f32) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_env_timing(module, name, delay_s, hold_s))
+    }
+
+    /// Scale a source's authored routes to `depth` at the deepest (see
+    /// `ModEngine::set_source_depth`).
+    pub fn set_source_depth(&mut self, module: &str, name: &str, depth: f32) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_source_depth(module, name, depth))
+    }
+
+    /// Live-update a modulation route's depth (e.g. Filter Env → cutoff
+    /// amount), addressed by module + source + target.
+    pub fn set_route_depth(
+        &mut self,
+        module: &str,
+        source: &str,
+        leaf: &str,
+        param: &str,
+        depth: f32,
+    ) -> bool {
+        self.root_engine()
+            .is_some_and(|e| e.set_route_depth(module, source, leaf, param, depth))
+    }
+
+    /// Run `f` against the sampler source instance of `module`'s leaf named
+    /// `leaf` (its unison / amp-envelope setters). `false` when the leaf
+    /// isn't a sampler source.
+    pub fn with_sampler_source(
+        &mut self,
+        module: &str,
+        leaf: &str,
+        f: impl FnOnce(&mut crate::SamplerInstrument),
+    ) -> bool {
+        let Some(id) = self.root_engine().and_then(|e| e.find_leaf(module, leaf)) else {
+            return false;
+        };
+        let Some(LeafBackend::Source(source)) = self.leaf_backend_mut(id) else {
+            return false;
+        };
+        match source
+            .as_any_mut()
+            .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+        {
+            Some(sampler) => {
+                f(sampler);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Whether leaf `leaf` of `module` is in this tree.
+
+    pub fn has_leaf(&mut self, module: &str, leaf: &str) -> bool {
+        self.root_engine()
+            .and_then(|e| e.find_leaf(module, leaf))
+            .is_some()
+    }
+
+    /// Write `param` of leaf `leaf` (in `module`) in the processor's OWN
+    /// units — a delay time in ms, a reverb's predelay — straight to it. The
+    /// parameter overlay ([`set_leaf_param`](Self::set_leaf_param)) is the
+    /// 0..1 path, right for the native blocks whose parameters are
+    /// normalized and wrong for the effects whose are not. The value holds
+    /// until the next write (it is the processor's own state now).
+    pub fn set_leaf_plain(&mut self, module: &str, leaf: &str, param: &str, value: f64) -> bool {
+        let Some(id) = self.root_engine().and_then(|e| e.find_leaf(module, leaf)) else {
+            return false;
+        };
+        let Some(LeafBackend::Plugin(p)) = self.leaf_backend_mut(id) else {
+            return false;
+        };
+        let Some(pid) = p
+            .params()
+            .iter()
+            .find(|i| i.name.eq_ignore_ascii_case(param))
+            .map(|i| i.id)
+        else {
+            return false;
+        };
+        let writes = [(pid, value)];
+        let ev = PluginEvents {
+            params: &writes,
+            ..PluginEvents::default()
+        };
+        p.process_block(&[], &[], &mut [], &mut [], &ev).is_ok()
+    }
+
+    /// The leaf backend behind leaf `id`, if present in this subtree.
+    fn leaf_backend_mut(&mut self, id: usize) -> Option<&mut LeafBackend> {
+        match self {
+            Self::Leaf { id: lid, inst } if *lid == id => inst.as_mut(),
+            Self::Leaf { .. } => None,
+            Self::Serial(v) | Self::Parallel(v) => {
+                v.iter_mut().find_map(|n| n.leaf_backend_mut(id))
+            }
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::BusInject { inner, .. }
+            | Self::SendTap { inner, .. } => inner.leaf_backend_mut(id),
+        }
+    }
+
+    /// Prepare every leaf processor for `sample_rate` / `block_size`.
+    pub fn prepare(&mut self, sample_rate: f64, block_size: u32) {
+        match self {
+            Self::Leaf {
+                inst: Some(inst), ..
+            } => {
+                inst.prepare(sample_rate, block_size);
+            }
+            Self::Leaf { inst: None, .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v.iter_mut() {
+                    n.prepare(sample_rate, block_size);
+                }
+            }
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.prepare(sample_rate, block_size),
+            Self::Modulated { engine, inner } => {
+                inner.prepare(sample_rate, block_size);
+                engine.prepare(sample_rate, inner.leaf_count());
+            }
+        }
+    }
+
+    /// Total leaves (placeholder or live) — sizes the mod write table.
+    fn leaf_count(&self) -> usize {
+        match self {
+            Self::Leaf { .. } => 1,
+            Self::Serial(v) | Self::Parallel(v) => v.iter().map(Self::leaf_count).sum(),
+            Self::Zoned { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.leaf_count(),
+        }
+    }
+
+    /// Count the leaf processors that actually have a backend (for tests/metering).
+    #[must_use]
+    pub fn live_leaves(&self) -> usize {
+        match self {
+            Self::Leaf { inst, .. } => inst.is_some() as usize,
+            Self::Serial(v) | Self::Parallel(v) => v.iter().map(Self::live_leaves).sum(),
+            Self::Zoned { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.live_leaves(),
+        }
+    }
+
+    /// Warm the sample `note`/`velocity` would trigger in each of this
+    /// subtree's **sampler** sources: decode it into the cache on the
+    /// calling (control) thread, so the audio thread never has to drop the
+    /// voice for want of a resident sample. Cheap no-op when it is already
+    /// cached. Respects [`Zoned`](RenderNode::Zoned) windows — a note a
+    /// zone filters out warms nothing behind it.
+    pub fn warm_note_samples(&mut self, note: u8, velocity: u8) {
+        match self {
+            Self::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => {
+                if let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                {
+                    let _ = sampler.engine().warm_note_samples(note, velocity);
+                    // Warming charges the shared decoded-PCM budget even past
+                    // its ceiling (correctness beats the ceiling for a
+                    // sounding note). Unchecked, on-demand warming grows
+                    // without bound — on wasm that growth ends in a memory
+                    // trap — so once WELL past the limit, shed this engine's
+                    // largest decoded samples back toward it. The freshly
+                    // warmed sample may itself be shed (eviction is
+                    // largest-first); the next press simply warms it again.
+                    let limit = crate::engine::budget::limit_bytes();
+                    let used = crate::engine::budget::used_bytes();
+                    if limit != u64::MAX && used > limit.saturating_add(limit / 8) {
+                        let over = (used - limit) as usize;
+                        let engine = sampler.engine();
+                        let target = engine.loaded_sample_bytes().saturating_sub(over);
+                        let _ = engine.evict_cache_until_under_budget(target);
+                    }
+                }
+            }
+            Self::Leaf { .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v.iter_mut() {
+                    n.warm_note_samples(note, velocity);
+                }
+            }
+            Self::Zoned { zone, inner } => {
+                if zone.note_gain(note, velocity) > 0.0 {
+                    inner.warm_note_samples(note, velocity);
+                }
+            }
+            Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.warm_note_samples(note, velocity),
+        }
+    }
+
+    /// Collect the sample paths a note-on for `note`/`velocity` would need
+    /// across this subtree's **sampler** sources that are NOT resident yet —
+    /// the resolve-only half of [`warm_note_samples`]
+    /// (`Self::warm_note_samples`), for callers that must never decode on the
+    /// calling thread (the browser worklet's audio thread: it ships these to
+    /// the decoder worker instead). Respects [`Zoned`](RenderNode::Zoned)
+    /// windows exactly like the warm walk.
+    pub fn missing_note_sample_paths(
+        &mut self,
+        note: u8,
+        velocity: u8,
+        out: &mut Vec<std::path::PathBuf>,
+    ) {
+        match self {
+            Self::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => {
+                if let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                {
+                    let engine = sampler.engine();
+                    // ALL round-robin candidates, not just rr 0 — playback
+                    // advances the rr counter, so warming one of them
+                    // leaves the others unopened and most presses land on
+                    // an unopened sample.
+                    for path in engine.resolve_note_sample_paths(note, velocity) {
+                        if !engine.is_sample_resident(&path) && !out.contains(&path) {
+                            out.push(path);
+                        }
+                    }
+                }
+            }
+            Self::Leaf { .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v.iter_mut() {
+                    n.missing_note_sample_paths(note, velocity, out);
+                }
+            }
+            Self::Zoned { zone, inner } => {
+                if zone.note_gain(note, velocity) > 0.0 {
+                    inner.missing_note_sample_paths(note, velocity, out);
+                }
+            }
+            Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => {
+                inner.missing_note_sample_paths(note, velocity, out);
+            }
+        }
+    }
+
+    /// Queue every zone this note needs but has not OPENED yet onto the
+    /// shared streamer queue, for a worker thread to open.
+    ///
+    /// The wasm answer to "this note's zone does not exist yet".
+    /// `SampleCache` is `Send + Sync` and lives in the shared heap, so a
+    /// streamer worker calls `cache.get(path)` and the audio thread finds
+    /// the result already in its own map — no copy, no message, no second
+    /// heap (which is what the decoder-worker path needed). Costs one
+    /// enqueue per missing zone on this thread and nothing else.
+    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    pub fn queue_note_opens(&mut self, note: u8, velocity: u8) -> usize {
+        match self {
+            RenderNode::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => {
+                let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                else {
+                    return 0;
+                };
+                let engine = sampler.engine();
+                let cache = engine.cache_handle();
+                let mut queued = 0;
+                // Every round-robin candidate — see the note above.
+                for path in engine.resolve_note_sample_paths(note, velocity) {
+                    if engine.is_sample_resident(&path) {
+                        continue;
+                    }
+                    crate::engine::stream_wasm::enqueue_open(&cache, &path);
+                    queued += 1;
+                }
+                queued
+            }
+            RenderNode::Leaf { .. } => 0,
+            RenderNode::Serial(v) | RenderNode::Parallel(v) => v
+                .iter_mut()
+                .map(|n| n.queue_note_opens(note, velocity))
+                .sum(),
+            RenderNode::Zoned { zone, inner } => {
+                if zone.note_gain(note, velocity) > 0.0 {
+                    inner.queue_note_opens(note, velocity)
+                } else {
+                    0
+                }
+            }
+            RenderNode::Gain { inner, .. }
+            | RenderNode::Modulated { inner, .. }
+            | RenderNode::SendTap { inner, .. }
+            | RenderNode::BusInject { inner, .. } => inner.queue_note_opens(note, velocity),
+        }
+    }
+
+    /// Insert PCM decoded elsewhere into every **sampler** source of this
+    /// subtree whose cache knows `path` (pack entry / prepared entry).
+    /// Returns whether any leaf accepted it. `charge_past_ceiling` follows
+    /// [`SampleEngine::insert_decoded_sample`]; a past-ceiling insert sheds
+    /// the accepting engine's largest samples back toward the limit, exactly
+    /// like the warm path.
+    pub fn insert_decoded_sample(
+        &mut self,
+        path: &std::path::Path,
+        data: &std::sync::Arc<crate::engine::cache::SampleData>,
+        charge_past_ceiling: bool,
+    ) -> bool {
+        match self {
+            Self::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => {
+                let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                else {
+                    return false;
+                };
+                let engine = sampler.engine();
+                if !engine.knows_sample_path(path) {
+                    return false;
+                }
+                let accepted = engine.insert_decoded_sample(
+                    path,
+                    std::sync::Arc::clone(data),
+                    charge_past_ceiling,
+                );
+                if accepted && charge_past_ceiling {
+                    // Same shed rule as `warm_note_samples`: correctness put
+                    // the budget past its ceiling; well past it, walk back.
+                    let limit = crate::engine::budget::limit_bytes();
+                    let used = crate::engine::budget::used_bytes();
+                    if limit != u64::MAX && used > limit.saturating_add(limit / 8) {
+                        let over = (used - limit) as usize;
+                        let engine = sampler.engine();
+                        let target = engine.loaded_sample_bytes().saturating_sub(over);
+                        let _ = engine.evict_cache_until_under_budget(target);
+                    }
+                }
+                accepted
+            }
+            Self::Leaf { .. } => false,
+            Self::Serial(v) | Self::Parallel(v) => {
+                let mut any = false;
+                for n in v.iter_mut() {
+                    any |= n.insert_decoded_sample(path, data, charge_past_ceiling);
+                }
+                any
+            }
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => {
+                inner.insert_decoded_sample(path, data, charge_past_ceiling)
+            }
+        }
+    }
+
+    /// Decode `path` in the first **sampler** source that knows it and take
+    /// the PCM back out of that cache (budget-flat) — the decoder-worker
+    /// seam; see [`SampleEngine::decode_sample_take`].
+    pub fn decode_sample_take(
+        &mut self,
+        path: &std::path::Path,
+    ) -> Option<std::sync::Arc<crate::engine::cache::SampleData>> {
+        match self {
+            Self::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => {
+                let sampler = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())?;
+                let engine = sampler.engine();
+                if !engine.knows_sample_path(path) {
+                    return None;
+                }
+                engine.decode_sample_take(path).ok()
+            }
+            Self::Leaf { .. } => None,
+            Self::Serial(v) | Self::Parallel(v) => {
+                v.iter_mut().find_map(|n| n.decode_sample_take(path))
+            }
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.decode_sample_take(path),
+        }
+    }
+
+    /// Coverage-first sample paths (playable order, middle-out from
+    /// `center`) of every **sampler** source in this subtree — the decoder
+    /// worker's background fill list.
+    pub fn coverage_sample_paths(&mut self, center: u8, out: &mut Vec<std::path::PathBuf>) {
+        match self {
+            Self::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => {
+                if let Some(sampler) = src
+                    .as_any_mut()
+                    .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                {
+                    out.extend(sampler.engine().sample_paths_playable(center));
+                }
+            }
+            Self::Leaf { .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v.iter_mut() {
+                    n.coverage_sample_paths(center, out);
+                }
+            }
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.coverage_sample_paths(center, out),
+        }
+    }
+
+    /// Sum the voices currently alive across this subtree's **sampler**
+    /// sources (`SamplerInstrument` leaves — synth/percussion backends keep
+    /// their own voice vecs and are not counted). A cheap read for
+    /// load/diagnostic panels; `&mut` only because the leaf downcast goes
+    /// through `as_any_mut`.
+    /// Shed voices in every source under this node (the rig's CPU guard):
+    /// see [`crate::soundsource::Soundsource::shed_voices`].
+    pub fn shed_voices(&mut self, level: u8) {
+        match self {
+            Self::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => src.shed_voices(level),
+            Self::Leaf { .. } => {}
+            Self::Serial(v) | Self::Parallel(v) => {
+                for n in v {
+                    n.shed_voices(level);
+                }
+            }
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.shed_voices(level),
+        }
+    }
+
+    pub fn active_voices(&mut self) -> usize {
+        match self {
+            Self::Leaf {
+                inst: Some(LeafBackend::Source(src)),
+                ..
+            } => src
+                .as_any_mut()
+                .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                .map_or(0, |s| s.engine().active_voices()),
+            Self::Leaf { .. } => 0,
+            Self::Serial(v) | Self::Parallel(v) => v.iter_mut().map(Self::active_voices).sum(),
+            Self::Zoned { inner, .. }
+            | Self::Gain { inner, .. }
+            | Self::Modulated { inner, .. }
+            | Self::SendTap { inner, .. }
+            | Self::BusInject { inner, .. } => inner.active_voices(),
+        }
+    }
+
+    /// The generator kinds of this subtree's **source** leaves, in compile
+    /// order — the tree-side view remotes classify layers by (processors
+    /// and placeholders are skipped).
+    #[must_use]
+    pub fn source_kinds(&self) -> Vec<SoundsourceKind> {
+        fn walk(node: &RenderNode, out: &mut Vec<SoundsourceKind>) {
+            match node {
+                RenderNode::Leaf { inst, .. } => {
+                    if let Some(kind) = inst.as_ref().and_then(LeafBackend::soundsource_kind) {
+                        out.push(kind);
+                    }
+                }
+                RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                    for n in v {
+                        walk(n, out);
+                    }
+                }
+                RenderNode::Zoned { inner, .. }
+                | RenderNode::Modulated { inner, .. }
+                | RenderNode::Gain { inner, .. }
+                | RenderNode::SendTap { inner, .. }
+                | RenderNode::BusInject { inner, .. } => walk(inner, out),
+            }
+        }
+        let mut out = Vec::new();
+        walk(self, &mut out);
+        out
+    }
+
+    /// The compiled `ModMatrix`, when any routes resolved (for tests/UI).
+    #[must_use]
+    pub fn mod_engine(&self) -> Option<&ModEngine> {
+        match self {
+            Self::Modulated { engine, .. } => Some(engine),
+            _ => None,
+        }
+    }
+
+    /// Set the tempo used by synced LFOs (no-op on trees without a mod engine).
+    pub fn set_tempo(&mut self, bpm: f32) {
+        if let Self::Modulated { engine, .. } = self {
+            engine.tempo_bpm = bpm.max(1.0);
+        }
+    }
+
+    /// Render one block. `out` is overwritten with this node's output.
+    pub fn process(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) {
+        // Root-level: tick the mod engine, then thread its writes + bus
+        // buffers down the tree.
+        if let Self::Modulated { engine, inner } = self {
+            let frames = out_l.len().min(out_r.len());
+            // The band's tempo, when there is one, drives everything synced.
+            if let Some(bpm) = signal_rig_host::tempo::get() {
+                engine.tempo_bpm = bpm;
+            }
+            if (engine.tempo_bpm - engine.followed_bpm).abs() > 1e-3 {
+                engine.followed_bpm = engine.tempo_bpm;
+                crate::native::set_tempo_bpm(engine.tempo_bpm);
+                for f in &engine.tempo_followers {
+                    if let Some(LeafBackend::Plugin(p)) = inner.leaf_backend_mut(f.leaf) {
+                        let writes = [(f.param_id, f.value(engine.tempo_bpm))];
+                        let ev = PluginEvents {
+                            params: &writes,
+                            ..PluginEvents::default()
+                        };
+                        let _ = p.process_block(&[], &[], &mut [], &mut [], &ev);
+                    }
+                }
+            }
+            // The arpeggiator rewrites the MIDI stream before anything else
+            // (steps replace held notes; CC/bend pass through).
+            let arp_midi;
+            let arp_events;
+            let events = if let Some(arp) = engine.arp.as_mut() {
+                arp_midi = arp.process(events.midi, frames, engine.sample_rate, engine.tempo_bpm);
+                arp_events = PluginEvents {
+                    params: events.params,
+                    midi: &arp_midi,
+                    note_expressions: events.note_expressions,
+                };
+                &arp_events
+            } else {
+                events
+            };
+            engine.tick(events, frames);
+            let mut ctx = RenderCtx {
+                writes: std::mem::take(&mut engine.writes),
+                bus_l: std::mem::take(&mut engine.bus_l),
+                bus_r: std::mem::take(&mut engine.bus_r),
+            };
+            for b in ctx.bus_l.iter_mut().chain(ctx.bus_r.iter_mut()) {
+                b.clear();
+                b.resize(frames, 0.0);
+            }
+            inner.process_inner(in_l, in_r, out_l, out_r, events, &mut ctx);
+            engine.writes = ctx.writes;
+            engine.bus_l = ctx.bus_l;
+            engine.bus_r = ctx.bus_r;
+            return;
+        }
+        let mut ctx = RenderCtx::default();
+        self.process_inner(in_l, in_r, out_l, out_r, events, &mut ctx);
+    }
+
+    fn process_inner(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+        ctx: &mut RenderCtx,
+    ) {
+        let frames = out_l.len().min(out_r.len());
+        match self {
+            Self::Leaf {
+                id,
+                inst: Some(inst),
+            } => {
+                let mods = ctx.writes.get(*id).map_or(&[][..], |w| w.as_slice());
+                if mods.is_empty() {
+                    inst.process(in_l, in_r, out_l, out_r, events);
+                } else {
+                    // Merge external param writes with this leaf's mod writes.
+                    let mut params = param_scratch();
+                    params.extend_from_slice(events.params);
+                    params.extend_from_slice(mods);
+                    let ev = PluginEvents {
+                        params: &params,
+                        midi: events.midi,
+                        note_expressions: events.note_expressions,
+                    };
+                    inst.process(in_l, in_r, out_l, out_r, &ev);
+                    recycle_params(params);
+                }
+            }
+            Self::Leaf { inst: None, .. } => copy_in(in_l, in_r, out_l, out_r, frames),
+            Self::Serial(nodes) => {
+                if nodes.is_empty() {
+                    return copy_in(in_l, in_r, out_l, out_r, frames);
+                }
+                // Ping-pong the signal through each child.
+                let mut cur_l = scratch_from(in_l, frames);
+                let mut cur_r = scratch_from(in_r, frames);
+                let mut nxt_l = scratch(frames);
+                let mut nxt_r = scratch(frames);
+                for node in nodes.iter_mut() {
+                    nxt_l.fill(0.0);
+                    nxt_r.fill(0.0);
+                    node.process_inner(&cur_l, &cur_r, &mut nxt_l, &mut nxt_r, events, ctx);
+                    std::mem::swap(&mut cur_l, &mut nxt_l);
+                    std::mem::swap(&mut cur_r, &mut nxt_r);
+                }
+                out_l[..frames].copy_from_slice(&cur_l[..frames]);
+                out_r[..frames].copy_from_slice(&cur_r[..frames]);
+                recycle(cur_l);
+                recycle(cur_r);
+                recycle(nxt_l);
+                recycle(nxt_r);
+            }
+            Self::Parallel(nodes) => {
+                out_l[..frames].fill(0.0);
+                out_r[..frames].fill(0.0);
+                let mut tl = scratch(frames);
+                let mut tr = scratch(frames);
+                for node in nodes.iter_mut() {
+                    tl.fill(0.0);
+                    tr.fill(0.0);
+                    node.process_inner(in_l, in_r, &mut tl, &mut tr, events, ctx);
+                    for f in 0..frames {
+                        out_l[f] += tl[f];
+                        out_r[f] += tr[f];
+                    }
+                }
+                recycle(tl);
+                recycle(tr);
+            }
+            Self::Zoned { zone, inner } => {
+                // Central-MIDI-input routing: keep only notes in this zone's
+                // window, scaling each NoteOn's velocity by the crossfade gain.
+                // Note-offs and CC pass through (so held notes always release).
+                let mut filtered = event_scratch();
+                filter_events_by_zone(*zone, events, &mut filtered);
+                let fe = PluginEvents {
+                    params: events.params,
+                    midi: &filtered,
+                    note_expressions: events.note_expressions,
+                };
+                inner.process_inner(in_l, in_r, out_l, out_r, &fe, ctx);
+                recycle_events(filtered);
+            }
+            Self::Gain {
+                input,
+                output,
+                cell,
+                meter,
+                asleep,
+                inner,
+            } => {
+                // Read the fader FIRST. A container the mixer has muted — or
+                // whose module is switched off, which is the same thing: a
+                // zero in its cell — multiplies its output by zero at the
+                // bottom of this arm. Every voice underneath it is rendered
+                // only to be thrown away, and voice count is the whole cost
+                // of this engine (measured: render time is linear in it).
+                //
+                // So once a muted branch has gone quiet, stop processing it.
+                // Not the moment it is muted: voices sounding at that instant
+                // would freeze mid-note and come back as STUCK NOTES when the
+                // fader returns, because nothing would ever advance them to
+                // their note-off. Instead it keeps rendering (into silence)
+                // until its own output has decayed below `SLEEP_FLOOR`, and
+                // only then sleeps — by which point there is nothing left to
+                // strand. Waking is immediate and needs no reset, since a
+                // branch only ever sleeps with no audible voices in it.
+                //
+                // While asleep the subtree sees no events at all, which is
+                // deliberate for notes (a switched-off module must not
+                // accumulate voices) but does mean its CC state is stale
+                // until the next controller move after it wakes.
+                let live = cell
+                    .as_ref()
+                    .map_or(1.0, |c| f32::from_bits(c.load(Ordering::Relaxed)));
+                let out_gain = *output * live;
+                let silent = out_gain == 0.0;
+                if silent && *asleep {
+                    out_l[..frames].fill(0.0);
+                    out_r[..frames].fill(0.0);
+                    // Keep the meter's ballistics running so it falls at the
+                    // same rate whether or not the branch is being rendered.
+                    if let Some(m) = meter {
+                        let held = f32::from_bits(m.load(Ordering::Relaxed));
+                        let decayed =
+                            held * (-(frames as f32) / (METER_RELEASE_S * METER_RATE_HZ)).exp();
+                        m.store(decayed.to_bits(), Ordering::Relaxed);
+                    }
+                    return;
+                }
+                *asleep = false;
+
+                // While muted, start no new voices. Passing the block through
+                // untouched would let a switched-off module bank a chord's
+                // worth of voices that cost full price to render and then get
+                // multiplied by zero — and a HELD one never decays, so the
+                // branch could never reach the quiet that lets it sleep.
+                //
+                // Note-offs, CC and everything else still go through, which
+                // is what makes the drain terminate: notes already sounding
+                // when the fader closed get their release and fade out
+                // normally, rather than sustaining forever under a mute.
+                let drained: Option<Vec<PluginMidiEvent>> = if silent
+                    && events
+                        .midi
+                        .iter()
+                        .any(|e| matches!(e.message, midicore::MidiEvent::NoteOn { .. }))
+                {
+                    let mut kept = event_scratch();
+                    kept.extend(
+                        events
+                            .midi
+                            .iter()
+                            .filter(|e| !matches!(e.message, midicore::MidiEvent::NoteOn { .. }))
+                            .cloned(),
+                    );
+                    Some(kept)
+                } else {
+                    None
+                };
+                let muted_events;
+                let events = match &drained {
+                    Some(midi) => {
+                        muted_events = PluginEvents {
+                            params: events.params,
+                            midi,
+                            note_expressions: events.note_expressions,
+                        };
+                        &muted_events
+                    }
+                    None => events,
+                };
+
+                if *input == 1.0 {
+                    inner.process_inner(in_l, in_r, out_l, out_r, events, ctx);
+                } else {
+                    let mut gl = scratch_from(in_l, frames);
+                    let mut gr = scratch_from(in_r, frames);
+                    for f in 0..frames {
+                        gl[f] *= *input;
+                        gr[f] *= *input;
+                    }
+                    inner.process_inner(&gl, &gr, out_l, out_r, events, ctx);
+                    recycle(gl);
+                    recycle(gr);
+                }
+                // A muted branch that has now decayed to nothing can sleep
+                // from the next block on. Measured pre-gain, because the
+                // post-gain signal is zero by definition here and would say
+                // nothing about whether the voices underneath have finished.
+                if silent {
+                    let mut pre_peak = 0.0f32;
+                    for f in 0..frames {
+                        pre_peak = pre_peak.max(out_l[f].abs()).max(out_r[f].abs());
+                    }
+                    *asleep = pre_peak < SLEEP_FLOOR;
+                }
+                if out_gain != 1.0 {
+                    for f in 0..frames {
+                        out_l[f] *= out_gain;
+                        out_r[f] *= out_gain;
+                    }
+                }
+                // Post-fader peak, decayed on the audio thread: a mixer that
+                // polls at 30 Hz and one that polls at 5 Hz see the same
+                // ballistics, and neither steals the other's reading.
+                if let Some(m) = meter {
+                    let mut peak = 0.0f32;
+                    for f in 0..frames {
+                        peak = peak.max(out_l[f].abs()).max(out_r[f].abs());
+                    }
+                    let held = f32::from_bits(m.load(Ordering::Relaxed));
+                    let decayed =
+                        held * (-(frames as f32) / (METER_RELEASE_S * METER_RATE_HZ)).exp();
+                    m.store(peak.max(decayed).to_bits(), Ordering::Relaxed);
+                }
+                if let Some(kept) = drained {
+                    recycle_events(kept);
+                }
+            }
+            Self::SendTap { buses, inner } => {
+                inner.process_inner(in_l, in_r, out_l, out_r, events, ctx);
+                // Feed this node's output into each bus (unity gain).
+                for &bus in buses.iter() {
+                    if let Some(bl) = ctx.bus_l.get_mut(bus) {
+                        for f in 0..frames.min(bl.len()) {
+                            bl[f] += out_l[f];
+                        }
+                    }
+                    if let Some(br) = ctx.bus_r.get_mut(bus) {
+                        for f in 0..frames.min(br.len()) {
+                            br[f] += out_r[f];
+                        }
+                    }
+                }
+            }
+            Self::BusInject { bus, inner } => {
+                // Send/return: `inner` processes the BUS content only; its
+                // output sums onto the pass-through main signal.
+                let bl = ctx
+                    .bus_l
+                    .get(*bus)
+                    .map_or_else(|| scratch(frames), |b| scratch_from(b, frames));
+                let br = ctx
+                    .bus_r
+                    .get(*bus)
+                    .map_or_else(|| scratch(frames), |b| scratch_from(b, frames));
+                let mut tl = scratch(frames);
+                let mut tr = scratch(frames);
+                inner.process_inner(&bl, &br, &mut tl, &mut tr, events, ctx);
+                for f in 0..frames {
+                    out_l[f] = in_l.get(f).copied().unwrap_or(0.0) + tl[f];
+                    out_r[f] = in_r.get(f).copied().unwrap_or(0.0) + tr[f];
+                }
+                recycle(bl);
+                recycle(br);
+                recycle(tl);
+                recycle(tr);
+            }
+            Self::Modulated { .. } => {
+                // Only ever the root; handled in `process`.
+                debug_assert!(false, "nested Modulated node");
+            }
+        }
+    }
+
+    /// Convenience: render `frames` of output from silence + the given MIDI.
+    pub fn render(&mut self, out_l: &mut [f32], out_r: &mut [f32], midi: &PluginEvents<'_>) {
+        let frames = out_l.len().min(out_r.len());
+        let silence = scratch(frames);
+        self.process(&silence, &silence, out_l, out_r, midi);
+        recycle(silence);
+    }
+}
+
+/// Apply a [`Zone`] to a MIDI stream: drop `NoteOns` outside the window, scale
+/// the rest by the crossfade gain (velocity × gain), and pass everything else
+/// (`NoteOff` / CC / …) through unchanged so releases always land.
+fn filter_events_by_zone(zone: Zone, events: &PluginEvents<'_>, out: &mut Vec<PluginMidiEvent>) {
+    use midicore::{MidiEvent, Velocity};
+    out.clear();
+    for ev in events.midi {
+        match &ev.message {
+            MidiEvent::NoteOn {
+                channel,
+                key,
+                velocity,
+            } => {
+                let (note, vel) = (key.get(), velocity.get());
+                let gain = zone.note_gain(note, vel);
+                if gain > 0.0 {
+                    let scaled = ((vel as f32 * gain).round() as u8).clamp(1, 127);
+                    out.push(PluginMidiEvent {
+                        offset: ev.offset,
+                        message: MidiEvent::NoteOn {
+                            channel: *channel,
+                            key: *key,
+                            velocity: Velocity::new(scaled),
+                        },
+                    });
+                }
+            }
+            _ => out.push(ev.clone()),
+        }
+    }
+}
+
+fn copy_in(in_l: &[f32], in_r: &[f32], out_l: &mut [f32], out_r: &mut [f32], frames: usize) {
+    let n = frames.min(in_l.len()).min(in_r.len());
+    out_l[..n].copy_from_slice(&in_l[..n]);
+    out_r[..n].copy_from_slice(&in_r[..n]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rig_node::Container;
+    use crate::rig_node::RigNode;
+    use signal_plugin_host::PluginMidiEvent;
+    use signal_proto::block::BlockType;
+
+    fn note_off(note: u8) -> PluginMidiEvent {
+        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+        PluginMidiEvent {
+            offset: 0,
+            message: MidiEvent::NoteOff {
+                channel: Channel::new(0),
+                key: KeyNumber::new(note),
+                velocity: Velocity::new(0),
+            },
+        }
+    }
+
+    fn note_on(note: u8, vel: u8) -> PluginMidiEvent {
+        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+        PluginMidiEvent {
+            offset: 0,
+            message: MidiEvent::NoteOn {
+                channel: Channel::new(0),
+                key: KeyNumber::new(note),
+                velocity: Velocity::new(vel),
+            },
+        }
+    }
+
+    fn rms(buf: &[f32]) -> f32 {
+        (buf.iter().map(|s| s * s).sum::<f32>() / buf.len().max(1) as f32).sqrt()
+    }
+
+    #[test]
+    fn oscillator_block_renders_through_a_serial_module() {
+        // Module [serial] { Oscillator (native), Filter (native SVF) }
+        let tree = Container::module("Osc")
+            .block(BlockType::Oscillator, "Osc")
+            .block(BlockType::Filter, "Filter");
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        rn.prepare(48_000.0, 256);
+        assert_eq!(
+            rn.live_leaves(),
+            2,
+            "oscillator + filter both have backends"
+        );
+
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+        let midi = [note_on(69, 110)];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &ev);
+        assert!(
+            rms(&l) > 1e-3,
+            "audio flows osc → filter (default open) → out"
+        );
+    }
+
+    /// Every container with a live fader also meters: an engine and its layer
+    /// report a post-fader peak while a note sounds, and the peak falls back
+    /// on its own once the audio stops (so a mixer polling at any rate sees
+    /// the same ballistics, and no reader steals another's reading).
+    #[test]
+    fn engine_and_layer_containers_meter_their_output() {
+        let tree = Container::engine("Keys").add(
+            Container::layer("Keys A")
+                .add(Container::module("Osc").block(BlockType::Oscillator, "Osc")),
+        );
+        let (mut rn, cells) = RenderNode::compile_with_cells(&tree, 48_000);
+        rn.prepare(48_000.0, 256);
+        assert_eq!(
+            cells.peak(Role::Engine, "Keys"),
+            0.0,
+            "silence before the first block"
+        );
+
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+        let midi = [note_on(69, 110)];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &ev);
+
+        let (engine, layer) = (
+            cells.peak(Role::Engine, "Keys"),
+            cells.peak(Role::Layer, "Keys A"),
+        );
+        assert!(engine > 1e-3, "the engine meters its output, peak={engine}");
+        assert!(layer > 1e-3, "and so does the lane under it, peak={layer}");
+        // Reading twice is not destructive — two panels can both draw it.
+        assert_eq!(
+            engine,
+            cells.peak(Role::Engine, "Keys"),
+            "peaks are read, not taken"
+        );
+        assert_eq!(
+            cells.peaks().len(),
+            cells.names().count(),
+            "every fader-addressable container has a meter"
+        );
+
+        // Pull the engine's fader to silence: the meter is post-fader, so it
+        // falls back on its own rather than sticking at the last hit.
+        cells.set(Role::Engine, "Keys", 0.0);
+        let held = PluginEvents {
+            params: &[],
+            midi: &[],
+            note_expressions: &[],
+        };
+        for _ in 0..200 {
+            rn.render(&mut l, &mut r, &held);
+        }
+        assert!(rms(&l) < 1e-6, "a muted engine is silent");
+        assert!(
+            cells.peak(Role::Engine, "Keys") < engine * 0.5,
+            "and its meter decays: {} → {}",
+            engine,
+            cells.peak(Role::Engine, "Keys")
+        );
+    }
+
+    /// **A muted container stops being rendered, and wakes without stuck
+    /// notes.** Voice count is the entire cost of this engine, so rendering
+    /// voices under a fader that multiplies them by zero is pure waste — a
+    /// switched-off module in a big layered patch costs exactly as much as a
+    /// playing one. This asserts the two halves that make skipping safe:
+    ///
+    /// - notes arriving while muted do not accumulate (they never reach the
+    ///   subtree at all), so unmuting cannot dump a pile of stale voices;
+    /// - unmuting with nothing played is silent, i.e. no voice was frozen
+    ///   mid-note by the skip and left with no note-off to retire it.
+    ///
+    /// Before the skip, both of these produced sound: the voices were still
+    /// spawned and rendered, just multiplied by zero on the way out.
+    #[test]
+    fn a_muted_container_sleeps_and_wakes_without_stuck_notes() {
+        let tree = Container::engine("Keys").add(
+            Container::layer("Keys")
+                .add(Container::module("Osc").block(BlockType::Oscillator, "Osc")),
+        );
+        let (mut rn, cells) = RenderNode::compile_with_cells(&tree, 48_000);
+        rn.prepare(48_000.0, 256);
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+
+        let held = PluginEvents {
+            params: &[],
+            midi: &[],
+            note_expressions: &[],
+        };
+        let struck = [note_on(69, 110)];
+        let strike = PluginEvents {
+            params: &[],
+            midi: &struck,
+            note_expressions: &[],
+        };
+
+        // It sounds at all, so the rest of the test means something.
+        rn.render(&mut l, &mut r, &strike);
+        assert!(rms(&l) > 1e-4, "the engine sounds when its fader is up");
+
+        // Release it, mute, and let it decay. The drain is the point: the
+        // branch keeps rendering (into silence) while the released note fades,
+        // and only sleeps once it is genuinely quiet. A note still HELD under
+        // a mute keeps the branch awake and resumes when the fader returns,
+        // which is what a mixer mute is supposed to do.
+        let released = [note_off(69)];
+        let release = PluginEvents {
+            params: &[],
+            midi: &released,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &release);
+        assert!(
+            cells.set(Role::Engine, "Keys", 0.0),
+            "the engine has a cell"
+        );
+        for _ in 0..200 {
+            rn.render(&mut l, &mut r, &held);
+        }
+        assert!(rms(&l) < 1e-6, "a muted engine is silent");
+
+        // Play into it while it is asleep. A switched-off module must not
+        // bank voices to unleash later.
+        for _ in 0..8 {
+            rn.render(&mut l, &mut r, &strike);
+        }
+
+        // Fader back up, nothing played: silence. Anything here is a voice
+        // the skip stranded (no note-off will ever reach it) or one that was
+        // banked while muted.
+        assert!(cells.set(Role::Engine, "Keys", 1.0), "and it comes back up");
+        rn.render(&mut l, &mut r, &held);
+        // Threshold well under the ~0.07 those eight banked strikes read
+        // before the note-on gate, and well over the inaudible tail of the
+        // released note (~5e-5) that is legitimately still decaying.
+        assert!(
+            rms(&l) < 1e-3,
+            "waking is quiet — no stranded or banked voices, rms={}",
+            rms(&l)
+        );
+
+        // And it is genuinely awake, not merely quiet.
+        rn.render(&mut l, &mut r, &strike);
+        assert!(rms(&l) > 1e-4, "a woken engine plays again");
+    }
+
+    /// **An engine and a lane with the same name are two different cells.**
+    /// A one-lane engine is conventionally named after its lane ("Pad" holding
+    /// "Pad"); when the map was keyed by name alone they shared a cell, so
+    /// muting or soloing the lane did nothing — the engine's trim, written
+    /// after it, put the gain straight back.
+    #[test]
+    fn an_engine_and_its_like_named_lane_do_not_share_a_cell() {
+        let tree = Container::engine("Pad").add(
+            Container::layer("Pad")
+                .add(Container::module("Osc").block(BlockType::Oscillator, "Osc")),
+        );
+        let (mut rn, cells) = RenderNode::compile_with_cells(&tree, 48_000);
+        rn.prepare(48_000.0, 256);
+
+        // The mixer's write order: lanes, then engines. Muting the LANE and
+        // then writing the engine's (un-muted) trim must leave the lane muted.
+        assert!(cells.set(Role::Layer, "Pad", 0.0), "the lane has a cell");
+        assert!(cells.set(Role::Engine, "Pad", 1.0), "so does the engine");
+
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+        let midi = [note_on(69, 110)];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
+        for _ in 0..4 {
+            rn.render(&mut l, &mut r, &ev);
+        }
+        assert!(rms(&l) < 1e-6, "a muted lane stays muted under its engine");
+        // Two cells for one name (the plain module has none — only containers
+        // the engine marks `module_level` get a fader).
+        assert_eq!(cells.names().count(), 2, "engine and lane, separately");
+    }
+
+    /// The compiled tree holds source generators DIRECTLY (`LeafBackend::
+    /// Source`, no leaf-adapter round-trip), and the direct path renders
+    /// sample-identically to the graph-boundary (`SoundsourceLeaf`-wrapped)
+    /// path — the golden is `oscillator_block_renders_through_a_serial_module`'s
+    /// osc block.
+    #[test]
+    fn source_leaves_held_directly_render_identically_to_the_adapter_path() {
+        use crate::rig::RigBlock;
+        let block = RigBlock::of_type(BlockType::Oscillator).named("Osc");
+
+        // Direct path: the render tree.
+        let tree = Container::module("M").add(block.clone());
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        assert_eq!(
+            rn.source_kinds(),
+            vec![crate::SoundsourceKind::Oscillator],
+            "the compiled leaf holds the generator directly"
+        );
+        rn.prepare(48_000.0, 256);
+
+        // Adapter path: the same block as a graph-boundary PluginInstance.
+        let mut leaf = build_node_backend(&block, 48_000).expect("osc backend");
+        leaf.prepare(48_000.0, 256).unwrap();
+
+        let midi = [note_on(69, 110)];
+        let silence = vec![0.0f32; 256];
+        let (mut tl, mut tr) = (vec![0.0; 256], vec![0.0; 256]);
+        let (mut ll, mut lr) = (vec![0.0; 256], vec![0.0; 256]);
+        for b in 0..4 {
+            let m: &[PluginMidiEvent] = if b == 0 { &midi } else { &[] };
+            let ev = PluginEvents {
+                params: &[],
+                midi: m,
+                note_expressions: &[],
+            };
+            rn.render(&mut tl, &mut tr, &ev);
+            leaf.process_block(&silence, &silence, &mut ll, &mut lr, &ev)
+                .unwrap();
+            assert_eq!(tl, ll, "block {b}: direct == adapter (L)");
+            assert_eq!(tr, lr, "block {b}: direct == adapter (R)");
+        }
+        assert!(rms(&tl) > 1e-3, "and the note is audible");
+    }
+
+    /// A Formant block compiles to the City Wurli physical model, held as a
+    /// direct `PhysicalModel` source, and a note renders nonzero audio.
+    #[test]
+    fn formant_block_is_a_direct_physical_model_source() {
+        let tree = Container::module("Wurli").block(BlockType::Formant, "Wurli");
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        assert_eq!(
+            rn.source_kinds(),
+            vec![crate::SoundsourceKind::PhysicalModel]
+        );
+        rn.prepare(48_000.0, 512);
+        assert_eq!(rn.live_leaves(), 1);
+
+        let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+        let midi = [note_on(60, 100)];
+        let mut peak = 0.0f32;
+        for b in 0..8 {
+            let m: &[PluginMidiEvent] = if b == 0 { &midi } else { &[] };
+            let ev = PluginEvents {
+                params: &[],
+                midi: m,
+                note_expressions: &[],
+            };
+            rn.render(&mut l, &mut r, &ev);
+            peak = peak.max(l.iter().fold(0.0f32, |a, s| a.max(s.abs())));
+        }
+        assert!(
+            peak > 1e-4,
+            "wurli through the tree is audible, peak={peak}"
+        );
+    }
+
+    #[test]
+    fn parallel_sums_two_oscillators() {
+        let tree = Container::parallel("Voices")
+            .add(Container::layer("A").block(BlockType::Oscillator, "Osc"))
+            .add(Container::layer("B").block(BlockType::Oscillator, "Osc"));
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        rn.prepare(48_000.0, 256);
+        assert_eq!(rn.live_leaves(), 2);
+
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+        let midi = [note_on(60, 100)];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &ev);
+        assert!(rms(&l) > 1e-3);
+    }
+
+    fn render_note(rn: &mut RenderNode, note: u8, vel: u8) -> f32 {
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+        let midi = [note_on(note, vel)];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &ev);
+        rms(&l)
+    }
+
+    #[test]
+    fn key_split_routes_notes_to_their_zone() {
+        // Low osc keys 0-50, High osc keys 70-127 — with a silent gap 51..69.
+        let split = Container::parallel("Split")
+            .add(
+                Container::layer("Low")
+                    .keys(0, 50)
+                    .block(BlockType::Oscillator, "Osc"),
+            )
+            .add(
+                Container::layer("High")
+                    .keys(70, 127)
+                    .block(BlockType::Oscillator, "Osc"),
+            );
+
+        // A note in the low zone sounds.
+        let mut rn = RenderNode::compile(&split, 48_000);
+        rn.prepare(48_000.0, 256);
+        assert!(render_note(&mut rn, 40, 100) > 1e-3, "low zone note sounds");
+
+        // A note in the gap reaches no layer → silence.
+        let mut rn = RenderNode::compile(&split, 48_000);
+        rn.prepare(48_000.0, 256);
+        assert!(render_note(&mut rn, 60, 100) < 1e-5, "gap note is silent");
+    }
+
+    #[test]
+    fn velocity_window_gates_notes() {
+        let loud = Container::layer("Loud")
+            .velocity(64, 127)
+            .block(BlockType::Oscillator, "Osc");
+
+        let mut rn = RenderNode::compile(&loud, 48_000);
+        rn.prepare(48_000.0, 256);
+        assert!(render_note(&mut rn, 60, 110) > 1e-3, "hard hit sounds");
+
+        let mut rn = RenderNode::compile(&loud, 48_000);
+        rn.prepare(48_000.0, 256);
+        assert!(
+            render_note(&mut rn, 60, 30) < 1e-5,
+            "soft hit is below the window"
+        );
+    }
+
+    /// A Sampler block (`BlockImpl::Sample`) plays a real library through the
+    /// render tree — the keys/piano/drums/orchestral loading path.
+    #[test]
+    fn sampler_block_plays_a_library() {
+        // Fixture: one 220 Hz sine zone covering the whole keyboard.
+        let dir =
+            std::env::temp_dir().join(format!("signal-sampler-block-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wav = dir.join("note.wav");
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 48_000,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut w = hound::WavWriter::create(&wav, spec).unwrap();
+        for i in 0..48_000 {
+            let t = i as f32 / 48_000.0;
+            w.write_sample((core::f32::consts::TAU * 220.0 * t).sin() * 0.8)
+                .unwrap();
+        }
+        w.finalize().unwrap();
+        let styx = "\
+name TestZoneLib
+zones (
+    { file note.wav, key_min 0, key_max 127, root_key 60, vel_min 0, vel_max 127 }
+)
+";
+        let spec_path = dir.join("lib.styx");
+        std::fs::write(&spec_path, styx).unwrap();
+
+        // Layer { Sampler(lib) } — samples_root defaults to the spec's dir.
+        let tree =
+            Container::layer("Keys").sample_block("Piano", spec_path.to_string_lossy().to_string());
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        rn.prepare(48_000.0, 512);
+        assert_eq!(rn.live_leaves(), 1, "sampler block has a backend");
+
+        let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+        let midi = [note_on(60, 100)];
+        // The cache fills on a background thread — keep (re)triggering the
+        // note until the sample is decoded and audible.
+        let mut heard = 0.0f32;
+        for _ in 0..200 {
+            let ev = PluginEvents {
+                params: &[],
+                midi: &midi,
+                note_expressions: &[],
+            };
+            rn.render(&mut l, &mut r, &ev);
+            heard = heard.max(rms(&l));
+            if heard > 1e-3 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(heard > 1e-3, "sampler block should be audible, rms={heard}");
+    }
+
+    /// Sample-mode unison: a Sampler block with unison params spawns detuned,
+    /// panned voice copies — audible as stereo side energy on a mono sample.
+    #[test]
+    fn sampler_unison_spreads_the_image() {
+        use crate::rig::RigBlock;
+        fn render(unison: bool) -> (Vec<f32>, Vec<f32>) {
+            let dir = std::env::temp_dir().join(format!(
+                "signal-sampler-unison-test-{}-{}",
+                std::process::id(),
+                unison
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            let wav = dir.join("note.wav");
+            let spec = hound::WavSpec {
+                channels: 1,
+                sample_rate: 48_000,
+                bits_per_sample: 32,
+                sample_format: hound::SampleFormat::Float,
+            };
+            let mut w = hound::WavWriter::create(&wav, spec).unwrap();
+            for i in 0..48_000 {
+                let t = i as f32 / 48_000.0;
+                w.write_sample((core::f32::consts::TAU * 220.0 * t).sin() * 0.8)
+                    .unwrap();
+            }
+            w.finalize().unwrap();
+            std::fs::write(
+                dir.join("lib.styx"),
+                "name U\nzones (\n    { file note.wav, key_min 0, key_max 127, root_key 60, vel_min 0, vel_max 127 }\n)\n",
+            )
+            .unwrap();
+            let mut sb =
+                RigBlock::sample_lib(dir.join("lib.styx").to_string_lossy().to_string()).named("S");
+            if unison {
+                sb = sb
+                    .with_param("unison_voices", "6")
+                    .with_param("unison_detune", "0.3")
+                    .with_param("unison_width", "1.0");
+            }
+            let tree = Container::layer("L").add(sb);
+            let mut rn = RenderNode::compile(&tree, 48_000);
+            rn.prepare(48_000.0, 512);
+            let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+            let midi = [note_on(60, 100)];
+            let mut got = (vec![], vec![]);
+            for _ in 0..200 {
+                let ev = PluginEvents {
+                    params: &[],
+                    midi: &midi,
+                    note_expressions: &[],
+                };
+                rn.render(&mut l, &mut r, &ev);
+                if rms(&l) > 1e-3 {
+                    got = (l.clone(), r.clone());
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            std::fs::remove_dir_all(&dir).ok();
+            got
+        }
+        let (ml, mr) = render(false);
+        let (wl, wr) = render(true);
+        assert!(rms(&ml) > 1e-3 && rms(&wl) > 1e-3, "both audible");
+        let side_mono: Vec<f32> = ml.iter().zip(&mr).map(|(a, b)| a - b).collect();
+        let side_wide: Vec<f32> = wl.iter().zip(&wr).map(|(a, b)| a - b).collect();
+        assert!(rms(&side_mono) < 1e-5, "single voice centered");
+        assert!(
+            rms(&side_wide) > rms(&wl) * 0.05,
+            "unison copies spread the image: side={} mid={}",
+            rms(&side_wide),
+            rms(&wl)
+        );
+    }
+
+    /// Machine-local: the real Keyscape LA Custom C7 Grand extraction loads
+    /// through a Sampler block and makes sound. Run explicitly:
+    /// `cargo test -p signal-sampler --lib keyscape -- --ignored`
+    #[test]
+    #[ignore = "requires the local Keyscape extraction on AudioHaven"]
+    fn keyscape_c7_grand_loads_and_sounds() {
+        let spec = "/run/media/AudioHaven/Sampled/Keys/Keyscape/LA Custom C7 Grand/library.styx";
+        if !std::path::Path::new(spec).exists() {
+            eprintln!("skipping: {spec} not present");
+            return;
+        }
+        let tree = Container::layer("Keys").sample_block("C7 Grand", spec);
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        rn.prepare(48_000.0, 512);
+        assert_eq!(rn.live_leaves(), 1, "keyscape sampler block builds");
+
+        let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+        let midi = [note_on(60, 100)];
+        let mut heard = 0.0f32;
+        for _ in 0..600 {
+            let ev = PluginEvents {
+                params: &[],
+                midi: &midi,
+                note_expressions: &[],
+            };
+            rn.render(&mut l, &mut r, &ev);
+            heard = heard.max(rms(&l));
+            if heard > 1e-3 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(heard > 1e-3, "C7 grand should be audible, rms={heard}");
+    }
+
+    #[test]
+    fn full_nord_preset_renders_synth_oscillators() {
+        // The whole Nord routing: every block with a registered native backend
+        // — the 3 synth Oscillators, Filters/Amps/EQ/Comp/Reverb/Delay/Chorus/
+        // Trem, and the passthrough Rotary placeholder — compiles to a live
+        // leaf; only the backend-less sources (tonewheel/sampler/unison) stay
+        // empty. A held note must reach the output through the entire tree
+        // (synth voices → engines-sum → global thru).
+        let preset = crate::nord::nord_stage_preset();
+        let mut rn = RenderNode::compile(&preset, 48_000);
+        rn.prepare(48_000.0, 512);
+        let expected = preset.blocks().iter().filter(|b| b.has_backend()).count();
+        assert_eq!(
+            rn.live_leaves(),
+            expected,
+            "every backend block compiles to a live leaf"
+        );
+        assert_eq!(rn.live_leaves(), 73, "the Nord tree's backend-block count");
+
+        let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+        let midi = [note_on(64, 100)];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &ev);
+        assert!(
+            rms(&l) > 1e-3,
+            "the synth layers must be audible through the full Nord tree"
+        );
+    }
+
+    // ── ModMatrix runtime ────────────────────────────────────────────────
+
+    /// An envelope route closes a filter: with a big negative depth from a
+    /// note-gated envelope, the held note is far darker than the same tree
+    /// without the route.
+    #[test]
+    fn envelope_route_modulates_filter_cutoff() {
+        fn sustain_level(with_route: bool) -> f32 {
+            let mut tree = Container::layer("L")
+                .block(BlockType::Oscillator, "Osc")
+                .block(BlockType::Filter, "Filter")
+                .modulator(BlockType::Envelope, "Filter Env");
+            if with_route {
+                tree = tree.route("Filter Env", "Filter.cutoff", -0.95);
+            }
+            let mut rn = RenderNode::compile(&tree, 48_000);
+            // The engine (live-edit address book) is always present now;
+            // only the ROUTE count depends on the tree.
+            assert_eq!(
+                rn.mod_engine()
+                    .map(super::modmatrix::ModEngine::route_count),
+                Some(if with_route { 1 } else { 0 }),
+                "route resolution matches"
+            );
+            rn.prepare(48_000.0, 512);
+            let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+            let mut level = 0.0;
+            for b in 0..48 {
+                let midi = [note_on(60, 100)];
+                let ev = PluginEvents {
+                    params: &[],
+                    midi: if b == 0 { &midi } else { &[] },
+                    note_expressions: &[],
+                };
+                rn.render(&mut l, &mut r, &ev);
+                level = rms(&l);
+            }
+            level
+        }
+        let open = sustain_level(false);
+        let closed = sustain_level(true);
+        assert!(open > 1e-3, "unmodulated tree sounds, rms={open}");
+        assert!(
+            closed < open * 0.35,
+            "envelope route closes the filter: open={open} closed={closed}"
+        );
+    }
+
+    /// A mod-wheel route opens/closes the filter from CC1.
+    #[test]
+    fn wheel_route_drives_filter_cutoff() {
+        let tree = Container::layer("L")
+            .block(BlockType::Oscillator, "Osc")
+            .block(BlockType::Filter, "Filter")
+            .route("Wheel", "Filter.cutoff", -1.0);
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        assert_eq!(
+            rn.mod_engine()
+                .map(super::modmatrix::ModEngine::route_count),
+            Some(1)
+        );
+        rn.prepare(48_000.0, 512);
+
+        let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+        // Note on, wheel at 0 → bright.
+        let start = [note_on(60, 100)];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &start,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &ev);
+        rn.render(
+            &mut l,
+            &mut r,
+            &PluginEvents {
+                params: &[],
+                midi: &[],
+                note_expressions: &[],
+            },
+        );
+        let bright = rms(&l);
+
+        // Wheel to max → cutoff floor → dark.
+        let cc = [PluginMidiEvent {
+            offset: 0,
+            message: midicore::MidiEvent::ControlChange {
+                channel: midicore::Channel::new(0),
+                controller: midicore::ControllerNumber::new(1),
+                value: midicore::ControllerValue::new(127),
+            },
+        }];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &cc,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &ev);
+        rn.render(
+            &mut l,
+            &mut r,
+            &PluginEvents {
+                params: &[],
+                midi: &[],
+                note_expressions: &[],
+            },
+        );
+        let dark = rms(&l);
+        assert!(
+            dark < bright * 0.35,
+            "wheel closes the filter: bright={bright} dark={dark}"
+        );
+    }
+
+    /// Build-time block params configure the native backend: a filter block
+    /// built with a low imported cutoff is audibly darker than the default.
+    #[test]
+    fn block_params_configure_the_backend() {
+        use crate::rig::RigBlock;
+        fn level(cutoff_param: Option<&str>) -> f32 {
+            let mut f = RigBlock::of_type(BlockType::Filter).named("F");
+            if let Some(v) = cutoff_param {
+                f = f.with_param("cutoff", v);
+            }
+            let tree = Container::module("M")
+                .block(BlockType::Oscillator, "Osc")
+                .add(f);
+            let mut rn = RenderNode::compile(&tree, 48_000);
+            rn.prepare(48_000.0, 512);
+            let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+            let midi = [note_on(69, 110)]; // A4 = 440 Hz
+            for b in 0..4 {
+                let ev = PluginEvents {
+                    params: &[],
+                    midi: if b == 0 { &midi } else { &[] },
+                    note_expressions: &[],
+                };
+                rn.render(&mut l, &mut r, &ev);
+            }
+            rms(&l)
+        }
+        let open = level(None);
+        let dark = level(Some("0.15")); // ≈ 56 Hz cutoff under a 440 Hz note
+        assert!(open > 1e-3);
+        assert!(
+            dark < open * 0.35,
+            "imported cutoff darkens the block: open={open} dark={dark}"
+        );
+    }
+
+    /// Send/return buses: a layer taps its output to a named return; with
+    /// the main path muted after the tap, audio reaches the output ONLY via
+    /// the bus (and doesn't without the send).
+    #[test]
+    fn sends_sum_into_their_return_bus() {
+        use crate::rig::RigBlock;
+        fn level(with_send: bool) -> f32 {
+            let mut src = Container::layer("Src").block(BlockType::Oscillator, "Osc");
+            if with_send {
+                src = src.send("Return", "To Return");
+            }
+            let tree = Container::preset("P")
+                .add(src)
+                // Mute the main path after the tap (amp gain 0).
+                .add(
+                    Container::module("Mute").add(
+                        RigBlock::of_type(BlockType::Amp)
+                            .named("Kill")
+                            .with_param("gain", "0"),
+                    ),
+                )
+                // The return: placeholder inside = bus passes straight through.
+                .add(Container::module("Return"));
+            let mut rn = RenderNode::compile(&tree, 48_000);
+            rn.prepare(48_000.0, 256);
+            let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+            let midi = [note_on(60, 100)];
+            let mut level = 0.0;
+            for b in 0..4 {
+                let ev = PluginEvents {
+                    params: &[],
+                    midi: if b == 0 { &midi } else { &[] },
+                    note_expressions: &[],
+                };
+                rn.render(&mut l, &mut r, &ev);
+                level = rms(&l);
+            }
+            level
+        }
+        assert!(
+            level(false) < 1e-6,
+            "muted main path is silent without a send"
+        );
+        assert!(
+            level(true) > 1e-3,
+            "audio reaches the output via the return bus"
+        );
+    }
+
+    /// Container volumes and bypass render: `output_db` scales the subtree,
+    /// bypassed subtrees pass audio through untouched.
+    #[test]
+    fn container_volume_and_bypass_apply() {
+        // Volume: a −12 dB layer is quieter than a 0 dB one.
+        fn level(db: f32) -> f32 {
+            let tree = Container::preset("P").add(
+                Container::layer("L")
+                    .volume(db)
+                    .block(BlockType::Oscillator, "Osc"),
+            );
+            let mut rn = RenderNode::compile(&tree, 48_000);
+            rn.prepare(48_000.0, 256);
+            render_note(&mut rn, 60, 100)
+        }
+        let full = level(0.0);
+        let quiet = level(-12.0);
+        assert!(full > 1e-3);
+        let ratio = quiet / full;
+        assert!(
+            (ratio - 0.251).abs() < 0.02,
+            "−12 dB ≈ ×0.25, got ratio {ratio}"
+        );
+
+        // Bypass: a bypassed muting-amp module passes audio through.
+        use crate::rig::RigBlock;
+        fn with_mute(bypassed: bool) -> f32 {
+            let mut mute = Container::module("Mute").add(
+                RigBlock::of_type(BlockType::Amp)
+                    .named("Kill")
+                    .with_param("gain", "0"),
+            );
+            mute.bypassed = bypassed;
+            let tree = Container::preset("P")
+                .add(Container::layer("L").block(BlockType::Oscillator, "Osc"))
+                .add(mute);
+            let mut rn = RenderNode::compile(&tree, 48_000);
+            rn.prepare(48_000.0, 256);
+            render_note(&mut rn, 60, 100)
+        }
+        assert!(with_mute(false) < 1e-6, "active mute silences");
+        assert!(with_mute(true) > 1e-3, "bypassed mute passes through");
+    }
+
+    /// Routes on placeholder blocks resolve to nothing (warn, not panic),
+    /// and the tree still renders.
+    /// The realtime edit surface: a running tree's filter cutoff closes via
+    /// the parameter overlay (no rebuild), the env→cutoff amount and the
+    /// envelope's own ADSR mutate in place, and addressing is module-scoped
+    /// (a sibling module's identically-named blocks are not touched).
+    #[test]
+    fn live_edits_reach_the_running_tree() {
+        let module = |name: &str| {
+            Container::module(name)
+                .block(BlockType::Oscillator, "Osc")
+                .add(
+                    crate::rig::RigBlock::of_type(BlockType::Filter)
+                        .named("Filter 1")
+                        .with_param("cutoff", "1.0"),
+                )
+                .modulator(BlockType::Envelope, "Filter Env")
+                .route("Filter Env", "Filter 1.cutoff", 0.0)
+        };
+        // Modules SUM (parallel), exactly as the engine builds a layer — in
+        // series, module B's source would replace A's output.
+        let tree = Container::layer("L").add(
+            Container::parallel("L Modules")
+                .add(module("L A"))
+                .add(module("L B")),
+        );
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        rn.prepare(48_000.0, 512);
+
+        let sustain = |rn: &mut RenderNode| {
+            let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+            let mut level = 0.0;
+            for b in 0..24 {
+                let midi = [note_on(60, 100)];
+                let ev = PluginEvents {
+                    params: &[],
+                    midi: if b == 0 { &midi } else { &[] },
+                    note_expressions: &[],
+                };
+                rn.render(&mut l, &mut r, &ev);
+                level = rms(&l);
+            }
+            level
+        };
+
+        let open = sustain(&mut rn);
+        assert!(open > 1e-3, "open tree sounds, rms={open}");
+
+        // Close ONE module's filter live — module-scoped addressing.
+        assert!(rn.set_leaf_param("L A", "Filter 1", "cutoff", 0.0));
+        assert!(
+            !rn.set_leaf_param("L C", "Filter 1", "cutoff", 0.0),
+            "unknown module"
+        );
+        assert!(
+            !rn.set_leaf_param("L A", "Filter 9", "cutoff", 0.0),
+            "unknown leaf"
+        );
+        let one_closed = sustain(&mut rn);
+        assert!(
+            one_closed < open * 0.75 && one_closed > open * 0.25,
+            "one of two parallel modules darkened: open={open} one_closed={one_closed}"
+        );
+
+        // Close the sibling too — near-silent highs now.
+        assert!(rn.set_leaf_param("L B", "Filter 1", "cutoff", 0.0));
+        let both_closed = sustain(&mut rn);
+        assert!(
+            both_closed < open * 0.35,
+            "both filters closed: open={open} both={both_closed}"
+        );
+
+        // Envelope + route-depth edits resolve (module-scoped).
+        assert!(rn.set_env(
+            "L A",
+            "Filter Env",
+            crate::native::AdsrParams {
+                attack_s: 0.5,
+                decay_s: 0.1,
+                sustain: 1.0,
+                release_s: 0.1
+            },
+        ));
+        assert!(!rn.set_env("L C", "Filter Env", crate::native::AdsrParams::default()));
+        assert!(rn.set_route_depth("L B", "Filter Env", "Filter 1", "cutoff", 0.9));
+        assert!(!rn.set_route_depth("L B", "Amp Env", "Filter 1", "cutoff", 0.9));
+
+        // No sampler source in this tree.
+        assert!(!rn.with_sampler_source("L A", "Soundsource", |_| {}));
+    }
+
+    #[test]
+    fn unresolved_routes_are_harmless() {
+        let tree = Container::layer("L")
+            .block(BlockType::Oscillator, "Osc")
+            .block(BlockType::Rotary, "Rotary") // placeholder — no params
+            .route("Wheel", "Rotary.speed", 1.0)
+            .route("Nonexistent Env", "Osc.pitch", 1.0);
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        // The engine is always present (live-edit address book); the broken
+        // routes just resolve to nothing.
+        assert_eq!(
+            rn.mod_engine()
+                .map(super::modmatrix::ModEngine::route_count),
+            Some(0),
+            "no routes resolved"
+        );
+        rn.prepare(48_000.0, 256);
+        assert!(render_note(&mut rn, 60, 100) > 1e-3, "still renders");
+    }
+
+    /// The renderer resolves a route by id, not only by name — so a route
+    /// that has been canonicalized still finds its target, and a renamed
+    /// target still receives it.
+    #[test]
+    fn a_canonicalized_route_still_resolves_after_a_rename() {
+        let mut tree = Container::layer("L")
+            .block(BlockType::Oscillator, "Osc")
+            .block(BlockType::Filter, "Filter")
+            .route("Wheel", "Filter.cutoff", -1.0);
+        tree.canonicalize();
+        assert!(
+            !tree.mod_routes[0].target.is_unresolved(),
+            "the route now points by id"
+        );
+
+        // Rename the target. Under name addressing this silently unhooked
+        // the route; the compile below is what used to report zero.
+        for child in &mut tree.children {
+            if let RigNode::Block { block } = child
+                && block.display_name() == "Filter"
+            {
+                *block = block.clone().named("Low Pass");
+            }
+        }
+
+        let rn = RenderNode::compile(&tree, 48_000);
+        assert_eq!(
+            rn.mod_engine()
+                .map(super::modmatrix::ModEngine::route_count),
+            Some(1),
+            "the route survived the rename"
+        );
+    }
+}

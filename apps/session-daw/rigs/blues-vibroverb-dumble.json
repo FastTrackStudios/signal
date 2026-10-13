@@ -1,0 +1,5748 @@
+{
+  "profile": "Blues",
+  "patch": "Vibroverb + Dumble",
+  "blocks": [
+    {
+      "name": "Transpose",
+      "block_type": "pitch",
+      "module": "",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "semitones",
+          "value": 0
+        },
+        {
+          "name": "b_semitones",
+          "value": -12
+        },
+        {
+          "name": "mix",
+          "value": 1
+        },
+        {
+          "name": "a_level",
+          "value": 1
+        },
+        {
+          "name": "b_level",
+          "value": 0
+        },
+        {
+          "name": "dry",
+          "value": 0
+        },
+        {
+          "name": "cents",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Dive Bomb",
+      "block_type": "pitch",
+      "module": "",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "semitones",
+          "value": 0
+        },
+        {
+          "name": "b_semitones",
+          "value": -12
+        },
+        {
+          "name": "mix",
+          "value": 1
+        },
+        {
+          "name": "a_level",
+          "value": 1
+        },
+        {
+          "name": "b_level",
+          "value": 0
+        },
+        {
+          "name": "dry",
+          "value": 0
+        },
+        {
+          "name": "cents",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Pre Comp",
+      "block_type": "compressor",
+      "module": "",
+      "bypassed": false,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "threshold",
+          "value": -30
+        },
+        {
+          "name": "ratio",
+          "value": 4
+        },
+        {
+          "name": "attack",
+          "value": 20
+        },
+        {
+          "name": "release",
+          "value": 200
+        },
+        {
+          "name": "knee",
+          "value": 6
+        },
+        {
+          "name": "range",
+          "value": 60
+        },
+        {
+          "name": "fold",
+          "value": 0
+        },
+        {
+          "name": "style",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Pitch",
+      "block_type": "pitch",
+      "module": "",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "semitones",
+          "value": 12
+        },
+        {
+          "name": "b_semitones",
+          "value": -12
+        },
+        {
+          "name": "mix",
+          "value": 0.5
+        },
+        {
+          "name": "a_level",
+          "value": 0.699999988079071
+        },
+        {
+          "name": "b_level",
+          "value": 0.699999988079071
+        },
+        {
+          "name": "dry",
+          "value": 1
+        },
+        {
+          "name": "cents",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Harmonizer",
+      "block_type": "pitch",
+      "module": "",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "semitones",
+          "value": 4
+        },
+        {
+          "name": "b_semitones",
+          "value": 7
+        },
+        {
+          "name": "mix",
+          "value": 0.5
+        },
+        {
+          "name": "a_level",
+          "value": 0.6000000238418579
+        },
+        {
+          "name": "b_level",
+          "value": 0.5
+        },
+        {
+          "name": "dry",
+          "value": 1
+        },
+        {
+          "name": "cents",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Volume Pedal",
+      "block_type": "volume",
+      "module": "",
+      "bypassed": false,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "gain_db",
+          "value": 0
+        },
+        {
+          "name": "pan",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Boost",
+      "block_type": "boost",
+      "module": "",
+      "bypassed": true,
+      "preset": "Keeley Katana",
+      "detail": "Clean Boost (built-in)",
+      "option": 0,
+      "options": [
+        "Clean Boost (built-in)"
+      ],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "drive",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Drive 1",
+      "block_type": "drive",
+      "module": "",
+      "bypassed": true,
+      "preset": "Klon Centaur",
+      "detail": "Silver",
+      "option": 0,
+      "options": [
+        "Silver"
+      ],
+      "asset": "KLON 2.nam",
+      "empty": false,
+      "output_level_db": 0,
+      "params": [
+        {
+          "name": "drive",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Drive 2",
+      "block_type": "drive",
+      "module": "",
+      "bypassed": true,
+      "preset": "Marshall Bluesbreaker",
+      "detail": "Original",
+      "option": 0,
+      "options": [
+        "Original"
+      ],
+      "asset": "marshall-bluesbreaker-pedal-setting1.nam",
+      "empty": false,
+      "output_level_db": 0,
+      "params": [
+        {
+          "name": "drive",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Drive 3",
+      "block_type": "drive",
+      "module": "",
+      "bypassed": true,
+      "preset": "Ibanez TS808",
+      "detail": "OD1 T5",
+      "option": 0,
+      "options": [
+        "OD1 T5"
+      ],
+      "asset": "46-TS808_Hot_Lvl6_OD1_T5.nam",
+      "empty": false,
+      "output_level_db": 0,
+      "params": [
+        {
+          "name": "drive",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Pre Mod",
+      "block_type": "chorus",
+      "module": "Pre FX",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "mix",
+          "value": 0.5
+        },
+        {
+          "name": "depth",
+          "value": 0.4000000059604645
+        },
+        {
+          "name": "rate",
+          "value": 0.6000000238418579
+        },
+        {
+          "name": "engine",
+          "value": 5
+        },
+        {
+          "name": "sync_div",
+          "value": 0
+        },
+        {
+          "name": "color",
+          "value": 0.5
+        },
+        {
+          "name": "feedback",
+          "value": 0
+        },
+        {
+          "name": "width",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Pre Delay",
+      "block_type": "delay",
+      "module": "Pre FX",
+      "bypassed": false,
+      "preset": "Aqua-Puss Slap",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "level",
+          "value": -14
+        },
+        {
+          "name": "time",
+          "value": 110
+        },
+        {
+          "name": "feedback",
+          "value": 0.11999999731779099
+        },
+        {
+          "name": "style",
+          "value": 0
+        },
+        {
+          "name": "tap_div_l",
+          "value": 7
+        },
+        {
+          "name": "tap_div_r",
+          "value": 7
+        },
+        {
+          "name": "high_pass",
+          "value": 0
+        },
+        {
+          "name": "repeat_dyn",
+          "value": 0
+        },
+        {
+          "name": "pan",
+          "value": 0
+        },
+        {
+          "name": "dry",
+          "value": 1
+        },
+        {
+          "name": "high_cut",
+          "value": 8000
+        },
+        {
+          "name": "duck_sens",
+          "value": 0
+        },
+        {
+          "name": "duck_release",
+          "value": 0.20000000298023224
+        },
+        {
+          "name": "mod_rate",
+          "value": 0.6000000238418579
+        },
+        {
+          "name": "mod_depth",
+          "value": 0
+        },
+        {
+          "name": "interval",
+          "value": 30
+        },
+        {
+          "name": "blend",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Pre Motion",
+      "block_type": "trem",
+      "module": "Pre FX",
+      "bypassed": true,
+      "preset": "Gravity Tank Trem",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "depth",
+          "value": 0.5
+        },
+        {
+          "name": "mix",
+          "value": 1
+        },
+        {
+          "name": "rate",
+          "value": 4
+        },
+        {
+          "name": "mode",
+          "value": 1
+        },
+        {
+          "name": "sync_div",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Pre Verb",
+      "block_type": "reverb",
+      "module": "Pre FX",
+      "bypassed": false,
+      "preset": "Gravity Tank Spring",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "level",
+          "value": -16.5
+        },
+        {
+          "name": "decay",
+          "value": 0.3499999940395355
+        },
+        {
+          "name": "size",
+          "value": 0.5
+        },
+        {
+          "name": "algorithm",
+          "value": 3
+        },
+        {
+          "name": "modulation",
+          "value": 0.20000000298023224
+        },
+        {
+          "name": "damping",
+          "value": 0.30000001192092896
+        },
+        {
+          "name": "tone",
+          "value": 0
+        },
+        {
+          "name": "pan_a",
+          "value": 0
+        },
+        {
+          "name": "sync_div",
+          "value": 0
+        },
+        {
+          "name": "dry",
+          "value": 1
+        },
+        {
+          "name": "predelay",
+          "value": 0
+        },
+        {
+          "name": "low_cut",
+          "value": 20
+        },
+        {
+          "name": "high_cut",
+          "value": 20000
+        },
+        {
+          "name": "duck",
+          "value": 0
+        },
+        {
+          "name": "duck_threshold",
+          "value": -20
+        },
+        {
+          "name": "duck_release",
+          "value": 120
+        },
+        {
+          "name": "shim_shift1",
+          "value": 12
+        },
+        {
+          "name": "shim_amount",
+          "value": 0.3499999940395355
+        }
+      ]
+    },
+    {
+      "name": "Amp L",
+      "block_type": "amp",
+      "module": "Amp",
+      "bypassed": false,
+      "preset": "Vibroverb + Dumble · Clean",
+      "detail": "",
+      "option": 0,
+      "options": [
+        "Clean",
+        "Drive"
+      ],
+      "asset": "Fender_ Vibroverb_ 1964.nam",
+      "empty": false,
+      "output_level_db": 0,
+      "params": [
+        {
+          "name": "drive",
+          "value": 0.5
+        },
+        {
+          "name": "input_trim",
+          "value": 0
+        },
+        {
+          "name": "output_trim",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Amp R",
+      "block_type": "amp",
+      "module": "Amp",
+      "bypassed": false,
+      "preset": "Vibroverb + Dumble · Clean",
+      "detail": "",
+      "option": 0,
+      "options": [
+        "Clean",
+        "Drive"
+      ],
+      "asset": "Dumble Steel SS Clean.nam",
+      "empty": false,
+      "output_level_db": 0,
+      "params": [
+        {
+          "name": "drive",
+          "value": 0.5
+        },
+        {
+          "name": "input_trim",
+          "value": 0
+        },
+        {
+          "name": "output_trim",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Gate",
+      "block_type": "gate",
+      "module": "Amp",
+      "bypassed": false,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "threshold",
+          "value": -50
+        },
+        {
+          "name": "attack",
+          "value": 1
+        },
+        {
+          "name": "release",
+          "value": 120
+        },
+        {
+          "name": "mode",
+          "value": 0
+        },
+        {
+          "name": "range",
+          "value": 90
+        },
+        {
+          "name": "hold",
+          "value": 0
+        },
+        {
+          "name": "hysteresis",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Post Comp",
+      "block_type": "compressor",
+      "module": "Amp",
+      "bypassed": false,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "threshold",
+          "value": -24
+        },
+        {
+          "name": "ratio",
+          "value": 3
+        },
+        {
+          "name": "attack",
+          "value": 20
+        },
+        {
+          "name": "release",
+          "value": 100
+        },
+        {
+          "name": "knee",
+          "value": 6
+        },
+        {
+          "name": "range",
+          "value": 60
+        },
+        {
+          "name": "fold",
+          "value": 0
+        },
+        {
+          "name": "style",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Amp EQ",
+      "block_type": "eq",
+      "module": "Amp",
+      "bypassed": false,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "b1_used",
+          "value": 1
+        },
+        {
+          "name": "b1_on",
+          "value": 1
+        },
+        {
+          "name": "b1_freq",
+          "value": 80
+        },
+        {
+          "name": "b1_gain",
+          "value": 0
+        },
+        {
+          "name": "b1_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b1_shape",
+          "value": 3
+        },
+        {
+          "name": "b2_used",
+          "value": 1
+        },
+        {
+          "name": "b2_on",
+          "value": 1
+        },
+        {
+          "name": "b2_freq",
+          "value": 212
+        },
+        {
+          "name": "b2_gain",
+          "value": 0
+        },
+        {
+          "name": "b2_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b2_shape",
+          "value": 0
+        },
+        {
+          "name": "b3_used",
+          "value": 1
+        },
+        {
+          "name": "b3_on",
+          "value": 1
+        },
+        {
+          "name": "b3_freq",
+          "value": 560
+        },
+        {
+          "name": "b3_gain",
+          "value": 0
+        },
+        {
+          "name": "b3_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b3_shape",
+          "value": 0
+        },
+        {
+          "name": "b4_used",
+          "value": 1
+        },
+        {
+          "name": "b4_on",
+          "value": 1
+        },
+        {
+          "name": "b4_freq",
+          "value": 1400
+        },
+        {
+          "name": "b4_gain",
+          "value": 0
+        },
+        {
+          "name": "b4_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b4_shape",
+          "value": 0
+        },
+        {
+          "name": "b5_used",
+          "value": 1
+        },
+        {
+          "name": "b5_on",
+          "value": 1
+        },
+        {
+          "name": "b5_freq",
+          "value": 5500
+        },
+        {
+          "name": "b5_gain",
+          "value": 0
+        },
+        {
+          "name": "b5_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b5_shape",
+          "value": 0
+        },
+        {
+          "name": "b6_used",
+          "value": 0
+        },
+        {
+          "name": "b6_on",
+          "value": 0
+        },
+        {
+          "name": "b6_freq",
+          "value": 1000
+        },
+        {
+          "name": "b6_gain",
+          "value": 0
+        },
+        {
+          "name": "b6_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b6_shape",
+          "value": 0
+        },
+        {
+          "name": "b7_used",
+          "value": 0
+        },
+        {
+          "name": "b7_on",
+          "value": 0
+        },
+        {
+          "name": "b7_freq",
+          "value": 1000
+        },
+        {
+          "name": "b7_gain",
+          "value": 0
+        },
+        {
+          "name": "b7_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b7_shape",
+          "value": 0
+        },
+        {
+          "name": "b8_used",
+          "value": 0
+        },
+        {
+          "name": "b8_on",
+          "value": 0
+        },
+        {
+          "name": "b8_freq",
+          "value": 1000
+        },
+        {
+          "name": "b8_gain",
+          "value": 0
+        },
+        {
+          "name": "b8_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b8_shape",
+          "value": 0
+        },
+        {
+          "name": "b9_used",
+          "value": 0
+        },
+        {
+          "name": "b9_on",
+          "value": 0
+        },
+        {
+          "name": "b9_freq",
+          "value": 1000
+        },
+        {
+          "name": "b9_gain",
+          "value": 0
+        },
+        {
+          "name": "b9_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b9_shape",
+          "value": 0
+        },
+        {
+          "name": "b10_used",
+          "value": 0
+        },
+        {
+          "name": "b10_on",
+          "value": 0
+        },
+        {
+          "name": "b10_freq",
+          "value": 1000
+        },
+        {
+          "name": "b10_gain",
+          "value": 0
+        },
+        {
+          "name": "b10_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b10_shape",
+          "value": 0
+        },
+        {
+          "name": "b11_used",
+          "value": 0
+        },
+        {
+          "name": "b11_on",
+          "value": 0
+        },
+        {
+          "name": "b11_freq",
+          "value": 1000
+        },
+        {
+          "name": "b11_gain",
+          "value": 0
+        },
+        {
+          "name": "b11_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b11_shape",
+          "value": 0
+        },
+        {
+          "name": "b12_used",
+          "value": 0
+        },
+        {
+          "name": "b12_on",
+          "value": 0
+        },
+        {
+          "name": "b12_freq",
+          "value": 1000
+        },
+        {
+          "name": "b12_gain",
+          "value": 0
+        },
+        {
+          "name": "b12_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b12_shape",
+          "value": 0
+        },
+        {
+          "name": "b13_used",
+          "value": 0
+        },
+        {
+          "name": "b13_on",
+          "value": 0
+        },
+        {
+          "name": "b13_freq",
+          "value": 1000
+        },
+        {
+          "name": "b13_gain",
+          "value": 0
+        },
+        {
+          "name": "b13_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b13_shape",
+          "value": 0
+        },
+        {
+          "name": "b14_used",
+          "value": 0
+        },
+        {
+          "name": "b14_on",
+          "value": 0
+        },
+        {
+          "name": "b14_freq",
+          "value": 1000
+        },
+        {
+          "name": "b14_gain",
+          "value": 0
+        },
+        {
+          "name": "b14_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b14_shape",
+          "value": 0
+        },
+        {
+          "name": "b15_used",
+          "value": 0
+        },
+        {
+          "name": "b15_on",
+          "value": 0
+        },
+        {
+          "name": "b15_freq",
+          "value": 1000
+        },
+        {
+          "name": "b15_gain",
+          "value": 0
+        },
+        {
+          "name": "b15_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b15_shape",
+          "value": 0
+        },
+        {
+          "name": "b16_used",
+          "value": 0
+        },
+        {
+          "name": "b16_on",
+          "value": 0
+        },
+        {
+          "name": "b16_freq",
+          "value": 1000
+        },
+        {
+          "name": "b16_gain",
+          "value": 0
+        },
+        {
+          "name": "b16_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b16_shape",
+          "value": 0
+        },
+        {
+          "name": "b17_used",
+          "value": 0
+        },
+        {
+          "name": "b17_on",
+          "value": 0
+        },
+        {
+          "name": "b17_freq",
+          "value": 1000
+        },
+        {
+          "name": "b17_gain",
+          "value": 0
+        },
+        {
+          "name": "b17_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b17_shape",
+          "value": 0
+        },
+        {
+          "name": "b18_used",
+          "value": 0
+        },
+        {
+          "name": "b18_on",
+          "value": 0
+        },
+        {
+          "name": "b18_freq",
+          "value": 1000
+        },
+        {
+          "name": "b18_gain",
+          "value": 0
+        },
+        {
+          "name": "b18_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b18_shape",
+          "value": 0
+        },
+        {
+          "name": "b19_used",
+          "value": 0
+        },
+        {
+          "name": "b19_on",
+          "value": 0
+        },
+        {
+          "name": "b19_freq",
+          "value": 1000
+        },
+        {
+          "name": "b19_gain",
+          "value": 0
+        },
+        {
+          "name": "b19_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b19_shape",
+          "value": 0
+        },
+        {
+          "name": "b20_used",
+          "value": 0
+        },
+        {
+          "name": "b20_on",
+          "value": 0
+        },
+        {
+          "name": "b20_freq",
+          "value": 1000
+        },
+        {
+          "name": "b20_gain",
+          "value": 0
+        },
+        {
+          "name": "b20_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b20_shape",
+          "value": 0
+        },
+        {
+          "name": "b21_used",
+          "value": 0
+        },
+        {
+          "name": "b21_on",
+          "value": 0
+        },
+        {
+          "name": "b21_freq",
+          "value": 1000
+        },
+        {
+          "name": "b21_gain",
+          "value": 0
+        },
+        {
+          "name": "b21_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b21_shape",
+          "value": 0
+        },
+        {
+          "name": "b22_used",
+          "value": 0
+        },
+        {
+          "name": "b22_on",
+          "value": 0
+        },
+        {
+          "name": "b22_freq",
+          "value": 1000
+        },
+        {
+          "name": "b22_gain",
+          "value": 0
+        },
+        {
+          "name": "b22_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b22_shape",
+          "value": 0
+        },
+        {
+          "name": "b23_used",
+          "value": 0
+        },
+        {
+          "name": "b23_on",
+          "value": 0
+        },
+        {
+          "name": "b23_freq",
+          "value": 1000
+        },
+        {
+          "name": "b23_gain",
+          "value": 0
+        },
+        {
+          "name": "b23_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b23_shape",
+          "value": 0
+        },
+        {
+          "name": "b24_used",
+          "value": 0
+        },
+        {
+          "name": "b24_on",
+          "value": 0
+        },
+        {
+          "name": "b24_freq",
+          "value": 1000
+        },
+        {
+          "name": "b24_gain",
+          "value": 0
+        },
+        {
+          "name": "b24_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b24_shape",
+          "value": 0
+        },
+        {
+          "name": "b1_slope",
+          "value": 2
+        },
+        {
+          "name": "b2_slope",
+          "value": 2
+        },
+        {
+          "name": "b3_slope",
+          "value": 2
+        },
+        {
+          "name": "b4_slope",
+          "value": 2
+        },
+        {
+          "name": "b5_slope",
+          "value": 2
+        },
+        {
+          "name": "b6_slope",
+          "value": 2
+        },
+        {
+          "name": "b7_slope",
+          "value": 2
+        },
+        {
+          "name": "b8_slope",
+          "value": 2
+        },
+        {
+          "name": "b9_slope",
+          "value": 2
+        },
+        {
+          "name": "b10_slope",
+          "value": 2
+        },
+        {
+          "name": "b11_slope",
+          "value": 2
+        },
+        {
+          "name": "b12_slope",
+          "value": 2
+        },
+        {
+          "name": "b13_slope",
+          "value": 2
+        },
+        {
+          "name": "b14_slope",
+          "value": 2
+        },
+        {
+          "name": "b15_slope",
+          "value": 2
+        },
+        {
+          "name": "b16_slope",
+          "value": 2
+        },
+        {
+          "name": "b17_slope",
+          "value": 2
+        },
+        {
+          "name": "b18_slope",
+          "value": 2
+        },
+        {
+          "name": "b19_slope",
+          "value": 2
+        },
+        {
+          "name": "b20_slope",
+          "value": 2
+        },
+        {
+          "name": "b21_slope",
+          "value": 2
+        },
+        {
+          "name": "b22_slope",
+          "value": 2
+        },
+        {
+          "name": "b23_slope",
+          "value": 2
+        },
+        {
+          "name": "b24_slope",
+          "value": 2
+        },
+        {
+          "name": "output_gain",
+          "value": 0
+        },
+        {
+          "name": "gain_scale",
+          "value": 1
+        },
+        {
+          "name": "transient_mode",
+          "value": 0
+        },
+        {
+          "name": "split_balance",
+          "value": 0
+        },
+        {
+          "name": "split_attack",
+          "value": 50
+        },
+        {
+          "name": "split_hold",
+          "value": 50
+        },
+        {
+          "name": "split_smooth",
+          "value": 50
+        },
+        {
+          "name": "split_solo",
+          "value": 0
+        },
+        {
+          "name": "b1_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b2_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b3_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b4_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b5_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b6_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b7_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b8_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b9_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b10_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b11_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b12_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b13_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b14_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b15_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b16_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b17_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b18_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b19_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b20_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b21_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b22_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b23_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b24_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b1_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b2_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b3_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b4_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b5_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b6_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b7_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b8_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b9_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b10_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b11_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b12_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b13_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b14_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b15_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b16_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b17_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b18_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b19_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b20_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b21_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b22_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b23_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b24_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b1_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b2_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b3_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b4_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b5_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b6_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b7_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b8_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b9_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b10_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b11_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b12_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b13_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b14_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b15_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b16_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b17_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b18_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b19_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b20_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b21_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b22_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b23_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b24_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b1_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b2_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b3_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b4_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b5_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b6_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b7_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b8_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b9_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b10_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b11_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b12_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b13_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b14_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b15_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b16_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b17_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b18_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b19_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b20_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b21_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b22_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b23_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b24_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b1_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b2_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b3_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b4_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b5_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b6_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b7_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b8_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b9_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b10_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b11_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b12_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b13_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b14_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b15_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b16_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b17_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b18_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b19_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b20_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b21_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b22_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b23_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b24_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b1_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b2_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b3_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b4_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b5_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b6_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b7_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b8_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b9_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b10_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b11_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b12_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b13_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b14_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b15_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b16_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b17_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b18_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b19_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b20_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b21_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b22_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b23_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b24_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b1_placement",
+          "value": 0
+        },
+        {
+          "name": "b2_placement",
+          "value": 0
+        },
+        {
+          "name": "b3_placement",
+          "value": 0
+        },
+        {
+          "name": "b4_placement",
+          "value": 0
+        },
+        {
+          "name": "b5_placement",
+          "value": 0
+        },
+        {
+          "name": "b6_placement",
+          "value": 0
+        },
+        {
+          "name": "b7_placement",
+          "value": 0
+        },
+        {
+          "name": "b8_placement",
+          "value": 0
+        },
+        {
+          "name": "b9_placement",
+          "value": 0
+        },
+        {
+          "name": "b10_placement",
+          "value": 0
+        },
+        {
+          "name": "b11_placement",
+          "value": 0
+        },
+        {
+          "name": "b12_placement",
+          "value": 0
+        },
+        {
+          "name": "b13_placement",
+          "value": 0
+        },
+        {
+          "name": "b14_placement",
+          "value": 0
+        },
+        {
+          "name": "b15_placement",
+          "value": 0
+        },
+        {
+          "name": "b16_placement",
+          "value": 0
+        },
+        {
+          "name": "b17_placement",
+          "value": 0
+        },
+        {
+          "name": "b18_placement",
+          "value": 0
+        },
+        {
+          "name": "b19_placement",
+          "value": 0
+        },
+        {
+          "name": "b20_placement",
+          "value": 0
+        },
+        {
+          "name": "b21_placement",
+          "value": 0
+        },
+        {
+          "name": "b22_placement",
+          "value": 0
+        },
+        {
+          "name": "b23_placement",
+          "value": 0
+        },
+        {
+          "name": "b24_placement",
+          "value": 0
+        },
+        {
+          "name": "b1_stream",
+          "value": 0
+        },
+        {
+          "name": "b2_stream",
+          "value": 0
+        },
+        {
+          "name": "b3_stream",
+          "value": 0
+        },
+        {
+          "name": "b4_stream",
+          "value": 0
+        },
+        {
+          "name": "b5_stream",
+          "value": 0
+        },
+        {
+          "name": "b6_stream",
+          "value": 0
+        },
+        {
+          "name": "b7_stream",
+          "value": 0
+        },
+        {
+          "name": "b8_stream",
+          "value": 0
+        },
+        {
+          "name": "b9_stream",
+          "value": 0
+        },
+        {
+          "name": "b10_stream",
+          "value": 0
+        },
+        {
+          "name": "b11_stream",
+          "value": 0
+        },
+        {
+          "name": "b12_stream",
+          "value": 0
+        },
+        {
+          "name": "b13_stream",
+          "value": 0
+        },
+        {
+          "name": "b14_stream",
+          "value": 0
+        },
+        {
+          "name": "b15_stream",
+          "value": 0
+        },
+        {
+          "name": "b16_stream",
+          "value": 0
+        },
+        {
+          "name": "b17_stream",
+          "value": 0
+        },
+        {
+          "name": "b18_stream",
+          "value": 0
+        },
+        {
+          "name": "b19_stream",
+          "value": 0
+        },
+        {
+          "name": "b20_stream",
+          "value": 0
+        },
+        {
+          "name": "b21_stream",
+          "value": 0
+        },
+        {
+          "name": "b22_stream",
+          "value": 0
+        },
+        {
+          "name": "b23_stream",
+          "value": 0
+        },
+        {
+          "name": "b24_stream",
+          "value": 0
+        },
+        {
+          "name": "transient_gain",
+          "value": 0
+        },
+        {
+          "name": "steady_gain",
+          "value": 0
+        },
+        {
+          "name": "auto_gain",
+          "value": 0
+        },
+        {
+          "name": "character",
+          "value": 0
+        },
+        {
+          "name": "output_pan",
+          "value": 0
+        },
+        {
+          "name": "output_pan_mode",
+          "value": 0
+        },
+        {
+          "name": "b1_spectral",
+          "value": 0
+        },
+        {
+          "name": "b2_spectral",
+          "value": 0
+        },
+        {
+          "name": "b3_spectral",
+          "value": 0
+        },
+        {
+          "name": "b4_spectral",
+          "value": 0
+        },
+        {
+          "name": "b5_spectral",
+          "value": 0
+        },
+        {
+          "name": "b6_spectral",
+          "value": 0
+        },
+        {
+          "name": "b7_spectral",
+          "value": 0
+        },
+        {
+          "name": "b8_spectral",
+          "value": 0
+        },
+        {
+          "name": "b9_spectral",
+          "value": 0
+        },
+        {
+          "name": "b10_spectral",
+          "value": 0
+        },
+        {
+          "name": "b11_spectral",
+          "value": 0
+        },
+        {
+          "name": "b12_spectral",
+          "value": 0
+        },
+        {
+          "name": "b13_spectral",
+          "value": 0
+        },
+        {
+          "name": "b14_spectral",
+          "value": 0
+        },
+        {
+          "name": "b15_spectral",
+          "value": 0
+        },
+        {
+          "name": "b16_spectral",
+          "value": 0
+        },
+        {
+          "name": "b17_spectral",
+          "value": 0
+        },
+        {
+          "name": "b18_spectral",
+          "value": 0
+        },
+        {
+          "name": "b19_spectral",
+          "value": 0
+        },
+        {
+          "name": "b20_spectral",
+          "value": 0
+        },
+        {
+          "name": "b21_spectral",
+          "value": 0
+        },
+        {
+          "name": "b22_spectral",
+          "value": 0
+        },
+        {
+          "name": "b23_spectral",
+          "value": 0
+        },
+        {
+          "name": "b24_spectral",
+          "value": 0
+        },
+        {
+          "name": "b1_listen",
+          "value": 0
+        },
+        {
+          "name": "b2_listen",
+          "value": 0
+        },
+        {
+          "name": "b3_listen",
+          "value": 0
+        },
+        {
+          "name": "b4_listen",
+          "value": 0
+        },
+        {
+          "name": "b5_listen",
+          "value": 0
+        },
+        {
+          "name": "b6_listen",
+          "value": 0
+        },
+        {
+          "name": "b7_listen",
+          "value": 0
+        },
+        {
+          "name": "b8_listen",
+          "value": 0
+        },
+        {
+          "name": "b9_listen",
+          "value": 0
+        },
+        {
+          "name": "b10_listen",
+          "value": 0
+        },
+        {
+          "name": "b11_listen",
+          "value": 0
+        },
+        {
+          "name": "b12_listen",
+          "value": 0
+        },
+        {
+          "name": "b13_listen",
+          "value": 0
+        },
+        {
+          "name": "b14_listen",
+          "value": 0
+        },
+        {
+          "name": "b15_listen",
+          "value": 0
+        },
+        {
+          "name": "b16_listen",
+          "value": 0
+        },
+        {
+          "name": "b17_listen",
+          "value": 0
+        },
+        {
+          "name": "b18_listen",
+          "value": 0
+        },
+        {
+          "name": "b19_listen",
+          "value": 0
+        },
+        {
+          "name": "b20_listen",
+          "value": 0
+        },
+        {
+          "name": "b21_listen",
+          "value": 0
+        },
+        {
+          "name": "b22_listen",
+          "value": 0
+        },
+        {
+          "name": "b23_listen",
+          "value": 0
+        },
+        {
+          "name": "b24_listen",
+          "value": 0
+        },
+        {
+          "name": "b1_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b2_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b3_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b4_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b5_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b6_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b7_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b8_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b9_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b10_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b11_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b12_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b13_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b14_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b15_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b16_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b17_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b18_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b19_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b20_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b21_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b22_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b23_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b24_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b1_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b2_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b3_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b4_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b5_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b6_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b7_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b8_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b9_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b10_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b11_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b12_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b13_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b14_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b15_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b16_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b17_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b18_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b19_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b20_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b21_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b22_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b23_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b24_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b1_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b2_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b3_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b4_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b5_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b6_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b7_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b8_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b9_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b10_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b11_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b12_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b13_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b14_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b15_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b16_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b17_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b18_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b19_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b20_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b21_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b22_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b23_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b24_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b1_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b2_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b3_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b4_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b5_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b6_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b7_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b8_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b9_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b10_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b11_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b12_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b13_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b14_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b15_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b16_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b17_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b18_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b19_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b20_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b21_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b22_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b23_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b24_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b1_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b2_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b3_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b4_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b5_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b6_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b7_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b8_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b9_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b10_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b11_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b12_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b13_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b14_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b15_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b16_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b17_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b18_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b19_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b20_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b21_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b22_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b23_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b24_dyn_side_hi",
+          "value": 20000
+        }
+      ]
+    },
+    {
+      "name": "Boost",
+      "block_type": "volume",
+      "module": "",
+      "bypassed": false,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "gain_db",
+          "value": 0
+        },
+        {
+          "name": "pan",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Tremolo",
+      "block_type": "trem",
+      "module": "Motion",
+      "bypassed": false,
+      "preset": "John Mayer Tremolo",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "depth",
+          "value": 0.15000000596046448
+        },
+        {
+          "name": "mix",
+          "value": 1
+        },
+        {
+          "name": "rate",
+          "value": 4
+        },
+        {
+          "name": "mode",
+          "value": 1
+        },
+        {
+          "name": "sync_div",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Vibrato",
+      "block_type": "vibrato",
+      "module": "Motion",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "mix",
+          "value": 0.4000000059604645
+        },
+        {
+          "name": "depth",
+          "value": 0.5
+        },
+        {
+          "name": "rate",
+          "value": 1
+        },
+        {
+          "name": "engine",
+          "value": 0
+        },
+        {
+          "name": "sync_div",
+          "value": 0
+        },
+        {
+          "name": "color",
+          "value": 0.5
+        },
+        {
+          "name": "feedback",
+          "value": 0
+        },
+        {
+          "name": "width",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Rotary",
+      "block_type": "rotary",
+      "module": "Motion",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": []
+    },
+    {
+      "name": "Chorus",
+      "block_type": "chorus",
+      "module": "Modulation",
+      "bypassed": false,
+      "preset": "John Mayer Chorus",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "mix",
+          "value": 0.20000000298023224
+        },
+        {
+          "name": "depth",
+          "value": 0.30000001192092896
+        },
+        {
+          "name": "rate",
+          "value": 0.6000000238418579
+        },
+        {
+          "name": "engine",
+          "value": 0
+        },
+        {
+          "name": "sync_div",
+          "value": 0
+        },
+        {
+          "name": "color",
+          "value": 0.5
+        },
+        {
+          "name": "feedback",
+          "value": 0
+        },
+        {
+          "name": "width",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Flanger",
+      "block_type": "flanger",
+      "module": "Modulation",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "mix",
+          "value": 0.4000000059604645
+        },
+        {
+          "name": "depth",
+          "value": 0.5
+        },
+        {
+          "name": "rate",
+          "value": 1
+        },
+        {
+          "name": "engine",
+          "value": 0
+        },
+        {
+          "name": "sync_div",
+          "value": 0
+        },
+        {
+          "name": "color",
+          "value": 0.5
+        },
+        {
+          "name": "feedback",
+          "value": 0
+        },
+        {
+          "name": "width",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Phaser",
+      "block_type": "phaser",
+      "module": "Modulation",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": []
+    },
+    {
+      "name": "Patch Trim",
+      "block_type": "volume",
+      "module": "",
+      "bypassed": false,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "gain_db",
+          "value": 7.225013732910156
+        },
+        {
+          "name": "pan",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "DLY 1",
+      "block_type": "delay",
+      "module": "Time",
+      "bypassed": false,
+      "preset": "Tape Echo",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "level",
+          "value": -24
+        },
+        {
+          "name": "time",
+          "value": 540
+        },
+        {
+          "name": "feedback",
+          "value": 0.30000001192092896
+        },
+        {
+          "name": "style",
+          "value": 0
+        },
+        {
+          "name": "tap_div_l",
+          "value": 0
+        },
+        {
+          "name": "tap_div_r",
+          "value": 0
+        },
+        {
+          "name": "high_pass",
+          "value": 150
+        },
+        {
+          "name": "repeat_dyn",
+          "value": 0
+        },
+        {
+          "name": "pan",
+          "value": 0
+        },
+        {
+          "name": "dry",
+          "value": 1
+        },
+        {
+          "name": "high_cut",
+          "value": 3200
+        },
+        {
+          "name": "duck_sens",
+          "value": 0
+        },
+        {
+          "name": "duck_release",
+          "value": 0.20000000298023224
+        },
+        {
+          "name": "mod_rate",
+          "value": 0.800000011920929
+        },
+        {
+          "name": "mod_depth",
+          "value": 0.25
+        },
+        {
+          "name": "interval",
+          "value": 30
+        },
+        {
+          "name": "blend",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "DLY 2",
+      "block_type": "delay",
+      "module": "Time",
+      "bypassed": false,
+      "preset": "Bucket Brigade",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "level",
+          "value": -26
+        },
+        {
+          "name": "time",
+          "value": 420
+        },
+        {
+          "name": "feedback",
+          "value": 0.3499999940395355
+        },
+        {
+          "name": "style",
+          "value": 2
+        },
+        {
+          "name": "tap_div_l",
+          "value": 0
+        },
+        {
+          "name": "tap_div_r",
+          "value": 0
+        },
+        {
+          "name": "high_pass",
+          "value": 100
+        },
+        {
+          "name": "repeat_dyn",
+          "value": 0
+        },
+        {
+          "name": "pan",
+          "value": 0
+        },
+        {
+          "name": "dry",
+          "value": 1
+        },
+        {
+          "name": "high_cut",
+          "value": 3000
+        },
+        {
+          "name": "duck_sens",
+          "value": 0
+        },
+        {
+          "name": "duck_release",
+          "value": 0.20000000298023224
+        },
+        {
+          "name": "mod_rate",
+          "value": 0.5
+        },
+        {
+          "name": "mod_depth",
+          "value": 0.30000001192092896
+        },
+        {
+          "name": "interval",
+          "value": 30
+        },
+        {
+          "name": "blend",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "VERB 1",
+      "block_type": "reverb",
+      "module": "Time",
+      "bypassed": false,
+      "preset": "Studio Verb",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "level",
+          "value": -20
+        },
+        {
+          "name": "decay",
+          "value": 0.23999999463558197
+        },
+        {
+          "name": "size",
+          "value": 0.5
+        },
+        {
+          "name": "algorithm",
+          "value": 2
+        },
+        {
+          "name": "modulation",
+          "value": 0.11999999731779099
+        },
+        {
+          "name": "damping",
+          "value": 0.44999998807907104
+        },
+        {
+          "name": "tone",
+          "value": -0.15000000596046448
+        },
+        {
+          "name": "pan_a",
+          "value": 0
+        },
+        {
+          "name": "sync_div",
+          "value": 0
+        },
+        {
+          "name": "dry",
+          "value": 1
+        },
+        {
+          "name": "predelay",
+          "value": 18
+        },
+        {
+          "name": "low_cut",
+          "value": 180
+        },
+        {
+          "name": "high_cut",
+          "value": 8000
+        },
+        {
+          "name": "duck",
+          "value": 0
+        },
+        {
+          "name": "duck_threshold",
+          "value": -20
+        },
+        {
+          "name": "duck_release",
+          "value": 120
+        },
+        {
+          "name": "shim_shift1",
+          "value": 12
+        },
+        {
+          "name": "shim_amount",
+          "value": 0.3499999940395355
+        }
+      ]
+    },
+    {
+      "name": "VERB 2",
+      "block_type": "reverb",
+      "module": "Time",
+      "bypassed": false,
+      "preset": "Cloud Verb",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "level",
+          "value": -28
+        },
+        {
+          "name": "decay",
+          "value": 0.75
+        },
+        {
+          "name": "size",
+          "value": 0.8500000238418579
+        },
+        {
+          "name": "algorithm",
+          "value": 4
+        },
+        {
+          "name": "modulation",
+          "value": 0.5
+        },
+        {
+          "name": "damping",
+          "value": 0.4000000059604645
+        },
+        {
+          "name": "tone",
+          "value": -0.10000000149011612
+        },
+        {
+          "name": "pan_a",
+          "value": 0
+        },
+        {
+          "name": "sync_div",
+          "value": 0
+        },
+        {
+          "name": "dry",
+          "value": 1
+        },
+        {
+          "name": "predelay",
+          "value": 30
+        },
+        {
+          "name": "low_cut",
+          "value": 200
+        },
+        {
+          "name": "high_cut",
+          "value": 7000
+        },
+        {
+          "name": "duck",
+          "value": 0
+        },
+        {
+          "name": "duck_threshold",
+          "value": -20
+        },
+        {
+          "name": "duck_release",
+          "value": 120
+        },
+        {
+          "name": "shim_shift1",
+          "value": 12
+        },
+        {
+          "name": "shim_amount",
+          "value": 0.3499999940395355
+        }
+      ]
+    },
+    {
+      "name": "Master EQ",
+      "block_type": "eq",
+      "module": "Master",
+      "bypassed": true,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "b1_used",
+          "value": 0
+        },
+        {
+          "name": "b1_on",
+          "value": 0
+        },
+        {
+          "name": "b1_freq",
+          "value": 1000
+        },
+        {
+          "name": "b1_gain",
+          "value": 0
+        },
+        {
+          "name": "b1_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b1_shape",
+          "value": 0
+        },
+        {
+          "name": "b2_used",
+          "value": 0
+        },
+        {
+          "name": "b2_on",
+          "value": 0
+        },
+        {
+          "name": "b2_freq",
+          "value": 1000
+        },
+        {
+          "name": "b2_gain",
+          "value": 0
+        },
+        {
+          "name": "b2_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b2_shape",
+          "value": 0
+        },
+        {
+          "name": "b3_used",
+          "value": 0
+        },
+        {
+          "name": "b3_on",
+          "value": 0
+        },
+        {
+          "name": "b3_freq",
+          "value": 1000
+        },
+        {
+          "name": "b3_gain",
+          "value": 0
+        },
+        {
+          "name": "b3_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b3_shape",
+          "value": 0
+        },
+        {
+          "name": "b4_used",
+          "value": 0
+        },
+        {
+          "name": "b4_on",
+          "value": 0
+        },
+        {
+          "name": "b4_freq",
+          "value": 1000
+        },
+        {
+          "name": "b4_gain",
+          "value": 0
+        },
+        {
+          "name": "b4_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b4_shape",
+          "value": 0
+        },
+        {
+          "name": "b5_used",
+          "value": 0
+        },
+        {
+          "name": "b5_on",
+          "value": 0
+        },
+        {
+          "name": "b5_freq",
+          "value": 1000
+        },
+        {
+          "name": "b5_gain",
+          "value": 0
+        },
+        {
+          "name": "b5_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b5_shape",
+          "value": 0
+        },
+        {
+          "name": "b6_used",
+          "value": 0
+        },
+        {
+          "name": "b6_on",
+          "value": 0
+        },
+        {
+          "name": "b6_freq",
+          "value": 1000
+        },
+        {
+          "name": "b6_gain",
+          "value": 0
+        },
+        {
+          "name": "b6_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b6_shape",
+          "value": 0
+        },
+        {
+          "name": "b7_used",
+          "value": 0
+        },
+        {
+          "name": "b7_on",
+          "value": 0
+        },
+        {
+          "name": "b7_freq",
+          "value": 1000
+        },
+        {
+          "name": "b7_gain",
+          "value": 0
+        },
+        {
+          "name": "b7_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b7_shape",
+          "value": 0
+        },
+        {
+          "name": "b8_used",
+          "value": 0
+        },
+        {
+          "name": "b8_on",
+          "value": 0
+        },
+        {
+          "name": "b8_freq",
+          "value": 1000
+        },
+        {
+          "name": "b8_gain",
+          "value": 0
+        },
+        {
+          "name": "b8_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b8_shape",
+          "value": 0
+        },
+        {
+          "name": "b9_used",
+          "value": 0
+        },
+        {
+          "name": "b9_on",
+          "value": 0
+        },
+        {
+          "name": "b9_freq",
+          "value": 1000
+        },
+        {
+          "name": "b9_gain",
+          "value": 0
+        },
+        {
+          "name": "b9_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b9_shape",
+          "value": 0
+        },
+        {
+          "name": "b10_used",
+          "value": 0
+        },
+        {
+          "name": "b10_on",
+          "value": 0
+        },
+        {
+          "name": "b10_freq",
+          "value": 1000
+        },
+        {
+          "name": "b10_gain",
+          "value": 0
+        },
+        {
+          "name": "b10_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b10_shape",
+          "value": 0
+        },
+        {
+          "name": "b11_used",
+          "value": 0
+        },
+        {
+          "name": "b11_on",
+          "value": 0
+        },
+        {
+          "name": "b11_freq",
+          "value": 1000
+        },
+        {
+          "name": "b11_gain",
+          "value": 0
+        },
+        {
+          "name": "b11_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b11_shape",
+          "value": 0
+        },
+        {
+          "name": "b12_used",
+          "value": 0
+        },
+        {
+          "name": "b12_on",
+          "value": 0
+        },
+        {
+          "name": "b12_freq",
+          "value": 1000
+        },
+        {
+          "name": "b12_gain",
+          "value": 0
+        },
+        {
+          "name": "b12_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b12_shape",
+          "value": 0
+        },
+        {
+          "name": "b13_used",
+          "value": 0
+        },
+        {
+          "name": "b13_on",
+          "value": 0
+        },
+        {
+          "name": "b13_freq",
+          "value": 1000
+        },
+        {
+          "name": "b13_gain",
+          "value": 0
+        },
+        {
+          "name": "b13_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b13_shape",
+          "value": 0
+        },
+        {
+          "name": "b14_used",
+          "value": 0
+        },
+        {
+          "name": "b14_on",
+          "value": 0
+        },
+        {
+          "name": "b14_freq",
+          "value": 1000
+        },
+        {
+          "name": "b14_gain",
+          "value": 0
+        },
+        {
+          "name": "b14_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b14_shape",
+          "value": 0
+        },
+        {
+          "name": "b15_used",
+          "value": 0
+        },
+        {
+          "name": "b15_on",
+          "value": 0
+        },
+        {
+          "name": "b15_freq",
+          "value": 1000
+        },
+        {
+          "name": "b15_gain",
+          "value": 0
+        },
+        {
+          "name": "b15_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b15_shape",
+          "value": 0
+        },
+        {
+          "name": "b16_used",
+          "value": 0
+        },
+        {
+          "name": "b16_on",
+          "value": 0
+        },
+        {
+          "name": "b16_freq",
+          "value": 1000
+        },
+        {
+          "name": "b16_gain",
+          "value": 0
+        },
+        {
+          "name": "b16_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b16_shape",
+          "value": 0
+        },
+        {
+          "name": "b17_used",
+          "value": 0
+        },
+        {
+          "name": "b17_on",
+          "value": 0
+        },
+        {
+          "name": "b17_freq",
+          "value": 1000
+        },
+        {
+          "name": "b17_gain",
+          "value": 0
+        },
+        {
+          "name": "b17_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b17_shape",
+          "value": 0
+        },
+        {
+          "name": "b18_used",
+          "value": 0
+        },
+        {
+          "name": "b18_on",
+          "value": 0
+        },
+        {
+          "name": "b18_freq",
+          "value": 1000
+        },
+        {
+          "name": "b18_gain",
+          "value": 0
+        },
+        {
+          "name": "b18_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b18_shape",
+          "value": 0
+        },
+        {
+          "name": "b19_used",
+          "value": 0
+        },
+        {
+          "name": "b19_on",
+          "value": 0
+        },
+        {
+          "name": "b19_freq",
+          "value": 1000
+        },
+        {
+          "name": "b19_gain",
+          "value": 0
+        },
+        {
+          "name": "b19_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b19_shape",
+          "value": 0
+        },
+        {
+          "name": "b20_used",
+          "value": 0
+        },
+        {
+          "name": "b20_on",
+          "value": 0
+        },
+        {
+          "name": "b20_freq",
+          "value": 1000
+        },
+        {
+          "name": "b20_gain",
+          "value": 0
+        },
+        {
+          "name": "b20_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b20_shape",
+          "value": 0
+        },
+        {
+          "name": "b21_used",
+          "value": 0
+        },
+        {
+          "name": "b21_on",
+          "value": 0
+        },
+        {
+          "name": "b21_freq",
+          "value": 1000
+        },
+        {
+          "name": "b21_gain",
+          "value": 0
+        },
+        {
+          "name": "b21_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b21_shape",
+          "value": 0
+        },
+        {
+          "name": "b22_used",
+          "value": 0
+        },
+        {
+          "name": "b22_on",
+          "value": 0
+        },
+        {
+          "name": "b22_freq",
+          "value": 1000
+        },
+        {
+          "name": "b22_gain",
+          "value": 0
+        },
+        {
+          "name": "b22_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b22_shape",
+          "value": 0
+        },
+        {
+          "name": "b23_used",
+          "value": 0
+        },
+        {
+          "name": "b23_on",
+          "value": 0
+        },
+        {
+          "name": "b23_freq",
+          "value": 1000
+        },
+        {
+          "name": "b23_gain",
+          "value": 0
+        },
+        {
+          "name": "b23_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b23_shape",
+          "value": 0
+        },
+        {
+          "name": "b24_used",
+          "value": 0
+        },
+        {
+          "name": "b24_on",
+          "value": 0
+        },
+        {
+          "name": "b24_freq",
+          "value": 1000
+        },
+        {
+          "name": "b24_gain",
+          "value": 0
+        },
+        {
+          "name": "b24_q",
+          "value": 0.7070000171661377
+        },
+        {
+          "name": "b24_shape",
+          "value": 0
+        },
+        {
+          "name": "b1_slope",
+          "value": 2
+        },
+        {
+          "name": "b2_slope",
+          "value": 2
+        },
+        {
+          "name": "b3_slope",
+          "value": 2
+        },
+        {
+          "name": "b4_slope",
+          "value": 2
+        },
+        {
+          "name": "b5_slope",
+          "value": 2
+        },
+        {
+          "name": "b6_slope",
+          "value": 2
+        },
+        {
+          "name": "b7_slope",
+          "value": 2
+        },
+        {
+          "name": "b8_slope",
+          "value": 2
+        },
+        {
+          "name": "b9_slope",
+          "value": 2
+        },
+        {
+          "name": "b10_slope",
+          "value": 2
+        },
+        {
+          "name": "b11_slope",
+          "value": 2
+        },
+        {
+          "name": "b12_slope",
+          "value": 2
+        },
+        {
+          "name": "b13_slope",
+          "value": 2
+        },
+        {
+          "name": "b14_slope",
+          "value": 2
+        },
+        {
+          "name": "b15_slope",
+          "value": 2
+        },
+        {
+          "name": "b16_slope",
+          "value": 2
+        },
+        {
+          "name": "b17_slope",
+          "value": 2
+        },
+        {
+          "name": "b18_slope",
+          "value": 2
+        },
+        {
+          "name": "b19_slope",
+          "value": 2
+        },
+        {
+          "name": "b20_slope",
+          "value": 2
+        },
+        {
+          "name": "b21_slope",
+          "value": 2
+        },
+        {
+          "name": "b22_slope",
+          "value": 2
+        },
+        {
+          "name": "b23_slope",
+          "value": 2
+        },
+        {
+          "name": "b24_slope",
+          "value": 2
+        },
+        {
+          "name": "output_gain",
+          "value": 0
+        },
+        {
+          "name": "gain_scale",
+          "value": 1
+        },
+        {
+          "name": "transient_mode",
+          "value": 0
+        },
+        {
+          "name": "split_balance",
+          "value": 0
+        },
+        {
+          "name": "split_attack",
+          "value": 50
+        },
+        {
+          "name": "split_hold",
+          "value": 50
+        },
+        {
+          "name": "split_smooth",
+          "value": 50
+        },
+        {
+          "name": "split_solo",
+          "value": 0
+        },
+        {
+          "name": "b1_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b2_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b3_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b4_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b5_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b6_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b7_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b8_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b9_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b10_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b11_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b12_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b13_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b14_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b15_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b16_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b17_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b18_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b19_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b20_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b21_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b22_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b23_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b24_dyn_range",
+          "value": 0
+        },
+        {
+          "name": "b1_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b2_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b3_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b4_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b5_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b6_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b7_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b8_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b9_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b10_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b11_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b12_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b13_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b14_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b15_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b16_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b17_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b18_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b19_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b20_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b21_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b22_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b23_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b24_dyn_thr",
+          "value": -40
+        },
+        {
+          "name": "b1_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b2_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b3_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b4_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b5_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b6_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b7_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b8_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b9_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b10_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b11_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b12_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b13_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b14_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b15_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b16_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b17_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b18_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b19_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b20_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b21_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b22_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b23_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b24_dyn_atk",
+          "value": 50
+        },
+        {
+          "name": "b1_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b2_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b3_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b4_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b5_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b6_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b7_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b8_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b9_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b10_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b11_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b12_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b13_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b14_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b15_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b16_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b17_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b18_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b19_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b20_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b21_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b22_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b23_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b24_dyn_rel",
+          "value": 50
+        },
+        {
+          "name": "b1_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b2_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b3_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b4_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b5_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b6_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b7_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b8_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b9_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b10_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b11_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b12_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b13_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b14_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b15_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b16_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b17_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b18_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b19_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b20_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b21_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b22_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b23_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b24_dyn_auto",
+          "value": 1
+        },
+        {
+          "name": "b1_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b2_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b3_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b4_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b5_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b6_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b7_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b8_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b9_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b10_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b11_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b12_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b13_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b14_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b15_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b16_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b17_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b18_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b19_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b20_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b21_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b22_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b23_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b24_dyn_relative",
+          "value": 0
+        },
+        {
+          "name": "b1_placement",
+          "value": 0
+        },
+        {
+          "name": "b2_placement",
+          "value": 0
+        },
+        {
+          "name": "b3_placement",
+          "value": 0
+        },
+        {
+          "name": "b4_placement",
+          "value": 0
+        },
+        {
+          "name": "b5_placement",
+          "value": 0
+        },
+        {
+          "name": "b6_placement",
+          "value": 0
+        },
+        {
+          "name": "b7_placement",
+          "value": 0
+        },
+        {
+          "name": "b8_placement",
+          "value": 0
+        },
+        {
+          "name": "b9_placement",
+          "value": 0
+        },
+        {
+          "name": "b10_placement",
+          "value": 0
+        },
+        {
+          "name": "b11_placement",
+          "value": 0
+        },
+        {
+          "name": "b12_placement",
+          "value": 0
+        },
+        {
+          "name": "b13_placement",
+          "value": 0
+        },
+        {
+          "name": "b14_placement",
+          "value": 0
+        },
+        {
+          "name": "b15_placement",
+          "value": 0
+        },
+        {
+          "name": "b16_placement",
+          "value": 0
+        },
+        {
+          "name": "b17_placement",
+          "value": 0
+        },
+        {
+          "name": "b18_placement",
+          "value": 0
+        },
+        {
+          "name": "b19_placement",
+          "value": 0
+        },
+        {
+          "name": "b20_placement",
+          "value": 0
+        },
+        {
+          "name": "b21_placement",
+          "value": 0
+        },
+        {
+          "name": "b22_placement",
+          "value": 0
+        },
+        {
+          "name": "b23_placement",
+          "value": 0
+        },
+        {
+          "name": "b24_placement",
+          "value": 0
+        },
+        {
+          "name": "b1_stream",
+          "value": 0
+        },
+        {
+          "name": "b2_stream",
+          "value": 0
+        },
+        {
+          "name": "b3_stream",
+          "value": 0
+        },
+        {
+          "name": "b4_stream",
+          "value": 0
+        },
+        {
+          "name": "b5_stream",
+          "value": 0
+        },
+        {
+          "name": "b6_stream",
+          "value": 0
+        },
+        {
+          "name": "b7_stream",
+          "value": 0
+        },
+        {
+          "name": "b8_stream",
+          "value": 0
+        },
+        {
+          "name": "b9_stream",
+          "value": 0
+        },
+        {
+          "name": "b10_stream",
+          "value": 0
+        },
+        {
+          "name": "b11_stream",
+          "value": 0
+        },
+        {
+          "name": "b12_stream",
+          "value": 0
+        },
+        {
+          "name": "b13_stream",
+          "value": 0
+        },
+        {
+          "name": "b14_stream",
+          "value": 0
+        },
+        {
+          "name": "b15_stream",
+          "value": 0
+        },
+        {
+          "name": "b16_stream",
+          "value": 0
+        },
+        {
+          "name": "b17_stream",
+          "value": 0
+        },
+        {
+          "name": "b18_stream",
+          "value": 0
+        },
+        {
+          "name": "b19_stream",
+          "value": 0
+        },
+        {
+          "name": "b20_stream",
+          "value": 0
+        },
+        {
+          "name": "b21_stream",
+          "value": 0
+        },
+        {
+          "name": "b22_stream",
+          "value": 0
+        },
+        {
+          "name": "b23_stream",
+          "value": 0
+        },
+        {
+          "name": "b24_stream",
+          "value": 0
+        },
+        {
+          "name": "transient_gain",
+          "value": 0
+        },
+        {
+          "name": "steady_gain",
+          "value": 0
+        },
+        {
+          "name": "auto_gain",
+          "value": 0
+        },
+        {
+          "name": "character",
+          "value": 0
+        },
+        {
+          "name": "output_pan",
+          "value": 0
+        },
+        {
+          "name": "output_pan_mode",
+          "value": 0
+        },
+        {
+          "name": "b1_spectral",
+          "value": 0
+        },
+        {
+          "name": "b2_spectral",
+          "value": 0
+        },
+        {
+          "name": "b3_spectral",
+          "value": 0
+        },
+        {
+          "name": "b4_spectral",
+          "value": 0
+        },
+        {
+          "name": "b5_spectral",
+          "value": 0
+        },
+        {
+          "name": "b6_spectral",
+          "value": 0
+        },
+        {
+          "name": "b7_spectral",
+          "value": 0
+        },
+        {
+          "name": "b8_spectral",
+          "value": 0
+        },
+        {
+          "name": "b9_spectral",
+          "value": 0
+        },
+        {
+          "name": "b10_spectral",
+          "value": 0
+        },
+        {
+          "name": "b11_spectral",
+          "value": 0
+        },
+        {
+          "name": "b12_spectral",
+          "value": 0
+        },
+        {
+          "name": "b13_spectral",
+          "value": 0
+        },
+        {
+          "name": "b14_spectral",
+          "value": 0
+        },
+        {
+          "name": "b15_spectral",
+          "value": 0
+        },
+        {
+          "name": "b16_spectral",
+          "value": 0
+        },
+        {
+          "name": "b17_spectral",
+          "value": 0
+        },
+        {
+          "name": "b18_spectral",
+          "value": 0
+        },
+        {
+          "name": "b19_spectral",
+          "value": 0
+        },
+        {
+          "name": "b20_spectral",
+          "value": 0
+        },
+        {
+          "name": "b21_spectral",
+          "value": 0
+        },
+        {
+          "name": "b22_spectral",
+          "value": 0
+        },
+        {
+          "name": "b23_spectral",
+          "value": 0
+        },
+        {
+          "name": "b24_spectral",
+          "value": 0
+        },
+        {
+          "name": "b1_listen",
+          "value": 0
+        },
+        {
+          "name": "b2_listen",
+          "value": 0
+        },
+        {
+          "name": "b3_listen",
+          "value": 0
+        },
+        {
+          "name": "b4_listen",
+          "value": 0
+        },
+        {
+          "name": "b5_listen",
+          "value": 0
+        },
+        {
+          "name": "b6_listen",
+          "value": 0
+        },
+        {
+          "name": "b7_listen",
+          "value": 0
+        },
+        {
+          "name": "b8_listen",
+          "value": 0
+        },
+        {
+          "name": "b9_listen",
+          "value": 0
+        },
+        {
+          "name": "b10_listen",
+          "value": 0
+        },
+        {
+          "name": "b11_listen",
+          "value": 0
+        },
+        {
+          "name": "b12_listen",
+          "value": 0
+        },
+        {
+          "name": "b13_listen",
+          "value": 0
+        },
+        {
+          "name": "b14_listen",
+          "value": 0
+        },
+        {
+          "name": "b15_listen",
+          "value": 0
+        },
+        {
+          "name": "b16_listen",
+          "value": 0
+        },
+        {
+          "name": "b17_listen",
+          "value": 0
+        },
+        {
+          "name": "b18_listen",
+          "value": 0
+        },
+        {
+          "name": "b19_listen",
+          "value": 0
+        },
+        {
+          "name": "b20_listen",
+          "value": 0
+        },
+        {
+          "name": "b21_listen",
+          "value": 0
+        },
+        {
+          "name": "b22_listen",
+          "value": 0
+        },
+        {
+          "name": "b23_listen",
+          "value": 0
+        },
+        {
+          "name": "b24_listen",
+          "value": 0
+        },
+        {
+          "name": "b1_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b2_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b3_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b4_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b5_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b6_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b7_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b8_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b9_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b10_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b11_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b12_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b13_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b14_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b15_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b16_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b17_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b18_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b19_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b20_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b21_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b22_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b23_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b24_spectral_density",
+          "value": 50
+        },
+        {
+          "name": "b1_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b2_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b3_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b4_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b5_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b6_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b7_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b8_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b9_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b10_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b11_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b12_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b13_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b14_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b15_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b16_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b17_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b18_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b19_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b20_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b21_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b22_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b23_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b24_spectral_tilt",
+          "value": 0
+        },
+        {
+          "name": "b1_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b2_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b3_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b4_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b5_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b6_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b7_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b8_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b9_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b10_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b11_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b12_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b13_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b14_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b15_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b16_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b17_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b18_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b19_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b20_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b21_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b22_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b23_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b24_dyn_side",
+          "value": 0
+        },
+        {
+          "name": "b1_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b2_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b3_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b4_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b5_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b6_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b7_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b8_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b9_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b10_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b11_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b12_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b13_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b14_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b15_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b16_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b17_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b18_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b19_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b20_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b21_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b22_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b23_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b24_dyn_side_lo",
+          "value": 20
+        },
+        {
+          "name": "b1_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b2_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b3_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b4_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b5_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b6_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b7_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b8_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b9_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b10_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b11_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b12_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b13_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b14_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b15_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b16_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b17_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b18_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b19_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b20_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b21_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b22_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b23_dyn_side_hi",
+          "value": 20000
+        },
+        {
+          "name": "b24_dyn_side_hi",
+          "value": 20000
+        }
+      ]
+    },
+    {
+      "name": "Limiter",
+      "block_type": "compressor",
+      "module": "Master",
+      "bypassed": false,
+      "preset": "",
+      "detail": "",
+      "option": null,
+      "options": [],
+      "asset": "",
+      "empty": false,
+      "output_level_db": null,
+      "params": [
+        {
+          "name": "threshold",
+          "value": -1
+        },
+        {
+          "name": "ratio",
+          "value": 20
+        },
+        {
+          "name": "attack",
+          "value": 0.10000000149011612
+        },
+        {
+          "name": "release",
+          "value": 50
+        },
+        {
+          "name": "knee",
+          "value": 0
+        },
+        {
+          "name": "range",
+          "value": 60
+        },
+        {
+          "name": "fold",
+          "value": 0
+        },
+        {
+          "name": "style",
+          "value": 0
+        }
+      ]
+    }
+  ],
+  "active_blocks": {
+    "Chorus": "John Mayer Chorus",
+    "DLY 1": "Tape Echo",
+    "DLY 2": "Bucket Brigade",
+    "Pre Delay": "Aqua-Puss Slap",
+    "Pre Motion": "Gravity Tank Trem",
+    "Pre Verb": "Gravity Tank Spring",
+    "Tremolo": "John Mayer Tremolo",
+    "VERB 1": "Studio Verb",
+    "VERB 2": "Cloud Verb"
+  }
+}

@@ -1,0 +1,5 @@
+// Master mode workflow. id = "mode-master", name = "Mode Master".
+// Skeleton — see mode-organize.styx for the override-block menu.
+
+name        "Master"
+description "Master bus, metering, export prep."

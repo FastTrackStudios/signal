@@ -1,0 +1,23 @@
+rpp_perf: fixtures=2, warmup=1, repeat=3, typed_mode=Full
+
+=== Results ===
+fixture: /Users/codywright/Documents/Development/Rust/roam-test/modules/dawfile/dawfile-reaper/tests/fixtures/tempo-map-advanced.RPP
+  size_mb: 0.01
+  parse_avg_s: 0.0001
+  typed_avg_s: 0.0000
+  parse_throughput_mb_s: 59.79
+  peak_rss_mb: 2.19
+  parse_alloc_calls_avg: 473
+  parse_alloc_mb_avg: 0.06
+  typed_alloc_calls_avg: 262
+  typed_alloc_mb_avg: 0.04
+fixture: /Users/codywright/Documents/Development/Rust/roam-test/modules/dawfile/dawfile-reaper/tests/fixtures/local/Goodness of God.RPP
+  size_mb: 418.82
+  parse_avg_s: 0.3174
+  typed_avg_s: 0.0549
+  parse_throughput_mb_s: 1319.62
+  peak_rss_mb: 1295.77
+  parse_alloc_calls_avg: 4362878
+  parse_alloc_mb_avg: 752.15
+  typed_alloc_calls_avg: 529959
+  typed_alloc_mb_avg: 70.40

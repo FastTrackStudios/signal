@@ -1,0 +1,19 @@
+//! FTS Modulation's editor.
+//!
+//! Five circuits on a rail — Chorus, Flanger, Vibrato, Tremolo, Wah — each
+//! with its own panel and its own drawing of what it moves. What a circuit
+//! *is* lives in `modulation-profiles`; what it looks like lives here.
+
+pub mod faces;
+
+#[cfg(feature = "native")]
+pub mod control_view;
+#[cfg(feature = "native")]
+pub use fts_plug_ui::param_adapter;
+#[cfg(feature = "native")]
+pub mod params;
+
+/// The painted per-engine visualiser — one picture per modulation engine,
+/// on the GPU where there is one. See [`viz`].
+#[cfg(feature = "viz")]
+pub mod viz;

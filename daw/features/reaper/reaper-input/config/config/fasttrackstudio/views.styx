@@ -1,0 +1,51 @@
+// Profile-specific which-key prefixes are defined in section files.
+// Only non-prefix bindings are listed here.
+
+bindings (
+    // Window sets (Cmd+1-4)
+    {keys "<D-1>", action 40454, desc "Load window set 1"}
+    {keys "<D-2>", action 40455, desc "Load window set 2"}
+    {keys "<D-3>", action 40456, desc "Load window set 3"}
+    {keys "<D-4>", action 40457, desc "Load window set 4"}
+
+    // Window toggles
+    {keys x,         action 40078, desc "Toggle mixer"}
+    {keys f,         action "FTS_TOGGLE_FX", desc "Toggle the FX: the selected track's effects as devices (Alt-F is the semantic FX manager)"}
+    {keys "<S-f>",   action "FTS_FX_FULL", desc "The FX full size: several tracks' chains at once"}
+    {keys i,         action 50124, desc "Show/hide media explorer"}
+    {keys "<C-S-m>", action 40906, desc "Show track manager"}
+    {keys "<C-S-v>", action 50125, desc "Show/hide video window"}
+    {keys "<C-S-p>", action 40240, desc "Show performance meter"}
+    {keys "<C-S-n>", action 40268, desc "Show navigator"}
+    {keys "<C-S-r>", action 43542, desc "Show ruler lane manager"}
+
+    // FTS panels
+    {keys "<C-S-i>", action "FTS_INPUT_TOGGLE_STATUS_PANEL", desc "Toggle FTS Input status panel"}
+)
+
+which_key (
+    {
+        prefix w,
+        label "Windows",
+        entries (
+            {key x, label "Mixer", action 40078}
+            {key i, label "Media Explorer", action 50124}
+            {key t, label "Track Manager", action 40906}
+            {key r, label "Ruler Lane Manager", action 43542}
+            {key f, label "FX Browser", action 40271}
+            {key p, label "Performance Meter", action 40240}
+            {key n, label "Navigator", action 40268}
+            {key v, label "Video Window", action 50125}
+            {key d, label "Docker Visibility", action 40279}
+            {key m, label "Metronome Settings", action 40363}
+            {key u, label "Undo History", action 40072}
+            {key b, label "Project Bay", action 41157}
+            {key q, label "Region/Marker Manager", action 40326}
+            {key e, label "Routing Matrix", action 40251}
+            {key o, label "Track Grouping Matrix", action 40768}
+            {key l, label "Screensets/Layouts", action 40422}
+            {key y, label "Monitoring FX", action 41882}
+            {key s, label "Input Status", action "FTS_INPUT_TOGGLE_STATUS_PANEL"}
+        )
+    }
+)

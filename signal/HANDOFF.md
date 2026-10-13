@@ -1,0 +1,310 @@
+# Handoff — the native guitar rig: levelled, parallel time section, trails (2026-09-23)
+
+Everything is **committed locally, nothing pushed** (the user's standing
+rule: commit locally, never push/PR/tag unless asked). Branch
+`macos-signal-rig` in `signal`, `processor` and `daw`, on
+`/Volumes/dev-drive`. The previous handoff (the rig in a browser) is in git
+history at `b2df36c1`.
+
+The user's direction for this stretch: **get the native desktop app fully
+playable first; port it to wasm after.** The browser rig (a page where any
+computer becomes the rig, all audio in the tab) is planned — see
+*Browser rig* below — but not started.
+
+## Build and run — read this first
+
+- **One build line:** `just app` =
+  `cargo build --profile release-fast -p signal-desktop --features signal-keys-rig`.
+  `just guitar` and `just desktop-run` use the same line. Building
+  `signal-desktop` with a *different* feature set or profile makes cargo
+  recompile every shared crate (that was the 15-minute rebuilds). The CLI
+  builds alongside with no penalty:
+  `cargo build --profile release-fast -p signal-desktop -p signal-cli --features signal-desktop/signal-keys-rig`.
+- **release-fast** (root `Cargo.toml`): release opt, incremental, 256 CGUs.
+  An edit in `signal-sampler` rebuilds the app in ~15 s. Local only.
+  **dev** now has the render stack (Blitz/Stylo/Taffy/Parley/Vello/wgpu) at
+  opt-level 3, so a dev build is usable too.
+- `bin/signal-latest-bin` prints the newest of `target/{release-fast,release,debug}/signal-desktop`;
+  `Signal Rig.app`'s launcher and the menu bar's login agent hard-link it,
+  so **whatever you built last is what launches**.
+- Launch: `open "/Volumes/dev-drive/bin/Signal Rig.app"` (config
+  `XDG_CONFIG_HOME=/Volumes/dev-drive/config`). Logs:
+  `/Volumes/dev-drive/logs/signal-app-YYYYMMDD.log` — note it grows ~1 GB/day
+  from a repeating usvg "Rect has invalid height" warning (see *Open*).
+- **Never build while the user is playing** — a build takes every core and
+  causes dropouts. Never run a benchmark while a build runs.
+
+## What changed (commits)
+
+`processor`: `38e5259` one GPU device for every canvas · `5f52aea` comp shader
+fix for the browser · `439379a` per-thread DI sidechain + a meter channel per
+compressor.
+`signal`: `b9da6a38` menu bar · `629be64d` build profiles · `690a07f5` the rig
+work below.
+
+### Loudness — the model now
+
+**Levels live on the blocks, are measured by the rig's own engine, and are
+built into the chain.** Bottom up:
+
+1. **Amp module snapshots** (`modules.styx`) carry `level_db` / `level2_db`:
+   the amp through its own cab, levelled to **−23 LUFS** (`TARGET_LUFS`,
+   `signal-sampler/src/patch_level.rs`).
+2. **Drive options** (`drive-presets.styx`) carry `level_db`: engaging the
+   pedal at drive 0.5 is unity.
+3. **Preset snapshots** (`presets.styx`) `level_db` balances only the effects
+   around the amp (median +2.7 dB).
+4. **Patches**: `level_db` is an *offset on its snapshot's* (compose.rs
+   `flatten` adds, it used to overwrite — which silently discarded every
+   patch-level correction). Plus the player's own `trim_db`.
+
+`nodes::apply_block_levels` writes (1)/(2) into each NAM block's
+`input_trim_db`/`output_trim_db` **when the chain is built**. Nothing
+applies gain at switch time any more (`apply_all_drives` is a no-op kept as
+the switch paths' single hook). A drive knob moved live
+(`session::apply_drive`) corrects *relative* to the block's built level via
+the cached drive curve.
+
+Commands, in order: `signal rig level-modules` → `signal rig level-presets`
+→ `signal rig level <Profile>` (all `--dry-run` capable). A full cold pass is
+~7 min; unchanged chains are cache hits (seconds). The app's **Level
+patches** writes per-patch offsets the same way.
+
+**One code path, measured.** `GuitarRig::open_offline(sr)` builds the
+identical project/track/slots/probe/chains as `open` and renders through the
+same `ProjectRenderer`, pulled by `render_offline` (no device). Input is the
+probe's test signal (`start_test_signal`), output the new `OutputTap` after
+the chain (`measure_output`). `features/rigs/guitar/src/measure.rs`:
+`patch_lufs` (cached via `patch_level::level_cached`, engine key `rig-v3`),
+`apply_chain_bypass` (the switch-in step both live and offline call). The old
+hand-rolled `render_lufs` is no longer used by the guitar rig. Every
+divergence found on the way was a second code path: live applied drive
+compensation only to amps (a definition lookup missed composed patches'
+pedals); offline skipped chain bypass; snapshot levelling used a different
+chain builder. If live and offline ever disagree again, look for the
+second path.
+
+Verified: every patch in all four profiles measures −23.0 LUFS on the
+engine; switching through a whole profile on one offline rig is repeatable
+(±1 dB of settled). The user confirms "the patches sound level now".
+
+### Other fixes this stretch
+
+- **Engine deadlock** (the "wedge"): `nodes()`/`perf()` took `profile_def`
+  then `rig`; `patches()`/`resync_blocks()` the reverse. LOCK ORDER (rig
+  before profile_def) is documented on `GuitarRigBackend::rig`. Found with
+  `sample` + lldb (`__psynch_mutexwait` x3 = owner tid).
+- **Switch stalls**: a footswitch used to run a 5.5 s drive-curve sweep for
+  an uncached model inside the request. Startup now pre-measures every NAM
+  any patch plays, in parallel.
+- **Footswitches**: `midi.styx` `tap_notes (1 2 3 4 5)` — the AIRSTEP (BLE,
+  connected via Audio MIDI Setup → MIDI Studio → Bluetooth) sends Note On /
+  Note Off per switch; tap/hold from timing (`rig-host/src/gestures.rs`).
+  The user set Note On velocity to 1: midicore's CoreMIDI input *re-encodes*
+  `90 n 00` as `80`, losing the press (upstream fix pending).
+- **Preset tab = audition**: `choose_preset` plays the snapshot alone (the
+  `compose::snapshot_patch` template levelling measures), never writes the
+  profile. It used to repoint and save the live patch on every click.
+- **Presets named for gear** (`signal rig regroup-presets`): the
+  profile-named presets (Worship Clean …) were dissolved into the amp
+  presets; profiles repointed. Worship Drive → Fender Deluxe Reverb ·
+  Cranked (user asked for "more normal").
+- **Compressor panels**: a meter channel per block (Pre Comp 1, Post Comp 2,
+  Limiter 3 — `profiles::meter_channel`), `RigEvent::CompWave(CompTrace)`
+  names its block. Red on the IN/OUT strips = within 3 dB of clipping.
+- **Menu bar** (`--menubar`, `apps/desktop/src/menubar.rs`): runs from
+  `bin/signal-menubar` (NOT inside the .app — Launch Services then treats
+  the app as already running). Login agent:
+  `~/Library/LaunchAgents/com.fasttrackstudio.signal-menubar.plist`.
+- Level target −23 LUFS (was −18; peaks hit the limiter).
+- `SIGNAL_SWITCH_PROBE=1` writes `logs/switch-<patch>-<t>-{in,out}.wav` (4 s
+  after each switch) to re-render a suspicious transition offline. The app
+  is currently launched with it on.
+
+## User config (not in any repo)
+
+`/Volumes/dev-drive/config/signal/rig/`: `presets.styx`, `modules.styx`,
+`drive-presets.styx`, `profiles/*.styx`, `midi.styx` were rewritten this
+session. Every edit left a timestamped `.bak-*` beside the file.
+`calibration/di-reference.wav` is the user's own guitar (three DIs joined;
+the old GuitarLSTM DI is `di-reference.guitarlstm-ts9.wav`).
+
+## Open — in the order I would do them
+
+1. ~~**Latency.**~~ DONE (`673dac53`, daw `51d4b1c8`). Cause: on macOS
+   `rig-host` aliased `DuplexEngine` to the cpal engine — input and output
+   as two streams bridged by a ring that drained one block per callback and
+   never shed backlog, so every stall added latency for the rest of the
+   session. The guitar rig now runs on daw's CoreAudio HAL IOProc (log line
+   `coreaudio duplex: started … round_trip_ms=6.33` at 64 frames on the
+   MiniFuse; the rest is the interface's own converters). The keys rig stays
+   on cpal (CoreAudio buffer size is per process per device). The cpal ring
+   now drops backlog past one spare block. DSP proven zero-latency by
+   `cargo run --profile release-fast -p signal-guitar --example latency_probe
+   [-- <Profile>] [--per-block]`: every block answers on the impulse's own
+   sample except NAM amps / cab IRs (0–47 samples: the captured gear's own
+   response, not buffering).
+2. ~~**Dual-amp blends.**~~ DONE (`9fc659b4`). Not a loudness problem:
+   `prepare_chain` wrapped the blend stage with
+   `if let (Some(role), Some(inner)) = (role, slot.take())`, which takes
+   every box before matching, so a blend patch played its two amps and
+   nothing else (no gate/comps/trim/FX/limiter). Levelling could never
+   converge, which is where +14–25 dB came from. Now `amp_blend::wrap`,
+   tested; blends level at +5–9 dB. `examples/blend_probe`.
+3. ~~**Output Level knob.**~~ DONE: the OUT readout on each amp/pedal row
+   (drag up/down), `Rig::set_block_level`, stored with the gear. Also
+   `signal_widgets::DragBus`: drags follow the pointer anywhere in the
+   window (Blitz has no pointer capture). Not yet on the bus: the
+   compressor surface (`comp_surface.rs`) and the keys rig's knobs/faders.
+4. ~~midicore velocity-0 Note On.~~ Won't fix: decoding it as Note Off is
+   the MIDI spec; the AIRSTEP is set to send velocity 1 (user's call).
+5. ~~Log flood.~~ DONE (signal `24ca794a`, processor `eb06151`): the
+   tuner's empty pitch trace, zero-size reverb/saturate face rects, the
+   gate band at the floor.
+6. `signal rig level` (non-dry-run) writes `patch.level_db`; with the new
+   offset semantics that is right, but `levelling::level_profile` measures
+   with offsets zeroed, so its dry-run shows the *raw* figure, not the
+   final one — confusing when verifying.
+7. **Other profiles onto the Worship model.** Blues / Metal / Rock still
+   point at assorted amp presets; Worship plays one rig preset (Deluxe +
+   AC30) through its variations and overrides only Time. Give each profile
+   a core rig preset the same way if the player likes it.
+8. **`dial-post-comp` is slow** (~18 min for 116 snapshots): an 8-step
+   serial bisection per snapshot, each step a full render. Fewer steps (a
+   secant step from the first two readings), a shorter render, or running
+   only changed snapshots would cut it — it reruns whenever a comp preset
+   changes.
+9. **Rig config under git.** `/Volumes/dev-drive/config` (presets,
+   modules, blocks, profiles) had only `.bak-*` copies (see the repo now
+   started there — items below).
+10. ~~Reverb decay curve undocumented~~ — calibrated (see *Time section*).
+    Next: dial the delay/reverb library by ear per Worship patch;
+    Modulation/Motion presets + modules the same way; Pre FX presets; EQ
+    modules; the sidebar for the remaining modules.
+11. **Tone loose ends:** Twin Reverb · Funk and Deluxe Reverb · Country are
+    in no profile; Deluxe + AC30 · Lead needs +12 dB (KoT Both Sides → MG
+    into the pushed amps reads quiet — understand why); the reverb `decay`
+    knob's curve per algorithm is undocumented.
+
+## Compressors and the gain bias (2026-09-23, `eea9e0e3`, processor `f897de7`)
+
+- Compressor block: `makeup` (dB, output level after the blend) and `mix`
+  (parallel blend), both zero-latency.
+- **Pre Comp** presets hear only the guitar: dialled once to the DI
+  reference (`examples/comp_dial`) and valid everywhere — Clean Sustain,
+  Funk Squash, Country Squash, Swell Sustain, Drive Tighten. Never re-dial
+  unless the guitar/interface gain changes.
+- **Post Comp** presets (Live Glue 2 dB, Clean Punch 4, Lead Sustain 5,
+  Rhythm Catch 1 — `target_gr_db` in blocks.styx) carry the character; each
+  preset snapshot's threshold is its own override, dialled on its own chain
+  by `signal rig dial-post-comp` (all 113 within ±0.2 dB; thresholds span
+  8 dB between amps). `examples/comp_verify` checks them.
+- Every snapshot picks a Pre and Post Comp in presets.styx by gain class
+  (Amp modules no longer set Post Comp). New variations: Twin Reverb ·
+  Funk, Deluxe Reverb · Country (not in any profile yet).
+- `gain_bias_db` per snapshot: loudness target = −23 + bias (clean 0, edge
+  +1, crunch +2, high-gain rhythm +2.5, lead +3). All three levelling paths
+  use `compose::loudness_target`. Measuring it (peak-to-loudness of the gain
+  stages) was tried and does not sort by gain.
+- **Order after changing a comp preset or an amp:** `signal rig
+  dial-post-comp` → `level-presets` → `level <Profile>` ×4 (dial ~18 min,
+  presets ~4 min).
+- Sidebar shows each patch's variation under its preset.
+
+## Worship profile = Deluxe + AC30 (config only, 2026-09-23)
+
+The profile only *picks*: every patch plays a variation of the rig preset
+**Deluxe + AC30** (Clean, Edge, Crunch, Drive, Lead, Swells — amp module
+"Deluxe + AC30" snapshots + Drive module "King of Tone + Morning Glory":
+King of Tone / Stacked / Lead) and overrides only the Time module. Presets
+are named for gear, never for a profile. Time module **"Slap + Room"**:
+DLY 2 slap (BBD, 100 ms, fb 0.08, mix 0.15) and VERB 2 room (mix 0.2) stay
+on; DLY 1 / VERB 1 are the main layers (Foundation, Dotted Eighth, Dotted
+Eighth Low, Quarter, Hall, Lead, Swells). Chain order is DLY 1 → DLY 2 →
+VERB 1 → VERB 2. Reverb `decay` is a 0–1 knob whose curve is per
+algorithm — the room/hall decays want a listen. The Lead variation needs
++12 dB of level (pedal stack into the pushed amps reads quiet). Every
+"Cranked" amp variation in the library is classed as edge (+1 dB, Drive
+Tighten). Backups: `*.bak-pre-worship-*`.
+
+## Time section: parallel, calibrated, trails (2026-09-23)
+
+**Delays and reverbs run fully wet in parallel with the dry** — `mix` is
+pinned at 1 in the rig and each block's amount is its `level` (dB against a
+unity dry; fx-blocks ids 62 delay / 94 reverb, a gain on the wet). Legacy
+`mix` overrides convert to `level = 20·log10(mix)` in `compose::flatten`
+(`OverrideDef::pin_parallel_mix`) and in `set_block_param`. New engine
+params: delay `high_cut` (in the loop *and* on the wet out, so repeat n is
+filtered n times); reverb `low_cut` / `high_cut` (wet band, live-safe via
+`ReverbChain::refresh_output_filters`), `duck` / `duck_threshold` /
+`duck_release`. Delay tap divisions gained 1/4. (8), 1/2 (9), 1/4T (10).
+
+**Reverb decay is a time on every engine.** Room/Hall convert natively;
+the plates, springs, Cloud, Bloom, Shimmer, Chorale and Swell map through
+measured tables (`reverb-dsp/src/calibration.rs`, measured by
+`fx-blocks/examples/rt60_table.rs`, generated by
+`reverb-dsp/tools/gen_calibration.py` — steps in the file header). Verified
+within a few % (Cloud −15 % at its shortest). Magneto / NonLinear /
+Reflections are not tail times and are left out. Fixed on the way: the
+vintage spring self-oscillated (its saturator raised the loop gain 1.5×).
+The UI's Time readouts show exact seconds everywhere.
+
+**Library** (config `7edb1c0`, from the research): 37 delay + 25 reverb
+block presets, 9 Delay / 8 Reverb / 10 Time modules (Dry, Ambience,
+Slapback, Spring, Rhythmic, Lead, Metal, Ambient, Swells, U2 Edge). Old
+Time picks were migrated in presets.styx and Worship; everything re-levelled
+(ENGINE `rig-v8`). Not yet dialled by ear — the next thing to do with it.
+
+**Trails and gapless switching.** Each block carries its bypass
+(`block_gate.rs`: Trails for time effects — the input mutes, the tail rings
+— Hard for the rest, 5 ms ramps). A switch is one hold of the renderer's
+lock (daw `with_plugin_instances`; the renderer spins briefly rather than
+render a block dry). The outgoing chain becomes a voice in the output
+stage (`tail_stage.rs`, inside the `OutputTap`): 8 ms equal-power crossfade
+on the live input, then its Time section onward rings on silence at its own
+patch level until quiet for 2 s (max 30 s, 4 voices). Switching back to a
+ringing patch resumes it. The patch level now lives in the stage (smoothed,
+captured per tail); the fader is master trim + mute only. Pre FX tails
+(Pre Verb/Delay) still cut on a switch. Tests:
+`signal-sampler/tests/gapless_switch.rs` (offline end to end, a concurrent
+switch storm, a `--ignored` realtime budget: 4 Hall tails = 13 % of a
+128-frame block) and `tests/rt_alloc.rs` (no audio-thread allocation).
+
+**Known stale tests (not from this work):** delay-dsp `tests/golden.rs`
+vectors fail on macOS (4 of them before any of this; the inert-pair test
+since the Tape timing fix); fx-blocks `tests/{eq_suite,tune_block,…}` still
+import the old `signal_fx` / `signal_plugin_host` names.
+
+## UI crash class: input between a re-render and its layout (fixed 2026-09-23)
+
+`invalid key` / unwrap panics in blitz-dom (node_chain, absolute_position,
+node_layout_ancestors, mark_ancestors_dirty) — 8 in the 2026-09-21 log, and
+reproducible by changing the amp capture then moving the mouse. Cause: the
+window resolves layout once per frame, pointer input arrives between
+frames, and after `poll` applies mutations the tree still holds
+`layout_parent` links into anonymous boxes the mutation freed. Fix:
+`dioxus-native-dom` (vendored in signal) marks layout stale in `poll` and
+`handle_ui_event` resolves first (`BaseDocument::resolve_at_last_time`,
+blitz fork `fts-focus` `45fba011`). The per-site guards (`b98dda16`,
+`da8bc781`, `a24cbf1a`, `e7a452c1`) stay as a second net — and are needed:
+a crash in `absolute_position` came back after a delay-timing dropdown
+change *with* the resolve in place, so a rebuild itself can leave a
+`layout_parent` pointing at a freed anonymous box. **Open:** find where
+blitz-dom's layout construction frees anonymous boxes without updating
+their children's `layout_parent`. Menus draw at the rig root
+(`signal_widgets::PopupHost`/`PopupLayer`), drags go through
+`signal_widgets::DragBus` — both because Blitz has no `fixed`, no portals,
+no pointer capture.
+
+## Browser rig (next phase, after native is done)
+
+Plan from this session (research, no code): mirror the keys rig —
+`apps/desktop/src/web_keys_rig.rs` + `web_keys_backend.rs` — as
+`web_guitar_rig.rs` (route `/rigs/guitar`) + `web_guitar_backend.rs`: an
+in-page `Rig` implementation over `rig.json` (`signal rig web-bundle`)
+driving `features/rigs/guitar/worklet`, mounting the real
+`GuitarRigRemote`. `GuitarRigBackend` itself is too native to compile for
+wasm. Phase 1: stacks into the bundle, `setParamByName` in the worklet, the
+~22 `Rig` methods the UI calls to play, web-stage wiring, COOP/COEP
+headers. Hosting (the public link's domain, which captures may be
+redistributed) is the user's decision.

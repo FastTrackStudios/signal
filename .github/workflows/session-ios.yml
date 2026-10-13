@@ -1,0 +1,127 @@
+# Session iOS TestFlight — build the Session iPhone app and upload it on
+# every push to main that touches the app or the crates it renders with.
+#
+# Runs on the org-level self-hosted macOS runner `airlock`, which holds its
+# own credentials (~/.appstoreconnect + fts-build.keychain), so this needs no
+# GitHub secrets.
+#
+# Reuses the same parameterized deploy-testflight.sh the other products use;
+# only the DX_* env below differs.
+
+name: session-ios
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - "apps/session-daw/**"
+      - "crates/**"
+      - "libs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/session-ios.yml"
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "CFBundleShortVersionString (e.g. 0.0.2)"
+        required: false
+        default: "0.0.4"
+
+# Per-workflow group: a newer run supersedes an older queued one. NOT shared
+# across products — a concurrency group holds only one pending run, so a
+# shared name makes the products cancel each other (that is exactly how
+# task-ios went stale for four merges). Serialization is already guaranteed:
+# airlock is a single runner and takes one job at a time.
+concurrency:
+  group: ios-testflight-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: [self-hosted, macos, airlock]
+    # Turn a missing runner into a red X within the hour. Without it a job
+    # with no available runner sits QUEUED and is eventually cancelled,
+    # which reads as "cancelled" rather than "failed" and alerts nobody.
+    timeout-minutes: 90
+    steps:
+      - name: Preflight — build volume mounted
+        run: |
+          if [ ! -d /Volumes/build-disk ]; then
+            echo "ERROR: /Volumes/build-disk is not mounted on this runner." >&2
+            exit 1
+          fi
+          df -h /Volumes/build-disk | tail -1
+
+      # clean:false keeps target/ between runs so cargo builds incrementally.
+      # Into session/, beside its siblings: the workspace takes daw and
+      # processor as path deps (`../daw`, `../processor`), as checks.yml
+      # lays them out.
+      - uses: actions/checkout@v4
+        with:
+          path: session
+          clean: false
+
+      # The siblings at the revisions flake.lock pins (daw-src,
+      # processor-src) — the one place they are pinned for a build.
+      - name: Sibling checkouts — daw, processor
+        run: |
+          set -euo pipefail
+          for sibling in daw processor; do
+            rev=$(jq -r ".nodes[\"$sibling-src\"].locked.rev" session/flake.lock)
+            if [ ! -d "$sibling/.git" ]; then
+              git clone --quiet "https://github.com/FastTrackStudios/$sibling" "$sibling"
+            fi
+            git -C "$sibling" fetch --quiet origin "$rev"
+            git -C "$sibling" checkout --quiet --force "$rev"
+            echo "$sibling at $rev"
+          done
+
+      - name: Build, sign, and upload Session to TestFlight
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+          MARKETING_VER: ${{ inputs.marketing_version || '0.0.4' }}
+          # The release Xcode xcode-select points at (27, on macOS 27) builds,
+          # compiles the icon catalog, signs and uploads: App Store Connect
+          # refuses a beta SDK (90534), and actool must match the macOS.
+          # ── Telemetry ────────────────────────────────────────────────
+          # Baked at build time via option_env! in architect-telemetry: a
+          # shipped app has nobody to set env vars for it, and the exporter
+          # is built at process start -- before sign-in -- so a session
+          # token cannot be the credential. Both empty => the app is
+          # telemetry-free, which is the local-first default.
+          TASK_OTLP_ENDPOINT: ${{ vars.TASK_OTLP_ENDPOINT }}
+          TASK_OTLP_TOKEN: ${{ secrets.TASK_OTLP_TOKEN }}
+          TASK_SENTRY_DSN: ${{ secrets.TASK_SENTRY_DSN }}
+          # ── Session product identity ─────────────────────────────────
+          # The app crate is `session-desktop` (apps/desktop) — the same one
+          # the Mac runs, on Blitz (`native`): the phone gets the same
+          # panels in the small-screen layout (session_daw::compact).
+          DX_PACKAGE: session-desktop
+          DX_APP_DIR: apps/desktop
+          # NOT the crate defaults. `session` implies `tts`, which pulls
+          # ort/ONNX Runtime -- and ONNX publishes no prebuilt binary for
+          # aarch64-apple-ios, so ort-sys' build.rs panics and the whole
+          # build dies. `session-domain` is Session without the TTS backend;
+          # the guide still runs on synthesized cues.
+          DX_FEATURES: --no-default-features --features native,session-domain,charts
+          DX_BUNDLE_ID: app.fasttrackstudio.session
+          APP_DISPLAY_NAME: Session
+          PROFILE_NAME: FTS Session App Store
+          ICONS_DIR: ${{ github.workspace }}/session/apps/desktop/ios/Assets.xcassets
+        working-directory: session
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          bash apps/desktop/ios/deploy-testflight.sh
+
+      - name: Summary
+        if: always()
+        working-directory: session
+        run: |
+          echo "### Session iOS TestFlight" >> "$GITHUB_STEP_SUMMARY"
+          echo "commit \`$(git rev-parse --short HEAD)\` → Session uploaded (see log for build number)." >> "$GITHUB_STEP_SUMMARY"

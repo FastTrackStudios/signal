@@ -1,0 +1,5 @@
+// Scoring mode workflow. id = "mode-scoring", name = "Mode Scoring".
+// Skeleton — see mode-organize.styx for the override-block menu.
+
+name        "Scoring"
+description "Multi-agent orchestration layout, no toolbars."

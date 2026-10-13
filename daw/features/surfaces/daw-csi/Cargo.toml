@@ -1,0 +1,39 @@
+[package]
+name = "daw-csi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Control Surface Integration — CSI-style hardware surface support (Mackie Control / Behringer X-Touch) driven by the daw event bus"
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+[dependencies]
+daw-proto = { workspace = true }
+daw-control = { workspace = true }
+
+# Hardware MIDI (ALSA on Linux). Optional so the codec/navigator can be
+# used (and tested) without a MIDI stack — e.g. in CI or on WASM.
+midir = { workspace = true, optional = true }
+
+tokio.workspace = true
+tracing.workspace = true
+eyre.workspace = true
+vox.workspace = true
+facet.workspace = true
+facet-styx.workspace = true
+
+[features]
+default = ["midi-hardware"]
+midi-hardware = ["dep:midir"]
+
+[dev-dependencies]
+# Integration tests drive the full gesture → service → event-bus path
+# against an in-process Standalone (no hardware, no REAPER).
+# `clap-host` lets the FX-zone test load real CLAP plugins.
+daw-standalone = { workspace = true, features = ["bootstrap", "clap-host", "decode"] }
+# Console output for the xtouch_test hardware exerciser.
+tracing-subscriber = { workspace = true }

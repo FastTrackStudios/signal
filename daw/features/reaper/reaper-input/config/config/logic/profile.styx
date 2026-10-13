@@ -1,0 +1,13 @@
+name "Logic Pro"
+description "Logic Pro — keyboard shortcuts that mirror Logic Pro X workflows"
+version 1.0.0
+
+sections (
+    transport.styx
+    navigation.styx
+    editing.styx
+    scrolling.styx
+    views.styx
+    midi.styx
+    mouse.styx
+)

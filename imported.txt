@@ -1,0 +1,9 @@
+# Where each folded-in repo's code came from: repo, its directory here
+# ("." = the root), the branch followed, and the last commit carried over.
+# scripts/catch-up.sh carries over what those branches did since, and
+# moves the commit forward. Delete a line once its repo is archived.
+session    .           frame-mixer  071fc717e9db3c57aedf4abc5b2d49a1f7d2425d
+daw        daw         fx-key       2be3136d53ed69d949d9209f6faa8d2960bdd6e9
+processor  processor   builtin-fx   f6f52e9fdc3e89db3dd8b8aeb70b28ad96f3e57b
+signal     signal      rig-dump     b96c0f5e8db42c534a70e2b81bb0073a291807b6
+patchbay   patchbay    main         3fe4607c125f041fd5d07ca6f6208c856ffacc77

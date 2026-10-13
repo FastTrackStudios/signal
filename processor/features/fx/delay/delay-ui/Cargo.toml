@@ -1,0 +1,83 @@
+[package]
+name = "delay-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Delay GUI — the six families, each with its own panel"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# The painted visualiser: what the effect is actually doing, on the GPU where
+# there is one and in vectors where there is not. Wants a Blitz host for the
+# custom-widget mechanism, which is why it is not on by default.
+viz = ["dep:anyrender", "dep:blitz-dom", "dep:dioxus-native-dom", "dep:vello", "dep:bytemuck", "fts-audio-ui/shader"]
+native = [
+    "musical-time/params",
+    "dep:nice-plug",
+    "dep:fts-plug-ui",
+    "dep:nice-plug-dioxus",
+    "dep:architect-ui",
+    "dep:atomic_float",
+    "dep:parking_lot",
+]
+
+[dependencies]
+architect-ui = { workspace = true, optional = true }
+fts-audio-ui = { workspace = true }
+# The painted widget keeps its own clock; `std::time::Instant` panics in a
+# browser.
+web-time = { workspace = true }
+anyrender = { workspace = true, optional = true }
+blitz-dom = { workspace = true, features = ["custom-widget"], optional = true }
+dioxus-native-dom = { workspace = true, optional = true }
+vello = { workspace = true, optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+nice-plug = { workspace = true, optional = true }
+fts-plug-ui = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+atomic_float = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+delay-profiles = { workspace = true }
+# `params` (the nice-plug parameter tree) only with `native`: the module
+# that uses it is `#[cfg(feature = "native")]`, and unconditionally it
+# dragged nice-plug — and its filesystem logging — into every wasm build
+# that mounts these visualisers.
+musical-time = { workspace = true }
+musical-time-ui = { workspace = true }
+delay-dsp = { workspace = true }
+crossbeam-channel = { workspace = true }
+dioxus = { workspace = true }
+
+[[test]]
+name = "screenshots"
+required-features = ["native"]
+
+[dev-dependencies]
+dioxus = { workspace = true }
+dioxus-test = { workspace = true }
+# Validate the WGSL without a GPU — nothing else would catch a shader that
+# does not compile until someone ran a plugin, because a surface that fails
+# to build is indistinguishable from a renderer that declined.
+naga = { version = "29", features = ["wgsl-in"] }
+# The family contact sheet (examples/family_sheet.rs) renders the real shader
+# on a real device — see .
+fts-audio-ui = { workspace = true, features = ["probe"] }
+bytemuck = { version = "1", features = ["derive"] }
+png = "0.18"
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[test]]
+name = "param_round_trip"
+required-features = ["native"]
+
+[[test]]
+name = "tempo_sync"
+required-features = ["native"]
+
+[[test]]
+name = "time_field"
+required-features = ["native"]

@@ -1,0 +1,31 @@
+[package]
+name = "session-player"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["FastTrack Studio"]
+publish = false
+
+# The live multitrack setlist player: loads a setlist (a `type: setlist`
+# note, or bare song titles), builds each song's real Master Setlist
+# Template project in-process (`session_vault_sync::live_bus::build_live_rpp`
+# — the exact same generator `session-vault-sync build-project --live`
+# writes to disk, just not written to disk here) and loads it via
+# `daw_standalone::project_loader::load_rpp_via_bay` — the actual RPP
+# parser + audio materializer, not a reseeded approximation — then drives
+# real synced playback with per-stem mute/solo, natively, no REAPER, no
+# browser. Deliberately skips the RPC/vox facade
+# `apps/desktop/src/session_engine.rs` builds for remote UIs: this is a
+# local CLI player, so it drives `daw-standalone`'s sync
+# `Transport`/`Tracks` trait methods directly.
+
+[[bin]]
+name = "session-player"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+daw-proto = { workspace = true }
+daw-standalone = { workspace = true, features = ["audio", "rpp-project", "rpp-loader"] }
+session-vault-sync = { path = "../vault-sync" }
+tokio = { workspace = true }

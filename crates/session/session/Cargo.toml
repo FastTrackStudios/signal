@@ -1,0 +1,147 @@
+[package]
+name = "session"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[lib]
+name = "session"
+path = "src/lib.rs"
+doctest = false
+
+[[bin]]
+name = "session"
+path = "src/main.rs"
+
+[dependencies]
+session-proto.workspace = true
+# `platform` = the portable async-runtime seam (`architect::platform::{spawn,
+# sleep, timeout}` — tokio on native, browser timers/`spawn_local` on wasm),
+# replacing the retired moire.
+architect = { workspace = true, features = ["platform"] }
+# Base (wasm-safe) daw facade: proto + control + module only. The REAPER +
+# file backends are native-only and added in the `cfg(not(wasm32))` target
+# table below (Cargo unions the two entries on native). The browser setlist
+# engine drives the backend-agnostic `daw::get()` facade, so it needs no
+# REAPER feature.
+daw = { workspace = true }
+daw-proto = { workspace = true }
+# Canonical 128-slot group partition lives here (music_catalog::groups).
+# Guide schedule + MIDI note rendering (the pure half of guide
+# generation; this crate does the DAW writes).
+session-guide.workspace = true
+# <KEYSIG> read/write for the bake step.
+dawfile-reaper.workspace = true
+music-catalog.workspace = true
+# Auto-colour classification: monarchy sorts track names into the group
+# hierarchy, color-palette carries the Color type the palette is keyed in.
+monarchy.workspace = true
+color-palette.workspace = true
+# Base (wasm-safe) vox runtime. `transport-local` (Unix-socket / tokio-net,
+# pulls mio) is native-only — added in the target table below.
+vox = { workspace = true }
+tokio = { version = "1.48", features = ["rt", "sync", "time", "macros"] }
+eyre.workspace = true
+tracing.workspace = true
+chrono = "0.4"
+utils.workspace = true
+uuid = { version = "1", features = ["v4"] }
+keyflow = { workspace = true, features = ["text"] }
+keyflow-daw-analysis = { workspace = true }
+smallvec = "1.13"
+rustc-hash = "2"
+
+# Native-only backends. `dynamic-template` (native template engine, used
+# by `daw_module` / `track_manager_actions`) and vox's `transport-local`
+# (Unix-socket transport → tokio-net → mio) do not build for wasm32, but
+# ARE backend-agnostic (no REAPER dependency) — unconditional here. The
+# REAPER-only crates (`daw-reaper`, `daw-actions`, `daw-synchronization`,
+# `reaper-high`/`reaper-low`/`reaper-medium`) are optional, gated by the
+# `reaper` feature below — a REAPER-hosted consumer (the extension) opts
+# in; a `daw-standalone`-only consumer (apps/desktop) does not, and must
+# not: those crates declare REAPER-process-only native symbols
+# (`delete_midi_output`, `MIDI_eventlist_AddItem`, ...) that can never
+# resolve in a standalone executable's link — pulling them in
+# unconditionally is what broke `session-desktop`'s build.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+daw = { workspace = true, features = ["file"] }
+daw-reaper = { workspace = true, optional = true }
+# Pre-roll / record / grouping / take-ranking / auto-colour actions —
+# generic DAW operations, moved out of this crate.
+daw-actions = { workspace = true, optional = true }
+daw-synchronization = { workspace = true, optional = true }
+# Raw REAPER FFI — used by take_ranking for cursor / item / take-marker ops
+# that aren't covered by the daw service traits.
+reaper-high = { workspace = true, optional = true }
+reaper-low = { workspace = true, optional = true }
+reaper-medium = { workspace = true, optional = true }
+dynamic-template = { workspace = true, features = ["reaper"] }
+vox = { workspace = true, features = ["transport-local"] }
+
+# Wasm-only: the browser setlist pump drives its single-threaded reactive loop
+# with `futures::select!` + fused `architect::platform::sleep` timers (the
+# native pump uses `tokio::select!` + `tokio::time::interval`, neither of which
+# builds for the browser runtime).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+futures = { workspace = true }
+
+[dev-dependencies]
+daw = { workspace = true, features = ["standalone", "file", "test-harness"] }
+# Ephemeral, REAPER-free harness: drive the SetlistService build path against
+# an in-process daw-standalone backend over a vox memory link.
+# "audio" is required: daw-standalone's unconditional `sync` module references
+# the feature-gated `audio_engine` (compile error with default features) —
+# same workaround dynamic-template carries.
+daw-standalone = { workspace = true, features = ["bootstrap", "audio"] }
+daw-proto = { workspace = true }
+# Test-only: `standalone_setlist_harness.rs` exercises the live DAW sync
+# bridge directly. Dev-dependencies never leak into a consumer's build
+# (unlike the `[target...dependencies]` table above), so this doesn't
+# reintroduce REAPER linkage into `session-desktop` or any other consumer.
+daw-synchronization = { workspace = true }
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+eyre.workspace = true
+# `reaper_setlist_recording_mode.rs`: opens the SetlistService lanes
+# directly over the `#[reaper_test]` rig's Unix-socket vox link — the
+# same lanes `session-desktop`'s Recording Mode
+# (`apps/desktop/src/reaper_engine.rs`) opens, so this proves that
+# connection actually works against a live `daw_reaper::Reaper`. `vox`
+# itself is already a normal (non-dev) dependency above; `vox-stream` is
+# the Unix-socket transport, only needed here.
+vox-stream = { workspace = true }
+# `reaper_lan_engine.rs`: connects a real `tokio-tungstenite`-backed vox
+# WebSocket client to session-extension's LAN test server — the exact
+# `architect::axum_ws`/vox-WebSocket path `session-desktop --engine` uses,
+# proven against real REAPER instead of just the unix socket.
+vox-websocket = { workspace = true }
+# `compare_sections` example reads the legacy `manifest.json`.
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# The live session as a Loro doc, presence and shared transport
+# (FastTrackStudios/session#139).
+[dependencies.session-sync]
+workspace = true
+
+[features]
+# Sharing a session: the doc bridge to the engine, and hosting/joining
+# over vox (FastTrackStudios/session#139).
+collab = ["session-sync/engine", "session-sync/net"]
+# Real REAPER integration: window-layout modes (screensets), auto-colour
+# action registration, the DawModule extension glue, take-ranking, live
+# cross-window DAW sync. Off by default. A REAPER-hosted binary (the
+# extension) enables this explicitly; `apps/desktop` (daw-standalone
+# only) must not — see the dependency-table comment above.
+reaper = [
+    "daw/reaper",
+    "dep:daw-reaper",
+    "dep:daw-actions",
+    "dep:daw-synchronization",
+    "dep:reaper-high",
+    "dep:reaper-low",
+    "dep:reaper-medium",
+]
+
+[lints]
+workspace = true

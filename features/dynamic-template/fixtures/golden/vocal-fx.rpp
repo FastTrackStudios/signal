@@ -1,0 +1,1443 @@
+<REAPER_PROJECT 0.1 "7.0" 0
+  RIPPLE 0
+  TEMPO 92 4 4 0
+  <EXTSTATE
+    <FTSMCP
+      WIDTHS {321589FE-F10B-529B-FB7E-9B40A48DFFE8}=56 {1DC85F5B-2631-8BF7-E472-F014890FDE08}=56 {EF4E8903-F929-1C9B-5D51-B9EDBFB344CA}=133 {4BA0C661-ABDB-3E5F-4845-8858BEA923A4}=30 {2A5F819B-2DD2-35D5-DB50-7378691DEBBA}=56 {6FE5EB2A-D0FA-BC01-0D93-D6725FF204BA}=56 {1C7AF579-8962-2524-0C8F-AF7E5F8AB590}=30 {E1124360-9B18-FC5C-E950-6C15916F2630}=30 {6A1B68D8-F906-F004-62C1-FACDF1AFEFF8}=30 {F4443537-38E0-788A-9E83-D3B63D4BA204}=30 {5ADDA076-C7B2-F247-A9E9-4675748DD358}=56 {8E9BEFE7-5791-0B6B-ACD1-A81A321E9506}=30 {31A47EC5-7C28-A83A-FE8C-CE00267EE68C}=30 {EE59EA3A-C6FE-EE66-D0E9-23456945B6C0}=30 {20B5AE51-D11C-B6B4-D983-2C8FE76532F8}=30 {6AFBB41E-04B7-09C0-01E5-27F2018F04C0}=30 {59F1657D-A18C-B989-598D-8787979BA75C}=30 {5C6F255C-A2D8-F0EC-F791-8709EF076428}=56 {3E9DA58F-E504-98CA-8BD1-38A828A583DC}=30 {3E9D9F8F-E504-8E98-4EED-9D010A896440}=30
+    >
+  >
+  <TRACK {321589FE-F10B-529B-FB7E-9B40A48DFFE8}
+    NAME "Vox Lead"
+    TRACKID {321589FE-F10B-529B-FB7E-9B40A48DFFE8}
+    PEAKCOL 23743152
+    AUTOMODE 0
+    VOLPAN 0.55 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 1 1
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind group
+    EXT FTS:group Vocals/Lead
+  >
+  <TRACK {1DC85F5B-2631-8BF7-E472-F014890FDE08}
+    NAME "Chase Vox"
+    TRACKID {1DC85F5B-2631-8BF7-E472-F014890FDE08}
+    PEAKCOL 23743152
+    AUTOMODE 0
+    VOLPAN 0.625 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 1 1
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind piece
+  >
+  <TRACK {EF4E8903-F929-1C9B-5D51-B9EDBFB344CA}
+    NAME "Lead Vox"
+    TRACKID {EF4E8903-F929-1C9B-5D51-B9EDBFB344CA}
+    PEAKCOL 23743152
+    SEL 1
+    AUTOMODE 0
+    VOLPAN 0.7 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 1 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind part
+    <ITEM
+      POSITION 5.217391304347826
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {804931D2-03C9-1079-B71D-D054991E4F5A}
+      NAME "Lead Vox 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-lead-vox.wav"
+      >
+    >
+    <ITEM
+      POSITION 15.652173913043478
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {804930D2-03C9-0EC6-7C7C-5BC6BE43A50C}
+      NAME "Lead Vox 2"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-lead-vox.wav"
+      >
+    >
+    <ITEM
+      POSITION 36.52173913043478
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {80492FD2-03C9-0D13-F520-6E24C7122662}
+      NAME "Lead Vox 4"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-lead-vox.wav"
+      >
+    >
+    <ITEM
+      POSITION 67.82608695652173
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {80492ED2-03C9-0B60-9C68-9AD0AFBB9EC0}
+      NAME "Lead Vox 7"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-lead-vox.wav"
+      >
+    >
+    <ITEM
+      POSITION 88.69565217391305
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {804935D2-03C9-1745-D378-5E9E29C5FA1A}
+      NAME "Lead Vox 9"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-lead-vox.wav"
+      >
+    >
+    <ITEM
+      POSITION 120
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {804934D2-03C9-1592-BB95-BBBF0B1A495C}
+      NAME "Lead Vox 12"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-lead-vox.wav"
+      >
+    >
+  >
+  <TRACK {4BA0C661-ABDB-3E5F-4845-8858BEA923A4}
+    NAME "Vox Dbl"
+    TRACKID {4BA0C661-ABDB-3E5F-4845-8858BEA923A4}
+    PEAKCOL 23743152
+    AUTOMODE 0
+    VOLPAN 0.775 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 2 -1
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind part
+    <ITEM
+      POSITION 0
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {AC6C24C7-BEF8-B4B3-51E4-559A191801E8}
+      NAME "Vox Dbl 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-vox-dbl.wav"
+      >
+    >
+    <ITEM
+      POSITION 31.304347826086957
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {AC6C23C7-BEF8-B300-00B6-4A8B004F87C0}
+      NAME "Vox Dbl 4"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-vox-dbl.wav"
+      >
+    >
+    <ITEM
+      POSITION 62.608695652173914
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {AC6C26C7-BEF8-B819-8780-2AF3FF65ECA8}
+      NAME "Vox Dbl 7"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-vox-dbl.wav"
+      >
+    >
+    <ITEM
+      POSITION 83.47826086956522
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {AC6C25C7-BEF8-B666-B545-C350E048E540}
+      NAME "Vox Dbl 9"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-vox-dbl.wav"
+      >
+    >
+    <ITEM
+      POSITION 104.34782608695653
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {AC6C28C7-BEF8-BB7F-D333-9793B219EE40}
+      NAME "Vox Dbl 11"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-chase-vox-vox-dbl.wav"
+      >
+    >
+  >
+  <TRACK {2A5F819B-2DD2-35D5-DB50-7378691DEBBA}
+    NAME "Vox FX"
+    TRACKID {2A5F819B-2DD2-35D5-DB50-7378691DEBBA}
+    PEAKCOL 25916516
+    AUTOMODE 0
+    VOLPAN 0.85 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 1 1
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind fx
+  >
+  <TRACK {6FE5EB2A-D0FA-BC01-0D93-D6725FF204BA}
+    NAME Delay
+    TRACKID {6FE5EB2A-D0FA-BC01-0D93-D6725FF204BA}
+    PEAKCOL 32932411
+    AUTOMODE 0
+    VOLPAN 0.925 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 1 1
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind fx
+  >
+  <TRACK {1C7AF579-8962-2524-0C8F-AF7E5F8AB590}
+    NAME Slap
+    TRACKID {1C7AF579-8962-2524-0C8F-AF7E5F8AB590}
+    PEAKCOL 32932411
+    AUTOMODE 0
+    VOLPAN 1 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind return
+    <ITEM
+      POSITION 7.826086956521739
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {CB7324BD-82AD-73EC-0AA6-3DEAC8D362D8}
+      NAME "Slap 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-slap.wav"
+      >
+    >
+    <ITEM
+      POSITION 18.26086956521739
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {CB7325BD-82AD-759F-83D8-571354E3C9D4}
+      NAME "Slap 2"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-slap.wav"
+      >
+    >
+    <ITEM
+      POSITION 39.130434782608695
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {CB7326BD-82AD-7752-5E93-7FF98B7F6C18}
+      NAME "Slap 4"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-slap.wav"
+      >
+    >
+    <ITEM
+      POSITION 60
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {CB7327BD-82AD-7905-009A-6D8D72D16CEC}
+      NAME "Slap 6"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-slap.wav"
+      >
+    >
+    <ITEM
+      POSITION 80.86956521739131
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {CB7320BD-82AD-6D20-25AD-6943CF9EDB80}
+      NAME "Slap 8"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-slap.wav"
+      >
+    >
+    <ITEM
+      POSITION 101.73913043478261
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {CB7321BD-82AD-6ED3-4202-7A6FC6B02B64}
+      NAME "Slap 10"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-slap.wav"
+      >
+    >
+    <ITEM
+      POSITION 122.60869565217392
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {CB7322BD-82AD-7086-FBF3-55B457FC9370}
+      NAME "Slap 12"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-slap.wav"
+      >
+    >
+  >
+  <TRACK {E1124360-9B18-FC5C-E950-6C15916F2630}
+    NAME Short
+    TRACKID {E1124360-9B18-FC5C-E950-6C15916F2630}
+    PEAKCOL 32932411
+    AUTOMODE 0
+    VOLPAN 0.55 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind return
+    <ITEM
+      POSITION 2.608695652173913
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {32DA7ED6-C763-1AFA-7EB3-8F9F10832E50}
+      NAME "Short 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 23.47826086956522
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {32DA7FD6-C763-1CAD-364E-CF3B1350F8D6}
+      NAME "Short 3"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 44.34782608695652
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {32DA7CD6-C763-1794-F24D-AE89D160CA98}
+      NAME "Short 5"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 65.21739130434783
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {32DA7DD6-C763-1947-0179-94E60EB4B51A}
+      NAME "Short 7"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 75.65217391304348
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {32DA7AD6-C763-142E-A58A-97C0DF4124E8}
+      NAME "Short 8"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 86.08695652173913
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {32DA7BD6-C763-15E1-224E-3AB2E2AA501E}
+      NAME "Short 9"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 106.95652173913044
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {32DA78D6-C763-10C8-36C6-66A40C7B8E90}
+      NAME "Short 11"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 117.3913043478261
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {32DA79D6-C763-127B-B7ED-F9D4832CCE3A}
+      NAME "Short 12"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-short.wav"
+      >
+    >
+  >
+  <TRACK {6A1B68D8-F906-F004-62C1-FACDF1AFEFF8}
+    NAME Long
+    TRACKID {6A1B68D8-F906-F004-62C1-FACDF1AFEFF8}
+    PEAKCOL 32932411
+    AUTOMODE 0
+    VOLPAN 0.625 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind return
+    <ITEM
+      POSITION 5.217391304347826
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {785338DA-FAC2-618C-9D6A-7B98E5FBC1E0}
+      NAME "Long 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-long.wav"
+      >
+    >
+    <ITEM
+      POSITION 36.52173913043478
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {785339DA-FAC2-633F-6A16-92F071FEC08C}
+      NAME "Long 4"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-long.wav"
+      >
+    >
+    <ITEM
+      POSITION 57.391304347826086
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {78533ADA-FAC2-64F2-0988-08F52B117920}
+      NAME "Long 6"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-long.wav"
+      >
+    >
+    <ITEM
+      POSITION 88.69565217391305
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {78533BDA-FAC2-66A5-2370-89C196AD0A94}
+      NAME "Long 9"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-long.wav"
+      >
+    >
+    <ITEM
+      POSITION 120
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {785334DA-FAC2-5AC0-CC24-353739B794C0}
+      NAME "Long 12"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-long.wav"
+      >
+    >
+  >
+  <TRACK {F4443537-38E0-788A-9E83-D3B63D4BA204}
+    NAME Throw
+    TRACKID {F4443537-38E0-788A-9E83-D3B63D4BA204}
+    PEAKCOL 32932411
+    AUTOMODE 0
+    VOLPAN 0.7 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 2 -1
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind return
+    <ITEM
+      POSITION 5.217391304347826
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {D06DB6E7-F43C-1D10-F27A-76B273954180}
+      NAME "Throw 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 15.652173913043478
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {D06DB7E7-F43C-1EC3-889E-C43E39E11532}
+      NAME "Throw 2"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 36.52173913043478
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {D06DB8E7-F43C-2076-566E-04F09932B5C4}
+      NAME "Throw 4"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 67.82608695652173
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {D06DB9E7-F43C-2229-0509-CD72FF71A262}
+      NAME "Throw 7"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 99.1304347826087
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {D06DBAE7-F43C-23DC-5D15-8165578D02F8}
+      NAME "Throw 10"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 120
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {D06DBBE7-F43C-258F-DB1E-5CB275910B42}
+      NAME "Throw 12"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-delay-throw.wav"
+      >
+    >
+  >
+  <TRACK {5ADDA076-C7B2-F247-A9E9-4675748DD358}
+    NAME Verb
+    TRACKID {5ADDA076-C7B2-F247-A9E9-4675748DD358}
+    PEAKCOL 32922763
+    AUTOMODE 0
+    VOLPAN 0.775 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 1 1
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind fx
+  >
+  <TRACK {8E9BEFE7-5791-0B6B-ACD1-A81A321E9506}
+    NAME Room
+    TRACKID {8E9BEFE7-5791-0B6B-ACD1-A81A321E9506}
+    PEAKCOL 32922763
+    AUTOMODE 0
+    VOLPAN 0.85 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind verb
+    <ITEM
+      POSITION 0
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0CEB21E3-6872-3615-0A18-FF2FC9D05F06}
+      NAME "Room 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-room.wav"
+      >
+    >
+    <ITEM
+      POSITION 31.304347826086957
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0CEB20E3-6872-3462-FA0B-50DD23BF058C}
+      NAME "Room 4"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-room.wav"
+      >
+    >
+    <ITEM
+      POSITION 41.73913043478261
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0CEB1FE3-6872-32AF-119A-441A23D0F0CE}
+      NAME "Room 5"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-room.wav"
+      >
+    >
+    <ITEM
+      POSITION 73.04347826086956
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0CEB1EE3-6872-30FC-9A1A-8C2B29C03608}
+      NAME "Room 8"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-room.wav"
+      >
+    >
+    <ITEM
+      POSITION 93.91304347826087
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0CEB1DE3-6872-2F49-E528-E4B9CF31BC0E}
+      NAME "Room 10"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-room.wav"
+      >
+    >
+  >
+  <TRACK {31A47EC5-7C28-A83A-FE8C-CE00267EE68C}
+    NAME Short
+    TRACKID {31A47EC5-7C28-A83A-FE8C-CE00267EE68C}
+    PEAKCOL 32922763
+    AUTOMODE 0
+    VOLPAN 0.925 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind verb
+    <ITEM
+      POSITION 7.826086956521739
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {DAFB0423-09F0-6AE2-6DBF-A64E7716B4A8}
+      NAME "Short 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 39.130434782608695
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {DAFB0523-09F0-6C95-BD93-581B617C3C08}
+      NAME "Short 4"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 60
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {DAFB0223-09F0-677C-0B53-3BE9058AB8D8}
+      NAME "Short 6"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 91.30434782608695
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {DAFB0323-09F0-692F-5705-D3E358DE8278}
+      NAME "Short 9"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 112.17391304347827
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {DAFB0023-09F0-6416-6EDE-6D783EA3C990}
+      NAME "Short 11"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-short.wav"
+      >
+    >
+    <ITEM
+      POSITION 122.60869565217392
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {DAFB0123-09F0-65C9-0451-ADACBD5F5AE0}
+      NAME "Short 12"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-short.wav"
+      >
+    >
+  >
+  <TRACK {EE59EA3A-C6FE-EE66-D0E9-23456945B6C0}
+    NAME Long
+    TRACKID {EE59EA3A-C6FE-EE66-D0E9-23456945B6C0}
+    PEAKCOL 32922763
+    AUTOMODE 0
+    VOLPAN 1 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind verb
+    <ITEM
+      POSITION 7.826086956521739
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0BCFC196-FA53-9734-5AB1-A52A4C64BA10}
+      NAME "Long 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-long.wav"
+      >
+    >
+    <ITEM
+      POSITION 18.26086956521739
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0BCFC296-FA53-98E7-0542-8476FCD54B92}
+      NAME "Long 2"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-long.wav"
+      >
+    >
+    <ITEM
+      POSITION 49.56521739130435
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0BCFC396-FA53-9A9A-2EDA-20A056A012C8}
+      NAME "Long 5"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-long.wav"
+      >
+    >
+    <ITEM
+      POSITION 80.86956521739131
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0BCFC496-FA53-9C4D-21FE-BFBDAD62CB4E}
+      NAME "Long 8"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-long.wav"
+      >
+    >
+    <ITEM
+      POSITION 101.73913043478261
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0BCFBD96-FA53-9068-1281-D8D769E47A00}
+      NAME "Long 10"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-long.wav"
+      >
+    >
+    <ITEM
+      POSITION 112.17391304347827
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0BCFBE96-FA53-921B-E190-F77B54987EFA}
+      NAME "Long 11"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-long.wav"
+      >
+    >
+  >
+  <TRACK {20B5AE51-D11C-B6B4-D983-2C8FE76532F8}
+    NAME Moment
+    TRACKID {20B5AE51-D11C-B6B4-D983-2C8FE76532F8}
+    PEAKCOL 32922763
+    AUTOMODE 0
+    VOLPAN 0.55 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind verb
+    <ITEM
+      POSITION 7.826086956521739
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {8DEDE005-FA67-CFEA-9186-6CA5E5A5A7C8}
+      NAME "Moment 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-moment.wav"
+      >
+    >
+    <ITEM
+      POSITION 28.695652173913043
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {8DEDE105-FA67-D19D-7F47-81650C0D3EBE}
+      NAME "Moment 3"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-moment.wav"
+      >
+    >
+    <ITEM
+      POSITION 60
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {8DEDDE05-FA67-CC84-0024-0086E8C64160}
+      NAME "Moment 6"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-moment.wav"
+      >
+    >
+    <ITEM
+      POSITION 91.30434782608695
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {8DEDDF05-FA67-CE37-7804-48C1EDBA0F3A}
+      NAME "Moment 9"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-moment.wav"
+      >
+    >
+    <ITEM
+      POSITION 112.17391304347827
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {8DEDDC05-FA67-C91E-C8B3-7DE7D4853AC8}
+      NAME "Moment 11"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-moment.wav"
+      >
+    >
+  >
+  <TRACK {6AFBB41E-04B7-09C0-01E5-27F2018F04C0}
+    NAME Throw
+    TRACKID {6AFBB41E-04B7-09C0-01E5-27F2018F04C0}
+    PEAKCOL 32922763
+    AUTOMODE 0
+    VOLPAN 0.625 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 2 -1
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind verb
+    <ITEM
+      POSITION 5.217391304347826
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {165B8556-837D-BD98-159C-F9F2EE2FE620}
+      NAME "Throw 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 15.652173913043478
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {165B8656-837D-BF4B-CA9C-6AF3CB39EE74}
+      NAME "Throw 2"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 36.52173913043478
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {165B8756-837D-C0FE-EE37-9E641FC5357C}
+      NAME "Throw 4"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 57.391304347826086
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {165B8856-837D-C2B1-7DAA-5DE2364A2498}
+      NAME "Throw 6"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 67.82608695652173
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {165B8956-837D-C464-B4D3-66AC38146A88}
+      NAME "Throw 7"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 88.69565217391305
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {165B8A56-837D-C617-1B04-CEAAF60EBF24}
+      NAME "Throw 9"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-throw.wav"
+      >
+    >
+    <ITEM
+      POSITION 109.56521739130434
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {165B8B56-837D-C7CA-2DFE-EE13C4F0B20C}
+      NAME "Throw 11"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-verb-throw.wav"
+      >
+    >
+  >
+  <TRACK {59F1657D-A18C-B989-598D-8787979BA75C}
+    NAME Wide
+    TRACKID {59F1657D-A18C-B989-598D-8787979BA75C}
+    PEAKCOL 22988066
+    AUTOMODE 0
+    VOLPAN 0.7 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind return
+    <ITEM
+      POSITION 5.217391304347826
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {7D99CA13-70C6-72CD-68E6-196916470BA4}
+      NAME "Wide 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-wide.wav"
+      >
+    >
+    <ITEM
+      POSITION 26.086956521739133
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {7D99C913-70C6-711A-D138-9896C1E71608}
+      NAME "Wide 3"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-wide.wav"
+      >
+    >
+    <ITEM
+      POSITION 57.391304347826086
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {7D99C813-70C6-6F67-8400-F3F34C92F38C}
+      NAME "Wide 6"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-wide.wav"
+      >
+    >
+    <ITEM
+      POSITION 88.69565217391305
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {7D99C713-70C6-6DB4-108D-AFEFA8DB7D98}
+      NAME "Wide 9"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-wide.wav"
+      >
+    >
+    <ITEM
+      POSITION 109.56521739130434
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {7D99C613-70C6-6C01-3B25-655487F41634}
+      NAME "Wide 11"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-wide.wav"
+      >
+    >
+    <ITEM
+      POSITION 120
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {7D99C513-70C6-6A4E-8520-C231995BF750}
+      NAME "Wide 12"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-wide.wav"
+      >
+    >
+  >
+  <TRACK {5C6F255C-A2D8-F0EC-F791-8709EF076428}
+    NAME Pitch
+    TRACKID {5C6F255C-A2D8-F0EC-F791-8709EF076428}
+    PEAKCOL 26822892
+    AUTOMODE 0
+    VOLPAN 0.775 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 1 1
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind fx
+  >
+  <TRACK {3E9DA58F-E504-98CA-8BD1-38A828A583DC}
+    NAME "Oct+"
+    TRACKID {3E9DA58F-E504-98CA-8BD1-38A828A583DC}
+    PEAKCOL 26822892
+    AUTOMODE 0
+    VOLPAN 0.85 0 -1 -1 1
+    MUTESOLO 0 0 0
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind return
+    <ITEM
+      POSITION 2.608695652173913
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {FE0295A8-BC8F-50DE-BD85-2F274EA5AE08}
+      NAME "Oct+ 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-plus.wav"
+      >
+    >
+    <ITEM
+      POSITION 23.47826086956522
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {FE0296A8-BC8F-5291-D949-E13EA1B0CBDC}
+      NAME "Oct+ 3"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-plus.wav"
+      >
+    >
+    <ITEM
+      POSITION 44.34782608695652
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {FE0293A8-BC8F-4D78-7D13-4460FCD6FCE0}
+      NAME "Oct+ 5"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-plus.wav"
+      >
+    >
+    <ITEM
+      POSITION 54.78260869565217
+      SNAPOFFS 0
+      LENGTH 10.434782608695652
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {FE0294A8-BC8F-4F2B-80C4-B1D55BD52314}
+      NAME "Oct+ 6"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-plus.wav"
+      >
+    >
+    <ITEM
+      POSITION 75.65217391304348
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {FE0299A8-BC8F-57AA-D447-041230FAF140}
+      NAME "Oct+ 8"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-plus.wav"
+      >
+    >
+    <ITEM
+      POSITION 106.95652173913044
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {FE029AA8-BC8F-595D-39D3-01E5ED24F8AC}
+      NAME "Oct+ 11"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-plus.wav"
+      >
+    >
+  >
+  <TRACK {3E9D9F8F-E504-8E98-4EED-9D010A896440}
+    NAME Oct-
+    TRACKID {3E9D9F8F-E504-8E98-4EED-9D010A896440}
+    PEAKCOL 26822892
+    AUTOMODE 0
+    VOLPAN 0.925 0 -1 -1 1
+    MUTESOLO 0 0 0
+    ISBUS 2 -3
+    REC 0 0 1 0 0 0 0
+    NCHAN 2
+    MAINSEND_NCH 2
+    MAINSEND 1 0
+    EXT FTS:kind return
+    <ITEM
+      POSITION 5.217391304347826
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0E5363A8-C584-1468-C82F-AF601B536560}
+      NAME "Oct- 1"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-minus.wav"
+      >
+    >
+    <ITEM
+      POSITION 26.086956521739133
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0E5364A8-C584-161B-9386-EE2E3E59BEAC}
+      NAME "Oct- 3"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-minus.wav"
+      >
+    >
+    <ITEM
+      POSITION 57.391304347826086
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0E5365A8-C584-17CE-A032-8B75F8FE7D68}
+      NAME "Oct- 6"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-minus.wav"
+      >
+    >
+    <ITEM
+      POSITION 78.26086956521739
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0E5366A8-C584-1981-4797-6DD894C87F24}
+      NAME "Oct- 8"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-minus.wav"
+      >
+    >
+    <ITEM
+      POSITION 99.1304347826087
+      SNAPOFFS 0
+      LENGTH 20.869565217391305
+      LOOP 0
+      ALLTAKES 0
+      SEL 0
+      IGUID {0E5367A8-C584-1B34-6E80-B8BAB7B6DB40}
+      NAME "Oct- 10"
+      CHANMODE 0
+      <SOURCE WAVE
+        FILE "media/vox-lead-vox-fx-pitch-oct-minus.wav"
+      >
+    >
+  >
+>

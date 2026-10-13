@@ -1,0 +1,52 @@
+<Document>
+  <Page name="tcp.row">
+    <Frame name="Row" w=343 h=70>
+      <Rectangle name="Tint" w=343 h=70 bind:w="w" bind:h="h" bind:fill="track.tint" />
+      <Rectangle name="Gutter" x=296 w=47 h=70 bind:h="h" fill="#09090b" />
+      <Frame name="Body" w=343 h=70 bind:w="w" bind:h="h" bind:visible="h >= 11">
+        <Rectangle name="Column" w=20 h=70 bind:w="row.indent + 20" bind:h="h" fill="#0a0a0c" />
+        <Frame name="%steps" w=343 h=70 bind:w="w" bind:h="h" />
+        <Rectangle name="Rail" w=20 h=70 bind:x="row.indent" bind:h="h" bind:fill="track.band" />
+        <Rectangle name="Rule" x=20 w=1 h=70 bind:x="row.indent + 20" bind:h="h" fill="#27272a" />
+        <Rectangle name="Edge" x=341 w=1 h=70 bind:x="w - 2" bind:h="h" fill="#27272a" />
+        <Frame name="Fold" w=14 h=12 bind:x="row.indent + (20 - 14 * clamp(h / 24, 0.55, 1)) / 2" bind:y="3 * clamp(h / 24, 0.4, 1)" bind:visible="track.folder" bind:scale="clamp(h / 24, 0.55, 1)">
+          <!-- The fold button: the folder open (its children showing) or
+               shut (folded away), in the band's own ink. The whole rail
+               is the button (`@folder`). -->
+          <Vector name="Open" w=14 h=12 geometry="M0,1 L5,1 L6.5,2.5 L12,2.5 L12,4.5 L3.5,4.5 L1.2,11 L0,11 Z M4.2,5.5 L14,5.5 L11.6,11 L1.8,11 Z" bind:visible="!track.collapsed" bind:fill="(luma(track.band) > 0.179 ? #18181b : #e4e4e7)" />
+          <Vector name="Shut" w=14 h=12 geometry="M0,1 L5,1 L6.5,2.5 L13,2.5 L13,11 L0,11 Z" bind:visible="track.collapsed" bind:fill="(luma(track.band) > 0.179 ? #18181b : #e4e4e7)" />
+        </Frame>
+        <Text name="Number" w=400 h=15 size=11 bind:x="row.number_x - 1" bind:y="row.number_baseline - 0.8 * row.number_size - 1" bind:size="row.number_size" bind:text="row.number" bind:fill="(luma(track.band) > 0.179 ? #000000 : #e8e8ea)" bind:visible="row.has_number">1</Text>
+        <Frame name="%icon" w=16 h=16 bind:x="row.icon_x" bind:y="row.icon_y" bind:w="row.icon_size" bind:h="row.icon_size" bind:visible="row.icon" />
+        <Text name="Name" w=400 h=15 size=11 bind:x="57 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + (h >= 58 ? 24 : min(24, max(h - 2, 1))) / 2 + 0.35 * row.name_size - 0.8 * row.name_size - 1" bind:size="row.name_size" bind:text="row.name" bind:fill="track.selected ? #e4e4e7 : #a1a1aa">Track</Text>
+        <Frame name="Row two" w=343 h=70 bind:visible="h >= 58 && track.armed">
+          <Rectangle name="Input FX" x=56 y=34 w=34 h=20 fill="#0a0a0c" />
+          <Text x=-128 y=39 w=400 h=14 size=10 text-align="center" fill="#71717a">FX</Text>
+          <Rectangle name="Input" x=91 y=34 w=195 h=20 fill="#0a0a0c" />
+          <Text name="Input name" x=-12.5 y=38.2 w=400 h=15 size=11 text-align="center" bind:text="row.input" fill="#a1a1aa">None</Text>
+          <Vector name="Caret" x=272 y=42 w=7 h=4 geometry="M 0 0 L 7 0 L 3.5 4 Z" fill="#71717a" />
+        </Frame>
+        <Instance name="Mute" of="mute" w=21 h=20 bind:x="298" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" arg:on="track.mute" />
+        <Instance name="Solo" of="solo" w=21 h=20 bind:x="320" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:scale-y="(min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20) / 20)" arg:on="track.solo" />
+        <Instance name="FX" of="fx" w=36 h=22 bind:x="248" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" arg:count="track.fx" />
+        <Instance name="Routing" of="routing" w=28 h=22 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" arg:parent_send="track.parent_send" arg:sends="track.sends" arg:receives="track.receives" />
+        <Instance name="Phase" of="phase" w=16 h=16 bind:x="320" bind:y="h - 24" bind:visible="h >= 94" arg:on="track.phase" />
+        <Instance name="Arm" of="arm" w=20 h=20 bind:x="36 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 20) / 2" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && ui.recording" arg:armed="track.armed" arg:behind="$field" />
+        <Instance name="Volume" of="volume" w=24 h=24 bind:x="169 - 12 * min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 22, 1)" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:scale="min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 22, 1)" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" arg:value="track.fader" />
+        <Instance name="Pan" of="pan" w=24 h=25 bind:x="184" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 25 * min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 25, 1)) / 2" bind:scale="min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 25, 1)" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" arg:value="track.pan" />
+        <Rectangle name="Name hover" w=97 h=1 bind:x="58 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + (h >= 58 ? 24 : min(24, max(h - 2, 1))) - 1" bind:w="max(155 - (58 + row.indent), 0)" fill="#38bdf8" bind:visible="!!(ui.pressed == \"name\" || (ui.hover == \"name\" && ui.pressed == \"\"))" />
+        <Frame name="@name" w=10 h=10 bind:x="58 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="max(155 - (58 + row.indent), 0)" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" />
+        <Frame name="@folder" w=10 h=10 bind:x="row.indent" bind:y="0" bind:w="20" bind:h="h" />
+        <Frame name="@fx" w=10 h=10 bind:x="248" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="36" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" />
+        <Frame name="@routing" w=10 h=10 bind:x="214" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="26" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" />
+        <Frame name="@pan" w=10 h=10 bind:x="184" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="25" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" />
+        <Frame name="@volume" w=10 h=10 bind:x="169 - (((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) ? 24 * min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 22, 1) : 24) / 2" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6))" bind:w="(((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) ? 24 * min((h >= 58 ? 24 : min(24, max(h - 2, 1))) / 22, 1) : 24)" bind:h="(h >= 58 ? 24 : min(24, max(h - 2, 1)))" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20)" />
+        <Frame name="@arm" w=10 h=10 bind:x="36 + row.indent" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - 20) / 2" bind:w="20" bind:h="20" bind:visible="((h >= 58 ? 24 : min(24, max(h - 2, 1))) >= 20) && ui.recording" />
+        <Frame name="@solo" w=10 h=10 bind:x="320" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:w="21" bind:h="min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)" />
+        <Frame name="@mute" w=10 h=10 bind:x="298" bind:y="(h >= 58 ? 6 : clamp((h - min(24, max(h - 2, 1))) / 2, 1, 6)) + ((h >= 58 ? 24 : min(24, max(h - 2, 1))) - min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)) / 2" bind:w="21" bind:h="min((h >= 58 ? 24 : min(24, max(h - 2, 1))), 20)" />
+        <Frame name="@phase" w=10 h=10 bind:x="320" bind:y="h - 24" bind:w="16" bind:h="16" bind:visible="h >= 94" />
+      </Frame>
+    </Frame>
+
+  </Page>
+</Document>

@@ -1,0 +1,14 @@
+# dx config for the app. Only the mobile/bundle identity lives here; the
+# desktop and web launches are configured in main.rs via LaunchBuilder, and
+# feature selection is via cargo features (see Cargo.toml).
+[application]
+
+# App bundle identity (iOS CFBundleIdentifier / TestFlight App ID).
+# This binary ships as SESSION — setlists, songs, charts, the guide. It is
+# NOT the old `app.fasttrackstudio` record (that id belongs to the
+# original combined app), and it must differ from Signal's id — the crate
+# is `session-desktop` (apps/desktop) here; Signal's repo still calls its
+# app crate `fasttrackstudio`.
+[bundle]
+identifier = "app.fasttrackstudio.session"
+publisher = "FastTrackStudio"

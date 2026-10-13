@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Session</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Everything the page needs, asked for at once: without these the
+         module is fetched, then the snippets it imports, and only once
+         those have run does it ask for the wasm — three round trips in a
+         row before the 7 MB that matters starts. `crossorigin` matches the
+         glue's own fetch() of the wasm, so the preload is the one used. -->
+    <link rel="modulepreload" href="./session-daw-web.js" />
+    <link rel="preload" as="fetch" type="application/wasm" crossorigin href="./session-daw-web_bg.wasm" />
+    <!-- snippets -->
+    <!-- Where a set's songs come from: the connection (DNS, TLS) is made
+         while the wasm downloads rather than after it starts. -->
+    <link rel="preconnect" href="https://task.fasttrackstudio.app" crossorigin />
+    <link rel="preconnect" href="https://task.starcommand.live" crossorigin />
+    <style>
+      html, body, #main { margin: 0; height: 100%; background: #0f1012; overflow: hidden; }
+      body { font-family: system-ui, -apple-system, sans-serif; color: #e5e7eb; }
+    </style>
+  </head>
+  <body>
+    <div id="main"></div>
+    <script type="module">
+      import init from "./session-daw-web.js";
+      init();
+    </script>
+  </body>
+</html>

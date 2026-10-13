@@ -1,0 +1,395 @@
+name        "FastTrackStudio"
+description "FastTrackStudio default mouse modifiers (generated from exported REAPER mouse map)"
+
+// Generated from ~/.fts-dev/MouseMaps/exportbackupmousemap.ReaperMouseMap, with
+// behavior names decoded via reaper-input's mouse_modifiers::behaviors tables.
+// mm_0-7 only (none / Shift / Ctrl / Alt combos); Win/Super combos omitted.
+// mods: <S->=Shift  <C->=Ctrl/Cmd  <A->=Alt/Opt  <W->=Win/Super.
+
+settings (
+    // MM_CTX_AREASEL_CLK
+    {ctx MM_CTX_AREASEL_CLK, mods "<C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_AREASEL_CLK, mods "<C-A->", behavior "0 m", desc "No action"}
+
+    // MM_CTX_AREASEL_EDGE
+    {ctx MM_CTX_AREASEL_EDGE, mods "<C->", behavior "1 m", desc "Move edges"}
+    {ctx MM_CTX_AREASEL_EDGE, mods "<S-C->", behavior "1 m", desc "Move edges"}
+    {ctx MM_CTX_AREASEL_EDGE, mods "<C-A->", behavior "1 m", desc "Move edges"}
+    {ctx MM_CTX_AREASEL_EDGE, mods "<S-C-A->", behavior "1 m", desc "Move edges"}
+
+    // MM_CTX_AREASEL_ENV
+    {ctx MM_CTX_AREASEL_ENV, mods "<S->", behavior "1 m", desc "Move or tilt envelope vertically"}
+    {ctx MM_CTX_AREASEL_ENV, mods "<A->", behavior "1 m", desc "Move or tilt envelope vertically"}
+    {ctx MM_CTX_AREASEL_ENV, mods "<S-A->", behavior "1 m", desc "Move or tilt envelope vertically"}
+    {ctx MM_CTX_AREASEL_ENV, mods "<S-C-A->", behavior "1 m", desc "Move or tilt envelope vertically"}
+
+    // MM_CTX_ARRANGE_MMOUSE
+    {ctx MM_CTX_ARRANGE_MMOUSE, mods "", behavior "2 m", desc "Hand scroll (pan around)"}
+    {ctx MM_CTX_ARRANGE_MMOUSE, mods "<S-C->", behavior "4 m", desc "Jog audio"}
+    {ctx MM_CTX_ARRANGE_MMOUSE, mods "<S-C-A->", behavior "4 m", desc "Jog audio"}
+
+    // MM_CTX_ARRANGE_MMOUSE_CLK
+    {ctx MM_CTX_ARRANGE_MMOUSE_CLK, mods "<S->", behavior "3 m", desc "Move edit cursor ignoring snap"}
+    {ctx MM_CTX_ARRANGE_MMOUSE_CLK, mods "<S-C->", behavior "3 m", desc "Move edit cursor ignoring snap"}
+    {ctx MM_CTX_ARRANGE_MMOUSE_CLK, mods "<A->", behavior "3 m", desc "Move edit cursor ignoring snap"}
+    {ctx MM_CTX_ARRANGE_MMOUSE_CLK, mods "<S-A->", behavior "3 m", desc "Move edit cursor ignoring snap"}
+    {ctx MM_CTX_ARRANGE_MMOUSE_CLK, mods "<C-A->", behavior "3 m", desc "Move edit cursor ignoring snap"}
+    {ctx MM_CTX_ARRANGE_MMOUSE_CLK, mods "<S-C-A->", behavior "3 m", desc "Move edit cursor ignoring snap"}
+
+    // MM_CTX_CROSSFADE
+    {ctx MM_CTX_CROSSFADE, mods "<C-A->", behavior "14 m", desc "Move both fades"}
+
+    // MM_CTX_CROSSFADE_CLK
+    {ctx MM_CTX_CROSSFADE_CLK, mods "<S->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_CROSSFADE_CLK, mods "<S-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_CROSSFADE_CLK, mods "<C-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_CROSSFADE_CLK, mods "<S-C-A->", behavior "0 m", desc "No action"}
+
+    // MM_CTX_CROSSFADE_DBLCLK
+    {ctx MM_CTX_CROSSFADE_DBLCLK, mods "<S->", behavior "1 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_CROSSFADE_DBLCLK, mods "<C->", behavior "1 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_CROSSFADE_DBLCLK, mods "<S-C->", behavior "1 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_CROSSFADE_DBLCLK, mods "<S-A->", behavior "1 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_CROSSFADE_DBLCLK, mods "<C-A->", behavior "1 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_CROSSFADE_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Open crossfade editor"}
+
+    // MM_CTX_CURSORHANDLE
+    {ctx MM_CTX_CURSORHANDLE, mods "<S->", behavior "2 m", desc "Jog audio"}
+    {ctx MM_CTX_CURSORHANDLE, mods "<S-C->", behavior "2 m", desc "Jog audio"}
+    {ctx MM_CTX_CURSORHANDLE, mods "<S-A->", behavior "2 m", desc "Jog audio"}
+    {ctx MM_CTX_CURSORHANDLE, mods "<S-C-A->", behavior "2 m", desc "Jog audio"}
+
+    // MM_CTX_ENVCP_DBLCLK
+    {ctx MM_CTX_ENVCP_DBLCLK, mods "<S->", behavior "1 m", desc "Select/unselect all envelope points"}
+    {ctx MM_CTX_ENVCP_DBLCLK, mods "<C->", behavior "1 m", desc "Select/unselect all envelope points"}
+    {ctx MM_CTX_ENVCP_DBLCLK, mods "<S-C->", behavior "1 m", desc "Select/unselect all envelope points"}
+    {ctx MM_CTX_ENVCP_DBLCLK, mods "<A->", behavior "1 m", desc "Select/unselect all envelope points"}
+    {ctx MM_CTX_ENVCP_DBLCLK, mods "<S-A->", behavior "1 m", desc "Select/unselect all envelope points"}
+    {ctx MM_CTX_ENVCP_DBLCLK, mods "<C-A->", behavior "1 m", desc "Select/unselect all envelope points"}
+    {ctx MM_CTX_ENVCP_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Select/unselect all envelope points"}
+
+    // MM_CTX_ENVLANE
+    {ctx MM_CTX_ENVLANE, mods "<S-C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ENVLANE, mods "<C-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ENVLANE, mods "<S-C-A->", behavior "0 m", desc "No action"}
+
+    // MM_CTX_ENVLANE_DBLCLK
+    {ctx MM_CTX_ENVLANE_DBLCLK, mods "<S->", behavior "0 m", desc "Action 0 m"}
+    {ctx MM_CTX_ENVLANE_DBLCLK, mods "<C->", behavior "0 m", desc "Action 0 m"}
+    {ctx MM_CTX_ENVLANE_DBLCLK, mods "<S-C->", behavior "0 m", desc "Action 0 m"}
+    {ctx MM_CTX_ENVLANE_DBLCLK, mods "<A->", behavior "0 m", desc "Action 0 m"}
+    {ctx MM_CTX_ENVLANE_DBLCLK, mods "<S-A->", behavior "0 m", desc "Action 0 m"}
+    {ctx MM_CTX_ENVLANE_DBLCLK, mods "<C-A->", behavior "0 m", desc "Action 0 m"}
+    {ctx MM_CTX_ENVLANE_DBLCLK, mods "<S-C-A->", behavior "0 m", desc "Action 0 m"}
+
+    // MM_CTX_ENVPT
+    {ctx MM_CTX_ENVPT, mods "<S-A->", behavior "1 m", desc "Move envelope point"}
+
+    // MM_CTX_ENVPT_DBLCLK
+    {ctx MM_CTX_ENVPT_DBLCLK, mods "<S->", behavior "1 m", desc "Reset point to default value"}
+    {ctx MM_CTX_ENVPT_DBLCLK, mods "<S-C->", behavior "1 m", desc "Reset point to default value"}
+    {ctx MM_CTX_ENVPT_DBLCLK, mods "<A->", behavior "1 m", desc "Reset point to default value"}
+    {ctx MM_CTX_ENVPT_DBLCLK, mods "<S-A->", behavior "1 m", desc "Reset point to default value"}
+    {ctx MM_CTX_ENVPT_DBLCLK, mods "<C-A->", behavior "1 m", desc "Reset point to default value"}
+    {ctx MM_CTX_ENVPT_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Reset point to default value"}
+
+    // MM_CTX_ENVSEG
+    {ctx MM_CTX_ENVSEG, mods "<S-C-A->", behavior "1 m", desc "Move envelope segment ignoring time selection"}
+
+    // MM_CTX_ENVSEG_DBLCLK
+    {ctx MM_CTX_ENVSEG_DBLCLK, mods "<S->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ENVSEG_DBLCLK, mods "<C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ENVSEG_DBLCLK, mods "<S-C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ENVSEG_DBLCLK, mods "<S-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ENVSEG_DBLCLK, mods "<C-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ENVSEG_DBLCLK, mods "<S-C-A->", behavior "0 m", desc "No action"}
+
+    // MM_CTX_FIXEDLANETAB_CLK
+    {ctx MM_CTX_FIXEDLANETAB_CLK, mods "<S->", behavior "3 m", desc "Play only this lane"}
+    {ctx MM_CTX_FIXEDLANETAB_CLK, mods "<S-C->", behavior "3 m", desc "Play only this lane"}
+    {ctx MM_CTX_FIXEDLANETAB_CLK, mods "<S-A->", behavior "3 m", desc "Play only this lane"}
+    {ctx MM_CTX_FIXEDLANETAB_CLK, mods "<C-A->", behavior "3 m", desc "Play only this lane"}
+    {ctx MM_CTX_FIXEDLANETAB_CLK, mods "<S-C-A->", behavior "3 m", desc "Play only this lane"}
+
+    // MM_CTX_ITEM
+    {ctx MM_CTX_ITEM, mods "<A->", behavior "2 m", desc "Copy item"}
+    {ctx MM_CTX_ITEM, mods "<S-A->", behavior "5 m", desc "Copy item ignoring snap"}
+
+    // MM_CTX_ITEM_CLK
+    {ctx MM_CTX_ITEM_CLK, mods "<S-A->", behavior "20 m", desc "Extend razor edit area"}
+    {ctx MM_CTX_ITEM_CLK, mods "<S-C-A->", behavior "1 m", desc "Select item and move edit cursor"}
+
+    // MM_CTX_ITEM_DBLCLK
+    {ctx MM_CTX_ITEM_DBLCLK, mods "<S-C->", behavior "6 m", desc "MIDI: open in editor, Subprojects: open project, Audio: show media item properties"}
+    {ctx MM_CTX_ITEM_DBLCLK, mods "<S-C-A->", behavior "6 m", desc "MIDI: open in editor, Subprojects: open project, Audio: show media item properties"}
+
+    // MM_CTX_ITEMEDGE
+    {ctx MM_CTX_ITEMEDGE, mods "", behavior "1 m", desc "Move edge"}
+    {ctx MM_CTX_ITEMEDGE, mods "<S->", behavior "3 m", desc "Move edge ignoring snap"}
+
+    // MM_CTX_ITEMEDGE_DBLCLK
+    {ctx MM_CTX_ITEMEDGE_DBLCLK, mods "<S->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ITEMEDGE_DBLCLK, mods "<C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ITEMEDGE_DBLCLK, mods "<S-C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ITEMEDGE_DBLCLK, mods "<A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ITEMEDGE_DBLCLK, mods "<S-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ITEMEDGE_DBLCLK, mods "<C-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ITEMEDGE_DBLCLK, mods "<S-C-A->", behavior "0 m", desc "No action"}
+
+    // MM_CTX_ITEMFADE_CLK
+    {ctx MM_CTX_ITEMFADE_CLK, mods "<S->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ITEMFADE_CLK, mods "<S-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ITEMFADE_CLK, mods "<C-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_ITEMFADE_CLK, mods "<S-C-A->", behavior "0 m", desc "No action"}
+
+    // MM_CTX_ITEMFADE_DBLCLK
+    {ctx MM_CTX_ITEMFADE_DBLCLK, mods "<S->", behavior "2 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_ITEMFADE_DBLCLK, mods "<C->", behavior "2 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_ITEMFADE_DBLCLK, mods "<S-C->", behavior "2 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_ITEMFADE_DBLCLK, mods "<A->", behavior "2 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_ITEMFADE_DBLCLK, mods "<S-A->", behavior "2 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_ITEMFADE_DBLCLK, mods "<C-A->", behavior "2 m", desc "Open crossfade editor"}
+    {ctx MM_CTX_ITEMFADE_DBLCLK, mods "<S-C-A->", behavior "2 m", desc "Open crossfade editor"}
+
+    // MM_CTX_ITEMLOWER
+    {ctx MM_CTX_ITEMLOWER, mods "", behavior "62 m", desc "Select razor edit area"}
+    {ctx MM_CTX_ITEMLOWER, mods "<S->", behavior "63 m", desc "Select razor edit area ignoring snap"}
+    {ctx MM_CTX_ITEMLOWER, mods "<C->", behavior "64 m", desc "Add to razor edit area"}
+    {ctx MM_CTX_ITEMLOWER, mods "<S-C->", behavior "65 m", desc "Add to razor edit area ignoring snap"}
+    {ctx MM_CTX_ITEMLOWER, mods "<A->", behavior "62 m", desc "Select razor edit area"}
+    {ctx MM_CTX_ITEMLOWER, mods "<S-A->", behavior "62 m", desc "Select razor edit area"}
+    {ctx MM_CTX_ITEMLOWER, mods "<C-A->", behavior "62 m", desc "Select razor edit area"}
+    {ctx MM_CTX_ITEMLOWER, mods "<S-C-A->", behavior "62 m", desc "Select razor edit area"}
+
+    // MM_CTX_ITEMLOWER_CLK
+    {ctx MM_CTX_ITEMLOWER_CLK, mods "", behavior "1 m", desc "Select item and move edit cursor"}
+    {ctx MM_CTX_ITEMLOWER_CLK, mods "<S->", behavior "6 m", desc "Add a range of items to selection, if already selected extend time selection"}
+    {ctx MM_CTX_ITEMLOWER_CLK, mods "<C->", behavior "4 m", desc "Toggle item selection"}
+    {ctx MM_CTX_ITEMLOWER_CLK, mods "<S-C->", behavior "2 m", desc "Select item and move edit cursor ignoring snap"}
+    {ctx MM_CTX_ITEMLOWER_CLK, mods "<A->", behavior "12 m", desc "Select item ignoring grouping"}
+    {ctx MM_CTX_ITEMLOWER_CLK, mods "<S-A->", behavior "20 m", desc "Extend razor edit area"}
+    {ctx MM_CTX_ITEMLOWER_CLK, mods "<C-A->", behavior "15 m", desc "Add stretch marker"}
+    {ctx MM_CTX_ITEMLOWER_CLK, mods "<S-C-A->", behavior "1 m", desc "Select item and move edit cursor"}
+
+    // MM_CTX_ITEMLOWER_DBLCLK
+    {ctx MM_CTX_ITEMLOWER_DBLCLK, mods "", behavior "6 m", desc "MIDI: open in editor, Subprojects: open project, Audio: show media item properties"}
+    {ctx MM_CTX_ITEMLOWER_DBLCLK, mods "<S->", behavior "2 m", desc "Set time selection to item"}
+    {ctx MM_CTX_ITEMLOWER_DBLCLK, mods "<C->", behavior "3 m", desc "Set loop points to item"}
+    {ctx MM_CTX_ITEMLOWER_DBLCLK, mods "<S-C->", behavior "6 m", desc "MIDI: open in editor, Subprojects: open project, Audio: show media item properties"}
+    {ctx MM_CTX_ITEMLOWER_DBLCLK, mods "<A->", behavior "1 m", desc "Open media item in external editor"}
+    {ctx MM_CTX_ITEMLOWER_DBLCLK, mods "<S-A->", behavior "7 m", desc "Show take list"}
+    {ctx MM_CTX_ITEMLOWER_DBLCLK, mods "<C-A->", behavior "8 m", desc "Show take props list"}
+    {ctx MM_CTX_ITEMLOWER_DBLCLK, mods "<S-C-A->", behavior "6 m", desc "MIDI: open in editor, Subprojects: open project, Audio: show media item properties"}
+
+    // MM_CTX_ITEMSTRETCHMARKER_DBLCLK
+    {ctx MM_CTX_ITEMSTRETCHMARKER_DBLCLK, mods "<S->", behavior "1 m", desc "Reset stretch marker rate to 1.0"}
+    {ctx MM_CTX_ITEMSTRETCHMARKER_DBLCLK, mods "<S-C->", behavior "1 m", desc "Reset stretch marker rate to 1.0"}
+    {ctx MM_CTX_ITEMSTRETCHMARKER_DBLCLK, mods "<A->", behavior "1 m", desc "Reset stretch marker rate to 1.0"}
+    {ctx MM_CTX_ITEMSTRETCHMARKER_DBLCLK, mods "<S-A->", behavior "1 m", desc "Reset stretch marker rate to 1.0"}
+    {ctx MM_CTX_ITEMSTRETCHMARKER_DBLCLK, mods "<C-A->", behavior "1 m", desc "Reset stretch marker rate to 1.0"}
+    {ctx MM_CTX_ITEMSTRETCHMARKER_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Reset stretch marker rate to 1.0"}
+
+    // MM_CTX_LINKEDLANE
+    {ctx MM_CTX_LINKEDLANE, mods "<C-A->", behavior "1 m", desc "Move comp area vertically"}
+
+    // MM_CTX_LINKEDLANE_CLK
+    {ctx MM_CTX_LINKEDLANE_CLK, mods "<C->", behavior "5 m", desc "Move comp area to lane under mouse"}
+    {ctx MM_CTX_LINKEDLANE_CLK, mods "<S-C->", behavior "5 m", desc "Move comp area to lane under mouse"}
+
+    // MM_CTX_MARKER_REGIONEDGE
+    {ctx MM_CTX_MARKER_REGIONEDGE, mods "<C->", behavior "1 m", desc "Move project marker/region edge"}
+    {ctx MM_CTX_MARKER_REGIONEDGE, mods "<S-C->", behavior "1 m", desc "Move project marker/region edge"}
+    {ctx MM_CTX_MARKER_REGIONEDGE, mods "<A->", behavior "1 m", desc "Move project marker/region edge"}
+    {ctx MM_CTX_MARKER_REGIONEDGE, mods "<S-A->", behavior "1 m", desc "Move project marker/region edge"}
+    {ctx MM_CTX_MARKER_REGIONEDGE, mods "<C-A->", behavior "1 m", desc "Move project marker/region edge"}
+    {ctx MM_CTX_MARKER_REGIONEDGE, mods "<S-C-A->", behavior "1 m", desc "Move project marker/region edge"}
+
+    // MM_CTX_MARKERLANES
+    {ctx MM_CTX_MARKERLANES, mods "<S-C->", behavior "1 m", desc "Hand scroll"}
+    {ctx MM_CTX_MARKERLANES, mods "<S-A->", behavior "1 m", desc "Hand scroll"}
+    {ctx MM_CTX_MARKERLANES, mods "<C-A->", behavior "1 m", desc "Hand scroll"}
+    {ctx MM_CTX_MARKERLANES, mods "<S-C-A->", behavior "1 m", desc "Hand scroll"}
+
+    // MM_CTX_MCP_DBLCLK
+    {ctx MM_CTX_MCP_DBLCLK, mods "<S->", behavior "2 m", desc "Zoom view to track"}
+    {ctx MM_CTX_MCP_DBLCLK, mods "<C->", behavior "2 m", desc "Zoom view to track"}
+    {ctx MM_CTX_MCP_DBLCLK, mods "<S-C->", behavior "2 m", desc "Zoom view to track"}
+    {ctx MM_CTX_MCP_DBLCLK, mods "<A->", behavior "2 m", desc "Zoom view to track"}
+    {ctx MM_CTX_MCP_DBLCLK, mods "<S-A->", behavior "2 m", desc "Zoom view to track"}
+    {ctx MM_CTX_MCP_DBLCLK, mods "<C-A->", behavior "2 m", desc "Zoom view to track"}
+    {ctx MM_CTX_MCP_DBLCLK, mods "<S-C-A->", behavior "2 m", desc "Zoom view to track"}
+
+    // MM_CTX_MIDI_CCEVT
+    {ctx MM_CTX_MIDI_CCEVT, mods "<S-A->", behavior "1 m", desc "Move CC event"}
+    {ctx MM_CTX_MIDI_CCEVT, mods "<C-A->", behavior "1 m", desc "Move CC event"}
+    {ctx MM_CTX_MIDI_CCEVT, mods "<S-C-A->", behavior "1 m", desc "Move CC event"}
+
+    // MM_CTX_MIDI_CCEVT_DBLCLK
+    {ctx MM_CTX_MIDI_CCEVT_DBLCLK, mods "<C->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCEVT_DBLCLK, mods "<S-C->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCEVT_DBLCLK, mods "<A->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCEVT_DBLCLK, mods "<S-A->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCEVT_DBLCLK, mods "<C-A->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCEVT_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Insert CC event"}
+
+    // MM_CTX_MIDI_CCLANE
+    {ctx MM_CTX_MIDI_CCLANE, mods "<S-A->", behavior "2 m", desc "Edit selected CC events if any, otherwise draw/edit"}
+    {ctx MM_CTX_MIDI_CCLANE, mods "<C-A->", behavior "2 m", desc "Edit selected CC events if any, otherwise draw/edit"}
+    {ctx MM_CTX_MIDI_CCLANE, mods "<S-C-A->", behavior "2 m", desc "Edit selected CC events if any, otherwise draw/edit"}
+
+    // MM_CTX_MIDI_CCLANE_DBLCLK
+    {ctx MM_CTX_MIDI_CCLANE_DBLCLK, mods "<C->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCLANE_DBLCLK, mods "<S-C->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCLANE_DBLCLK, mods "<A->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCLANE_DBLCLK, mods "<S-A->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCLANE_DBLCLK, mods "<C-A->", behavior "1 m", desc "Insert CC event"}
+    {ctx MM_CTX_MIDI_CCLANE_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Insert CC event"}
+
+    // MM_CTX_MIDI_CCSEG
+    {ctx MM_CTX_MIDI_CCSEG, mods "<S-A->", behavior "1 m", desc "Move CC segment ignoring time selection"}
+    {ctx MM_CTX_MIDI_CCSEG, mods "<C-A->", behavior "1 m", desc "Move CC segment ignoring time selection"}
+    {ctx MM_CTX_MIDI_CCSEG, mods "<S-C-A->", behavior "1 m", desc "Move CC segment ignoring time selection"}
+
+    // MM_CTX_MIDI_CCSEG_DBLCLK
+    {ctx MM_CTX_MIDI_CCSEG_DBLCLK, mods "<S->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_MIDI_CCSEG_DBLCLK, mods "<C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_MIDI_CCSEG_DBLCLK, mods "<S-C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_MIDI_CCSEG_DBLCLK, mods "<S-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_MIDI_CCSEG_DBLCLK, mods "<C-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_MIDI_CCSEG_DBLCLK, mods "<S-C-A->", behavior "0 m", desc "No action"}
+
+    // MM_CTX_MIDI_ENDPTR
+    {ctx MM_CTX_MIDI_ENDPTR, mods "<C->", behavior "1 m", desc "Edit MIDI source loop length"}
+    {ctx MM_CTX_MIDI_ENDPTR, mods "<S-C->", behavior "1 m", desc "Edit MIDI source loop length"}
+    {ctx MM_CTX_MIDI_ENDPTR, mods "<C-A->", behavior "1 m", desc "Edit MIDI source loop length"}
+    {ctx MM_CTX_MIDI_ENDPTR, mods "<S-C-A->", behavior "1 m", desc "Edit MIDI source loop length"}
+
+    // MM_CTX_MIDI_MARKERLANES
+    {ctx MM_CTX_MIDI_MARKERLANES, mods "<S->", behavior "1 m", desc "Hand scroll"}
+    {ctx MM_CTX_MIDI_MARKERLANES, mods "<S-C->", behavior "1 m", desc "Hand scroll"}
+    {ctx MM_CTX_MIDI_MARKERLANES, mods "<A->", behavior "1 m", desc "Hand scroll"}
+    {ctx MM_CTX_MIDI_MARKERLANES, mods "<S-A->", behavior "1 m", desc "Hand scroll"}
+    {ctx MM_CTX_MIDI_MARKERLANES, mods "<C-A->", behavior "1 m", desc "Hand scroll"}
+    {ctx MM_CTX_MIDI_MARKERLANES, mods "<S-C-A->", behavior "1 m", desc "Hand scroll"}
+
+    // MM_CTX_MIDI_NOTE
+    {ctx MM_CTX_MIDI_NOTE, mods "<C->", behavior "9 m", desc "Edit note velocity"}
+    {ctx MM_CTX_MIDI_NOTE, mods "<S-C->", behavior "10 m", desc "Edit note velocity (fine)"}
+    {ctx MM_CTX_MIDI_NOTE, mods "<A->", behavior "7 m", desc "Copy note"}
+    {ctx MM_CTX_MIDI_NOTE, mods "<S-A->", behavior "28 m", desc "Select notes touched while dragging"}
+    {ctx MM_CTX_MIDI_NOTE, mods "<C-A->", behavior "1 m", desc "Move note"}
+
+    // MM_CTX_MIDI_NOTE_CLK
+    {ctx MM_CTX_MIDI_NOTE_CLK, mods "", behavior "1 m", desc "Select note"}
+    {ctx MM_CTX_MIDI_NOTE_CLK, mods "<A->", behavior "2 m", desc "Select note and move edit cursor"}
+    {ctx MM_CTX_MIDI_NOTE_CLK, mods "<S-C-A->", behavior "1 m", desc "Select note"}
+
+    // MM_CTX_MIDI_NOTE_DBLCLK
+    {ctx MM_CTX_MIDI_NOTE_DBLCLK, mods "<C->", behavior "1 m", desc "Erase note"}
+    {ctx MM_CTX_MIDI_NOTE_DBLCLK, mods "<S-C->", behavior "1 m", desc "Erase note"}
+    {ctx MM_CTX_MIDI_NOTE_DBLCLK, mods "<A->", behavior "1 m", desc "Erase note"}
+    {ctx MM_CTX_MIDI_NOTE_DBLCLK, mods "<S-A->", behavior "1 m", desc "Erase note"}
+    {ctx MM_CTX_MIDI_NOTE_DBLCLK, mods "<C-A->", behavior "1 m", desc "Erase note"}
+    {ctx MM_CTX_MIDI_NOTE_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Erase note"}
+
+    // MM_CTX_MIDI_NOTEEDGE
+    {ctx MM_CTX_MIDI_NOTEEDGE, mods "<C-A->", behavior "1 m", desc "Move note edge"}
+    {ctx MM_CTX_MIDI_NOTEEDGE, mods "<S-C-A->", behavior "1 m", desc "Move note edge"}
+
+    // MM_CTX_MIDI_PIANOROLL
+    {ctx MM_CTX_MIDI_PIANOROLL, mods "", behavior "7 m", desc "Marquee select notes"}
+    {ctx MM_CTX_MIDI_PIANOROLL, mods "<S->", behavior "9 m", desc "Marquee add to note selection"}
+    {ctx MM_CTX_MIDI_PIANOROLL, mods "<C->", behavior "12 m", desc "Insert note, drag to move"}
+    {ctx MM_CTX_MIDI_PIANOROLL, mods "<S-C->", behavior "1 m", desc "Insert note, drag to extend or change pitch"}
+
+    // MM_CTX_MIDI_PIANOROLL_CLK
+    {ctx MM_CTX_MIDI_PIANOROLL_CLK, mods "<S->", behavior "1 m", desc "Deselect all notes and move edit cursor"}
+    {ctx MM_CTX_MIDI_PIANOROLL_CLK, mods "<C->", behavior "4 m", desc "Insert note"}
+    {ctx MM_CTX_MIDI_PIANOROLL_CLK, mods "<S-C->", behavior "1 m", desc "Deselect all notes and move edit cursor"}
+    {ctx MM_CTX_MIDI_PIANOROLL_CLK, mods "<C-A->", behavior "1 m", desc "Deselect all notes and move edit cursor"}
+
+    // MM_CTX_MIDI_PIANOROLL_DBLCLK
+    {ctx MM_CTX_MIDI_PIANOROLL_DBLCLK, mods "<C->", behavior "1 m", desc "Insert note"}
+    {ctx MM_CTX_MIDI_PIANOROLL_DBLCLK, mods "<S-C->", behavior "1 m", desc "Insert note"}
+    {ctx MM_CTX_MIDI_PIANOROLL_DBLCLK, mods "<A->", behavior "1 m", desc "Insert note"}
+    {ctx MM_CTX_MIDI_PIANOROLL_DBLCLK, mods "<S-A->", behavior "1 m", desc "Insert note"}
+    {ctx MM_CTX_MIDI_PIANOROLL_DBLCLK, mods "<C-A->", behavior "1 m", desc "Insert note"}
+    {ctx MM_CTX_MIDI_PIANOROLL_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Insert note"}
+
+    // MM_CTX_MIDI_RMOUSE
+    {ctx MM_CTX_MIDI_RMOUSE, mods "<S-C->", behavior "1 m", desc "Marquee select notes/CC"}
+
+    // MM_CTX_MIDI_RULER_CLK
+    {ctx MM_CTX_MIDI_RULER_CLK, mods "<S-C->", behavior "1 m", desc "Move edit cursor"}
+    {ctx MM_CTX_MIDI_RULER_CLK, mods "<S-A->", behavior "1 m", desc "Move edit cursor"}
+    {ctx MM_CTX_MIDI_RULER_CLK, mods "<C-A->", behavior "1 m", desc "Move edit cursor"}
+    {ctx MM_CTX_MIDI_RULER_CLK, mods "<S-C-A->", behavior "1 m", desc "Move edit cursor"}
+
+    // MM_CTX_MIDI_RULER_DBLCLK
+    {ctx MM_CTX_MIDI_RULER_DBLCLK, mods "<S->", behavior "1 m", desc "Zoom to selected notes/CC"}
+    {ctx MM_CTX_MIDI_RULER_DBLCLK, mods "<C->", behavior "1 m", desc "Zoom to selected notes/CC"}
+    {ctx MM_CTX_MIDI_RULER_DBLCLK, mods "<S-C->", behavior "1 m", desc "Zoom to selected notes/CC"}
+    {ctx MM_CTX_MIDI_RULER_DBLCLK, mods "<A->", behavior "1 m", desc "Zoom to selected notes/CC"}
+    {ctx MM_CTX_MIDI_RULER_DBLCLK, mods "<S-A->", behavior "1 m", desc "Zoom to selected notes/CC"}
+    {ctx MM_CTX_MIDI_RULER_DBLCLK, mods "<C-A->", behavior "1 m", desc "Zoom to selected notes/CC"}
+    {ctx MM_CTX_MIDI_RULER_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Zoom to selected notes/CC"}
+
+    // MM_CTX_POOLEDENV
+    {ctx MM_CTX_POOLEDENV, mods "<S-A->", behavior "1 m", desc "Move automation item - just snap"}
+
+    // MM_CTX_POOLEDENV_DBLCLK
+    {ctx MM_CTX_POOLEDENV_DBLCLK, mods "<A->", behavior "1 m", desc "Show automation item properties"}
+    {ctx MM_CTX_POOLEDENV_DBLCLK, mods "<S-A->", behavior "1 m", desc "Show automation item properties"}
+    {ctx MM_CTX_POOLEDENV_DBLCLK, mods "<C-A->", behavior "1 m", desc "Show automation item properties"}
+    {ctx MM_CTX_POOLEDENV_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Show automation item properties"}
+
+    // MM_CTX_POOLEDENVEDGE
+    {ctx MM_CTX_POOLEDENVEDGE, mods "<C-A->", behavior "1 m", desc "Move automation item edge - just move"}
+    {ctx MM_CTX_POOLEDENVEDGE, mods "<S-C-A->", behavior "1 m", desc "Move automation item edge - just move"}
+
+    // MM_CTX_RULER
+    {ctx MM_CTX_RULER, mods "<C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_RULER, mods "<S-C->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_RULER, mods "<A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_RULER, mods "<S-A->", behavior "4 m", desc "Move loop points ignoring snap"}
+    {ctx MM_CTX_RULER, mods "<C-A->", behavior "0 m", desc "No action"}
+    {ctx MM_CTX_RULER, mods "<S-C-A->", behavior "0 m", desc "No action"}
+
+    // MM_CTX_RULER_CLK
+    {ctx MM_CTX_RULER_CLK, mods "<S-A->", behavior "1 m", desc "Move edit cursor"}
+    {ctx MM_CTX_RULER_CLK, mods "<S-C-A->", behavior "1 m", desc "Move edit cursor"}
+
+    // MM_CTX_RULER_DBLCLK
+    {ctx MM_CTX_RULER_DBLCLK, mods "<S->", behavior "1 m", desc "Set loop points to region"}
+    {ctx MM_CTX_RULER_DBLCLK, mods "<S-C->", behavior "1 m", desc "Set loop points to region"}
+    {ctx MM_CTX_RULER_DBLCLK, mods "<S-A->", behavior "1 m", desc "Set loop points to region"}
+    {ctx MM_CTX_RULER_DBLCLK, mods "<C-A->", behavior "1 m", desc "Set loop points to region"}
+    {ctx MM_CTX_RULER_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Set loop points to region"}
+
+    // MM_CTX_TCP_DBLCLK
+    {ctx MM_CTX_TCP_DBLCLK, mods "<S-C->", behavior "1 m", desc "Select all media items on track"}
+    {ctx MM_CTX_TCP_DBLCLK, mods "<A->", behavior "1 m", desc "Select all media items on track"}
+    {ctx MM_CTX_TCP_DBLCLK, mods "<S-A->", behavior "1 m", desc "Select all media items on track"}
+    {ctx MM_CTX_TCP_DBLCLK, mods "<C-A->", behavior "1 m", desc "Select all media items on track"}
+    {ctx MM_CTX_TCP_DBLCLK, mods "<S-C-A->", behavior "1 m", desc "Select all media items on track"}
+
+    // MM_CTX_TEMPOMARKER
+    {ctx MM_CTX_TEMPOMARKER, mods "<S-C->", behavior "1 m", desc "Move project tempo/time signature marker"}
+    {ctx MM_CTX_TEMPOMARKER, mods "<A->", behavior "1 m", desc "Move project tempo/time signature marker"}
+    {ctx MM_CTX_TEMPOMARKER, mods "<S-A->", behavior "1 m", desc "Move project tempo/time signature marker"}
+    {ctx MM_CTX_TEMPOMARKER, mods "<S-C-A->", behavior "1 m", desc "Move project tempo/time signature marker"}
+
+    // MM_CTX_TRACK
+    {ctx MM_CTX_TRACK, mods "", behavior "9 m", desc "Marquee select items"}
+    {ctx MM_CTX_TRACK, mods "<S->", behavior "13 m", desc "Marquee add to item selection"}
+    {ctx MM_CTX_TRACK, mods "<C->", behavior "25 m", desc "Draw empty MIDI item on same track"}
+    {ctx MM_CTX_TRACK, mods "<S-C->", behavior "27 m", desc "Draw empty MIDI item on same track ignoring snap"}
+    {ctx MM_CTX_TRACK, mods "<A->", behavior "22 m", desc "Marquee zoom"}
+    {ctx MM_CTX_TRACK, mods "<S-A->", behavior "9 m", desc "Marquee select items"}
+
+    // MM_CTX_TRACK_CLK
+    {ctx MM_CTX_TRACK_CLK, mods "", behavior "3 m", desc "Deselect all items"}
+    {ctx MM_CTX_TRACK_CLK, mods "<S->", behavior "1 m", desc "Deselect all items and move edit cursor"}
+    {ctx MM_CTX_TRACK_CLK, mods "<S-A->", behavior "2 m", desc "Deselect all items and move edit cursor ignoring snap"}
+    {ctx MM_CTX_TRACK_CLK, mods "<S-C-A->", behavior "3 m", desc "Deselect all items"}
+)

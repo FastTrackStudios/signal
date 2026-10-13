@@ -1,0 +1,19 @@
+[package]
+name = "expression-editor-host"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Shared expression editor workspace and drum editing services without a renderer"
+
+[features]
+default = []
+standalone = ["daw/standalone-save"]
+
+[dependencies]
+# Opening a kit is the slowest thing here; the span carries what it cost.
+tracing = { workspace = true }
+daw.workspace = true
+expression-editor-core.workspace = true
+expression-editor-tools.workspace = true
+expression-editor-audio = { workspace = true, features = ["daw"] }

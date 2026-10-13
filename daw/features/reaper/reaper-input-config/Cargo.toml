@@ -1,0 +1,22 @@
+[package]
+name = "reaper-input-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "The canonical keybind profiles, embedded as bytes."
+
+# No dependencies, no FFI, no platform assumptions — this crate exists so
+# consumers can read the keybind configuration WITHOUT linking
+# reaper-input (which pulls the REAPER FFI and does not build for wasm).
+# The website's /input tutorial is the motivating consumer.
+#
+# Exporting the bytes from the owning repo is the rule here: a build
+# script that reaches across a repo boundary with a relative path is
+# invisible to cargo's dependency graph and breaks at compile time rather
+# than resolution time. See docs/split/PLAN.md in the shell repo.
+
+[dependencies]
+
+[lints]
+workspace = true

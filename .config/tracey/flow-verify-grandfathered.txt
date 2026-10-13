@@ -1,0 +1,9 @@
+# flow.* rules allowed to be r[impl] without an r[verify].
+#
+# Read by scripts/tracey-flow-gate.py (`just daw-flows`, CI checks.yml).
+# One rule id per line; `#` starts a comment — say WHY the rule is
+# excused, and open a ticket for the verify. The gate warns on every
+# entry and again once the entry is no longer needed. The standard
+# (issue #48) is that this file stays empty: when the gate was wired
+# (issue #33) the five implemented-but-unverified flow rules got their
+# verifies instead of a line here.

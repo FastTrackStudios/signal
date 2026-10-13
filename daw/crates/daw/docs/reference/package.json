@@ -1,0 +1,14 @@
+{
+  "name": "daw-docs",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "@fasttrackstudios/docs-theme": "file:../../fasttrackstudio-docs"
+  }
+}

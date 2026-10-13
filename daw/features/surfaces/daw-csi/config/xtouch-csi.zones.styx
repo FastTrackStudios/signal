@@ -1,0 +1,533 @@
+// Converted from CSI .zon files by zon2styx — daw-csi zone format.
+// Unsupported CSI lines are preserved as comments.
+
+home home
+
+zones {
+    /// Converted from CSI zone "Folder".
+    folder {
+        navigator @Folder
+        display_color @Yellow
+        strip {
+            lcd_top @TrackName
+            fader @TrackVolume
+            vpot @TrackPan
+            lcd_bottom @PanDisplay
+            shift+vpot_press @TrackPanReset
+            rec @TrackRecordArm
+            control+rec @TrackTogglePolarity
+            solo @TrackSolo
+            shift+solo @ClearAllSolo
+            mute @TrackMute
+            shift+mute @Command{id "40339"}
+            select @TrackSelect
+            shift+select @TrackRangeSelect
+            control+select @TrackSelectAdditive
+            hold+select @FolderSpill
+        }
+        buttons {
+            bank_left @Bank{amount -8}
+            bank_right @Bank{amount 8}
+            channel_left @Bank{amount -1}
+            channel_right @Bank{amount 1}
+        }
+        // Not yet portable from CSI:
+        // VUMeter|                    TrackOutputMeterMaxPeakLR
+        // Touch+DisplayLower|         TrackVolumeDisplay
+        // Option+DisplayLower|        TrackFolderParentDisplay
+        // Flip+Fader|                 TrackPan
+        // Toggle+Rotary|              TrackPanAutoRight RingStyle=Dot
+        // Toggle+DisplayLower|        TrackPanAutoRightDisplay
+        // RotaryPush|                 ToggleChannel
+        // Option+RotaryPush|          TrackPanWidth [ 1.0 ]
+        // Option+RecordArm|           CycleTrackInputMonitor
+        // Option+DisplayLower|        TrackInputMonitorDisplay
+        // Control+DisplayLower|       TrackInvertPolarityDisplay
+        // Alt+RecordArm|              CycleTrackAutoMode
+        // Alt+DisplayLower|           TrackAutoModeDisplay
+    }
+    /// Converted from CSI zone "FXEpilogue".
+    fxepilogue {
+        // Not yet portable from CSI:
+        // OnZoneDeactivation  HideFXSlot
+    }
+    /// Converted from CSI zone "FXPrologue".
+    fxprologue {
+        display_color @Cyan
+        // Not yet portable from CSI:
+        // Plugin              ClearFXSlot
+    }
+    /// Converted from CSI zone "FXRowLayout".
+    fxrow_layout {
+        // Not yet portable from CSI:
+        // "" ""
+        // "Shift" ""
+        // "Option" ""
+        // "Control" ""
+        // "Alt" ""
+        // "Shift+Option" ""
+        // "Shift+Control" ""
+        // "Shift+Alt" ""
+        // "Shift+Option+Control" ""
+        // "Shit+Option+Control+Alt" ""
+        // "Shift+Control+Alt" ""
+        // "Shift+Option+Alt" ""
+        // "Option+Control" ""
+        // "Option+Alt" ""
+        // "Option+Control+Alt" ""
+        // "Control+Alt" ""
+    }
+    /// Converted from CSI zone "FXWidgetLayout".
+    fxwidget_layout {
+        // Not yet portable from CSI:
+        // Fader FXParam
+        // DisplayUpper FixedTextDisplay
+        // DisplayLower FXParamValueDisplay
+    }
+    /// Converted from CSI zone "GoZones".
+    go_zones {
+        // Not yet portable from CSI:
+        // SelectedTracks
+        // SelectedTrackSend
+        // SelectedTrackReceive
+        // SelectedTrackFXMenu
+        // MasterTrackFXMenu
+        // TrackSend
+        // TrackReceive
+        // TrackFXMenu
+        // VCA
+        // Folder
+        // SelectedTrackTCPFX
+    }
+    /// Converted from CSI zone "Home".
+    home {
+        include (track master_track)
+        navigator @Track
+        buttons {
+            assign_track @GoZone{zone selected_tracks}
+            assign_pan @GoZone{zone folder}
+            assign_eq @GoZone{zone selected_track_receive}
+            assign_send @GoZone{zone selected_track_send}
+            assign_plugin @GoZone{zone selected_track_fxmenu}
+            name_value @GoZone{zone home}
+            smpte_beats @CycleTimeDisplay
+            f1 @Command{id "40605"}
+            f2 @Command{id "40271"}
+            f3 @Command{id "40078"}
+            f4 @Command{id "41157"}
+            f5 @Command{id "50124"}
+            f6 @Command{id "40906"}
+            f7 @Command{id "40268"}
+            f8 @Command{id "41050"}
+            flip @Flip
+            save @SaveProject
+            undo @Undo
+            shift+undo @Redo
+            option+undo @Command{id "40072"}
+            enter @Command{id "40021"}
+            marker @AddMarker
+            cycle @ToggleLoop
+            drop @Command{id "1157"}
+            replace @Command{id "1155"}
+            click @Command{id "40364"}
+            shift+click @Command{id "_SWS_AWCOUNTRECTOG"}
+            option+click @Command{id "40363"}
+            rewind @NudgePosition{seconds -5}
+            fast_forward @NudgePosition{seconds 5}
+            stop @Stop
+            hold+stop @Command{id "40042"}
+            play @Play
+            record @Record
+            solo_global @ClearAllSolo
+            option+solo_global @Command{id "40745"}
+            bank_left @Bank{amount -8}
+            bank_right @Bank{amount 8}
+            channel_left @Bank{amount -1}
+            channel_right @Bank{amount 1}
+            shift+channel_left @Bank{amount -999}
+            shift+channel_right @Bank{amount 999}
+            up @Command{id "_XENAKIOS_TVPAGEUP"}
+            down @Command{id "_XENAKIOS_TVPAGEDOWN"}
+            left @Command{id "40842"}
+            right @Command{id "40841"}
+            jog @JogPosition{seconds_per_tick 1}
+        }
+        // Not yet portable from CSI:
+        // OnInitialization     ToggleRestrictTextLength 7
+        // OnInitialization     SetLatchTime 100
+        // Global+Track                GoZone MasterTrackFXMenu
+        // Global+Pan                  GoZone VCA
+        // Global+EQ                   GoZone TrackReceive
+        // Global+Send                 GoZone TrackSend
+        // Global+Plugin               GoZone TrackFXMenu
+        // Instrument                  LearnFocusedFX
+        // (duplicate) nameValue                   Reaper _S&M_WNCLS4
+        // (duplicate) nameValue                   Reaper _S&M_WNCLS3
+        // AssignmentDisplay           GlobalModeDisplay
+        // TimeDisplay                 MCUTimeDisplay
+        // GlobalView                  Global
+        // MidiTracks                  ToggleEnableLastTouchedFXParamMapping
+        // Inputs                      ToggleEnableFocusedFXMapping
+        // AudioTracks                 ToggleScrollLink
+        // AudioInstrument             GoZone SelectedTrackFX
+        // Aux                         ClearSelectedTrackFX
+        // Busses                      GoZone SelectedTrackTCPFX
+        // Outputs                     ToggleFollowMCP
+        // User                        Reaper 42678
+        // Read                        TrackAutoMode 1
+        // Write                       TrackAutoMode 3
+        // Trim                        TrackAutoMode 0
+        // Touch                       TrackAutoMode 2
+        // Latch                       TrackAutoMode 4
+        // Group                       TrackAutoMode 5
+        // Global+Read                 GlobalAutoMode 1
+        // Global+Write                GlobalAutoMode 3
+        // Global+Trim                 GlobalAutoMode 0
+        // Global+Touch                GlobalAutoMode 2
+        // Global+Latch                GlobalAutoMode 4
+        // Global+Group                GlobalAutoMode 5
+        // Shift+Read                  Reaper 40876
+        // Cancel                      ClearModifiers
+        // Nudge                       Nudge
+        // BankLeft                    Bank SelectedTrack -8
+        // BankRight                   Bank SelectedTrack 8
+        // ChannelLeft                 Bank SelectedTrack -1
+        // ChannelRight                Bank SelectedTrack 1
+        // Shift+ChannelLeft           Bank SelectedTrack -999
+        // Shift+ChannelRight          Bank SelectedTrack 999
+        // Zoom                        Zoom
+        // Zoom+Up                     Reaper 40111
+        // Zoom+Down                   Reaper 40112
+        // Zoom+Right                  Reaper 1012
+        // Zoom+Left                   Reaper 1011
+        // Marker+Up                   Reaper 40613
+        // Marker+Down                 Reaper 40157
+        // Marker+Right                Reaper 40173
+        // Marker+Left                 Reaper 40172
+        // Nudge+Up                    Reaper 41925
+        // Nudge+Down                  Reaper 41924
+        // Nudge+Left                  Reaper 41279
+        // Nudge+Right                 Reaper 41275
+        // Scrub                       Scrub
+        // Shift+Decrease+JogWheel          Reaper 40286
+        // Shift+Increase+JogWheel          Reaper 40285
+        // Zoom+Decrease+JogWheel           Reaper 40112
+        // Zoom+Increase+JogWheel           Reaper 40111
+        // Zoom+Shift+Decrease+JogWheel     Reaper 1011
+        // Zoom+Shift+Increase+JogWheel     Reaper 1012
+        // Marker+JogWheel                  MoveEditCursor Marker
+        // Scrub+Decrease+JogWheel          Reaper 40104
+        // Scrub+Increase+JogWheel          Reaper 40105
+        // Scrub+Shift+Decrease+JogWheel    Reaper 41666
+        // Scrub+Shift+Increase+JogWheel    Reaper 41667
+        // Footswitch1                 Reaper 40003
+        // Footswitch2                 Reaper 40328
+    }
+    /// Converted from CSI zone "LastTouchedFXParam".
+    last_touched_fxparam {
+        // Not yet portable from CSI:
+        // DisplayUpper1     LastTouchedFXParamNameDisplay
+        // DiplayLower1      LastTouchedFXParamValueDisplay
+        // Fader1            LastTouchedFXParam
+    }
+    /// Converted from CSI zone "MasterTrack".
+    master_track {
+        buttons {
+            master_fader @MasterVolume
+        }
+    }
+    /// Converted from CSI zone "MasterTrackFXMenu".
+    master_track_fxmenu {
+        display_color @Blue
+        strip {
+            vpot @NoAction
+            rec @NoAction
+            solo @NoAction
+            mute @Command{id "_S&M_FXOFF|"}
+            fader @NoAction
+        }
+        // Not yet portable from CSI:
+        // DisplayUpper|            FXMenuNameDisplay
+        // DisplayLower|            FXBypassDisplay
+        // RotaryPush|              GoFXSlot
+        // Select|                  ToggleFXBypass
+        // Left                     Bank MasterTrackFXMenu -1
+        // Right                    Bank MasterTrackFXMenu 1
+    }
+    /// Converted from CSI zone "SelectedTrackFX".
+    selected_track_fx {
+        display_color @Magenta
+    }
+    /// Converted from CSI zone "SelectedTrackFXMenu".
+    selected_track_fxmenu {
+        display_color @Yellow
+        strip {
+            vpot @NoAction
+            shift+vpot_press @NoAction
+            alt+vpot_press @NoAction
+            rec @NoAction
+            solo @NoAction
+            mute @Command{id "_S&M_FXOFF|"}
+            fader @NoAction
+        }
+        // Not yet portable from CSI:
+        // DisplayUpper|              FXMenuNameDisplay
+        // DisplayLower|              FXBypassDisplay
+        // RotaryPush|                ShowFXSlot
+        // RotaryPush|                GoFXSlot
+        // Left                       Bank SelectedTrackFXMenu -1
+        // Right                      Bank SelectedTrackFXMenu 1
+        // Select|                    ToggleFXBypass
+    }
+    /// Converted from CSI zone "SelectedTrackReceive".
+    selected_track_receive {
+        display_color @Magenta
+        strip {
+            lcd_top @ReceiveNameDisplay
+            mute @ReceiveMute
+            vpot @ReceivePan
+            fader @ReceiveVolume
+            rec @NoAction
+            solo @NoAction
+            select @NoAction
+        }
+        buttons {
+            left @BankReceives{amount -1}
+            right @BankReceives{amount 1}
+        }
+        // Not yet portable from CSI:
+        // DisplayLower|               TrackReceivePrePostDisplay
+        // Touch+DisplayLower|         TrackReceiveVolumeDisplay
+        // RotaryPush|                 TrackReceivePrePost
+    }
+    /// Converted from CSI zone "SelectedTrackSend".
+    selected_track_send {
+        display_color @Cyan
+        strip {
+            lcd_top @SendNameDisplay
+            shift+lcd_bottom @SendPanDisplay
+            alt+lcd_bottom @SendVolumeDisplay
+            mute @SendMute
+            vpot @SendPan
+            fader @SendVolume
+            rec @NoAction
+            solo @NoAction
+            select @NoAction
+        }
+        buttons {
+            left @BankSends{amount -1}
+            right @BankSends{amount 1}
+        }
+        // Not yet portable from CSI:
+        // DisplayLower|                 TrackSendPrePostDisplay
+        // FaderTouch+DisplayLower|      TrackSendVolumeDisplay
+        // RotaryPush|                   TrackSendPrePost
+    }
+    /// Converted from CSI zone "SelectedTrackTCPFX".
+    selected_track_tcpfx {
+        display_color @Cyan
+        // Not yet portable from CSI:
+        // DisplayUpper1         TCPFXParamNameDisplay 0
+        // DisplayLower1         TCPFXParamValueDisplay 0
+        // Fader1                TCPFXParam 0
+        // Rotary1               NoAction
+        // DisplayUpper2         TCPFXParamNameDisplay 1
+        // DisplayLower2         TCPFXParamValueDisplay 1
+        // Fader2                TCPFXParam 1
+        // Rotary2               NoAction
+        // DisplayUpper3         TCPFXParamNameDisplay 2
+        // DisplayLower3         TCPFXParamValueDisplay 2
+        // Fader3                TCPFXParam 2
+        // Rotary3               NoAction
+        // DisplayUpper4         TCPFXParamNameDisplay 3
+        // DisplayLower4         TCPFXParamValueDisplay 3
+        // Fader4                TCPFXParam 3
+        // Rotary4               NoAction
+        // DisplayUpper5         TCPFXParamNameDisplay 4
+        // DisplayLower5         TCPFXParamValueDisplay 4
+        // Fader5                TCPFXParam 4
+        // Rotary5               NoAction
+        // DisplayUpper6         TCPFXParamNameDisplay 5
+        // DisplayLower6         TCPFXParamValueDisplay 5
+        // Fader6                TCPFXParam 5
+        // Rotary6               NoAction
+        // DisplayUpper7         TCPFXParamNameDisplay 6
+        // DisplayLower7         TCPFXParamValueDisplay 6
+        // Fader7                TCPFXParam 6
+        // Rotary7               NoAction
+        // DisplayUpper8         TCPFXParamNameDisplay 7
+        // DisplayLower8         TCPFXParamValueDisplay 7
+        // Fader8                TCPFXParam 7
+        // Rotary8               NoAction
+    }
+    /// Converted from CSI zone "SelectedTracks".
+    selected_tracks {
+        strip {
+            lcd_top @TrackName
+            fader @TrackVolume
+            vpot @TrackPan
+            lcd_bottom @PanDisplay
+            shift+vpot_press @TrackPanReset
+            rec @TrackRecordArm
+            alt+rec @TrackTogglePolarity
+            solo @TrackSolo
+            shift+solo @ClearAllSolo
+            mute @TrackMute
+            shift+mute @Command{id "40339"}
+            select @TrackSelect
+            shift+select @TrackRangeSelect
+            control+select @TrackSelectAdditive
+        }
+        // Not yet portable from CSI:
+        // VUMeter|                 TrackOutputMeterMaxPeakLR
+        // Touch+DisplayLower|      TrackVolumeDisplay
+        // Flip+Fader|              TrackPan
+        // Toggle+Rotary|           TrackPanAutoRight RingStyle=Dot
+        // Toggle+DisplayLower|     TrackPanAutoRightDisplay
+        // RotaryPush|              ToggleChannel
+        // Option+RotaryPush|       TrackPanWidth [ 1.0 ]
+        // Option+RecordArm|        CycleTrackAutoMode
+        // Option+DisplayLower|     TrackAutoModeDisplay
+        // Alt+DisplayLower|        TrackInvertPolarityDisplay
+        // Control+RecordArm|       CycleTrackInputMonitor
+        // Control+DisplayLower|    TrackInputMonitorDisplay
+        // Hold+Select|             TrackVolume [ 0.760 ] Feedback=No
+        // BankLeft                 Bank SelectedTracks -8
+        // BankRight                Bank SelectedTracks 8
+        // ChannelLeft              Bank SelectedTracks -1
+        // ChannelRight             Bank SelectedTracks 1
+    }
+    /// Converted from CSI zone "Track".
+    track {
+        navigator @Track
+        strip {
+            lcd_top @TrackName
+            fader @TrackVolume
+            vpot @TrackPan
+            lcd_bottom @PanDisplay
+            shift+vpot_press @TrackPanReset
+            rec @TrackRecordArm
+            control+rec @TrackTogglePolarity
+            solo @TrackSolo
+            shift+solo @ClearAllSolo
+            mute @TrackMute
+            shift+mute @Command{id "40339"}
+            select @TrackSelect
+            shift+select @TrackRangeSelect
+            control+select @TrackSelectAdditive
+        }
+        // Not yet portable from CSI:
+        // VUMeter|                 TrackOutputMeterMaxPeakLR
+        // Touch+DisplayLower|      TrackVolumeDisplay
+        // Flip+Fader|              TrackPan
+        // Toggle+Rotary|           TrackPanAutoRight RingStyle=Dot
+        // Toggle+DisplayLower|     TrackPanAutoRightDisplay
+        // RotaryPush|              ToggleChannel
+        // Option+RotaryPush|       TrackPanWidth [ 1.0 ]
+        // Option+RecordArm|        CycleTrackInputMonitor
+        // Option+DisplayLower|     TrackInputMonitorDisplay
+        // Control+DisplayLower|    TrackInvertPolarityDisplay
+        // Alt+RecordArm|           CycleTrackAutoMode
+        // Alt+DisplayLower|        TrackAutoModeDisplay
+        // Hold+Select|             TrackVolume [ 0.760 ] Feedback=No
+    }
+    /// Converted from CSI zone "TrackFXMenu".
+    track_fxmenu {
+        display_color @Blue
+        strip {
+            vpot @NoAction
+            rec @NoAction
+            solo @NoAction
+            mute @Command{id "_S&M_FXOFF|"}
+            fader @NoAction
+        }
+        // Not yet portable from CSI:
+        // DisplayUpper|              FixedTextDisplay "FXMenu"
+        // DisplayLower|              FXMenuNameDisplay
+        // RotaryPush|                ShowFXSlot
+        // RotaryPush|                GoFXSlot
+        // Left                       Bank TrackFXMenu -1
+        // Right                      Bank TrackFXMenu 1
+        // Up                         Bank TrackFXMenu -1
+        // Down                       Bank TrackFXMenu 1
+        // Select|                    ToggleFXBypass
+    }
+    /// Converted from CSI zone "TrackReceive".
+    track_receive {
+        display_color @Red
+        strip {
+            lcd_bottom @ReceiveNameDisplay
+            mute @ReceiveMute
+            vpot @ReceivePan
+            fader @ReceiveVolume
+            rec @NoAction
+            solo @NoAction
+            select @NoAction
+        }
+        // Not yet portable from CSI:
+        // DisplayUpper|               FixedTextDisplay "TrkRcv"
+        // Touch+DisplayLower|         TrackReceiveVolumeDisplay
+        // Up                          Bank TrackReceivex -1
+        // Down                        Bank TrackReceive 1
+    }
+    /// Converted from CSI zone "TrackSend".
+    track_send {
+        display_color @Green
+        strip {
+            lcd_bottom @SendNameDisplay
+            mute @SendMute
+            vpot @SendPan
+            fader @SendVolume
+            rec @NoAction
+            solo @NoAction
+            select @NoAction
+        }
+        // Not yet portable from CSI:
+        // DisplayUpper|               FixedTextDisplay "TrkSnd"
+        // Touch+DisplayLower|         TrackSendVolumeDisplay
+        // Up                          Bank TrackSend -1
+        // Down                        Bank TrackSend 1
+    }
+    /// Converted from CSI zone "VCA".
+    vca {
+        navigator @Vca
+        display_color @Cyan
+        strip {
+            lcd_top @TrackName
+            fader @TrackVolume
+            vpot @TrackPan
+            lcd_bottom @PanDisplay
+            shift+vpot_press @TrackPanReset
+            rec @TrackRecordArm
+            control+rec @TrackTogglePolarity
+            solo @TrackSolo
+            shift+solo @ClearAllSolo
+            mute @TrackMute
+            shift+mute @Command{id "40339"}
+            select @TrackSelect
+            shift+select @TrackRangeSelect
+            control+select @TrackSelectAdditive
+            hold+select @VcaSpill
+        }
+        buttons {
+            bank_left @Bank{amount -8}
+            bank_right @Bank{amount 8}
+            channel_left @Bank{amount -1}
+            channel_right @Bank{amount 1}
+        }
+        // Not yet portable from CSI:
+        // VUMeter|                    TrackOutputMeterMaxPeakLR
+        // Touch+DisplayLower|         TrackVolumeDisplay
+        // Option+DisplayLower|        TrackVCALeaderDisplay
+        // Flip+Fader|                 TrackPan
+        // Toggle+Rotary|              TrackPanAutoRight RingStyle=Dot
+        // Toggle+DisplayLower|        TrackPanAutoRightDisplay
+        // RotaryPush|                 ToggleChannel
+        // Option+RotaryPush|          TrackPanWidth [ 1.0 ]
+        // Option+RecordArm|           CycleTrackInputMonitor
+        // Option+DisplayLower|        TrackInputMonitorDisplay
+        // Control+DisplayLower|       TrackInvertPolarityDisplay
+        // Alt+RecordArm|              CycleTrackAutoMode
+        // Alt+DisplayLower|           TrackAutoModeDisplay
+    }
+}

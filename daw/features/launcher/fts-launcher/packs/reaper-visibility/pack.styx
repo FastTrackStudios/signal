@@ -1,0 +1,106 @@
+/// Visibility Manager Pack
+/// Demonstrates the workflow pack system with multi-action items.
+
+pack {
+    name "visibility-manager"
+    version "1.0.0"
+    author "FastTrackStudios"
+    description "Track visibility management workflows for Reaper"
+    url "https://github.com/FastTrackStudios/dioxus-launcher"
+}
+
+tags (
+    {path "reaper/visibility", name "Visibility", description "Track visibility controls", color "#cba6f7"}
+)
+
+items (
+    {
+        id "vis-guitars"
+        label "Guitars"
+        sub "Guitar track visibility"
+        icon "G"
+        tags ("reaper/visibility" "reaper/tracks")
+        search_fields ("guitars" "guitar" "gtr" "visibility")
+        actions {
+            enter       {name "Toggle",    exec "reaper:_RS_TOGGLE_VIS_GUITARS",    description "Toggle guitar tracks on/off"}
+            shift_enter {name "Exclusive", exec "reaper:_RS_EXCLUSIVE_VIS_GUITARS",  description "Show only guitar tracks"}
+            ctrl_enter  {name "Show",      exec "reaper:_RS_SHOW_VIS_GUITARS",       description "Show guitar tracks (additive)", keep_open true}
+            ctrl_shift_enter {name "Hide", exec "reaper:_RS_HIDE_VIS_GUITARS",       description "Hide guitar tracks", keep_open true}
+        }
+    }
+    {
+        id "vis-bass"
+        label "Bass"
+        sub "Bass track visibility"
+        icon "B"
+        tags ("reaper/visibility" "reaper/tracks")
+        search_fields ("bass" "low end" "visibility")
+        actions {
+            enter       {name "Toggle",    exec "reaper:_RS_TOGGLE_VIS_BASS"}
+            shift_enter {name "Exclusive", exec "reaper:_RS_EXCLUSIVE_VIS_BASS"}
+            ctrl_enter  {name "Show",      exec "reaper:_RS_SHOW_VIS_BASS", keep_open true}
+            ctrl_shift_enter {name "Hide", exec "reaper:_RS_HIDE_VIS_BASS", keep_open true}
+        }
+    }
+    {
+        id "vis-drums"
+        label "Drums"
+        sub "Drum track visibility"
+        icon "D"
+        tags ("reaper/visibility" "reaper/tracks")
+        search_fields ("drums" "percussion" "kick" "snare" "visibility")
+        actions {
+            enter       {name "Toggle",    exec "reaper:_RS_TOGGLE_VIS_DRUMS"}
+            shift_enter {name "Exclusive", exec "reaper:_RS_EXCLUSIVE_VIS_DRUMS"}
+            ctrl_enter  {name "Show",      exec "reaper:_RS_SHOW_VIS_DRUMS", keep_open true}
+            ctrl_shift_enter {name "Hide", exec "reaper:_RS_HIDE_VIS_DRUMS", keep_open true}
+        }
+    }
+    {
+        id "vis-vocals"
+        label "Vocals"
+        sub "Vocal track visibility"
+        icon "V"
+        tags ("reaper/visibility" "reaper/tracks")
+        search_fields ("vocals" "voice" "singing" "vox" "visibility")
+        actions {
+            enter       {name "Toggle",    exec "reaper:_RS_TOGGLE_VIS_VOCALS"}
+            shift_enter {name "Exclusive", exec "reaper:_RS_EXCLUSIVE_VIS_VOCALS"}
+            ctrl_enter  {name "Show",      exec "reaper:_RS_SHOW_VIS_VOCALS", keep_open true}
+            ctrl_shift_enter {name "Hide", exec "reaper:_RS_HIDE_VIS_VOCALS", keep_open true}
+        }
+    }
+    {
+        id "vis-keys"
+        label "Keys"
+        sub "Keys/piano track visibility"
+        icon "K"
+        tags ("reaper/visibility" "reaper/tracks")
+        search_fields ("keys" "piano" "keyboard" "synth" "visibility")
+        actions {
+            enter       {name "Toggle",    exec "reaper:_RS_TOGGLE_VIS_KEYS"}
+            shift_enter {name "Exclusive", exec "reaper:_RS_EXCLUSIVE_VIS_KEYS"}
+            ctrl_enter  {name "Show",      exec "reaper:_RS_SHOW_VIS_KEYS", keep_open true}
+            ctrl_shift_enter {name "Hide", exec "reaper:_RS_HIDE_VIS_KEYS", keep_open true}
+        }
+    }
+    {
+        id "vis-all"
+        label "Show All Tracks"
+        sub "Reset visibility — show everything"
+        icon "A"
+        tags ("reaper/visibility")
+        search_fields ("show all" "reset" "visibility" "everything")
+        actions {
+            enter {name "Show All", exec "reaper:_RS_SHOW_ALL_TRACKS"}
+        }
+    }
+)
+
+magic_words (
+    {keyword "V", preset "Visibility"}
+)
+
+presets (
+    {name "Visibility", include ("reaper/visibility")}
+)

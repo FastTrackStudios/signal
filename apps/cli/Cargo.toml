@@ -1,0 +1,41 @@
+[package]
+name = "session-cli"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+publish = false
+description = "session — drive a real REAPER's setlist from the command line"
+
+[[bin]]
+name = "session"
+path = "src/main.rs"
+
+[dependencies]
+session = { workspace = true, features = ["reaper"] }
+session-proto = { workspace = true }
+session-library = { workspace = true }
+# `peaks-*` = `session peaks`: the `.sessionpeaks` builder, WAV through
+# a memory map and Ogg proxies through symphonia.
+dawfile-reaper = { workspace = true, features = ["peaks-wav", "peaks-ogg"] }
+daw = { workspace = true, features = ["reaper", "cli"] }
+vox = { workspace = true }
+vox-stream = { workspace = true }
+eyre = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "time"] }
+libc = "0.2"
+# `session proxies` — the Ogg Vorbis proxy writer.
+fts-sample = { workspace = true, features = ["engine-native", "mapped"] }
+# `session import` — reading a multitrack folder onto the grid.
+keyflow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# `session lyrics fetch` — LRCLIB over HTTPS. Blocking on purpose: the
+# provider seam is a plain trait walked in order, and ureq 2 (rustls) is
+# already in the lockfile, so this adds no new crates.
+ureq = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

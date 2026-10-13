@@ -1,0 +1,225 @@
+# patchbay — PipeWire studio routing, extracted from the FastTrackStudio
+# monorepo into its own workspace.
+#
+#   crates/proto     patchbay-proto  — the wire contract (architect RPC)
+#   crates/patchbay  patchbay        — the headless core (PipeWire)
+#   crates/ui        patchbay-ui     — the Dioxus UI (native + wasm)
+#   crates/device    patchbay-device — adapter-agnostic hardware model + DeviceAdapter
+#   crates/adapters/antelope  patchbay-antelope — Antelope Galaxy32 adapter
+#   crates/adapters/yamaha    patchbay-yamaha   — Yamaha TF-series (RCP) adapter
+#   crates/adapters/dante     patchbay-dante    — Dante network (inferno-net) adapter
+#   crates/host      patchbay-host   — host-audio graph model + HostBackend
+#   crates/host-coreaudio  patchbay-host-coreaudio — macOS Core Audio backend
+#   app              fts-patchbay    — the binary (server + desktop shell)
+#   app/web          patchbay-web    — the browser remote (dx web build)
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/patchbay",
+    "crates/proto",
+    "crates/ui",
+    "crates/device",
+    "crates/driver",
+    "crates/adapters/antelope",
+    "crates/adapters/yamaha",
+    "crates/adapters/dante",
+    "crates/host",
+    "crates/host-coreaudio",
+    "app",
+    "app/web",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+authors = ["FastTrack Studio"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/FastTrackStudios/patchbay"
+
+[workspace.dependencies]
+# ── Internal — path deps ──────────────────────────────────────────────
+patchbay = { path = "crates/patchbay" }
+patchbay-proto = { path = "crates/proto" }
+patchbay-ui = { path = "crates/ui" }
+patchbay-device = { path = "crates/device" }
+patchbay-antelope = { path = "crates/adapters/antelope" }
+patchbay-yamaha = { path = "crates/adapters/yamaha" }
+patchbay-dante = { path = "crates/adapters/dante" }
+patchbay-host = { path = "crates/host" }
+patchbay-host-coreaudio = { path = "crates/host-coreaudio" }
+
+# ── architect (RPC / services / transports) ───────────────────────────
+architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.2.0" }
+architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.2.0" }
+
+# ── music-convention (instrument catalog → port colours) ──────────────
+music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
+
+# ── inferno-net (Dante/AES67 discovery) ───────────────────────────────
+inferno-net = { git = "https://codeberg.org/FastTrackStudios/inferno-control", rev = "d3b048941df55dae12c7b9f8c4b776681b8679d3" }
+
+# ── facet / vox (reflection + RPC transport) ──────────────────────────
+facet = { version = "0.50.0-rc.5", features = ["reflect", "chrono", "uuid"] }
+facet-styx = { version = "5.0.0-rc.5" }
+vox = { version = "0.10.0-rc.5", default-features = false, features = ["runtime"] }
+vox-types = { version = "0.10.0-rc.5" }
+vox-core = { version = "0.10.0-rc.5" }
+vox-websocket = { version = "0.10.0-rc.5" }
+
+# ── UI ────────────────────────────────────────────────────────────────
+dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false, features = ["lib"] }
+
+# ── Third-party ───────────────────────────────────────────────────────
+clap = { version = "4", features = ["derive"] }
+eyre = "0.6"
+futures-util = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+include_dir = "0.7"
+parking_lot = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+socket2 = { version = "0.6", features = ["all"] }
+thiserror = "2.0"
+tokio = { version = "1.48", features = ["full"] }
+tracing = { version = "0.1", features = ["std"] }
+
+[patch.crates-io]
+# Vendored one-line fix: quote scalars containing `<`/`>` — upstream
+# (facet-rs/facet) styx-format emits them bare but styx-parse rejects them.
+styx-format = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.1.0" }
+# Vendored phon rc.5 + derive support for parse/display opaque scalars
+# (Uuid, chrono DateTime/NaiveDate, url, …). Upstream rc.5 PANICS (and the
+# reply path aborts the process) the first time a vox RPC reply contains
+# such a field.
+phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.1.0" }
+# Vendored phon-jit rc.5 with a one-line build.rs fix: force the stable,
+# call-based stencils — upstream's nightly detection compiles `become`
+# stencils on stable rustc 1.94 → E0658.
+phon-jit = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.1.0" }
+
+# ── Lints — carried from the FastTrackStudio workspace ────────────────
+[workspace.lints.rust]
+dead_code = "warn"
+unused = "warn"
+unused_unsafe = "warn"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "allow"
+private_intra_doc_links = "allow"
+redundant_explicit_links = "allow"
+
+[workspace.lints.clippy]
+# ── Strict baseline (namtao.com/rust) ─────────────────────────────────
+# Groups at priority -1 so the individual `allow`s below still win.
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+# Deny the panic paths.
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+unreachable = "deny"
+unimplemented = "deny"
+unchecked_time_subtraction = "deny"
+todo = "deny"
+string_slice = "deny"
+panic_in_result_fn = "deny"
+panic = "deny"
+exit = "deny"
+as_conversions = "deny"
+
+# ── Unfixable in-place: these fire inside derive-generated code ───────
+# `facet`'s derive emits unsafe, so every Facet type trips this.
+unsafe_derive_deserialize = "allow"
+# `#[architect::rpc]` generates the async trait shape; impls that need
+# no `.await` are still required to be async. (Two distinct lints:
+# `unused_async` for free functions, `unused_async_trait_impl` for the
+# trait impls that make up the whole RPC surface.)
+unused_async = "allow"
+unused_async_trait_impl = "allow"
+# The wire types are Facet/serde-derived; adding Eq to 15 derives buys
+# nothing and some carry f64 fields that genuinely can't be Eq.
+derive_partial_eq_without_eq = "allow"
+# rsx!/derive-heavy modules legitimately exceed these.
+multiple_crate_versions = "allow"
+
+# ── Fights this codebase's deliberate design ──────────────────────────
+# Every module here is private with a `pub(crate)` surface — that IS the
+# crate facade pattern (see crates/CLAUDE.md), and bare `pub` inside a
+# private module reads as a wider surface than it is.
+redundant_pub_crate = "allow"
+# The preset store holds its mutex across `persist` ON PURPOSE: dropping
+# it earlier would let two writers interleave a read-modify-write of the
+# same config file.
+significant_drop_tightening = "allow"
+# RPC futures are inherently large (the service surface is wide); boxing
+# each one costs an allocation per call to satisfy a heuristic.
+large_futures = "allow"
+# Layout math is written for legibility, not FMA fusion.
+suboptimal_flops = "allow"
+
+# ── Carried from the FastTrackStudio workspace ────────────────────────
+field_reassign_with_default = "allow"
+redundant_closure = "allow"
+nonminimal_bool = "allow"
+clone_on_copy = "allow"
+useless_vec = "allow"
+type_complexity = "allow"
+manual_clamp = "allow"
+needless_range_loop = "allow"
+not_unsafe_ptr_arg_deref = "allow"
+only_used_in_recursion = "allow"
+unnecessary_sort_by = "allow"
+unusual_byte_groupings = "allow"
+manual_c_str_literals = "allow"
+branches_sharing_code = "allow"
+needless_borrow = "allow"
+needless_borrows_for_generic_args = "allow"
+collapsible_if = "allow"
+map_clone = "allow"
+unnecessary_map_or = "allow"
+if_same_then_else = "allow"
+redundant_locals = "allow"
+large_enum_variant = "allow"
+explicit_counter_loop = "allow"
+manual_strip = "allow"
+too_many_arguments = "allow"
+double_must_use = "allow"
+vec_init_then_push = "allow"
+collapsible_match = "allow"
+filter_next = "allow"
+
+# ── Dev profile ───────────────────────────────────────────────────────
+# Dependencies at light opt (O0 registry codegen is pathological), thin
+# workspace crates stay cheap to rebuild. Debuginfo is line-tables-only
+# with unpacked split DWARF: full DWARF was 98% of a debug binary here.
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+# Escape hatch: full DWARF for stepping in gdb/lldb.
+[profile.dev-dbg]
+inherits = "dev"
+debug = 2
+split-debuginfo = "packed"
+
+# dx web builds: native debuginfo blew past Chrome's 1 GiB wasm module cap.
+[profile.wasm-dev]
+inherits = "dev"
+debug = false
+strip = "debuginfo"
+
+[profile.wasm-dev.package."*"]
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 1
+
+# Build scripts + proc macros: this tree leans hard on derive macros
+# (facet, architect, dioxus rsx), so paying O3 once on syn/quote wins back
+# many times over, and build scripts have no use for DWARF.
+[profile.dev.build-override]
+opt-level = 3
+debug = false

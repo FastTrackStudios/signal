@@ -1,0 +1,15 @@
+[package]
+name = "meter-dsp"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move workspace edition; migrate deliberately
+description = "Audio metering DSP: LUFS, K-meter, spectrum, phase, goniometer, true peak"
+
+[dependencies]
+realfft = "3"
+atomic_float = { workspace = true }
+parking_lot = "0.12"
+
+[features]
+default = []

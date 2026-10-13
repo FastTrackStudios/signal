@@ -1,0 +1,53 @@
+[package]
+name = "daw-proto"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+[dependencies]
+vox = { workspace = true }
+vox-types = { workspace = true }
+facet = { workspace = true }
+# Canonical MIDI event type — `MidiEvent` + constrained newtypes + byte codec,
+# re-exported from `live_midi` as this crate's live-MIDI message type. Consumed
+# through the `midicore` facade (never midicore-proto directly).
+midicore = { workspace = true, default-features = false }
+# architect — provides `#[architect::rpc]`. Enabling the `vox` feature
+# wires the macro's emission through to the workspace's vox stack.
+architect = { workspace = true, features = ["vox"] }
+# futures::channel::oneshot powers main_thread::query's result hand-back.
+# WASM-safe (no tokio); keeps this crate web-app compatible.
+futures = { workspace = true }
+# `transport_sync`'s wire type converts from/to the sync core's
+# `AudioSnapshot` / `Position`. Dependency-free and wasm-clean.
+daw-transport-sync = { workspace = true }
+# Note: No tokio - this crate is WASM-compatible for use in web apps
+
+[features]
+# `vox` here is the consumer-crate flag the architect-rpc-derive macro
+# checks via `#[cfg_attr(feature = "vox", ::architect::vox::service)]`.
+# Enabling it activates the macro's `<T>Client` type alias and the
+# vox::service decoration on the hidden mirror trait.
+default = ["vox"]
+vox = []
+
+# Pulls in the MockDockHost in-memory adapter for unit tests that don't
+# need REAPER / GPU. Enable from a consumer's dev-dependencies:
+#   daw-proto = { workspace = true, features = ["test-utils"] }
+test-utils = []
+
+[dev-dependencies]
+# Locks the externally-tagged JSON wire shape of the batch op enums.
+facet-json = { workspace = true }
+# Locks phon schema-exchange compatibility of the batch wire types
+# (what vox runs per method) — a tuple or std type sneaking into an
+# op signature would otherwise poison the whole batch schema.
+vox-phon = { workspace = true }
+
+[lints]
+workspace = true

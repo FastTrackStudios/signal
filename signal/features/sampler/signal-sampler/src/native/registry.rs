@@ -1,0 +1,526 @@
+//! **Native block registry** — the single place a block type's built-in DSP
+//! is declared. `native_dsp_available` and the render-tree backend builder
+//! both derive from this table, so implementing a new block type is one
+//! entry here (plus its module), nothing else.
+//!
+//! Each entry is a constructor from `(&RigBlock, sample_rate)` — build-time
+//! `RigBlock.params` configure the instance; runtime parameter writes (the
+//! mod matrix, a UI, a host) arrive later through `PluginEvents.params`.
+
+use signal_plugin_host::{PluginEvents, PluginInstance};
+use signal_proto::block::BlockType;
+
+use crate::rig::RigBlock;
+
+use super::{
+    FilterCharacter, FilterMode, HarmVoice, NativeAmp, NativeDfs, NativeFilter, NativeModal,
+    NativeWaveguide, NativeWaveshaper, NativeWavetable, NativeWurli, SynthConfig,
+};
+use crate::native_osc::NativeOscillator;
+use crate::soundsource::{Soundsource, SoundsourceLeaf};
+
+type Ctor = fn(&RigBlock, u32) -> Box<dyn PluginInstance>;
+
+/// The registry: `(block type, constructor)`.
+const REGISTRY: &[(BlockType, Ctor)] = &[
+    (BlockType::Oscillator, build_oscillator),
+    // City Grand physically-modeled piano (coupled waveguide; env-switchable).
+    (BlockType::Harmonic, build_modal),
+    // City Wurli physically-modeled Wurlitzer 200A (vendored openwurli-dsp).
+    (BlockType::Formant, build_wurli),
+    (BlockType::Wavetable, build_wavetable),
+    (BlockType::Filter, build_filter),
+    (BlockType::Amp, build_amp),
+    (BlockType::Waveshaper, build_waveshaper),
+    (BlockType::Dfs, build_dfs),
+    // Built-in FX (the processor repo, wrapped in fx-blocks).
+    (BlockType::Eq, build_eq),
+    (BlockType::Compressor, build_comp),
+    (BlockType::Reverb, build_reverb),
+    (BlockType::Delay, build_delay),
+    // Modulation — chorus/flanger/vibrato share chorus-dsp; tremolo is trem-dsp.
+    (BlockType::Chorus, build_chorus),
+    (BlockType::Pitch, build_pitch),
+    (BlockType::Flanger, build_flanger),
+    (BlockType::Vibrato, build_vibrato),
+    (BlockType::Trem, build_trem),
+    (BlockType::Gate, build_gate),
+    (BlockType::Volume, build_volume),
+    // No DSP yet — transparent placeholders so the block exists (bypassed).
+    (BlockType::Phaser, build_phaser),
+    (BlockType::Rotary, build_rotary),
+    (BlockType::Boost, build_boost_pedal),
+    (BlockType::Drive, build_drive),
+];
+
+/// Set a built-in effect from the block's stored params — through
+/// [`native_writes`](crate::block_params::native_writes), the one conversion
+/// a live write of the same params goes through too, so the two set the
+/// effect identically.
+fn set_stored(block: &RigBlock, mut set: impl FnMut(&str, f64)) {
+    for (name, value) in crate::block_params::native_writes(block).unwrap_or_default() {
+        set(&name, value);
+    }
+}
+
+fn build_chorus(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeMod::chorus(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+/// The octaver / harmony: two shifted voices over the dry (fx-blocks
+/// `NativePitch`, the phase-vocoder shifter).
+fn build_pitch(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativePitch::new(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+fn build_flanger(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeMod::flanger(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+fn build_vibrato(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeMod::vibrato(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+fn build_trem(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeTrem::new(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+fn build_gate(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeGate::new(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+fn build_volume(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeGain::new(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+fn build_phaser(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(fx_blocks::NativePassthrough::new("Phaser"))
+}
+fn build_rotary(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(fx_blocks::NativePassthrough::new("Rotary"))
+}
+/// The clean boost at the head of the drive board: its `drive` is the level
+/// push into the drives (0 dB … +18 dB).
+fn build_boost_pedal(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeBoost::new(sample_rate as f64);
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+fn build_drive(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(fx_blocks::NativePassthrough::new("Drive"))
+}
+
+fn build_eq(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeEq::new(sample_rate as f64);
+    // Full band set: b{1..24}_{used,on,freq,gain,q,shape}.
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+
+fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeComp::new(sample_rate as f64);
+    // `meter` is which compressor-panel trace this block draws on (0 =
+    // none) — see `fx_blocks::comp_meter`.
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+
+fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeReverb::new(sample_rate as f64);
+    // Every numeric param the block carries (the block ignores names it does
+    // not have). A fixed list here dropped the algorithm, tone, damping and
+    // modulation a preset set, and the new `dry`: a reverb built as the
+    // default Hall until someone touched a knob live.
+    set_stored(block, |n, v| fx.set_named(n, v));
+    if let Some(path) = block.param_str("ir_path") {
+        if !path.is_empty() && !fx.load_ir_wav(&path) {
+            tracing::warn!("reverb IR failed to load: {path}");
+        }
+    }
+    Box::new(fx)
+}
+
+fn build_delay(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = fx_blocks::NativeDelay::new(sample_rate as f64);
+    // Every numeric param the block carries — a fixed list dropped the style,
+    // high-pass and repeat dynamics a preset set (and `dry`).
+    set_stored(block, |n, v| fx.set_named(n, v));
+    Box::new(fx)
+}
+
+/// Block types whose built-in `Native` DSP is implemented today.
+pub fn native_dsp_available(block_type: BlockType) -> bool {
+    REGISTRY.iter().any(|(t, _)| *t == block_type)
+}
+
+/// Construct the native backend for `block`, or `None` for types whose DSP
+/// isn't written yet.
+pub fn build_native(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn PluginInstance>> {
+    REGISTRY
+        .iter()
+        .find(|(t, _)| *t == block.block_type)
+        .map(|(_, ctor)| ctor(block, sample_rate))
+}
+
+/// Construct the native **generator** for a source block as a bare
+/// [`Soundsource`] — the render tree holds these directly (no
+/// [`SoundsourceLeaf`] adapter in between). `None` for block types whose
+/// native backend is a processor (or not a `Soundsource` yet); those keep
+/// going through [`build_native`].
+pub fn build_native_source(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn Soundsource>> {
+    match block.block_type {
+        BlockType::Oscillator => Some(Box::new(
+            NativeOscillator::new(sample_rate).with_block_params(block),
+        )),
+        BlockType::Wavetable => Some(Box::new(wavetable_osc(block, sample_rate))),
+        // City Wurli physically-modeled Wurlitzer 200A (PhysicalModel kind).
+        BlockType::Formant => Some(Box::new(NativeWurli::new(sample_rate))),
+        _ => None,
+    }
+}
+
+// ── Constructors ─────────────────────────────────────────────────────────────
+
+fn build_oscillator(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    // A first-class Soundsource, hosted through the generic leaf adapter.
+    Box::new(SoundsourceLeaf::new(NativeOscillator::new(sample_rate)))
+}
+
+fn build_modal(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    // The Harmonic block plays the LATEST City Grand engine: the coupled
+    // waveguide (physical simulation). CITY_GRAND_ENGINE=modal falls back to
+    // the additive/DDSP voice for A/B.
+    if std::env::var("CITY_GRAND_ENGINE").as_deref() == Ok("modal") {
+        Box::new(NativeModal::new(sample_rate))
+    } else {
+        Box::new(NativeWaveguide::new(sample_rate))
+    }
+}
+
+fn build_wurli(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    // The PhysicalModel Soundsource, hosted through the generic leaf adapter.
+    Box::new(SoundsourceLeaf::new(NativeWurli::new(sample_rate)))
+}
+
+/// Parse a wavetable block's build-time params into its [`SynthConfig`].
+fn wavetable_config(block: &RigBlock) -> SynthConfig {
+    let mut cfg = SynthConfig::default();
+    let p = |name: &str| block.param_f32(name);
+    if let Some(v) = p("shape") {
+        cfg.shape = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = p("unison_voices") {
+        cfg.unison_voices = (v.round() as u32).clamp(1, 8);
+    }
+    if let Some(v) = p("unison_detune") {
+        // 0..2 → 0..200 cents (Omnisphere full detune ≈ 185 cents).
+        cfg.unison_detune_cents = v.clamp(0.0, 2.0) * 100.0;
+    }
+    if let Some(v) = p("unison_width") {
+        cfg.unison_width = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = p("unison_octave") {
+        cfg.unison_octave = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = p("unison_analog") {
+        cfg.unison_analog = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = p("unison_drift") {
+        cfg.unison_drift = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = p("fm_depth") {
+        cfg.fm_depth = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = p("fm_ratio") {
+        cfg.fm_ratio = v.max(0.01);
+    }
+    if let Some(v) = p("fm_shape") {
+        cfg.fm_shape = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = p("ring_mix") {
+        cfg.ring_mix = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = p("ring_ratio") {
+        cfg.ring_ratio = v.max(0.01);
+    }
+    if let Some(v) = p("amp_attack") {
+        cfg.env.attack_s = v.max(0.0);
+    }
+    if let Some(v) = p("amp_decay") {
+        cfg.env.decay_s = v.max(0.0);
+    }
+    if let Some(v) = p("amp_sustain") {
+        cfg.env.sustain = v.clamp(0.0, 1.0);
+    }
+    if let Some(v) = p("amp_release") {
+        cfg.env.release_s = v.max(0.0);
+    }
+    for i in 0..4 {
+        let n = i + 1;
+        let level = p(&format!("harm{n}_level")).unwrap_or(0.0);
+        if level > 0.0 {
+            cfg.harmonia[i] = HarmVoice {
+                on: true,
+                level: level.clamp(0.0, 1.0),
+                interval_semi: p(&format!("harm{n}_interval")).unwrap_or(0.0),
+                pan: p(&format!("harm{n}_pan")).unwrap_or(0.0),
+                shape: p(&format!("harm{n}_shape")).unwrap_or(cfg.shape),
+            };
+        }
+    }
+    cfg
+}
+
+/// The Wavetable oscillator for `block`: its config, and — when the block
+/// names real waves (`wave0` / `wave1`, an imported patch's) and they load —
+/// those waves in place of the generated shapes.
+/// Breakpoints from a block param: "time:level:curve:step;…" (see
+/// `breakpoints::SegPoint`).
+pub fn parse_points(spec: &str) -> Vec<super::breakpoints::SegPoint> {
+    spec.split(';')
+        .filter_map(|p| {
+            let mut it = p.split(':').map(|v| v.trim().parse::<f32>().ok());
+            Some(super::breakpoints::SegPoint {
+                time: it.next()??,
+                level: it.next()??,
+                curve: it.next().flatten().unwrap_or(0.0),
+                step: it.next().flatten().unwrap_or(0.0) > 0.0,
+            })
+        })
+        .collect()
+}
+
+fn wavetable_osc(block: &RigBlock, sample_rate: u32) -> NativeWavetable {
+    let mut osc = NativeWavetable::new(sample_rate)
+        .with_config(wavetable_config(block))
+        .with_transpose(block.param_f32("transpose").unwrap_or(0.0))
+        .with_glide(block.param_f32("glide_s").unwrap_or(0.0))
+        .with_amp_points(
+            block
+                .param_str("amp_points")
+                .map(|p| parse_points(&p))
+                .unwrap_or_default(),
+        )
+        .with_amp_sync(block.param_f32("amp_sync").unwrap_or(0.0) > 0.5)
+        .with_noise((block.param_f32("noise").unwrap_or(0.0) > 0.5).then(|| {
+            super::wavetable::NoiseCfg::from_shape(
+                block.param_f32("noise_shape").unwrap_or(0.0),
+                block.param_f32("noise_symmetry").unwrap_or(0.0),
+            )
+        }));
+    // Real wavetables (an imported patch's `wave0` / `wave1`), when named and
+    // readable; otherwise the generated shapes.
+    if let Some(a) = block.param_str("wave0").filter(|p| !p.is_empty()) {
+        let b = block
+            .param_str("wave1")
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| a.clone());
+        let stride = block
+            .param_f32("wt_stride")
+            .map_or(1, |s| s.max(1.0) as usize);
+        // Omnisphere's tables are 64 frames of 4096-sample cycles.
+        let cycle = block
+            .param_f32("wt_cycle")
+            .map_or(4096, |c| (c as usize).next_power_of_two().max(64));
+        let load =
+            |p: &str| super::wavebank::WaveBank::load(std::path::Path::new(p), cycle, stride);
+        match (load(&a), load(&b)) {
+            (Ok(wa), Ok(wb)) => {
+                osc = osc.with_waves(
+                    wa,
+                    wb,
+                    block.param_f32("wt_position").unwrap_or(0.0),
+                    block.param_f32("wt_mix").unwrap_or(0.0),
+                );
+            }
+            (Err(e), _) | (_, Err(e)) => tracing::warn!("wavetable not loaded: {e}"),
+        }
+    }
+    // A patch's polyphony in notes (1 = mono).
+    if let Some(n) = block.param_f32("max_notes") {
+        osc.set_max_notes(n.round().max(1.0) as usize);
+    }
+    if let Some(s) = block.param_f32("vel_sens") {
+        osc = osc.with_velocity_sensitivity(s);
+    }
+    if let Some(r) = block.param_f32("sync_ratio") {
+        osc = osc.with_sync_ratio(r);
+    }
+    if let Some(k) = block.param_f32("sync_knob") {
+        osc = osc.with_sync_knob(k);
+    }
+    osc
+}
+
+fn build_wavetable(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    // A first-class Soundsource, hosted through the generic leaf adapter.
+    let osc = wavetable_osc(block, sample_rate);
+    let mut w: Box<dyn PluginInstance> = Box::new(SoundsourceLeaf::new(osc));
+    // Normalized live params the rig's knobs also write (the amp envelope
+    // arrives through `wavetable_config`, in seconds).
+    apply_named(w.as_mut(), block, &["vib_rate", "vib_depth", "tune"]);
+    w
+}
+
+fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut f = NativeFilter::new(sample_rate);
+    if let Some(v) = block.param_f32("cutoff") {
+        f = f.with_cutoff(NativeFilter::cutoff_from_norm(v));
+    }
+    // A filter model's resonance curve (see `ResonanceMap`), passband gain
+    // and ladder compensation.
+    if let (Some(lo), Some(hi)) = (block.param_f32("res_lo"), block.param_f32("res_hi")) {
+        let curve = block.param_f32("res_curve").unwrap_or(1.0);
+        f = f.with_resonance_map(super::ResonanceMap { lo, hi, curve });
+    }
+    if let Some(v) = block.param_f32("resonance") {
+        f = f.with_resonance(v);
+    }
+    if let Some(db) = block.param_f32("gain_db") {
+        f = f.with_gain_db(db);
+    }
+    if let Some(v) = block.param_f32("res_shift") {
+        f = f.with_res_shift(v, block.param_f32("res_shift_curve").unwrap_or(1.0));
+    }
+    if let Some(c) = block.param_f32("ladder_comp") {
+        f = f.with_ladder_comp(c);
+    }
+    // An emulated cutoff knob: `taper` = "setting:hz;…", set to `knob_setting`.
+    if let Some(t) = block.param_str("taper") {
+        let points: Vec<(f32, f32)> = t
+            .split(';')
+            .filter_map(|p| {
+                let (s, hz) = p.split_once(':')?;
+                Some((s.trim().parse().ok()?, hz.trim().parse().ok()?))
+            })
+            .collect();
+        if points.len() >= 2 {
+            let setting = block.param_f32("knob_setting").unwrap_or(0.5);
+            f = f.with_taper(points, setting);
+        }
+    }
+    if let Some(m) = block
+        .params
+        .iter()
+        .find(|p| p.name == "mode")
+        .and_then(|p| FilterMode::parse(&p.value))
+    {
+        f = f.with_mode(m);
+    }
+    if let Some(v) = block.param_f32("poles") {
+        f = f.with_poles(v.round() as u32);
+    }
+    if block
+        .params
+        .iter()
+        .any(|p| p.name == "character" && p.value.eq_ignore_ascii_case("ladder"))
+    {
+        f = f.with_character(FilterCharacter::Ladder);
+    }
+    let mut f: Box<dyn PluginInstance> = Box::new(f);
+    apply_named(f.as_mut(), block, &["drive", "mix", "env_octaves", "env_sens", "env_attack", "env_release", "mode"]);
+    f
+}
+
+fn build_amp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut a = NativeAmp::new(sample_rate);
+    if let Some(v) = block.param_f32("gain") {
+        a = a.with_gain_norm(v);
+    }
+    let mut a: Box<dyn PluginInstance> = Box::new(a);
+    apply_named(
+        a.as_mut(),
+        block,
+        &["pan", "width", "warmth", "body", "drive", "tremolo"],
+    );
+    a
+}
+
+/// Hand `names` from the block's stored params to `inst` in its own units
+/// (its parameter table's), the way a live write would.
+fn apply_named(inst: &mut dyn PluginInstance, block: &RigBlock, names: &[&str]) {
+    let infos = inst.params();
+    let writes: Vec<(u32, f64)> = names
+        .iter()
+        .filter_map(|n| {
+            let v = block.param_f32(n)?;
+            let id = infos.iter().find(|p| p.name == *n)?.id;
+            Some((id, f64::from(v)))
+        })
+        .collect();
+    if writes.is_empty() {
+        return;
+    }
+    let ev = PluginEvents {
+        params: &writes,
+        ..PluginEvents::default()
+    };
+    let _ = inst.process_block(&[], &[], &mut [], &mut [], &ev);
+}
+
+fn build_waveshaper(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut w = NativeWaveshaper::new(sample_rate);
+    if let Some(v) = block.param_f32("drive") {
+        w = w.with_drive(v);
+    }
+    if let Some(v) = block.param_f32("crush") {
+        w = w.with_crush(v);
+    }
+    if let Some(v) = block.param_f32("reduce") {
+        w = w.with_reduce(v);
+    }
+    if let Some(v) = block.param_f32("mix") {
+        w = w.with_mix(v);
+    }
+    Box::new(w)
+}
+
+fn build_dfs(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(
+        NativeDfs::new(sample_rate)
+            .with_shifter_a(
+                block.param_f32("shift_a_hz").unwrap_or(0.0),
+                block.param_f32("mix_a").unwrap_or(0.0),
+            )
+            .with_shifter_b(
+                block.param_f32("shift_b_hz").unwrap_or(0.0),
+                block.param_f32("mix_b").unwrap_or(0.0),
+            )
+            .with_parallel(block.param_f32("parallel").unwrap_or(0.0) > 0.0),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_and_availability_agree() {
+        for bt in [
+            BlockType::Oscillator,
+            BlockType::Wavetable,
+            BlockType::Filter,
+            BlockType::Amp,
+            BlockType::Waveshaper,
+            BlockType::Dfs,
+        ] {
+            assert!(native_dsp_available(bt), "{bt:?} registered");
+            let block = RigBlock::of_type(bt);
+            assert!(build_native(&block, 48_000).is_some(), "{bt:?} builds");
+        }
+        // Rotary is registered as a transparent placeholder (NativePassthrough)
+        // so the block exists in chains until rotary DSP lands.
+        assert!(native_dsp_available(BlockType::Rotary));
+        assert!(build_native(&RigBlock::of_type(BlockType::Rotary), 48_000).is_some());
+        // Pitch has no entry at all — no placeholder, no DSP.
+        assert!(native_dsp_available(BlockType::Pitch));
+        assert!(build_native(&RigBlock::of_type(BlockType::Pitch), 48_000).is_some());
+    }
+}

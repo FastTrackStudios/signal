@@ -1,0 +1,209 @@
+[package]
+name = "daw-standalone"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+# `cdylib` is for the wasm worklet bundle (wasm-bindgen consumes a cdylib
+# .wasm; see examples/web_worklet + `just task-worklet-wasm`); `rlib` keeps
+# every in-tree consumer linking exactly as before.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+[dependencies]
+daw-proto = { workspace = true }
+# WSOLA: a stretched take rendered at its own pitch (render/stretch_render).
+pitch-dsp = { workspace = true }
+# `platform` = the portable async-runtime seam (`architect::platform::{spawn,
+# sleep, JoinHandle}` — tokio on native, browser timers/`spawn_local` on wasm),
+# replacing the retired moire.
+architect = { workspace = true, features = ["vox", "local", "platform"] }
+vox = { workspace = true }
+tracing = { workspace = true }
+# Multi-machine transport sync: the per-buffer snapshot cell, the buffer
+# DLL, and the `TransportBackend` this engine implements
+# (`transport_sync::SyncBackend`). Dependency-free, wasm-clean.
+daw-transport-sync = { workspace = true }
+# `sync`-only tokio (wasm-clean: no net/mio) for `tokio::sync::RwLock` etc.,
+# native + wasm. Direct (not `workspace = true`) so `default-features = false`
+# is allowed; native unifies to full via the native target dep below.
+tokio = { version = "1", default-features = false, features = ["sync"] }
+# media_fetch: requests in flight (FuturesUnordered). Wasm-clean.
+futures = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+web-time = "1"
+
+# Optional: in-process Daw client bootstrap (LocalCaller-style helper).
+daw-control = { workspace = true, optional = true }
+eyre = { workspace = true, optional = true }
+
+# Audio engine (feature-gated)
+cpal = { version = "0.18", optional = true, features = ["wasm-bindgen"] }
+# Shared audio-file layer: header probe always; the `decode` feature adds
+# resident symphonium decodes (wav/mp3/ogg/flac/aac) + the preload RAM
+# budget; native (below) adds the mmap'd PCM source. Wasm-clean at this
+# feature set (no `engine`).
+fts-sample = { workspace = true }
+
+# RPP project loading
+dawfile-reaper = { workspace = true, optional = true }
+dawfile-standalone = { workspace = true, optional = true }
+
+# Optional native HTTP fetcher for `HttpBaseUrlResolver`.
+ureq = { version = "2", optional = true }
+
+# CLAP plugin hosting (Rust-native; supports macOS / Linux / Windows
+# .clap bundles and dylibs). Behind `clap-host` feature.
+clack-host = { workspace = true, optional = true }
+clack-extensions = { workspace = true, optional = true }
+# rwh 0.6 for bridging host windows into embedded CLAP GUIs — the same
+# crates.io version clack-extensions' raw-window-handle_06 resolves to,
+# so the Window::from_raw_window_handle types line up.
+raw-window-handle-06 = { package = "raw-window-handle", version = "0.6", optional = true }
+thiserror = { workspace = true }
+
+# VST3 plugin hosting (auto-generated Steinberg COM bindings). Native-only.
+vst3 = { workspace = true, optional = true }
+libloading = { workspace = true, optional = true }
+
+# Decoding REAPER VST/VST3/CLAP plugin state blobs from .rpp files.
+base64 = "0.22"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# mmap-backed PCM streaming (native only; WASM falls back to decode) —
+# fts-sample's `mapped` feature (memmap2 only, none of the engine codecs).
+fts-sample = { workspace = true, features = ["mapped"] }
+tokio = { workspace = true }
+# Shared device-selection / open-stream plumbing + lock-free input ring.
+# Native-only (cpal device streams); pulled in by the `audio` feature.
+daw-audio-io = { workspace = true, features = ["monitor"], optional = true }
+rtrb = { version = "0.3", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { version = "0.3", features = ["futures"] }
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+
+[dev-dependencies]
+# This crate, with the features its own tests need.
+#
+# A self dev-dependency is how a crate turns a feature on for its test
+# targets without turning it on for everyone who depends on it.
+# `comped_take_selection` reads a `.rpp`, which lives behind
+# `rpp-project` — without this the test does not compile, and because a
+# crate's test targets are built as a set, it took every other test in
+# daw-standalone down with it.
+daw-standalone = { path = ".", features = ["rpp-project", "bootstrap"] }
+daw-proto = { workspace = true }
+daw-control = { workspace = true }
+eyre = { workspace = true }
+# `streamed_playback` encodes the proxy it streams.
+fts-sample = { workspace = true, features = ["engine-native"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+base64 = "0.22"
+dawfile-reaper = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+# Resident source decoding (fts-sample/symphonium) without cpal.
+# WASM-compatible — the decoder is pure Rust and doesn't touch the audio
+# device. `budget` bounds the decoded-bytes accounting (see materialize).
+# `rtrb` because the renderer's live-input and live-MIDI rings are built
+# natively whenever it is — a native-only target dep, so a no-op on wasm.
+decode = ["fts-sample/load", "fts-sample/decode-compressed", "fts-sample/budget", "dep:rtrb"]
+# Full audio engine = decode + cpal output stream. Native-only audio
+# output (cpal+wasm-bindgen on WASM, but cpal pulls JS bindings).
+# `daw-audio-io` + `rtrb` are native-only (`cfg(not(wasm32))` target
+# deps); enabling them here is a no-op on wasm32 where Cargo ignores
+# the target dep, and the live-input paths are themselves `cfg`-gated.
+audio = ["decode", "dep:cpal", "daw-audio-io", "dep:rtrb"]
+# Native PipeWire duplex engine (`DuplexAudioEngine`) — one realtime callback
+# (input+output, no ring) via daw-audio-io's `pw_filter` backend. Linux-only.
+# PipeWire is DEFAULT on Linux (daw-audio-io target-gates it); alias kept
+# for existing `daw-standalone/pipewire` references. Still pulls `audio`.
+pipewire = ["audio"]
+# Parse `.rpp` files into `Standalone::ProjectState` (tracks, items,
+# takes, markers, regions, tempo, routing). Native default pulls
+# rayon via `dawfile-reaper/parallel`. For WASM, enable
+# `rpp-project` without default features:
+#   default-features = false, features = ["rpp-project-wasm"]
+rpp-project = ["dep:dawfile-reaper", "dawfile-reaper/parallel"]
+# Save an opened project back to a NEW .rpp beside its original, via
+# dawfile-standalone's patched export (verbatim source + minimal patch).
+rpp-save = ["rpp-project", "dep:dawfile-standalone"]
+# Save a live project as a `.session` directory and open one back
+# (`session_file::{save_session, load_session, session_rpp_text}`): the
+# engine state written as REAPER text over the project's original, through
+# dawfile-standalone's `.session` format. Native-only (rpp-project pulls
+# rayon).
+session-file = ["rpp-project", "dep:dawfile-standalone"]
+# REAPER .reapeaks peak-cache reading (waveform drawing) — much lighter
+# than rpp-project (no parallel parser).
+reapeaks = ["dep:dawfile-reaper"]
+rpp-project-wasm = ["dep:dawfile-reaper"]
+# Adds audio decoding on top of rpp-project — for the in-process
+# mixer example that streams the resolved item audio. Native-only.
+rpp-loader = ["audio", "rpp-project"]
+# Build an in-process `daw_control::Daw` client over Standalone via
+# `bootstrap::build_in_process_daw`. Optional because it pulls daw-control.
+bootstrap = ["dep:daw-control", "dep:eyre"]
+# `HttpBaseUrlResolver` — fetch sources from a base URL on native
+# (e.g. Nextcloud / S3 / a static host). Browsers should fetch on the
+# JS side and push bytes via `InMemoryResolver`; this feature is for
+# native testing of the same flow.
+http-resolver = ["dep:ureq"]
+# Host CLAP plugins (load .clap bundles, inspect params, process audio).
+# Native-only (clack-host dynamically loads native dylibs). A hosted
+# plugin only runs inside the audio engine, so this pulls `audio`.
+clap-host = ["audio", "dep:clack-host", "dep:clack-extensions", "dep:raw-window-handle-06"]
+# Host VST3 plugins (load .vst3 bundles, inspect descriptor, process audio).
+# Native-only (libloading + native dylibs). Pulls `audio` for the same
+# reason as clap-host — on its own it did not compile.
+vst3-host = ["audio", "dep:vst3", "dep:libloading"]
+# Browser bindings: a wasm-bindgen wrapper that an AudioWorklet
+# processor can construct + drive. Only meaningful on wasm32.
+web = ["decode", "dep:wasm-bindgen", "dep:js-sys"]
+# Streamed takes decoded from Ogg Vorbis proxies a window at a time
+# (`audio_engine::streamed`) — pure Rust, wasm-clean: how a browser plays
+# a session whose originals it cannot hold.
+stream-ogg = ["decode", "fts-sample/engine-core"]
+
+[[example]]
+name = "meter_probe"
+required-features = ["bootstrap", "audio"]
+
+[[example]]
+name = "play_rpp"
+required-features = ["rpp-loader"]
+
+[[example]]
+name = "render_bench"
+required-features = ["rpp-loader"]
+
+[lints]
+workspace = true
+
+[[example]]
+name = "dump_rpp_items"
+required-features = ["rpp-project"]
+
+[[example]]
+name = "render_probe"
+required-features = ["rpp-loader"]
+
+[[example]]
+name = "route_probe"
+required-features = ["rpp-project"]
+
+[[example]]
+name = "omni_render"
+required-features = ["vst3-host"]
+
+[[example]]
+name = "fx_render"
+required-features = ["vst3-host"]

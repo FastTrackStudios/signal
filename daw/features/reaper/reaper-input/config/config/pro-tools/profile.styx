@@ -1,0 +1,7 @@
+name "Pro Tools"
+description "Pro Tools — keyboard shortcuts that mirror Pro Tools workflows (stub)"
+version 0.1.0
+
+sections (
+    transport.styx
+)

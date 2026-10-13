@@ -1,0 +1,38 @@
+[package]
+name = "daw-network"
+description = "TCP peer mesh + framed envelope transport for DAW-to-DAW connections"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+# A library-shaped peer-mesh transport: handshake, clock calibration, framed
+# envelopes, fan-out broadcast. Used by `daw-synchronization` to wire its
+# engine to remote peers, and reusable by other domains (session sharing,
+# telemetry, future Pro-Tools sync) that need the same connection shape.
+#
+# Concrete on `SyncEvent` today. If a second consumer arrives we'll
+# generalize over event type via a `Frame: Facet` trait bound.
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+daw-synchronization = { workspace = true }
+facet.workspace = true
+facet-postcard = "0.50.0-rc.1"
+tokio = { workspace = true, features = ["sync", "time", "net", "io-util", "rt", "macros"] }
+tokio-util = "0.7"
+tracing.workspace = true
+
+[dev-dependencies]
+daw = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,50 @@
+[package]
+name = "session-vault-sync"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["FastTrack Studio"]
+publish = false
+
+# Generates Task vault notes from Task's Assets/Tracks folder — the Song
+# Library — and writes setlist notes as `[[wikilink]]` bodies in Task's
+# own `type: setlist` format (plain body wikilinks, one song per line,
+# document order — see `setlist_songs_from_body` in the task repo's
+# crates/ui-core/src/frontmatter.rs, which this deliberately matches
+# byte-for-byte so notes generated here round-trip through Task's
+# existing parser unmodified).
+#
+# Also builds a real REAPER project per song: one track per stem (via
+# dawfile-reaper's builder API), run through dynamic-template's real
+# organize pipeline (the same one `dynamic-template --apply-buses` runs —
+# `apply_colors`/`apply_buses`/`apply_routing`/`gather_unsorted`) so the
+# result is grouped/routed/coloured like a hand-built session, not a flat
+# stem dump. See `Thank God I'm Free - Elevation Rhythm/Thank God I'm
+# Free - Elevation Worship.RPP` for the shape this replicates.
+#
+# Deliberately NOT a web server: Task's own colocated-media serving and
+# anonymous share-link support for notes don't exist yet (see
+# docs/guides/session/getting-started.md for what's still missing on the
+# Task side before a public "session.fasttrackstudio.app" rehearsal link
+# is possible). This tool's job stops at "the vault has correct,
+# Task-native notes, and a real project per song". Exposed as a lib too
+# (see `src/lib.rs`) so `apps/session-player` — the live multitrack
+# player, driven by `daw-standalone` — can reuse the Tracks-folder
+# scanner and song-naming convention without duplicating them.
+
+[lib]
+name = "session_vault_sync"
+path = "src/lib.rs"
+
+[[bin]]
+name = "session-vault-sync"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+dawfile-reaper = { workspace = true }
+dynamic-template = { path = "../../features/dynamic-template/dynamic-template" }
+monarchy = { workspace = true }

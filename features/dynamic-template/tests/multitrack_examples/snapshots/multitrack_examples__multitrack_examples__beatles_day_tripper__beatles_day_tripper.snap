@@ -1,0 +1,18 @@
+---
+source: modules/dynamic-template/tests/multitrack_examples/beatles_day_tripper.rs
+expression: structure.to_tree_string()
+---
+-Drums
+--Kick: [kick_01.wav]
+--Snare: [snare_01.wav]
+--Cymbals
+---OH: [oh_01.wav]
+-Percussion: [tambourine_01.wav]
+-Bass: [bass hofner_01.wav, bass hofner.Duplicate _01.wav]
+-Vocals
+--Lead
+---1: [Steve Lead VOX Take 1.06_01.wav]
+---2: [Steve Lead VOX Take 2.06_01.wav]
+--BGVs: [Steve BGV1_SUM.06_01.wav, Steve BGV1A.06_01.wav, ... and 8 more]
+-Guide: [click.Edit_01.wav]
+-Unsorted: [fernando strat_02.wav, gretsch fernando_02.wav, ... and 2 more]

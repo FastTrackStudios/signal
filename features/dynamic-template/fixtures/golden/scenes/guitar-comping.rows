@@ -1,0 +1,256 @@
+0	Guide	86
+0	Keyflow	86
+0	Drums	30
+1	Kick	30
+2	Sum	30
+3	In	30
+3	Out	30
+3	Trig	30
+3	Sample	30
+2	Sub	30
+2	Verb	30
+3	Room	30
+1	Snare	30
+2	Sum	30
+3	Top	30
+3	Bottom	30
+3	Trig	30
+3	Sample	30
+3	Fund	30
+2	Verb	30
+3	Plate	30
+3	Hall	30
+3	Nonlin	30
+1	Toms	30
+2	Tom 1	30
+3	T1	30
+3	T1 Trig	30
+3	T1 Sample	30
+3	Fund	30
+2	Tom 2	30
+3	T2	30
+3	T2 Trig	30
+3	T2 Sample	30
+3	Fund	30
+2	Tom 3	30
+3	T3	30
+3	T3 Trig	30
+3	T3 Sample	30
+3	Fund	30
+2	Tom 4	30
+3	T4	30
+3	T4 Trig	30
+3	T4 Sample	30
+3	Fund	30
+2	Verb	30
+3	Room	30
+3	Nonlin	30
+1	Cymbals	30
+2	OH	30
+2	Hi-Hat	30
+2	Ride	30
+1	Rooms	30
+2	Rooms	30
+2	Rooms Far	30
+1	Process	30
+2	Compress	30
+3	Dry	30
+3	Tight	30
+3	Punch	30
+3	Smash	30
+3	Crunch	30
+2	FX	30
+3	Room Sim	30
+3	Verb	30
+4	Wood Room	30
+4	Music Club	30
+4	Stadium	30
+4	RMX 16	30
+4	Nonlin	30
+4	Brick Wall	30
+0	Percussion	30
+1	Shaker	30
+1	Tambourine	30
+1	Claps	30
+0	Bass	30
+1	Guitar	30
+2	DI	30
+2	Amp	30
+1	Synth	30
+2	Sub	30
+2	Synth	30
+0	Electric	133
+1	Rhythm	133
+2	Main	133
+3	L	133
+4	DI	133
+4	Pedalboard	133
+4	Amp 1	133
+5	SM57	133
+5	Royer	133
+4	Amp 2	133
+5	SM57	133
+5	Royer	133
+3	R	133
+4	DI	133
+4	Pedalboard	133
+4	Amp 1	133
+5	SM57	133
+5	Royer	133
+4	Amp 2	133
+5	SM57	133
+5	Royer	133
+2	Octave	133
+3	L	133
+4	DI	133
+4	Pedalboard	133
+4	Amp 1	133
+5	SM57	133
+5	Royer	133
+4	Amp 2	133
+5	SM57	133
+5	Royer	133
+3	R	133
+4	DI	133
+4	Pedalboard	133
+4	Amp 1	133
+5	SM57	133
+5	Royer	133
+4	Amp 2	133
+5	SM57	133
+5	Royer	133
+1	Lead	133
+2	L	30
+2	R	30
+1	Solo	133
+2	Main	133
+2	Harmony	133
+0	Acoustic	30
+1	Steel	30
+1	Nylon	30
+1	Nashville	30
+0	Keys	30
+1	Piano	30
+1	Rhodes	30
+1	Wurli	30
+1	Organ	30
+0	Synths	30
+1	Sub Bass Synth	30
+1	Texture	30
+1	SY Arps	30
+2	Arp	30
+1	SY Pads	30
+2	Pad	30
+1	SY Leads	30
+2	Lead Synth	30
+1	SY Chords	30
+2	Chord	30
+0	Vocals	30
+1	Ron	30
+2	Main	30
+3	EN	30
+3	ES	30
+3	PT	30
+2	DBL	30
+3	EN	30
+3	ES	30
+3	PT	30
+1	Belen	30
+2	Main	30
+3	EN	30
+3	ES	30
+2	DBL	30
+3	EN	30
+3	ES	30
+1	Aline	30
+2	Main	30
+3	PT	30
+2	DBL	30
+3	PT	30
+1	Vox FX	30
+2	Delay	30
+3	Slap	30
+3	Short	30
+3	Long	30
+3	Throw	30
+2	Verb	30
+3	Room	30
+3	Short	30
+3	Long	30
+3	Moment	30
+3	Throw	30
+2	Wide	30
+2	Pitch	30
+3	Oct+	30
+3	Oct-	30
+1	VOX EN	30
+1	VOX ES	30
+1	VOX PT	30
+0	BGVs	30
+1	Octave Up	30
+2	EN	30
+2	ES	30
+2	PT	30
+1	Octave Down	30
+2	EN	30
+2	ES	30
+2	PT	30
+1	Higher Harmony	30
+2	EN	30
+2	ES	30
+2	PT	30
+1	Lower Harmony	30
+2	EN	30
+2	ES	30
+2	PT	30
+1	Hey	30
+2	All 1	30
+2	All 2	30
+2	All 3	30
+2	All 4	30
+2	All 5	30
+2	All 6	30
+2	All 7	30
+2	All 8	30
+0	Choir	30
+1	Soprano	30
+2	EN	30
+2	ES	30
+2	PT	30
+1	Alto	30
+2	EN	30
+2	ES	30
+2	PT	30
+1	Tenor	30
+2	EN	30
+2	ES	30
+2	PT	30
+1	Bass	30
+2	EN	30
+2	ES	30
+2	PT	30
+0	Orchestra	30
+1	Winds	30
+2	Flute	30
+2	Oboe	30
+2	Clarinet	30
+2	Bassoon	30
+1	Brass	30
+2	Trumpets	30
+2	Horns	30
+2	Trombones	30
+2	Tuba	30
+1	Strings	30
+2	Violin 1	30
+2	Violin 2	30
+2	Viola	30
+2	Cello	30
+2	Bass	30
+1	Orch Percussion	30
+2	Timpani	30
+0	HEADPHONE MIXES	30
+1	HP Engineer	30
+1	HP Producer	30
+1	HP Broadcast	30
+0	TALKBACK	30
+1	TB Engineer	30

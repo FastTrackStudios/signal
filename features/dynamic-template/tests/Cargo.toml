@@ -1,0 +1,80 @@
+[package]
+name = "dynamic-template-tests"
+version.workspace = true
+edition = "2021"  # original edition of the dissolved workspace (root is 2024)
+license.workspace = true
+publish = false
+
+[dependencies]
+dynamic-template = { workspace = true, features = ["reaper"] }
+dawfile-reaper.workspace = true
+daw-proto.workspace = true
+# daw-standalone needs its "audio" feature to compile (cpal → ALSA, which the
+# dev shell carries). 09_grouping_watcher drives the gangs through the facade
+# against it — the map's standard that a scenario runs the real gesture and
+# reads the project back, rather than asserting on the thing that computed it.
+daw-standalone = { workspace = true, features = ["audio"] }
+monarchy.workspace = true
+vox.workspace = true
+color-palette.workspace = true
+facet-styx.workspace = true
+tempfile = "3.8"
+pretty_assertions = "1.4"
+insta = "1.34"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "01_no_unneccesary_folders"
+path = "01_no_unneccesary_folders.rs"
+
+[[test]]
+name = "02_scoped_resorting"
+path = "02_scoped_resorting.rs"
+
+[[test]]
+name = "03_assertion_sensitivity"
+path = "03_assertion_sensitivity.rs"
+
+[[test]]
+name = "04_visibility_classification"
+path = "04_visibility_classification.rs"
+
+# Parked: 05_auto_color targets a removed daw API (`daw_proto::TrackService`,
+# `daw_standalone::StandaloneTrack`). Re-enable once ported to the current
+# daw service surface. Kept out of the build so `cargo check --all-targets`
+# stays green.
+# [[test]]
+# name = "05_auto_color"
+# path = "05_auto_color.rs"
+
+[[test]]
+name = "06_organize_is_lossless"
+path = "06_organize_is_lossless.rs"
+
+# Builds the golden session with the Rust builder and reads its
+# GROUP_FLAGS back through dawfile-reaper.
+[[test]]
+name = "07_template_group_flags"
+path = "07_template_group_flags.rs"
+
+# The golden session: builder output == the committed fixtures, kinds in
+# ext-state, the checklist regenerated from the golden-rule checks.
+[[test]]
+name = "08_golden_session"
+path = "08_golden_session.rs"
+
+[[test]]
+name = "multitrack_examples"
+path = "multitrack_examples.rs"
+
+# The scene selector vocabulary the patch list lowers into (#48, #56).
+[[test]]
+name = "08_scene_selector"
+path = "08_scene_selector.rs"
+
+[[test]]
+name = "09_grouping_watcher"
+path = "09_grouping_watcher.rs"

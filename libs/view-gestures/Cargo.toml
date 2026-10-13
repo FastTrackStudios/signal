@@ -1,0 +1,15 @@
+[package]
+name = "view-gestures"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "The view gestures the arrangement and the Editor share: the zoom drag and its box, the wheel, the marquee"
+
+# No dependencies, deliberately — the same bargain as `razor`. Two
+# surfaces with two different cameras (the arrangement's pixels-a-second
+# and scroll; the Editor's units-a-pixel and centre row) agree on what a
+# gesture MEANS here, and each applies the answer through its own camera.
+
+[lints]
+workspace = true

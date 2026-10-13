@@ -1,0 +1,29 @@
+[package]
+name = "mic-plugin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "FTS Mic — CLAP/VST3 dual-capsule microphone modeller: a front/rear capsule recording rendered as one of forty modelled mics"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+nice-plug = { workspace = true, features = ["vst3"] }
+mic-dsp.workspace = true
+mic-ui.workspace = true
+nice-plug-dioxus.workspace = true
+dsp-core.workspace = true
+crossbeam-channel = { workspace = true }
+
+[features]
+default = ["export"]
+# The CLAP / VST3 entry points. A host linking this plugin in-process
+# (the session engine's built-in FX) turns it off: every plugin exports
+# the same `clap_entry` / `GetPluginFactory` symbols, and two in one
+# binary collide.
+export = []

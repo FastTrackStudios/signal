@@ -1,0 +1,65 @@
+// Organize mode workflow.
+// Identity derived from filename: id = "mode-organize", name = "Mode Organize".
+//
+// In Organize mode the `o` prefix shadows the base profile's "Options"
+// which-key tree and becomes the Organize menu. The merge fully wipes
+// every base binding starting with `o ` when this overlay binds any
+// `o *` entry, so pressing `o` in the overlay shows only the entries
+// listed here.
+
+name        "Organize"
+description "Planning, song structure, setlists."
+
+bindings (
+    // ── Organize menu (o prefix) ─────────────────────────────────────
+    {keys "o s", action "_FTS_SESSION_ORGANIZE_SELECTED_TRACKS", desc "Organize selected"}
+    {keys "o a", action "_FTS_SESSION_ORGANIZE_EVERYTHING",      desc "Organize all tracks"}
+
+    // ── Tempo markers (t prefix, letters) ────────────────────────────
+    // Insert/edit/delete tempo + time-signature change markers, and walk
+    // between them. Lives next to the digit-spelled time signatures.
+    {keys "t t", action 40256,  desc "Insert tempo/timesig marker (dialog)"}
+    {keys "t i", action 42330,  desc "Insert tempo marker (no dialog)"}
+    {keys "t e", action 40618,  desc "Edit tempo/timesig marker near cursor"}
+    {keys "t d", action 40617,  desc "Delete tempo/timesig marker near cursor"}
+    {keys "t h", action 41820,  desc "Previous tempo/timesig change"}
+    {keys "t l", action 41821,  desc "Next tempo/timesig change"}
+    {keys "t k", action 41129,  desc "Tempo +1 BPM"}
+    {keys "t j", action 41130,  desc "Tempo -1 BPM"}
+
+    // ── Time signatures (t prefix, digits) ───────────────────────────
+    // Digits spell numerator then denominator: `t 2 4` = 2/4, `t 1 3 8`
+    // = 13/8. Inserts at the start of the measure under the edit cursor
+    // (flooring). Shadows the base profile's `t` (lanes) in this mode.
+    {keys "t 2 4",   action "_FTS_TEMPO_INSERT_TIMESIG_2_4",  desc "2/4"}
+    {keys "t 3 4",   action "_FTS_TEMPO_INSERT_TIMESIG_3_4",  desc "3/4"}
+    {keys "t 4 4",   action "_FTS_TEMPO_INSERT_TIMESIG_4_4",  desc "4/4"}
+    {keys "t 5 4",   action "_FTS_TEMPO_INSERT_TIMESIG_5_4",  desc "5/4"}
+    {keys "t 6 4",   action "_FTS_TEMPO_INSERT_TIMESIG_6_4",  desc "6/4"}
+    {keys "t 7 4",   action "_FTS_TEMPO_INSERT_TIMESIG_7_4",  desc "7/4"}
+    {keys "t 3 8",   action "_FTS_TEMPO_INSERT_TIMESIG_3_8",  desc "3/8"}
+    {keys "t 5 8",   action "_FTS_TEMPO_INSERT_TIMESIG_5_8",  desc "5/8"}
+    {keys "t 6 8",   action "_FTS_TEMPO_INSERT_TIMESIG_6_8",  desc "6/8"}
+    {keys "t 7 8",   action "_FTS_TEMPO_INSERT_TIMESIG_7_8",  desc "7/8"}
+    {keys "t 9 8",   action "_FTS_TEMPO_INSERT_TIMESIG_9_8",  desc "9/8"}
+    {keys "t 1 2 8", action "_FTS_TEMPO_INSERT_TIMESIG_12_8", desc "12/8"}
+    {keys "t 1 3 8", action "_FTS_TEMPO_INSERT_TIMESIG_13_8", desc "13/8"}
+
+    // ── One-shot time signatures (T prefix) ──────────────────────────
+    // Same spelling, but always inserts a single measure and restores
+    // the previous signature on the next downbeat: `T 2 4` = one bar of
+    // 2/4 then back to whatever it was.
+    {keys "<S-t> 2 4",   action "_FTS_TEMPO_INSERT_TIMESIG_2_4_SINGLE",  desc "One bar of 2/4"}
+    {keys "<S-t> 3 4",   action "_FTS_TEMPO_INSERT_TIMESIG_3_4_SINGLE",  desc "One bar of 3/4"}
+    {keys "<S-t> 4 4",   action "_FTS_TEMPO_INSERT_TIMESIG_4_4_SINGLE",  desc "One bar of 4/4"}
+    {keys "<S-t> 5 4",   action "_FTS_TEMPO_INSERT_TIMESIG_5_4_SINGLE",  desc "One bar of 5/4"}
+    {keys "<S-t> 6 4",   action "_FTS_TEMPO_INSERT_TIMESIG_6_4_SINGLE",  desc "One bar of 6/4"}
+    {keys "<S-t> 7 4",   action "_FTS_TEMPO_INSERT_TIMESIG_7_4_SINGLE",  desc "One bar of 7/4"}
+    {keys "<S-t> 3 8",   action "_FTS_TEMPO_INSERT_TIMESIG_3_8_SINGLE",  desc "One bar of 3/8"}
+    {keys "<S-t> 5 8",   action "_FTS_TEMPO_INSERT_TIMESIG_5_8_SINGLE",  desc "One bar of 5/8"}
+    {keys "<S-t> 6 8",   action "_FTS_TEMPO_INSERT_TIMESIG_6_8_SINGLE",  desc "One bar of 6/8"}
+    {keys "<S-t> 7 8",   action "_FTS_TEMPO_INSERT_TIMESIG_7_8_SINGLE",  desc "One bar of 7/8"}
+    {keys "<S-t> 9 8",   action "_FTS_TEMPO_INSERT_TIMESIG_9_8_SINGLE",  desc "One bar of 9/8"}
+    {keys "<S-t> 1 2 8", action "_FTS_TEMPO_INSERT_TIMESIG_12_8_SINGLE", desc "One bar of 12/8"}
+    {keys "<S-t> 1 3 8", action "_FTS_TEMPO_INSERT_TIMESIG_13_8_SINGLE", desc "One bar of 13/8"}
+)

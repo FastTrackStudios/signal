@@ -1,0 +1,55 @@
+[package]
+name = "daw-audio-io"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Reusable audio I/O for the DAW engine — host (JACK) selection, device enumeration/selection, and a live duplex monitor (input → process → output)."
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# Same cpal 0.17.1 (crates.io) the rest of the workspace resolves, so `Stream`
+# and device types unify across daw-standalone and this crate.
+cpal = "0.18"
+facet = { workspace = true }
+tracing = { workspace = true }
+# SPSC lock-free ring for the duplex monitor's input → output handoff.
+rtrb = { version = "0.3", optional = true }
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# PipeWire is the Linux audio host, unconditionally: cpal's native pipewire
+# backend (real device names, per-node latency) + the raw pw_filter duplex
+# engine (one realtime callback, no ring — the high-level crate wraps
+# `stream` but not `filter`, hence raw FFI). Other platforms keep plain cpal
+# (CoreAudio etc.) and never see these deps.
+cpal = { version = "0.18", features = ["pipewire"] }
+pipewire = "0.10"
+libspa = "0.10"
+# sched_setscheduler: the audio threads run SCHED_FIFO (`realtime`).
+libc = { workspace = true }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+# The audio session's ports are iOS's devices (src/ios_session.rs), read by
+# dynamic messaging — the same objc2 the app's session code uses.
+objc2 = "0.6"
+
+[features]
+default = []
+# Prefer cpal's JACK backend (pipewire-jack shim) over the raw ALSA/CoreAudio
+# default.
+jack = ["cpal/jack"]
+# PipeWire is DEFAULT on Linux now (target-gated deps above); this feature is
+# a no-op alias kept so existing `daw-audio-io/pipewire` references parse.
+pipewire = []
+# The live in → process → out duplex monitor. Pulls rtrb. Native-only.
+monitor = ["dep:rtrb"]

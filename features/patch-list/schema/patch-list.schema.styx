@@ -1,0 +1,50 @@
+// The album file, `patch-list.styx` (docs/spec/session/workflows.md,
+// flow.patch-list.plan; decision session #29).
+//
+// performer -> source kind -> channel or mic -> input role. Roles are
+// names the studio profile resolves (studio.schema.styx); a MIDI source
+// names its device and channel directly.
+
+meta {
+    id https://fasttrackstudio.app/schema/patch-list
+    version 2026-09-14
+    description "An album's patch list: every input by performer, and the headphone buses by who they are for"
+}
+
+schema {
+    @ @object{
+        /// Each performer's rig, by performer name, in tracking order.
+        performers @optional(@map(@Performer))
+        /// The headphone buses, by bus name.
+        headphones @optional(@map(@Bus))
+    }
+
+    /// A rig per kind of source the performer records: `guitar`,
+    /// `drums`, `bass`, `vocal`, `keys`, `talkback`.
+    Performer @map(@Rig)
+
+    /// Each channel or mic of one kind of source, and what it is
+    /// patched to. A kit is keyed `piece/mic` (`kick/in`, `snare/top`);
+    /// a guitar rig `di`, `pedalboard`, `amp-a/57`; a bass by channel.
+    Rig @map(@Entry)
+
+    /// An input role the profile resolves (`"DI 3"`, `"Kick In"`), or a
+    /// MIDI source named directly.
+    Entry @enum{
+        /// A MIDI device, on one channel or (absent) every channel.
+        midi @object{
+            device @string
+            channel @optional(@int{min 1, max 16})
+        }
+        /// An input role in the studio profile's inputs table.
+        role @string
+    }
+
+    /// A headphone bus.
+    Bus @object{
+        /// The bus role in the profile's outputs table (`"HP 1"`).
+        output @string
+        /// Who hears it: one name, or several for a shared bus.
+        for @optional(@seq(@string))
+    }
+}

@@ -1,0 +1,86 @@
+[package]
+name = "fts-audio-ui"
+description = "FastTrack Studio audio widget kit — Dioxus port of iced_audio (knobs, sliders, XY pads, meters)"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move workspace edition; migrate deliberately
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+dioxus = { workspace = true }
+architect-ui = { workspace = true }
+tracing = { workspace = true }
+# The painter (`src/paint`). `anyrender::Scene` is a plain recording of draw
+# commands — no DOM, no renderer — so the control graphics stay portable;
+# peniko brings kurbo with it. Spec: `fx.control.painted`.
+anyrender = { workspace = true }
+wgpu = { workspace = true, optional = true }
+vello = { workspace = true, optional = true }
+# The device handle the renderer hands a custom widget, in every shape it
+# comes in. `anyrender_vello` boxes `wgpu_context::DeviceHandle`, and which
+# `wgpu_context` that is depends on which `anyrender_vello` the host links:
+# 0.11 (the baseview/plugin path) carries 0.6, 0.12 (the Blitz desktop path)
+# carries 0.7. They are different types to `Any`, so a downcast that knows
+# only one of them fails — silently, because the fallback is a legal drawing.
+# Both resolve to the same `wgpu`, so once unwrapped the device and queue are
+# interchangeable. See `ShaderSurface::with_uniform_size`.
+wgpu-context-06 = { package = "wgpu_context", version = "0.6", optional = true }
+wgpu-context-07 = { package = "wgpu_context", version = "0.7", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+pollster = { version = "0.4", optional = true }
+peniko = { workspace = true }
+kurbo = { workspace = true }
+
+# The widget seam (`src/widget.rs`) that puts a scene on screen through a
+# Blitz custom widget. Native only — the DOM/renderer boundary.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+blitz-dom = { workspace = true, features = ["custom-widget"] }
+blitz-traits = { workspace = true }
+# Rendering a widget's scene into its own texture (`widget::Rasterized`),
+# so the host can draw it over the page as a layer.
+anyrender_vello = { workspace = true }
+dioxus-native-dom = { workspace = true }
+
+# The browser's half of that seam (`src/scene_canvas.rs`): a `<canvas>` with
+# vello_hybrid's WebGL2 renderer behind it, replaying the same recorded
+# scenes the custom widget composites natively.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# vello on WebGPU, through anyrender's own window renderer — which is what
+# makes the browser's canvas a real host: its painter hands a widget a wgpu
+# device (`renderer_specific_context`) and takes the texture a shader drew
+# into, exactly as Blitz's does. Anything less would mean the browser drew
+# the vector fallback of every panel.
+anyrender_vello = { workspace = true }
+# One device and one vello renderer for every canvas on the page, rather
+# than one of each per canvas (see `scene_canvas`'s module docs).
+vello = { workspace = true }
+wgpu = { workspace = true }
+wgpu-context-07 = { package = "wgpu_context", version = "0.7" }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+web-sys = { workspace = true, features = ["Window", "Document", "Element", "HtmlCanvasElement", "Performance"] }
+gloo-timers = { workspace = true, features = ["futures"] }
+
+[features]
+default = []
+# The GPU path for painted panels: a WGSL fragment shader rendered into a
+# texture the compositor is handed. Off by default because it pulls wgpu,
+# and a surface that only ever draws vectors should not carry it.
+shader = ["dep:wgpu", "dep:vello", "dep:bytemuck", "dep:wgpu-context-06", "dep:wgpu-context-07"]
+# The offline shader renderer (): a wgpu device with no window,
+# for contact sheets and for tests that assert two states actually differ.
+# A development tool — never on a panel's path at runtime.
+probe = ["shader", "dep:pollster"]
+# Enable nih_plug ParamPtr adapter for ParamHandle.
+# Consumers building plugins should enable this; UI-only consumers can leave it off.
+nih-plug = []
+
+# The knob contact sheet (tests/knob_sheet.rs) paints every style in the kit
+# to one PNG on the headless Blitz DOM — no GPU, no window. It is the answer
+# to "does my new knob look right" without building a whole faceplate.
+[dev-dependencies]
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

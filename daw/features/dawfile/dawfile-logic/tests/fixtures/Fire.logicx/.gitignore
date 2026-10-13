@@ -1,0 +1,6 @@
+# Logic Pro project metadata/UI files not needed for parsing tests
+DisplayState.plist
+DisplayStateArchive
+WindowImage.jpg
+Project File Backups/
+Undo Data.nosync/

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>daw-standalone — remote project playback</title>
+  <style>
+    body { font-family: monospace; padding: 1rem; max-width: 72ch; }
+    button { margin-right: .5rem; }
+    label { display: block; margin: .5rem 0; }
+    input[type=text] { width: 40em; }
+    #log { white-space: pre-wrap; background: #111; color: #ddd; padding: .5rem; }
+  </style>
+</head>
+<body>
+  <h1>daw-standalone — WASM playback from remote storage</h1>
+  <p>
+    Host an <code>.rpp</code> + its audio sources at a public base URL
+    (Nextcloud share link, S3 bucket, Cloudflare R2, any static host).
+    The page loads the project structure, enumerates source paths via
+    <code>pathsToResolve()</code>, fetches each one, decodes via
+    <code>AudioContext.decodeAudioData</code>, and ships the PCM into
+    the AudioWorklet via <code>postMessage</code>.
+  </p>
+
+  <label>
+    Project base URL:
+    <input id="base" type="text"
+           placeholder="https://nextcloud.example/s/SHARETOKEN/download?path=&files="
+           value="">
+  </label>
+  <label>
+    RPP filename (relative to base):
+    <input id="rpp" type="text" placeholder="song.rpp" value="song.rpp">
+  </label>
+  <div>
+    <button id="load">load + decode + attach</button>
+    <button id="play" disabled>play</button>
+    <button id="pause" disabled>pause</button>
+    <button id="stop" disabled>stop</button>
+  </div>
+  <pre id="log"></pre>
+
+<script type="module">
+const GLUE_URL = './pkg/daw_standalone.js';
+const WASM_URL = './pkg/daw_standalone_bg.wasm';
+
+const baseInput = document.getElementById('base');
+const rppInput  = document.getElementById('rpp');
+const loadBtn   = document.getElementById('load');
+const playBtn   = document.getElementById('play');
+const pauseBtn  = document.getElementById('pause');
+const stopBtn   = document.getElementById('stop');
+const logEl     = document.getElementById('log');
+
+let ctx = null;
+let node = null;
+function log(s) { logEl.textContent += s + '\n'; }
+
+async function ensureContext() {
+  if (ctx) return;
+  ctx = new AudioContext();
+  await ctx.audioWorklet.addModule('./processor.js');
+  node = new AudioWorkletNode(ctx, 'daw-standalone', { outputChannelCount: [2] });
+  node.connect(ctx.destination);
+
+  const wasmBytes = await (await fetch(WASM_URL)).arrayBuffer();
+  await new Promise((resolve) => {
+    node.port.onmessage = (e) => { if (e.data.kind === 'ready') resolve(); };
+    node.port.postMessage({
+      kind: 'init',
+      wasmBytes,
+      glueUrl: GLUE_URL,
+      sampleRate: ctx.sampleRate,
+    });
+  });
+  log(`audio context ready @ ${ctx.sampleRate} Hz`);
+}
+
+loadBtn.addEventListener('click', async () => {
+  try {
+    await ensureContext();
+    const base = baseInput.value.trim();
+    if (!base) { log('! enter a base URL'); return; }
+    const rppName = rppInput.value.trim();
+    if (!rppName) { log('! enter an RPP filename'); return; }
+
+    log(`fetching ${rppName}...`);
+    const rppText = await (await fetch(base + encodeURIComponent(rppName))).text();
+
+    // Ship the RPP text to the worklet; it parses + populates the bay.
+    const trackCount = await rpc('load_rpp', { text: rppText });
+    log(`loaded ${trackCount} tracks; enumerating sources...`);
+
+    // Ask the worklet which source paths the bay wants.
+    const pairs = await rpc('take_sources', {});
+    // `pairs` is a flat [take, path, take, path, …] array.
+    const byPath = new Map();
+    for (let i = 0; i < pairs.length; i += 2) {
+      const take = pairs[i], path = pairs[i + 1];
+      if (!byPath.has(path)) byPath.set(path, []);
+      byPath.get(path).push(take);
+    }
+    log(`${byPath.size} unique source files to fetch`);
+
+    // Fetch + decode + attach for each unique path.
+    for (const [path, takes] of byPath) {
+      const url = base + path.split('/').map(encodeURIComponent).join('/');
+      log(`  fetching ${path}…`);
+      const ab = await (await fetch(url)).arrayBuffer();
+      const audioBuf = await ctx.decodeAudioData(ab);
+      const pcm = interleave(audioBuf);
+      // Attach the same PCM to every take that references this path.
+      for (const take of takes) {
+        node.port.postMessage({
+          kind: 'attach_source',
+          takeGuid: take,
+          pcm,
+          channels: audioBuf.numberOfChannels,
+          sampleRate: audioBuf.sampleRate,
+        });
+      }
+    }
+
+    log('ready — press play');
+    playBtn.disabled = pauseBtn.disabled = stopBtn.disabled = false;
+  } catch (e) {
+    log(`! ${e.message ?? e}`);
+  }
+});
+
+playBtn.addEventListener('click',  () => node.port.postMessage({ kind: 'play'  }));
+pauseBtn.addEventListener('click', () => node.port.postMessage({ kind: 'pause' }));
+stopBtn.addEventListener('click',  () => node.port.postMessage({ kind: 'stop'  }));
+
+let nextRpcId = 1;
+function rpc(kind, payload) {
+  // Tiny ack/reply protocol over the worklet port.
+  const id = nextRpcId++;
+  return new Promise((resolve) => {
+    const handler = (e) => {
+      if (e.data && e.data.replyTo === id) {
+        node.port.removeEventListener('message', handler);
+        resolve(e.data.value);
+      }
+    };
+    node.port.addEventListener('message', handler);
+    node.port.postMessage({ kind, replyTo: id, ...payload });
+  });
+}
+
+function interleave(audioBuffer) {
+  const ch = audioBuffer.numberOfChannels;
+  const n = audioBuffer.length;
+  const out = new Float32Array(n * ch);
+  for (let c = 0; c < ch; c++) {
+    const data = audioBuffer.getChannelData(c);
+    for (let i = 0; i < n; i++) out[i * ch + c] = data[i];
+  }
+  return out;
+}
+</script>
+</body>
+</html>

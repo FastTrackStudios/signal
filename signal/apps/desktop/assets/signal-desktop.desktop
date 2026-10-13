@@ -1,0 +1,13 @@
+# Template — `just install` substitutes the binary path and copies this
+# to ~/.local/share/applications/.
+[Desktop Entry]
+Type=Application
+Name=Signal
+GenericName=Live Rig
+Comment=Guitar, keys and drum rigs — the live signal chain
+Exec=@LAUNCH@@BIN@
+Icon=signal-desktop
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+Keywords=guitar;rig;amp;NAM;setlist;worship;daw;
+StartupWMClass=fasttrackstudio

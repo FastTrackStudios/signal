@@ -1,0 +1,25 @@
+[package]
+name = "dawfile-store"
+version = "0.1.0"
+edition = "2024"
+description = "One file per project: the Loro doc's history, its blobs once each, named versions — on Turso"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# The storage engine: SQLite's file format, Turso's engine. Pinned to its
+# latest release; no default features (they bring mimalloc as the global
+# allocator and full-text search).
+turso = { version = "0.8.2", default-features = false }
+loro.workspace = true
+sha2 = { workspace = true }
+zstd = "0.13"
+thiserror = { workspace = true }
+pollster = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+loro.workspace = true
+dawfile-standalone = { workspace = true }
+
+[lints]
+workspace = true

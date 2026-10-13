@@ -1,0 +1,22 @@
+[package]
+name = "mic-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "FTS Mic GUI — the parameter trees of FTS Mic and FTS Mic 180, and their Dioxus editors"
+
+[dependencies]
+dioxus = { workspace = true }
+fts-plug-ui = { workspace = true }
+fts-audio-ui = { workspace = true }
+nice-plug = { workspace = true }
+nice-plug-dioxus = { workspace = true }
+
+
+[dev-dependencies]
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

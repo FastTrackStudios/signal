@@ -1,0 +1,31 @@
+// Quick-Edit mode workflow. id = "quick-edit".
+//
+// Toggle it with the auto-registered Main-section action:
+//   FTS_INPUT_WORKFLOW_QUICK_EDIT  ("Workflow: Quick-Edit")
+//
+// On  → lower-half item drag becomes slip edit (move item contents), and
+//       snapping is turned off so the slip ignores snap.
+// Off → the mouse modifier and the snap setting are restored.
+//
+// REAPER's lower-half context has no dedicated "slip ignoring snap" behavior,
+// so "ignoring snap" is achieved by disabling global snapping while active.
+
+name        "Quick-Edit"
+description "Fast item editing: lower-half drag slips item contents, snapping off."
+
+mouse_overlays (quick-edit)
+
+settings (
+    {command 1157, enabled false, desc "Disable snapping (so slip ignores snap)"}
+)
+
+// Arm "Split item under mouse cursor (select right)" while quick-edit is on
+// (disarmed on toggle-off). One click-drag = split + slip the right piece:
+//   intercept_clicks → FTS catches the item mouse-down and runs the split.
+//   slip_drag        → FTS then drives the slip itself, dragging the right
+//                      piece's take contents as the mouse moves, until release.
+// We drive the slip rather than passing the click through to REAPER's native
+// slip because the fresh split boundary lands under the cursor — REAPER would
+// read that as an item-EDGE drag (trim), and no mouse-modifier maps an edge to
+// slip. Driving it ourselves sidesteps edge-detection entirely.
+armed_action {command 42577, name "Split item under mouse (select right)", intercept_clicks true, slip_drag true}

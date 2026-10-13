@@ -1,0 +1,45 @@
+bindings (
+    // Track selection
+    {keys "<up>",         action 40286, desc "Go to previous track"}
+    {keys "<down>",       action 40285, desc "Go to next track"}
+    {keys "<C-up>",       action 40286, desc "Select previous track"}
+    {keys "<C-down>",     action 40285, desc "Select next track"}
+
+    // Item navigation
+    {keys "<tab>",        action 40319, desc "Move cursor to next transient"}
+    {keys "<S-tab>",      action 40318, desc "Move cursor to previous transient"}
+
+    // Cursor navigation
+    {keys "<left>",       action 40104, desc "Move cursor left to grid"}
+    {keys "<right>",      action 40105, desc "Move cursor right to grid"}
+    {keys "<C-left>",     action 40100, desc "Move cursor left big"}
+    {keys "<C-right>",    action 40099, desc "Move cursor right big"}
+    {keys "<home>",       action 40042, desc "Go to start of project"}
+    {keys "<end>",        action 40043, desc "Go to end of project"}
+
+    // Time selection
+    {keys "<S-left>",     action 40102, desc "Extend time selection left"}
+    {keys "<S-right>",    action 40103, desc "Extend time selection right"}
+
+    // Markers
+    {keys ";",          action 40172, desc "Go to previous marker / project start"}
+    {keys "'",          action 40173, desc "Go to next marker / project end"}
+    {keys m,            action 40157, desc "Insert marker at cursor"}
+    {keys "<S-m>",        action 40171, desc "Insert and name marker"}
+
+    // Marker numbers
+    {keys 1,            action 40161, desc "Go to marker 1"}
+    {keys 2,            action 40162, desc "Go to marker 2"}
+    {keys 3,            action 40163, desc "Go to marker 3"}
+    {keys 4,            action 40164, desc "Go to marker 4"}
+    {keys 5,            action 40165, desc "Go to marker 5"}
+    {keys 6,            action 40166, desc "Go to marker 6"}
+    {keys 7,            action 40167, desc "Go to marker 7"}
+    {keys 8,            action 40168, desc "Go to marker 8"}
+    {keys 9,            action 40169, desc "Go to marker 9"}
+    {keys 0,            action 40170, desc "Go to marker 10"}
+
+    // Regions
+    {keys "<S-r>",        action 40174, desc "Insert region from time selection"}
+    {keys "<C-S-r>",      action 40306, desc "Insert region from selected items"}
+)

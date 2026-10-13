@@ -1,0 +1,27 @@
+[package]
+name = "expression-editor-demo"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "The demo project the four #149 scenarios run against — assembled from material on disk, never committed"
+
+[dependencies]
+expression-editor-core = { workspace = true }
+expression-editor-guitarpro = { workspace = true }
+dawfile-standalone = { workspace = true }
+daw-proto = { workspace = true }
+
+[dev-dependencies]
+expression-editor-audio = { workspace = true }
+expression-editor-tools = { workspace = true }
+expression-editor-daw = { workspace = true }
+expression-editor-corpus = { workspace = true }
+# The gen_reaper example: builds the demo as an .rpp REAPER opens.
+dawfile-reaper = { workspace = true }
+daw = { workspace = true }
+hound = "3.5"
+midly = "0.5"
+
+[lints]
+workspace = true

@@ -1,0 +1,90 @@
+# Time-signature icons for the Organize 1 toolbar.
+#   fts-icons build examples/timesigs.toml --install
+# Renders stacked num/den digits, installs all 3 DPI sizes, and points the
+# _FTS_TEMPO_INSERT_TIMESIG_* buttons at them in reaper-menu.ini.
+
+# Organize 1 sits at the top — timesigs stay square (classic stacked digits).
+[settings]
+resource_paths = ["~/.fts-dev"]
+
+[defaults.all]
+icon_size = 27
+bg_size = 28
+corner_radius = 6
+
+[defaults.normal]
+icon = "#e6e6e6"
+
+[defaults.hover]
+icon = "#ffd75e"
+
+[defaults.clicked]
+icon = "#ffffff"
+bg = "#2e7d32aa"
+border = "#69f0ae"
+border_width = 1.5
+
+[[icon]]
+file = "fts_timesig_2_4"
+source = "text:2/4"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_2_4"
+
+[[icon]]
+file = "fts_timesig_3_4"
+source = "text:3/4"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_3_4"
+
+[[icon]]
+file = "fts_timesig_4_4"
+source = "text:4/4"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_4_4"
+
+[[icon]]
+file = "fts_timesig_5_4"
+source = "text:5/4"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_5_4"
+
+[[icon]]
+file = "fts_timesig_6_4"
+source = "text:6/4"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_6_4"
+
+[[icon]]
+file = "fts_timesig_7_4"
+source = "text:7/4"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_7_4"
+
+[[icon]]
+file = "fts_timesig_3_8"
+source = "text:3/8"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_3_8"
+
+[[icon]]
+file = "fts_timesig_5_8"
+source = "text:5/8"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_5_8"
+
+[[icon]]
+file = "fts_timesig_6_8"
+source = "text:6/8"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_6_8"
+
+[[icon]]
+file = "fts_timesig_7_8"
+source = "text:7/8"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_7_8"
+
+[[icon]]
+file = "fts_timesig_9_8"
+source = "text:9/8"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_9_8"
+
+[[icon]]
+file = "fts_timesig_12_8"
+source = "text:12/8"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_12_8"
+
+[[icon]]
+file = "fts_timesig_13_8"
+source = "text:13/8"
+assign = "_FTS_TEMPO_INSERT_TIMESIG_13_8"

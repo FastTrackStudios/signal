@@ -1,0 +1,13 @@
+[package]
+name = "world-sys"
+version.workspace = true
+edition = "2021"
+license = "BSD-3-Clause"
+authors.workspace = true
+description = "Vendored WORLD vocoder (M. Morise, modified-BSD) — Harvest/CheapTrick/D4C analysis + synthesis for formant-preserving pitch editing"
+links = "world"
+
+[dependencies]
+
+[build-dependencies]
+cc = "1"

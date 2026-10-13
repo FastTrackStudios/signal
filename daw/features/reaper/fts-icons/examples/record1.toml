@@ -1,0 +1,78 @@
+# Record 1 toolbar (top bar — mixed widths) — pre-roll controls + record modes.
+# Wide pills for labeled toggles/modes, square for the quick value buttons.
+# Toggle/radio actions show their "on" state with the 3rd (clicked) cell.
+#   fts-icons build examples/record1.toml --install
+
+[settings]
+resource_paths = ["~/.fts-dev"]
+width = 60
+
+[defaults.all]
+icon_size = 25
+bg_size = 28
+corner_radius = 6
+
+[defaults.normal]
+icon = "#ffffff"
+
+[defaults.hover]
+border = "#ffffffaa"
+border_width = 1.5
+
+[defaults.clicked]
+border = "#ffffff"
+border_width = 2.5
+
+# --- pre-roll ---
+
+[[icon]]
+file = "fts_rec1_preroll"
+source = "text:PRE-ROLL"
+assign = "41819"
+  [icon.normal]
+  bg = "#EC4899"          # pink-500 (kin to count-in marker)
+  [icon.clicked]
+  bg = "#F472B6"          # pink-400 — brighter when enabled
+
+[[icon]]
+file = "fts_rec1_preroll_x2"
+source = "text:×2"
+assign = "_FTS_SESSION_PRE_ROLL_DOUBLE_DURATION"
+width = 30
+  [icon.normal]
+  bg = "#475569"          # slate-600
+
+[[icon]]
+file = "fts_rec1_preroll_half"
+source = "text:÷2"
+assign = "_FTS_SESSION_PRE_ROLL_HALF_DURATION"
+width = 30
+  [icon.normal]
+  bg = "#475569"
+
+[[icon]]
+file = "fts_rec1_preroll_halfbar"
+source = "text:½"
+assign = "_FTS_SESSION_PRE_ROLL_SET_HALF_MEASURE"
+width = 30
+  [icon.normal]
+  bg = "#64748B"          # slate-500 — bar-count preset group
+
+[[icon]]
+file = "fts_rec1_preroll_1bar"
+source = "text:1"
+assign = "_FTS_SESSION_PRE_ROLL_SET_1_MEASURE"
+width = 30
+  [icon.normal]
+  bg = "#64748B"
+
+[[icon]]
+file = "fts_rec1_preroll_2bar"
+source = "text:2"
+assign = "_FTS_SESSION_PRE_ROLL_SET_2_MEASURES"
+width = 30
+  [icon.normal]
+  bg = "#64748B"
+
+# Record modes (40252/40253/40076) intentionally keep REAPER's stock icons
+# (toolbar_record*.png) — they read better than text pills here.

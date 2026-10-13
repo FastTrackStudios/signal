@@ -1,0 +1,113 @@
+# Mix 1 toolbar (top bar) — nine mix phases as sleek dark pills.
+# Idle = uniform translucent slate; the ACTIVE phase (REAPER lights the
+# 3rd cell for toggled-on actions) gets its phase color as an overlay.
+#   fts-icons build examples/mix.toml --install
+
+[settings]
+resource_paths = ["~/.fts-dev"]
+width = 60
+
+[defaults.all]
+icon_size = 25
+bg_size = 28
+corner_radius = 6
+
+[defaults.normal]
+icon = "#CBD5E1"          # slate-300 text
+bg = "#33415566"          # translucent slate-700
+
+[defaults.hover]
+icon = "#ffffff"
+bg = "#33415599"
+border = "#94A3B866"      # whisper of slate-400
+border_width = 1.0
+
+[defaults.clicked]
+icon = "#ffffff"
+border = "#ffffff55"
+border_width = 1.5
+
+[[icon]]
+file = "fts_mix_staging"
+source = "text:STAGING"
+assign = "_FTS_SESSION_MIX_PHASE_STAGING"
+  [icon.clicked]
+  bg = "#64748B"          # slate-500 — setup
+
+[[icon]]
+file = "fts_mix_rescue"
+source = "text:RESCUE"
+assign = "_FTS_SESSION_MIX_PHASE_RESCUE"
+  [icon.clicked]
+  bg = "#EF4444"          # red-500 — fix problems
+
+[[icon]]
+file = "fts_mix_balance"
+source = "text:BALANCE"
+assign = "_FTS_SESSION_MIX_PHASE_BALANCE"
+  [icon.clicked]
+  bg = "#22C55E"          # green-500 — levels
+
+[[icon]]
+file = "fts_mix_tone"
+source = "text:TONE"
+assign = "_FTS_SESSION_MIX_PHASE_TONE"
+  [icon.clicked]
+  icon = "#0F172A"
+  bg = "#FACC15"          # yellow-400 — EQ/shape
+
+[[icon]]
+file = "fts_mix_polish"
+source = "text:POLISH"
+assign = "_FTS_SESSION_MIX_PHASE_POLISH"
+  [icon.clicked]
+  bg = "#06B6D4"          # cyan-500 — shine
+
+# The shipped set named this phase MIX, which named the mode twice and
+# the phase not at all — see `session::mix_phases`, where it is
+# `Relational`. Both files are built: the old name is what existing
+# toolbars point at, the new one is what the phase is called.
+[[icon]]
+file = "fts_mix_mix"
+source = "text:MIX"
+assign = "_FTS_SESSION_MIX_PHASE_MIX"
+  [icon.clicked]
+  bg = "#3B82F6"          # blue-500 — the core work
+
+[[icon]]
+file = "fts_mix_relational"
+source = "text:RELATIONAL"
+assign = "_FTS_SESSION_MIX_PHASE_RELATIONAL"
+  [icon.clicked]
+  bg = "#3B82F6"          # blue-500 — how tracks sit against each other
+
+[[icon]]
+file = "fts_mix_depth"
+source = "text:DEPTH"
+assign = "_FTS_SESSION_MIX_PHASE_DEPTH"
+  [icon.clicked]
+  bg = "#8B5CF6"          # violet-500 — space/reverb
+
+# Automate is no longer a phase — automation is a property of every
+# phase from Rescue on — and Creative took its place in the reconciled
+# set. The old file stays for toolbars that still reference it.
+[[icon]]
+file = "fts_mix_automate"
+source = "text:AUTOMATE"
+assign = "_FTS_SESSION_MIX_PHASE_AUTOMATE"
+  [icon.clicked]
+  bg = "#F97316"          # orange-500 — motion
+
+[[icon]]
+file = "fts_mix_creative"
+source = "text:CREATIVE"
+assign = "_FTS_SESSION_MIX_PHASE_CREATIVE"
+  [icon.clicked]
+  bg = "#EC4899"          # pink-500 — choices rather than corrections
+
+[[icon]]
+file = "fts_mix_overview"
+source = "text:OVERVIEW"
+assign = "_FTS_SESSION_MIX_PHASE_OVERVIEW"
+  [icon.clicked]
+  bg = "#6366F1"          # indigo-500 — zoom out

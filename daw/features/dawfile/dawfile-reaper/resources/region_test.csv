@@ -1,0 +1,15 @@
+#,Name,Start,End,Length
+M7,SONGEND,13.1.50,,
+M3,SONGEND,7.1.00,,
+M6,SECOND SONG'S NAME,9.1.00,,
+M2,FIRST SONG'S TITLE,2.1.00,,
+M5,=START,8.4.00,,
+M1,=START,1.3.00,,
+M8,=END,13.3.50,,
+M4,=END,7.3.00,,
+R3,Outro,6.1.00,7.1.00,1.0.00
+R5,Middle Section,10.1.00,12.1.00,2.0.00
+R1,Intro,2.1.00,4.1.00,2.0.00
+R4,First Section,9.1.00,10.1.00,1.0.00
+R6,Ending Section,12.1.00,13.1.50,1.0.50
+R2,Chorus,4.1.00,6.1.00,2.0.00

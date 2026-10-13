@@ -1,0 +1,10 @@
+bindings (
+    {keys "?", action 40605, desc "Show action list"}
+    {keys ":", action "_FTS_LAUNCHER_TOGGLE", desc "Toggle FTS launcher"}
+    {keys "<C-space>", action "_FTS_LAUNCHER_TOGGLE", desc "Toggle REAPER launcher"}
+    {keys "<C-n>", action 40023, desc "New project"}
+    {keys "<C-A-n>", action 40859, desc "New project tab"}
+    {keys "<C-s>", action 40026, desc "Save project"}
+    {keys "<C-,>", action 40016, desc "Open settings and preferences"}
+    {keys "<A-d>", action 40279, desc "Toggle docker visibility"}
+)

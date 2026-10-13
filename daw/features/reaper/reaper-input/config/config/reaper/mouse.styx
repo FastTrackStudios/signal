@@ -1,0 +1,10 @@
+// REAPER default mouse modifiers — fade controls in item corners, full edge behaviour.
+
+mouse (
+    {ctx @MediaItemFade,       modifiers "",    action fade_adjust,  desc "Adjust fade curve (REAPER default)"}
+    {ctx @MediaItemLeftEdge,   modifiers "",    action edge_resize,  desc "Resize item from left edge"}
+    {ctx @MediaItemRightEdge,  modifiers "",    action edge_resize,  desc "Resize item from right edge"}
+    {ctx @MediaItemLeftEdge,   modifiers "<S->",  action slip_edit,    desc "Slip edit from left edge"}
+    {ctx @MediaItemRightEdge,  modifiers "<S->",  action slip_edit,    desc "Slip edit from right edge"}
+    {ctx @MediaItemBottomHalf, modifiers "<A->",  action copy_item,    desc "Copy item on drag"}
+)

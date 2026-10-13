@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block site_name %}DAW{% endblock %}
+{% block nav_title %}DAW{% endblock %}
+{% block brand_letter %}D{% endblock %}
+{% block github_url %}https://github.com/FastTrackStudios/daw{% endblock %}
+
+{% block content %}
+<div class="content">
+    {% if page %}{{ page.content | safe }}{% else %}{{ section.content | safe }}{% endif %}
+</div>
+{% endblock %}

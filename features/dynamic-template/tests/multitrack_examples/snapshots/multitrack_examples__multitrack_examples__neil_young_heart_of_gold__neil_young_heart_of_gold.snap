@@ -1,0 +1,27 @@
+---
+source: modules/dynamic-template/tests/multitrack_examples/neil_young_heart_of_gold.rs
+assertion_line: 43
+expression: structure.to_tree_string()
+---
+-Drums
+--Kick: [01.Kick OptoComp_01.wav]
+--Snare: [02.Snare No Compression_01.wav]
+--Cymbals
+---OH
+----L: [03.OH L 260VU_01.wav]
+----R: [04.OH R 260VU_01.wav]
+-Bass: [05.Bass DI OptoComp_01.wav, 06.Bass Amp 44A. 260VU_01.wav, 07.Bass Amp 421 260VU_01.wav]
+-Guitars
+--Acoustic: [08.Acoustic OptoComp_01.wav, 09.Acoustic Dbl OptoComp_01.wav, ... and 2 more]
+--Steel: [13.Steel Guitar OptoComp_01.wav]
+-Keys: [14.Piano 260VU_01.wav, 15.Piano Lead 260VU_01.wav]
+-Vocals
+--Lead
+---Main: [16.Vocal OptoComp_01.wav]
+---Triple: [18.Vocal.Triple OptoComp_01.wav]
+---DBL: [17.Vocal.DBL OptoComp_01.wav]
+--BGVs
+---Main: [19.Vocal.HARMONY OptoComp_01.wav]
+---DBL: [20.Vocal.HARMONY Dbl OptoComp_01.wav]
+-Reference: [21.Heart Of Gold Mix_01.wav]
+-Unsorted: [12.Mando OptoComp_01.wav]

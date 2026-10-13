@@ -1,0 +1,36 @@
+bindings (
+    // Windows
+    {keys x,            action 40078, desc "Toggle mixer visible"}
+    {keys p,            action 40153, desc "Open item in MIDI editor"}
+    {keys y,            action 40271, desc "Show media explorer"}
+    {keys o,            action 40271, desc "Show media explorer (alt)"}
+    {keys v,            action 40549, desc "Show / hide all floating FX windows"}
+    {keys g,            action 40915, desc "Toggle global track visibility"}
+
+    // Automation
+    {keys a,            action 40400, desc "Toggle automation visible in arrange"}
+    {keys "<C-M-v>",      action 40406, desc "Show volume envelope for all tracks"}
+    {keys "<C-M-p>",      action 40407, desc "Show pan envelope for all tracks"}
+
+    // Automation modes
+    {keys "<S-w>",        action 40082, desc "Write current values to automation"}
+
+    // Snap / grid
+    {keys "<D-g>",        action 1157,  desc "Toggle snap to grid"}
+    {keys "<M-n>",        action 1157,  desc "Toggle snapping"}
+
+    // File operations
+    {keys "<D-n>",        action 40023, desc "New project from template"}
+    {keys "<D-o>",        action 40025, desc "Open project"}
+    {keys "<D-s>",        action 40026, desc "Save project"}
+    {keys "<S-D-s>",      action 40022, desc "Save project as"}
+
+    // Bounce / render
+    {keys "<D-b>",        action 40015, desc "Render project to disk"}
+
+    // Window management
+    {keys "<D-w>",        action 40031, desc "Close current project tab"}
+
+    // Color
+    {keys "<M-c>",        action 40357, desc "Open color picker for tracks / items"}
+)

@@ -1,0 +1,17 @@
+[package]
+name = "align-dsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "align-dsp — take-to-take temporal alignment: macro offset search, multi-band frame features, banded DTW, and sparse warp anchors"
+
+[dependencies]
+# Only for the cross-correlation in `offset`. Everything else is plain
+# arithmetic, because the point of this crate is to be usable from any
+# host — including wasm and offline batch — with no audio backend.
+realfft = { workspace = true }
+audiocore-dsp = { workspace = true }
+
+[dev-dependencies]
+align-dsp = { workspace = true }

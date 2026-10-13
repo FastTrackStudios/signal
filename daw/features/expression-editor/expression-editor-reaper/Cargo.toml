@@ -1,0 +1,24 @@
+[package]
+name = "expression-editor-reaper"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"
+description = "REAPER module for the expression editor — dockable panel plus actions to open it on the selected MIDI item"
+
+[dependencies]
+daw = { workspace = true, features = ["reaper", "standalone", "reaper-ui"] }
+expression-editor-core = { workspace = true }
+expression-editor-daw = { workspace = true }
+# The audio half. `render` because writing a take back means producing
+# audio; `daw` because the session drives the facade.
+expression-editor-audio = { workspace = true, features = ["daw", "render"] }
+expression-editor-ui = { workspace = true }
+dioxus = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+daw = { workspace = true, features = ["reaper", "standalone", "reaper-ui", "test-harness"] }
+daw-test-macro = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
+eyre = { workspace = true }

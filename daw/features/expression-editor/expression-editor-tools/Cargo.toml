@@ -1,0 +1,34 @@
+[package]
+name = "expression-editor-tools"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "The tool seam: what a tool needs to know about the thing it edits, and the tools written once over it — one Quantize for MIDI notes, audio transients and pitch-detected notes"
+
+# Deliberately thin. This crate is the seam every editing tool sits on,
+# so it may not grow a dependency that one domain has and another does
+# not: a tool that could only be built with an FFT is not a tool this
+# editor can offer in MIDI mode.
+[features]
+default = []
+# The impls for `tune-dsp`'s pitch-detected notes. Off by default
+# because the orphan rule forces them to live here rather than in
+# `expression-editor-audio` — the trait is ours, the type is not — and
+# a MIDI-only or wasm consumer should not pay for a DSP crate to get
+# `Timed`.
+pitch = ["dep:tune-dsp"]
+
+[dependencies]
+# Absorbed with `velocity::Randomize` from midi-tools (#153); the only
+# thing in this crate that is not arithmetic.
+rand = { workspace = true }
+# Absorbed with the no-DAW `DemoSink`'s diagnostics.
+tracing = { workspace = true }
+# The document — its `Note` is the MIDI/MPE side of the seam. Portable,
+# no DSP, no UI, which is the property that lets this crate stay thin.
+expression-editor-core = { workspace = true }
+tune-dsp = { workspace = true, optional = true }
+
+[dev-dependencies]
+expression-editor-tools = { workspace = true, features = ["pitch"] }

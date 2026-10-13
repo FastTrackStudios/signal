@@ -1,0 +1,49 @@
+[package]
+name = "daw-synchronization"
+description = "Backend-agnostic DAW state synchronization engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+# Synchronizes DAW state between peers. Subscribes to the streaming
+# service traits in daw-proto (TransportStream, MarkersStream, …),
+# wraps events in SyncEvent envelopes with origin peer + sequence
+# number, broadcasts outbound, and applies inbound events back into
+# the DAW via the sync trait API.
+#
+# Backend-agnostic: any backend implementing the streaming traits
+# gets synchronization for free. Sync-between-two-REAPER-instances
+# is the canonical use case, but the same engine works for
+# REAPER↔Standalone (testing), REAPER↔ProTools (when a PT backend
+# lands), or any pair.
+#
+# Network transport is NOT in this crate — that lives in the
+# FastTrackStudio/sync repo, which depends on this crate and wires
+# `outbound()`/`apply_remote()` to a peer-to-peer connection.
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+daw = { workspace = true, features = ["reaper"] }
+daw-reaper.workspace = true
+facet.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "macros", "rt"] }
+tokio-util = "0.7"
+tracing.workspace = true
+
+[dev-dependencies]
+# Integration-test harness via the daw facade's `test-harness` feature
+# (replaces the former `reaper-test` crate).
+daw = { workspace = true, features = ["reaper", "test-harness"] }
+eyre.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync"] }
+
+[lints]
+workspace = true

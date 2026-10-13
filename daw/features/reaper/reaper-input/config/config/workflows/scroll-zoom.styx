@@ -1,0 +1,25 @@
+// Scroll / zoom workflow.
+// Identity derived from filename: id = "scroll-zoom", name = "Scroll Zoom".
+
+wheel (
+    // Plain wheel scrolls vertically.
+    {modifiers "",       action 989,   desc "Scroll view vertically"}
+
+    // Shift+wheel scrolls horizontally.
+    {modifiers "<S->",   action 977,   desc "Scroll horizontally reversed (Shift+wheel)"}
+    {modifiers "<S->",   action 977,   horizontal true, desc "Scroll horizontally reversed (Shift+horizwheel)"}
+
+    // Option+wheel zooms vertically.
+    {modifiers "<A->",   action 1001,  desc "Zoom vertically reversed (Option+wheel)"}
+    {modifiers "<A->",   action 1001,  horizontal true, desc "Zoom vertically reversed (Option+horizwheel)"}
+
+    // Shift+Option+wheel zooms horizontally.
+    {modifiers "<S-A->", action 979,   desc "Zoom horizontally reversed (Shift+Option+wheel)"}
+    {modifiers "<S-A->", action 979,   horizontal true, desc "Zoom horizontally reversed (Shift+Option+horizwheel)"}
+
+    // Ctrl+Option+wheel zooms vertically and horizontally together.
+    {modifiers "<C-A->", action "1001+979", desc "Zoom vertically and horizontally reversed (Ctrl+Option+wheel)"}
+    {modifiers "<C-A->", action "1001+979", horizontal true, desc "Zoom vertically and horizontally reversed (Ctrl+Option+horizwheel)"}
+    {modifiers "<M-A->", action "1001+979", desc "Zoom vertically and horizontally reversed (Meta+Option+wheel)"}
+    {modifiers "<M-A->", action "1001+979", horizontal true, desc "Zoom vertically and horizontally reversed (Meta+Option+horizwheel)"}
+)

@@ -1,0 +1,17 @@
+// Fast slip-edit overlay — active during the fast slip-edit workflow.
+
+name        fast-slip-edit
+description "Fast slip-edit workflow — quick item splitting with crossfades"
+priority    50
+
+bindings (
+    {keys s, action FTS_SPLIT_ITEMS_CROSSFADE_LEFT, desc "Split with crossfade left"}
+    {keys x, action FTS_SPLIT_ITEMS_CROSSFADE_LEFT, desc "Split with crossfade left (alt)"}
+)
+
+mouse_settings (
+    // Item lower half: move item contents (for slip editing feel)
+    {ctx MM_CTX_ITEMLOWER, mods "", behavior "3 m", desc "Move item contents"}
+    // Crossfade: move both fades ignoring snap (quick crossfade adjustment)
+    {ctx MM_CTX_CROSSFADE, mods "", behavior "1 m", desc "Move both fades ignoring snap"}
+)

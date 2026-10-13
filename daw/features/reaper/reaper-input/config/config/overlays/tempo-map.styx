@@ -1,0 +1,25 @@
+// Tempo mapping overlay — active during the tempo map workflow.
+// These bindings stack on top of the active profile.
+
+name        tempo-map
+description "Tempo mapping workflow — grid and transient manipulation"
+priority    100
+
+bindings (
+    {keys g,       action FTS_TEMPO_MOVE_MEASURE_GRID_TO_MOUSE,                   desc "Move measure grid to mouse"}
+    {keys "<S-g>",   action FTS_TEMPO_MOVE_MEASURE_GRID_TO_MOUSE_CONSTRAINED,       desc "Move measure grid to mouse (constrained)"}
+    {keys "<A-g>",   action FTS_TEMPO_MOVE_MEASURE_GRID_TO_MOUSE_FULLY_CONSTRAINED, desc "Move measure grid to mouse (fully constrained)"}
+    {keys "<C-g>",   action FTS_TEMPO_MOVE_GRID_TO_MOUSE,                           desc "Move grid to mouse"}
+    {keys "<C-S-g>", action FTS_TEMPO_MOVE_MARKER_TO_MOUSE,                         desc "Move marker to mouse"}
+    {keys t,       action FTS_TEMPO_SNAP_GRID_TO_TRANSIENT,                       desc "Snap grid to transient"}
+    {keys "<S-t>",   action FTS_TEMPO_SNAP_GRID_TO_TRANSIENT_CONSTRAINED,           desc "Snap grid to transient (constrained)"}
+    {keys "<A-t>",   action FTS_TEMPO_SNAP_GRID_TO_TRANSIENT_FULLY_CONSTRAINED,     desc "Snap grid to transient (fully constrained)"}
+)
+
+wheel (
+    {modifiers "",     action 989,   desc "Scroll view vertically"}
+    {modifiers "<S->",   action 977,   desc "Scroll horizontally reversed"}
+    {modifiers "<S->",   action 977,   horizontal true}
+    {modifiers "",     action 977,   horizontal true}
+    // Zoom wheel bindings live in the scroll-zoom workflow.
+)

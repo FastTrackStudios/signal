@@ -1,0 +1,50 @@
+# Seed fasttrackstudio.cachix.org with the CI devshell closure so
+# checks.yml jobs pull the toolchain (rust pin, dx trio, patched
+# cargo-rail, native deps) instead of rebuilding it on every fresh
+# hosted runner.
+#
+# Needs the CACHIX_AUTH_TOKEN repo/org secret (a cachix auth token with
+# write access to the fasttrackstudio cache). Without it the workflow
+# skips pushing and merely reports what would be cached.
+#
+# Runs on the repo's own self-hosted runner (NixOS, nix preinstalled), so
+# there is no installer step and `cachix` itself comes from nixpkgs —
+# downloaded dynamic binaries do not run on NixOS.
+
+name: cache-devshell
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+
+concurrency:
+  group: cache-devshell
+  cancel-in-progress: true
+
+jobs:
+  seed:
+    runs-on: [self-hosted, session]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build CI devshell closure
+        run: |
+          nix build --accept-flake-config --no-link --print-out-paths \
+            .#devShells.x86_64-linux.ci \
+            .#devShells.x86_64-linux.default \
+            | tee devshell-paths.txt
+      - name: Push to cachix
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          if [ -z "${CACHIX_AUTH_TOKEN}" ]; then
+            echo "CACHIX_AUTH_TOKEN not set — would push:"
+            cat devshell-paths.txt
+            exit 0
+          fi
+          xargs -a devshell-paths.txt nix run nixpkgs#cachix -- push fasttrackstudio

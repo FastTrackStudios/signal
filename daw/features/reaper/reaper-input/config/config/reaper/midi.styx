@@ -1,0 +1,67 @@
+bindings (
+    // Selection
+    {keys "<C-a>",        action 40003, context @Midi, desc "Select all notes"}
+    {keys "<escape>",     action 40214, context @Midi, desc "Unselect all"}
+
+    // Note movement
+    {keys "<up>",         action 40138, context @Midi, desc "Move notes up one semitone"}
+    {keys "<down>",       action 40139, context @Midi, desc "Move notes down one semitone"}
+    {keys "<S-up>",       action 40140, context @Midi, desc "Move notes up one octave"}
+    {keys "<S-down>",     action 40141, context @Midi, desc "Move notes down one octave"}
+    {keys "<left>",       action 40183, context @Midi, desc "Move notes left by grid"}
+    {keys "<right>",      action 40181, context @Midi, desc "Move notes right by grid"}
+
+    // Editing
+    {keys "<delete>",     action 40002, context @Midi, desc "Delete notes"}
+    {keys "<backspace>",  action 40002, context @Midi, desc "Delete notes"}
+    {keys "<C-c>",        action 40010, context @Midi, desc "Copy notes"}
+    {keys "<C-x>",        action 40011, context @Midi, desc "Cut notes"}
+    {keys "<C-v>",        action 40012, context @Midi, desc "Paste notes"}
+    {keys "<C-d>",        action 40006, context @Midi, desc "Duplicate notes"}
+
+    // Quantize
+    {keys q,            action 40039, context @Midi, desc "Quantize notes to grid"}
+    {keys "<S-q>",        action 40421, context @Midi, desc "Quantize notes dialog"}
+
+    // Velocity
+    {keys "<C-up>",       action 40462, context @Midi, desc "Increase velocity"}
+    {keys "<C-down>",     action 40463, context @Midi, desc "Decrease velocity"}
+
+    // Length
+    {keys "<S-left>",     action 40444, context @Midi, desc "Shorten note length"}
+    {keys "<S-right>",    action 40443, context @Midi, desc "Lengthen note length"}
+
+    // Zoom
+    {keys "<C-=>",        action 40111, context @Midi, desc "Zoom in horizontal"}
+    {keys "<C-->",        action 40112, context @Midi, desc "Zoom out horizontal"}
+    {keys "<C-S-=>",      action 40113, context @Midi, desc "Zoom in vertical"}
+    {keys "<C-S-->",      action 40114, context @Midi, desc "Zoom out vertical"}
+
+    // Grid / snap
+    {keys "<M-g>",        action 40047, context @Midi, desc "Toggle grid"}
+    {keys "<M-s>",        action 40455, context @Midi, desc "Toggle snap"}
+
+    // View
+    {keys "<C-home>",     action 40434, context @Midi, desc "Scroll to start"}
+    {keys "<C-end>",      action 40435, context @Midi, desc "Scroll to end"}
+
+    // Tools
+    {keys 1,            action 40042, context @Midi, desc "Select tool: Draw / Select"}
+    {keys 2,            action 40043, context @Midi, desc "Select tool: Erase"}
+    {keys 3,            action 40044, context @Midi, desc "Select tool: Paint"}
+    {keys 4,            action 40045, context @Midi, desc "Select tool: Marquee"}
+
+    // Split / join
+    {keys s,            action 40456, context @Midi, desc "Split notes at cursor"}
+
+    // Humanize
+    {keys h,            action 40422, context @Midi, desc "Humanize notes"}
+)
+
+wheel (
+    // Vertical scroll
+    {modifiers "",      action 40432, context @Midi, desc "Scroll view vertically"}
+    // Horizontal scroll
+    {modifiers "<S->",    action 40433, context @Midi, desc "Scroll horizontally (Shift+wheel)"}
+    // Zoom wheel bindings live in the scroll-zoom workflow.
+)

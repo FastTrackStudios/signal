@@ -1,0 +1,60 @@
+// The golden room's studio profile (docs/spec/session/workflows.md,
+// flow.patch-list.studio-profiles): the physical inputs this room has
+// and what the patch list's roles resolve to on its device. Lives at
+// `studios/<name>.styx` in the app config directory; the album file
+// never names a channel.
+//
+// A patchbay endpoint on a role is optional — patchbay uses it to build
+// and verify the profile against the live graph; applying a list never
+// needs it.
+
+inputs {
+    "DI 1" @audio{channel 0}
+    "DI 3" @audio{channel 2}
+    "DI 4" @audio{channel 3}
+    "DI 5" @audio{channel 4}
+    "DI 6" @audio{channel 5}
+    "Mic 5" @audio{channel 8, patchbay {node "Scarlett 18i20", port "capture_AUX8"}}
+    "Mic 6" @audio{channel 9, patchbay {node "Scarlett 18i20", port "capture_AUX9"}}
+    "Mic 7" @audio{channel 10}
+    "Mic 8" @audio{channel 11}
+    "Mic 9" @audio{channel 12}
+    "Mic 10" @audio{channel 13}
+    "Vocal 1" @audio{channel 16}
+    "Vocal 2" @audio{channel 17}
+    "Vocal 3" @audio{channel 18}
+    "Kick In" @audio{channel 24}
+    "Kick Out" @audio{channel 25}
+    "Kick Trig" @audio{channel 26}
+    "Snare Top" @audio{channel 27}
+    "Snare Bottom" @audio{channel 28}
+    "Snare Trig" @audio{channel 29}
+    "Tom 1" @audio{channel 30}
+    "Tom 2" @audio{channel 31}
+    "Tom 3" @audio{channel 32}
+    "OH" @audio{channel 33}
+    "Hi-Hat" @audio{channel 35}
+    "Ride" @audio{channel 36}
+    "Rooms" @audio{channel 37}
+    "Rooms Far" @audio{channel 39}
+    "Talkback" @audio{channel 47}
+    "Nord" @midi{device "Nord Stage 3", channel 1}
+    // No "Mic 11": the bassist's amp mic is unresolved in this room.
+}
+
+outputs {
+    "HP 1" {left 2, right 3}
+    "HP 2" {left 4, right 5}
+    "HP 3" {left 6, right 7}
+    "HP 4" {left 8, right 9}
+    "HP 5" {left 10, right 11}
+    "HP 6" {left 12, right 13, patchbay {node "Scarlett 18i20", port "playback_AUX12"}}
+    "HP Engineer" {left 0, right 1}
+    "HP Producer" {left 14, right 15}
+    "Broadcast" {left 16, right 17}
+    // No "HP 7": the bassist's bus is unresolved in this room.
+}
+
+// Roles more than one entry may name: the talkback mic is on the
+// engineer's rig and the producer's.
+shared ("Talkback")

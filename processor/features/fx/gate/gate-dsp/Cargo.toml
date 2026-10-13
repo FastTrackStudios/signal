@@ -1,0 +1,19 @@
+[package]
+name = "gate-dsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "gate-dsp — drum gate with source modes, look-ahead, a shaped release and an HF de-bleed expander on a subtractive crossover; matched by null test against a reference drum gate."
+
+[lints]
+workspace = true
+
+[dependencies]
+dsp-core = { workspace = true }
+# no_std + alloc; libm for exp/sin/cos/pow — also bit-identical across platforms,
+# which the Linux-vs-Mac render check relies on.
+libm = { version = "0.2", default-features = false }
+
+[dev-dependencies]
+hound = "3.5"

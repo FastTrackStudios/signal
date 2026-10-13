@@ -1,0 +1,53 @@
+[package]
+name = "daw-audio-sync"
+description = "The REAPER adapter for daw-transport-sync — audio hook, UDP multicast clock sync, and playrate drift correction for sample-accurate redundant playback"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[package.metadata]
+
+[package.metadata."docs.rs"]
+rustdoc-args = ["--html-in-header", "arborium-header.html"]
+
+# The REAPER adapter for `daw-transport-sync`. That crate holds the
+# backend-agnostic maths of sample-accurate multi-machine playback — the
+# per-buffer snapshot (`AudioSnapshot`/`SnapshotCell`), the NTP clock
+# estimator, `Position` projection, and the PI `DriftController`. This crate
+# plugs REAPER into it:
+#
+# - the audio hooks (reaper-medium `OnAudioBuffer`, single- and
+#   multi-project) that fill the core's snapshot from REAPER's audio thread;
+# - the carrier: UDP multicast discovery + unicast ping/pong + position
+#   frames, feeding one core `ClockEstimator` per peer;
+# - the actuator: a tokio loop that runs the core's `DriftController`
+#   against the elected leader and applies its rate via
+#   `CSurf_OnPlayRateChange` on REAPER's main thread.
+#
+# Companion to `daw-synchronization`, which handles state sync (mixer,
+# tracks, markers, …) at main-thread cadence. Audio-sync owns "where exactly
+# is the playhead, right now."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+daw-transport-sync.workspace = true
+reaper-medium = { workspace = true }
+reaper-low = { workspace = true }
+tokio = { workspace = true, features = ["net", "sync", "time", "rt", "macros"] }
+tracing.workspace = true
+# Stable peer identifiers across restarts of the same machine.
+uuid = { version = "1", features = ["v4", "serde"] }
+# Wire format for the clock-sync protocol. postcard is small + facet-
+# free so we don't drag in vox here.
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+socket2 = { version = "0.5", features = ["all"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[lints]
+workspace = true

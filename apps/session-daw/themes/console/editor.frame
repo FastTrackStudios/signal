@@ -1,0 +1,96 @@
+<Document>
+  <Page name="editor.bar">
+    <Frame name="Bar" w=1200 h=30>
+      <Rectangle name="Ground" w=1200 h=30 bind:w="w" bind:h="h" bind:fill="$editor.surface_bar" />
+      <Rectangle name="Rule" y=29 w=1200 h=1 bind:y="h - 1" bind:w="w" bind:fill="$editor.panel_border" />
+    </Frame>
+  </Page>
+  <Page name="editor.button">
+    <Frame name="Button" w=80 h=24>
+      <Rectangle name="Plate" w=80 h=24 radius=3 bind:w="w" bind:h="h" bind:visible="!button.readout || button.on" bind:fill="button.on ? $editor.control_active : (button.hover ? $editor.control_hover : $editor.control)" />
+      <Rectangle name="Sheen" x=1 y=1 w=78 h=1 bind:w="w - 2" bind:visible="!button.readout" bind:fill="$sheen" />
+      <Text name="Label" w=80 h=14 size=10 text-align="center" bind:w="w" bind:y="h / 2 - 6.5" bind:text="button.label" bind:fill="!button.enabled ? $text.faint : (button.on ? $editor.text_bright : $editor.text)">Button</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.keys">
+    <Frame name="Keys" w=54 h=400>
+      <Rectangle name="Bed" w=54 h=400 bind:w="w" bind:h="h" bind:fill="key.piano ? $editor.key_white : $editor.surface_bar" />
+      <Rectangle name="Edge" x=53 w=1 h=400 bind:x="w - 1" bind:h="h" bind:fill="$editor.panel_border" />
+    </Frame>
+  </Page>
+  <Page name="editor.key">
+    <Frame name="Key" w=54 h=12>
+      <Rectangle name="Lane" w=53 h=12 bind:w="w - 1" bind:h="h" bind:visible="!key.piano" bind:fill="key.black ? $editor.key_black : $editor.key_white" />
+      <Rectangle name="Black" w=33 h=12 radius=1.5 bind:w="(w - 1) * 0.62" bind:h="h" bind:visible="key.piano && key.black" bind:fill="$editor.key_black" />
+      <Rectangle name="Shine" x=1 w=31 h=1 bind:w="(w - 1) * 0.62 - 2" bind:y="h - 2" bind:visible="key.piano && key.black" bind:fill="$sheen" />
+      <Rectangle name="Part" w=53 h=0.5 bind:w="w - 1" bind:visible="!(key.piano && key.black)" bind:fill="$editor.panel_border" />
+      <Text name="Name" w=49 h=12 size=9 text-align="right" bind:w="w - 5" bind:y="h / 2 - 5.5" bind:visible="key.labelled" bind:text="key.label" bind:fill="$editor.key_label">C4</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.keygroup">
+    <Frame name="Group" w=54 h=24>
+      <Rectangle name="Brace" x=1 y=2 w=1.5 h=20 bind:h="h - 4" bind:fill="$editor.text_dim" />
+      <Text name="Name" x=5 w=46 h=12 size=9 bind:y="h / 2 - 5.5" bind:text="group.label" bind:fill="$editor.text_dim">T1</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.lane">
+    <!-- A take's header in the stacked view, over the gutter: no ground
+         of its own (the lane's is under it, and the mic chip on that),
+         a rail down the take being edited, the name, and a mark on the
+         take the others are aligned against. -->
+    <Frame name="Lane" w=54 h=120>
+      <Rectangle name="Rail" w=3 h=120 bind:h="h" bind:visible="lane.active" bind:fill="lane.tinted ? lane.tint : $accent" />
+      <Rectangle name="Glow" x=3 w=6 h=120 opacity=0.18 bind:h="h" bind:visible="lane.active" bind:fill="lane.tinted ? lane.tint : $accent" />
+      <Rectangle name="Edge" x=53 w=1 h=120 bind:h="h" bind:fill="$editor.panel_border" />
+      <Text name="Name" x=8 y=5 w=44 h=12 size=9 weight=600 bind:text="lane.name" bind:fill="lane.active ? $editor.text_bright : $editor.text_dim">Main</Text>
+      <Rectangle name="Reference" x=8 y=20 w=24 h=11 radius=2 bind:visible="lane.reference" bind:fill="$editor.gold" />
+      <Text name="Ref" x=8 y=20 w=24 h=11 size=7 weight=700 text-align="center" bind:visible="lane.reference" bind:fill="$editor.gutter_bg">REF</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.ruler">
+    <Frame name="Ruler" w=1200 h=28>
+      <Rectangle name="Ground" w=1200 h=28 bind:w="w" bind:h="h" bind:fill="$editor.surface_bar" />
+      <Rectangle name="Rule" y=27 w=1200 h=1 bind:y="h - 1" bind:w="w" bind:fill="$editor.panel_border" />
+      <Rectangle name="Gutter edge" x=53 w=1 h=28 bind:h="h" bind:fill="$editor.panel_border" />
+    </Frame>
+  </Page>
+  <Page name="editor.tick">
+    <Frame name="Tick" w=60 h=28>
+      <Rectangle name="Line" w=1 h=22 bind:y="tick.bar ? 6 : h - 7" bind:h="tick.bar ? h - 6 : 7" bind:fill="tick.bar ? $editor.text_dim : $editor.grid_sub" />
+      <Text name="Number" x=4 y=3 w=54 h=12 size=9 bind:visible="tick.labelled" bind:text="tick.label" bind:fill="$editor.text_dim">1</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.marker">
+    <Frame name="Marker" w=160 h=28>
+      <Rectangle name="Flag" y=2 w=6 h=6 radius=1 bind:fill="$editor.gold" />
+      <Text name="Name" x=8 w=150 h=12 size=9 bind:y="h - 15" bind:text="marker.label" bind:fill="$editor.gold">Verse</Text>
+    </Frame>
+  </Page>
+  <Page name="editor.strip">
+    <Frame name="Strip" w=1200 h=96>
+      <Rectangle name="Ground" w=1200 h=96 bind:w="w" bind:h="h" bind:fill="$editor.surface_bar" />
+      <Rectangle name="Top rule" w=1200 h=1 bind:w="w" bind:fill="$editor.panel_border" />
+      <Rectangle name="Gutter" w=54 h=96 bind:h="h" bind:fill="$editor.gutter_bg" />
+      <Rectangle name="Gutter edge" x=53 w=1 h=96 bind:h="h" bind:fill="$editor.panel_border" />
+      <Text name="Lane" x=6 y=6 w=46 h=12 size=9 bind:text="strip.label" bind:fill="$editor.text_dim">Velocity</Text>
+      <Rectangle name="Quarter" x=54 y=72 w=1146 h=1 bind:y="h * 0.75" bind:w="w - 54" bind:fill="$editor.grid_sub" />
+      <Rectangle name="Half" x=54 y=48 w=1146 h=1 bind:y="h * 0.5" bind:w="w - 54" bind:fill="$editor.grid_beat" />
+      <Rectangle name="Three quarters" x=54 y=24 w=1146 h=1 bind:y="h * 0.25" bind:w="w - 54" bind:fill="$editor.grid_sub" />
+    </Frame>
+  </Page>
+  <Page name="editor.menu">
+    <Frame name="Menu" w=220 h=200>
+      <Rectangle name="Shadow" x=0 y=3 w=220 h=200 radius=6 bind:w="w" bind:h="h" fill="#00000066" />
+      <Rectangle name="Panel" w=220 h=200 radius=6 bind:w="w" bind:h="h" bind:fill="$editor.panel" />
+      <Rectangle name="Edge" w=220 h=1 radius=6 bind:w="w" bind:fill="$sheen" />
+    </Frame>
+  </Page>
+  <Page name="editor.menuitem">
+    <Frame name="Item" w=220 h=22>
+      <Rectangle name="Rule" x=6 y=-2 w=208 h=1 bind:w="w - 12" bind:visible="menu.rule" bind:fill="$editor.panel_border" />
+      <Rectangle name="Hover" x=3 w=214 h=22 radius=4 bind:w="w - 6" bind:h="h" bind:visible="menu.hover" bind:fill="$editor.control_active" />
+      <Text name="Label" x=10 w=150 h=14 size=11 bind:y="h / 2 - 7" bind:text="menu.label" bind:fill="menu.enabled ? (menu.hover ? $editor.text_bright : $editor.text) : $text.faint">Quantize</Text>
+      <Text name="Key" x=150 w=60 h=14 size=10 text-align="right" bind:x="w - 70" bind:y="h / 2 - 6.5" bind:text="menu.shortcut" bind:fill="$editor.text_dim">Q</Text>
+    </Frame>
+  </Page>
+</Document>

@@ -1,0 +1,25 @@
+The .ptf, .ptx, and .pts test session files in this directory are from the
+ptformat project by Damien Zammit and Robin Gareus:
+
+  https://github.com/zamaudio/ptformat
+
+They are licensed under the GNU Lesser General Public License v2.1 or later
+(LGPL-2.1+). See below for the full license text of the preamble.
+
+These files are binary Pro Tools session fixtures used solely for testing.
+They are not executable programs.
+
+---
+
+Copyright (C) 2015-2019  Damien Zammit
+Copyright (C) 2015-2019  Robin Gareus
+
+This library is free software; you can redistribute it and/or modify it
+under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at
+your option) any later version.
+
+This library is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser
+General Public License for more details.

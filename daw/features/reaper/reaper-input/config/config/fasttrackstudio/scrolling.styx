@@ -1,0 +1,39 @@
+bindings (
+    {keys "<plus>",   action 1012,  desc "Zoom in horizontal"}
+    {keys "<minus>",  action 1011,  desc "Zoom out horizontal"}
+    {keys "<S-plus>", action 40111, desc "Zoom in vertical"}
+    {keys "<S-minus>", action 40112, desc "Zoom out vertical"}
+)
+
+which_key (
+    {
+        prefix z,
+        label "Zoom",
+        entries (
+            {key z, label "Toggle item/time zoom", action "_SWS_TOGZOOMIMIN"}
+            {key x, label "Zoom out project", action 40295}
+            {key h, label "Toggle horizontal zoom", action "_SWS_TOGZOOMHORIZ"}
+            {key v, label "Vertical zoom tracks", action "_SWS_VZOOMFITMIN"}
+            {key t, label "Toggle tracks/time zoom", action "_SWS_TOGZOOMTTMIN"}
+            {key u, label "Restore previous zoom/scroll", action 40848}
+            {key r, label "Restore next zoom/scroll", action 40762}
+            {key i, label "Toggle item-only zoom", action "_SWS_TOGZOOMIONLYMIN"}
+            {key s, label "Zoom items/time selection", action "_SWS_ZOOMSITMIN"}
+            {key f, label "Zoom selected items", action "_SWS_ITEMZOOMMIN"}
+            {key p, label "Zoom preferences", action "_SWS_ZOOMPREFS"}
+            {key m, label "Zoom marquee tool", action "_SWS_ZOOM"}
+        )
+    }
+)
+
+wheel (
+    // Vertical scroll (no modifier)
+    {modifiers "",     action 989,   desc "Scroll view vertically"}
+
+    // Horizontal scroll
+    {modifiers "<S->",   action 977,   desc "Scroll horizontally reversed (Shift+wheel)"}
+    {modifiers "<S->",   action 977,   horizontal true, desc "Scroll horizontally reversed (Shift+horizwheel)"}
+    {modifiers "",     action 977,   horizontal true, desc "Scroll horizontally reversed (horizwheel)"}
+
+    // Zoom wheel bindings live in zoom.styx.
+)

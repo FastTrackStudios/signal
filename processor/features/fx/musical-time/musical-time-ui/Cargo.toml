@@ -1,0 +1,22 @@
+[package]
+name = "musical-time-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "The Free/Sync mode switch and note-value picker, for any face that has a time on it"
+
+# The control side of `musical-time`. Separate from the core so a DSP crate
+# can take the arithmetic without dragging in dioxus, and separate from any
+# one plugin's UI so the delay, the reverb and the compressor share one
+# control rather than growing three that drift.
+
+[lints]
+workspace = true
+
+[dependencies]
+# Direct dioxus dep: in this workspace audiocore-core is built without its
+# dioxus re-exports, so the prelude items must come from dioxus itself.
+dioxus = { workspace = true }
+musical-time = { workspace = true }
+fts-audio-ui = { workspace = true }

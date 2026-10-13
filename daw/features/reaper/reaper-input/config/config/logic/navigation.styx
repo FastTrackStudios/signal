@@ -1,0 +1,52 @@
+bindings (
+    // Track selection
+    {keys "<up>",         action 40286, desc "Go to previous track"}
+    {keys "<down>",       action 40285, desc "Go to next track"}
+    {keys "<M-up>",       action 40286, desc "Select previous track"}
+    {keys "<M-down>",     action 40285, desc "Select next track"}
+    {keys m,            action 40281, desc "Mute / unmute tracks"}
+    {keys s,            action 40280, desc "Solo / unsolo tracks"}
+    {keys "<C-i>",        action 40495, desc "Toggle track input monitor"}
+    {keys "<S-r>",        action 40490, desc "Arm all tracks for recording"}
+
+    // Item / region selection
+    {keys "<left>",       action 40416, desc "Select previous item"}
+    {keys "<right>",      action 40417, desc "Select next item"}
+    {keys "<S-left>",     action 40421, desc "Extend selection to previous item"}
+    {keys "<S-right>",    action 40421, desc "Extend selection to next item"}
+
+    // Selection commands (Logic Shift+letter)
+    {keys "<S-f>",        action 40421, desc "Select all following"}
+    {keys "<S-l>",        action 40717, desc "Select all items in current time selection"}
+    {keys "<S-o>",        action 40528, desc "Select all items on selected tracks"}
+
+    // Markers
+    {keys ";",          action 40172, desc "Go to previous marker"}
+    {keys "'",          action 40173, desc "Go to next marker"}
+    {keys "<M-'>",        action 40157, desc "Insert marker at cursor"}
+    {keys "<S-'>",        action 40171, desc "Edit / rename marker near cursor"}
+    {keys "<M-delete>",   action 40613, desc "Delete marker near cursor"}
+
+    // Numpad markers (Logic style)
+    {keys "<kp_1>",       action 40161, desc "Go to marker 1"}
+    {keys "<kp_2>",       action 40162, desc "Go to marker 2"}
+    {keys "<kp_3>",       action 40163, desc "Go to marker 3"}
+    {keys "<kp_4>",       action 40164, desc "Go to marker 4"}
+    {keys "<kp_5>",       action 40165, desc "Go to marker 5"}
+    {keys "<kp_6>",       action 40166, desc "Go to marker 6"}
+    {keys "<kp_7>",       action 40167, desc "Go to marker 7"}
+    {keys "<kp_8>",       action 40168, desc "Go to marker 8"}
+    {keys "<kp_9>",       action 40169, desc "Go to marker 9"}
+
+    // Loop / locators
+    {keys u,            action 40290, desc "Set time selection to items"}
+    {keys "<M-l>",        action 40632, desc "Go to start of loop"}
+    {keys "<S-M-l>",      action 40633, desc "Go to end of loop"}
+
+    // Bar navigation
+    {keys "<",          action 40646, desc "Move cursor left to grid"}
+    {keys ">",          action 40647, desc "Move cursor right to grid"}
+
+    // Scroll to selection
+    {keys "<S-`>",      action 40913, desc "Scroll view to edit cursor"}
+)

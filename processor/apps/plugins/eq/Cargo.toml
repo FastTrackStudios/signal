@@ -1,0 +1,32 @@
+[package]
+name = "eq-plugin"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "FTS EQ — CLAP/VST3 audio plugin entry point"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+audiocore-core = { workspace = true }
+eq-dsp = { workspace = true }
+eq-profiles = { workspace = true }
+# The full Dioxus plugin editor (control view, EQ graph, spectrum) —
+# `native` pulls nice-plug-dioxus/Blitz.
+eq-ui = { workspace = true, features = ["native"] }
+audiocore-dsp = { workspace = true }
+nice-plug = { workspace = true, features = ["vst3"] }
+spectrum-analyzer = { workspace = true }
+
+[features]
+default = ["export"]
+# The CLAP / VST3 entry points. A host linking this plugin in-process
+# (the session engine's built-in FX) turns it off: every plugin exports
+# the same `clap_entry` / `GetPluginFactory` symbols, and two in one
+# binary collide.
+export = []
