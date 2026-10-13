@@ -3198,6 +3198,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "control-surfaces"
+version = "0.1.0"
+dependencies = [
+ "daw-control",
+ "daw-proto",
+ "daw-standalone",
+ "eyre",
+ "facet",
+ "facet-styx",
+ "hidapi",
+ "midicore",
+ "midir",
+ "rusb",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "vox",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4051,8 +4071,8 @@ version = "0.1.0"
 dependencies = [
  "architect",
  "clap",
+ "control-surfaces",
  "daw-control",
- "daw-csi",
  "daw-module",
  "daw-proto",
  "daw-reaper",
@@ -4177,23 +4197,6 @@ dependencies = [
  "tracing",
  "vox",
  "vox-types",
-]
-
-[[package]]
-name = "daw-csi"
-version = "0.1.0"
-dependencies = [
- "daw-control",
- "daw-proto",
- "daw-standalone",
- "eyre",
- "facet",
- "facet-styx",
- "midir",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "vox",
 ]
 
 [[package]]
@@ -10808,17 +10811,6 @@ name = "konst_macro_rules"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4933f3f57a8e9d9da04db23fb153356ecaf00cbd14aee46279c33dc80925c37"
-
-[[package]]
-name = "kontrol"
-version = "0.1.0"
-dependencies = [
- "eyre",
- "hidapi",
- "midicore",
- "rusb",
- "tracing",
-]
 
 [[package]]
 name = "kstring"
@@ -18534,9 +18526,9 @@ name = "signal-drums"
 version = "0.1.0"
 dependencies = [
  "architect",
+ "control-surfaces",
  "daw",
  "fx-blocks",
- "kontrol",
  "midicore",
  "signal-drums-proto",
  "signal-plugin-host",

@@ -42,7 +42,7 @@ daw-ui = { workspace = true, optional = true }
 
 # Control Surface Integration (Mackie Control / X-Touch). Depends only on
 # daw-proto + daw-control, so it folds into the facade — no cycle.
-daw-csi = { workspace = true, optional = true }
+control-surfaces = { workspace = true, optional = true }
 
 # Source-format parsers — each exposes one DAW's file format (format →
 # daw-proto types) under `daw::<format>`, gated by a per-format feature.
@@ -155,7 +155,7 @@ cli = [
 vox = []
 # Control surfaces (`daw::csi`) — Mackie Control / Behringer X-Touch driver
 # fed by the event bus. Hardware MIDI via midir (ALSA/CoreMIDI/WinMM).
-csi = ["dep:daw-csi"]
+csi = ["dep:control-surfaces"]
 
 # Source-format parsers, exposed under daw::<format>. Each is independent
 # of REAPER and of each other — opt into only what you read.

@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use kontrol::{KontrolUsb, LightColor};
+use control_surfaces::kontrol::{KontrolUsb, LightColor};
 
 /// Lowest / highest key of an 88-key keybed (A0..C8).
 const LOW: u8 = 21;
@@ -35,10 +35,10 @@ fn piece_color(id: &str) -> LightColor {
     } else if s.contains("china") {
         LightColor::PINK
     } else if s.contains("splash") {
-        LightColor::new(LightColor::BLUE_BASE, kontrol::Intensity::Bright)
+        LightColor::new(LightColor::BLUE_BASE, control_surfaces::kontrol::Intensity::Bright)
     } else {
         // Any other mapped note: dim white, so it's visibly "mapped".
-        LightColor::new(LightColor::WHITE_BASE, kontrol::Intensity::Low)
+        LightColor::new(LightColor::WHITE_BASE, control_surfaces::kontrol::Intensity::Low)
     }
 }
 

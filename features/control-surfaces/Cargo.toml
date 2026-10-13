@@ -1,0 +1,53 @@
+[package]
+name = "control-surfaces"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Control surfaces: Mackie Control / X-Touch, and NI Komplete Kontrol"
+
+[lints]
+workspace = true
+
+[features]
+default = ["midi-hardware"]
+kontrol = ["dep:hidapi", "dep:midicore", "dep:rusb"]
+midi-hardware = ["dep:midir"]
+
+[dependencies]
+daw-control = { workspace = true }
+daw-proto = { workspace = true }
+eyre = { workspace = true }
+facet = { workspace = true }
+facet-styx = { workspace = true }
+hidapi = { workspace = true, optional = true }
+midicore = { workspace = true, features = ["midir"], optional = true }
+midir = { workspace = true, optional = true }
+rusb = { workspace = true, optional = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+vox = { workspace = true }
+
+[dev-dependencies]
+daw-standalone = { workspace = true, features = ["bootstrap", "clap-host", "decode"] }
+tracing-subscriber = { workspace = true }
+
+[[example]]
+name = "nihia"
+path = "examples/nihia.rs"
+required-features = ["kontrol"]
+
+[[example]]
+name = "probe"
+path = "examples/probe.rs"
+required-features = ["kontrol"]
+
+[[example]]
+name = "screennihia"
+path = "examples/screennihia.rs"
+required-features = ["kontrol"]
+
+[[example]]
+name = "screenprobe"
+path = "examples/screenprobe.rs"
+required-features = ["kontrol"]

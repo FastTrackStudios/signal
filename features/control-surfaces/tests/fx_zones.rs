@@ -6,8 +6,8 @@
 //! local FTS plugins, then LSP's system locations; skips when none
 //! exist (CI without plugins).
 
-use daw_csi::driver::{DriverState, Intent, execute_intent, refresh_fx_caches};
-use daw_csi::mcu;
+use control_surfaces::driver::{DriverState, Intent, execute_intent, refresh_fx_caches};
+use control_surfaces::mcu;
 use daw_proto::ProjectInfo;
 use daw_proto::event_bus::{BusFilter, DawEvent};
 use daw_proto::fx::FxEvent;

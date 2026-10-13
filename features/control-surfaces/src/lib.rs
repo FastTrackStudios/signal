@@ -31,7 +31,7 @@
 //!
 //! ```ignore
 //! let daw: daw_control::Daw = /* in-process or RPC connection */;
-//! architect::platform::spawn(daw_csi::run(daw, daw_csi::CsiConfig::default()));
+//! architect::platform::spawn(crate::run(daw, crate::CsiConfig::default()));
 //! ```
 //!
 //! Customizing: copy `config/xtouch.zones.styx` somewhere, edit, set
@@ -41,6 +41,10 @@
 //! Known v1 gaps: no meter bridge (Peaks isn't in the served layer
 //! set yet), no FX-parameter pages (FX param events aren't streamed),
 //! no timecode display, no hold/double-press gestures yet.
+
+
+#[cfg(feature = "kontrol")]
+pub mod kontrol;
 
 pub mod action;
 pub mod mcu;

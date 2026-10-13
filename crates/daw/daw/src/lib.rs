@@ -264,7 +264,7 @@ pub mod plugin {
 /// driver fed by the event bus. `daw::csi::run(daw, config)` connects
 /// a surface to any backend reachable through `daw_control::Daw`.
 pub mod csi {
-    pub use daw_csi::*;
+    pub use control_surfaces::*;
 }
 
 // ── REAPER backend re-export ────────────────────────────────────────────────

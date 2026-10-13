@@ -12,7 +12,7 @@
 //! 2. **Demo session** — seeds an in-process Standalone with folders
 //!    (DRUMS → OH nested), colors, a VCA group, a VOX→FX BUS send,
 //!    and a real CLAP plugin on Kick when one is found on disk.
-//! 3. **Live driver** — runs the real `daw_csi::run` loop against it.
+//! 3. **Live driver** — runs the real `control_surfaces::run` loop against it.
 //!    Every gesture is logged (`daw_csi=debug`): faders write volume,
 //!    GLOBAL VIEW enters folder mode, hold-SELECT spills folders in
 //!    the converted-CSI set, ASSIGN-PLUGIN opens the FX zones.
@@ -21,9 +21,9 @@
 
 use std::time::Duration;
 
-use daw_csi::driver::CsiConfig;
-use daw_csi::mcu::{self, Button, RingMode, StripColor};
-use daw_csi::midi::SurfacePort;
+use control_surfaces::driver::CsiConfig;
+use control_surfaces::mcu::{self, Button, RingMode, StripColor};
+use control_surfaces::midi::SurfacePort;
 use daw_proto::{ProjectContext, ProjectInfo, TrackRef, Tracks};
 use daw_standalone::bootstrap::build_in_process_daw;
 use daw_standalone::sync::Standalone;
@@ -94,7 +94,7 @@ async fn main() -> eyre::Result<()> {
     println!();
 
     tokio::select! {
-        r = daw_csi::run(daw.daw.clone(), CsiConfig { device_match: device }) => {
+        r = control_surfaces::run(daw.daw.clone(), CsiConfig { device_match: device }) => {
             r?;
         }
         _ = tokio::signal::ctrl_c() => {

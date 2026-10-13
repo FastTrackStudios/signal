@@ -26,7 +26,7 @@
 
 use std::{thread::sleep, time::Duration};
 
-use kontrol::{
+use control_surfaces::kontrol::{
     output::{ports, MidiOut},
     usb::{self, KontrolUsb},
     Encoding, LightColor, S88_HIGHEST_NOTE, S88_LOWEST_NOTE,
@@ -107,7 +107,7 @@ fn main() {
     match mode.as_str() {
         "list" => {
             banner("available MIDI OUTPUT ports");
-            for p in kontrol::output_ports() {
+            for p in control_surfaces::kontrol::output_ports() {
                 let mark = if p.contains(ports::DEVICE) {
                     "  <-- S88 MK3"
                 } else {
@@ -125,7 +125,7 @@ fn main() {
                 banner("USB Light Guide: walk a green key up the keybed");
                 for note in S88_LOWEST_NOTE..=S88_HIGHEST_NOTE {
                     kk.clear();
-                    kk.set_key(kontrol::note_to_key(note), LightColor::GREEN);
+                    kk.set_key(control_surfaces::kontrol::note_to_key(note), LightColor::GREEN);
                     match kk.flush() {
                         Ok(()) => println!("  lit key {note} (green)"),
                         Err(e) => {
@@ -147,7 +147,7 @@ fn main() {
         // USB palette discovery: hold one key, step the color byte.
         "usb-palette" => {
             if let Some(mut kk) = open_usb() {
-                let key = kontrol::note_to_key(60); // middle C
+                let key = control_surfaces::kontrol::note_to_key(60); // middle C
                 banner("USB palette sweep on middle C (color byte 0..=127)");
                 for idx in 0u8..=127 {
                     kk.set_key(key, LightColor::from_byte(idx));
@@ -189,7 +189,7 @@ fn main() {
                 for _ in 0..2 {
                     for note in S88_LOWEST_NOTE..=S88_HIGHEST_NOTE {
                         kk.clear();
-                        kk.set_key(kontrol::note_to_key(note), LightColor::GREEN);
+                        kk.set_key(control_surfaces::kontrol::note_to_key(note), LightColor::GREEN);
                         if kk.flush().is_err() {
                             break;
                         }

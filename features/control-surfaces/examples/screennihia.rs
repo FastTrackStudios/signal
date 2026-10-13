@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use kontrol::output::MidiOut;
+use control_surfaces::kontrol::output::MidiOut;
 use rusb::{Context, UsbContext};
 
 const VID: u16 = 0x17cc;

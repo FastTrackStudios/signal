@@ -21,7 +21,7 @@
 //!   the seam for future NIHIA DAW-port integration.
 //!
 //! ```no_run
-//! use kontrol::{usb::KontrolUsb, LightColor, note_to_key};
+//! use crate::kontrol::{usb::KontrolUsb, LightColor, note_to_key};
 //! let mut kk = KontrolUsb::open()?;              // claim iface 4
 //! kk.set_key(note_to_key(60), LightColor::GREEN); // middle C
 //! kk.flush()?;                                    // bulk write

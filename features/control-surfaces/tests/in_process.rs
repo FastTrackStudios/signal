@@ -3,8 +3,8 @@
 //! minus the MIDI port. Proves daw-csi works against any backend
 //! reachable through `daw_control::Daw`.
 
-use daw_csi::driver::{DriverState, execute_intent};
-use daw_csi::{mcu, taper};
+use control_surfaces::driver::{DriverState, execute_intent};
+use control_surfaces::{mcu, taper};
 use daw_proto::ProjectInfo;
 use daw_proto::event_bus::{BusFilter, DawEvent};
 use daw_proto::track::TrackEvent;

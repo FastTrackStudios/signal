@@ -10,7 +10,7 @@
 use eyre::Result;
 use midicore::{midir::MidiOutput, PortSelector};
 
-use crate::LightColor;
+use crate::kontrol::LightColor;
 
 /// The three MIDI ports the S88 MK3 exposes, matched by a case-insensitive
 /// substring of the ALSA port name.
