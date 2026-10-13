@@ -8,7 +8,7 @@ license.workspace = true
 
 [dependencies]
 # Musical time (time.rs puts it on screen).
-dsp-core = { workspace = true, default-features = false }
+dsp-core = { workspace = true }
 dioxus = { workspace = true }
 architect-ui = { workspace = true }
 tracing = { workspace = true }
