@@ -298,6 +298,23 @@ impl KitMic {
         }
     }
 
+    /// One note as the main pair plays it, mono (left and right
+    /// averaged), `frames` long from the note: a hit's sound, offline.
+    /// Prepare first, unsplit; silence before that.
+    #[must_use]
+    pub fn hit_sound(&mut self, note: u8, velocity: u8, frames: usize) -> Vec<f32> {
+        let block = self.scratch.len() / 2;
+        let (mut l, mut r) = (vec![0.0_f32; frames], vec![0.0_f32; frames]);
+        if block == 0 || self.state.split {
+            return l;
+        }
+        self.note(note, velocity, true);
+        for at in (0..frames).step_by(block) {
+            self.render(&mut l, &mut r, (at, block.min(frames - at)));
+        }
+        l.iter().zip(&r).map(|(a, b)| (a + b) * 0.5).collect()
+    }
+
     /// Every voice's next `frames`, summed into its output from `at`: the
     /// main pair `out`, or the aux pairs.
     fn render(&mut self, out_l: &mut [f32], out_r: &mut [f32], (at, frames): (usize, usize)) {
