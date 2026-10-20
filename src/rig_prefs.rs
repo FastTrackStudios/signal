@@ -169,6 +169,10 @@ impl From<&RigAudioPrefs> for audio::io::AudioIoPrefs {
             },
             want_input: true,
             allow_builtin_mic: p.allow_builtin_mic,
+            // A rig is played live, every track of it: nothing to render
+            // ahead, and its engine stays as it was.
+            render_ahead_ms: 0,
+            no_render_ahead: true,
             // The guitar rig keeps the engine's default node name; the caller
             // overrides it where a process runs more than one engine.
             node_name: String::new(),
