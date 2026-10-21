@@ -175,6 +175,13 @@ pub trait ProfileService {
         profile_id: profile::ProfileId,
         variant_id: profile::PatchId,
     ) -> Result<Option<profile::Patch>, SignalServiceError>;
+    /// Library-level settings, including `default_profile_id` ("All-Around").
+    async fn library_settings(
+        &self,
+    ) -> Result<crate::default_profile::LibrarySettings, SignalServiceError>;
+    /// Make an existing profile the library default every inheriting song
+    /// resolves to.
+    async fn set_default_profile(&self, id: profile::ProfileId) -> Result<(), SignalServiceError>;
 }
 
 #[vox::service]

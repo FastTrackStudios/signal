@@ -36,6 +36,36 @@ impl<S: SignalApi> ProfileOps<S> {
             .map_err(OpsError::Storage)
     }
 
+    /// The library's default profile ("All-Around"): what every scene without
+    /// an explicit source inherits.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the storage backend fails.
+    pub async fn default_profile(&self) -> Result<Option<Profile>, OpsError> {
+        let settings = self
+            .0
+            .service
+            .library_settings()
+            .await
+            .map_err(OpsError::Storage)?;
+        match settings.default_profile_id {
+            Some(id) => self.load(id).await,
+            None => Ok(None),
+        }
+    }
+
+    /// Make `id` the library default profile.
+    ///
+    /// # Errors
+    /// Returns `OpsError::Storage` if the profile does not exist or storage fails.
+    pub async fn set_default(&self, id: impl Into<ProfileId>) -> Result<(), OpsError> {
+        self.0
+            .service
+            .set_default_profile(id.into())
+            .await
+            .map_err(OpsError::Storage)
+    }
+
     /// # Errors
     /// Returns `OpsError::Storage` if the storage backend fails.
     pub async fn create(

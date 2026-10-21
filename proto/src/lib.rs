@@ -64,6 +64,7 @@ pub mod block;
 pub mod block_kind;
 pub mod builder;
 pub mod catalog;
+pub mod default_profile;
 pub mod defaults;
 pub mod engine;
 pub mod fx_send;

@@ -5,6 +5,10 @@ use sea_orm::{
     EntityTrait, Iden, IdenStatic, Iterable, QueryFilter, QueryOrder, QueryTrait, Schema, Set,
     StatementBuilder,
 };
+use signal_proto::default_profile::{
+    DEFAULT_PROFILE_SETTING_KEY, LibrarySettings, all_around_profile, all_around_seed_ids,
+    choose_default_profile,
+};
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::Override;
 use signal_proto::profile::{Patch, PatchId, PatchTarget, Profile, ProfileId};
@@ -19,12 +23,23 @@ pub trait ProfileRepo: Send + Sync + 'static {
     async fn list_profiles(&self) -> StorageResult<Vec<Profile>>;
     async fn load_profile(&self, id: &ProfileId) -> StorageResult<Option<Profile>>;
     async fn save_profile(&self, profile: &Profile) -> StorageResult<()>;
+    /// Delete a profile. Refused ([`StorageError::Refused`]) for the library
+    /// default profile.
     async fn delete_profile(&self, id: &ProfileId) -> StorageResult<()>;
     async fn load_variant(
         &self,
         profile_id: &ProfileId,
         variant_id: &PatchId,
     ) -> StorageResult<Option<Patch>>;
+
+    /// Library-level settings, including the default profile pointer.
+    async fn library_settings(&self) -> StorageResult<LibrarySettings>;
+    /// Make `id` the library default profile. The profile must exist.
+    async fn set_default_profile(&self, id: &ProfileId) -> StorageResult<()>;
+    /// Make sure the library has exactly one valid default profile and return
+    /// it: keep a valid pointer, else adopt a profile named "All-Around", else
+    /// seed All-Around with one patch on `seed_target`.
+    async fn ensure_default_profile(&self, seed_target: PatchTarget) -> StorageResult<Profile>;
 }
 
 // endregion: --- Trait
@@ -59,6 +74,24 @@ impl ProfileRepoLive {
         patches.if_not_exists();
         self.db.execute(backend.build(&patches)).await?;
 
+        // Library-level settings live beside the profiles they point at.
+        let mut settings = schema.create_table_from_entity(entity::library_setting::Entity);
+        settings.if_not_exists();
+        self.db.execute(backend.build(&settings)).await?;
+
+        Ok(())
+    }
+
+    async fn write_setting(&self, key: &str, value: &str) -> StorageResult<()> {
+        entity::library_setting::Entity::delete_by_id(key.to_string())
+            .exec(&self.db)
+            .await?;
+        entity::library_setting::Entity::insert(entity::library_setting::ActiveModel {
+            key: Set(key.to_string()),
+            value: Set(value.to_string()),
+        })
+        .exec(&self.db)
+        .await?;
         Ok(())
     }
 
@@ -199,10 +232,55 @@ impl ProfileRepo for ProfileRepoLive {
     }
 
     async fn delete_profile(&self, id: &ProfileId) -> StorageResult<()> {
+        self.library_settings()
+            .await?
+            .check_delete(id)
+            .map_err(|e| StorageError::Refused(e.to_string()))?;
         entity::profile::Entity::delete_by_id(id.as_str().to_string())
             .exec(&self.db)
             .await?;
         Ok(())
+    }
+
+    async fn library_settings(&self) -> StorageResult<LibrarySettings> {
+        let row = entity::library_setting::Entity::find_by_id(
+            DEFAULT_PROFILE_SETTING_KEY.to_string(),
+        )
+        .one(&self.db)
+        .await?;
+        Ok(LibrarySettings {
+            default_profile_id: row
+                .filter(|r| !r.value.is_empty())
+                .map(|r| ProfileId::from(r.value)),
+        })
+    }
+
+    async fn set_default_profile(&self, id: &ProfileId) -> StorageResult<()> {
+        if self.load_profile(id).await?.is_none() {
+            return Err(StorageError::Data(format!(
+                "cannot make {id} the default profile: no such profile"
+            )));
+        }
+        self.write_setting(DEFAULT_PROFILE_SETTING_KEY, id.as_str())
+            .await
+    }
+
+    async fn ensure_default_profile(&self, seed_target: PatchTarget) -> StorageResult<Profile> {
+        let settings = self.library_settings().await?;
+        let profiles = self.list_profiles().await?;
+        let profile = if let Some(existing) = choose_default_profile(&settings, &profiles) {
+            existing.clone()
+        } else {
+            let (profile_id, patch_id) = all_around_seed_ids();
+            let seeded = all_around_profile(profile_id, patch_id, seed_target);
+            self.save_profile(&seeded).await?;
+            seeded
+        };
+        if !settings.is_default(&profile.id) {
+            self.write_setting(DEFAULT_PROFILE_SETTING_KEY, profile.id.as_str())
+                .await?;
+        }
+        Ok(profile)
     }
 
     async fn load_variant(
@@ -365,6 +443,89 @@ mod tests {
             }
         );
         assert_eq!(p.overrides.len(), 1);
+        Ok(())
+    }
+
+    fn seed_target() -> PatchTarget {
+        PatchTarget::RigScene {
+            rig_id: RigId::from_uuid(seed_id("rig-1")),
+            scene_id: RigSceneId::from_uuid(seed_id("rs-clean")),
+        }
+    }
+
+    #[tokio::test]
+    async fn ensure_default_seeds_all_around_once() -> Result<()> {
+        let repo = test_repo().await?;
+        assert_eq!(repo.library_settings().await?.default_profile_id, None);
+
+        let first = repo.ensure_default_profile(seed_target()).await?;
+        assert_eq!(first.name, signal_proto::default_profile::ALL_AROUND_NAME);
+        assert!(first.default_patch().is_some());
+        assert_eq!(
+            repo.library_settings().await?.default_profile_id,
+            Some(first.id.clone())
+        );
+
+        // Idempotent: a second call keeps the same default, seeds nothing.
+        let again = repo.ensure_default_profile(seed_target()).await?;
+        assert_eq!(again.id, first.id);
+        assert_eq!(repo.list_profiles().await?.len(), 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ensure_default_adopts_an_existing_all_around() -> Result<()> {
+        let repo = test_repo().await?;
+        repo.save_profile(&sample_profile()).await?;
+        let mine = Profile::new(
+            seed_id("captains-all-around"),
+            "All-Around",
+            Patch::from_rig_scene(seed_id("aa-main"), "Main", seed_id("rig-1"), seed_id("rs-1")),
+        );
+        repo.save_profile(&mine).await?;
+
+        let chosen = repo.ensure_default_profile(seed_target()).await?;
+        assert_eq!(chosen.id, pid("captains-all-around"));
+        assert_eq!(repo.list_profiles().await?.len(), 2);
+        Ok(())
+    }
+
+    // (e) the default profile can't be deleted
+    #[tokio::test]
+    async fn the_default_profile_cannot_be_deleted() -> Result<()> {
+        let repo = test_repo().await?;
+        repo.save_profile(&sample_profile()).await?;
+        let default = repo.ensure_default_profile(seed_target()).await?;
+
+        let err = repo
+            .delete_profile(&default.id)
+            .await
+            .expect_err("deleting the default must be refused");
+        assert!(matches!(err, StorageError::Refused(_)), "{err}");
+        assert!(repo.load_profile(&default.id).await?.is_some());
+
+        // Others still delete.
+        let other = Profile::new(
+            seed_id("profile-other"),
+            "Other",
+            Patch::from_rig_scene(seed_id("p-other"), "Other", seed_id("rig-1"), seed_id("rs-o")),
+        );
+        repo.save_profile(&other).await?;
+        repo.delete_profile(&pid("profile-other")).await?;
+        assert!(repo.load_profile(&pid("profile-other")).await?.is_none());
+
+        // Moving the default frees the old one.
+        repo.set_default_profile(&pid("profile-1")).await?;
+        repo.delete_profile(&default.id).await?;
+        assert!(repo.load_profile(&default.id).await?.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn set_default_requires_an_existing_profile() -> Result<()> {
+        let repo = test_repo().await?;
+        assert!(repo.set_default_profile(&pid("nope")).await.is_err());
+        assert_eq!(repo.library_settings().await?.default_profile_id, None);
         Ok(())
     }
 }

@@ -77,6 +77,9 @@ pub enum StorageError {
     Db(#[from] DbErr),
     #[error("data error: {0}")]
     Data(String),
+    /// The operation would break an invariant (e.g. deleting the default profile).
+    #[error("refused: {0}")]
+    Refused(String),
 }
 
 pub type StorageResult<T> = Result<T, StorageError>;

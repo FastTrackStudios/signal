@@ -17,6 +17,9 @@ pub mod engine_scene;
 pub mod rig;
 pub mod rig_scene;
 
+// Library-level settings (default profile pointer)
+pub mod library_setting;
+
 // Profile
 pub mod patch;
 pub mod profile;

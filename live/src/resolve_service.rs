@@ -730,23 +730,14 @@ where
                             node.as_str()
                         )))
                     }
-                    signal_proto::song::SceneSource::Patch { patch_id } => {
-                        let profiles = self.profile_repo.list_profiles().await.map_err(|e| {
-                            ResolveError::NotFound(format!("profiles load failed: {e}"))
-                        })?;
-                        let patch = profiles
-                            .iter()
-                            .find_map(|p| p.patch(&patch_id))
-                            .cloned()
-                            .ok_or_else(|| {
-                                ResolveError::NotFound(format!(
-                                    "section patch source not found: {patch_id}"
-                                ))
-                            })?;
+                    signal_proto::song::SceneSource::Patch { .. }
+                    | signal_proto::song::SceneSource::DefaultProfile => {
+                        // Inheritance (DefaultProfile → All-Around's default
+                        // patch) and the patch/scene override layering live in
+                        // signal_proto::default_profile, shared with the UI.
+                        let (patch, ovs) = self.scene_patch(&section).await?;
                         validate_overrides::<FreePolicy>(&patch.overrides)
                             .map_err(|e| map_policy_err("section source patch", e))?;
-                        let mut ovs = patch.overrides.clone();
-                        ovs.extend(section.overrides);
                         // Use cycle-safe inner resolver with fresh visited set
                         let mut visited = HashSet::new();
                         self.resolve_patch_target_inner(&patch.target, ovs, &mut visited)
@@ -755,6 +746,34 @@ where
                 }
             }
         }
+    }
+
+    /// The patch a patch-sourced or inheriting scene plays, and its overrides
+    /// with the scene's layered on top (nearest scope wins per path).
+    async fn scene_patch(
+        &self,
+        section: &signal_proto::song::Scene,
+    ) -> Result<(signal_proto::profile::Patch, Vec<signal_proto::overrides::Override>), ResolveError>
+    {
+        let profiles = self
+            .profile_repo
+            .list_profiles()
+            .await
+            .map_err(|e| ResolveError::NotFound(format!("profiles load failed: {e}")))?;
+        let settings = self
+            .profile_repo
+            .library_settings()
+            .await
+            .map_err(|e| ResolveError::NotFound(format!("library settings load failed: {e}")))?;
+        let resolution =
+            signal_proto::default_profile::resolve_scene(section, &profiles, &settings)
+                .map_err(|e| ResolveError::NotFound(format!("section source: {e}")))?
+                .ok_or_else(|| {
+                    ResolveError::InvalidReference(
+                        "section source does not go through a profile".into(),
+                    )
+                })?;
+        Ok((resolution.patch.clone(), resolution.overrides))
     }
 
     /// Extract the underlying `PatchTarget` from any `ResolveTarget`, following
@@ -802,20 +821,9 @@ where
                     signal_proto::song::SceneSource::Node { node, variant } => {
                         Ok(Some(PatchTarget::Node { node, variant }))
                     }
-                    signal_proto::song::SceneSource::Patch { patch_id } => {
-                        let profiles =
-                            self.profile_repo.list_profiles().await.map_err(|e| {
-                                ResolveError::NotFound(format!("profiles load: {e}"))
-                            })?;
-                        let patch = profiles
-                            .iter()
-                            .find_map(|p| p.patch(&patch_id))
-                            .cloned()
-                            .ok_or_else(|| {
-                                ResolveError::NotFound(format!(
-                                    "section patch source not found: {patch_id}"
-                                ))
-                            })?;
+                    signal_proto::song::SceneSource::Patch { .. }
+                    | signal_proto::song::SceneSource::DefaultProfile => {
+                        let (patch, _) = self.scene_patch(&section).await?;
                         Ok(Some(self.follow_patch_refs(patch.target).await?))
                     }
                 }

@@ -398,6 +398,77 @@ mod tests {
         assert!(loaded.artist.is_none());
         Ok(())
     }
+
+    #[tokio::test]
+    async fn inheriting_scene_round_trips_with_its_overrides() -> Result<()> {
+        let repo = test_repo().await?;
+        let mut song = Song::inheriting_default(seed_id("song-caa"), "Sweet Caroline");
+        assert!(song.scenes[0].inherits_default());
+        song.scenes[0].set_override(Override::set("module.drive.param.gain", 0.8));
+        repo.save_song(&song).await?;
+
+        let loaded = repo.load_song(&soid("song-caa")).await?.unwrap();
+        assert_eq!(loaded.scenes[0].source, SceneSource::DefaultProfile);
+        assert_eq!(loaded.scenes[0].overrides, song.scenes[0].overrides);
+        Ok(())
+    }
+
+    // (d) rows written before `DefaultProfile` existed load unchanged.
+    #[tokio::test]
+    async fn old_rows_with_explicit_sources_load_unchanged() -> Result<()> {
+        let repo = test_repo().await?;
+        let patch_id = signal_proto::profile::PatchId::from_uuid(seed_id("patch-old"));
+        let rig_id = signal_proto::rig::RigId::from_uuid(seed_id("rig-old"));
+        let rig_scene = signal_proto::rig::RigSceneId::from_uuid(seed_id("rs-old"));
+
+        entity::song::Entity::insert(entity::song::ActiveModel {
+            id: Set(soid("song-old").as_str().to_string()),
+            name: Set("Old Song".into()),
+            artist: Set(None),
+            default_variant_id: Set(secid("old-verse").as_str().to_string()),
+            metadata_json: Set(SongRepoLive::metadata_to_json(&Metadata::new())?),
+        })
+        .exec(&repo.db)
+        .await?;
+        // The exact shapes the pre-change code wrote.
+        let rows = [
+            (
+                "old-verse",
+                serde_json::json!({ "source": { "Patch": { "patch_id": patch_id } }, "overrides": [] }),
+            ),
+            (
+                "old-intro",
+                serde_json::json!({
+                    "source": { "RigScene": { "rig_id": rig_id, "scene_id": rig_scene } },
+                    "overrides": [],
+                }),
+            ),
+        ];
+        for (position, (scene, state)) in rows.iter().enumerate() {
+            entity::scene::Entity::insert(entity::scene::ActiveModel {
+                id: Set(secid(scene).as_str().to_string()),
+                song_id: Set(soid("song-old").as_str().to_string()),
+                position: Set(position as i32),
+                name: Set((*scene).to_string()),
+                state_json: Set(state.to_string()),
+                metadata_json: Set(SongRepoLive::metadata_to_json(&Metadata::new())?),
+            })
+            .exec(&repo.db)
+            .await?;
+        }
+
+        let loaded = repo.load_song(&soid("song-old")).await?.unwrap();
+        assert_eq!(loaded.scenes[0].source, SceneSource::Patch { patch_id });
+        assert_eq!(
+            loaded.scenes[1].source,
+            SceneSource::RigScene {
+                rig_id,
+                scene_id: rig_scene
+            }
+        );
+        assert!(loaded.scenes.iter().all(|s| !s.inherits_default()));
+        Ok(())
+    }
 }
 
 // endregion: --- Tests

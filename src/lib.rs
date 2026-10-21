@@ -226,6 +226,7 @@ pub async fn connect_db(path: &str) -> Result<SignalController, StorageError> {
     let url = format!("sqlite:{path}?mode=rwc");
     let db = Database::connect(&url).await?;
     init_all_schemas(&db).await?;
+    ensure_default_profile(&db).await?;
     let service = Arc::new(SignalLive::from_db(db));
     Ok(SignalController::new(service))
 }
@@ -286,6 +287,7 @@ pub async fn connect_db_seeded(path: &str) -> Result<SignalController, StorageEr
         refresh_rfxchain_presets(&block_repo).await?;
         refresh_fxchains_presets(&block_repo).await?;
     }
+    ensure_default_profile(&db).await?;
 
     let service = Arc::new(SignalLive::from_db(db));
     Ok(SignalController::new(service))
@@ -316,6 +318,35 @@ async fn refresh_fxchains_presets(block_repo: &BlockRepoLive) -> Result<(), Stor
         block_repo.save_block_collection(preset).await?;
     }
     Ok(())
+}
+
+/// Make sure the library has its default ("All-Around") profile and the
+/// `default_profile_id` setting pointing at it. Seeds All-Around on the first
+/// rig's default scene (or a placeholder rig scene in an empty library).
+///
+/// # Errors
+///
+/// Returns `StorageError` if reading rigs/profiles or writing the seed fails.
+pub async fn ensure_default_profile(
+    db: &DatabaseConnection,
+) -> Result<profile::Profile, StorageError> {
+    let target = RigRepoLive::new(db.clone())
+        .list_rigs()
+        .await?
+        .first()
+        .map_or_else(
+            || profile::PatchTarget::RigScene {
+                rig_id: rig::RigId::from_uuid(seed_id("signal-default-profile-rig")),
+                scene_id: rig::RigSceneId::from_uuid(seed_id("signal-default-profile-rig-scene")),
+            },
+            |first| profile::PatchTarget::RigScene {
+                rig_id: first.id.clone(),
+                scene_id: first.default_variant_id.clone(),
+            },
+        );
+    ProfileRepoLive::new(db.clone())
+        .ensure_default_profile(target)
+        .await
 }
 
 /// Initialize all table schemas on a database connection.

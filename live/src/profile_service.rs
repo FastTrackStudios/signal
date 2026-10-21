@@ -53,6 +53,28 @@ where
         self.profile_repo
             .delete_profile(&id)
             .await
+            .map_err(|e| match e {
+                // Deleting the library default is a rule, not a storage fault.
+                signal_storage::StorageError::Refused(why) => {
+                    SignalServiceError::ValidationError(why)
+                }
+                other => SignalServiceError::StorageError(other.to_string()),
+            })
+    }
+
+    async fn library_settings(
+        &self,
+    ) -> Result<signal_proto::default_profile::LibrarySettings, SignalServiceError> {
+        self.profile_repo
+            .library_settings()
+            .await
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))
+    }
+
+    async fn set_default_profile(&self, id: ProfileId) -> Result<(), SignalServiceError> {
+        self.profile_repo
+            .set_default_profile(&id)
+            .await
             .map_err(|e| SignalServiceError::StorageError(e.to_string()))
     }
 

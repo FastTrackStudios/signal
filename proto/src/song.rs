@@ -25,7 +25,8 @@ crate::typed_uuid_id!(
 
 // ─── Scene source ─────────────────────────────────────────────
 
-/// What a song scene references — either a Patch or a direct Rig variant.
+/// What a song scene references — a Patch, a node, a Rig variant, or nothing
+/// explicit, which means the library's default profile.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum SceneSource {
@@ -42,6 +43,14 @@ pub enum SceneSource {
     /// Reference a Rig scene directly. Kept while storage and `signal-live`
     /// still speak it; new scenes should target a node.
     RigScene { rig_id: RigId, scene_id: RigSceneId },
+    /// No explicit source: inherit the library's default profile ("All-Around")
+    /// **by reference**. Resolves at load time to that profile's default
+    /// patch, so editing it changes every inheriting scene; the scene's own
+    /// `overrides` sit on top. See [`crate::default_profile`].
+    ///
+    /// Appended last so positional codecs keep the existing variants'
+    /// indices; old data never contains it and loads unchanged.
+    DefaultProfile,
 }
 
 // ─── Scene ────────────────────────────────────────────────────
@@ -89,6 +98,36 @@ impl Scene {
             overrides: Vec::new(),
             metadata: Metadata::new(),
         }
+    }
+
+    /// A scene with no explicit source: it plays the library's default
+    /// profile ("All-Around") by reference, with no overrides yet.
+    pub fn inheriting_default(id: impl Into<SceneId>, name: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            source: SceneSource::DefaultProfile,
+            overrides: Vec::new(),
+            metadata: Metadata::new(),
+        }
+    }
+
+    /// True when this scene inherits the library default profile.
+    #[must_use]
+    pub const fn inherits_default(&self) -> bool {
+        matches!(self.source, SceneSource::DefaultProfile)
+    }
+
+    /// "Override this param for this song": set or replace the override at
+    /// `ov.path`, leaving every other param inherited.
+    pub fn set_override(&mut self, ov: Override) {
+        crate::default_profile::upsert_override(&mut self.overrides, ov);
+    }
+
+    /// Stop overriding `path`; the param follows the inherited patch again.
+    /// Returns true if an override was removed.
+    pub fn clear_override(&mut self, path: &crate::overrides::NodePath) -> bool {
+        crate::default_profile::clear_override(&mut self.overrides, path)
     }
 
     #[must_use]
@@ -144,6 +183,11 @@ impl Song {
             scenes: vec![default_scene],
             metadata: Metadata::new(),
         }
+    }
+
+    /// A song with one scene that inherits the library default profile.
+    pub fn inheriting_default(id: impl Into<SongId>, name: impl Into<String>) -> Self {
+        Self::new(id, name, Scene::inheriting_default(SceneId::new(), "Main"))
     }
 
     pub fn add_scene(&mut self, scene: Scene) {

@@ -243,7 +243,8 @@ where
                     node.as_str()
                 ))
             }
-            signal_proto::song::SceneSource::Patch { patch_id } => {
+            signal_proto::song::SceneSource::Patch { .. }
+            | signal_proto::song::SceneSource::DefaultProfile => {
                 let target = signal_proto::resolve::ResolveTarget::SongScene {
                     song_id: song_id.clone(),
                     scene_id: section.id.clone(),
@@ -260,7 +261,8 @@ where
                         SwitchResult::Switched { name }
                     }
                     Err(e) => SwitchResult::ActivateError(format!(
-                        "resolve section patch {patch_id}: {e}"
+                        "resolve section patch for {}: {e}",
+                        section.name
                     )),
                 }
             }
