@@ -312,7 +312,8 @@ mod tests {
         let other = Profile::new(
             ProfileId::new(),
             "Blues",
-            Patch::new(PatchId::new(), "Crunch", rig_target()).with_override(Override::set(gain(), 0.9)),
+            Patch::new(PatchId::new(), "Crunch", rig_target())
+                .with_override(Override::set(gain(), 0.9)),
         );
         (
             vec![other, all_around],
@@ -355,7 +356,10 @@ mod tests {
             .map(|i| Song::inheriting_default(SongId::new(), format!("Song {i}")))
             .collect();
 
-        upsert_override(&mut all_around_main(&mut profiles).overrides, Override::set(gain(), 0.7));
+        upsert_override(
+            &mut all_around_main(&mut profiles).overrides,
+            Override::set(gain(), 0.7),
+        );
 
         for song in &songs {
             let scene = song.default_scene().expect("scene");
@@ -372,27 +376,47 @@ mod tests {
         scene.set_override(Override::set(gain(), 0.9));
 
         {
-            let r = resolve_scene(&scene, &profiles, &settings).unwrap().unwrap();
+            let r = resolve_scene(&scene, &profiles, &settings)
+                .unwrap()
+                .unwrap();
             assert_eq!(r.param_value(&gain()), Some(0.9), "song override wins");
-            assert_eq!(r.param_value(&tone()), Some(0.3), "untouched param inherits");
+            assert_eq!(
+                r.param_value(&tone()),
+                Some(0.3),
+                "untouched param inherits"
+            );
             assert_eq!(r.label(&scene), "All-Around + overrides");
             assert_eq!(r.overrides.len(), 2, "one entry per path");
         }
 
         // All-Around moving gain does not move an overridden song…
-        upsert_override(&mut all_around_main(&mut profiles).overrides, Override::set(gain(), 0.2));
+        upsert_override(
+            &mut all_around_main(&mut profiles).overrides,
+            Override::set(gain(), 0.2),
+        );
         // …but does move its other params.
-        upsert_override(&mut all_around_main(&mut profiles).overrides, Override::set(tone(), 0.6));
+        upsert_override(
+            &mut all_around_main(&mut profiles).overrides,
+            Override::set(tone(), 0.6),
+        );
         {
-            let r = resolve_scene(&scene, &profiles, &settings).unwrap().unwrap();
+            let r = resolve_scene(&scene, &profiles, &settings)
+                .unwrap()
+                .unwrap();
             assert_eq!(r.param_value(&gain()), Some(0.9));
             assert_eq!(r.param_value(&tone()), Some(0.6));
         }
 
         assert!(scene.clear_override(&gain()));
         assert!(!scene.clear_override(&gain()), "already cleared");
-        let r = resolve_scene(&scene, &profiles, &settings).unwrap().unwrap();
-        assert_eq!(r.param_value(&gain()), Some(0.2), "falls back to All-Around");
+        let r = resolve_scene(&scene, &profiles, &settings)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            r.param_value(&gain()),
+            Some(0.2),
+            "falls back to All-Around"
+        );
         assert_eq!(r.label(&scene), "All-Around");
     }
 
@@ -403,7 +427,9 @@ mod tests {
         let blues_patch = profiles[0].default_patch_id.clone();
 
         let explicit = Scene::from_patch(SceneId::new(), "Verse", blues_patch.clone());
-        let r = resolve_scene(&explicit, &profiles, &settings).unwrap().unwrap();
+        let r = resolve_scene(&explicit, &profiles, &settings)
+            .unwrap()
+            .unwrap();
         assert!(!r.inherits_default);
         assert_eq!(r.patch.id, blues_patch);
         assert_eq!(r.profile.name, "Blues");

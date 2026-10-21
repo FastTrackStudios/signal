@@ -753,18 +753,22 @@ where
     async fn scene_patch(
         &self,
         section: &signal_proto::song::Scene,
-    ) -> Result<(signal_proto::profile::Patch, Vec<signal_proto::overrides::Override>), ResolveError>
-    {
+    ) -> Result<
+        (
+            signal_proto::profile::Patch,
+            Vec<signal_proto::overrides::Override>,
+        ),
+        ResolveError,
+    > {
         let profiles = self
             .profile_repo
             .list_profiles()
             .await
             .map_err(|e| ResolveError::NotFound(format!("profiles load failed: {e}")))?;
-        let settings = self
-            .profile_repo
-            .library_settings()
-            .await
-            .map_err(|e| ResolveError::NotFound(format!("library settings load failed: {e}")))?;
+        let settings =
+            self.profile_repo.library_settings().await.map_err(|e| {
+                ResolveError::NotFound(format!("library settings load failed: {e}"))
+            })?;
         let resolution =
             signal_proto::default_profile::resolve_scene(section, &profiles, &settings)
                 .map_err(|e| ResolveError::NotFound(format!("section source: {e}")))?

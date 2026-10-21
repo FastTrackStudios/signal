@@ -243,11 +243,10 @@ impl ProfileRepo for ProfileRepoLive {
     }
 
     async fn library_settings(&self) -> StorageResult<LibrarySettings> {
-        let row = entity::library_setting::Entity::find_by_id(
-            DEFAULT_PROFILE_SETTING_KEY.to_string(),
-        )
-        .one(&self.db)
-        .await?;
+        let row =
+            entity::library_setting::Entity::find_by_id(DEFAULT_PROFILE_SETTING_KEY.to_string())
+                .one(&self.db)
+                .await?;
         Ok(LibrarySettings {
             default_profile_id: row
                 .filter(|r| !r.value.is_empty())
@@ -480,7 +479,12 @@ mod tests {
         let mine = Profile::new(
             seed_id("captains-all-around"),
             "All-Around",
-            Patch::from_rig_scene(seed_id("aa-main"), "Main", seed_id("rig-1"), seed_id("rs-1")),
+            Patch::from_rig_scene(
+                seed_id("aa-main"),
+                "Main",
+                seed_id("rig-1"),
+                seed_id("rs-1"),
+            ),
         );
         repo.save_profile(&mine).await?;
 
@@ -508,7 +512,12 @@ mod tests {
         let other = Profile::new(
             seed_id("profile-other"),
             "Other",
-            Patch::from_rig_scene(seed_id("p-other"), "Other", seed_id("rig-1"), seed_id("rs-o")),
+            Patch::from_rig_scene(
+                seed_id("p-other"),
+                "Other",
+                seed_id("rig-1"),
+                seed_id("rs-o"),
+            ),
         );
         repo.save_profile(&other).await?;
         repo.delete_profile(&pid("profile-other")).await?;
