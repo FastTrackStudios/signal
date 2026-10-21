@@ -102,7 +102,7 @@ pub fn TouchSwitches(
         perf.switch_actions.get(4).is_some_and(|a| a == "stack") && stacks.len() > 4;
     if compact {
         return rsx! {
-            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {COMPACT_H}px; gap: 1px; background: #000; border-top: 1px solid #000; box-sizing: border-box; height: {COMPACT_H + 1}px;",
+            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {COMPACT_H}px; gap: 1px; background: #000; border-top: 1px solid #000; box-sizing: border-box; height: {COMPACT_H + 1.0}px;",
                 for i in 0..4usize {
                     if let Some(st) = stacks.get(i).cloned() {
                         StackTile { key: "c{i}", no: i as u32 + 1, stack: st, index: i, compact: true }
