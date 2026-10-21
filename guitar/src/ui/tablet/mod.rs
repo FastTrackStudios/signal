@@ -390,9 +390,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 },
                 chart: gig.map(|_| chart_on() && !browser()),
-                chart_tools: gig
-                    .filter(|_| chart_on() && !browser() && view() == View::Perform)
-                    .map(|g| g.foot),
+                chart_tools: gig.filter(|_| chart_on() && !browser() && view() == View::Perform),
                 on_chart: move |()| {
                     if chart_on() && !browser() {
                         chart_on.set(false);
@@ -471,7 +469,7 @@ fn TabletFoot(
     chart: Option<bool>,
     on_chart: EventHandler<()>,
     /// The chart's own controls, while it holds the middle.
-    chart_tools: Option<fn() -> Element>,
+    chart_tools: Option<GigSlots>,
     state: RigViewState,
 ) -> Element {
     let (perform, build, edit, setup) = (
@@ -534,7 +532,7 @@ fn TabletFoot(
             } else if let Some(tools) = chart_tools {
                 Rule {}
                 div { style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center;",
-                    {tools()}
+                    {(tools.foot)()}
                 }
             } else {
                 span { style: "flex: 1;" }
