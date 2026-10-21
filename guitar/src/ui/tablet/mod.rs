@@ -46,13 +46,17 @@ use signal_rig_shell::{
 /// its practice player) to the iPad layout. Provided as context; without
 /// it the layout is the rig's own.
 ///
-///   header     beside the top bar's mode tabs: the Studio / Signal toggle
+///   header     beside the top bar's mode tabs: the Session / Signal toggle
 ///              and the transport
-///   progress   a strip under the top bar: the song's timeline, its
-///              sections and the playhead (a tap seeks)
+///   progress   a strip under the top bar: Session's song progress bar
+///              (its sections, the playhead; a tap seeks)
 ///   main       Perform's middle, in the routing's and the macros' place:
-///              the chosen song's chart (or, on Studio, its session view)
-///   setlist    the sidebar on Setlist: the gig's set, a tap picks a song
+///              the chosen song's chart (or, on Session, its session view)
+///   foot       the chart's own controls, in the foot bar while the chart
+///              holds the middle (PDF / Keyflow, zoom, offset)
+///   follow     draws nothing: ties the gig to the rig's setlist (the set
+///              shows in the rig's own Setlist view; the song up there is
+///              the song whose chart and track are up here)
 ///
 /// Each returns a component of the app's (`rsx! { Its {} }`), so its hooks
 /// are its own.
@@ -61,7 +65,8 @@ pub struct GigSlots {
     pub header: fn() -> Element,
     pub progress: fn() -> Element,
     pub main: fn() -> Element,
-    pub setlist: fn() -> Element,
+    pub foot: fn() -> Element,
+    pub follow: fn() -> Element,
 }
 
 /// One set of slots per app, set once: as a prop it never changes.
@@ -224,6 +229,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 },
             }
             if let Some(g) = gig {
+                {(g.follow)()}
                 {(g.progress)()}
             }
             Middle {
@@ -285,12 +291,12 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                 } else {
                                     // The sidebar for the footswitch mode: the set,
                                     // the profile's stacks, or the presets.
-                                    match (model.perform_mode, gig) {
-                                        (0, _) => rsx! { sidebar_views::PresetView { state: perf } },
-                                        (1, _) => rsx! { sidebar_views::ProfileView { state: perf } },
-                                        // The gig's set, when there is a gig.
-                                        (_, Some(g)) => (g.setlist)(),
-                                        (_, None) => rsx! { setlist::TabletSetlist { state: perf } },
+                                    // (A gig's set is one of the rig's setlists, so
+                                    // it shows here, its sections and parts and all.)
+                                    match model.perform_mode {
+                                        0 => rsx! { sidebar_views::PresetView { state: perf } },
+                                        1 => rsx! { sidebar_views::ProfileView { state: perf } },
+                                        _ => rsx! { setlist::TabletSetlist { state: perf } },
                                     }
                                 }
                             }
@@ -372,6 +378,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 },
                 chart: gig.map(|_| chart_on() && !browser()),
+                chart_tools: gig
+                    .filter(|_| chart_on() && !browser() && view() == View::Perform)
+                    .map(|g| g.foot),
                 on_chart: move |()| {
                     if chart_on() && !browser() {
                         chart_on.set(false);
@@ -445,6 +454,8 @@ fn TabletFoot(
     /// The gig's chart in the middle (`None`: no gig).
     chart: Option<bool>,
     on_chart: EventHandler<()>,
+    /// The chart's own controls, while it holds the middle.
+    chart_tools: Option<fn() -> Element>,
     state: RigViewState,
 ) -> Element {
     let (perform, build, edit, setup) = (
@@ -499,8 +510,14 @@ fn TabletFoot(
                 }
             }
             // The FX row's block and its preset, while the row is up.
+            // The chart's own controls take that room while it holds the middle.
             if (perform && fx) || edit {
                 fx_row::FxPresetBar { state }
+            } else if let Some(tools) = chart_tools {
+                Rule {}
+                div { style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center;",
+                    {tools()}
+                }
             } else {
                 span { style: "flex: 1;" }
             }
