@@ -50,6 +50,13 @@ mod prefs;
 #[expect(dead_code)]
 #[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
 mod pack_client;
+/// Libraries — the home screen's downloads: a studio's kits and packs onto
+/// this device, over the content host.
+#[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
+mod libraries_view;
+/// The front page's live state: each rig's, tonight's set, the studio link.
+#[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
+mod front_state;
 /// (Dead-code allowed: which of these dialers get used depends on which rig
 /// surfaces are compiled in — the guitar-only phone build needs a subset.)
 #[expect(dead_code)]
@@ -265,12 +272,22 @@ fn main() {
             // Documents/FastTrackStudio/signal.
             // SAFETY: single-threaded, before the engine bootstrap spawns.
             unsafe { std::env::set_var("XDG_CONFIG_HOME", &app_root) };
-            // Downloaded keys packs (pack_client.rs) live beside the config,
-            // Files-app visible; the keys rig scans this dir.
+            // Downloaded keys packs live beside the config, Files-app
+            // visible; the keys rig scans this dir.
             #[cfg(feature = "signal-keys-rig")]
             {
-                let packs = app_root.join("Packs/Keys");
+                // In the libraries folder, at the studio's path, so the
+                // Libraries page's downloads land where the rig scans; packs
+                // from before (`Packs/Keys`) move across once.
+                let packs = std::env::var_os("SIGNAL_LIBRARIES_DIR")
+                    .map_or_else(|| app_root.join("signal/libraries"), std::path::PathBuf::from)
+                    .join("Keys/Keyscape/Packs");
                 let _ = std::fs::create_dir_all(&packs);
+                if let Ok(old) = std::fs::read_dir(app_root.join("Packs/Keys")) {
+                    for f in old.flatten() {
+                        let _ = std::fs::rename(f.path(), packs.join(f.file_name()));
+                    }
+                }
                 // SAFETY: single-threaded, before the engine bootstrap spawns.
                 unsafe { std::env::set_var("FTS_KEYSCAPE_PACKS", &packs) };
                 // Phone RAM: preload only the audition set; everything else

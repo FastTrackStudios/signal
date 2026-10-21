@@ -190,3 +190,16 @@ pub fn island_on_left() -> Option<bool> {
     }
 }
 
+
+/// What this device is called on screen: "iPhone" or "iPad"
+/// (`UIDevice.userInterfaceIdiom`).
+pub fn device_name() -> &'static str {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    // SAFETY: plain UIKit reads of the shared device object.
+    let idiom: isize = unsafe {
+        let device: *mut AnyObject = msg_send![class!(UIDevice), currentDevice];
+        msg_send![device, userInterfaceIdiom]
+    };
+    if idiom == 1 { "iPad" } else { "iPhone" }
+}

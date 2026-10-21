@@ -1,0 +1,24 @@
+[package]
+name = "signal-rig-perform-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# Profiles, songs and setlists for a rig that keeps them apart from the
+# guitar's: one styx directory per rig (`<config>/signal/<rig>/perform/`),
+# and the whole shared performance surface (`RigPerform`) answered from it —
+# the rig only says what presets it has and plays one. The guitar keeps its
+# own library; the drums, the e-kit, the keys use this.
+
+[lints]
+workspace = true
+
+[dependencies]
+signal-rigs-proto.workspace = true
+# StyxDir: read / write / seed one struct per file.
+signal-rig-host.workspace = true
+facet.workspace = true
+# The performance hub (PubSub) every remote's stream reads.
+architect.workspace = true
+tracing.workspace = true

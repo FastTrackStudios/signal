@@ -23,6 +23,12 @@ fts-chrome.workspace = true
 dioxus.workspace = true
 # Shared audio-gui widgets (knob + arc geometry) — one copy for every rig UI.
 signal-widgets.workspace = true
+# The iPad rig frame every rig shares (top bar, sidebar, dock, foot bar).
+signal-rig-shell.workspace = true
+# The performance screens every rig shares (Preset, Profile, Setlist).
+signal-rig-perform-ui.workspace = true
+# Its scope names, and (rig_shot) mounting the surface.
+signal-rigs-proto.workspace = true
 lumen-blocks.workspace = true
 signal-guitar-proto.workspace = true
 # The drum rig's wire contract, for its iPad surface (tablet/drums.rs).

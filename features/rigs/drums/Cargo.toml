@@ -17,6 +17,8 @@ pipewire = []
 
 [dependencies]
 signal-rigs-proto.workspace = true
+# The drums' own profiles, songs and setlists (apart from the guitar's).
+signal-rig-perform-store.workspace = true
 # Drums are plain sample zones on the shared engine — no drum-specific DSP.
 signal-sampler.workspace = true
 # The similarity space over the library's swappable pieces (#77 M4).
@@ -31,16 +33,22 @@ signal-drums-proto.workspace = true
 architect = { workspace = true, features = ["vox", "rig"] }
 # Hardware MIDI ports + the drum-map converter for the live input path.
 midicore = { workspace = true, features = ["vox", "midir", "native"] }
-# NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs.
-kontrol.workspace = true
 # Built-in FX (NativeEq/NativeComp/NativeReverb) + the plugin-host wrapper, so
 # an imported MM2 (Cradle) mix can be reproduced with our own DSP per piece.
 fx-blocks.workspace = true
 signal-plugin-host.workspace = true
 tracing.workspace = true
 
+# NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs. A
+# USB HID keyboard: desktop only (`lightguide_none.rs` on a phone or tablet).
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+kontrol.workspace = true
+
 [dev-dependencies]
 tracing-subscriber.workspace = true
+# perform_rpc: the shared performance surface served in-process.
+architect = { workspace = true, features = ["vox", "local"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Hardware MIDI as a routable PipeWire graph node (midir on the

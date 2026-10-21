@@ -22,9 +22,17 @@ midicore = { workspace = true, features = ["vox", "midir"] }
 architect = { workspace = true, features = ["vox", "rig"] }
 daw = { workspace = true }
 tracing = { workspace = true }
+# Its own saved kits, profiles, songs and setlists (apart from the other
+# rigs'), and the shared performance surface answered from them.
+signal-rig-perform-store.workspace = true
+signal-rig-host.workspace = true
+facet.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
+# perform_rpc: the shared performance surface served in-process.
+architect = { workspace = true, features = ["vox", "local"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

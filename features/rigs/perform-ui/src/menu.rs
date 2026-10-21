@@ -102,7 +102,7 @@ pub fn open_naming_under(host: Option<PopupHost>, el: Option<std::rc::Rc<Mounted
 
 /// The window's size in points, when the host says (0 when it does not).
 fn window_size() -> (f64, f64) {
-    try_consume_context::<crate::control::WindowSize>().map_or((0.0, 0.0), |s| *s.0.peek())
+    try_consume_context::<signal_rig_shell::WindowSize>().map_or((0.0, 0.0), |s| *s.0.peek())
 }
 
 fn open_at(host: Option<PopupHost>, x: f64, y: f64, above: Option<f64>, items: Vec<Item>, start: Option<usize>, on_pick: EventHandler<Picked>, on_close: impl Fn() + 'static) {

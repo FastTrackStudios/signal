@@ -70,6 +70,12 @@ members = [
     "features/rigs/keys/ui",
     "features/rigs/keys/worklet",
     "features/rigs/guitar/worklet",
+    "features/rigs/shell",
+    "features/rigs/perform-ui",
+    "features/rigs/perform-store",
+    "crates/signal/content-proto",
+    "crates/signal/content-library",
+    "crates/signal/content-client",
     "features/rigs/orchestra",
     "features/rigs/synth",
     "features/rigs/synth/proto",
@@ -291,12 +297,18 @@ signal-daw-bridge = { path = "crates/signal/daw-bridge" }
 signal-rig-host = { path = "crates/signal/rig-host" }
 signal-rigs-proto = { path = "crates/signal/rigs-proto" }
 signal-widgets = { path = "crates/signal/widgets" }
+signal-rig-shell = { path = "features/rigs/shell" }
+signal-rig-perform-ui = { path = "features/rigs/perform-ui" }
+signal-rig-perform-store = { path = "features/rigs/perform-store" }
 signal-nam = { path = "features/nam" }
 signal-extension = { path = "features/reaper/signal-extension" }
 signal-macromod = { path = "features/fx/macromod" }
 signal-plugin-host = { path = "features/plugin-host", default-features = false }
 signal-sampler = { path = "features/sampler/signal-sampler" }
 signal-packs-proto = { path = "features/sampler/packs-proto" }
+signal-content-proto = { path = "crates/signal/content-proto" }
+signal-content-library = { path = "crates/signal/content-library" }
+signal-content-client = { path = "crates/signal/content-client" }
 signal-pack-library = { path = "features/sampler/pack-library" }
 signal-guitar = { path = "features/rigs/guitar" }
 signal-guitar-proto = { path = "features/rigs/guitar/proto" }

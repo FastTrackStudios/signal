@@ -26,20 +26,7 @@ pub enum Selected {
 #[derive(Clone, Copy)]
 pub struct RoutingSel(pub Signal<Option<Selected>>);
 
-/// Where the browser goes for a selection: its kind (`block:delay`,
-/// `module:Amp`) and, inside it, the preset (and variation) in use.
-#[derive(Clone, PartialEq, Debug, Default)]
-pub struct Focus {
-    pub kind: String,
-    pub preset: String,
-    pub variation: String,
-    /// Open on the search, the keyboard up.
-    pub search: bool,
-}
-
-/// The browser's focus, set by a selection here.
-#[derive(Clone, Copy)]
-pub struct BrowserFocus(pub Signal<Option<Focus>>);
+pub use signal_rig_perform_ui::{BrowserFocus, Focus};
 
 /// The browser's place for a selection: a block's presets when its type has
 /// any (on its preset), else its module's (on the preset · variation the

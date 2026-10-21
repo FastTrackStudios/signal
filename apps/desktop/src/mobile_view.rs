@@ -42,6 +42,8 @@ enum MobileScreen {
     /// The keys rig (sampler engine + downloaded packs).
     #[cfg(feature = "signal-keys-rig")]
     Keys,
+    /// The studio's kits and packs, onto this device.
+    Libraries,
 }
 
 impl MobileScreen {
@@ -145,6 +147,12 @@ pub fn MobileApp() -> Element {
                     let _ = provide_context(engine.rig.clone());
                     let _ = provide_context(engine.stream.clone());
                     let _ = provide_context(engine.settings.clone());
+                    // The guitar's performance surface, for its screens. The
+                    // drum page provides its own (it must not play the guitar's).
+                    let _ = provide_context(signal_rig_perform_ui::PerformClients {
+                        client: engine.perform.clone(),
+                        stream: engine.perform_stream.clone(),
+                    });
                     #[cfg(feature = "signal-keys-rig")]
                     let _ = provide_context(engine.keys.clone());
                     // TONE3000 and the account: the browser's Tone3000 source
@@ -207,7 +215,11 @@ fn Router() -> Element {
                     crate::rigs::store_last(Some(rig));
                     screen.set(MobileScreen::for_rig(rig));
                 },
+                on_libraries: move |()| screen.set(MobileScreen::Libraries),
             }
+        },
+        MobileScreen::Libraries => rsx! {
+            crate::libraries_view::LibrariesPage { on_back: move |()| screen.set(MobileScreen::Menu) }
         },
         MobileScreen::Rig { bass } => rsx! {
             GuitarPage { bass, on_home: to_menu }
@@ -229,6 +241,17 @@ fn DrumPage(on_home: EventHandler<()>) -> Element {
     use_context_provider(|| PhoneHost {
         on_home: Callback::new(move |()| on_home.call(())),
     });
+    // The in-process drum rig, and its own performance surface — never the
+    // guitar's from above. No drum engine in this build: the screen says so.
+    let drums = drum_clients();
+    use_context_provider(|| signal_rig_perform_ui::PerformClients {
+        client: drums.as_ref().and_then(|d| d.perform.clone()),
+        stream: drums.as_ref().and_then(|d| d.perform_stream.clone()),
+    });
+    if let Some(d) = drums {
+        use_context_provider(|| d.rig.clone());
+        use_context_provider(|| d.stream.clone());
+    }
     rsx! {
         div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             signal_guitar_ui::DrumTablet {}
@@ -236,12 +259,57 @@ fn DrumPage(on_home: EventHandler<()>) -> Element {
     }
 }
 
+/// The embedded engine's drum clients, when this build has the drum rig.
+#[cfg(feature = "signal-drums-rig")]
+fn drum_clients() -> Option<
+    crate::rig_engine::RigClients<signal_drums_proto::drum::DrumRigClient, signal_drums_proto::drum::DrumRigStreamClient>,
+> {
+    crate::rig_engine::engine().and_then(|e| e.drums.clone())
+}
+#[cfg(not(feature = "signal-drums-rig"))]
+fn drum_clients() -> Option<NoDrums> {
+    None
+}
+/// Stands in for the drum clients in a build without the drum rig.
+#[cfg(not(feature = "signal-drums-rig"))]
+#[derive(Clone)]
+struct NoDrums {
+    perform: Option<signal_rig_perform_ui::RigPerformClient>,
+    perform_stream: Option<signal_rig_perform_ui::RigPerformStreamClient>,
+    rig: (),
+    stream: (),
+}
+
 /// The front door: the shared instrument menu, phone layout.
 #[component]
-fn MenuPage(on_pick: EventHandler<Rig>) -> Element {
+fn MenuPage(on_pick: EventHandler<Rig>, on_libraries: EventHandler<()>) -> Element {
+    let front = crate::front_state::use_front();
+    // A phone on its side is short; an iPad is not — the page's compact
+    // layout follows the window, not the device family.
+    let compact = try_use_context::<WindowSize>().is_none_or(|w| w.0.read().1 < 600.0);
+    let portrait = try_use_context::<WindowSize>().is_some_and(|w| {
+        let (width, height) = *w.0.read();
+        height > width
+    });
     rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto;",
-            RigMenu { phone: true, on_pick }
+        div { style: "flex: 1; min-height: 0; height: 100%; display: flex; flex-direction: column;",
+            RigMenu {
+                phone: compact,
+                on_pick,
+                on_libraries,
+                // A song from tonight's set: the guitar, on that song.
+                on_song: move |i: usize| {
+                    crate::front_state::play_song(i);
+                    on_pick.call(Rig::Guitar);
+                },
+                // No set yet: the guitar, on its setlists.
+                on_setlists: move |()| {
+                    crate::front_state::open_setlists();
+                    on_pick.call(Rig::Guitar);
+                },
+                front: front(),
+                portrait,
+            }
         }
     }
 }

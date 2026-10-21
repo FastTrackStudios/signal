@@ -84,7 +84,23 @@ type GuitarClients = (
     AudioSettingsClient,
     Option<Tone3000Client>,
     Option<Tone3000StreamClient>,
+    PerformClients,
 );
+
+/// The shared performance surface, under the guitar's scope. `Option`s: an
+/// older engine does not serve it.
+type PerformClients = (
+    Option<signal_rigs_proto::perform::service::RigPerformClient>,
+    Option<signal_rigs_proto::perform::service::RigPerformStreamClient>,
+);
+
+/// The guitar's performance clients on `target`, scoped.
+async fn connect_perform(target: &EngineTarget) -> PerformClients {
+    let slug = signal_rigs_proto::Rig::Guitar.slug();
+    let perform: Option<signal_rigs_proto::perform::service::RigPerformClient> = establish(target).await;
+    let stream: Option<signal_rigs_proto::perform::service::RigPerformStreamClient> = establish(target).await;
+    (perform.map(|c| architect::scope_client!(c, slug)), stream.map(|c| architect::scope_client!(c, slug)))
+}
 
 /// One connect attempt for every client the page uses.
 async fn connect_once(target: &EngineTarget) -> Option<GuitarClients> {
@@ -93,7 +109,8 @@ async fn connect_once(target: &EngineTarget) -> Option<GuitarClients> {
     let settings: AudioSettingsClient = establish(target).await?;
     let tones: Option<Tone3000Client> = establish(target).await;
     let tones_stream: Option<Tone3000StreamClient> = establish(target).await;
-    Some((rig, stream, settings, tones, tones_stream))
+    let perform = connect_perform(target).await;
+    Some((rig, stream, settings, tones, tones_stream, perform))
 }
 
 /// The in-process rig's clients, bootstrapping it on first use.
@@ -121,6 +138,7 @@ async fn embedded_clients() -> Option<GuitarClients> {
         e.settings.clone(),
         e.tones.clone(),
         e.tones_stream.clone(),
+        (e.perform.clone(), e.perform_stream.clone()),
     ))
 }
 
@@ -169,6 +187,14 @@ pub(crate) fn open_externally(url: String) {
 #[component]
 pub fn SignalWorkspace() -> Element {
     let mut selected = use_signal(crate::rigs::load_last);
+    // The menu's Libraries page (the studio's kits and packs onto this
+    // machine), open in the menu's place.
+    let mut libraries = use_signal(|| false);
+    // The front page's live state (each rig's, tonight's set, the studio).
+    #[cfg(not(target_arch = "wasm32"))]
+    let front = crate::front_state::use_front();
+    #[cfg(target_arch = "wasm32")]
+    let front = use_signal(crate::rigs::FrontState::default);
     // Level 1 of the chrome: which rig. Switching rigs is rare, so it lives
     // in the top bar only — the "Guitar ▾" crumb's menu — not in a rail.
     let level = fts_chrome::use_chrome_level(1);
@@ -179,9 +205,37 @@ pub fn SignalWorkspace() -> Element {
     });
 
     let Some(kind) = selected() else {
+        if libraries() {
+            level.crumbs(vec![
+                fts_chrome::Crumb::new("Rigs", Callback::new(move |()| libraries.set(false))),
+                fts_chrome::Crumb::here("Libraries"),
+            ]);
+            return rsx! {
+                crate::libraries_view::LibrariesPage { on_back: move |()| libraries.set(false) }
+            };
+        }
         level.crumbs(vec![fts_chrome::Crumb::here("Rigs")]);
         return rsx! {
-            RigMenu { phone: false, on_pick: move |rig| pick.call(Some(rig)) }
+            RigMenu {
+                phone: false,
+                on_pick: move |rig| pick.call(Some(rig)),
+                on_libraries: move |()| libraries.set(true),
+                // A song from tonight's set: the guitar, on that song.
+                on_song: move |i: usize| {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    crate::front_state::play_song(i);
+                    #[cfg(target_arch = "wasm32")]
+                    let _ = i;
+                    pick.call(Some(Rig::Guitar));
+                },
+                // No set yet: the guitar, on its setlists.
+                on_setlists: move |()| {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    crate::front_state::open_setlists();
+                    pick.call(Some(Rig::Guitar));
+                },
+                front: front(),
+            }
         };
     };
 
@@ -384,7 +438,7 @@ fn GuitarRigView(instrument: &'static str) -> Element {
         loop {
             architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
             let current = clients.peek().as_ref().cloned();
-            let Some((g, (rig, _, _, _, _))) = current else {
+            let Some((g, (rig, ..))) = current else {
                 fails = 0;
                 continue;
             };
@@ -426,10 +480,12 @@ fn GuitarRigView(instrument: &'static str) -> Element {
         document::Style { {SIGNAL_TAILWIND} }
         div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
             match state {
-                Some((rig, stream, settings, tones, tones_stream)) => {
+                Some((rig, stream, settings, tones, tones_stream, (perform, perform_stream))) => {
                     let _ = provide_context(rig);
                     let _ = provide_context(stream);
                     let _ = provide_context(settings);
+                    // The shared performance screens play the rig through these.
+                    let _ = provide_context(signal_rig_perform_ui::PerformClients { client: perform, stream: perform_stream });
                     // The Tones page reads these; absent ones leave it in its
                     // disconnected state rather than failing to mount.
                     if let Some(tones) = tones {

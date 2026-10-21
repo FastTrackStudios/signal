@@ -11,8 +11,8 @@
 //!   Patch     what a section or part plays, where there is no browser
 
 use dioxus::prelude::*;
-use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::{LibraryModel, PerformanceModel, ProfileEntry};
+use signal_rigs_proto::perform::service::RigPerformClient;
+use signal_rigs_proto::perform::{LibraryModel, PerformState, ProfileEntry};
 
 use super::colors::{add_days, date_label, date_parts, name_colour, next_date_for, set_heading, set_meta, set_name, song_colour, tape_for, tape_mark, today_iso, when_label, SetMeta, SONG_PALETTE, TAPE_GAFFER};
 use super::marks::{ProfileIcon, SourceIcon};
@@ -48,7 +48,7 @@ const SWATCH_RING: &str = "0 0 0 2px #141418, 0 0 0 4px #d4d4d8"; // SHEET_2, FO
 const KEYS: [&str; 12] = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
 /// Every set's parts, in the set list's order.
-fn metas(perf: &PerformanceModel, lib: &LibraryModel) -> Vec<SetMeta> {
+fn metas(perf: &PerformState, lib: &LibraryModel) -> Vec<SetMeta> {
     perf.setlists
         .iter()
         .enumerate()
@@ -60,7 +60,7 @@ fn metas(perf: &PerformanceModel, lib: &LibraryModel) -> Vec<SetMeta> {
 }
 
 #[component]
-pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_close: EventHandler<()>) -> Element {
+pub fn PanelView(panel: Panel, perf: PerformState, lib: LibraryModel, on_close: EventHandler<()>) -> Element {
     let mut current = use_signal(|| panel.clone());
     let mut seen = use_signal(|| panel.clone());
     if *seen.peek() != panel {
@@ -168,7 +168,7 @@ pub fn PanelView(panel: Panel, perf: PerformanceModel, lib: LibraryModel, on_clo
 // ── Sets ───────────────────────────────────────────────────────────────────
 
 #[component]
-fn SetsBody(perf: PerformanceModel, lib: LibraryModel, on_close: EventHandler<()>, on_new: EventHandler<()>) -> Element {
+fn SetsBody(perf: PerformState, lib: LibraryModel, on_close: EventHandler<()>, on_new: EventHandler<()>) -> Element {
     let today = today_iso();
     let ms = metas(&perf, &lib);
     let rows: Vec<(usize, SetMeta)> = ms.into_iter().enumerate().collect();
@@ -190,8 +190,8 @@ fn SetsBody(perf: PerformanceModel, lib: LibraryModel, on_close: EventHandler<()
 }
 
 #[component]
-fn SetGroup(label: &'static str, rows: Vec<(usize, SetMeta)>, perf: PerformanceModel, lib: LibraryModel, on_close: EventHandler<()>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn SetGroup(label: &'static str, rows: Vec<(usize, SetMeta)>, perf: PerformState, lib: LibraryModel, on_close: EventHandler<()>) -> Element {
+    let rig = use_hook(crate::perform_client);
     if rows.is_empty() {
         return rsx! {};
     }
@@ -258,8 +258,8 @@ fn EventChip(event: String, big: bool) -> Element {
 // ── Details ────────────────────────────────────────────────────────────────
 
 #[component]
-fn DetailsBody(mode: DetailsMode, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn DetailsBody(mode: DetailsMode, perf: PerformState, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
+    let rig = use_hook(crate::perform_client);
     let set_index = perf.setlist_index as usize;
     let all = metas(&perf, &lib);
     let set = all.get(set_index).cloned().unwrap_or_default();
@@ -540,8 +540,8 @@ fn DateField(value: String, on_change: EventHandler<String>) -> Element {
 // ── Add songs ──────────────────────────────────────────────────────────────
 
 #[component]
-fn AddBody(perf: PerformanceModel, lib: LibraryModel) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn AddBody(perf: PerformState, lib: LibraryModel) -> Element {
+    let rig = use_hook(crate::perform_client);
     let mut q = use_signal(String::new);
     let mut making = use_signal(|| false);
     let mut key = use_signal(|| "G".to_string());
@@ -680,8 +680,8 @@ fn KeyGrid(value: String, on_pick: EventHandler<String>) -> Element {
 // ── A song's key, tempo, start, colour, profile ────────────────────────────
 
 #[component]
-fn KeyBody(index: usize, perf: PerformanceModel, on_done: EventHandler<()>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn KeyBody(index: usize, perf: PerformState, on_done: EventHandler<()>) -> Element {
+    let rig = use_hook(crate::perform_client);
     let song = perf.songs.get(index).cloned().unwrap_or_default();
     let value = if song.key.is_empty() { "C".to_string() } else { song.key.clone() };
     rsx! {
@@ -699,8 +699,8 @@ fn KeyBody(index: usize, perf: PerformanceModel, on_done: EventHandler<()>) -> E
 }
 
 #[component]
-fn TempoBody(index: usize, perf: PerformanceModel) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn TempoBody(index: usize, perf: PerformState) -> Element {
+    let rig = use_hook(crate::perform_client);
     let song = perf.songs.get(index).cloned().unwrap_or_default();
     rsx! {
         div { style: "padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 16px;",
@@ -734,8 +734,8 @@ fn TempoBody(index: usize, perf: PerformanceModel) -> Element {
 }
 
 #[component]
-fn StartBody(index: usize, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn StartBody(index: usize, perf: PerformState, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
+    let rig = use_hook(crate::perform_client);
     let song = perf.songs.get(index).cloned().unwrap_or_default();
     let current = (!song.start.is_empty()).then(|| song.start.clone());
     rsx! {
@@ -755,8 +755,8 @@ fn StartBody(index: usize, perf: PerformanceModel, lib: LibraryModel, on_done: E
 }
 
 #[component]
-fn ColourBody(index: usize, perf: PerformanceModel, on_done: EventHandler<()>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn ColourBody(index: usize, perf: PerformState, on_done: EventHandler<()>) -> Element {
+    let rig = use_hook(crate::perform_client);
     let song = perf.songs.get(index).cloned().unwrap_or_default();
     let chosen = song.colour.clone();
     let auto = name_colour(&song.name);
@@ -805,8 +805,8 @@ fn ColourBody(index: usize, perf: PerformanceModel, on_done: EventHandler<()>) -
 }
 
 #[component]
-fn ProfileBody(song: Option<usize>, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn ProfileBody(song: Option<usize>, perf: PerformState, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
+    let rig = use_hook(crate::perform_client);
     let set_index = perf.setlist_index;
     let set_profile = lib.setlists.get(set_index as usize).map(|s| s.profile.clone()).unwrap_or_default();
     let song_name = song.and_then(|i| perf.songs.get(i)).map(|s| s.name.clone());
@@ -822,7 +822,7 @@ fn ProfileBody(song: Option<usize>, perf: PerformanceModel, lib: LibraryModel, o
     let most = lib.profiles.iter().flat_map(|p| p.stacks.iter().map(move |st| p.patch_list.iter().filter(|x| &x.stack == st).count())).max().unwrap_or(1).max(1);
     let mut profiles = lib.profiles.clone();
     profiles.sort_by_key(|p| !p.name.eq_ignore_ascii_case(&current));
-    let set = move |rig: Option<RigClient>, song_name: Option<String>, name: String| match song_name {
+    let set = move |rig: Option<RigPerformClient>, song_name: Option<String>, name: String| match song_name {
         Some(s) => call!(rig, |r| r.set_song_profile(s, name)),
         None => call!(rig, |r| r.set_setlist_profile(set_index, name)),
     };
@@ -926,8 +926,8 @@ fn ProfileCell(name: String, of: String, inherit: bool, profile: Option<ProfileE
 /// What a part plays: "Keep what plays", then the song's stacks, each with
 /// the song's own patches first.
 #[component]
-fn PatchBody(part: usize, perf: PerformanceModel, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+fn PatchBody(part: usize, perf: PerformState, lib: LibraryModel, on_done: EventHandler<()>) -> Element {
+    let rig = use_hook(crate::perform_client);
     let p = perf.parts.get(part).cloned().unwrap_or_default();
     let song = perf.songs.get(perf.song_index as usize).map(|s| s.name.clone()).unwrap_or_default();
     rsx! {
@@ -951,7 +951,7 @@ fn PatchBody(part: usize, perf: PerformanceModel, lib: LibraryModel, on_done: Ev
 /// profiles' patches wait below. A pick is the patch, and the profile it is
 /// borrowed from.
 #[component]
-fn PatchList(song: String, perf: PerformanceModel, lib: LibraryModel, current: Option<String>, default_label: &'static str, on_pick: EventHandler<Option<(String, Option<String>)>>) -> Element {
+fn PatchList(song: String, perf: PerformState, lib: LibraryModel, current: Option<String>, default_label: &'static str, on_pick: EventHandler<Option<(String, Option<String>)>>) -> Element {
     let mut show_others = use_signal(|| false);
     let colour = perf.songs.iter().find(|s| s.name.eq_ignore_ascii_case(&song)).map_or_else(|| INK_3.to_string(), |s| song_colour(&s.name, &s.colour));
     // A song's own patches are in the stacks only while it is up.

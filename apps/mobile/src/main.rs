@@ -12,6 +12,7 @@
 use dioxus::prelude::*;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::{RigClient, RigStreamClient};
+use signal_rigs_proto::perform::service::{RigPerformClient, RigPerformStreamClient};
 use signal_guitar_ui::GuitarRigRemote;
 
 /// The signal UI's compiled Tailwind (the desktop app's sheet).
@@ -65,10 +66,21 @@ async fn establish<C: vox_core::FromVoxLane>(url: &str) -> Option<C> {
     vox_core::initiator_on(link).establish::<C>().await.map_err(|e| tracing::debug!("vox handshake: {e:?}")).ok()
 }
 
-type Clients = (RigClient, RigStreamClient, AudioSettingsClient);
+type Clients = (RigClient, RigStreamClient, AudioSettingsClient, Option<RigPerformClient>, Option<RigPerformStreamClient>);
 
 async fn connect(url: &str) -> Option<Clients> {
-    Some((establish(url).await?, establish(url).await?, establish(url).await?))
+    // The shared performance surface, under the guitar's scope; an older
+    // engine does not serve it.
+    let slug = signal_rigs_proto::Rig::Guitar.slug();
+    let perform: Option<RigPerformClient> = establish(url).await;
+    let perform_stream: Option<RigPerformStreamClient> = establish(url).await;
+    Some((
+        establish(url).await?,
+        establish(url).await?,
+        establish(url).await?,
+        perform.map(|c| architect::scope_client!(c, slug)),
+        perform_stream.map(|c| architect::scope_client!(c, slug)),
+    ))
 }
 
 #[component]
@@ -121,7 +133,7 @@ fn App() -> Element {
         let mut fails = 0u32;
         loop {
             architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
-            let Some((g, (rig, _, _))) = clients.peek().as_ref().cloned() else { continue };
+            let Some((g, (rig, ..))) = clients.peek().as_ref().cloned() else { continue };
             if g != *generation.peek() {
                 continue;
             }
@@ -146,10 +158,11 @@ fn App() -> Element {
         // view does).
         div { style: "width: 100vw; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: #0b0b0d; color: #e4e4e7; font-family: Inter, sans-serif;",
             match state {
-                Some((rig, stream, settings)) => {
+                Some((rig, stream, settings, perform, perform_stream)) => {
                     let _ = provide_context(rig);
                     let _ = provide_context(stream);
                     let _ = provide_context(settings);
+                    let _ = provide_context(signal_guitar_ui::PerformClients { client: perform, stream: perform_stream });
                     rsx! {
                         div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
                             GuitarRigRemote { key: "{generation}" }

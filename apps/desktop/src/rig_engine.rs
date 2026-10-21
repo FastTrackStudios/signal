@@ -30,6 +30,10 @@ pub struct RigEngine {
     pub rig: RigClient,
     pub stream: RigStreamClient,
     pub settings: AudioSettingsClient,
+    /// The shared performance surface (presets, profiles, setlists), under
+    /// the guitar's scope — what the shared screens play.
+    pub perform: Option<signal_rigs_proto::perform::service::RigPerformClient>,
+    pub perform_stream: Option<signal_rigs_proto::perform::service::RigPerformStreamClient>,
     /// The TONE3000 catalog. `Option` for symmetry with the network path,
     /// where an older engine may not serve it; in-process it is always here.
     #[cfg(feature = "tone3000")]
@@ -49,8 +53,56 @@ pub struct RigEngine {
     pub keys: KeysRigClient,
     #[cfg(feature = "signal-keys-rig")]
     pub keys_stream: KeysRigStreamClient,
+    /// The in-process drum rig — dormant until its screen starts audio —
+    /// and its own performance surface (kits, profiles, setlists).
+    /// The drum backend itself, for what is not on its wire: pointing it at
+    /// a library this device just downloaded.
+    #[cfg(feature = "signal-drums-rig")]
+    pub drums_backend: Option<signal_drums::DrumRigBackend>,
+    #[cfg(feature = "signal-drums-rig")]
+    pub drums: Option<RigClients<signal_drums_proto::drum::DrumRigClient, signal_drums_proto::drum::DrumRigStreamClient>>,
+    /// The in-process e-kit, as the drums.
+    #[cfg(feature = "signal-ekit-rig")]
+    pub ekit: Option<RigClients<signal_ekit_proto::ekit::EkitRigClient, signal_ekit_proto::ekit::EkitRigStreamClient>>,
     /// Keeps the `LocalServer` acceptor tasks alive for the app's lifetime.
     _scope: Arc<architect::Scope>,
+}
+
+/// A rig's clients: its own service and stream, and its performance
+/// surface under its scope.
+#[derive(Clone)]
+pub struct RigClients<C, S> {
+    pub rig: C,
+    pub stream: S,
+    pub perform: Option<signal_rigs_proto::perform::service::RigPerformClient>,
+    pub perform_stream: Option<signal_rigs_proto::perform::service::RigPerformStreamClient>,
+}
+
+/// A rig's clients on the in-process server; `None` (and why, logged) when
+/// one cannot be had — the rig's screen then shows it has no engine.
+async fn rig_clients<C: vox_core::FromVoxLane, S: vox_core::FromVoxLane>(
+    server: &architect::LocalServer,
+    rig: signal_rigs_proto::Rig,
+) -> Option<RigClients<C, S>> {
+    let slug = rig.slug();
+    let (c, st) = match (server.establish::<C>().await, server.establish::<S>().await) {
+        (Ok(c), Ok(s)) => (c, s),
+        (c, s) => {
+            tracing::warn!(rig = slug, rig_ok = c.is_ok(), stream_ok = s.is_ok(), "embedded: rig clients refused");
+            return None;
+        }
+    };
+    let perform = server
+        .establish::<signal_rigs_proto::perform::service::RigPerformClient>()
+        .await
+        .ok()
+        .map(|c| architect::scope_client!(c, slug));
+    let perform_stream = server
+        .establish::<signal_rigs_proto::perform::service::RigPerformStreamClient>()
+        .await
+        .ok()
+        .map(|c| architect::scope_client!(c, slug));
+    Some(RigClients { rig: c, stream: st, perform, perform_stream })
 }
 
 static ENGINE: OnceLock<RigEngine> = OnceLock::new();
@@ -85,6 +137,9 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         // calibration) and opens audio off-thread on start().
         let backend = GuitarRigBackend::new();
         let router = backend.router();
+        // The shared performance surface, under the guitar's scope — as
+        // engine_main.rs mounts it.
+        let router = signal_rigs_proto::mount_perform!(router, signal_rigs_proto::Rig::Guitar, backend.clone());
 
         // The keys rig mounts on the same in-process router — one more
         // backend + merge_router, exactly the engine_main.rs wiring. It
@@ -93,6 +148,26 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         let keys_backend = signal_keys::KeysRigBackend::new();
         #[cfg(feature = "signal-keys-rig")]
         let router = router.merge_router(keys_backend.router());
+
+        // The drums and the e-kit, the same way: dormant until their
+        // screens start audio, each with its own performance surface under
+        // its scope (as engine_main.rs mounts them).
+        #[cfg(feature = "signal-drums-rig")]
+        let drums_backend = signal_drums::DrumRigBackend::new();
+        #[cfg(feature = "signal-drums-rig")]
+        let router = signal_rigs_proto::mount_perform!(
+            router.merge_router(drums_backend.router()),
+            signal_rigs_proto::Rig::Drums,
+            drums_backend.clone()
+        );
+        #[cfg(feature = "signal-ekit-rig")]
+        let ekit_backend = signal_ekit::EkitBackend::new();
+        #[cfg(feature = "signal-ekit-rig")]
+        let router = signal_rigs_proto::mount_perform!(
+            router.merge_router(ekit_backend.router()),
+            signal_rigs_proto::Rig::Ekit,
+            ekit_backend.clone()
+        );
 
         // TONE3000 and the FastTrackStudio account come with the full
         // `signal` feature: their sign-in lands on a localhost listener,
@@ -134,6 +209,17 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             .establish()
             .await
             .map_err(|e| eyre::eyre!("audio settings client: {e:?}"))?;
+        let slug = signal_rigs_proto::Rig::Guitar.slug();
+        let perform = server
+            .establish::<signal_rigs_proto::perform::service::RigPerformClient>()
+            .await
+            .ok()
+            .map(|c| architect::scope_client!(c, slug));
+        let perform_stream = server
+            .establish::<signal_rigs_proto::perform::service::RigPerformStreamClient>()
+            .await
+            .ok()
+            .map(|c| architect::scope_client!(c, slug));
         #[cfg(feature = "signal-keys-rig")]
         let keys: KeysRigClient = server
             .establish()
@@ -144,6 +230,10 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             .establish()
             .await
             .map_err(|e| eyre::eyre!("keys stream client: {e:?}"))?;
+        #[cfg(feature = "signal-drums-rig")]
+        let drums = rig_clients(&server, signal_rigs_proto::Rig::Drums).await;
+        #[cfg(feature = "signal-ekit-rig")]
+        let ekit = rig_clients(&server, signal_rigs_proto::Rig::Ekit).await;
 
         // Open the audio device + load the profile (returns immediately;
         // the open happens on the backend's own thread). On iOS we only
@@ -208,6 +298,8 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         Ok::<_, eyre::Report>(RigEngine {
             rig,
             stream,
+            perform,
+            perform_stream,
             #[cfg(feature = "tone3000")]
             tones,
             #[cfg(feature = "tone3000")]
@@ -219,6 +311,12 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             keys,
             #[cfg(feature = "signal-keys-rig")]
             keys_stream,
+            #[cfg(feature = "signal-drums-rig")]
+            drums,
+            #[cfg(feature = "signal-drums-rig")]
+            drums_backend: Some(drums_backend.clone()),
+            #[cfg(feature = "signal-ekit-rig")]
+            ekit,
             _scope: scope,
         })
     })?;

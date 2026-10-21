@@ -11,6 +11,8 @@
 
 use facet::Facet;
 
+pub mod perform;
+
 /// One selectable preset/kit/patch in a rig's library.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Facet)]
 pub struct RigPresetInfo {

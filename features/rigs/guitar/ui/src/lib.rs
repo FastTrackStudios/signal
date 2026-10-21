@@ -58,6 +58,10 @@ pub use chain::ChainStrip;
 pub use comp_surface::CompSurface;
 pub use control::{ControlView, FormFactor, MidiIndicator, WindowAspect, WindowSize, ZoomPanel};
 pub use phone::{IslandLeft, PhoneHost, ScreenCorners};
+/// The rig's performance clients, for hosts to provide.
+pub use signal_rig_perform_ui::PerformClients;
+/// A stack's colour (its identity mark) and the ink that reads on it.
+pub use perform::folder_color;
 pub use phone_audio::LogFeed;
 pub use grid::RigGraph;
 pub use icons::module_icon;

@@ -51,6 +51,9 @@ struct State {
     cursors: Vec<i32>,
 }
 
+#[path = "perform.rs"]
+mod perform;
+
 struct Inner {
     rig: Mutex<Option<SamplerRig>>,
     space: Mutex<Option<Arc<LoadedSpace>>>,
@@ -59,6 +62,12 @@ struct Inner {
     pump_started: AtomicBool,
     /// Deterministic re-roll counter (no RNG — reproducible kits).
     roll: std::sync::atomic::AtomicU32,
+    /// The shared performance surface (`perform.rs`): the saved kits (read
+    /// on first use), the kit and variation on the pads, and the e-kit's
+    /// own profiles, songs and setlists.
+    kits: Mutex<Option<Vec<perform::KitDef>>>,
+    playing: Mutex<(String, String)>,
+    perform: std::sync::OnceLock<signal_rig_perform_store::PerformStore>,
 }
 
 /// The Electronic Kit backend handle. Cheap to clone; every clone shares
@@ -107,6 +116,9 @@ impl EkitBackend {
                 events: architect::rig::events_hub(),
                 pump_started: AtomicBool::new(false),
                 roll: std::sync::atomic::AtomicU32::new(0),
+                kits: Mutex::new(None),
+                playing: Mutex::new((String::new(), String::new())),
+                perform: std::sync::OnceLock::new(),
             }),
         };
         backend.spawn_meter_pump("ekit-meter-pump");
@@ -472,9 +484,7 @@ zones (
 impl EkitRig for EkitBackend {
     fn start(&self) {
         let b = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("ekit-open".into())
-            .spawn(move || {
+        let _ = signal_rig_host::thread::spawn("ekit-open", move || {
                 b.open_blocking();
                 b.publish();
             });

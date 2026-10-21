@@ -63,6 +63,8 @@ struct Wired {
     rig: RigClient,
     stream: RigStreamClient,
     settings: AudioSettingsClient,
+    perform: signal_rig_perform_ui::RigPerformClient,
+    perform_stream: signal_rig_perform_ui::RigPerformStreamClient,
 }
 
 fn main() {
@@ -94,14 +96,22 @@ fn main() {
         // Leaked on purpose: the server has to outlive the render, and this
         // process exists to take one picture and stop.
         let server: &'static LocalServer =
-            Box::leak(Box::new(LocalServer::serve(backend.router(), Scope::new())));
+            Box::leak(Box::new(LocalServer::serve(
+                signal_rigs_proto::mount_perform!(backend.router(), signal_rigs_proto::Rig::Guitar, backend.clone()),
+                Scope::new(),
+            )));
         let rig: RigClient = server.establish().await.expect("rig client");
         let stream: RigStreamClient = server.establish().await.expect("stream client");
         let settings: AudioSettingsClient = server.establish().await.expect("settings client");
+        let slug = signal_rigs_proto::Rig::Guitar.slug();
+        let perform: signal_rig_perform_ui::RigPerformClient = server.establish().await.expect("perform client");
+        let perform_stream: signal_rig_perform_ui::RigPerformStreamClient = server.establish().await.expect("perform stream client");
         Wired {
             rig,
             stream,
             settings,
+            perform: architect::scope_client!(perform, slug),
+            perform_stream: architect::scope_client!(perform_stream, slug),
         }
     });
     // `RIG_SHOT_MODE=0|1|2`: the perform mode (Preset / Profile / Setlist),
@@ -243,6 +253,10 @@ fn Shot() -> Element {
             let _ = provide_context(w.rig.clone());
             let _ = provide_context(w.stream.clone());
             let _ = provide_context(w.settings.clone());
+            let _ = provide_context(signal_rig_perform_ui::PerformClients {
+                client: Some(w.perform.clone()),
+                stream: Some(w.perform_stream.clone()),
+            });
         }
         // `RIG_SHOT_SELECT=Amp` (a module) or `RIG_SHOT_SELECT=DLY 1:delay`
         // (a block and its type): the right sidebar, open on it.

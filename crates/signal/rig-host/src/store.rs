@@ -17,6 +17,14 @@ pub fn signal_config_dir() -> PathBuf {
     base.join("signal")
 }
 
+/// This device's libraries — kits, packs, rig libraries brought from a
+/// studio, laid out as the studio's: `$SIGNAL_LIBRARIES_DIR`, else
+/// `<config>/signal/libraries` (on the iPad, in the Files app).
+#[must_use]
+pub fn libraries_dir() -> PathBuf {
+    std::env::var_os("SIGNAL_LIBRARIES_DIR").map_or_else(|| signal_config_dir().join("libraries"), PathBuf::from)
+}
+
 /// A directory of styx files, one persisted struct per file.
 #[derive(Clone, Debug)]
 pub struct StyxDir {

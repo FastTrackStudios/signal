@@ -185,6 +185,10 @@ async fn async_main() {
         }};
     }
     let router = mount_core!(router, Rig::Guitar, guitar.clone());
+    // The shared performance surface (presets, profiles, setlists) — the
+    // same way, under each rig's scope.
+    let router = signal_rigs_proto::mount_perform!(router, Rig::Guitar, guitar.clone());
+    let router = signal_rigs_proto::mount_perform!(router, Rig::Drums, drums.clone());
     let router = mount_core!(router, Rig::Drums, drums.clone());
     let router = mount_core!(router, Rig::Keys, keys.clone());
     let router = mount_core!(router, Rig::Synth, synth.clone());
@@ -195,6 +199,26 @@ async fn async_main() {
     // and download packs over the same `/vox` (and iroh p2p) endpoint.
     let packs = signal_pack_library::PackLibraryBackend::new();
     let router = router.merge_router(packs.router());
+
+    // ── Content (everything a device can fetch from this one) ─────────────
+    // The sample libraries at their own paths, and each rig's library under
+    // `Signal/<rig>`: presets, profiles, songs, setlists, captures. A device
+    // saves each file at its id, so what it fetches plays where it lands.
+    let signal_dir = signal_rig_host::store::signal_config_dir();
+    let content = signal_content_library::ContentLibraryBackend::with_roots(vec![
+        (
+            String::new(),
+            std::env::var("FTS_PACK_LIBRARY")
+                .unwrap_or_else(|_| "/run/media/AudioHaven/Signal/Libraries".into())
+                .into(),
+        ),
+        ("Signal/guitar".into(), signal_dir.join("rig")),
+        ("Signal/bass".into(), signal_dir.join("bass-rig")),
+        ("Signal/nam".into(), signal_dir.join("nam")),
+        ("Signal/drums".into(), signal_dir.join("drums")),
+        ("Signal/ekit".into(), signal_dir.join("ekit")),
+    ]);
+    let router = router.merge_router(content.router());
 
     // ── TONE3000 (the public NAM/IR library) ──────────────────────────────
     // The session and the fetching live on the engine, not in a GUI: a
@@ -233,6 +257,7 @@ async fn async_main() {
     let ekit = signal_ekit::EkitBackend::new();
     let router = router.merge_router(ekit.router());
     let router = mount_core!(router, Rig::Ekit, ekit.clone());
+    let router = signal_rigs_proto::mount_perform!(router, Rig::Ekit, ekit.clone());
 
     // ── Session (the setlist player) ─────────────────────────────────────
     // ── Watch bridge ──────────────────────────────────────────────────────

@@ -64,6 +64,9 @@ signal-guitar = [
     # Pack downloads (pack_client.rs) — list + fetch .signalpacks from a
     # pack host (the studio engine / a hosted mirror) over ws or iroh.
     "dep:signal-packs-proto",
+    # Libraries: any kit, pack or rig library from a studio, onto this device.
+    "dep:signal-content-proto",
+    "dep:signal-content-client",
     "dep:session-ui",
     "dep:vox-core",
     "dep:vox-websocket",
@@ -97,8 +100,23 @@ signal-keys-rig = [
     "dep:signal-keys",
     "dep:signal-keys-proto",
 ]
+# The drum rig in the app itself (the iPad's embedded engine): its backend,
+# its own profiles / songs / setlists, and the iPad drum screen's clients.
+signal-drums-rig = [
+    "signal-guitar",
+    "dep:signal-drums",
+    "dep:signal-drums-proto",
+]
+# The e-kit in the app itself, as the drums.
+signal-ekit-rig = [
+    "signal-guitar",
+    "dep:signal-ekit",
+    "dep:signal-ekit-proto",
+]
 signal = [
     "signal-guitar",
+    "signal-drums-rig",
+    "signal-ekit-rig",
     "dep:signal-drums-proto",
     "dep:signal-drums-ui",
     "dep:signal-keys-proto",
@@ -120,6 +138,8 @@ signal = [
     # Pack distribution: the engine serves its .signalpack library
     # (native-only dep — no-op on the web build, same trick as above).
     "dep:signal-pack-library",
+    # Content transfer: everything this engine can give another device.
+    "dep:signal-content-library",
     "dep:signal-space",
     "dep:signal-space-proto",
     "dep:signal-ekit",
@@ -205,6 +225,8 @@ utils.workspace = true
 signal-space-proto = { workspace = true, optional = true }
 signal-ekit-proto = { workspace = true, optional = true }
 signal-rigs-proto.workspace = true
+# The performance screens every rig shares — the clients they play through.
+signal-rig-perform-ui.workspace = true
 # Standard-MIDI-file codec (daw-proto's `midi::smf`) — the browser keys
 # rig's demo MIDI player parses the bundled .mid presets with it, and the
 # `demo_midi_gen` example authors them. Wasm-clean, deliberately
@@ -230,6 +252,8 @@ midicore-proto = { workspace = true, optional = true }
 signal-synth-proto = { workspace = true, optional = true }
 signal-synth-ui = { workspace = true, optional = true }
 signal-packs-proto = { workspace = true, optional = true }
+signal-content-proto = { workspace = true, optional = true }
+signal-content-client = { workspace = true, optional = true }
 
 # Session domain, wire surface — the SetlistService types + generated
 # clients (session-proto) compile everywhere, including the wasm remote.
@@ -326,6 +350,7 @@ signal-keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }
 signal-pack-library = { workspace = true, optional = true }
+signal-content-library = { workspace = true, optional = true }
 signal-space = { workspace = true, optional = true }
 signal-ekit = { workspace = true, optional = true }
 signal-tone3000 = { workspace = true, optional = true }
