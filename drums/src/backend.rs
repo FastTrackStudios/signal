@@ -34,7 +34,7 @@ const DEFAULT_LIBRARY: &str =
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Library {
     pub(crate) dir: PathBuf,
-    pub(crate) pieces: Vec<signal_drums_proto::LibraryPiece>,
+    pub(crate) pieces: Vec<crate::proto::LibraryPiece>,
     pub(crate) mixes: Vec<(String, PathBuf)>,
 }
 
@@ -75,7 +75,11 @@ fn library_root() -> PathBuf {
         .filter(|p| p.join("Presets").is_dir())
         .collect();
     found.sort();
-    found.into_iter().next().unwrap_or_else(|| signal_rig_host::store::signal_config_dir().join("drums").join("library"))
+    found.into_iter().next().unwrap_or_else(|| {
+        signal_rig_host::store::signal_config_dir()
+            .join("drums")
+            .join("library")
+    })
 }
 
 const fn to_drum_map(m: InputMap) -> Option<DrumMap> {
@@ -1015,7 +1019,8 @@ impl DrumRig for DrumRigBackend {
 
     fn load_kit(&self, index: u32) {
         let b = self.clone();
-        let _ = signal_rig_host::thread::spawn("drum-load-kit", move || b.do_load_kit(index as usize));
+        let _ =
+            signal_rig_host::thread::spawn("drum-load-kit", move || b.do_load_kit(index as usize));
     }
 
     fn pieces(&self) -> Vec<PieceInfo> {
@@ -1052,7 +1057,10 @@ impl DrumRig for DrumRigBackend {
             .into_iter()
             .map(|(id, abs)| {
                 let abs_str = abs.display().to_string();
-                let lib = library.pieces.iter().find(|p| same_engine(&p.path, &abs_str));
+                let lib = library
+                    .pieces
+                    .iter()
+                    .find(|p| same_engine(&p.path, &abs_str));
                 let current_name = lib.map_or_else(
                     || {
                         abs.file_stem()
@@ -1077,13 +1085,15 @@ impl DrumRig for DrumRigBackend {
             .collect()
     }
 
-    fn library(&self) -> Vec<signal_drums_proto::LibraryPiece> {
+    fn library(&self) -> Vec<crate::proto::LibraryPiece> {
         self.lib().pieces.clone()
     }
 
     fn swap_piece(&self, slot_id: String, engine_path: String) {
         let b = self.clone();
-        let _ = signal_rig_host::thread::spawn("drum-swap", move || b.do_swap_piece(slot_id, engine_path));
+        let _ = signal_rig_host::thread::spawn("drum-swap", move || {
+            b.do_swap_piece(slot_id, engine_path)
+        });
     }
 
     fn similar_pieces(&self, slot_id: String) -> Vec<crate::proto::LibraryPiece> {
@@ -1164,7 +1174,9 @@ impl DrumRig for DrumRigBackend {
             return;
         };
         let b = self.clone();
-        let _ = signal_rig_host::thread::spawn("drum-mm2-import", move || b.do_import_mix(kit_index, mix_path));
+        let _ = signal_rig_host::thread::spawn("drum-mm2-import", move || {
+            b.do_import_mix(kit_index, mix_path)
+        });
     }
 
     fn trigger(&self, note: u32, velocity: u32) {

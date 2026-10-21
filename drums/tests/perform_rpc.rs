@@ -3,7 +3,7 @@
 //! drums keep songs and sets of their own.
 
 use architect::rig::RigBackend as _;
-use signal_drums::DrumRigBackend;
+use drums::DrumRigBackend;
 use signal_rigs_proto::Rig;
 use signal_rigs_proto::perform::service::RigPerformClient;
 

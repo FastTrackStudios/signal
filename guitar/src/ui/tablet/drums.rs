@@ -31,8 +31,8 @@
 //! kit, so the surface is there before the engine is.
 
 use dioxus::prelude::*;
-use signal_drums_proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
-use signal_drums_proto::{
+use drums::proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
+use drums::proto::{
     DrumStatus, InputMap, KitInfo, KitSlot, LibraryPiece, MeterSnapshot, MixerStrip, PieceInfo,
     StripKind,
 };

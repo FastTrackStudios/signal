@@ -465,7 +465,11 @@ fn SetupTabs(tab: SetupTab, options: bool, on_tab: EventHandler<SetupTab>) -> El
     ];
     // The way back to the app's instruments — here in Setup, two steps from
     // the stage, so a rig is never left by accident mid-song.
-    let columns = if signal_rig_shell::has_host() { "auto repeat(3, minmax(0, 1fr))" } else { "repeat(3, minmax(0, 1fr))" };
+    let columns = if signal_rig_shell::has_host() {
+        "auto repeat(3, minmax(0, 1fr))"
+    } else {
+        "repeat(3, minmax(0, 1fr))"
+    };
     rsx! {
         div { style: "flex-shrink: 0; display: grid; grid-template-columns: {columns}; height: {HEADER_H}px; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box;",
             signal_rig_shell::InstrumentsBack {}

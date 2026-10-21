@@ -4205,7 +4205,10 @@ impl GuitarRigBackend {
     /// screen on the shared performance surface.
     fn publish_perf(&self) {
         let m = Rig::perf(self);
-        self.perform.publish(signal_rigs_proto::perform::PerformEvent::State(perform::perform_state(&m, self.active_patch_name())));
+        self.perform
+            .publish(signal_rigs_proto::perform::PerformEvent::State(
+                perform::perform_state(&m, self.active_patch_name()),
+            ));
         self.events.publish(RigEvent::Perf(m));
     }
 
@@ -9459,7 +9462,9 @@ impl Rig for GuitarRigBackend {
             let backend = self.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(1200));
-                backend.panicking.store(false, std::sync::atomic::Ordering::Relaxed);
+                backend
+                    .panicking
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
                 backend.publish_perf();
             });
         }

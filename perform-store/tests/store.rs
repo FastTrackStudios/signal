@@ -142,7 +142,10 @@ fn a_profile_never_holds_a_patch_twice() {
     struct Twice;
     impl PresetPlayer for Twice {
         fn presets(&self) -> Vec<(String, Vec<String>)> {
-            vec![("Kit".into(), vec!["Default".into(), "Room".into(), "Default".into()])]
+            vec![(
+                "Kit".into(),
+                vec!["Default".into(), "Room".into(), "Default".into()],
+            )]
         }
         fn play(&self, _: &str, _: &str) -> Applied {
             Applied::done()
@@ -150,7 +153,10 @@ fn a_profile_never_holds_a_patch_twice() {
     }
     let path = dir("twice");
     let store = PerformStore::open(&path, &Twice);
-    assert_eq!(store.state(&Twice).stacks[0].patches, ["Kit · Default", "Kit · Room"]);
+    assert_eq!(
+        store.state(&Twice).stacks[0].patches,
+        ["Kit · Default", "Kit · Room"]
+    );
 
     // A file that already holds one twice is repaired as it opens.
     let file = path.join("profiles.styx");
@@ -159,5 +165,8 @@ fn a_profile_never_holds_a_patch_twice() {
     assert_ne!(text, doubled, "the stack line is where the test expects");
     std::fs::write(&file, doubled).unwrap();
     let store = PerformStore::open(&path, &Twice);
-    assert_eq!(store.state(&Twice).stacks[0].patches, ["Kit · Default", "Kit · Room"]);
+    assert_eq!(
+        store.state(&Twice).stacks[0].patches,
+        ["Kit · Default", "Kit · Room"]
+    );
 }

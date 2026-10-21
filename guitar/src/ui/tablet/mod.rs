@@ -14,31 +14,33 @@
 //! Build is the browser (`browser`); Edit is `edit`; Setup is `setup`.
 
 mod browser;
-pub(crate) mod splash;
-mod tones;
-pub(crate) mod drums;
 mod captures;
+pub(crate) mod drums;
 mod edit;
+mod fx_row;
 mod macros;
 mod player;
 mod routing;
 mod routing_canvas;
-mod fx_row;
 mod setup;
+pub(crate) mod splash;
 mod switches;
 mod tokens;
+mod tones;
 mod topbar;
 
 // The performance screens every rig shares.
-use signal_rig_perform_ui::{colors, marks, menu, panels, setlist, sidebar_views};
 pub use signal_rig_perform_ui::BuildPick;
+use signal_rig_perform_ui::{colors, marks, menu, panels, setlist, sidebar_views};
 
+use crate::proto::PerformanceModel;
 use dioxus::prelude::*;
-use signal_guitar_proto::PerformanceModel;
 
 use self::tokens::*;
-use signal_rig_shell::{Dock, FootBar, FootButton, Frame, Group, Main, Middle, Rule, SetupButton, Sidebar, ink};
-use crate::state::RigViewState;
+use crate::ui::state::RigViewState;
+use signal_rig_shell::{
+    Dock, FootBar, FootButton, Frame, Group, Main, Middle, Rule, SetupButton, Sidebar, ink,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum View {
@@ -64,7 +66,10 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     // Edit's left pane: the browser, or the sidebar a tap away.
     let mut left_browser = use_signal(|| true);
     let setup_tab = use_signal(|| setup::SetupTab::Guitar);
-    let pick = use_context_provider(|| BuildPick { part: Signal::new(None), building: Signal::new(false) });
+    let pick = use_context_provider(|| BuildPick {
+        part: Signal::new(None),
+        building: Signal::new(false),
+    });
     // Edit's routing selection, and where it points the browser.
     let routing_sel = use_context_provider(|| routing::RoutingSel(Signal::new(None))).0;
     use_effect(move || {
@@ -78,7 +83,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     // own surface, under its scope.
     let perf = signal_rig_perform_ui::use_perform();
     let face_comp = sidebar_views::use_compositions(perf);
-    use_context_provider(|| crate::face_chrome::FacePresets(face_comp));
+    use_context_provider(|| crate::ui::face_chrome::FacePresets(face_comp));
     // The sidebar turned into a browser on one block's (or module's)
     // presets — the FX row's bar opens it.
     let mut sidebar_browser = use_signal(|| false);
@@ -86,7 +91,11 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut tone_slot = use_signal(|| None::<String>);
     // 0 its presets, 1 TONE3000, 2 the captures on this device.
     let mut tone_tab = use_signal(|| 0u8);
-    let source_title = if tone_tab() == 1 { "TONE3000" } else { "MY CAPTURES" };
+    let source_title = if tone_tab() == 1 {
+        "TONE3000"
+    } else {
+        "MY CAPTURES"
+    };
     // With the sidebar on a block's presets, picking another block in the
     // routing turns it to that block's.
     use_effect(move || {
@@ -95,10 +104,12 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
             return;
         }
         let kind = match picked {
-            Some(routing::Selected::Block(id)) => state.blocks.peek().iter().find(|b| b.id == id).map(|b| {
-                tone_slot.set(tones::slot_of(&b.name, b.block_type.as_str()));
-                browser_kind(b.block_type.as_str())
-            }),
+            Some(routing::Selected::Block(id)) => {
+                state.blocks.peek().iter().find(|b| b.id == id).map(|b| {
+                    tone_slot.set(tones::slot_of(&b.name, b.block_type.as_str()));
+                    browser_kind(b.block_type.as_str())
+                })
+            }
             Some(routing::Selected::Module(m, _)) => {
                 tone_slot.set(tones::slot_of(&m, &format!("module:{m}")));
                 Some(format!("module:{m}"))
@@ -107,39 +118,49 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
         };
         if let Some(kind) = kind {
             let mut f = browser_focus.0;
-            f.set(Some(routing::Focus { kind, preset: String::new(), variation: String::new(), search: false }));
+            f.set(Some(routing::Focus {
+                kind,
+                preset: String::new(),
+                variation: String::new(),
+                search: false,
+            }));
         }
     });
     // A face's preset name: the browser, on that block's presets.
     use_context_provider(|| {
-        crate::face_chrome::OpenPresets(Callback::new(move |(block, block_type): (String, String)| {
-            tone_slot.set(tones::slot_of(&block, &block_type));
-            tone_tab.set(0);
-            let mut f = browser_focus.0;
-            let kind = browser_kind(&block_type);
-            f.set(Some(routing::Focus { kind, preset: String::new(), variation: String::new(), search: false }));
-            // In the sidebar, the routing and the FX row kept in view.
-            match view() {
-                View::Edit => left_browser.set(true),
-                _ => {
-                    sidebar.set(true);
-                    sidebar_browser.set(true);
+        crate::ui::face_chrome::OpenPresets(Callback::new(
+            move |(block, block_type): (String, String)| {
+                tone_slot.set(tones::slot_of(&block, &block_type));
+                tone_tab.set(0);
+                let mut f = browser_focus.0;
+                let kind = browser_kind(&block_type);
+                f.set(Some(routing::Focus {
+                    kind,
+                    preset: String::new(),
+                    variation: String::new(),
+                    search: false,
+                }));
+                // In the sidebar, the routing and the FX row kept in view.
+                match view() {
+                    View::Edit => left_browser.set(true),
+                    _ => {
+                        sidebar.set(true);
+                        sidebar_browser.set(true);
+                    }
                 }
-            }
-        }))
+            },
+        ))
     });
     // "Patch…" on a section or part, or the presets' search: bring the
     // browser up (in Edit it takes the sidebar; in Build it is already there).
     use_context_provider(|| setlist::PickPart {
-        open: Callback::new(move |()| {
-            match view() {
-                View::Perform => {
-                    browser.set(true);
-                    routing_on.set(false);
-                }
-                View::Edit => left_browser.set(true),
-                _ => {}
+        open: Callback::new(move |()| match view() {
+            View::Perform => {
+                browser.set(true);
+                routing_on.set(false);
             }
+            View::Edit => left_browser.set(true),
+            _ => {}
         }),
     });
     // A press anywhere outside the macro bar and its panel closes the panel
@@ -352,7 +373,12 @@ fn TabletFoot(
     on_browser: EventHandler<()>,
     state: RigViewState,
 ) -> Element {
-    let (perform, build, edit, setup) = (view == View::Perform, view == View::Build, view == View::Edit, view == View::Setup);
+    let (perform, build, edit, setup) = (
+        view == View::Perform,
+        view == View::Build,
+        view == View::Edit,
+        view == View::Setup,
+    );
     rsx! {
         FootBar {
             FootButton { label: "Perform", on: perform, pin: false, onclick: move |_| on_view.call(View::Perform),

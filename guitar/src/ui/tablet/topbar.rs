@@ -10,19 +10,25 @@
 
 use std::time::Duration;
 
+use crate::proto::PerformanceModel;
+use crate::proto::rig::RigClient;
 use dioxus::prelude::*;
-use signal_guitar_proto::rig::RigClient;
-use signal_guitar_proto::PerformanceModel;
 use signal_widgets::PopupHost;
 
-use super::menu::{open_menu, Item, Picked, MENU_W};
+use super::menu::{Item, MENU_W, Picked, open_menu};
 use super::tokens::*;
+use crate::ui::state::RigViewState;
 pub use signal_rig_shell::Rule;
 use signal_rig_shell::{Cpu, Indicator, Meters, TopBar as SignalTopBar};
-use crate::state::RigViewState;
 
 #[component]
-pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_sidebar: EventHandler<()>, on_setup: EventHandler<&'static str>) -> Element {
+pub fn TopBar(
+    model: PerformanceModel,
+    state: RigViewState,
+    sidebar: bool,
+    on_sidebar: EventHandler<()>,
+    on_setup: EventHandler<&'static str>,
+) -> Element {
     // Panic resetting: the meters go flat until it is done.
     let resetting = use_signal(|| false);
     let midi = use_midi_health();
@@ -31,8 +37,9 @@ pub fn TopBar(model: PerformanceModel, state: RigViewState, sidebar: bool, on_si
     // What the phones hear: the guitar at its own level, the band's mix at
     // its, under the phones fader.
     let (mix_l, mix_r) = *state.mix_db.read();
-    let mix = crate::meters::meter_level(10f32.powf(mix_l.max(mix_r) / 20.0));
-    let phones = (output * f64::from(hp.self_mix)).max(mix * f64::from(hp.mix_level)) * f64::from(hp.volume);
+    let mix = crate::ui::meters::meter_level(10f32.powf(mix_l.max(mix_r) / 20.0));
+    let phones =
+        (output * f64::from(hp.self_mix)).max(mix * f64::from(hp.mix_level)) * f64::from(hp.volume);
     // Resetting here, or anywhere: the rig says so to every remote.
     let flat = resetting() || model.panicking;
     // Audio struggling: amber for a few seconds after a dropout.
@@ -112,7 +119,11 @@ fn PanicButton(busy: Signal<bool>) -> Element {
     let mut busy = busy;
     // The reset arrow turns while it works.
     let mut turn = use_signal(|| 0u32);
-    let (ink, bg) = if busy() { ("#1a1205", "#fbbf24") } else { ("#fbbf24", CLEAR) };
+    let (ink, bg) = if busy() {
+        ("#1a1205", "#fbbf24")
+    } else {
+        ("#fbbf24", CLEAR)
+    };
     rsx! {
         button {
             "aria-label": "Panic — all notes off, reset audio and MIDI",
@@ -161,13 +172,21 @@ fn MuteButton(house: bool, phones: bool) -> Element {
     let any = house || phones;
     let items = vec![
         Item::head("Mute"),
-        Item::run("house", "Mute house").detail("you still hear yourself").checked(house && !full),
-        Item::run("full", "Mute fully").detail("your guitar out of the phones too").checked(full),
+        Item::run("house", "Mute house")
+            .detail("you still hear yourself")
+            .checked(house && !full),
+        Item::run("full", "Mute fully")
+            .detail("your guitar out of the phones too")
+            .checked(full),
         Item::Sep,
         Item::run("none", "Unmute").unless((!any).then(|| "Nothing is muted".to_string())),
     ];
     let set = set_mutes;
-    let (ink, bg) = if any { (DANGER_INK, VOID) } else { (INK_2, CLEAR) };
+    let (ink, bg) = if any {
+        (DANGER_INK, VOID)
+    } else {
+        (INK_2, CLEAR)
+    };
     // Lit, it breathes: a shade over it rising and falling every 1.6 s.
     let mut lit = use_signal(|| any);
     if lit() != any {
@@ -194,7 +213,11 @@ fn MuteButton(house: bool, phones: bool) -> Element {
     } else {
         "Mute house — tap to mute the house, hold to mute fully"
     };
-    let shade = if any { (1.0 - (phase() * std::f64::consts::TAU).cos()) / 2.0 * 0.18 } else { 0.0 };
+    let shade = if any {
+        (1.0 - (phase() * std::f64::consts::TAU).cos()) / 2.0 * 0.18
+    } else {
+        0.0
+    };
     rsx! {
         button {
             "aria-label": "{aria}",
@@ -262,7 +285,9 @@ fn MuteButton(house: bool, phones: bool) -> Element {
 
 fn set_mutes(rig: Option<RigClient>, house: bool, phones: bool) {
     if let Some(r) = rig {
-        let _ = dioxus_core::spawn_forever(async move { let _ = r.set_mutes(house, phones).await; });
+        let _ = dioxus_core::spawn_forever(async move {
+            let _ = r.set_mutes(house, phones).await;
+        });
     }
 }
 
@@ -287,10 +312,18 @@ fn use_midi_health() -> &'static str {
             loop {
                 let ports = r.midi_ports().await.unwrap_or_default();
                 let wanted = r.setup().await.ok().and_then(|s| {
-                    s.controllers.get(s.controller_index as usize).map(|c| c.device.clone())
+                    s.controllers
+                        .get(s.controller_index as usize)
+                        .map(|c| c.device.clone())
                 });
                 let next = match wanted.filter(|d| !d.is_empty()) {
-                    Some(d) if ports.iter().any(|p| p.eq_ignore_ascii_case(&d) || p.contains(&d)) => LIVE,
+                    Some(d)
+                        if ports
+                            .iter()
+                            .any(|p| p.eq_ignore_ascii_case(&d) || p.contains(&d)) =>
+                    {
+                        LIVE
+                    }
                     Some(_) => VOID,
                     None => LIVE,
                 };
@@ -317,7 +350,11 @@ fn AudioBadge(failed: bool) -> Element {
     } else {
         "Start audio"
     };
-    let (ink, bg, edge) = if failed && !starting() { (DANGER_INK, VOID, VOID) } else { (AMBER, CLEAR, AMBER) };
+    let (ink, bg, edge) = if failed && !starting() {
+        (DANGER_INK, VOID, VOID)
+    } else {
+        (AMBER, CLEAR, AMBER)
+    };
     rsx! {
         div { style: "align-self: stretch; display: flex; align-items: center; padding: 0 10px; flex-shrink: 0;",
             button {
@@ -349,4 +386,3 @@ const AMBER: &str = "#fbbf24";
 
 /// A link that is up but struggling (the prototype's "warn").
 const WARN: &str = "#eab308";
-

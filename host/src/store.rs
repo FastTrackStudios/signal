@@ -22,7 +22,8 @@ pub fn signal_config_dir() -> PathBuf {
 /// `<config>/signal/libraries` (on the iPad, in the Files app).
 #[must_use]
 pub fn libraries_dir() -> PathBuf {
-    std::env::var_os("SIGNAL_LIBRARIES_DIR").map_or_else(|| signal_config_dir().join("libraries"), PathBuf::from)
+    std::env::var_os("SIGNAL_LIBRARIES_DIR")
+        .map_or_else(|| signal_config_dir().join("libraries"), PathBuf::from)
 }
 
 /// A directory of styx files, one persisted struct per file.

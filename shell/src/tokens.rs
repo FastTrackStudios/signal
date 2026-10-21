@@ -62,7 +62,8 @@ pub const HEADER_H: u32 = 44 * 2 + 1 + 1;
 pub const SIDEBAR_W: u32 = 360;
 
 /// The font every surface uses.
-pub const FONT: &str = "-apple-system, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif";
+pub const FONT: &str =
+    "-apple-system, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif";
 
 pub const CLEAR: &str = "transparent";
 pub const NO_SHADOW: &str = "none";
@@ -107,31 +108,51 @@ pub fn tint(colour: &str, pct: u32) -> String {
 /// when not.
 #[must_use]
 pub fn ring(on: bool, w: f32) -> String {
-    if on { format!("{w}px solid {FOCUS_FG}") } else { format!("1px solid {RULE_STRONG}") }
+    if on {
+        format!("{w}px solid {FOCUS_FG}")
+    } else {
+        format!("1px solid {RULE_STRONG}")
+    }
 }
 
 /// A row's state dot: filled green when on, an open ring of `edge` when not.
 #[must_use]
 pub fn state_dot(on: bool, edge: &str) -> String {
-    if on { format!("background: {LIVE};") } else { format!("border: 1.5px solid {edge};") }
+    if on {
+        format!("background: {LIVE};")
+    } else {
+        format!("border: 1.5px solid {edge};")
+    }
 }
 
 /// The line a dragged row will land above.
 #[must_use]
 pub fn drop_line(on: bool) -> String {
-    if on { format!("border-top: 2px solid {INK_2};") } else { String::new() }
+    if on {
+        format!("border-top: 2px solid {INK_2};")
+    } else {
+        String::new()
+    }
 }
 
 /// A focus outline, when on.
 #[must_use]
 pub fn focus_outline(on: bool) -> String {
-    if on { format!("outline: 2px solid {FOCUS_FG};") } else { String::new() }
+    if on {
+        format!("outline: 2px solid {FOCUS_FG};")
+    } else {
+        String::new()
+    }
 }
 
 /// A hairline under a row, unless it stands apart.
 #[must_use]
 pub fn rule_below(on: bool) -> String {
-    if on { format!("border-bottom: 1px solid {RULE};") } else { String::new() }
+    if on {
+        format!("border-bottom: 1px solid {RULE};")
+    } else {
+        String::new()
+    }
 }
 
 /// A tape colour as ink: the grey tape reads as the third ink.
@@ -139,4 +160,3 @@ pub fn rule_below(on: bool) -> String {
 pub fn tape_ink(tape: &str) -> &str {
     if tape == "#3f3f46" { INK_3 } else { tape }
 }
-

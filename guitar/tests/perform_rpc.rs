@@ -3,8 +3,8 @@
 //! call through it plays on the rig.
 
 use architect::rig::RigBackend as _;
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::Rig;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::Rig;
 use signal_rigs_proto::perform::service::RigPerformClient;
 
 /// The tests set the process environment the library reads: one at a time.

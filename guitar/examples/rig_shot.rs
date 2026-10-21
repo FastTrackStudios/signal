@@ -95,17 +95,22 @@ fn main() {
         backend.open_blocking();
         // Leaked on purpose: the server has to outlive the render, and this
         // process exists to take one picture and stop.
-        let server: &'static LocalServer =
-            Box::leak(Box::new(LocalServer::serve(
-                signal_rigs_proto::mount_perform!(backend.router(), signal_rigs_proto::Rig::Guitar, backend.clone()),
-                Scope::new(),
-            )));
+        let server: &'static LocalServer = Box::leak(Box::new(LocalServer::serve(
+            signal_rigs_proto::mount_perform!(
+                backend.router(),
+                signal_rigs_proto::Rig::Guitar,
+                backend.clone()
+            ),
+            Scope::new(),
+        )));
         let rig: RigClient = server.establish().await.expect("rig client");
         let stream: RigStreamClient = server.establish().await.expect("stream client");
         let settings: AudioSettingsClient = server.establish().await.expect("settings client");
         let slug = signal_rigs_proto::Rig::Guitar.slug();
-        let perform: signal_rig_perform_ui::RigPerformClient = server.establish().await.expect("perform client");
-        let perform_stream: signal_rig_perform_ui::RigPerformStreamClient = server.establish().await.expect("perform stream client");
+        let perform: signal_rig_perform_ui::RigPerformClient =
+            server.establish().await.expect("perform client");
+        let perform_stream: signal_rig_perform_ui::RigPerformStreamClient =
+            server.establish().await.expect("perform stream client");
         Wired {
             rig,
             stream,

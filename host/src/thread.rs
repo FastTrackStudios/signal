@@ -21,9 +21,14 @@ pub fn runtime() -> &'static tokio::runtime::Runtime {
 }
 
 /// Spawn a named rig thread that runs `f` inside [`runtime`].
-pub fn spawn(name: &str, f: impl FnOnce() + Send + 'static) -> std::io::Result<std::thread::JoinHandle<()>> {
-    std::thread::Builder::new().name(name.into()).spawn(move || {
-        let _rt = runtime().enter();
-        f();
-    })
+pub fn spawn(
+    name: &str,
+    f: impl FnOnce() + Send + 'static,
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+    std::thread::Builder::new()
+        .name(name.into())
+        .spawn(move || {
+            let _rt = runtime().enter();
+            f();
+        })
 }

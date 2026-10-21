@@ -6,8 +6,8 @@
 //!
 //! Mounted under the e-kit's scope (`merge_router_scoped("ekit", …)`).
 
+use crate::proto::Pad;
 use facet::Facet;
-use signal_ekit_proto::Pad;
 use signal_rig_host::store::StyxDir;
 use signal_rig_perform_store::{DEFAULT_VARIATION, PerformStore, PresetPlayer};
 use signal_rigs_proto::perform::Applied;

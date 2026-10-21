@@ -13,7 +13,7 @@
 //!
 //! [`RigPerform`]: signal_rigs_proto::perform::RigPerform
 
-use signal_drums_proto::drum::DrumRig;
+use crate::proto::drum::DrumRig;
 use signal_rig_perform_store::{PerformStore, PresetPlayer};
 use signal_rigs_proto::perform::{
     Applied, CompositionModel, ModulePick, ModulePresetEntry, PresetEntry, PresetSnapshotEntry,
@@ -39,7 +39,13 @@ impl DrumRigBackend {
     fn variations(&self) -> Vec<String> {
         std::iter::once(DEFAULT.to_string())
             // A library mix named like the kit's own load is that, once.
-            .chain(self.lib().mixes.iter().map(|(n, _)| n.clone()).filter(|n| !n.eq_ignore_ascii_case(DEFAULT)))
+            .chain(
+                self.lib()
+                    .mixes
+                    .iter()
+                    .map(|(n, _)| n.clone())
+                    .filter(|n| !n.eq_ignore_ascii_case(DEFAULT)),
+            )
             .collect()
     }
 
@@ -74,9 +80,9 @@ impl DrumRigBackend {
             (false, false) => {
                 let (b, mix) = (self.clone(), variation.to_string());
                 let _ = signal_rig_host::thread::spawn("drum-load-kit-mix", move || {
-                        b.do_load_kit(index);
-                        DrumRig::import_mm2_mix(&b, mix);
-                    });
+                    b.do_load_kit(index);
+                    DrumRig::import_mm2_mix(&b, mix);
+                });
             }
         }
         if let Ok(mut v) = self.inner.variation.lock() {

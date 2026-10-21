@@ -3,9 +3,9 @@
 //! screen built on the shared surface plays every rig. Mounted under the
 //! rig's scope (`merge_router_scoped("guitar", …)`).
 
+use crate::proto::rig::Rig;
+use crate::proto::{Applied, CompositionModel, LibraryModel, PatchInfo, PerformanceModel};
 use architect::PubSub;
-use signal_guitar_proto::rig::Rig;
-use signal_guitar_proto::{Applied, CompositionModel, LibraryModel, PatchInfo, PerformanceModel};
 use signal_rigs_proto::perform::PerformState;
 use signal_rigs_proto::perform::service::{PerformEvent, RigPerform, RigPerformStreamSource};
 

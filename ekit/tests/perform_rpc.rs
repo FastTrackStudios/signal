@@ -2,7 +2,7 @@
 //! first start saves the pads as `Kit 1` and seeds a profile from it; kits
 //! are saved, copied, renamed, played and kept in the e-kit's own place.
 
-use signal_ekit::EkitBackend;
+use ekit::EkitBackend;
 use signal_rigs_proto::Rig;
 use signal_rigs_proto::perform::service::RigPerformClient;
 

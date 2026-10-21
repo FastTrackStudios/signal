@@ -485,9 +485,9 @@ impl EkitRig for EkitBackend {
     fn start(&self) {
         let b = self.clone();
         let _ = signal_rig_host::thread::spawn("ekit-open", move || {
-                b.open_blocking();
-                b.publish();
-            });
+            b.open_blocking();
+            b.publish();
+        });
     }
 
     fn stop(&self) {
