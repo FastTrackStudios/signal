@@ -411,9 +411,6 @@ impl PatchDef {
             .to_string()
     }
 
-    /// The unique module names this patch overrides (for the UI's
-    /// override badges).
-    #[must_use]
     /// What a footswitch says the patch plays: its preset's name, where it
     /// plays one; else its Core (`preset ·
     /// snapshot`) — the amp it plays, for a patch on no Core yet — and its
@@ -444,6 +441,9 @@ impl PatchDef {
         }
     }
 
+    /// The unique module names this patch overrides (for the UI's
+    /// override badges).
+    #[must_use]
     pub fn override_modules(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for ov in &self.overrides {
@@ -797,7 +797,6 @@ fn drive_board(drives: &[DriveSlotDef], dps: &[DrivePresetDef], patch: RigPatch)
     })
 }
 
-#[must_use]
 /// A chain fitted to its instrument: the bass's is the guitar's less what a
 /// bass has no use for — the Pre-FX in front of the amp, the Motion
 /// module; it keeps Modulation and Time.

@@ -345,45 +345,6 @@ pub struct KeyBinding {
     pub action: String,
 }
 
-/// One footswitch stack (folder) in the performance grid — a named rotation
-/// of patches plus its live cursor/active state.
-#[derive(Clone, PartialEq, Eq, Debug, Facet)]
-pub struct PerfStack {
-    /// Folder / footswitch name (e.g. "Clean", "Lead").
-    pub name: String,
-    /// Display name of the patch at the current rotation cursor.
-    pub current_patch: String,
-    /// Cursor position within the rotation (0-based).
-    pub position: u32,
-    /// Number of patches in the rotation.
-    pub patch_count: u32,
-    /// Whether the current patch's chain is loaded (preloaded / ready).
-    pub available: bool,
-    /// Whether this stack holds the currently-active patch.
-    pub is_active: bool,
-    /// What the current patch plays: its Core (`preset · snapshot`), and
-    /// its Time module when it picks one — the amp, for a patch on no Core.
-    pub preset: String,
-    /// Module names the current patch overrides (badge icons).
-    pub override_modules: Vec<String>,
-    /// Active only while held (released: back to the previous patch).
-    #[facet(default)]
-    pub momentary: bool,
-    /// Always lands on its patch — pressing again does not rotate.
-    #[facet(default)]
-    pub no_rotate: bool,
-    /// The part that is up tunes this switch (its own rotation or mode).
-    #[facet(default)]
-    pub part_tuned: bool,
-    /// The song that is up tunes this switch (its rotation, landing patch or
-    /// mode) — the song's own switch setup, shown under the song.
-    #[facet(default)]
-    pub song_tuned: bool,
-    /// Every patch in the switch's rotation, in order.
-    #[facet(default)]
-    pub patches: Vec<String>,
-}
-
 /// The live performance model: the active profile's footswitch stacks + the
 /// global function-switch state (FX bypass, volume boost, tempo).
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
@@ -469,35 +430,6 @@ pub struct PerformanceModel {
     pub learn: signal_rigs_proto::SwitchLearn,
 }
 
-/// One patch in the loaded profile — the preset browser's row.
-#[derive(Clone, PartialEq, Eq, Debug, Facet)]
-pub struct PatchInfo {
-    /// Patch name (globally unique in the profile).
-    pub name: String,
-    /// The stack (footswitch folder) this patch belongs to, if any.
-    pub stack: String,
-    /// Chain preloaded and ready for gapless switching.
-    pub available: bool,
-    /// This is the active patch.
-    pub active: bool,
-    /// The preset this patch points at (`Preset · Variation` for a patch
-    /// that plays a preset snapshot).
-    pub preset: String,
-    /// The same, apart: the preset's name, and which of its variations
-    /// (snapshot) the patch plays — empty for a legacy pool patch.
-    pub rig_preset: String,
-    pub variation: String,
-    /// This patch is its stack's default (first in the rotation — where the
-    /// footswitch lands after a reset).
-    pub default_in_stack: bool,
-    /// Module names this patch overrides on its preset.
-    pub override_modules: Vec<String>,
-    /// What kind of sound it is: Clean, Crunch, Drive, Lead or Ambient —
-    /// its own tag, else its stack's or variation's (empty: none).
-    #[facet(default)]
-    pub role: String,
-}
-
 /// One preset in the pool — a complete tone patches point at.
 #[derive(Clone, PartialEq, Eq, Debug, Facet)]
 pub struct PresetInfo {
@@ -544,23 +476,6 @@ pub struct Artwork {
     /// A preset with no art at all is not an error — every field is simply
     /// empty.
     pub error: String,
-}
-
-/// One song slot in the active setlist — key/tempo already resolved
-/// (per-set override or the song's default).
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct SongSlot {
-    pub name: String,
-    /// Key for this set (e.g. "G").
-    pub key: String,
-    /// Tempo for this set.
-    pub bpm: u32,
-    /// The patch it starts on — the setlist's badge. Empty: it keeps the
-    /// profile's default.
-    pub start: String,
-    /// Its colour (`#rrggbb`); empty: one picked from its name.
-    #[facet(default)]
-    pub colour: String,
 }
 
 /// [`LiveBlock::engine`] values.
@@ -666,178 +581,6 @@ pub struct TunerReading {
     pub note: String,
     /// Distance from the note in cents (−50..+50; negative = flat).
     pub cents: f32,
-}
-
-/// Everything the library holds, for the browser — one fetch, re-read when
-/// [`PerformanceModel::revision`] moves.
-///
-/// One module's pick: which module preset, and which of its snapshots.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct ModulePick {
-    pub module: String,
-    pub preset: String,
-    pub snapshot: String,
-    /// The chain blocks this module owns on the live patch (what saving it
-    /// from live folds in): with [`LiveBlock::overridden`], whether the
-    /// module plays differently from its saved snapshot.
-    #[facet(default)]
-    pub blocks: Vec<String>,
-}
-
-/// A module preset (Amp, Drive, Time, …) and its snapshots, by name.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct ModulePresetEntry {
-    pub module: String,
-    pub name: String,
-    pub snapshots: Vec<String>,
-    /// What refers to it (presets, other modules, patches) — why it cannot
-    /// be deleted.
-    #[facet(default)]
-    pub used_by: Vec<String>,
-    /// The same per snapshot, parallel to `snapshots`: who picks each one,
-    /// joined ("" = nothing does).
-    #[facet(default)]
-    pub snapshot_used_by: Vec<String>,
-    /// What each snapshot holds, parallel to `snapshots` — so a list can
-    /// show a Time snapshot's Delay and Reverb, or an Amp's captures,
-    /// without a fetch per row.
-    #[facet(default)]
-    pub snapshot_info: Vec<ModuleSnapshotInfo>,
-}
-
-/// What one module snapshot holds.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct ModuleSnapshotInfo {
-    /// The module picks it plays (a Time snapshot's Delay and Reverb).
-    pub modules: Vec<ModulePick>,
-    /// The block presets it puts on blocks (a Delay snapshot's DLY 1).
-    pub blocks: Vec<BlockPick>,
-    /// Its captures, by file name without the extension: amp, then cab,
-    /// then the second amp and cab (empty ones left out).
-    pub captures: Vec<String>,
-    /// The NAM models it loads, by role: `amp` and `cab` (its captures),
-    /// `drive` (a slot's pedal: the capture, the pedal and its option).
-    #[facet(default)]
-    pub models: Vec<CaptureModel>,
-    /// The macro knobs it tunes on its blocks.
-    #[facet(default)]
-    pub macros: Vec<String>,
-    /// A Core snapshot frozen into NAM captures (`signal rig freeze`): it
-    /// can play them in place of its settings.
-    #[facet(default)]
-    pub frozen_available: bool,
-    /// It plays its frozen captures now.
-    #[facet(default)]
-    pub frozen: bool,
-}
-
-/// A NAM model a module snapshot loads.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct CaptureModel {
-    /// `amp`, `cab` or `drive`.
-    pub role: String,
-    /// The capture, by file stem (a drive: its option's, else the pedal).
-    pub name: String,
-    /// A drive's pedal and the option it plays; empty otherwise.
-    #[facet(default)]
-    pub pedal: String,
-    #[facet(default)]
-    pub option: String,
-}
-
-/// One parameter a block preset sets.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
-pub struct PresetParam {
-    pub name: String,
-    pub value: f32,
-}
-
-/// One snapshot of a preset: its module picks.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct PresetSnapshotEntry {
-    pub name: String,
-    pub modules: Vec<ModulePick>,
-    /// How many overrides it layers on top of its modules.
-    pub overrides: u32,
-    /// The picks put over it (module kind or `block:<block>`), as they
-    /// play now.
-    #[facet(default)]
-    pub picks: Vec<PartPick>,
-    /// Its block presets, by block.
-    #[facet(default)]
-    pub blocks: Vec<BlockPick>,
-}
-
-/// A preset: a composition of module presets, with snapshots.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct PresetEntry {
-    pub name: String,
-    pub snapshots: Vec<PresetSnapshotEntry>,
-    /// The patches playing it — why it cannot be deleted.
-    #[facet(default)]
-    pub used_by: Vec<String>,
-}
-
-/// The composition libraries, and what the active patch plays from them.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
-pub struct CompositionModel {
-    pub modules: Vec<ModulePresetEntry>,
-    pub presets: Vec<PresetEntry>,
-    /// The active patch's preset and snapshot (empty when it is not composed).
-    pub active_preset: String,
-    pub active_snapshot: String,
-    /// The active patch's effective module picks — its preset snapshot's,
-    /// with its own over them.
-    pub active_modules: Vec<ModulePick>,
-    /// Every block preset (`blocks.styx`): a delay, a reverb, a compressor…
-    /// Module snapshots point at these, so editing one changes everywhere.
-    #[facet(default)]
-    pub block_presets: Vec<BlockPresetEntry>,
-    /// The active patch's effective block picks, one per block.
-    #[facet(default)]
-    pub active_blocks: Vec<BlockPick>,
-}
-
-/// A block preset: its block type's storage key (`delay`, `reverb`, …).
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
-pub struct BlockPresetEntry {
-    pub block_type: String,
-    pub name: String,
-    /// Picking it bypasses the block.
-    pub bypass: bool,
-    /// What refers to it (module snapshots, presets, patches) — why it
-    /// cannot be deleted.
-    #[facet(default)]
-    pub used_by: Vec<String>,
-    /// What it sets, as saved — so a list can draw and sort it (a delay's
-    /// time and feedback, a reverb's algorithm and decay).
-    #[facet(default)]
-    pub params: Vec<PresetParam>,
-    /// The macro knobs it tunes (`delay`, `space`) — empty when the macros
-    /// move it their own way.
-    #[facet(default)]
-    pub macros: Vec<String>,
-}
-
-/// A block preset on a chain block, by the block's name (`DLY 1`, `VERB 2`).
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct BlockPick {
-    pub block: String,
-    pub preset: String,
-}
-
-/// Patches and presets are not here: they belong to the active profile and
-/// already have their own lists ([`rig::Rig::patches`], [`rig::Rig::presets`]),
-/// in the order their index-addressed calls expect.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
-pub struct LibraryModel {
-    pub profiles: Vec<ProfileEntry>,
-    pub songs: Vec<SongEntry>,
-    pub setlists: Vec<SetlistEntry>,
-    pub drives: Vec<DriveEntry>,
-    /// Song collections ("Church"…): a song can be in any number.
-    #[facet(default)]
-    pub collections: Vec<CollectionEntry>,
 }
 
 // ── Setup: guitars, audio rigs, MIDI controllers ──────────────────────────
@@ -1011,124 +754,6 @@ pub struct ControllerEntry {
     pub clock: String,
 }
 
-/// A section's own pick: `kind` is a module kind (`Amp`, `Time`…) or
-/// `block:<block name>`; the preset, and the snapshot for a module.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct PartPick {
-    pub kind: String,
-    pub preset: String,
-    #[facet(default)]
-    pub snapshot: String,
-}
-
-/// A named group of songs, for finding them faster.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct CollectionEntry {
-    pub name: String,
-    /// `#rrggbb`.
-    pub colour: String,
-    pub songs: Vec<String>,
-}
-
-/// One profile: a rig's worth of presets, patches and stacks.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct ProfileEntry {
-    pub name: String,
-    /// The rig is playing this one.
-    pub active: bool,
-    /// Stack names, in footswitch order.
-    pub stacks: Vec<String>,
-    pub patches: u32,
-    /// Pool preset names — the amps this profile is built on.
-    pub presets: Vec<String>,
-    /// Every patch, with its stack — what a song part can pick from this
-    /// profile when the part is played on it.
-    pub patch_list: Vec<ProfilePatch>,
-    /// The patch it lands on when loaded (its default scene); empty = the
-    /// first.
-    pub default_patch: String,
-}
-
-/// A patch of a profile, and the stack (footswitch slot) holding it.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct ProfilePatch {
-    pub name: String,
-    pub stack: String,
-    /// The song whose own patch it is (merged into the profile while the
-    /// song plays); empty for the profile's own.
-    #[facet(default)]
-    pub song: String,
-}
-
-/// One song in the library, with its defaults.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
-pub struct SongEntry {
-    pub name: String,
-    pub key: String,
-    pub bpm: u32,
-    /// Section names, in order.
-    pub parts: Vec<String>,
-    /// Its parts as the setlist shows them (what each plays, its section,
-    /// its changes) — for a song that is not up.
-    #[facet(default)]
-    pub part_list: Vec<PerfPart>,
-    /// Names of the setlists it appears in — why it cannot be deleted.
-    pub setlists: Vec<String>,
-    /// The profile it is played on; empty keeps whatever is loaded.
-    pub profile: String,
-    /// The part it starts on; empty = the profile's default patch.
-    pub start_part: String,
-    /// Its colour (`#rrggbb`); empty: one picked from its name.
-    #[facet(default)]
-    pub colour: String,
-    /// Who it's by; empty when unknown.
-    #[facet(default)]
-    pub artist: String,
-    /// Its genre ("Worship", "Gospel", …); empty when unset.
-    #[facet(default)]
-    pub genre: String,
-}
-
-/// One setlist and its songs as the set plays them.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct SetlistEntry {
-    pub name: String,
-    /// The rig is playing from this set.
-    pub active: bool,
-    /// Entries with the set's key/tempo already resolved.
-    pub songs: Vec<SongSlot>,
-    /// The day it is played (`YYYY-MM-DD`); empty when it has none.
-    #[facet(default)]
-    pub date: String,
-    /// The recurring event it is for ("HSM"); empty for a one-off.
-    #[facet(default)]
-    pub event: String,
-    /// A title of its own ("Worship Night"); empty: named by event and day.
-    #[facet(default)]
-    pub title: String,
-    /// The profile every song plays on unless it has its own; empty keeps
-    /// whatever is loaded.
-    #[facet(default)]
-    pub profile: String,
-}
-
-/// One drive block preset (a pedal) and its captures.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct DriveEntry {
-    pub name: String,
-    pub options: Vec<String>,
-    /// The active profile's drive slots holding it (`Drive 1`, …).
-    pub slots: Vec<String>,
-}
-
-/// A profile patch the song that is up has changed.
-#[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
-pub struct SongChange {
-    pub patch: String,
-    /// How many settings it changes.
-    pub count: u32,
-}
-
 /// How a stack switch is tuned (see `Rig::tune_switch`).
 #[derive(Clone, PartialEq, Eq, Debug, Default, Facet)]
 pub struct SwitchTuning {
@@ -1141,66 +766,6 @@ pub struct SwitchTuning {
     /// For the part that is up (else the song — or, with no song, the
     /// profile).
     pub part: bool,
-}
-
-/// One section of the current song, and the patch selecting it recalls.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
-pub struct PerfPart {
-    pub name: String,
-    /// The patch this section switches to. Empty means it stays on whatever
-    /// is up — which, with [`overrides`](Self::overrides), is the common
-    /// case: a chorus is usually the verse's sound with one thing changed.
-    pub patch: String,
-    /// It plays this whole stack (its first patch, then the switch steps
-    /// it) — empty when it plays a patch.
-    #[facet(default)]
-    pub stack: String,
-    /// It plays this preset's variation (`Preset · Variation`) — empty when
-    /// it plays a patch.
-    #[facet(default)]
-    pub preset: String,
-    /// What this section changes on top of that patch.
-    #[facet(default)]
-    pub overrides: Vec<PartOverride>,
-    /// The profile this part is played on, when it is not the song's.
-    #[facet(default)]
-    pub profile: String,
-    /// The section it belongs to (consecutive parts with one section name
-    /// make one section); a part nobody grouped is its own.
-    #[facet(default)]
-    pub section: String,
-    /// How many switches the part tunes on top of the song's.
-    #[facet(default)]
-    pub switch_count: u32,
-    /// It plays the profile's own switches (the song's tuning steps aside).
-    #[facet(default)]
-    pub profile_switches: bool,
-    /// The part it repeats (plays and edits that part's sound); empty for
-    /// its own.
-    #[facet(default)]
-    pub repeat_of: String,
-    /// The section's own picks over its patch: module presets and block
-    /// presets it plays (their overrides are in `overrides`).
-    #[facet(default)]
-    pub picks: Vec<PartPick>,
-}
-
-/// One parameter a section changes.
-///
-/// The section's real content. Recalling a whole patch forces a separate
-/// patch for every variation — a Verb-heavy chorus of an otherwise identical
-/// sound becomes a second patch to build, level and maintain. This says the
-/// one thing that is different.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
-#[repr(C)]
-pub struct PartOverride {
-    /// Block name, as it appears in the chain.
-    pub block: String,
-    /// Parameter name; empty when `op` is `bypass`.
-    pub param: String,
-    /// `set` or `bypass`. For `bypass`, `value >= 0.5` means bypassed.
-    pub op: String,
-    pub value: f32,
 }
 
 /// One controllable parameter of a live block.
@@ -1456,36 +1021,6 @@ pub struct MacroSave {
     /// A new block preset / module snapshot to create for the blocks that
     /// have none in that scope. Empty = save only where there is one.
     pub name: String,
-}
-
-/// Whether a pick took — what the browser shows on the row picked: Loaded,
-/// or Didn't load and why. A refusal the rig used to only log (no such
-/// preset, no patch playing, a block that has gone) comes back as `message`.
-#[derive(Clone, PartialEq, Debug, Default, Facet)]
-pub struct Applied {
-    pub ok: bool,
-    /// Why not, when it did not take. Empty when it did.
-    pub message: String,
-}
-
-impl Applied {
-    /// It took.
-    #[must_use]
-    pub fn done() -> Self {
-        Self {
-            ok: true,
-            message: String::new(),
-        }
-    }
-
-    /// It did not, and why.
-    #[must_use]
-    pub fn refused(message: impl Into<String>) -> Self {
-        Self {
-            ok: false,
-            message: message.into(),
-        }
-    }
 }
 
 /// What a macro call did — shown in the panel's header.
@@ -2309,3 +1844,6 @@ mod tests {
 
 /// The switches' MIDI learn state (shared by every rig).
 pub use signal_rigs_proto::SwitchLearn;
+// The performance model every rig shares — presets and variations,
+// modules, profiles, songs and setlists.
+pub use signal_rigs_proto::perform::*;

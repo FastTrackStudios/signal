@@ -1,0 +1,19 @@
+[package]
+name = "signal-rig-shell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# The iPad rig frame every rig shares — guitar, bass, drums, and the rigs to
+# come: the top bar (the sidebar's toggle and tabs over it, the status
+# lights, the meters), the sidebar, the bottom dock, the foot bar and its
+# buttons, the tokens they are drawn with, and the way back to the app's
+# instruments. One copy, so the rigs read as one instrument. Wasm-clean:
+# Dioxus only, no rig contract.
+
+[lints]
+workspace = true
+
+[dependencies]
+dioxus.workspace = true

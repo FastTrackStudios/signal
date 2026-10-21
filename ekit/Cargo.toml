@@ -22,6 +22,10 @@ dioxus = { workspace = true, optional = true }
 facet = { workspace = true }
 midi = { workspace = true, features = ["midir", "vox"] }
 signal-rigs-proto = { workspace = true }
+# Its own saved kits, profiles, songs and setlists (apart from the other
+# rigs'), and the shared performance surface answered from them.
+signal-rig-perform-store = { workspace = true }
+signal-rig-host = { workspace = true }
 sampler = { workspace = true }
 signal-space = { workspace = true, features = ["engine"] }
 tracing = { workspace = true }
@@ -29,6 +33,9 @@ vox = { workspace = true, optional = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
+# perform_rpc: the shared performance surface served in-process.
+architect = { workspace = true, features = ["vox", "local"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 midi = { workspace = true, features = ["midir", "pipewire", "vox"] }

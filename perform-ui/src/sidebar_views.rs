@@ -8,25 +8,21 @@
 //!            order; the stack playing opens into its patches — tap one to
 //!            play it, ⋯ to rename, move or remove it, add one at the foot.
 
-use crate::proto::rig::RigClient;
-use crate::proto::{CompositionModel, PerformanceModel};
 use dioxus::prelude::*;
-use signal_widgets::PopupHost;
+use signal_rigs_proto::perform::{CompositionModel, PerformState};
 use signal_widgets::drag_bus::DragBus;
+use signal_widgets::PopupHost;
 
 use super::colors::{name_colour, tape_mark};
 use super::marks::ProfileIcon;
-use super::menu::{Item, MoreButton, Picked, PressMenu, open_naming_under};
-use super::setlist::{
-    Plus, Rows, StackRow, StackView, begin_row_drag, call, is_live, keep_row, part_patch,
-    profile_stacks, stack_for, use_library,
-};
+use super::menu::{open_naming_under, Item, MoreButton, Picked, PressMenu};
+use super::setlist::{begin_row_drag, call, is_live, keep_row, part_patch, profile_stacks, stack_for, use_library, Plus, Rows, StackRow, StackView};
 use super::tokens::*;
-use crate::ui::state::RigViewState;
+use crate::PerfState;
 
 /// The compositions, refetched whenever the rig's state moves on.
-pub(super) fn use_compositions(state: RigViewState) -> Signal<CompositionModel> {
-    let rig = use_hook(try_consume_context::<RigClient>);
+pub fn use_compositions(state: PerfState) -> Signal<CompositionModel> {
+    let rig = use_hook(crate::perform_client);
     let mut comp = use_signal(CompositionModel::default);
     use_effect(move || {
         let _revision = state.perf.read().revision;
@@ -42,13 +38,7 @@ pub(super) fn use_compositions(state: RigViewState) -> Signal<CompositionModel> 
 }
 
 #[component]
-fn Header(
-    title: String,
-    sub: String,
-    icon: Option<String>,
-    #[props(default)] actions: Vec<Item>,
-    #[props(default)] on_pick: Option<EventHandler<Picked>>,
-) -> Element {
+fn Header(title: String, sub: String, icon: Option<String>, #[props(default)] actions: Vec<Item>, #[props(default)] on_pick: Option<EventHandler<Picked>>) -> Element {
     rsx! {
         header { style: "flex-shrink: 0; height: {HEADER_H}px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid {RULE}; box-sizing: border-box;",
             if let Some(p) = icon {
@@ -84,8 +74,7 @@ fn ScrollWindow(max_h: f64, #[props(default)] watch: String, children: Element) 
             // Until it has been laid out (it mounts before layout runs).
             spawn(async move {
                 for _ in 0..10 {
-                    if let (Ok(size), Ok(rect)) =
-                        (e.get_scroll_size().await, e.get_client_rect().await)
+                    if let (Ok(size), Ok(rect)) = (e.get_scroll_size().await, e.get_client_rect().await)
                         && rect.height() > 0.0
                     {
                         let next = (m.peek().0, size.height, rect.height());
@@ -106,16 +95,8 @@ fn ScrollWindow(max_h: f64, #[props(default)] watch: String, children: Element) 
     let (top, overflow, view) = m();
     let total = view + overflow;
     let more = view > 0.0 && overflow > 0.5;
-    let thumb = if more {
-        (view / total * view).max(24.0)
-    } else {
-        0.0
-    };
-    let at = if more {
-        (top / overflow).clamp(0.0, 1.0) * (view - thumb)
-    } else {
-        0.0
-    };
+    let thumb = if more { (view / total * view).max(24.0) } else { 0.0 };
+    let at = if more { (top / overflow).clamp(0.0, 1.0) * (view - thumb) } else { 0.0 };
     rsx! {
         div { style: "position: relative;",
             div {
@@ -144,14 +125,14 @@ fn ScrollWindow(max_h: f64, #[props(default)] watch: String, children: Element) 
 /// keyboard up.
 #[component]
 fn SearchFoot(label: &'static str, kind: &'static str, at: String, variation: String) -> Element {
-    let focus = try_use_context::<super::routing::BrowserFocus>();
+    let focus = try_use_context::<crate::BrowserFocus>();
     let picker = try_use_context::<super::setlist::PickPart>();
     rsx! {
         button {
             style: "display: flex; align-items: center; gap: 8px; height: {HIT}px; padding: 0 12px; border: none; border-radius: {R}; background: {FILL}; color: {INK_3}; font-size: 15px; font-family: {FONT}; text-align: left; cursor: pointer;",
             onclick: move |_| {
-                if let Some(super::routing::BrowserFocus(mut f)) = focus {
-                    f.set(Some(super::routing::Focus { kind: kind.into(), preset: at.clone(), variation: variation.clone(), search: true }));
+                if let Some(crate::BrowserFocus(mut f)) = focus {
+                    f.set(Some(crate::Focus { kind: kind.into(), preset: at.clone(), variation: variation.clone(), search: true }));
                 }
                 if let Some(pick) = picker.as_ref() {
                     pick.open.call(());
@@ -175,78 +156,50 @@ const ROLES: [&str; 5] = ["Clean", "Crunch", "Drive", "Lead", "Ambient"];
 /// The role a variation's name says, if any.
 fn role_of(variation: &str) -> Option<&'static str> {
     let v = variation.to_lowercase();
-    ROLES
-        .iter()
-        .find(|r| v.contains(&r.to_lowercase()))
-        .copied()
+    ROLES.iter().find(|r| v.contains(&r.to_lowercase())).copied()
 }
 
 /// The presets: the loaded one held at the top, its variations in a window
 /// four rows tall; the rest scrolling under it; at the foot the kinds of
 /// sound, and a search that opens the whole browser on the presets.
 #[component]
-pub fn PresetView(state: RigViewState) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+pub fn PresetView(state: PerfState) -> Element {
+    let rig = use_hook(crate::perform_client);
     let comp = use_compositions(state);
     let c = comp.read().clone();
     let lib = use_library(state);
     let l = lib.read().clone();
-    let perf: PerformanceModel = state.perf.read().clone();
+    let perf: PerformState = state.perf.read().clone();
     let mut open = use_signal(|| None::<String>);
     let mut role = use_signal(|| None::<&'static str>);
     let playing = c.active_preset.clone();
     let loaded = c.presets.iter().find(|p| p.name == playing).cloned();
-    let fits = |p: &crate::proto::PresetEntry| {
-        role().is_none_or(|r| p.snapshots.iter().any(|s| role_of(&s.name) == Some(r)))
-    };
-    let rest: Vec<crate::proto::PresetEntry> = c
-        .presets
-        .iter()
-        .filter(|p| p.name != playing && fits(p))
-        .cloned()
-        .collect();
+    let fits = |p: &signal_rigs_proto::perform::PresetEntry| role().is_none_or(|r| p.snapshots.iter().any(|s| role_of(&s.name) == Some(r)));
+    let rest: Vec<signal_rigs_proto::perform::PresetEntry> = c.presets.iter().filter(|p| p.name != playing && fits(p)).cloned().collect();
     let (playing_for_browser, snapshot_for_browser) = (playing.clone(), c.active_snapshot.clone());
+    // The kinds of sound this rig's presets have — none for a rig whose
+    // variations are not sounds (a drum kit's mixes): then no chips.
+    let roles: Vec<&'static str> = ROLES.into_iter().filter(|r| c.presets.iter().any(|p| p.snapshots.iter().any(|s| role_of(&s.name) == Some(*r)))).collect();
     // The loaded preset's menu: a new one (a copy of it), its name, gone.
     let preset_names: Vec<String> = c.presets.iter().map(|p| p.name.clone()).collect();
     let preset_actions = vec![
         Item::head(playing.clone()),
-        Item::name(
-            "new",
-            "New preset…",
-            format!("{playing} 2"),
-            "Add",
-            preset_names.clone(),
-        ),
-        Item::name(
-            "rename",
-            "Rename…",
-            playing.clone(),
-            "Rename",
-            preset_names.clone(),
-        ),
+        Item::name("new", "New preset…", format!("{playing} 2"), "Add", preset_names.clone()),
+        Item::name("rename", "Rename…", playing.clone(), "Rename", preset_names.clone()),
         Item::Sep,
-        Item::delete("delete", "Delete preset")
-            .unless((preset_names.len() <= 1).then(|| "The only preset".to_string())),
+        Item::delete("delete", "Delete preset").unless((preset_names.len() <= 1).then(|| "The only preset".to_string())),
     ];
-    let next_preset = c.presets.iter().find(|p| p.name != playing).map(|p| {
-        (
-            p.name.clone(),
-            p.snapshots
-                .first()
-                .map(|s| s.name.clone())
-                .unwrap_or_default(),
-        )
-    });
+    let next_preset = c.presets.iter().find(|p| p.name != playing).map(|p| (p.name.clone(), p.snapshots.first().map(|s| s.name.clone()).unwrap_or_default()));
     let on_preset = {
         let (rig, from, variation) = (rig.clone(), playing.clone(), c.active_snapshot.clone());
         EventHandler::new(move |p: Picked| {
             let (from, name, variation) = (from.clone(), p.text.clone(), variation.clone());
             match p.id.as_str() {
                 "new" => call!(rig, |r| async move {
-                    let _ = r.duplicate_rig_preset(from, name.clone()).await;
+                    let _ = r.duplicate_preset(from, name.clone()).await;
                     r.choose_preset(name, variation).await
                 }),
-                "rename" => call!(rig, |r| r.rename_rig_preset(from, name)),
+                "rename" => call!(rig, |r| r.rename_preset(from, name)),
                 // It is the one loaded: load another, then let it go.
                 "delete" => {
                     let next = next_preset.clone();
@@ -254,21 +207,14 @@ pub fn PresetView(state: RigViewState) -> Element {
                         if let Some((p, v)) = next {
                             let _ = r.choose_preset(p, v).await;
                         }
-                        r.delete_rig_preset(from).await
+                        r.delete_preset(from).await
                     });
                 }
                 _ => {}
             }
         })
     };
-    let chip = |on: bool| {
-        format!(
-            "height: {HIT}px; padding: 0 12px; border-radius: 999px; border: 1px solid {}; background: {}; color: {}; font-size: 13px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; gap: 6px; cursor: pointer; flex-shrink: 0;",
-            pick(on, INK_2, RULE_STRONG),
-            pick(on, "rgba(255,255,255,0.08)", "transparent"),
-            pick(on, INK, INK_2)
-        )
-    };
+    let chip = |on: bool| format!("height: {HIT}px; padding: 0 12px; border-radius: 999px; border: 1px solid {}; background: {}; color: {}; font-size: 13px; font-weight: 650; font-family: {FONT}; display: flex; align-items: center; gap: 6px; cursor: pointer; flex-shrink: 0;", pick(on, INK_2, RULE_STRONG), pick(on, "rgba(255,255,255,0.08)", "transparent"), pick(on, INK, INK_2));
     rsx! {
         section { style: "height: 100%; display: flex; flex-direction: column; min-height: 0; background: {SHEET}; font-family: {FONT}; color: {INK};",
             // The one loaded, held: big, its variations four rows tall.
@@ -312,11 +258,11 @@ pub fn PresetView(state: RigViewState) -> Element {
                                 match x.id.as_str() {
                                     "load" => call!(rig, |r| r.choose_preset(from, first)),
                                     "new" => call!(rig, |r| async move {
-                                        let _ = r.duplicate_rig_preset(from, name.clone()).await;
+                                        let _ = r.duplicate_preset(from, name.clone()).await;
                                         r.choose_preset(name, first).await
                                     }),
-                                    "rename" => call!(rig, |r| r.rename_rig_preset(from, name)),
-                                    "delete" => call!(rig, |r| r.delete_rig_preset(from)),
+                                    "rename" => call!(rig, |r| r.rename_preset(from, name)),
+                                    "delete" => call!(rig, |r| r.delete_preset(from)),
                                     _ => {}
                                 }
                             })
@@ -353,14 +299,16 @@ pub fn PresetView(state: RigViewState) -> Element {
             // browser, on the presets.
             div { style: "flex-shrink: 0; display: flex; flex-direction: column-reverse; gap: 10px; padding: 12px 14px; border-top: 1px solid {RULE};",
                 SearchFoot { label: "Search presets", kind: "presets", at: playing_for_browser.clone(), variation: snapshot_for_browser.clone() }
+                if !roles.is_empty() {
                 div { style: "display: flex; gap: 6px; overflow-x: auto;",
                     button { style: "{chip(role().is_none())}", onclick: move |_| role.set(None), "All" }
-                    for r in ROLES {
+                    for r in roles {
                         button { key: "{r}", style: "{chip(role() == Some(r))}", onclick: move |_| role.set(if role() == Some(r) { None } else { Some(r) }),
                             span { style: "width: 8px; height: 8px; border-radius: 2px; background: {tape_mark(r)};" }
                             "{r}"
                         }
                     }
+                }
                 }
             }
         }
@@ -369,7 +317,7 @@ pub fn PresetView(state: RigViewState) -> Element {
 
 #[component]
 fn Variations(preset: String, variations: Vec<String>, playing: (String, String)) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+    let rig = use_hook(crate::perform_client);
     let host = PopupHost::try_use();
     let n = variations.len();
     let mut add_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
@@ -406,7 +354,7 @@ fn Variations(preset: String, variations: Vec<String>, playing: (String, String)
                         let (rig, preset) = (rig.clone(), preset.clone());
                         open_naming_under(host, add_el.peek().clone(), Item::name("add", format!("New variation of {preset}…"), format!("Variation {}", n + 1), "Add", variations.clone()), EventHandler::new(move |p: Picked| {
                             let (preset, name) = (preset.clone(), p.text.clone());
-                            call!(rig, |r| r.save_core_snapshot(preset, name));
+                            call!(rig, |r| r.save_variation(preset, name));
                         }));
                     }
                 },
@@ -423,11 +371,11 @@ fn Variations(preset: String, variations: Vec<String>, playing: (String, String)
 /// under a section, with grips to drag them into order; the stack playing
 /// opens into all its patches.
 #[component]
-pub fn ProfileView(state: RigViewState) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+pub fn ProfileView(state: PerfState) -> Element {
+    let rig = use_hook(crate::perform_client);
     let bus = DragBus::try_use();
     let lib = use_library(state);
-    let perf: PerformanceModel = state.perf.read().clone();
+    let perf: PerformState = state.perf.read().clone();
     let l = lib.read().clone();
     let profile = perf.profile_name.clone();
     let views = profile_stacks(&perf, &l);
@@ -443,42 +391,19 @@ pub fn ProfileView(state: RigViewState) -> Element {
     let names: Vec<String> = l.profiles.iter().map(|p| p.name.clone()).collect();
     let profile_actions = vec![
         Item::head(profile.clone()),
-        Item::name(
-            "new",
-            "New profile…",
-            format!("{profile} 2"),
-            "Add",
-            names.clone(),
-        ),
-        Item::name(
-            "rename",
-            "Rename…",
-            profile.clone(),
-            "Rename",
-            names.clone(),
-        ),
+        Item::name("new", "New profile…", format!("{profile} 2"), "Add", names.clone()),
+        Item::name("rename", "Rename…", profile.clone(), "Rename", names.clone()),
         Item::run("all", "All profiles…").detail(format!("{}", names.len())),
         Item::Sep,
-        Item::delete("delete", "Delete profile")
-            .unless((names.len() <= 1).then(|| "The only profile".to_string())),
+        Item::delete("delete", "Delete profile").unless((names.len() <= 1).then(|| "The only profile".to_string())),
     ];
-    let focus = try_use_context::<super::routing::BrowserFocus>();
+    let focus = try_use_context::<crate::BrowserFocus>();
     let picker = try_use_context::<super::setlist::PickPart>();
     let others: Vec<String> = names.iter().filter(|n| **n != profile).cloned().collect();
     let mut drawer = use_signal(|| false);
     let mut query = use_signal(String::new);
     let q = query().trim().to_lowercase();
-    let rest: Vec<crate::proto::ProfileEntry> = l
-        .profiles
-        .iter()
-        .filter(|p| {
-            p.name != profile
-                && (q.is_empty()
-                    || p.name.to_lowercase().contains(&q)
-                    || p.stacks.iter().any(|st| st.to_lowercase().contains(&q)))
-        })
-        .cloned()
-        .collect();
+    let rest: Vec<signal_rigs_proto::perform::ProfileEntry> = l.profiles.iter().filter(|p| p.name != profile && (q.is_empty() || p.name.to_lowercase().contains(&q) || p.stacks.iter().any(|st| st.to_lowercase().contains(&q)))).cloned().collect();
     let on_profile = {
         let (rig, profile) = (rig.clone(), profile.clone());
         Some(EventHandler::new(move |p: Picked| {
@@ -498,13 +423,8 @@ pub fn ProfileView(state: RigViewState) -> Element {
                     });
                 }
                 "all" => {
-                    if let Some(super::routing::BrowserFocus(mut f)) = focus {
-                        f.set(Some(super::routing::Focus {
-                            kind: "profiles".into(),
-                            preset: from,
-                            variation: String::new(),
-                            search: false,
-                        }));
+                    if let Some(crate::BrowserFocus(mut f)) = focus {
+                        f.set(Some(crate::Focus { kind: "profiles".into(), preset: from, variation: String::new(), search: false }));
                     }
                     if let Some(pick) = picker.as_ref() {
                         pick.open.call(());
@@ -693,7 +613,7 @@ pub fn ProfileView(state: RigViewState) -> Element {
 /// long-press) to rename, move or remove it; "Add a patch" at the foot.
 #[component]
 fn StackPatches(view: StackView) -> Element {
-    let rig = use_hook(try_consume_context::<RigClient>);
+    let rig = use_hook(crate::perform_client);
     let host = PopupHost::try_use();
     let tape = tape_mark(&view.name);
     let stack = view.name.clone();

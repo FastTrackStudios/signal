@@ -12,7 +12,7 @@ workspace = true
 [features]
 default = ["vox"]
 pipewire = []
-ui = ["dep:anyrender", "dep:base64", "dep:comp", "dep:delay", "dep:dioxus", "dep:drums", "dep:eq", "dep:fts-audio-ui", "dep:kurbo", "dep:lumen-blocks", "dep:modulation", "dep:serde_json", "dep:signal-tone3000", "dep:signal-grid", "dep:signal-grid-ui", "signal-tone3000?/ui", "dep:signal-widgets", "architect/atom", "architect/platform", "reverb/ui", "reverb/viz", "uuid/v4"]
+ui = ["dep:anyrender", "dep:base64", "dep:comp", "dep:delay", "dep:dioxus", "dep:drums", "dep:eq", "dep:fts-audio-ui", "dep:kurbo", "dep:lumen-blocks", "dep:modulation", "dep:serde_json", "dep:signal-tone3000", "dep:signal-grid", "dep:signal-grid-ui", "dep:signal-rig-shell", "dep:signal-rig-perform-ui", "signal-tone3000?/ui", "dep:signal-widgets", "architect/atom", "architect/platform", "reverb/ui", "reverb/viz", "uuid/v4"]
 vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
@@ -49,6 +49,10 @@ signal-nam = { workspace = true }
 signal-proto = { workspace = true }
 signal-rig-host = { workspace = true }
 signal-rigs-proto = { workspace = true }
+# The iPad rig frame every rig shares (top bar, sidebar, dock, foot bar).
+signal-rig-shell = { workspace = true, optional = true }
+# The performance screens every rig shares (Preset, Profile, Setlist).
+signal-rig-perform-ui = { workspace = true, optional = true }
 sampler = { workspace = true }
 signal-widgets = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt"] }

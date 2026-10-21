@@ -1,0 +1,25 @@
+[package]
+name = "signal-rig-perform-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# The performance screens every rig shares — Preset, Profile and Setlist in
+# the sidebar, the song and set panels, the menus they open — on the shared
+# performance surface (`signal-rigs-proto::perform`), in the rig frame
+# (`signal-rig-shell`). A rig mounts its `RigPerform` under its scope and
+# these screens play it; nothing here knows which instrument it is.
+# Wasm-clean.
+
+[lints]
+workspace = true
+
+[dependencies]
+dioxus.workspace = true
+signal-rig-shell.workspace = true
+signal-rigs-proto.workspace = true
+# PopupHost (menus) and the drag bus (row reordering).
+signal-widgets.workspace = true
+chrono.workspace = true
+architect = { workspace = true, features = ["atom", "vox", "platform"] }

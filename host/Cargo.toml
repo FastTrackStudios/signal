@@ -40,6 +40,8 @@ facet-styx.workspace = true
 midi = { workspace = true, features = ["midir", "native", "pipewire"] }
 # Drain-style hub subscriptions (mirrors MidiStream's bounded channel).
 crossbeam-channel.workspace = true
+# The runtime a rig's own threads enter (src/thread.rs).
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 daw = { workspace = true, features = ["standalone-audio"] }
 audio = { workspace = true, features = ["io"] }
 

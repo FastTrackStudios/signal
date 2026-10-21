@@ -20,11 +20,63 @@ use signal_rig_host::mixer::db_to_linear;
 
 use crate::GM_DRUM_CHANNEL;
 
+#[path = "perform.rs"]
+mod perform;
+
 /// The single instrument-prefix the kit is loaded under.
 const KIT: &str = "kit";
 /// Default library root if `$SIGNAL_DRUM_LIBRARY` is unset.
 const DEFAULT_LIBRARY: &str =
     "/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2";
+
+/// A kit library: its folder, the pieces any kit slot can swap to, and the
+/// mixes a kit can take.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Library {
+    pub(crate) dir: PathBuf,
+    pub(crate) pieces: Vec<signal_drums_proto::LibraryPiece>,
+    pub(crate) mixes: Vec<(String, PathBuf)>,
+}
+
+impl Library {
+    fn scan(dir: PathBuf) -> Self {
+        let pieces = crate::library::scan_engines(&crate::library::engines_dir(&dir));
+        let mixes = scan_mixes(&dir.join("Mixes"));
+        Self { dir, pieces, mixes }
+    }
+}
+
+/// Whether two engine paths are the one engine — a kit's (`…/Presets/../
+/// Engines/x.signalengine`) and the library's spell it differently.
+fn same_engine(a: &str, b: &str) -> bool {
+    let canon = |p: &str| std::fs::canonicalize(p).unwrap_or_else(|_| PathBuf::from(p));
+    a == b || canon(a) == canon(b)
+}
+
+/// Where the kit library is: `$SIGNAL_DRUM_LIBRARY`; else the studio's
+/// library when this machine has it; else the first drum library this
+/// device downloaded (`<config>/signal/libraries/Drum Kits/…`).
+fn library_root() -> PathBuf {
+    if let Ok(dir) = std::env::var("SIGNAL_DRUM_LIBRARY") {
+        return PathBuf::from(dir);
+    }
+    let studio = PathBuf::from(DEFAULT_LIBRARY);
+    if studio.is_dir() {
+        return studio;
+    }
+    // The libraries this device downloaded (`<config>/signal/libraries`,
+    // laid out as the studio's): the first drum library there.
+    let downloaded = signal_rig_host::store::libraries_dir().join("Drum Kits");
+    let mut found: Vec<PathBuf> = std::fs::read_dir(&downloaded)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.join("Presets").is_dir())
+        .collect();
+    found.sort();
+    found.into_iter().next().unwrap_or_else(|| signal_rig_host::store::signal_config_dir().join("drums").join("library"))
+}
 
 const fn to_drum_map(m: InputMap) -> Option<DrumMap> {
     match m {
@@ -171,7 +223,9 @@ struct Inner {
     rig: Mutex<Option<SamplerRig>>,
     state: Mutex<State>,
     events: PubSub<DrumEvent>,
-    library_dir: PathBuf,
+    /// The kit library: its folder, its swappable pieces, its mixes —
+    /// one value, swapped whole by [`DrumRigBackend::set_library`].
+    lib: std::sync::RwLock<Arc<Library>>,
     /// Rolling MIDI monitor (midicore's shared type) — the live MIDI callback
     /// records raw events; the UI renders them via `midicore-ui`.
     monitor: MidiMonitor,
@@ -181,13 +235,10 @@ struct Inner {
     /// One-shot guard so the meter pump is spawned exactly once, however the
     /// rig first becomes active (start / `load_kit` / open).
     pump_started: std::sync::atomic::AtomicBool,
-    /// The sample-library catalog (every swappable `.signalengine`, grouped by
-    /// kind on the client). Scanned once at construction.
-    library: Vec<crate::proto::LibraryPiece>,
-    /// Available MM2 (Cradle) mix presets — `(name, path)` of `.preset` files
-    /// under the library's `Mixes/` dir — whose per-strip level + FX we can
-    /// import onto the loaded kit.
-    mixes: Vec<(String, PathBuf)>,
+    /// The shared performance surface (`perform.rs`): its hub, the mode the
+    /// screens are in, and the variation (mix) playing on the loaded kit.
+    perform: std::sync::OnceLock<signal_rig_perform_store::PerformStore>,
+    variation: Mutex<String>,
 }
 
 /// The drum-rig backend handle. Cheap to clone (all state is shared); every
@@ -208,10 +259,8 @@ impl DrumRigBackend {
     /// Build the backend and scan the kit library. Does not open audio — call
     /// [`DrumRig::start`] (which spawns the open off-thread) or `load_kit`.
     pub fn new() -> Self {
-        let library_dir = std::env::var("SIGNAL_DRUM_LIBRARY")
-            .map_or_else(|_| PathBuf::from(DEFAULT_LIBRARY), PathBuf::from);
-        let library = crate::library::scan_engines(&crate::library::engines_dir(&library_dir));
-        let mixes = scan_mixes(&library_dir.join("Mixes"));
+        let lib = Library::scan(library_root());
+        let (library, mixes) = (&lib.pieces, &lib.mixes);
         tracing::info!(
             pieces = library.len(),
             mixes = mixes.len(),
@@ -227,12 +276,12 @@ impl DrumRigBackend {
                     ..State::default()
                 }),
                 events: architect::rig::events_hub(),
-                library_dir,
+                lib: std::sync::RwLock::new(Arc::new(lib.clone())),
                 monitor: MidiMonitor::new(),
                 light: Mutex::new(None),
                 pump_started: std::sync::atomic::AtomicBool::new(false),
-                library,
-                mixes,
+                perform: std::sync::OnceLock::new(),
+                variation: Mutex::new(String::new()),
             }),
         };
         backend.rescan_library();
@@ -240,19 +289,38 @@ impl DrumRigBackend {
         backend
     }
 
+    /// The kit library now.
+    pub(crate) fn lib(&self) -> Arc<Library> {
+        self.inner.lib.read().map(|l| l.clone()).unwrap_or_default()
+    }
+
+    /// Play from the kit library in `dir` — one just downloaded, one picked:
+    /// its kits, pieces and mixes replace the old library's, and every
+    /// remote hears. The kit playing keeps playing until another is loaded.
+    pub fn set_library(&self, dir: PathBuf) {
+        let lib = Library::scan(dir);
+        tracing::info!(dir = %lib.dir.display(), pieces = lib.pieces.len(), mixes = lib.mixes.len(), "drum rig: library set");
+        if let Ok(mut l) = self.inner.lib.write() {
+            *l = Arc::new(lib);
+        }
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.loaded = None;
+        }
+        self.rescan_library();
+        self.publish_all();
+    }
+
     /// Start the meter pump + open audio in the background.
     pub fn start_background(&self) {
         self.spawn_meter_pump("drum-meter-pump");
         let b = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("drum-rig-open".into())
-            .spawn(move || b.open_blocking());
+        let _ = signal_rig_host::thread::spawn("drum-rig-open", move || b.open_blocking());
     }
 
     // ── library ──
     fn rescan_library(&self) {
         let mut kits = Vec::new();
-        collect_presets(&self.inner.library_dir, &mut kits);
+        collect_presets(&self.lib().dir, &mut kits);
         kits.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         let loaded = self.inner.state.lock().ok().and_then(|s| s.loaded);
         if let Some(li) = loaded {
@@ -778,6 +846,7 @@ impl DrumRigBackend {
         self.inner
             .events
             .publish(DrumEvent::Status(DrumRig::status(self)));
+        self.publish_perform();
     }
 
     /// Open the Light Guide (if a keyboard is attached) and paint the current
@@ -872,9 +941,7 @@ impl DrumRig for DrumRigBackend {
     fn start(&self) {
         self.spawn_meter_pump("drum-meter-pump");
         let b = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("drum-rig-open".into())
-            .spawn(move || b.open_blocking());
+        let _ = signal_rig_host::thread::spawn("drum-rig-open", move || b.open_blocking());
     }
 
     fn stop(&self) {
@@ -948,9 +1015,7 @@ impl DrumRig for DrumRigBackend {
 
     fn load_kit(&self, index: u32) {
         let b = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("drum-load-kit".into())
-            .spawn(move || b.do_load_kit(index as usize));
+        let _ = signal_rig_host::thread::spawn("drum-load-kit", move || b.do_load_kit(index as usize));
     }
 
     fn pieces(&self) -> Vec<PieceInfo> {
@@ -982,11 +1047,12 @@ impl DrumRig for DrumRigBackend {
             .lock()
             .map(|s| s.engines.clone())
             .unwrap_or_default();
+        let library = self.lib();
         engines
             .into_iter()
             .map(|(id, abs)| {
                 let abs_str = abs.display().to_string();
-                let lib = self.inner.library.iter().find(|p| p.path == abs_str);
+                let lib = library.pieces.iter().find(|p| same_engine(&p.path, &abs_str));
                 let current_name = lib.map_or_else(
                     || {
                         abs.file_stem()
@@ -1011,15 +1077,13 @@ impl DrumRig for DrumRigBackend {
             .collect()
     }
 
-    fn library(&self) -> Vec<crate::proto::LibraryPiece> {
-        self.inner.library.clone()
+    fn library(&self) -> Vec<signal_drums_proto::LibraryPiece> {
+        self.lib().pieces.clone()
     }
 
     fn swap_piece(&self, slot_id: String, engine_path: String) {
         let b = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("drum-swap".into())
-            .spawn(move || b.do_swap_piece(slot_id, engine_path));
+        let _ = signal_rig_host::thread::spawn("drum-swap", move || b.do_swap_piece(slot_id, engine_path));
     }
 
     fn similar_pieces(&self, slot_id: String) -> Vec<crate::proto::LibraryPiece> {
@@ -1037,10 +1101,10 @@ impl DrumRig for DrumRigBackend {
         let Some(current) = current else {
             return Vec::new();
         };
-        match crate::piece_space::similar_to(&self.inner.library_dir, &current, 12) {
+        match crate::piece_space::similar_to(&self.lib().dir, &current, 12) {
             Ok(hits) => hits
                 .into_iter()
-                .filter_map(|(path, _)| self.inner.library.iter().find(|p| p.path == path).cloned())
+                .filter_map(|(path, _)| self.lib().pieces.iter().find(|p| p.path == path).cloned())
                 .collect(),
             Err(e) => {
                 tracing::debug!("similar_pieces: {e}");
@@ -1051,8 +1115,8 @@ impl DrumRig for DrumRigBackend {
 
     fn build_piece_space(&self) {
         let b = self.clone();
-        let _ = std::thread::Builder::new().name("drum-piece-space".into()).spawn(move || {
-            match crate::piece_space::build(&b.inner.library_dir) {
+        let _ = signal_rig_host::thread::spawn("drum-piece-space", move || {
+            match crate::piece_space::build(&b.lib().dir) {
                 Ok((dir, n, skipped)) => {
                     tracing::info!(dir = %dir.display(), analyzed = n, skipped, "piece space built");
                 }
@@ -1063,12 +1127,12 @@ impl DrumRig for DrumRigBackend {
     }
 
     fn mm2_mixes(&self) -> Vec<String> {
-        self.inner.mixes.iter().map(|(n, _)| n.clone()).collect()
+        self.lib().mixes.iter().map(|(n, _)| n.clone()).collect()
     }
 
     fn import_mm2_mix(&self, name: String) {
         let mix_path = self
-            .inner
+            .lib()
             .mixes
             .iter()
             .find(|(n, _)| *n == name)
@@ -1100,9 +1164,7 @@ impl DrumRig for DrumRigBackend {
             return;
         };
         let b = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("drum-mm2-import".into())
-            .spawn(move || b.do_import_mix(kit_index, mix_path));
+        let _ = signal_rig_host::thread::spawn("drum-mm2-import", move || b.do_import_mix(kit_index, mix_path));
     }
 
     fn trigger(&self, note: u32, velocity: u32) {

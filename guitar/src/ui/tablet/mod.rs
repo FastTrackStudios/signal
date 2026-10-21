@@ -14,33 +14,31 @@
 //! Build is the browser (`browser`); Edit is `edit`; Setup is `setup`.
 
 mod browser;
-mod captures;
-mod colors;
+pub(crate) mod splash;
+mod tones;
 pub(crate) mod drums;
+mod captures;
 mod edit;
-mod fx_row;
 mod macros;
-mod marks;
-mod menu;
-mod panels;
 mod player;
 mod routing;
 mod routing_canvas;
-mod setlist;
+mod fx_row;
 mod setup;
-mod sidebar_views;
-pub(crate) mod splash;
 mod switches;
 mod tokens;
-mod tones;
 mod topbar;
 
-use crate::proto::PerformanceModel;
+// The performance screens every rig shares.
+use signal_rig_perform_ui::{colors, marks, menu, panels, setlist, sidebar_views};
+pub use signal_rig_perform_ui::BuildPick;
+
 use dioxus::prelude::*;
+use signal_guitar_proto::PerformanceModel;
 
 use self::tokens::*;
-use self::topbar::Rule;
-use crate::ui::state::RigViewState;
+use signal_rig_shell::{Dock, FootBar, FootButton, Frame, Group, Main, Middle, Rule, SetupButton, Sidebar, ink};
+use crate::state::RigViewState;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum View {
@@ -48,15 +46,6 @@ enum View {
     Build,
     Edit,
     Setup,
-}
-
-/// The part picked in Build (Setlist mode): what the browser builds into.
-/// Shared by the setlist (whose section rows pick it) and the browser.
-#[derive(Clone, Copy, PartialEq)]
-pub struct BuildPick {
-    pub part: Signal<Option<usize>>,
-    /// Whether a section row's tap picks (Build) or plays (Perform).
-    pub building: Signal<bool>,
 }
 
 #[component]
@@ -75,10 +64,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     // Edit's left pane: the browser, or the sidebar a tap away.
     let mut left_browser = use_signal(|| true);
     let setup_tab = use_signal(|| setup::SetupTab::Guitar);
-    let pick = use_context_provider(|| BuildPick {
-        part: Signal::new(None),
-        building: Signal::new(false),
-    });
+    let pick = use_context_provider(|| BuildPick { part: Signal::new(None), building: Signal::new(false) });
     // Edit's routing selection, and where it points the browser.
     let routing_sel = use_context_provider(|| routing::RoutingSel(Signal::new(None))).0;
     use_effect(move || {
@@ -88,8 +74,11 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     });
     let browser_focus = use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
     // The faces' presets (their names, the FX row's bar).
-    let face_comp = sidebar_views::use_compositions(state);
-    use_context_provider(|| crate::ui::face_chrome::FacePresets(face_comp));
+    // The performance state the shared screens draw from — the rig's
+    // own surface, under its scope.
+    let perf = signal_rig_perform_ui::use_perform();
+    let face_comp = sidebar_views::use_compositions(perf);
+    use_context_provider(|| crate::face_chrome::FacePresets(face_comp));
     // The sidebar turned into a browser on one block's (or module's)
     // presets — the FX row's bar opens it.
     let mut sidebar_browser = use_signal(|| false);
@@ -97,11 +86,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut tone_slot = use_signal(|| None::<String>);
     // 0 its presets, 1 TONE3000, 2 the captures on this device.
     let mut tone_tab = use_signal(|| 0u8);
-    let source_title = if tone_tab() == 1 {
-        "TONE3000"
-    } else {
-        "MY CAPTURES"
-    };
+    let source_title = if tone_tab() == 1 { "TONE3000" } else { "MY CAPTURES" };
     // With the sidebar on a block's presets, picking another block in the
     // routing turns it to that block's.
     use_effect(move || {
@@ -110,12 +95,10 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
             return;
         }
         let kind = match picked {
-            Some(routing::Selected::Block(id)) => {
-                state.blocks.peek().iter().find(|b| b.id == id).map(|b| {
-                    tone_slot.set(tones::slot_of(&b.name, b.block_type.as_str()));
-                    browser_kind(b.block_type.as_str())
-                })
-            }
+            Some(routing::Selected::Block(id)) => state.blocks.peek().iter().find(|b| b.id == id).map(|b| {
+                tone_slot.set(tones::slot_of(&b.name, b.block_type.as_str()));
+                browser_kind(b.block_type.as_str())
+            }),
             Some(routing::Selected::Module(m, _)) => {
                 tone_slot.set(tones::slot_of(&m, &format!("module:{m}")));
                 Some(format!("module:{m}"))
@@ -124,49 +107,39 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
         };
         if let Some(kind) = kind {
             let mut f = browser_focus.0;
-            f.set(Some(routing::Focus {
-                kind,
-                preset: String::new(),
-                variation: String::new(),
-                search: false,
-            }));
+            f.set(Some(routing::Focus { kind, preset: String::new(), variation: String::new(), search: false }));
         }
     });
     // A face's preset name: the browser, on that block's presets.
     use_context_provider(|| {
-        crate::ui::face_chrome::OpenPresets(Callback::new(
-            move |(block, block_type): (String, String)| {
-                tone_slot.set(tones::slot_of(&block, &block_type));
-                tone_tab.set(0);
-                let mut f = browser_focus.0;
-                let kind = browser_kind(&block_type);
-                f.set(Some(routing::Focus {
-                    kind,
-                    preset: String::new(),
-                    variation: String::new(),
-                    search: false,
-                }));
-                // In the sidebar, the routing and the FX row kept in view.
-                match view() {
-                    View::Edit => left_browser.set(true),
-                    _ => {
-                        sidebar.set(true);
-                        sidebar_browser.set(true);
-                    }
+        crate::face_chrome::OpenPresets(Callback::new(move |(block, block_type): (String, String)| {
+            tone_slot.set(tones::slot_of(&block, &block_type));
+            tone_tab.set(0);
+            let mut f = browser_focus.0;
+            let kind = browser_kind(&block_type);
+            f.set(Some(routing::Focus { kind, preset: String::new(), variation: String::new(), search: false }));
+            // In the sidebar, the routing and the FX row kept in view.
+            match view() {
+                View::Edit => left_browser.set(true),
+                _ => {
+                    sidebar.set(true);
+                    sidebar_browser.set(true);
                 }
-            },
-        ))
+            }
+        }))
     });
     // "Patch…" on a section or part, or the presets' search: bring the
     // browser up (in Edit it takes the sidebar; in Build it is already there).
     use_context_provider(|| setlist::PickPart {
-        open: Callback::new(move |()| match view() {
-            View::Perform => {
-                browser.set(true);
-                routing_on.set(false);
+        open: Callback::new(move |()| {
+            match view() {
+                View::Perform => {
+                    browser.set(true);
+                    routing_on.set(false);
+                }
+                View::Edit => left_browser.set(true),
+                _ => {}
             }
-            View::Edit => left_browser.set(true),
-            _ => {}
         }),
     });
     // A press anywhere outside the macro bar and its panel closes the panel
@@ -177,11 +150,8 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
         b.set(view() == View::Build);
     });
     rsx! {
-        div {
-            style: "position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: {DESK}; color: {INK}; font-family: {FONT}; font-weight: 500; overflow: hidden;",
+        Frame {
             onpointerdown: move |_| away.press(),
-            // Every button answers a press (the prototype's `.pressable`).
-            document::Style { {PRESSABLE} }
             topbar::TopBar {
                 model: model.clone(),
                 state,
@@ -193,12 +163,12 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     view.set(View::Setup);
                 },
             }
-            div { style: "flex: 1; min-height: 0; display: flex;",
+            Middle {
                 if view() == View::Setup {
                     setup::SetupView { state, tab: setup_tab }
                 } else {
                     if sidebar() {
-                        aside { style: "width: {SIDEBAR_W}px; flex-shrink: 0; height: 100%; border-right: 1px solid {RULE}; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0;",
+                        Sidebar {
                             // In Edit, where routing and the FX row hold the
                             // main area: the browser, the sidebar a tap away.
                             if view() == View::Edit {
@@ -253,15 +223,15 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                     // The sidebar for the footswitch mode: the set,
                                     // the profile's stacks, or the presets.
                                     match model.perform_mode {
-                                        0 => rsx! { sidebar_views::PresetView { state } },
-                                        1 => rsx! { sidebar_views::ProfileView { state } },
-                                        _ => rsx! { setlist::TabletSetlist { state } },
+                                        0 => rsx! { sidebar_views::PresetView { state: perf } },
+                                        1 => rsx! { sidebar_views::ProfileView { state: perf } },
+                                        _ => rsx! { setlist::TabletSetlist { state: perf } },
                                     }
                                 }
                             }
                         }
                     }
-                    main { style: "flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; background: {DESK};",
+                    Main {
                         match view() {
                             View::Perform => rsx! {
                                 // The macros along the top: what you turn while playing.
@@ -283,9 +253,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                     }
                                 }
                                 if fx_on() {
-                                    fx_row::FxRow { state }
+                                    Dock { fx_row::FxRow { state } }
                                 } else if docked() {
-                                    div { style: "flex-shrink: 0;", switches::TouchSwitches { perf: model.clone() } }
+                                    Dock { switches::TouchSwitches { perf: model.clone() } }
                                 }
                             },
                             View::Build => rsx! {
@@ -299,7 +269,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 }
             }
-            FootBar {
+            TabletFoot {
                 view: view(),
                 on_view: move |v| view.set(v),
                 macros: macros(),
@@ -367,7 +337,7 @@ fn LeftSwitch(browser: bool, mode: u32, on_change: EventHandler<bool>) -> Elemen
 // ── Foot bar ───────────────────────────────────────────────────────────────
 
 #[component]
-fn FootBar(
+fn TabletFoot(
     view: View,
     on_view: EventHandler<View>,
     macros: bool,
@@ -382,14 +352,9 @@ fn FootBar(
     on_browser: EventHandler<()>,
     state: RigViewState,
 ) -> Element {
-    let (perform, build, edit, setup) = (
-        view == View::Perform,
-        view == View::Build,
-        view == View::Edit,
-        view == View::Setup,
-    );
+    let (perform, build, edit, setup) = (view == View::Perform, view == View::Build, view == View::Edit, view == View::Setup);
     rsx! {
-        footer { style: "height: {FOOT_H}px; flex-shrink: 0; display: flex; align-items: stretch; border-top: 1px solid {RULE}; background: {SHEET}; padding: 0 6px; box-sizing: border-box;",
+        FootBar {
             FootButton { label: "Perform", on: perform, pin: false, onclick: move |_| on_view.call(View::Perform),
                 path { d: "M5 3.5v11l9-5.5Z", fill: ink(perform) }
             }
@@ -450,50 +415,7 @@ fn FootBar(
                 }
             }
             Rule {}
-            FootButton { label: "Setup", on: setup, pin: false, onclick: move |_| on_view.call(View::Setup),
-                Gear { colour: ink(setup) }
-            }
-        }
-    }
-}
-
-/// An icon's ink, by its button's state — explicit, since Blitz does not
-/// re-resolve `currentColor` inside an SVG on restyle.
-fn ink(on: bool) -> &'static str {
-    if on { INK } else { INK_3 }
-}
-
-/// A foot-bar button. A view (Perform, Build, Edit, Setup) is a tab: the
-/// one open is bright with a bar along its top edge. A dock (`pin`) is a
-/// toggle: on, it sits in a fill.
-#[component]
-fn FootButton(
-    label: &'static str,
-    on: bool,
-    pin: bool,
-    #[props(default)] grouped: bool,
-    onclick: EventHandler<MouseEvent>,
-    children: Element,
-) -> Element {
-    let colour = ink(on);
-    let bg = if pin && on { FILL_ON } else { CLEAR };
-    let margin = if grouped {
-        "0"
-    } else {
-        pick(pin, PIN_MARGIN, TAB_MARGIN)
-    };
-    rsx! {
-        button {
-            title: "{label}",
-            "aria-pressed": "{on}",
-            style: "position: relative; min-width: 64px; margin: {margin}; padding: 0 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: none; border-radius: {pick(pin, 8, 0)}px; background: {bg}; color: {colour}; font-family: {FONT}; cursor: pointer;",
-            onclick: move |e| onclick.call(e),
-            if !pin && on {
-                span { style: "position: absolute; top: 0; left: 12px; right: 12px; height: 3px; border-radius: 0 0 3px 3px; background: {INK};" }
-            }
-            // Keyed by its state: rebuilt, not restyled, when it changes.
-            svg { key: "{on}", width: "20", height: "20", view_box: "0 0 18 18", style: "display: block;", {children} }
-            span { style: "font-size: 12px; font-weight: {pick(on, 700, 600)}; letter-spacing: 0.01em; color: {colour};", "{label}" }
+            SetupButton { on: setup, onclick: move |_| on_view.call(View::Setup) }
         }
     }
 }
@@ -510,35 +432,3 @@ fn browser_kind(block_type: &str) -> String {
         format!("block:{t}")
     }
 }
-
-/// Toggles that share one place, side by side in a well: one of them on
-/// at a time.
-#[component]
-fn Group(children: Element) -> Element {
-    rsx! {
-        div { style: "display: flex; align-items: stretch; gap: 2px; margin: 5px 4px; padding: 2px; border-radius: 10px; background: rgba(255,255,255,0.04);", {children} }
-    }
-}
-
-/// A gear: teeth around a hub.
-#[component]
-fn Gear(colour: &'static str) -> Element {
-    let teeth = 8;
-    let points: String = (0..teeth * 4)
-        .map(|i| {
-            let a = (f64::from(i) / f64::from(teeth * 4)) * std::f64::consts::TAU
-                - std::f64::consts::FRAC_PI_2;
-            let r = if i % 4 == 1 || i % 4 == 2 { 7.6 } else { 5.9 };
-            format!("{:.2},{:.2}", 9.0 + r * a.cos(), 9.0 + r * a.sin())
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-    rsx! {
-        polygon { points: "{points}", fill: "none", stroke: colour, stroke_width: "1.4", stroke_linejoin: "round" }
-        circle { cx: "9", cy: "9", r: "2.4", fill: "none", stroke: colour, stroke_width: "1.4" }
-    }
-}
-
-/// A pressed button sinks a little and lightens — over its own background,
-/// which is inline, hence `!important`.
-const PRESSABLE: &str = "button:not(:disabled):active { transform: scale(0.985); background-image: linear-gradient(rgba(255,255,255,0.07), rgba(255,255,255,0.07)) !important; }";

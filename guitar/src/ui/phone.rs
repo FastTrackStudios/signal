@@ -276,10 +276,7 @@ const HOUSING: u32 = 54;
 /// What the app around the rig gives it on a phone or an iPad: the way
 /// back to the instrument menu (the app's front door). Absent where the rig
 /// is the whole app (the Android remote, the desktop shot tool).
-#[derive(Clone, Copy)]
-pub struct PhoneHost {
-    pub on_home: Callback<()>,
-}
+pub use signal_rig_shell::PhoneHost;
 
 /// Which side the camera housing is on, for a phone on its side: `true`
 /// the left. The page keeps [`HOUSING`] clear on that side. Provided by the

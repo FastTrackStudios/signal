@@ -294,6 +294,9 @@ const AUDITION_PATCH: &str = "\u{25B6} Audition";
 /// Shared live rig (a [`ProfileRig`] wrapping the [`GuitarRig`]).
 type SharedRig = Arc<Mutex<Option<ProfileRig>>>;
 
+#[path = "perform.rs"]
+mod perform;
+
 use signal_rig_host::gestures::{FootswitchAction, FootswitchEngine, FootswitchMap};
 use signal_rig_host::lock::{LockExt, panic_message};
 
@@ -484,6 +487,9 @@ pub struct GuitarRigBackend {
     /// The `#[subscribe]` fan-out hub: every mutation publishes full-state
     /// [`RigEvent`]s here; the meter pump publishes `Status` at meter rate.
     events: PubSub<RigEvent>,
+    /// The shared performance surface's hub (`perform.rs`): the same
+    /// changes as [`RigEvent::Perf`], in every rig's terms.
+    perform: PubSub<signal_rigs_proto::perform::PerformEvent>,
     /// Once-start guard for the shared meter pump (`architect::rig`).
     pump_started: Arc<std::sync::atomic::AtomicBool>,
     /// The process CPU meter's last sample (see [`CpuMeter`]).
@@ -700,6 +706,7 @@ impl GuitarRigBackend {
             usage_cache: Arc::default(),
             design_cache: Arc::default(),
             events: architect::rig::events_hub(),
+            perform: architect::rig::events_hub(),
             pump_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             cpu: Arc::new(Mutex::new(CpuMeter::default())),
             hot: Arc::default(),
@@ -1124,7 +1131,7 @@ impl GuitarRigBackend {
                 let _ = Rig::select_patch(self, u32::from(program));
             }
             if learned {
-                self.events.publish(RigEvent::Perf(Rig::perf(self)));
+                self.publish_perf();
             }
             // Remappable mapping (midi.styx) → the shared gesture engine:
             // gesture switches (tap on short release, hold at 500 ms) +
@@ -2249,7 +2256,7 @@ impl GuitarRigBackend {
                     *session.tempo.lock_ok() = Some(bpm);
                     session.mark_state_dirty();
                     session.apply_tempo_to_delays();
-                    session.events.publish(RigEvent::Perf(Rig::perf(&session)));
+                    session.publish_perf();
                 }
             });
     }
@@ -3093,7 +3100,7 @@ impl GuitarRigBackend {
         signal_rig_host::tempo::set(bpm);
         self.mark_state_dirty();
         self.apply_tempo_to_delays();
-        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        self.publish_perf();
     }
 
     /// Edit preset `preset`'s variation `variation` in the composition
@@ -3183,7 +3190,7 @@ impl GuitarRigBackend {
     /// Publish the full perf model + chain — call after every mutation.
     fn publish_state(&self) {
         *self.revision.lock_ok() += 1;
-        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        self.publish_perf();
         self.events.publish(RigEvent::Chain(Rig::chain(self)));
         self.events.publish(RigEvent::Macros(Rig::macros(self)));
     }
@@ -4194,6 +4201,14 @@ impl GuitarRigBackend {
             .map(|(name, ..)| name.clone())
     }
 
+    /// The performance model changed: tell the guitar's remotes, and every
+    /// screen on the shared performance surface.
+    fn publish_perf(&self) {
+        let m = Rig::perf(self);
+        self.perform.publish(signal_rigs_proto::perform::PerformEvent::State(perform::perform_state(&m, self.active_patch_name())));
+        self.events.publish(RigEvent::Perf(m));
+    }
+
     /// The patch playing now.
     fn active_patch_name(&self) -> Option<String> {
         self.rig
@@ -4430,7 +4445,7 @@ impl GuitarRigBackend {
             let index = *self.part_index.lock_ok() as u32;
             let _ = Rig::select_part(self, index);
         } else {
-            self.events.publish(RigEvent::Perf(Rig::perf(self)));
+            self.publish_perf();
         }
     }
 
@@ -4479,7 +4494,7 @@ impl GuitarRigBackend {
         };
         if changed {
             tracing::info!(song = %song_name, what, "guitar: song edited");
-            self.events.publish(RigEvent::Perf(Rig::perf(self)));
+            self.publish_perf();
         }
     }
 
@@ -6902,7 +6917,7 @@ impl Rig for GuitarRigBackend {
             );
             self.home().save_songs(&songs);
         }
-        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        self.publish_perf();
     }
 
     fn set_part_stack(&self, part: String, stack: String) {
@@ -7044,7 +7059,7 @@ impl Rig for GuitarRigBackend {
             );
             self.home().save_songs(&songs);
         }
-        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        self.publish_perf();
     }
 
     fn choose_part_module(
@@ -7277,17 +7292,17 @@ impl Rig for GuitarRigBackend {
 
     fn midi_learn(&self, target: String) {
         self.learn.lock_ok().learn(&target);
-        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        self.publish_perf();
     }
 
     fn midi_learn_cancel(&self) {
         self.learn.lock_ok().cancel();
-        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        self.publish_perf();
     }
 
     fn midi_unlearn(&self, target: String) {
         self.learn.lock_ok().clear(&target);
-        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        self.publish_perf();
     }
 
     fn release_stack(&self, index: u32) {
@@ -7753,7 +7768,7 @@ impl Rig for GuitarRigBackend {
                 tracing::info!(preset = %preset, variation = %variation, "part → variation");
                 Rig::choose_preset(self, preset, variation);
                 self.apply_section_overrides(&overrides);
-                self.events.publish(RigEvent::Perf(Rig::perf(self)));
+                self.publish_perf();
                 return;
             }
             // A part that plays a whole stack lands on its first patch; the
@@ -7837,7 +7852,7 @@ impl Rig for GuitarRigBackend {
             }
 
             self.apply_section_overrides(&overrides);
-            self.events.publish(RigEvent::Perf(Rig::perf(self)));
+            self.publish_perf();
         })
     }
 
@@ -7887,7 +7902,7 @@ impl Rig for GuitarRigBackend {
                 *cur += 1;
             }
         }
-        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        self.publish_perf();
     }
 
     fn patches(&self) -> Vec<PatchInfo> {
@@ -9444,10 +9459,8 @@ impl Rig for GuitarRigBackend {
             let backend = self.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(1200));
-                backend
-                    .panicking
-                    .store(false, std::sync::atomic::Ordering::Relaxed);
-                backend.events.publish(RigEvent::Perf(Rig::perf(&backend)));
+                backend.panicking.store(false, std::sync::atomic::Ordering::Relaxed);
+                backend.publish_perf();
             });
         }
         // The mutes as they were once the tails have died away — unless
@@ -9598,7 +9611,7 @@ impl Rig for GuitarRigBackend {
             signal_rig_host::tempo::set(bpm);
             self.mark_state_dirty();
             self.apply_tempo_to_delays();
-            self.events.publish(RigEvent::Perf(Rig::perf(self)));
+            self.publish_perf();
         }
     }
 

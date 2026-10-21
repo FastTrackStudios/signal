@@ -2856,8 +2856,7 @@ pub struct WindowAspect(pub Signal<f64>);
 
 /// The window's size in points (logical pixels): which form factor the rig
 /// lays out for. Provided by the host.
-#[derive(Clone, Copy)]
-pub struct WindowSize(pub Signal<(f64, f64)>);
+pub use signal_rig_shell::WindowSize;
 
 /// The room a face is drawn in, smallest first — which version of a face
 /// (`FaceEntry::at`) the rig draws. Not the device: a desktop window made

@@ -17,7 +17,6 @@ vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
 architect = { workspace = true, features = ["rig", "vox"] }
-control-surfaces = { workspace = true, features = ["kontrol"] }
 daw = { workspace = true }
 dioxus = { workspace = true, optional = true }
 facet = { workspace = true }
@@ -25,6 +24,8 @@ builtin = { workspace = true }
 midi = { workspace = true, features = ["midir", "native", "ui", "vox"] }
 signal-plugin-host = { workspace = true }
 signal-rig-host = { workspace = true }
+# The drums' own profiles, songs and setlists (apart from the guitar's).
+signal-rig-perform-store = { workspace = true }
 signal-rigs-proto = { workspace = true }
 sampler = { workspace = true }
 signal-space = { workspace = true, features = ["engine"] }
@@ -34,6 +35,14 @@ vox = { workspace = true, optional = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
+# perform_rpc: the shared performance surface served in-process.
+architect = { workspace = true, features = ["vox", "local"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+# NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs. A
+# USB HID keyboard: desktop only (`lightguide_none.rs` on a phone or tablet).
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+control-surfaces = { workspace = true, features = ["kontrol"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 midi = { workspace = true, features = ["midir", "pipewire", "vox"] }
