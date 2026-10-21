@@ -38,10 +38,10 @@ use dioxus::prelude::*;
 
 use self::tokens::*;
 use crate::ui::state::RigViewState;
-use signal_widgets::SwitchesMode;
 use signal_rig_shell::{
     Dock, FootBar, FootButton, Frame, Group, Main, Middle, Rule, SetupButton, Sidebar, ink,
 };
+use signal_widgets::SwitchesMode;
 
 /// The gig's pieces, lent by the app (which owns the gig, its charts and
 /// its practice player) to the iPad layout. Provided as context; without
