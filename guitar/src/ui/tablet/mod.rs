@@ -88,7 +88,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut chart_on = use_signal(|| gig.is_some());
     let mut sidebar = use_signal(|| true);
     let mut macros = use_signal(|| true);
-    let mut docked = use_signal(|| true);
+    // The switches at the foot — off under a gig, whose chart wants the room
+    // (the foot bar's Switches brings them back).
+    let mut docked = use_signal(|| gig.is_none());
     // Perform's middle: the routing grid, unless it's switched off.
     let mut routing_on = use_signal(|| true);
     // Perform's FX row: the selected block's controls, in the switches'
@@ -108,7 +110,10 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     use_effect(move || {
         let picked = routing_sel().is_some();
         fx_on.set(picked);
-        docked.set(!picked);
+        // Under a gig the switches stay as they were left when a pick is let go.
+        if picked || gig.is_none() {
+            docked.set(!picked);
+        }
     });
     let browser_focus = use_context_provider(|| routing::BrowserFocus(Signal::new(None)));
     // The faces' presets (their names, the FX row's bar).
@@ -335,8 +340,17 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
             TabletFoot {
                 view: view(),
                 on_view: move |v| view.set(v),
-                macros: macros(),
-                on_macros: move |()| macros.toggle(),
+                macros: macros() && !(gig_main.is_some() && !browser()),
+                on_macros: move |()| {
+                    // Over the chart, Macros brings the rig's middle back.
+                    if gig_main.is_some() && !browser() {
+                        chart_on.set(false);
+                        routing_on.set(true);
+                        macros.set(true);
+                    } else {
+                        macros.toggle();
+                    }
+                },
                 switches: docked(),
                 on_switches: move |()| {
                     docked.toggle();
