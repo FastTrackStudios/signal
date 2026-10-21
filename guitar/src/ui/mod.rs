@@ -69,7 +69,6 @@ pub use perform::folder_color;
 pub use phone::{IslandLeft, PhoneHost, ScreenCorners};
 pub use phone_audio::LogFeed;
 pub use remote::GuitarRigRemote;
-pub use tablet::GigSlots;
 pub use setlist_bar::SetlistSidebar;
 pub use settings::{
     AUDIO_SETTINGS_OPEN, AudioSettingsBridge, AudioSettingsModal, open_audio_settings,
@@ -81,6 +80,7 @@ pub use signal_rig_perform_ui::PerformClients;
 pub use signal_widgets::PresetTree;
 pub use signal_widgets::{Knob, KnobSize, Picker, PickerSize};
 pub use state::{RigViewState, use_rig_state};
+pub use tablet::GigSlots;
 pub use tablet::drums::DrumTablet;
 pub use wire_param::{EditSink, WireParam, use_wire_params};
 
