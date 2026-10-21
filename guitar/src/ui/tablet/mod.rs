@@ -38,6 +38,7 @@ use dioxus::prelude::*;
 
 use self::tokens::*;
 use crate::ui::state::RigViewState;
+use signal_widgets::SwitchesMode;
 use signal_rig_shell::{
     Dock, FootBar, FootButton, Frame, Group, Main, Middle, Rule, SetupButton, Sidebar, ink,
 };
@@ -93,9 +94,11 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut chart_on = use_signal(|| gig.is_some());
     let mut sidebar = use_signal(|| true);
     let mut macros = use_signal(|| true);
-    // The switches at the foot — off under a gig, whose chart wants the room
-    // (the foot bar's Switches brings them back).
-    let mut docked = use_signal(|| gig.is_none());
+    // The switches at the foot: under a gig a compact row (switches 1–5),
+    // so the chart gets the room and the rig stays in sight. A hold on the
+    // foot bar's Switches picks Full / Compact / Hidden.
+    let mut docked = use_signal(|| true);
+    let mut sw_compact = use_signal(|| gig.is_some());
     // Perform's middle: the routing grid, unless it's switched off.
     let mut routing_on = use_signal(|| true);
     // Perform's FX row: the selected block's controls, in the switches'
@@ -329,7 +332,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                 if fx_on() {
                                     Dock { fx_row::FxRow { state } }
                                 } else if docked() {
-                                    Dock { switches::TouchSwitches { perf: model.clone() } }
+                                    Dock { switches::TouchSwitches { perf: model.clone(), compact: sw_compact() } }
                                 }
                             },
                             View::Build => rsx! {
@@ -358,6 +361,15 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     }
                 },
                 switches: docked(),
+                switches_compact: sw_compact(),
+                on_switches_mode: move |m: SwitchesMode| {
+                    use signal_widgets::SwitchesMode as M;
+                    docked.set(m != M::Hidden);
+                    sw_compact.set(m == M::Compact);
+                    if m != M::Hidden {
+                        fx_on.set(false);
+                    }
+                },
                 on_switches: move |()| {
                     docked.toggle();
                     if docked() {
@@ -444,6 +456,10 @@ fn TabletFoot(
     macros: bool,
     on_macros: EventHandler<()>,
     switches: bool,
+    /// The switches as one compact row.
+    switches_compact: bool,
+    /// A hold on Switches picked how they show.
+    on_switches_mode: EventHandler<SwitchesMode>,
     on_switches: EventHandler<()>,
     routing: bool,
     on_routing: EventHandler<()>,
@@ -464,6 +480,8 @@ fn TabletFoot(
         view == View::Edit,
         view == View::Setup,
     );
+    let long = signal_widgets::use_long_press();
+    let mut sw_menu = use_signal(|| false);
     rsx! {
         FootBar {
             FootButton { label: "Perform", on: perform, pin: false, onclick: move |_| on_view.call(View::Perform),
@@ -525,10 +543,49 @@ fn TabletFoot(
             // at a time.
             if perform {
                 Group {
-                    FootButton { label: "Switches", on: switches, pin: true, grouped: true, onclick: move |_| on_switches.call(()),
-                        rect { x: "2", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
-                        rect { x: "7", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
-                        rect { x: "12", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                    div {
+                        style: "position: relative; display: flex;",
+                        onpointerdown: move |e: PointerEvent| long.down(&e, move |_| sw_menu.set(true)),
+                        onpointermove: move |e: PointerEvent| long.moved(&e),
+                        onpointerup: move |_| long.cancel(),
+                        onpointercancel: move |_| long.cancel(),
+                        FootButton { label: "Switches", on: switches, pin: true, grouped: true,
+                            onclick: move |_| {
+                                // A hold opened the menu: its release is not a tap.
+                                if !long.fired() {
+                                    on_switches.call(());
+                                }
+                            },
+                            rect { x: "2", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                            rect { x: "7", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                            rect { x: "12", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                        }
+                        if sw_menu() {
+                            div { style: "position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 60; display: flex; flex-direction: column; gap: 2px; padding: 4px; min-width: 140px; border-radius: 8px; background: #1c1c21; border: 1px solid #2e2e35; box-shadow: 0 8px 24px rgba(0,0,0,0.5);",
+                                for (label, m) in [("Full", SwitchesMode::Full), ("Compact", SwitchesMode::Compact), ("Hidden", SwitchesMode::Hidden)] {
+                                    {
+                                        let now = match m {
+                                            SwitchesMode::Hidden => !switches,
+                                            SwitchesMode::Compact => switches && switches_compact,
+                                            SwitchesMode::Full => switches && !switches_compact,
+                                        };
+                                        let (bg, fg) = if now { ("#2a2a31", "#fafafa") } else { ("transparent", "#a1a1aa") };
+                                        rsx! {
+                                            button {
+                                                key: "{label}",
+                                                style: "height: 40px; padding: 0 12px; text-align: left; border: none; border-radius: 6px; font-size: 15px; font-weight: 650; cursor: pointer; background: {bg}; color: {fg};",
+                                                onclick: move |e: MouseEvent| {
+                                                    e.stop_propagation();
+                                                    sw_menu.set(false);
+                                                    on_switches_mode.call(m);
+                                                },
+                                                "{label}"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     FootButton { label: "FX", on: fx, pin: true, grouped: true, onclick: move |_| on_fx.call(()),
                         circle { cx: "5", cy: "6", r: "2.2", fill: "none", stroke: ink(fx), stroke_width: "1.4" }

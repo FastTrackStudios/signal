@@ -55,6 +55,8 @@ fn LitRing() -> Element {
 /// and the border on top.
 const HOLD_H: f64 = (super::fx_row::FX_H - 2.0) / 3.0;
 const MAIN_H: f64 = (super::fx_row::FX_H - 2.0) * 2.0 / 3.0;
+/// The compact row's height: the main row's, cut down.
+const COMPACT_H: f64 = 58.0;
 
 macro_rules! call {
     ($rig:expr, |$r:ident| $body:expr) => {{
@@ -69,7 +71,13 @@ macro_rules! call {
 }
 
 #[component]
-pub fn TouchSwitches(perf: PerformanceModel) -> Element {
+pub fn TouchSwitches(
+    perf: PerformanceModel,
+    /// One short row, switches 1–5 alone (no hold layer): a chart above
+    /// gets the room.
+    #[props(default)]
+    compact: bool,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let stacks = perf.stacks.clone();
     let song = perf
@@ -92,6 +100,24 @@ pub fn TouchSwitches(perf: PerformanceModel) -> Element {
     // hold layer's first tile the sixth stack.
     let five_is_stack =
         perf.switch_actions.get(4).is_some_and(|a| a == "stack") && stacks.len() > 4;
+    if compact {
+        return rsx! {
+            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {COMPACT_H}px; gap: 1px; background: #000; border-top: 1px solid #000; box-sizing: border-box; height: {COMPACT_H + 1}px;",
+                for i in 0..4usize {
+                    if let Some(st) = stacks.get(i).cloned() {
+                        StackTile { key: "c{i}", no: i as u32 + 1, stack: st, index: i, compact: true }
+                    } else {
+                        Empty { key: "c{i}", no: i as u32 + 1 }
+                    }
+                }
+                if five_is_stack {
+                    StackTile { no: 5, stack: stacks[4].clone(), index: 4, compact: true }
+                } else {
+                    TapTempo { bpm: perf.tempo_bpm }
+                }
+            }
+        };
+    }
     rsx! {
         div { style: "display: flex; flex-direction: column; background: #0a0a0c;",
             // One grid, two rows of five, the same columns: the hold layer
