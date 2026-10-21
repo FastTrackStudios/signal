@@ -1,0 +1,25 @@
+[package]
+name = "signal-content-library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Content host: scans a library root for every file a rig plays from, hashes it, groups it into bundles (drum kits, …) and serves it over vox"
+
+[lints]
+workspace = true
+
+[dependencies]
+signal-content-proto.workspace = true
+architect = { workspace = true, features = ["vox"] }
+vox.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util"] }
+walkdir.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+architect = { workspace = true, features = ["vox", "local", "host"] }
+tempfile.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }

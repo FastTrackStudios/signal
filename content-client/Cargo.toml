@@ -1,0 +1,31 @@
+[package]
+name = "signal-content-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Content transfer client: download any file or bundle a host offers — resumable, verified, one transfer per file — onto this device at its id"
+
+[lints]
+workspace = true
+
+[dependencies]
+signal-content-proto.workspace = true
+vox.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
+futures-channel.workspace = true
+futures-util.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+reqwest = { workspace = true, optional = true }
+
+[features]
+default = ["mirror"]
+# Plain HTTPS with Range resume — the backup when no vox host answers.
+mirror = ["dep:reqwest"]
+
+[dev-dependencies]
+signal-content-library.workspace = true
+architect = { workspace = true, features = ["vox", "local"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile.workspace = true
