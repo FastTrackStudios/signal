@@ -31,6 +31,7 @@ pub fn TopBar(
 ) -> Element {
     // Panic resetting: the meters go flat until it is done.
     let resetting = use_signal(|| false);
+    let gig = use_hook(try_consume_context::<super::GigSlots>);
     let midi = use_midi_health();
     let hp = &model.headphone;
     let output = *state.out_level.read();
@@ -71,8 +72,14 @@ pub fn TopBar(
             if !*state.running.read() {
                 AudioBadge { failed: !state.audio_error.read().is_empty() }
             }
-            Rule {}
-            super::player::Player {}
+            // The gig's toggle and transport, when there is a gig, in the
+            // record player's place.
+            if let Some(g) = gig {
+                {(g.header)()}
+            } else {
+                Rule {}
+                super::player::Player {}
+            }
             Rule {}
             PanicButton { busy: resetting }
             Rule {}

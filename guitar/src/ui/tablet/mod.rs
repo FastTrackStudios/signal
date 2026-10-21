@@ -42,6 +42,35 @@ use signal_rig_shell::{
     Dock, FootBar, FootButton, Frame, Group, Main, Middle, Rule, SetupButton, Sidebar, ink,
 };
 
+/// The gig's pieces, lent by the app (which owns the gig, its charts and
+/// its practice player) to the iPad layout. Provided as context; without
+/// it the layout is the rig's own.
+///
+///   header     beside the top bar's mode tabs: the Studio / Signal toggle
+///              and the transport
+///   progress   a strip under the top bar: the song's timeline, its
+///              sections and the playhead (a tap seeks)
+///   main       Perform's middle, in the routing's and the macros' place:
+///              the chosen song's chart (or, on Studio, its session view)
+///   setlist    the sidebar on Setlist: the gig's set, a tap picks a song
+///
+/// Each returns a component of the app's (`rsx! { Its {} }`), so its hooks
+/// are its own.
+#[derive(Clone, Copy)]
+pub struct GigSlots {
+    pub header: fn() -> Element,
+    pub progress: fn() -> Element,
+    pub main: fn() -> Element,
+    pub setlist: fn() -> Element,
+}
+
+/// One set of slots per app, set once: as a prop it never changes.
+impl PartialEq for GigSlots {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum View {
     Perform,
@@ -53,6 +82,10 @@ enum View {
 #[component]
 pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut view = use_signal(|| View::Perform);
+    // The gig, when the app lends one: its chart holds Perform's middle
+    // until the routing or the browser is asked for.
+    let gig = use_hook(try_consume_context::<GigSlots>);
+    let mut chart_on = use_signal(|| gig.is_some());
     let mut sidebar = use_signal(|| true);
     let mut macros = use_signal(|| true);
     let mut docked = use_signal(|| true);
@@ -170,6 +203,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
         let mut b = pick.building;
         b.set(view() == View::Build);
     });
+    let gig_main = gig.filter(|_| chart_on()).map(|g| g.main);
     rsx! {
         Frame {
             onpointerdown: move |_| away.press(),
@@ -183,6 +217,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     t.set(setup::SetupTab::from_id(tab));
                     view.set(View::Setup);
                 },
+            }
+            if let Some(g) = gig {
+                {(g.progress)()}
             }
             Middle {
                 if view() == View::Setup {
@@ -243,10 +280,12 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                                 } else {
                                     // The sidebar for the footswitch mode: the set,
                                     // the profile's stacks, or the presets.
-                                    match model.perform_mode {
-                                        0 => rsx! { sidebar_views::PresetView { state: perf } },
-                                        1 => rsx! { sidebar_views::ProfileView { state: perf } },
-                                        _ => rsx! { setlist::TabletSetlist { state: perf } },
+                                    match (model.perform_mode, gig) {
+                                        (0, _) => rsx! { sidebar_views::PresetView { state: perf } },
+                                        (1, _) => rsx! { sidebar_views::ProfileView { state: perf } },
+                                        // The gig's set, when there is a gig.
+                                        (_, Some(g)) => (g.setlist)(),
+                                        (_, None) => rsx! { setlist::TabletSetlist { state: perf } },
                                     }
                                 }
                             }
@@ -255,8 +294,9 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     Main {
                         match view() {
                             View::Perform => rsx! {
-                                // The macros along the top: what you turn while playing.
-                                if macros() {
+                                // The macros along the top: what you turn while playing
+                                // (the gig's chart, when it holds the middle, takes the room).
+                                if macros() && !(gig_main.is_some() && !browser()) {
                                     div { style: "flex-shrink: 0; position: relative; z-index: 4; border-bottom: 1px solid #000;",
                                         macros::TouchMacroBar { state }
                                     }
@@ -269,6 +309,8 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                             browser.set(false);
                             routing_on.set(true);
                         } }
+                                    } else if let Some(main) = gig_main {
+                                        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;", {main()} }
                                     } else if routing_on() {
                                         div { style: "flex: 1; min-height: 0;", routing::Routing { state } }
                                     }
@@ -302,11 +344,26 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                         fx_on.set(false);
                     }
                 },
-                routing: routing_on(),
-                // The middle holds one at a time: the routing, or the browser.
+                routing: routing_on() && gig_main.is_none(),
+                // The middle holds one at a time: the chart, the routing, or the browser.
                 on_routing: move |()| {
-                    routing_on.toggle();
+                    if chart_on() {
+                        chart_on.set(false);
+                        routing_on.set(true);
+                    } else {
+                        routing_on.toggle();
+                    }
                     if routing_on() {
+                        browser.set(false);
+                    }
+                },
+                chart: gig.map(|_| chart_on() && !browser()),
+                on_chart: move |()| {
+                    if chart_on() && !browser() {
+                        chart_on.set(false);
+                        routing_on.set(true);
+                    } else {
+                        chart_on.set(true);
                         browser.set(false);
                     }
                 },
@@ -321,7 +378,7 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                 state,
                 on_browser: move |()| {
                     browser.toggle();
-                    routing_on.set(!browser());
+                    routing_on.set(!browser() && !chart_on());
                 },
             }
             signal_widgets::PopupLayer {}
@@ -371,6 +428,9 @@ fn TabletFoot(
     on_fx: EventHandler<()>,
     browser: bool,
     on_browser: EventHandler<()>,
+    /// The gig's chart in the middle (`None`: no gig).
+    chart: Option<bool>,
+    on_chart: EventHandler<()>,
     state: RigViewState,
 ) -> Element {
     let (perform, build, edit, setup) = (
@@ -401,6 +461,12 @@ fn TabletFoot(
             if perform {
                 Rule {}
                 Group {
+                    if let Some(chart) = chart {
+                        FootButton { label: "Chart", on: chart, pin: true, grouped: true, onclick: move |_| on_chart.call(()),
+                            rect { x: "3.5", y: "2", width: "11", height: "14", rx: "1.5", fill: "none", stroke: ink(chart), stroke_width: "1.4" }
+                            path { d: "M6 6h6M6 9h6M6 12h4", stroke: ink(chart), stroke_width: "1.4", stroke_linecap: "round" }
+                        }
+                    }
                     FootButton { label: "Routing", on: routing, pin: true, grouped: true, onclick: move |_| on_routing.call(()),
                         circle { cx: "3.5", cy: "9", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }
                         circle { cx: "14.5", cy: "4.5", r: "1.8", fill: "none", stroke: ink(routing), stroke_width: "1.4" }

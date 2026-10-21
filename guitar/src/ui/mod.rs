@@ -69,6 +69,7 @@ pub use perform::folder_color;
 pub use phone::{IslandLeft, PhoneHost, ScreenCorners};
 pub use phone_audio::LogFeed;
 pub use remote::GuitarRigRemote;
+pub use tablet::GigSlots;
 pub use setlist_bar::SetlistSidebar;
 pub use settings::{
     AUDIO_SETTINGS_OPEN, AudioSettingsBridge, AudioSettingsModal, open_audio_settings,
