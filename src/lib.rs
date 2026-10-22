@@ -910,4 +910,5 @@ impl PlayerPatch {
 }
 
 /// The drop log's event types and time base (see [`rig::GuitarRig::collect_drops`]).
+#[cfg(not(target_arch = "wasm32"))]
 pub use audio::io::duplex::{DropEvent, DropKind, clock_ns};

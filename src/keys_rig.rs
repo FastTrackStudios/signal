@@ -23,7 +23,6 @@ use daw::standalone::metering::Meters;
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
-#[cfg(not(target_arch = "wasm32"))]
 use signal_rig_host::engine::{Engine, Rig};
 
 use crate::MidiMonitor;

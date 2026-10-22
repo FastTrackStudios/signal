@@ -37,7 +37,6 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
-#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -1919,8 +1918,6 @@ impl HostedAudio {
     }
 }
 
-/// A live guitar rig: a single input-armed daw track whose FX chain is the
-/// active patch, running on daw's realtime `AudioEngine`.
 #[cfg(not(target_arch = "wasm32"))]
 impl Drop for GuitarRig {
     /// A rig leaving a shared engine takes its tracks with it.
@@ -1931,6 +1928,9 @@ impl Drop for GuitarRig {
     }
 }
 
+/// A live guitar rig: a single input-armed daw track whose FX chain is the
+/// active patch, running on daw's realtime `AudioEngine`.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct GuitarRig {
     daw: Standalone,
     /// The engine the rig plays on — its own (dropping the rig closes the
