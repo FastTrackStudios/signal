@@ -132,7 +132,10 @@ pub fn SetlistSidebar(
     let shown: Vec<bool> = {
         let hits = signal_rig_perform_ui::search::matching_songs(
             &q,
-            model.songs.iter().map(|s| (s.name.as_str(), s.key.as_str())),
+            model
+                .songs
+                .iter()
+                .map(|s| (s.name.as_str(), s.key.as_str())),
         );
         let mut v = vec![false; model.songs.len()];
         for i in hits {

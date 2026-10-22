@@ -87,7 +87,9 @@ fn channels(colour: &str) -> [f64; 3] {
         }
         return out;
     }
-    let ch = |i: usize| f64::from(u8::from_str_radix(c.get(1 + i..3 + i).unwrap_or("00"), 16).unwrap_or(0));
+    let ch = |i: usize| {
+        f64::from(u8::from_str_radix(c.get(1 + i..3 + i).unwrap_or("00"), 16).unwrap_or(0))
+    };
     [ch(0), ch(2), ch(4)]
 }
 
@@ -96,7 +98,11 @@ fn channels(colour: &str) -> [f64; 3] {
 pub fn luminance(colour: &str) -> f64 {
     let lin = |v: f64| {
         let v = v / 255.0;
-        if v <= 0.039_28 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+        if v <= 0.039_28 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
     };
     let [r, g, b] = channels(colour);
     0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
@@ -114,7 +120,11 @@ pub fn contrast(a: &str, b: &str) -> f64 {
 /// reads better.
 #[must_use]
 pub fn ink_on(bg: &str) -> &'static str {
-    if contrast(WHITE, bg) >= contrast(BLACK, bg) { WHITE } else { BLACK }
+    if contrast(WHITE, bg) >= contrast(BLACK, bg) {
+        WHITE
+    } else {
+        BLACK
+    }
 }
 
 /// switches::dim — a colour darkened toward the grid's ground.
@@ -421,11 +431,7 @@ fn Empty(no: u32, #[props(default)] gig: bool) -> Element {
 }
 
 #[component]
-fn TapTempo(
-    bpm: u32,
-    #[props(default)] compact: bool,
-    #[props(default)] gig: bool,
-) -> Element {
+fn TapTempo(bpm: u32, #[props(default)] compact: bool, #[props(default)] gig: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut flash = use_signal(|| false);
     let tempo = if bpm == 0 { 120 } else { bpm };
@@ -592,7 +598,10 @@ mod tests {
     fn the_stack_colours_are_the_folder_table() {
         for name in ["Clean", "Crunch", "Drive", "Lead", "Ambient"] {
             let (bg, _) = folder(name);
-            let listed = SWITCH_COLOURS.iter().find(|(n, _)| *n == name).map(|(_, c)| *c);
+            let listed = SWITCH_COLOURS
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, c)| *c);
             assert_eq!(listed, Some(bg), "{name}");
         }
     }

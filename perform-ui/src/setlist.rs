@@ -2277,8 +2277,16 @@ mod row_tap_tests {
 
     #[test]
     fn while_playing_another_row_takes_two_taps() {
-        assert_eq!(row_tap(false, false, true, false), RowTap::Arm, "first tap arms");
-        assert_eq!(row_tap(false, false, true, true), RowTap::Load, "second tap loads");
+        assert_eq!(
+            row_tap(false, false, true, false),
+            RowTap::Arm,
+            "first tap arms"
+        );
+        assert_eq!(
+            row_tap(false, false, true, true),
+            RowTap::Load,
+            "second tap loads"
+        );
     }
 
     #[test]
