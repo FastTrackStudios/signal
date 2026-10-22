@@ -51,7 +51,7 @@ keyswitch {
     .expect("parse test spec")
 }
 
-fn violin_part(score: &keyflow_orchestra::Score) -> &keyflow_orchestra::score::Part {
+fn violin_part(score: &keyflow_lang::orchestra::Score) -> &keyflow_lang::orchestra::score::Part {
     score
         .parts
         .iter()
@@ -67,16 +67,16 @@ fn violin_part(score: &keyflow_orchestra::Score) -> &keyflow_orchestra::score::P
 /// conversion path).
 #[test]
 fn score_to_schedule_equivalence() {
-    let score = keyflow_orchestra::score::load(fixture()).expect("parse fixture");
+    let score = keyflow_lang::orchestra::score::load(fixture()).expect("parse fixture");
     let part = violin_part(&score);
 
-    let cfg = keyflow_orchestra::Config {
-        profile: keyflow_orchestra::ProfileKind::Strings,
+    let cfg = keyflow_lang::orchestra::Config {
+        profile: keyflow_lang::orchestra::ProfileKind::Strings,
         timing_comp: false,
         tempo_map: Some(score.meta.tempos.clone()),
-        ..keyflow_orchestra::Config::default()
+        ..keyflow_lang::orchestra::Config::default()
     };
-    let po = keyflow_orchestra::process_part(part, &cfg);
+    let po = keyflow_lang::orchestra::process_part(part, &cfg);
     assert!(!po.empty && !po.notes.is_empty(), "engine produced notes");
 
     let doc = part_to_document(&po, &score.meta.tempos, SEED);
@@ -97,12 +97,12 @@ fn score_to_schedule_equivalence() {
     assert_eq!(sched.events, again.events);
 
     // ── Annotation equivalence with the mirror pass ──────────────────────
-    let src: Vec<keyflow_orchestra::MidiNote> = po
+    let src: Vec<keyflow_lang::orchestra::MidiNote> = po
         .notes
         .iter()
-        .map(keyflow_orchestra::MidiNote::from)
+        .map(keyflow_lang::orchestra::MidiNote::from)
         .collect();
-    let mirror = keyflow_orchestra::mirror::stage1_annotations(&src, &po.ccs, None, &cfg);
+    let mirror = keyflow_lang::orchestra::mirror::stage1_annotations(&src, &po.ccs, None, &cfg);
     let doc_ann = stage1_annotations(&doc, spec.legato_engine.is_some());
     assert_eq!(mirror.len(), doc_ann.len());
     for (i, (m, d)) in mirror.iter().zip(doc_ann.iter()).enumerate() {
@@ -126,7 +126,7 @@ fn score_to_nonsilent_audio_with_css() {
         return;
     }
 
-    let score = keyflow_orchestra::score::load(fixture()).expect("parse fixture");
+    let score = keyflow_lang::orchestra::score::load(fixture()).expect("parse fixture");
     let part = violin_part(&score);
 
     let rig = SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
@@ -145,19 +145,21 @@ fn score_to_nonsilent_audio_with_css() {
         "strings_1v",
         part,
         &score.meta.tempos,
-        keyflow_orchestra::ProfileKind::Strings,
+        keyflow_lang::orchestra::ProfileKind::Strings,
         SEED,
     )
     .expect("render");
 
     assert_eq!(res.note_count, {
-        let cfg = keyflow_orchestra::Config {
-            profile: keyflow_orchestra::ProfileKind::Strings,
+        let cfg = keyflow_lang::orchestra::Config {
+            profile: keyflow_lang::orchestra::ProfileKind::Strings,
             timing_comp: false,
             tempo_map: Some(score.meta.tempos.clone()),
-            ..keyflow_orchestra::Config::default()
+            ..keyflow_lang::orchestra::Config::default()
         };
-        keyflow_orchestra::process_part(part, &cfg).notes.len()
+        keyflow_lang::orchestra::process_part(part, &cfg)
+            .notes
+            .len()
     });
     assert_eq!(
         res.reactive_fallbacks, 0,

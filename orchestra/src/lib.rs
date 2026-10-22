@@ -13,7 +13,7 @@ pub mod timing;
 
 use std::path::Path;
 
-use keyflow_orchestra::{Config, PartOutput, ProfileKind, process_part, score};
+use keyflow_lang::orchestra::{Config, PartOutput, ProfileKind, process_part, score};
 use sampler::SamplerRig;
 use sampler::document::{
     DocCc, DocNote, DocumentRenderOptions, DocumentRenderResult, TempoPoint, TrackDocument,

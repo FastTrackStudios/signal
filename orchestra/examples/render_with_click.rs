@@ -52,7 +52,8 @@ fn main() -> eyre::Result<()> {
         .nth(3)
         .unwrap_or_else(|| "listen/going_home_violin1".into());
 
-    let sc = keyflow_orchestra::score::load(&mxl).map_err(|e| eyre::eyre!("score load: {e}"))?;
+    let sc =
+        keyflow_lang::orchestra::score::load(&mxl).map_err(|e| eyre::eyre!("score load: {e}"))?;
     let part = sc
         .parts
         .iter()
@@ -69,7 +70,7 @@ fn main() -> eyre::Result<()> {
         ID,
         part,
         &sc.meta.tempos,
-        keyflow_orchestra::ProfileKind::Strings,
+        keyflow_lang::orchestra::ProfileKind::Strings,
         SEED,
     )
     .map_err(|e| eyre::eyre!(e))?;
