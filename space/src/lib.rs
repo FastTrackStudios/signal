@@ -3,7 +3,9 @@
 //! (re)builds with a progress stream. Wasm-clean — the browser remote's map
 //! view consumes exactly this surface.
 
-#[cfg(feature = "engine")]
+// The analysis engine (rayon, threads, architect::rig) is native-only: the
+// browser remote reads built maps over the wire instead.
+#[cfg(all(feature = "engine", not(target_arch = "wasm32")))]
 pub mod engine;
 
 use facet::Facet;
