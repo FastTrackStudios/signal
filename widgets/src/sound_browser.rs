@@ -20,8 +20,8 @@
 //!
 //! By touch (see [`crate::touch`]) a tap **auditions** instead of loading
 //! outright — the sound plays, and the bar's Keep / Undo decide; tapping the
-//! same row again keeps it, and leaving keeps it too. A long-press on a row
-//! opens its menu, and every button is a fingertip wide.
+//! same row again keeps it, and leaving keeps it too. A row's ⋯ opens its
+//! menu (never a press-and-hold), and every button is a fingertip wide.
 //!
 //! Entries are data (see [`BrowseEntry`]); every action comes back through a
 //! handful of handlers, so the rig decides what "load", "audition" and
@@ -597,7 +597,6 @@ fn Row(
 ) -> Element {
     let host = PopupHost::try_use();
     let touch = crate::touch::use_touch();
-    let long = crate::touch::use_long_press();
     let (bg, fg) = if lit {
         (FOCUS_BG, TEXT)
     } else if entry.live {
@@ -629,32 +628,17 @@ fn Row(
             style: "display: flex; align-items: center; gap: 8px; padding: {pad}; border-radius: {R_SM}; \
                     background: {bg}; color: {fg}; cursor: pointer; min-width: 0; \
                     border-left: 2px solid {edge};",
-            // Touch: a long-press opens the row's menu (its right-click).
-            onpointerdown: {
-                let menu = menu.clone();
-                move |e: PointerEvent| {
-                    let menu = menu.clone();
-                    long.down(&e, move |(x, y)| crate::kit::context_menu_at(host, x, y, menu, on_pick));
-                }
-            },
-            onpointermove: move |e: PointerEvent| long.moved(&e),
-            onpointerup: move |_| long.cancel(),
-            onpointercancel: move |_| long.cancel(),
-            onpointerleave: move |_| long.cancel(),
             onclick: {
                 let id = id.clone();
-                move |_| {
-                    if !long.fired() {
-                        ui.tap(h, audition, touch, id.clone());
-                    }
-                }
+                move |_| ui.tap(h, audition, touch, id.clone())
             },
+            // Right-click: the row's menu. By touch, its ⋯ (below) only.
             oncontextmenu: {
                 let menu = menu.clone();
-                move |e: MouseEvent| {
+                crate::touch::right_click(move |e: MouseEvent| {
                     e.prevent_default();
                     context_menu(host, &e, menu.clone(), on_pick);
-                }
+                })
             },
             Dot { live: entry.live, modified: entry.modified, hollow: true }
             div { style: "flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px;",

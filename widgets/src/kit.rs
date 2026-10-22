@@ -415,8 +415,8 @@ pub fn origin_of(e: &MouseEvent) -> (f64, f64) {
     (c.x - el.x, c.y - el.y)
 }
 
-/// Open `items` as a menu at client point `(x, y)` — a long-press on a row,
-/// which has a point but no mouse event.
+/// Open `items` as a menu at client point `(x, y)` — for an opener that
+/// has a point but no mouse event.
 pub fn context_menu_at(
     host: Option<PopupHost>,
     x: f64,

@@ -31,7 +31,7 @@ pub use knob::{FmtFn, Knob, KnobSize};
 pub use piano::{MiniKeyboard, Piano, WaterfallNote, WaterfallState};
 pub use picker::{Picker, PickerSize};
 pub use popup::{PopupHost, PopupLayer};
-pub use touch::{LongPress, Touch, TouchMenuButton, is_touch, reveal, use_long_press, use_touch};
+pub use touch::{Touch, TouchMenuButton, is_touch, reveal, right_click, use_touch};
 
 pub use preset_tree::PresetTree;
 pub use sound_browser::{BrowseChip, BrowseEntry, BrowseScope, SoundBrowser};

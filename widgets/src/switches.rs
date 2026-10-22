@@ -276,8 +276,8 @@ pub fn open_menu(host: PopupHost, e: &MouseEvent, render: impl Fn() -> Element +
     open_menu_at(host, p.x, p.y, render);
 }
 
-/// [`open_menu`] at client point `(x, y)` — for a long-press, which has a
-/// point but no mouse event.
+/// [`open_menu`] at client point `(x, y)` — for an opener that has a point
+/// but no mouse event.
 pub fn open_menu_at(host: PopupHost, x: f64, y: f64, render: impl Fn() -> Element + 'static) {
     host.open_up(x - 110.0, y - 6.0, 230.0, render, || {});
 }
@@ -422,10 +422,11 @@ pub fn SwitchTile(
     rsx! {
         div {
             style: "position: relative; flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column;",
-            oncontextmenu: move |e: MouseEvent| {
+            // Right-click: the tile's menu — by touch, its ⋯ below.
+            oncontextmenu: crate::touch::right_click(move |e: MouseEvent| {
                 e.prevent_default();
                 on_menu.call(e);
-            },
+            }),
             HoldButton {
                 style: format!(
                     "position: relative; height: 100%; width: 100%; display: flex; align-items: center; \
@@ -448,7 +449,8 @@ pub fn SwitchTile(
                     span { style: "font-size: 9px; opacity: 0.65; font-variant-numeric: tabular-nums;", "{footer}" }
                 }
             }
-            // A long-press is the tile's hold, so a finger opens the menu here.
+            // A press-and-hold is the footswitch's own hold, and by touch no
+            // menu opens from one: a finger opens it here.
             crate::touch::TouchMenuButton { onclick: move |e: MouseEvent| on_menu.call(e), title: "Switch menu" }
         }
     }
