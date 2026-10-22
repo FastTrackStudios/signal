@@ -23,3 +23,8 @@ signal-rigs-proto.workspace = true
 signal-widgets.workspace = true
 chrono.workspace = true
 architect = { workspace = true, features = ["atom", "vox", "platform"] }
+
+[dev-dependencies]
+# Headless component tests on blitz-dom (tests/touch_menus.rs).
+dioxus-test.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "time"] }

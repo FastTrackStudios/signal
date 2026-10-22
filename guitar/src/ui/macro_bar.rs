@@ -479,12 +479,13 @@ fn MacroCell(
             }
         });
     }
-    // Touch has no hover: a press-and-hold (or a tap on the label) pins the
-    // panel open — its sub-macros to hand — until the label is tapped or
-    // another knob's is pinned.
+    // Touch has no hover: a tap on the label pins the panel open — its
+    // sub-macros to hand — until the label is tapped or another knob's is
+    // pinned. The tune menu is the ⋯ beside the label (no press-and-hold:
+    // `signal_widgets::touch`).
     let mut pinned_bar = wire.pinned;
     let pinned = pinned_bar.read().as_deref() == Some(id.as_str());
-    let long = signal_widgets::use_long_press();
+    let touch = signal_widgets::is_touch();
     let open = forced || hovered() || pinned || dragging() || tuning() || mine.is_some();
     let color = if knob.color.is_empty() {
         MUTED.to_string()
@@ -511,7 +512,7 @@ fn MacroCell(
         ]
     };
 
-    // The tune menu, at a client point: a right-click's, or a long-press's.
+    // The tune menu, at a client point: a right-click's, or the ⋯'s.
     let open_tune_menu = {
         let wire = wire.clone();
         let id = id.clone();
@@ -541,20 +542,6 @@ fn MacroCell(
         }
     };
 
-    // Held (the cell or its knob): the panel pinned open, its sub-macros to
-    // hand — or, in rig edit (or with no panel), the tune menu.
-    let hold = use_callback({
-        let open_tune_menu = open_tune_menu.clone();
-        let id = id.clone();
-        move |(x, y): (f64, f64)| {
-            if has_panel && crate::ui::phone::RigEdit::editing() != Some(true) {
-                pinned_bar.set(Some(id.clone()));
-            } else {
-                open_tune_menu(x, y);
-            }
-        }
-    });
-
     rsx! {
         div {
             style: "position: relative; flex: 1 1 0%; min-width: 0;",
@@ -571,31 +558,25 @@ fn MacroCell(
                 ),
                 onmouseenter: move |_| over_cell.set(true),
                 onmouseleave: move |_| over_cell.set(false),
-                // Right-click: tune it, or keep the bar's positions.
+                // Right-click: tune it, or keep the bar's positions. By
+                // touch, the ⋯ beside the label.
                 oncontextmenu: {
                     let open_tune_menu = open_tune_menu.clone();
-                    move |e: MouseEvent| {
+                    signal_widgets::right_click(move |e: MouseEvent| {
                         e.prevent_default();
                         e.stop_propagation();
                         let p = e.client_coordinates();
                         open_tune_menu(p.x, p.y);
-                    }
+                    })
                 },
-                // Touch: a long-press pins the panel open; in rig edit (or
-                // with no panel) it is the right-click, the tune menu.
-                onpointerdown: move |e: PointerEvent| {
-                    long.down(&e, move |at| hold.call(at));
-                },
-                onpointermove: move |e: PointerEvent| long.moved(&e),
-                onpointerup: move |_| long.cancel(),
-                onpointercancel: move |_| long.cancel(),
 
-                // Label (above knob). By touch, a tap pins the panel.
+                // Label (above knob). By touch, a tap pins the panel, and
+                // the ⋯ after it opens the tune menu.
                 div { style: "display: flex; align-items: center; justify-content: center; gap: 2px; width: 100%; min-width: 0;",
                     onclick: {
                         let id = id.clone();
                         move |_| {
-                            if !long.fired() && has_panel && signal_widgets::is_touch() {
+                            if has_panel && touch {
                                 pinned_bar.set(if pinned { None } else { Some(id.clone()) });
                             }
                         }
@@ -612,6 +593,17 @@ fn MacroCell(
                             path { d: "M1.5 2.75 L4 5.25 L6.5 2.75", fill: "none", stroke: if open { "#a1a1aa" } else { "#52525b" }, stroke_width: "1.4", stroke_linecap: "round", stroke_linejoin: "round" }
                         }
                     }
+                    signal_widgets::TouchMenuButton {
+                        inline: true,
+                        title: format!("{} menu", knob.label),
+                        onclick: {
+                            let open_tune_menu = open_tune_menu.clone();
+                            move |e: MouseEvent| {
+                                let p = e.client_coordinates();
+                                open_tune_menu(p.x, p.y);
+                            }
+                        },
+                    }
                 }
 
                 MiniKnob {
@@ -621,7 +613,6 @@ fn MacroCell(
                     spread: knob.style == "spread",
                     rest: knob.rest,
                     dragging,
-                    on_hold: hold,
                     on_change: {
                         let wire = wire.clone();
                         let id = id.clone();
@@ -1533,7 +1524,8 @@ fn CurveChip(parent: String, t: MacroTuneView, color: String) -> Element {
                 e.stop_propagation();
                 w1.tune_op(&p1, &t1, "curve", next);
             },
-            oncontextmenu: move |e: MouseEvent| {
+            // Right-click: pick one (a mouse's; a tap steps through them).
+            oncontextmenu: signal_widgets::right_click(move |e: MouseEvent| {
                 e.prevent_default();
                 e.stop_propagation();
                 let (w, t, p) = (wire.clone(), t.clone(), parent.clone());
@@ -1543,7 +1535,7 @@ fn CurveChip(parent: String, t: MacroTuneView, color: String) -> Element {
                     items.clone(),
                     EventHandler::new(move |x: crate::ui::kit::Picked| w.tune_op(&p, &t, "curve", x.id)),
                 );
-            },
+            }),
             "{label}"
         }
     }
@@ -1621,7 +1613,8 @@ fn EnterChip(parent: String, t: MacroTuneView) -> Element {
                     }
                 });
             },
-            oncontextmenu: move |e: MouseEvent| {
+            // Right-click: an exact value (a mouse's; a finger drags it).
+            oncontextmenu: signal_widgets::right_click(move |e: MouseEvent| {
                 e.prevent_default();
                 e.stop_propagation();
                 let (w, t, p) = (wire.clone(), t.clone(), parent.clone());
@@ -1635,7 +1628,7 @@ fn EnterChip(parent: String, t: MacroTuneView) -> Element {
                         }
                     }),
                 );
-            },
+            }),
             "in {pct}%"
         }
     }
@@ -1844,12 +1837,7 @@ fn MiniKnob(
     /// Nothing to turn (an empty drive slot).
     #[props(default)]
     disabled: bool,
-    /// Held still (touch), at the client point: in place of the reset — a
-    /// bar knob's hold opens its panel. Double-tap still resets.
-    #[props(default)]
-    on_hold: Option<Callback<(f64, f64)>>,
 ) -> Element {
-    let long = signal_widgets::use_long_press();
     let bus = DragBus::try_use();
     let mut shield = use_signal(|| None::<(f64, f64)>);
     let display = value.clamp(0.0, 1.0);
@@ -1929,20 +1917,8 @@ fn MiniKnob(
                 if disabled {
                     return;
                 }
-                // The knob's press is its own: the cell's long-press (its
-                // menu) must not fire under a knob being held.
+                // The knob's press is its own drag, not the cell's.
                 e.stop_propagation();
-                // Touch: holding still resets, as a double-click does.
-                long.down(&e, move |at| {
-                    if let Some(bus) = bus {
-                        bus.end();
-                    }
-                    match (on_hold, on_reset) {
-                        (Some(h), _) => h.call(at),
-                        (None, Some(r)) => r.call(()),
-                        (None, None) => apply(f64::from(rest)),
-                    }
-                });
                 let y0 = e.client_coordinates().y;
                 let mut dragging = dragging;
                 dragging.set(true);
@@ -1966,9 +1942,6 @@ fn MiniKnob(
                     None => shield.set(Some((y0, v))),
                 }
             },
-            onpointermove: move |e: PointerEvent| long.moved(&e),
-            onpointerup: move |_| long.cancel(),
-            onpointercancel: move |_| long.cancel(),
             onwheel: move |e: WheelEvent| {
                 if disabled {
                     return;

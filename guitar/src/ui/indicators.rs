@@ -72,7 +72,7 @@ pub fn Indicator(
     flash: bool,
     /// An alarm: the indicator becomes a red pill reading this ("Audio
     /// stopped · Start"), and a click runs `on_alarm` — the fix, not a menu.
-    /// The menu stays a right-click away.
+    /// The menu stays a right-click away (by touch, the ⋯ in the pill).
     #[props(default)]
     alarm: Option<String>,
     #[props(default)] on_alarm: Option<Callback<()>>,
@@ -120,10 +120,11 @@ pub fn Indicator(
                     style: "display: flex; align-items: center; gap: 7px; height: 24px; padding: 0 10px; \
                             border-radius: {R_SM}; cursor: pointer; user-select: none; white-space: nowrap; \
                             background: {ALARM}; color: #ffffff; font-size: {T_BODY}; font-weight: 700;",
-                    oncontextmenu: move |e: MouseEvent| {
+                    // Right-click: its options. By touch, the ⋯ after it.
+                    oncontextmenu: signal_widgets::right_click(move |e: MouseEvent| {
                         e.prevent_default();
                         open.set(true);
-                    },
+                    }),
                     onclick: move |_| {
                         if let Some(cb) = on_alarm {
                             cb.call(());
@@ -136,6 +137,11 @@ pub fn Indicator(
                                 background: {pill_dot};",
                     }
                     "{alarm}"
+                    signal_widgets::TouchMenuButton {
+                        inline: true,
+                        title: format!("{title} options"),
+                        onclick: move |_| open.set(true),
+                    }
                 }
             } else {
                 div {
@@ -144,10 +150,11 @@ pub fn Indicator(
                             border-radius: {R_SM}; cursor: pointer; user-select: none; \
                             font-size: {T_SMALL}; font-weight: 600; color: {label_color};",
                     class: "sg-hover",
-                    oncontextmenu: move |e: MouseEvent| {
+                    // A tap opens it too, so a finger needs nothing more.
+                    oncontextmenu: signal_widgets::right_click(move |e: MouseEvent| {
                         e.prevent_default();
                         open.set(true);
-                    },
+                    }),
                     onclick: move |_| open.toggle(),
                     span {
                         style: "width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; \

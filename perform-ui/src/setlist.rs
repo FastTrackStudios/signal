@@ -33,7 +33,7 @@ use super::colors::{
     suggest_section, tape_for, when_label,
 };
 use super::marks::{OverrideIcon, Strike, module_colour};
-use super::menu::{Item, MoreButton, Picked, PressMenu, open_naming_under};
+use super::menu::{Item, MoreButton, Picked, RowMenu, open_naming_under};
 use super::panels::{Panel, PanelView};
 use super::tokens::*;
 use crate::PerfState;
@@ -601,6 +601,23 @@ pub fn TabletSetlist(state: PerfState) -> Element {
     let set_index = perf.setlist_index;
     // A song being dragged into order: (from, to).
     let drag = use_signal(|| None::<(usize, usize)>);
+    // The search field's text: only the songs that answer it are listed,
+    // each at its own set position (`search`).
+    let query = use_signal(String::new);
+    let q = query();
+    let filtering = super::search::is_filtering(&q);
+    let shown: Vec<bool> = {
+        let hits = super::search::matching_songs(
+            &q,
+            songs.iter().map(|s| (s.name.as_str(), s.key.as_str())),
+        );
+        let mut v = vec![false; songs.len()];
+        for i in hits {
+            v[i] = true;
+        }
+        v
+    };
+    let none_shown = filtering && !shown.contains(&true);
     // The list and its songs, measured: whether the song up is scrolled
     // out of the list, and which way.
     let mut list_el = use_signal(|| None::<Rc<MountedData>>);
@@ -686,16 +703,34 @@ pub fn TabletSetlist(state: PerfState) -> Element {
             });
         }
     });
+    // The search cleared: the whole list back, and the song up in view.
+    let mut was_filtering = use_signal(|| false);
+    if *was_filtering.peek() != filtering {
+        was_filtering.set(filtering);
+        if !filtering {
+            spawn(async move {
+                // Once the rows are back (and measured).
+                architect::platform::sleep(std::time::Duration::from_millis(60)).await;
+                let at = perf_sig.peek().song_index as usize;
+                if let Some(Some(up)) = rows.peek().get(at).cloned() {
+                    let _ = up.scroll_to(ScrollBehavior::Instant).await;
+                }
+            });
+        }
+    }
     let count = songs.len();
     rsx! {
         section { style: "position: relative; height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: {SHEET}; font-family: {FONT}; color: {INK};",
             SetHeader { perf: perf.clone(), lib: lib_now.clone(), panel, reordering }
+            if !songs.is_empty() && !reordering() {
+                super::search::SongSearch { query }
+            }
             div { style: "position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column;",
             div {
                 style: "position: relative; flex: 1; min-height: 0; overflow-y: auto;",
                 onmounted: move |e| list_el.set(Some(e.data())),
                 onscroll: move |_| measure(),
-                for (i, song) in songs.iter().enumerate() {
+                for (i, song) in songs.iter().enumerate().filter(|(i, _)| reordering() || shown[*i]) {
                     div {
                         key: "{i}-{song.name}",
                         onmounted: move |e| {
@@ -721,6 +756,11 @@ pub fn TabletSetlist(state: PerfState) -> Element {
                             on_grip: {
                                 let rig = rig.clone();
                                 move |_: PointerEvent| {
+                                    // Filtered, the rows on screen are not the
+                                    // set's order: clear the search to reorder.
+                                    if filtering {
+                                        return;
+                                    }
                                     let rig = rig.clone();
                                     begin_row_drag(bus, drag, rows, count, i, 24.0, move |from, to| {
                                         call!(rig, |r| r.move_setlist_entry(set_index, from as u32, to as u32));
@@ -734,7 +774,12 @@ pub fn TabletSetlist(state: PerfState) -> Element {
                         }
                     }
                 }
-                if !songs.is_empty() && !reordering() {
+                if none_shown && !reordering() {
+                    div { "data-testid": "setlist-search-empty", style: "padding: 18px 20px; font-size: 15px; color: {INK_3};",
+                        "No song in this set matches “{q}”."
+                    }
+                }
+                if !songs.is_empty() && !reordering() && !filtering {
                     button {
                         style: "display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 0 18px; border: none; border-top: 1px solid {RULE}; background: transparent; color: {INK_3}; font-size: 15px; font-weight: 600; font-family: {FONT}; text-align: left; justify-content: flex-start; cursor: pointer;",
                         onclick: move |_| panel.set(Some(Panel::Add)),
@@ -750,7 +795,7 @@ pub fn TabletSetlist(state: PerfState) -> Element {
                 }
             }
             // Scrolled away from the song up: where it is, and a way back.
-            if let Some(above) = away() {
+            if let Some(above) = away().filter(|_| !filtering) {
                 NowBar { perf: perf.clone(), above, on_back: move |()| {
                     let at = perf_sig.peek().song_index as usize;
                     if let Some(up) = rows.peek().get(at).cloned().flatten() {
@@ -1138,7 +1183,7 @@ fn SongRow(
         || !modules.is_empty()
         || (!open && sections > 0);
     rsx! {
-        PressMenu {
+        RowMenu {
             items: items.clone(),
             on_pick: pick_handler,
             off: reordering,
@@ -1682,7 +1727,7 @@ fn SectionRow(
         }
     });
     rsx! {
-        PressMenu {
+        RowMenu {
             items: items.clone(),
             on_pick: pick_handler,
             style: "{pin} display: flex; align-items: center; min-height: 50px; background: {row_bg};",
@@ -2012,7 +2057,7 @@ pub fn StackRow(
     };
     let grip_ink = super::colors::tape_mark(&view.name);
     rsx! {
-        PressMenu {
+        RowMenu {
             items: items.clone(),
             on_pick: pick_handler,
             style: "position: relative; display: flex; align-items: stretch; border-top: 1px solid {RULE}; background: {pick(on, tint(&song_colour, 18), CLEAR.to_string())};",

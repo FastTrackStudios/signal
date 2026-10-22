@@ -124,6 +124,23 @@ pub fn SetlistSidebar(
         .cloned()
         .unwrap_or_else(|| "No setlist".to_string());
     let current = model.song_index as usize;
+    // The search field's text: the songs that answer it, each at its set
+    // position, so the song up keeps its highlight (`search`).
+    let query = use_signal(String::new);
+    let q = query();
+    let filtering = signal_rig_perform_ui::search::is_filtering(&q);
+    let shown: Vec<bool> = {
+        let hits = signal_rig_perform_ui::search::matching_songs(
+            &q,
+            model.songs.iter().map(|s| (s.name.as_str(), s.key.as_str())),
+        );
+        let mut v = vec![false; model.songs.len()];
+        for i in hits {
+            v[i] = true;
+        }
+        v
+    };
+    let none_shown = filtering && !shown.contains(&true);
     // A patch as its chip: the name, tinted with the colour of the stack
     // that holds it (the song's rotations are in the stacks already), else
     // the profile's own list.
@@ -161,11 +178,11 @@ pub fn SetlistSidebar(
                 oncontextmenu: {
                     let rig = rig.clone();
                     let (sets, index) = (model.setlists.clone(), model.setlist_index);
-                    move |e: MouseEvent| {
+                    signal_widgets::right_click(move |e: MouseEvent| {
                         e.prevent_default();
                         let rig = rig.clone();
                         crate::ui::kit::context_menu(popup_host, &e, set_items(&sets, index as usize), EventHandler::new(move |p: Picked| set_act(&rig, index, on_browse, p)));
-                    }
+                    })
                 },
                 PresetBar {
                     label: "Setlist",
@@ -205,6 +222,11 @@ pub fn SetlistSidebar(
                 }
             }
 
+            // ── Find a song: type part of its title or its key ──
+            if !model.songs.is_empty() {
+                signal_rig_perform_ui::search::SongSearch { query }
+            }
+
             // ── The songs in set order, on one timeline edge, each with the
             // patch it starts on. What a song does beyond that (its parts,
             // its switches) is the song's own page, not the set's list. ──
@@ -214,12 +236,17 @@ pub fn SetlistSidebar(
                         "This set has no songs yet."
                     }
                 }
+                if none_shown {
+                    div { "data-testid": "setlist-search-empty", style: "padding: 10px 8px; font-size: 12px; color: {FAINT}; line-height: 1.5;",
+                        "No song in this set matches “{q}”."
+                    }
+                }
                 div { style: "position: relative; display: flex; flex-direction: column;",
                     // The timeline: one line the song nodes sit on.
                     if !model.songs.is_empty() {
                         div { style: "position: absolute; left: 13px; top: 14px; bottom: 14px; width: 1px; background: {LINE}; z-index: 0;" }
                     }
-                    for (i, song) in model.songs.iter().cloned().enumerate() {
+                    for (i, song) in model.songs.iter().cloned().enumerate().filter(|(i, _)| shown[*i]) {
                         {
                             let state = if i < current { Node::Done } else if i == current { Node::Now } else { Node::Ahead };
                             let rig_play = rig.clone();
@@ -236,19 +263,20 @@ pub fn SetlistSidebar(
                                             send(&rig_play, move |r| async move { let _ = r.select_song(i as u32).await; });
                                         },
                                         // Right-click: edit the song (its name, key and
-                                        // tempo) and its place in this set.
+                                        // tempo) and its place in this set. By touch,
+                                        // its ⋯ at the row's end.
                                         oncontextmenu: {
                                             let rig = rig.clone();
                                             let row = song.clone();
                                             let entry = lib.songs.iter().find(|s| s.name == song.name).cloned();
                                             let names: Vec<String> = lib.songs.iter().map(|s| s.name.clone()).collect();
                                             let (count, setlist) = (model.songs.len(), model.setlist_index);
-                                            move |e: MouseEvent| {
+                                            signal_widgets::right_click(move |e: MouseEvent| {
                                                 e.prevent_default();
                                                 let items = song_items(&row, entry.as_ref(), &names, i, count);
                                                 let (rig, row, entry) = (rig.clone(), row.clone(), entry.clone());
                                                 crate::ui::kit::context_menu(popup_host, &e, items, EventHandler::new(move |p: Picked| song_act(&rig, &row, entry.as_ref(), i, setlist, p)));
-                                            }
+                                            })
                                         },
                                         TimelineNode { state, accent: false }
                                         span { style: "width: 14px; flex-shrink: 0; font-size: 11px; font-family: monospace; color: {FAINT};",
@@ -292,6 +320,29 @@ pub fn SetlistSidebar(
                                             span { style: "width: 24px; flex-shrink: 0; text-align: right; font-size: 11px; font-family: monospace; color: {FAINT};",
                                                 title: "{song.bpm} BPM",
                                                 "{song.bpm}"
+                                            }
+                                        }
+                                        // Its ⋯: the same menu as the right-click —
+                                        // a finger's only way in (no press-and-hold).
+                                        {
+                                            let rig = rig.clone();
+                                            let row = song.clone();
+                                            let entry = lib.songs.iter().find(|s| s.name == song.name).cloned();
+                                            let names: Vec<String> = lib.songs.iter().map(|s| s.name.clone()).collect();
+                                            let (count, setlist) = (model.songs.len(), model.setlist_index);
+                                            let items = song_items(&row, entry.as_ref(), &names, i, count);
+                                            rsx! {
+                                                div {
+                                                    class: if state == Node::Now { "" } else { signal_widgets::reveal("sg-reveal") },
+                                                    style: "display: flex; flex-shrink: 0;",
+                                                    crate::ui::kit::ActionMenu {
+                                                        items,
+                                                        size: 20,
+                                                        bare: true,
+                                                        title: format!("{} actions", song.name),
+                                                        on_pick: move |p: Picked| song_act(&rig, &row, entry.as_ref(), i, setlist, p),
+                                                    }
+                                                }
                                             }
                                         }
                                     }

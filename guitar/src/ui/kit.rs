@@ -170,15 +170,16 @@ pub fn ListRow(
                     h.call(());
                 }
             },
+            // Right-click: its menu. By touch, its ⋯ (shown, not revealed).
             oncontextmenu: {
                 let menu = menu.clone();
-                move |e: MouseEvent| {
+                signal_widgets::right_click(move |e: MouseEvent| {
                     if let Some(h) = on_menu {
                         e.prevent_default();
                         e.stop_propagation();
                         context_menu(host, &e, menu.clone(), h);
                     }
-                }
+                })
             },
             Dot { live, modified, hollow: !small }
             if !swatch.is_empty() {

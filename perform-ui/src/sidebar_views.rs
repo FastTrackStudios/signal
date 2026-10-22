@@ -15,7 +15,7 @@ use signal_widgets::drag_bus::DragBus;
 
 use super::colors::{name_colour, tape_mark};
 use super::marks::ProfileIcon;
-use super::menu::{Item, MoreButton, Picked, PressMenu, open_naming_under};
+use super::menu::{Item, MoreButton, Picked, RowMenu, open_naming_under};
 use super::setlist::{
     Plus, Rows, StackRow, StackView, begin_row_drag, call, is_live, keep_row, part_patch,
     profile_stacks, stack_for, use_library,
@@ -701,7 +701,7 @@ pub fn ProfileView(state: PerfState) -> Element {
 }
 
 /// Every patch in the stack playing: tap one to play it; ⋯ (or a
-/// long-press) to rename, move or remove it; "Add a patch" at the foot.
+/// right-click) to rename, move or remove it; "Add a patch" at the foot.
 #[component]
 fn StackPatches(view: StackView) -> Element {
     let rig = use_hook(crate::perform_client);
@@ -744,7 +744,7 @@ fn StackPatches(view: StackView) -> Element {
                         }
                     });
                     rsx! {
-                        PressMenu {
+                        RowMenu {
                             key: "{p}",
                             items: items.clone(),
                             on_pick,

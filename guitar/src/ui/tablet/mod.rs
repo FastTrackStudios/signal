@@ -125,8 +125,8 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut sidebar = use_signal(|| true);
     let mut macros = use_signal(|| true);
     // The switches at the foot: under a gig compact (all ten, both rows cut
-    // down), so the chart gets the room and the rig stays in sight. A hold
-    // on the foot bar's Switches picks Full / Compact / Hidden, and the
+    // down), so the chart gets the room and the rig stays in sight. The ⋯
+    // beside the foot bar's Switches picks Full / Compact / Hidden, and the
     // pick is kept across launches.
     let kept = load_switches_mode();
     let mut docked = use_signal(|| kept != Some(SwitchesMode::Hidden));
@@ -506,7 +506,7 @@ fn TabletFoot(
     switches: bool,
     /// The switches as one compact row.
     switches_compact: bool,
-    /// A hold on Switches picked how they show.
+    /// Switches' ⋯ picked how they show.
     on_switches_mode: EventHandler<SwitchesMode>,
     on_switches: EventHandler<()>,
     routing: bool,
@@ -528,7 +528,6 @@ fn TabletFoot(
         view == View::Edit,
         view == View::Setup,
     );
-    let long = signal_widgets::use_long_press();
     let mut sw_menu = use_signal(|| false);
     rsx! {
         FootBar {
@@ -592,21 +591,28 @@ fn TabletFoot(
             if perform {
                 Group {
                     div {
-                        style: "position: relative; display: flex;",
-                        onpointerdown: move |e: PointerEvent| long.down(&e, move |_| sw_menu.set(true)),
-                        onpointermove: move |e: PointerEvent| long.moved(&e),
-                        onpointerup: move |_| long.cancel(),
-                        onpointercancel: move |_| long.cancel(),
+                        style: "position: relative; display: flex; align-items: center;",
                         FootButton { label: "Switches", on: switches, pin: true, grouped: true,
-                            onclick: move |_| {
-                                // A hold opened the menu: its release is not a tap.
-                                if !long.fired() {
-                                    on_switches.call(());
-                                }
-                            },
+                            onclick: move |_| on_switches.call(()),
                             rect { x: "2", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
                             rect { x: "7", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
                             rect { x: "12", y: "5", width: "4", height: "8", rx: "1", fill: "none", stroke: ink(switches), stroke_width: "1.4" }
+                        }
+                        // How the switches show: its ⋯ (no press-and-hold —
+                        // `signal_widgets::touch`).
+                        button {
+                            "aria-label": "How the switches show",
+                            title: "How the switches show",
+                            style: "width: 28px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: none; background: transparent; padding: 0; cursor: pointer;",
+                            onclick: move |e: MouseEvent| {
+                                e.stop_propagation();
+                                sw_menu.toggle();
+                            },
+                            svg { width: "14", height: "4", view_box: "0 0 14 4", style: "display: block;",
+                                circle { cx: "2", cy: "2", r: "1.6", fill: "#a1a1aa" }
+                                circle { cx: "7", cy: "2", r: "1.6", fill: "#a1a1aa" }
+                                circle { cx: "12", cy: "2", r: "1.6", fill: "#a1a1aa" }
+                            }
                         }
                         if sw_menu() {
                             div { style: "position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 60; display: flex; flex-direction: column; gap: 2px; padding: 4px; min-width: 140px; border-radius: 8px; background: #1c1c21; border: 1px solid #2e2e35; box-shadow: 0 8px 24px rgba(0,0,0,0.5);",

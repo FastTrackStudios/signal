@@ -6,7 +6,7 @@
 //!   health & safety    Panic (with the health it fixes, far from Mute), the
 //!                      MIDI and Audio lights (a press opens Setup), CPU, the
 //!                      IN · OUT · PHONES meters, and Mute: a tap mutes the
-//!                      house, a hold offers muting fully
+//!                      house, its ⋯ offers muting fully
 
 use std::time::Duration;
 
@@ -165,16 +165,12 @@ fn PanicButton(busy: Signal<bool>) -> Element {
 }
 
 /// Mute: a tap mutes the house (you still hear yourself in the phones);
-/// held, a menu offers muting fully. Lit red while muted; a tap while lit
+/// its ⋯ offers muting fully. Lit red while muted; a tap while lit
 /// unmutes.
 #[component]
 fn MuteButton(house: bool, phones: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let host = PopupHost::try_use();
-    let mut held = use_signal(|| false);
-    let mut fired = use_signal(|| false);
-    // Each press its own: a hold timer from an earlier press never fires.
-    let mut press = use_signal(|| 0u32);
     let full = house && phones;
     let any = house || phones;
     let items = vec![
@@ -214,11 +210,11 @@ fn MuteButton(house: bool, phones: bool) -> Element {
         })
     });
     let aria = if full {
-        "Fully muted — tap to unmute, hold for more"
+        "Fully muted — tap to unmute"
     } else if any {
-        "House muted — tap to unmute, hold for more"
+        "House muted — tap to unmute"
     } else {
-        "Mute house — tap to mute the house, hold to mute fully"
+        "Mute house — tap to mute the house; ⋯ to mute fully"
     };
     let shade = if any {
         (1.0 - (phase() * std::f64::consts::TAU).cos()) / 2.0 * 0.18
@@ -226,64 +222,61 @@ fn MuteButton(house: bool, phones: bool) -> Element {
         0.0
     };
     rsx! {
-        button {
-            "aria-label": "{aria}",
-            "aria-pressed": "{any}",
-            style: "align-self: stretch; min-width: 48px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; justify-content: center; border: none; background: {bg}; touch-action: none; cursor: pointer; position: relative;",
-            onpointerdown: {
-                let rig = rig.clone();
-                let items = items.clone();
-                move |e: PointerEvent| {
-                    let (c, el) = (e.client_coordinates(), e.element_coordinates());
-                    let (left, bottom) = (c.x - el.x, c.y - el.y + f64::from(TOP_H));
-                    held.set(true);
-                    fired.set(false);
-                    let mine = press() + 1;
-                    press.set(mine);
+        div { style: "align-self: stretch; flex-shrink: 0; display: flex; align-items: stretch;",
+            button {
+                "aria-label": "{aria}",
+                "aria-pressed": "{any}",
+                style: "align-self: stretch; min-width: 48px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; justify-content: center; border: none; background: {bg}; cursor: pointer; position: relative;",
+                // A tap: mute the house, or unmute.
+                onclick: {
                     let rig = rig.clone();
-                    let items = items.clone();
-                    spawn(async move {
-                        architect::platform::sleep(Duration::from_millis(500)).await;
-                        if held() && press() == mine {
-                            fired.set(true);
-                            open_menu(host, left - MENU_W, bottom + 4.0, items, mute_pick(rig));
-                        }
-                    });
-                }
-            },
-            onpointerup: {
-                let rig = rig.clone();
-                move |_| {
-                    let was = held();
-                    held.set(false);
-                    if was && !fired() {
+                    move |_| {
                         if any { set(rig.clone(), false, false) } else { set(rig.clone(), true, phones) }
                     }
+                },
+                // Right-click: the menu, as its ⋯ opens it.
+                oncontextmenu: {
+                    let rig = rig.clone();
+                    let items = items.clone();
+                    signal_widgets::right_click(move |e: MouseEvent| {
+                        e.prevent_default();
+                        let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                        let (left, bottom) = (c.x - el.x, c.y - el.y + f64::from(TOP_H));
+                        open_menu(host, left - MENU_W, bottom + 4.0, items.clone(), mute_pick(rig.clone()));
+                    })
+                },
+                if shade > 0.0 {
+                    span { style: "position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,{shade});" }
                 }
-            },
-            onpointerleave: move |_| held.set(false),
-            onpointercancel: move |_| held.set(false),
-            oncontextmenu: {
-                let rig = rig.clone();
-                let items = items.clone();
-                move |e: MouseEvent| {
-                    e.prevent_default();
-                    let (c, el) = (e.client_coordinates(), e.element_coordinates());
-                    let (left, bottom) = (c.x - el.x, c.y - el.y + f64::from(TOP_H));
-                    held.set(false);
-                    open_menu(host, left - MENU_W, bottom + 4.0, items.clone(), mute_pick(rig.clone()));
+                svg { key: "{any}", width: "17", height: "17", view_box: "0 0 16 16",
+                    path { d: "M2 6h2.5L8 3v10L4.5 10H2Z", fill: ink }
+                    if any {
+                        path { d: "M10.5 6l4 4M14.5 6l-4 4", stroke: ink, stroke_width: "1.6", stroke_linecap: "round" }
+                    } else {
+                        path { d: "M10.5 5.5a3.5 3.5 0 0 1 0 5", fill: "none", stroke: ink, stroke_width: "1.4", stroke_linecap: "round" }
+                        path { d: "M12.5 3.8a6 6 0 0 1 0 8.4", fill: "none", stroke: ink, stroke_width: "1.4", stroke_linecap: "round", opacity: "0.7" }
+                    }
                 }
-            },
-            if shade > 0.0 {
-                span { style: "position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,{shade});" }
             }
-            svg { key: "{any}", width: "17", height: "17", view_box: "0 0 16 16",
-                path { d: "M2 6h2.5L8 3v10L4.5 10H2Z", fill: ink }
-                if any {
-                    path { d: "M10.5 6l4 4M14.5 6l-4 4", stroke: ink, stroke_width: "1.6", stroke_linecap: "round" }
-                } else {
-                    path { d: "M10.5 5.5a3.5 3.5 0 0 1 0 5", fill: "none", stroke: ink, stroke_width: "1.4", stroke_linecap: "round" }
-                    path { d: "M12.5 3.8a6 6 0 0 1 0 8.4", fill: "none", stroke: ink, stroke_width: "1.4", stroke_linecap: "round", opacity: "0.7" }
+            // More: mute fully, or unmute — no press-and-hold
+            // (`signal_widgets::touch`).
+            button {
+                "aria-label": "Mute options",
+                title: "Mute options",
+                style: "align-self: stretch; width: 26px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: none; background: {bg}; padding: 0; cursor: pointer;",
+                onclick: {
+                    let rig = rig.clone();
+                    let items = items.clone();
+                    move |e: MouseEvent| {
+                        let (c, el) = (e.client_coordinates(), e.element_coordinates());
+                        let (right, bottom) = (c.x - el.x + 26.0, c.y - el.y + f64::from(TOP_H));
+                        open_menu(host, right - MENU_W, bottom + 4.0, items.clone(), mute_pick(rig.clone()));
+                    }
+                },
+                svg { width: "12", height: "4", view_box: "0 0 12 4", style: "display: block;",
+                    circle { cx: "2", cy: "2", r: "1.5", fill: ink }
+                    circle { cx: "6", cy: "2", r: "1.5", fill: ink }
+                    circle { cx: "10", cy: "2", r: "1.5", fill: ink }
                 }
             }
         }

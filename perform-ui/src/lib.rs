@@ -13,6 +13,7 @@ pub mod colors;
 pub mod marks;
 pub mod menu;
 pub mod panels;
+pub mod search;
 pub mod setlist;
 pub mod sidebar_views;
 

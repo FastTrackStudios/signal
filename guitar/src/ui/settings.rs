@@ -404,7 +404,7 @@ fn PhonesLive(state: crate::ui::state::RigViewState) -> Element {
 }
 
 /// A horizontal level slider: drag or click anywhere on it; double-click
-/// (hold still, by touch) for unity.
+/// (double-tap), or a tap on the readout, for unity. No press-and-hold.
 #[component]
 fn LevelRow(label: String, value: f32, readout: String, on_change: Callback<f32>) -> Element {
     let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
@@ -413,7 +413,6 @@ fn LevelRow(label: String, value: f32, readout: String, on_change: Callback<f32>
     // Looked up here: a context lookup inside the press handler would be a
     // hook called outside render.
     let bus = signal_widgets::DragBus::try_use();
-    let long = signal_widgets::use_long_press();
     rsx! {
         div { style: "display: flex; align-items: center; gap: 10px;",
             span { style: "font-size: 12px; color: #a1a1aa; width: 80px; flex-shrink: 0;", "{label}" }
@@ -421,18 +420,9 @@ fn LevelRow(label: String, value: f32, readout: String, on_change: Callback<f32>
                 style: "position: relative; flex: 1 1 0%; height: 18px; cursor: ew-resize;",
                 onmounted: move |e| el.set(Some(e.data())),
                 ondoubleclick: move |_| on_change.call(crate::proto::PHONES_UNITY),
-                onpointermove: move |e: PointerEvent| long.moved(&e),
-                onpointerup: move |_| long.cancel(),
-                onpointercancel: move |_| long.cancel(),
                 onpointerdown: move |e: PointerEvent| {
                     // The press is the knob's to drag: no panning under it (Blitz).
                     e.prevent_default();
-                    long.down(&e, move |_| {
-                        if let Some(bus) = bus {
-                            bus.end();
-                        }
-                        on_change.call(crate::proto::PHONES_UNITY);
-                    });
                     let x = e.client_coordinates().x;
                     let el = el();
                     spawn(async move {
@@ -454,7 +444,11 @@ fn LevelRow(label: String, value: f32, readout: String, on_change: Callback<f32>
                 div { style: "position: absolute; left: {unity}%; top: 3px; width: 1px; height: 12px; background: #52525b;" }
                 div { style: "position: absolute; left: calc({pct}% - 6px); top: 3px; width: 12px; height: 12px; border-radius: 999px; background: #e4e4e7;" }
             }
-            span { style: "font-size: 11px; color: #d4d4d8; width: 58px; text-align: right; font-family: monospace;", "{readout}" }
+            span { style: "font-size: 11px; color: #d4d4d8; width: 58px; text-align: right; font-family: monospace; cursor: pointer;",
+                title: "Back to unity",
+                onclick: move |_| on_change.call(crate::proto::PHONES_UNITY),
+                "{readout}"
+            }
         }
     }
 }

@@ -762,7 +762,7 @@ fn StackTile(
             // across the neighbouring switches.
             style: "position: relative; height: 100%; display: flex; flex-direction: column; min-width: 0; overflow: hidden;",
             // Right-click: how this switch behaves, for the song that is up.
-            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
+            oncontextmenu: signal_widgets::right_click(move |e: MouseEvent| open_switch_menu.call(e)),
             onmouseleave: move |_| menu.set(false),
             LearnBadge {
                 binding: learn.binding(&learn_target).map(str::to_string),
@@ -941,7 +941,7 @@ fn ActionTile(
     rsx! {
         div {
             style: "position: relative; height: 100%; display: flex; flex-direction: column;",
-            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
+            oncontextmenu: signal_widgets::right_click(move |e: MouseEvent| open_switch_menu.call(e)),
             onmouseleave: move |_| menu.set(false),
             HoldButton {
                 class: if compact {
@@ -1342,7 +1342,7 @@ fn Learnable(target: String, title: String, learn: SwitchLearn, children: Elemen
     rsx! {
         div {
             style: "position: relative; height: 100%; min-height: 0; display: flex; flex-direction: column;",
-            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
+            oncontextmenu: signal_widgets::right_click(move |e: MouseEvent| open_switch_menu.call(e)),
             onmouseleave: move |_| menu.set(false),
             LearnBadge {
                 binding: learn.binding(&target).map(str::to_string),
@@ -1514,7 +1514,7 @@ fn TapTempoTile(
             style: "position: relative; height: 100%; display: flex; flex-direction: column;",
             // Right-click: MIDI-learn a pedal onto it, and (in a song) give
             // switch 5 another job.
-            oncontextmenu: move |e: MouseEvent| open_switch_menu.call(e),
+            oncontextmenu: signal_widgets::right_click(move |e: MouseEvent| open_switch_menu.call(e)),
             onmouseleave: move |_| menu.set(false),
             LearnBadge {
                 binding: learn.binding("tap").map(str::to_string),

@@ -456,12 +456,13 @@ fn row(armed: bool) -> String {
     )
 }
 
-/// A row that opens its menu on a long press, as its ⋯ does: hold still
-/// for half a second and the menu opens at the finger (a right-click opens
-/// it at once). Moving more than 10pt or lifting first lets the press be an
-/// ordinary tap. `off`: no long press (a list being reordered).
+/// A row with a menu: a right-click opens it at the pointer, as the row's
+/// ⋯ does under itself. **Nothing opens it by touch but the ⋯** — no
+/// press-and-hold, because a finger resting on a list before it scrolls is
+/// exactly a hold, and a scroll must never open a menu (`signal_widgets::
+/// touch`). `off`: no right-click either (a list being reordered).
 #[component]
-pub fn PressMenu(
+pub fn RowMenu(
     items: Vec<Item>,
     on_pick: EventHandler<Picked>,
     style: String,
@@ -469,50 +470,17 @@ pub fn PressMenu(
     children: Element,
 ) -> Element {
     let host = PopupHost::try_use();
-    // Bumped on every press and every release: a press's timer opens the
-    // menu only if nothing came after it.
-    let mut press = use_signal(|| 0_u64);
-    let mut at = use_signal(|| (0.0_f64, 0.0_f64));
-    let menu = items.clone();
     rsx! {
         div {
             style: "{style}",
-            onpointerdown: move |e: PointerEvent| {
-                if off {
-                    return;
-                }
-                let c = e.client_coordinates();
-                at.set((c.x, c.y));
-                let n = *press.peek() + 1;
-                press.set(n);
-                let items = items.clone();
-                spawn(async move {
-                    architect::platform::sleep(std::time::Duration::from_millis(500)).await;
-                    if *press.peek() == n {
-                        press.set(n + 1);
-                        let (x, y) = *at.peek();
-                        open_menu(host, x, y, items, on_pick);
-                    }
-                });
-            },
-            onpointermove: move |e: PointerEvent| {
-                let c = e.client_coordinates();
-                let (x, y) = *at.peek();
-                if (c.x - x).hypot(c.y - y) > 10.0 {
-                    press += 1;
-                }
-            },
-            onpointerup: move |_| press += 1,
-            onpointercancel: move |_| press += 1,
-            oncontextmenu: move |e: MouseEvent| {
+            oncontextmenu: signal_widgets::right_click(move |e: MouseEvent| {
                 if off {
                     return;
                 }
                 e.prevent_default();
-                press += 1;
                 let c = e.client_coordinates();
-                open_menu(host, c.x, c.y, menu.clone(), on_pick);
-            },
+                open_menu(host, c.x, c.y, items.clone(), on_pick);
+            }),
             {children}
         }
     }
