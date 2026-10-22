@@ -20,11 +20,17 @@
 //! All default bindings are channel 1.
 //!
 //! All bindings are user-replaceable via [`MidiActionMap::set`].
+//!
+//! A binding names an Action List id — the same `FTS_SIGNAL_*` id a key, a
+//! REAPER named command and a model over MCP run — so a pedal is dispatched
+//! by running that id on the host's list ([`crate::commands`]);
+//! [`MidiActionMap::command_for`] says which command a trigger means.
 
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 use crate::actions::{NEXT_SONG, PREVIOUS_SONG, switch_to_variation_action};
+use crate::commands::SignalCommand;
 
 // ── Trigger types ─────────────────────────────────────────────────────────────
 
@@ -210,6 +216,13 @@ impl MidiActionMap {
             .map(|b| b.action_id.as_str())
     }
 
+    /// The Signal command a trigger is bound to: `None` when it is unbound,
+    /// or bound to an id that is not one of Signal's commands.
+    #[must_use]
+    pub fn command_for(&self, trigger: &MidiActionTrigger) -> Option<SignalCommand> {
+        self.find(trigger).and_then(SignalCommand::from_id)
+    }
+
     /// All bindings in this map.
     #[must_use]
     pub fn bindings(&self) -> &[MidiActionBinding] {
@@ -261,6 +274,33 @@ mod tests {
                 101 + i
             );
         }
+    }
+
+    #[test]
+    fn every_default_binding_is_a_signal_command() {
+        let map = MidiActionMap::with_defaults();
+        for binding in map.bindings() {
+            assert!(
+                SignalCommand::from_id(&binding.action_id).is_some(),
+                "{} is not on Signal's Action List",
+                binding.action_id
+            );
+        }
+        assert_eq!(
+            map.command_for(&MidiActionTrigger::cc_ch(0, 110)),
+            Some(SignalCommand::NextSong)
+        );
+        assert_eq!(
+            map.command_for(&MidiActionTrigger::cc_ch(0, 101)),
+            crate::commands::Variation::new(1).map(SignalCommand::SwitchToVariation)
+        );
+    }
+
+    #[test]
+    fn a_custom_id_is_not_a_command() {
+        let mut map = MidiActionMap::empty();
+        map.set(MidiActionTrigger::cc_ch(0, 1), "custom.action");
+        assert_eq!(map.command_for(&MidiActionTrigger::cc_ch(0, 1)), None);
     }
 
     #[test]

@@ -5,10 +5,13 @@
 //! runtime. The per-action `ActionMeta` constants beside the trait are
 //! compile-time keys usable in handler maps.
 //!
-//! Declaration only: signal-proto has no `Daw` and no controller, so the
-//! handlers live with the host that owns them — today
-//! `signal-extension`'s `handle_action`. Keeping the declaration here means
-//! every host registers the same ids, names and descriptions.
+//! Declaration only: what each id means is [`crate::commands::SignalCommand`],
+//! and the handlers live with the host that owns them — the engine's rig
+//! (`guitar::signal_commands`) and the REAPER extension
+//! (`signal-extension`'s `commands`), each putting every id on an architect
+//! `ActionList` through [`crate::commands::register`]. Keeping the
+//! declaration here means every host registers the same ids, names and
+//! descriptions.
 //!
 //! # Navigation model
 //!

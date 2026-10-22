@@ -16,7 +16,7 @@ doc = ["dep:loro", "dep:serde_json"]
 
 [dependencies]
 base64.workspace = true
-architect.workspace = true
+architect = { workspace = true, features = ["action-list"] }
 signal-macromod.workspace = true
 utils.workspace = true
 serde.workspace = true

@@ -64,6 +64,7 @@ pub mod block;
 pub mod block_kind;
 pub mod builder;
 pub mod catalog;
+pub mod commands;
 pub mod default_profile;
 pub mod defaults;
 #[cfg(feature = "doc")]
