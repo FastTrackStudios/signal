@@ -13,6 +13,13 @@
 
 use dioxus::prelude::*;
 
+/// A decoded cover photograph, as the native canvas paints it.
+#[cfg(not(target_arch = "wasm32"))]
+pub type Art = vello::peniko::ImageData;
+/// The browser's canvas is a placeholder that paints no art: nothing to hold.
+#[cfg(target_arch = "wasm32")]
+pub type Art = ();
+
 /// One block's cell.
 #[derive(Clone, PartialEq, Debug)]
 pub struct CanvasCell {
@@ -45,7 +52,7 @@ pub struct CanvasCell {
     pub fallback: Option<(String, String, bool)>,
     /// Its cover art (a TONE3000 capture's photograph), drawn when no face
     /// matches it.
-    pub art: Option<vello::peniko::ImageData>,
+    pub art: Option<Art>,
 }
 
 /// One module: its name, what it plays, its colour, and what it holds left

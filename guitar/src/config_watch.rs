@@ -417,6 +417,7 @@ pub fn log_path() -> PathBuf {
 }
 
 /// Append one line to the reload log, stamped with the time.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn log_line(text: &str) {
     use std::io::Write as _;
     let line = format!(
@@ -431,6 +432,10 @@ pub fn log_line(text: &str) {
         let _ = f.write_all(line.as_bytes());
     }
 }
+
+/// The browser has no reload log (no file to append to): a no-op.
+#[cfg(target_arch = "wasm32")]
+pub fn log_line(_text: &str) {}
 
 /// The file `signal rig reload` drops into the rig directory to ask a
 /// running rig to re-read its config now. It holds a tag the rig puts on

@@ -3492,6 +3492,7 @@ pub fn seed_responses(p: &crate::compose::BlockPresetDef) -> Vec<MacroResponseDe
 /// Put `patch`'s stored knob positions on its built chain, as the live rig
 /// does — what levelling measures, so a preset's knob positions are part of
 /// the loudness it is levelled to.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn apply_positions(def: &PatchDef, comp: &Compositions, patch: &mut sampler::RigPatch) {
     apply_ctx(context_for(comp, def), def, patch);
 }
@@ -3503,6 +3504,7 @@ pub const LEVEL_EXEMPT: &[&str] = &["output"];
 
 /// [`apply_positions`] for a loudness measurement: every knob where the
 /// patch keeps it except the [`LEVEL_EXEMPT`] ones, which stay at rest.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn apply_positions_for_level(
     def: &PatchDef,
     comp: &Compositions,
@@ -3516,6 +3518,7 @@ pub fn apply_positions_for_level(
     apply_ctx(ctx, def, patch);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn apply_ctx(ctx: Context, def: &PatchDef, patch: &mut sampler::RigPatch) {
     if ctx.saved.is_empty() && ctx.defaults.is_empty() {
         return;

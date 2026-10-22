@@ -17,8 +17,12 @@ pub mod proto;
 #[cfg(feature = "ui")]
 pub mod ui;
 
+// The engine half (architect::rig, signal-space's engine): native-only. The
+// browser remote drives a network engine through `proto`.
+#[cfg(not(target_arch = "wasm32"))]
 mod backend;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use backend::{DEFAULT_COLS, DEFAULT_ROWS, EkitBackend};
 /// MIDI note of pad 0 — GM kick, so a stock drum map lines up.
 pub const BASE_NOTE: u8 = 36;

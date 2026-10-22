@@ -1761,6 +1761,7 @@ impl Default for KeysRigBackend {
 /// those from plain worker threads, which have no ambient runtime —
 /// entering this one gives every spawn a reactor regardless of host
 /// (in-process iOS app, engine mode, tests).
+#[cfg(not(target_arch = "wasm32"))]
 fn keys_runtime() -> &'static tokio::runtime::Runtime {
     static RT: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
     RT.get_or_init(|| {
@@ -1772,6 +1773,18 @@ fn keys_runtime() -> &'static tokio::runtime::Runtime {
             .expect("keys runtime")
     })
 }
+
+/// Enter [`keys_runtime`] for the current scope. The browser keys rig has
+/// no threads to give a runtime (tokio's `rt-multi-thread` does not exist on
+/// wasm): there the browser's own executor drives every spawn, so entering
+/// is a no-op.
+#[cfg(not(target_arch = "wasm32"))]
+fn enter_keys_runtime() -> tokio::runtime::EnterGuard<'static> {
+    keys_runtime().enter()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn enter_keys_runtime() {}
 
 /// The output-artefact half of [`crate::proto::KeysRealtime`], read from
 /// the sampler's process-wide counters (`engine::output_glitches`).
@@ -2453,7 +2466,7 @@ impl KeysRigBackend {
                 if b.inner.rebuild_gen.load(Ordering::Acquire) != r#gen {
                     return; // a later edit owns the rebuild
                 }
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }
@@ -3416,7 +3429,7 @@ impl KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-patch-open".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }
@@ -3820,7 +3833,7 @@ impl KeysRigBackend {
                         let _ = std::thread::Builder::new()
                             .name("keys-switch".into())
                             .spawn(move || {
-                                let _rt = keys_runtime().enter();
+                                let _rt = enter_keys_runtime();
                                 b.fire_switch(&target, pressed);
                             });
                         return;
@@ -3944,7 +3957,7 @@ impl KeysRigSvc for KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-open".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 // ensure_open attaches MIDI itself — it is the single open
                 // path for every entry point (start, preset load, rebuild).
                 if b.ensure_open() {
@@ -4138,7 +4151,7 @@ impl KeysRigSvc for KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-load".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.do_load_preset(index as usize);
             });
     }
@@ -4408,7 +4421,7 @@ impl KeysRigSvc for KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-layer-patch".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }
@@ -4918,7 +4931,7 @@ impl KeysRigSvc for KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-layer-clear".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }
@@ -4997,7 +5010,7 @@ impl KeysRigSvc for KeysRigBackend {
             let _ = std::thread::Builder::new()
                 .name("keys-stack".into())
                 .spawn(move || {
-                    let _rt = keys_runtime().enter();
+                    let _rt = enter_keys_runtime();
                     b.rebuild_program();
                 });
         } else {
@@ -5228,7 +5241,7 @@ impl KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-rebuild".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }

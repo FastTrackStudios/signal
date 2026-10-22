@@ -40,8 +40,9 @@ architect = { workspace = true, features = ["vox", "local"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 # NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs. A
-# USB HID keyboard: desktop only (`lightguide_none.rs` on a phone or tablet).
-[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+# USB HID keyboard: desktop only (`lightguide_none.rs` on a phone, tablet or
+# in the browser).
+[target.'cfg(not(any(target_os = "ios", target_os = "android", target_arch = "wasm32")))'.dependencies]
 control-surfaces = { workspace = true, features = ["kontrol"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

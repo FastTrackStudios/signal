@@ -68,7 +68,13 @@ fn main() {
     // The captures live in the rig-models repo, linked in by `just assets`.
     // A debug build without them is fine (a rig with no captures, tests
     // that need them fail); a release would ship that rig to people.
-    if std::env::var("PROFILE").as_deref() == Ok("release") {
+    // Except where no rig ships: a browser build (the engine is native-only)
+    // and a build that says so (`SIGNAL_RIG_NO_CAPTURES`: signal-web's
+    // pre-render server, which only renders pages).
+    println!("cargo:rerun-if-env-changed=SIGNAL_RIG_NO_CAPTURES");
+    let ships_a_rig = std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() != Ok("wasm32")
+        && std::env::var_os("SIGNAL_RIG_NO_CAPTURES").is_none();
+    if ships_a_rig && std::env::var("PROFILE").as_deref() == Ok("release") {
         for dir in ["default-config/models", "default-config-bass/models"] {
             assert!(
                 !files(&here.join(dir), &["nam", "wav"]).is_empty(),

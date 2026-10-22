@@ -548,7 +548,8 @@ fn type_colour(t: BlockType) -> &'static str {
 
 /// A cover photograph decoded small enough for a block (its longer side
 /// 256 px).
-fn thumbnail(bytes: &[u8]) -> Option<vello::peniko::ImageData> {
+#[cfg(not(target_arch = "wasm32"))]
+fn thumbnail(bytes: &[u8]) -> Option<super::routing_canvas::Art> {
     let img = image::load_from_memory(bytes)
         .ok()?
         .thumbnail(256, 256)
@@ -561,4 +562,10 @@ fn thumbnail(bytes: &[u8]) -> Option<vello::peniko::ImageData> {
         width,
         height,
     })
+}
+
+/// No image decoder in the browser build (`image` is native-only): no art.
+#[cfg(target_arch = "wasm32")]
+fn thumbnail(_bytes: &[u8]) -> Option<super::routing_canvas::Art> {
+    None
 }

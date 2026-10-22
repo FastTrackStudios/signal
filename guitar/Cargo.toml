@@ -55,7 +55,6 @@ signal-rig-shell = { workspace = true, optional = true }
 signal-rig-perform-ui = { workspace = true, optional = true }
 sampler = { workspace = true }
 signal-widgets = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 uuid = { workspace = true }
 vox = { workspace = true, optional = true }
@@ -79,6 +78,9 @@ dioxus-native-dom = { workspace = true }
 frame = { workspace = true, features = ["anyrender-0-11", "live"] }
 image = { workspace = true }
 parley = { workspace = true }
+# The workspace tokio is `full`; on wasm only sync/macros/io-util/rt/time
+# exist (mio has no wasm backend), so the browser remote gets its own line.
+tokio = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 vello = { workspace = true }
@@ -103,6 +105,7 @@ tracing-subscriber = { workspace = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 anyrender_vello_hybrid = { workspace = true, features = ["webgl"] }
 rustc-hash = { version = "2" }
+tokio = { version = "1.48", default-features = false, features = ["rt", "sync", "macros", "time"] }
 vello_hybrid = { workspace = true, features = ["webgl"] }
 wasm-bindgen = { workspace = true }
 web-sys = { workspace = true, features = ["Window", "Document", "Element", "HtmlCanvasElement"] }

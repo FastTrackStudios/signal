@@ -10,6 +10,10 @@
 //! the preset source (the Omnisphere library scan) and the wire service
 //! ([`synth::proto::synth::SynthRig`]) are synth-specific.
 
+// The rig engine (architect::rig, threads, audio) is native-only; the browser
+// remote reaches a network engine through `proto`.
+#[cfg(not(target_arch = "wasm32"))]
 mod backend;
+#[cfg(not(target_arch = "wasm32"))]
 pub use backend::SynthRigBackend;
 pub use synth::proto;

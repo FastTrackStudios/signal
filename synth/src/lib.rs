@@ -28,6 +28,8 @@ pub mod engine;
 pub mod gig;
 pub mod omni;
 pub mod omni_import;
+// Building packs (the filesystem, the sample cache) is native-only.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod pack;
 
 pub use engine::{Source, signal_layer};

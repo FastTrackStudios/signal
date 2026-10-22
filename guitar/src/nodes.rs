@@ -129,6 +129,7 @@ impl RigNodes {
             built.chain = sampler::from_node::to_chain(&resolved);
             settle_amp_stage(&mut built.chain, def, patch);
             settle_drives(&mut built.chain, def, patch, drives);
+            #[cfg(not(target_arch = "wasm32"))]
             apply_block_levels(&mut built.chain, def, patch, drives);
             // On the trim block inside the chain, not the scene's output —
             // see `profiles::set_patch_trim` for why a level after the
@@ -505,6 +506,7 @@ fn settle_drives(
 /// Built into the chain, not applied when a patch is switched in: a level
 /// set after the chain was already playing was a gain stage only the live
 /// rig had, and the first thing to drift.
+#[cfg(not(target_arch = "wasm32"))]
 fn apply_block_levels(
     chain: &mut [sampler::RigBlock],
     def: &ProfileDef,

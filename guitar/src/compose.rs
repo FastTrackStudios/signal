@@ -1935,6 +1935,7 @@ pub struct SnapshotLevel {
 /// target. Measured with no calibration of its own, so a second pass
 /// repeats the first. `threads` renders run at once (they are offline and
 /// slow; the cache is shared).
+#[cfg(not(target_arch = "wasm32"))]
 #[must_use]
 pub fn level_presets(
     comp: &mut Compositions,
@@ -2185,6 +2186,7 @@ const POST_COMP: &str = crate::profiles::POST_COMP;
 /// uses it. Snapshots whose Post Comp preset has no target are left alone.
 ///
 /// Changes each snapshot's level; run [`level_presets`] after.
+#[cfg(not(target_arch = "wasm32"))]
 #[must_use]
 pub fn dial_post_comp(
     comp: &mut Compositions,
@@ -2299,6 +2301,7 @@ pub fn dial_post_comp(
 /// The loudness (LUFS) a patch playing `preset` / `snapshot` is levelled to:
 /// the rig's target plus that snapshot's [`gain_bias_db`](PresetSnapshotDef::gain_bias_db).
 /// A patch with no preset snapshot (the legacy pool shape) gets the target.
+#[cfg(not(target_arch = "wasm32"))]
 #[must_use]
 pub fn loudness_target(comp: &Compositions, preset: &str, snapshot: &str) -> f32 {
     let bias = comp

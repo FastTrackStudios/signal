@@ -35,9 +35,16 @@ signal-rigs-proto = { workspace = true }
 sampler = { workspace = true }
 synth = { workspace = true }
 signal-widgets = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing = { workspace = true }
 vox = { workspace = true, optional = true }
+
+# The workspace tokio is `full`; on wasm only sync/macros/io-util/rt/time
+# exist (mio has no wasm backend), so the browser keys rig gets its own line.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1.48", default-features = false, features = ["rt", "sync", "macros", "time"] }
 
 [dev-dependencies]
 eyre = { workspace = true }

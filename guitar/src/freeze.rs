@@ -283,6 +283,7 @@ pub struct Rendered {
 /// # Errors
 /// When the signal is missing, the snapshot does not build, or the rig
 /// does not render.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn render_training(
     comp: &Compositions,
     base: &ProfileDef,
@@ -383,6 +384,7 @@ fn check_side(live: &[f32], frozen: &[f32]) -> Check {
 ///
 /// # Errors
 /// When either chain does not build or render.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn compare(
     comp: &Compositions,
     base: &ProfileDef,
