@@ -17,3 +17,5 @@ workspace = true
 
 [dependencies]
 dioxus.workspace = true
+# The studio shell's tokens (app_shell::tokens, no features: no UI deps).
+app-shell.workspace = true

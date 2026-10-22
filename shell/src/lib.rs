@@ -17,7 +17,10 @@
 //!
 //! Inline styles only: Blitz takes no stylesheet (CLAUDE.md).
 
-pub mod tokens;
+//! The tokens are the studio shell's (`app_shell::tokens`): one set for the
+//! desktop frame (`app_shell::ui::ShellFrame`) and this iPad rig frame, so
+//! there is one shell look, not two. Re-exported here under its old path.
+pub use app_shell::tokens;
 
 use dioxus::prelude::*;
 
