@@ -6,6 +6,9 @@
 //!   row B   switches 1–5: the profile's first four stacks, then Tap Tempo
 //!           — or, where switch 5 is a stack (the bass's), the fifth
 //!
+//! Compact (under a gig's chart): the same two rows and columns, both cut
+//! down, so all ten switches stay in reach.
+//!
 //! A stack switch plays its stack; pressed again it steps through it. Its
 //! tile is the stack's colour, lit when it plays, dimmed toward the grid
 //! when not.
@@ -55,7 +58,9 @@ fn LitRing() -> Element {
 /// and the border on top.
 const HOLD_H: f64 = (super::fx_row::FX_H - 2.0) / 3.0;
 const MAIN_H: f64 = (super::fx_row::FX_H - 2.0) * 2.0 / 3.0;
-/// The compact row's height: the main row's, cut down.
+/// Compact: both rows cut down (the hold layer over the switches under
+/// the feet), well under the FX row's height.
+const COMPACT_HOLD_H: f64 = 38.0;
 const COMPACT_H: f64 = 58.0;
 
 macro_rules! call {
@@ -73,8 +78,7 @@ macro_rules! call {
 #[component]
 pub fn TouchSwitches(
     perf: PerformanceModel,
-    /// One short row, switches 1–5 alone (no hold layer): a chart above
-    /// gets the room.
+    /// Both rows (6–10 over 1–5), cut down: a chart above gets the room.
     #[props(default)]
     compact: bool,
 ) -> Element {
@@ -100,24 +104,14 @@ pub fn TouchSwitches(
     // hold layer's first tile the sixth stack.
     let five_is_stack =
         perf.switch_actions.get(4).is_some_and(|a| a == "stack") && stacks.len() > 4;
-    if compact {
-        return rsx! {
-            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {COMPACT_H}px; gap: 1px; background: #000; border-top: 1px solid #000; box-sizing: border-box; height: {COMPACT_H + 1.0}px;",
-                for i in 0..4usize {
-                    if let Some(st) = stacks.get(i).cloned() {
-                        StackTile { key: "c{i}", no: i as u32 + 1, stack: st, index: i, compact: true }
-                    } else {
-                        Empty { key: "c{i}", no: i as u32 + 1 }
-                    }
-                }
-                if five_is_stack {
-                    StackTile { no: 5, stack: stacks[4].clone(), index: 4, compact: true }
-                } else {
-                    TapTempo { bpm: perf.tempo_bpm }
-                }
-            }
-        };
-    }
+    // Full: as tall as the FX row. Compact: the same ten switches, the
+    // same columns, both rows cut down — a chart above gets the room.
+    let (hold_h, main_h) = if compact {
+        (COMPACT_HOLD_H, COMPACT_H)
+    } else {
+        (HOLD_H, MAIN_H)
+    };
+    let grid_h = hold_h + main_h + 2.0;
     rsx! {
         div { style: "display: flex; flex-direction: column; background: #0a0a0c;",
             // One grid, two rows of five, the same columns: the hold layer
@@ -125,7 +119,7 @@ pub fn TouchSwitches(
             // hairline of the ground between.
             // As tall as the FX row it swaps with (a landscape iPhone's
             // room): the grid above never moves.
-            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {HOLD_H}px {MAIN_H}px; gap: 1px; background: #000; border-top: 1px solid #000; box-sizing: border-box; height: {super::fx_row::FX_H}px;",
+            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {hold_h}px {main_h}px; gap: 1px; background: #000; border-top: 1px solid #000; box-sizing: border-box; height: {grid_h}px;",
                 if let Some((i, st)) = { let i = if five_is_stack { 5 } else { 4 }; stacks.get(i).cloned().map(|s| (i, s)) } {
                     StackTile { no: 6, stack: st, index: i, compact: true }
                 } else {
@@ -142,15 +136,15 @@ pub fn TouchSwitches(
                 TunerTile { muted: perf.tuner_visible, onclick: { let rig = rig.clone(); move |_| call!(rig, |r| r.toggle_tuner()) } }
                 for i in 0..4usize {
                     if let Some(st) = stacks.get(i).cloned() {
-                        StackTile { key: "m{i}", no: i as u32 + 1, stack: st, index: i, compact: false }
+                        StackTile { key: "m{i}", no: i as u32 + 1, stack: st, index: i, compact }
                     } else {
                         Empty { key: "m{i}", no: i as u32 + 1 }
                     }
                 }
                 if five_is_stack {
-                    StackTile { no: 5, stack: stacks[4].clone(), index: 4, compact: false }
+                    StackTile { no: 5, stack: stacks[4].clone(), index: 4, compact }
                 } else {
-                    TapTempo { bpm: perf.tempo_bpm }
+                    TapTempo { bpm: perf.tempo_bpm, compact }
                 }
             }
         }
@@ -280,7 +274,7 @@ fn Empty(no: u32) -> Element {
 }
 
 #[component]
-fn TapTempo(bpm: u32) -> Element {
+fn TapTempo(bpm: u32, #[props(default)] compact: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut flash = use_signal(|| false);
     let tempo = if bpm == 0 { 120 } else { bpm };
@@ -314,8 +308,8 @@ fn TapTempo(bpm: u32) -> Element {
             },
             if beat() { LitRing {} }
             SwitchNo { no: 5, ink: INK.to_string() }
-            span { style: "font-size: 20px; font-weight: 700;", "Tap Tempo" }
-            span { style: "font-size: 14px; font-weight: 600; opacity: 0.8; font-variant-numeric: tabular-nums;", "{tempo} BPM" }
+            span { style: "font-size: {pick(compact, 16, 20)}px; font-weight: 700;", "Tap Tempo" }
+            span { style: "font-size: {pick(compact, 12, 14)}px; font-weight: 600; opacity: 0.8; font-variant-numeric: tabular-nums;", "{tempo} BPM" }
         }
     }
 }

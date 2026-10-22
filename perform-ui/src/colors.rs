@@ -324,9 +324,51 @@ pub fn suggest_section(names: &[String]) -> String {
     }
 }
 
+/// A song's key as a chart writes it, split into the key itself and the
+/// rest: `"C# sig (A#m7-D#m7-F#)"` → `("C#", "A#m7-D#m7-F#")`, `"Db sig,
+/// Bbm"` → `("Db", "Bbm")`, `"F"` → `("F", "")`. The key goes in a chip;
+/// the rest (a progression, a relative minor, a note) is the line that
+/// truncates first, so it never pushes the song's name out.
+#[must_use]
+pub fn split_key(key: &str) -> (String, String) {
+    let key = key.trim();
+    let end = key
+        .find(|c: char| c.is_whitespace() || matches!(c, '(' | ',' | ';'))
+        .unwrap_or(key.len());
+    let (head, rest) = key.split_at(end);
+    let mut rest = rest.trim_start_matches(|c: char| c.is_whitespace() || matches!(c, ',' | ';'));
+    // "sig" says the key signature; the chip already is it.
+    if let Some(r) = rest.strip_prefix("sig") {
+        rest = r.trim_start_matches(|c: char| c.is_whitespace() || matches!(c, ',' | ';'));
+    }
+    let rest = rest.trim();
+    let rest = match rest.strip_prefix('(').and_then(|r| r.strip_suffix(')')) {
+        Some(inner) if !inner.contains('(') => inner.trim(),
+        _ => rest,
+    };
+    (head.to_string(), rest.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keys_split_into_the_key_and_the_rest() {
+        let s = split_key;
+        assert_eq!(s("F"), ("F".into(), String::new()));
+        assert_eq!(s(""), (String::new(), String::new()));
+        assert_eq!(
+            s("C# sig (A#m7-D#m7-F#)"),
+            ("C#".into(), "A#m7-D#m7-F#".into())
+        );
+        assert_eq!(s("Db sig, Bbm"), ("Db".into(), "Bbm".into()));
+        assert_eq!(s("D (Bm-A)"), ("D".into(), "Bm-A".into()));
+        assert_eq!(
+            s("G sig; B-Bm7-F#m-E (key uncertain)"),
+            ("G".into(), "B-Bm7-F#m-E (key uncertain)".into())
+        );
+    }
 
     #[test]
     fn song_colours_match_the_prototype() {

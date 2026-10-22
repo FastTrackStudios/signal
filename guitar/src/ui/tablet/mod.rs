@@ -85,6 +85,36 @@ enum View {
     Setup,
 }
 
+/// Where the switches' mode (Full / Compact / Hidden) is kept, across
+/// launches.
+fn switches_mode_path() -> std::path::PathBuf {
+    signal_rig_host::store::signal_config_dir().join("tablet-switches")
+}
+
+/// The switches' mode kept last time, if any.
+fn load_switches_mode() -> Option<SwitchesMode> {
+    match std::fs::read_to_string(switches_mode_path()).ok()?.trim() {
+        "full" => Some(SwitchesMode::Full),
+        "compact" => Some(SwitchesMode::Compact),
+        "hidden" => Some(SwitchesMode::Hidden),
+        _ => None,
+    }
+}
+
+/// Keep the switches' mode for the next launch.
+fn store_switches_mode(m: SwitchesMode) {
+    let word = match m {
+        SwitchesMode::Full => "full",
+        SwitchesMode::Compact => "compact",
+        SwitchesMode::Hidden => "hidden",
+    };
+    let path = switches_mode_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(path, word);
+}
+
 #[component]
 pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut view = use_signal(|| View::Perform);
@@ -94,11 +124,16 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     let mut chart_on = use_signal(|| gig.is_some());
     let mut sidebar = use_signal(|| true);
     let mut macros = use_signal(|| true);
-    // The switches at the foot: under a gig a compact row (switches 1–5),
-    // so the chart gets the room and the rig stays in sight. A hold on the
-    // foot bar's Switches picks Full / Compact / Hidden.
-    let mut docked = use_signal(|| true);
-    let mut sw_compact = use_signal(|| gig.is_some());
+    // The switches at the foot: under a gig compact (all ten, both rows cut
+    // down), so the chart gets the room and the rig stays in sight. A hold
+    // on the foot bar's Switches picks Full / Compact / Hidden, and the
+    // pick is kept across launches.
+    let kept = load_switches_mode();
+    let mut docked = use_signal(|| kept != Some(SwitchesMode::Hidden));
+    let mut sw_compact = use_signal(|| match kept {
+        Some(m) => m == SwitchesMode::Compact,
+        None => gig.is_some(),
+    });
     // Perform's middle: the routing grid, unless it's switched off.
     let mut routing_on = use_signal(|| true);
     // Perform's FX row: the selected block's controls, in the switches'
@@ -115,9 +150,16 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
     });
     // Edit's routing selection, and where it points the browser.
     let routing_sel = use_context_provider(|| routing::RoutingSel(Signal::new(None))).0;
+    // Whether a block was picked, last time: only a change moves the dock
+    // (the first run leaves the switches as they were kept).
+    let mut was_picked = use_signal(|| false);
     use_effect(move || {
         let picked = routing_sel().is_some();
         fx_on.set(picked);
+        if picked == *was_picked.peek() {
+            return;
+        }
+        was_picked.set(picked);
         // Under a gig the switches stay as they were left when a pick is let go.
         if picked || gig.is_none() {
             docked.set(!picked);
@@ -366,12 +408,20 @@ pub fn TabletRemote(model: PerformanceModel, state: RigViewState) -> Element {
                     use signal_widgets::SwitchesMode as M;
                     docked.set(m != M::Hidden);
                     sw_compact.set(m == M::Compact);
+                    store_switches_mode(m);
                     if m != M::Hidden {
                         fx_on.set(false);
                     }
                 },
                 on_switches: move |()| {
                     docked.toggle();
+                    store_switches_mode(if !docked() {
+                        signal_widgets::SwitchesMode::Hidden
+                    } else if sw_compact() {
+                        signal_widgets::SwitchesMode::Compact
+                    } else {
+                        signal_widgets::SwitchesMode::Full
+                    });
                     if docked() {
                         fx_on.set(false);
                     }

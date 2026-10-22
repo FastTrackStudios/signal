@@ -468,12 +468,16 @@ fn KeyChip(key_name: String) -> Element {
     if key_name.is_empty() {
         return rsx! {};
     }
+    // The key alone ("C#" of "C# sig (A#m7-D#m7-F#)"): a chart's whole key
+    // line in a chip that never shrinks pushed the song's name out.
+    let (chip, _) = signal_rig_perform_ui::colors::split_key(&key_name);
     rsx! {
         span {
             style: "flex-shrink: 0; min-width: 18px; height: 16px; padding: 0 3px; border-radius: 4px; \
                     border: 1px solid {LINE_STRONG}; display: flex; align-items: center; justify-content: center; \
                     font-size: 11px; font-weight: 600; color: {MUTED};",
-            "{key_name}"
+            title: "{key_name}",
+            "{chip}"
         }
     }
 }

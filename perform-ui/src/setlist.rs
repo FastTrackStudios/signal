@@ -3,9 +3,11 @@
 //!
 //!   Header   the set's name (a tap opens the sets), event · date · profile
 //!            in words, the set as a bar of song colours; ⋯ manages the set.
-//!   Songs    number on the song's colour, name, Now / Next, key, tempo, ⋯.
-//!            The song up is open on its sections; a tap on another plays it.
-//!            Reorder mode grows handles to drag songs into order.
+//!   Songs    a grip, the number on the song's colour, the name (the whole
+//!            width, truncated last), Now / Next; under it the key, the
+//!            tempo and the rest of the key's line; ⋯. The song up is open
+//!            on its sections; a tap on another plays it. The grip drags a
+//!            song into order (Reorder folds the sections away for it).
 //!   Sections a part's `section` groups consecutive parts; each shows the
 //!            patch it plays, its changes in words, and a ⋯; its grip drags
 //!            it. The section playing opens into the stacks.
@@ -207,15 +209,19 @@ pub fn begin_row_drag(
     {
         let tops = Rc::clone(&tops);
         spawn(async move {
-            let mut out = Vec::with_capacity(els.len());
-            for e in els {
-                out.push(match e {
-                    Some(e) => e
-                        .get_client_rect()
-                        .await
-                        .map_or(f64::INFINITY, |r| r.min_y()),
-                    None => f64::INFINITY,
-                });
+            // A row Blitz cannot measure right now (the document is busy
+            // — it usually is mid-gesture) is asked again, not taken as
+            // "infinitely far down": that sent every drop to the top.
+            let mut out = vec![f64::INFINITY; els.len()];
+            for (k, e) in els.into_iter().enumerate() {
+                let Some(e) = e else { continue };
+                for _ in 0..30 {
+                    if let Ok(r) = e.get_client_rect().await {
+                        out[k] = r.min_y();
+                        break;
+                    }
+                    architect::platform::sleep(std::time::Duration::from_millis(16)).await;
+                }
             }
             *tops.borrow_mut() = out;
         });
@@ -234,12 +240,20 @@ pub fn begin_row_drag(
                 if t.is_empty() {
                     return;
                 }
-                let mut to = 0;
+                // The last measured row whose top (plus `grace`) the pointer
+                // is below; above them all, the first — but only when the
+                // first was measured, else it stays where it was.
+                let mut to = None;
                 for (k, top) in t.iter().enumerate() {
-                    if y > top + grace {
-                        to = k;
+                    if top.is_finite() && y > top + grace {
+                        to = Some(k);
                     }
                 }
+                let to = to.unwrap_or(if t.first().is_some_and(|x| x.is_finite()) {
+                    0
+                } else {
+                    from
+                });
                 d.set(Some((from, to)));
             }
             DragEvent::End => {
@@ -1020,9 +1034,12 @@ fn SongRow(
     let start = song.start.clone();
     let start_stack = stack_for(&perf, &lib, &shown_profile, &start);
     let set_index = perf.setlist_index;
-    let (lifted, drop_above) = match drag() {
-        Some((from, to)) => (from == index, to == index && from != index),
-        None => (false, false),
+    // Lifted: the song being dragged. Where it lands: a line above this
+    // song (moving up) or below it (moving down).
+    let (lifted, drop_line) = match drag() {
+        Some((from, to)) if to == index && from != index => (false, Some(to < from)),
+        Some((from, _)) => (from == index, None),
+        None => (false, None),
     };
 
     let items = vec![
@@ -1076,10 +1093,12 @@ fn SongRow(
     } else {
         UNSTUCK
     };
-    let top_rule = if drop_above {
-        format!("border-top: 3px solid {FOCUS_FG};")
-    } else {
-        format!("border-top: 1px solid {RULE};")
+    let top_rule = match drop_line {
+        Some(true) => format!("border-top: 3px solid {FOCUS_FG};"),
+        Some(false) => {
+            format!("border-top: 1px solid {RULE}; border-bottom: 3px solid {FOCUS_FG};")
+        }
+        None => format!("border-top: 1px solid {RULE};"),
     };
     let number_bg = if played {
         format!("color-mix(in srgb, {colour} 35%, {SHEET})")
@@ -1110,17 +1129,40 @@ fn SongRow(
             _ => {}
         }
     });
+    // The key as a chip ("C#"), the rest of what the chart says of it
+    // ("A#m7-D#m7-F#") after the tempo, where it truncates first.
+    let (key_chip, key_rest) = super::colors::split_key(&song.key);
+    let grip_ink = colour.clone();
+    let has_more = !start.is_empty()
+        || !own_profile.is_empty()
+        || !modules.is_empty()
+        || (!open && sections > 0);
     rsx! {
         PressMenu {
             items: items.clone(),
             on_pick: pick_handler,
             off: reordering,
-            style: "{pin} display: flex; align-items: stretch; min-height: 64px; {top_rule} background: {bg};",
+            style: "{pin} display: flex; align-items: stretch; min-height: 64px; {top_rule} background: {bg}; opacity: {pick(lifted, 0.5, 1.0)};",
             if up {
                 span { style: "position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: {colour};" }
             }
+            // The grip, as the profile's stacks have it: drag the song into
+            // its place (the order is the rig's, so it persists, and the song
+            // up stays up).
+            span {
+                "aria-label": "Drag {song.name} to move it",
+                style: "width: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none;",
+                onpointerdown: move |e: PointerEvent| {
+                    e.prevent_default();
+                    e.stop_propagation();
+                    on_grip.call(e);
+                },
+                svg { width: "14", height: "12", view_box: "0 0 14 12",
+                    path { d: "M1.5 2h11M1.5 6h11M1.5 10h11", stroke: "{grip_ink}", stroke_opacity: if played { "0.45" } else { "1" }, stroke_width: "1.7", stroke_linecap: "round" }
+                }
+            }
             button {
-                style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 10px 2px 10px 14px; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
+                style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 8px 2px 8px 0; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
                 onclick: {
                     let rig = rig.clone();
                     move |_| {
@@ -1137,9 +1179,10 @@ fn SongRow(
                 span { style: "width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 750; color: #0b0b0e; background: {number_bg};",
                     "{index + 1}"
                 }
-                span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;",
+                span { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;",
+                    // The title first, the whole width: it gives way last.
                     span { style: "display: flex; align-items: center; gap: 8px; min-width: 0;",
-                        span { style: "position: relative; min-width: 0; font-size: 17px; font-weight: {pick(up, 750, 600)}; color: {pick(played, INK_3, INK)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+                        span { style: "position: relative; flex: 1 1 auto; min-width: 0; font-size: 17px; font-weight: {pick(up, 750, 600)}; color: {pick(played, INK_3, INK)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
                             "{song.name}"
                             if played {
                                 Strike { width: 1.6 }
@@ -1148,44 +1191,43 @@ fn SongRow(
                         if up { Badge { live: true, "Now" } }
                         if next { Badge { live: false, "Next" } }
                     }
-                    span { style: "display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: {INK_3}; min-width: 0; white-space: nowrap; overflow: hidden;",
-                        if !start.is_empty() {
-                            PatchChip { patch: start.clone(), stack: start_stack.clone(), small: true, lit: false }
-                        }
-                        // Its own profile, in words — only when it isn't the set's.
-                        if !own_profile.is_empty() {
-                            span { style: "flex-shrink: 0; color: {INK_2}; font-weight: 650;", "{own_profile}" }
-                        }
-                        Changes { modules: modules.clone(), max: 2 }
-                        if !open && sections > 0 {
-                            span { style: "flex-shrink: 0;", "{sections} sections" }
+                    // Then the key and the tempo, then what else the chart
+                    // says of the key — that truncates first.
+                    if !key_chip.is_empty() || song.bpm > 0 || !key_rest.is_empty() {
+                        span { style: "display: flex; align-items: center; gap: 7px; min-width: 0; white-space: nowrap; overflow: hidden; font-size: 13px; color: {INK_3};",
+                            if !key_chip.is_empty() {
+                                span { style: "flex-shrink: 0; min-width: 24px; height: 20px; padding: 0 5px; box-sizing: border-box; border: 1px solid {RULE_STRONG}; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 650; color: {INK_2};",
+                                    "{key_chip}"
+                                }
+                            }
+                            if song.bpm > 0 {
+                                span { style: "flex-shrink: 0; font-weight: 600; color: {INK_2}; font-variant-numeric: tabular-nums;", "{song.bpm} BPM" }
+                            }
+                            if !key_rest.is_empty() {
+                                span { style: "flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;", "{key_rest}" }
+                            }
                         }
                     }
-                }
-                if !song.key.is_empty() {
-                    span { style: "flex-shrink: 0; min-width: 30px; height: 28px; padding: 0 6px; box-sizing: border-box; border: 1px solid {RULE_STRONG}; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: {INK_2}; font-variant-numeric: tabular-nums;",
-                        "{song.key}"
+                    if has_more {
+                        span { style: "display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: {INK_3}; min-width: 0; white-space: nowrap; overflow: hidden;",
+                            if !start.is_empty() {
+                                PatchChip { patch: start.clone(), stack: start_stack.clone(), small: true, lit: false }
+                            }
+                            // Its own profile, in words — only when it isn't the set's.
+                            if !own_profile.is_empty() {
+                                span { style: "flex-shrink: 0; color: {INK_2}; font-weight: 650;", "{own_profile}" }
+                            }
+                            Changes { modules: modules.clone(), max: 2 }
+                            if !open && sections > 0 {
+                                span { style: "flex-shrink: 0;", "{sections} sections" }
+                            }
+                        }
                     }
-                }
-                span { style: "width: 30px; text-align: right; font-size: 14px; font-weight: 600; color: {INK_2}; flex-shrink: 0; font-variant-numeric: tabular-nums;",
-                    if song.bpm > 0 { "{song.bpm}" }
                 }
             }
             div { style: "display: flex; align-items: center;",
                 if reordering {
-                    // The handle: drag the song into its place.
-                    span {
-                        "aria-label": "Drag {song.name}",
-                        style: "width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none;",
-                        onpointerdown: move |e: PointerEvent| {
-                            e.prevent_default();
-                            e.stop_propagation();
-                            on_grip.call(e);
-                        },
-                        svg { width: "14", height: "10", view_box: "0 0 14 10",
-                            path { d: "M1 1h12M1 5h12M1 9h12", stroke: INK_2, stroke_width: "1.8", stroke_linecap: "round" }
-                        }
-                    }
+                    span { style: "width: 12px;" }
                 } else {
                     MoreButton {
                         items: items.clone(),
