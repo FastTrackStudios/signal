@@ -308,7 +308,7 @@ pub fn ToneBrowser(on_loaded: Callback<ToneImport>) -> Element {
                                             }
                                         });
                                     },
-                                    "Sign in"
+                                    "Connect TONE3000"
                                 }
                             }
                         }
