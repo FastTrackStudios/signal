@@ -56,7 +56,7 @@ walkdir = { workspace = true, optional = true }
 sampler = { path = ".", features = ["library"] }
 futures-util = { workspace = true }
 hound = { version = "3.5" }
-keyflow-orchestra = { workspace = true }
+keyflow-lang = { workspace = true, features = ["orchestra"] }
 libc = { version = "0.2" }
 memmap2 = { workspace = true }
 ratatui = { version = "0.30" }

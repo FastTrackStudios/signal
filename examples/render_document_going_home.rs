@@ -15,7 +15,7 @@
 
 use std::path::PathBuf;
 
-use keyflow_orchestra::{Config, ProfileKind, process_part, score};
+use keyflow_lang::orchestra::{Config, ProfileKind, process_part, score};
 use sampler::SamplerRig;
 use sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
 

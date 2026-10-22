@@ -12,8 +12,8 @@
 //! capability gate is computed keyflow-style (profile) and passed to the
 //! document side, which normally derives it from the library spec.
 
-use keyflow_orchestra::mirror::stage1_annotations as mirror_annotations;
-use keyflow_orchestra::{Config, MidiNote, detect_profile, process_part};
+use keyflow_lang::orchestra::mirror::stage1_annotations as mirror_annotations;
+use keyflow_lang::orchestra::{Config, MidiNote, detect_profile, process_part};
 use sampler::document::{DocCc, DocNote, TrackDocument, stage1_annotations as doc_annotations};
 
 fn corpus_files() -> Vec<std::path::PathBuf> {
@@ -31,7 +31,10 @@ fn corpus_files() -> Vec<std::path::PathBuf> {
 }
 
 /// keyflow engine channels are 1-based; documents are 0-based.
-fn to_document(notes: &[MidiNote], ccs: &[keyflow_orchestra::engine::CcEvent]) -> TrackDocument {
+fn to_document(
+    notes: &[MidiNote],
+    ccs: &[keyflow_lang::orchestra::engine::CcEvent],
+) -> TrackDocument {
     TrackDocument {
         version: 1,
         seed: 0,
@@ -65,7 +68,7 @@ fn to_document(notes: &[MidiNote], ccs: &[keyflow_orchestra::engine::CcEvent]) -
 fn document_annotation_matches_mirror_across_corpus() {
     for f in corpus_files() {
         let name = f.file_name().unwrap().to_string_lossy().to_string();
-        let score = keyflow_orchestra::score::load(&f).expect("parse");
+        let score = keyflow_lang::orchestra::score::load(&f).expect("parse");
         for part in &score.parts {
             let profile = detect_profile(&part.name);
             let cfg = Config {
