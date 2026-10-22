@@ -585,8 +585,61 @@ fn song_parts(perf: &PerformState, lib: &LibraryModel, i: usize) -> Vec<PerfPart
 
 // ── The sidebar ────────────────────────────────────────────────────────────
 
+/// How long a row armed to load stays armed (worship / gig screen spec
+/// §8.7): a second tap inside it loads the song; after it, nothing.
+pub const ARM_FOR: std::time::Duration = std::time::Duration::from_secs(6);
+
+/// The primary button's fill (the armed row's Load): 5.2:1 under white.
+const PRIMARY: &str = "#2563eb";
+
+/// What a tap on a song row's body does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowTap {
+    /// Reordering: the grip moves rows, a tap does nothing.
+    Nothing,
+    /// The song up: open or fold its sections.
+    Toggle,
+    /// Another song while arming is on: arm it (highlight, show Load).
+    Arm,
+    /// Load it: between songs, or the second tap on an armed row.
+    Load,
+}
+
+/// A row tap's meaning. Arm-to-load (on while a song plays, or the touch
+/// lock is on) asks for two taps, so a stray tap mid-song never changes
+/// the rig's sound (`select_song` does at once).
+#[must_use]
+pub const fn row_tap(reordering: bool, up: bool, arm_to_load: bool, armed: bool) -> RowTap {
+    if reordering {
+        RowTap::Nothing
+    } else if up {
+        RowTap::Toggle
+    } else if arm_to_load && !armed {
+        RowTap::Arm
+    } else {
+        RowTap::Load
+    }
+}
+
 #[component]
-pub fn TabletSetlist(state: PerfState) -> Element {
+pub fn TabletSetlist(
+    state: PerfState,
+    /// The song up opens on its sections (the default). Off (the
+    /// performer screen's narrow column): every song stays folded until
+    /// its row is tapped open.
+    #[props(default = true)]
+    sections: bool,
+    /// Two taps to load another song: the first arms the row (a Load
+    /// button shows in it for [`ARM_FOR`]), the second loads it. The app
+    /// turns it on while a song plays; between songs one tap loads.
+    #[props(default)]
+    arm_to_load: bool,
+    /// The search text, when the screen holds it (the performer screen's
+    /// own field, or a test); without it the setlist keeps its own. Either
+    /// way the list is filtered by the song search (`search`).
+    #[props(default)]
+    filter: Option<Signal<String>>,
+) -> Element {
     let rig = use_hook(crate::perform_client);
     let bus = DragBus::try_use();
     let lib = use_library(state);
@@ -603,8 +656,21 @@ pub fn TabletSetlist(state: PerfState) -> Element {
     let drag = use_signal(|| None::<(usize, usize)>);
     // The search field's text: only the songs that answer it are listed,
     // each at its own set position (`search`).
-    let query = use_signal(String::new);
+    let own_query = use_signal(String::new);
+    let query = filter.unwrap_or(own_query);
     let q = query();
+    // The row armed to load, if any (only while arming is on).
+    let mut armed = use_signal(|| None::<usize>);
+    let armed_now = (*armed.read()).filter(|_| arm_to_load);
+    let mut arm = move |i: usize| {
+        armed.set(Some(i));
+        spawn(async move {
+            architect::platform::sleep(ARM_FOR).await;
+            if *armed.peek() == Some(i) {
+                armed.set(None);
+            }
+        });
+    };
     let filtering = super::search::is_filtering(&q);
     let shown: Vec<bool> = {
         let hits = super::search::matching_songs(
@@ -743,11 +809,16 @@ pub fn TabletSetlist(state: PerfState) -> Element {
                             perf: perf.clone(),
                             lib: lib_now.clone(),
                             index: i,
-                            open: !reordering() && (i == at || open.read().contains(&i)),
+                            open: !reordering() && ((sections && i == at) || open.read().contains(&i)),
                             reordering: reordering(),
+                            arm_to_load,
+                            armed: armed_now == Some(i),
+                            on_arm: move |()| arm(i),
+                            on_loaded: move |()| armed.set(None),
                             drag,
                             panel,
                             on_toggle: move |()| {
+                                armed.set(None);
                                 let mut o = open.write();
                                 if !o.remove(&i) {
                                     o.insert(i);
@@ -769,7 +840,7 @@ pub fn TabletSetlist(state: PerfState) -> Element {
                             },
                         }
                         // The song up is open on its sections; others when opened.
-                        if !reordering() && (i == at || open.read().contains(&i)) {
+                        if !reordering() && ((sections && i == at) || open.read().contains(&i)) {
                             Sections { perf: perf.clone(), lib: lib_now.clone(), song: i, panel }
                         }
                     }
@@ -1037,6 +1108,16 @@ fn SongRow(
     index: usize,
     open: bool,
     reordering: bool,
+    /// Arm-to-load is on (see [`row_tap`]).
+    #[props(default)]
+    arm_to_load: bool,
+    /// This row is armed: its Load button shows.
+    #[props(default)]
+    armed: bool,
+    /// Arm this row.
+    on_arm: EventHandler<()>,
+    /// This row's song was loaded (the setlist disarms).
+    on_loaded: EventHandler<()>,
     drag: Signal<Option<(usize, usize)>>,
     panel: Signal<Option<Panel>>,
     on_toggle: EventHandler<()>,
@@ -1127,6 +1208,8 @@ fn SongRow(
     let mut panel_w = panel;
     let bg = if lifted {
         SHEET_2.to_string()
+    } else if armed {
+        tint(PRIMARY, 18)
     } else if open {
         tint(&colour, pick(up, 7, 4))
     } else {
@@ -1212,12 +1295,15 @@ fn SongRow(
                     let rig = rig.clone();
                     move |_| {
                         // The song up stays open (a tap keeps it open after it);
-                        // another is played.
-                        if reordering {
-                        } else if up {
-                            on_toggle.call(());
-                        } else {
-                            call!(rig, |r| r.select_song(index as u32));
+                        // another is played — or, while arming, armed first.
+                        match row_tap(reordering, up, arm_to_load, armed) {
+                            RowTap::Nothing => {}
+                            RowTap::Toggle => on_toggle.call(()),
+                            RowTap::Arm => on_arm.call(()),
+                            RowTap::Load => {
+                                call!(rig, |r| r.select_song(index as u32));
+                                on_loaded.call(());
+                            }
                         }
                     }
                 },
@@ -1271,6 +1357,20 @@ fn SongRow(
                 }
             }
             div { style: "display: flex; align-items: center;",
+                if armed && !reordering {
+                    button {
+                        "aria-label": "Load {song.name}",
+                        style: "flex-shrink: 0; width: 84px; height: 48px; margin-right: 4px; border: none; border-radius: 8px; background: {PRIMARY}; color: #ffffff; font-size: 16px; font-weight: 700; font-family: {FONT}; cursor: pointer;",
+                        onclick: {
+                            let rig = rig.clone();
+                            move |_| {
+                                call!(rig, |r| r.select_song(index as u32));
+                                on_loaded.call(());
+                            }
+                        },
+                        "Load"
+                    }
+                }
                 if reordering {
                     span { style: "width: 12px;" }
                 } else {
@@ -2151,5 +2251,27 @@ fn RotationDot(lit: bool, source: Src, song_colour: String) -> Element {
     };
     rsx! {
         span { style: "width: {pick(lit, 12, 5)}px; height: 5px; border-radius: 999px; flex-shrink: 0; {style}" }
+    }
+}
+
+#[cfg(test)]
+mod row_tap_tests {
+    use super::*;
+
+    #[test]
+    fn between_songs_a_row_loads_on_one_tap() {
+        assert_eq!(row_tap(false, false, false, false), RowTap::Load);
+    }
+
+    #[test]
+    fn while_playing_another_row_takes_two_taps() {
+        assert_eq!(row_tap(false, false, true, false), RowTap::Arm, "first tap arms");
+        assert_eq!(row_tap(false, false, true, true), RowTap::Load, "second tap loads");
+    }
+
+    #[test]
+    fn the_song_up_folds_and_reordering_taps_nothing() {
+        assert_eq!(row_tap(false, true, true, false), RowTap::Toggle);
+        assert_eq!(row_tap(true, false, true, true), RowTap::Nothing);
     }
 }
