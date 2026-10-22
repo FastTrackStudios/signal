@@ -42,6 +42,8 @@ pub mod nam_file;
 pub mod pack;
 pub mod resolve;
 pub mod scanner;
+// Built on signal-space's analysis engine: native-only.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod space;
 pub mod vst_chunk;
 
