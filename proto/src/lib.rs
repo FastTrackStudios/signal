@@ -66,6 +66,8 @@ pub mod builder;
 pub mod catalog;
 pub mod default_profile;
 pub mod defaults;
+#[cfg(feature = "doc")]
+pub mod doc;
 pub mod engine;
 pub mod fx_send;
 pub mod layer;
@@ -89,6 +91,7 @@ pub mod routing;
 pub mod scene_template;
 pub mod setlist;
 pub mod signal_chain;
+pub mod slug;
 pub mod song;
 pub mod synth_blocks;
 pub mod tagging;

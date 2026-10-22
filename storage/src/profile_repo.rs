@@ -97,6 +97,7 @@ impl ProfileRepoLive {
 
     fn variant_state_to_json(patch: &Patch) -> StorageResult<String> {
         let state = PatchState {
+            slug: &patch.slug,
             target: &patch.target,
             overrides: &patch.overrides,
         };
@@ -122,9 +123,16 @@ impl ProfileRepoLive {
     fn variant_from_model(model: &entity::patch::Model) -> StorageResult<Patch> {
         let state = Self::variant_state_from_json(&model.state_json)?;
         let metadata = Self::metadata_from_json(&model.metadata_json)?;
+        // A patch saved before slugs existed gets the one its name makes —
+        // its live-doc identity from here on (`Patch::slug`).
+        let slug = state
+            .slug
+            .filter(|slug| !slug.is_empty())
+            .unwrap_or_else(|| signal_proto::slug::slugify(&model.name));
         Ok(Patch {
             id: model.variant_id_branded(),
             name: model.name.clone(),
+            slug,
             target: state.target,
             overrides: state.overrides,
             metadata,
@@ -159,14 +167,19 @@ impl ProfileRepoLive {
 
 // region: --- Serialization types
 
+/// A patch's row state. The slug rides here rather than in a column of
+/// its own, so a library written before slugs needs no migration.
 #[derive(serde::Serialize)]
 struct PatchState<'a> {
+    slug: &'a str,
     target: &'a PatchTarget,
     overrides: &'a [Override],
 }
 
 #[derive(serde::Deserialize)]
 struct PatchStateOwned {
+    #[serde(default)]
+    slug: Option<String>,
     target: PatchTarget,
     overrides: Vec<Override>,
 }

@@ -100,19 +100,52 @@ pub enum PatchTarget {
 pub struct Patch {
     pub id: PatchId,
     pub name: String,
+    /// The patch's identity in the live docs: `patch:<slug>` is what a
+    /// setlist, an agent and every device call it.
+    ///
+    /// Made from the name the patch was first given ([`crate::slug::slugify`])
+    /// and kept through renames, so a reference to it never breaks. Unique
+    /// across the library — [`crate::slug::unique_slug`] picks a free one.
+    /// A patch saved before slugs existed reads with none; [`Self::doc_key`]
+    /// then falls back to its id.
+    #[serde(default)]
+    #[facet(default)]
+    pub slug: String,
     pub target: PatchTarget,
     pub overrides: Vec<Override>,
     pub metadata: Metadata,
 }
 
 impl Patch {
+    /// A patch whose slug comes from `name`.
     pub fn new(id: impl Into<PatchId>, name: impl Into<String>, target: PatchTarget) -> Self {
+        let name = name.into();
         Self {
             id: id.into(),
-            name: name.into(),
+            slug: crate::slug::slugify(&name),
+            name,
             target,
             overrides: Vec::new(),
             metadata: Metadata::new(),
+        }
+    }
+
+    /// Give the patch a slug other than the one its name made — to keep it
+    /// unique in the library (`clean-2`) or to qualify it (`worship-clean`).
+    #[must_use]
+    pub fn with_slug(mut self, slug: impl Into<String>) -> Self {
+        self.slug = slug.into();
+        self
+    }
+
+    /// The name the live docs know this patch by: `patch:<slug>`, or
+    /// `patch:<id>` for a patch saved before it had a slug.
+    #[must_use]
+    pub fn doc_key(&self) -> String {
+        if self.slug.is_empty() {
+            format!("patch:{}", self.id)
+        } else {
+            format!("patch:{}", self.slug)
         }
     }
 
@@ -184,12 +217,14 @@ impl Patch {
         validate_overrides::<FreePolicy>(&self.overrides)
     }
 
-    /// Clone this patch with a new ID and name.
+    /// Clone this patch with a new ID and name — a new patch, so its slug
+    /// comes from the new name.
     #[must_use]
     pub fn duplicate(&self, new_id: impl Into<PatchId>, new_name: impl Into<String>) -> Self {
         let mut dup = self.clone();
         dup.id = new_id.into();
         dup.name = new_name.into();
+        dup.slug = crate::slug::slugify(&dup.name);
         dup
     }
 }
@@ -338,6 +373,32 @@ mod tests {
         assert_eq!(profile.patches.len(), 2);
         assert_eq!(profile.default_patch().unwrap().name, "Clean");
         assert!(profile.patch(&lead_id).is_some());
+    }
+
+    #[test]
+    fn a_patch_keeps_its_slug_through_a_rename() {
+        use crate::traits::Variant;
+
+        let mut patch =
+            Patch::from_rig_scene(PatchId::new(), "Lead", RigId::new(), RigSceneId::new());
+        assert_eq!(patch.slug, "lead");
+        assert_eq!(patch.doc_key(), "patch:lead");
+
+        patch.set_name("Big Lead");
+        assert_eq!(patch.slug, "lead", "a rename must not move the identity");
+
+        let copy = patch.duplicate(PatchId::new(), "Lead Copy");
+        assert_eq!(copy.slug, "lead-copy", "a duplicate is a new patch");
+    }
+
+    #[test]
+    fn a_patch_saved_before_slugs_reads_with_its_id_as_key() {
+        let patch = Patch::from_rig_scene(PatchId::new(), "Clean", RigId::new(), RigSceneId::new());
+        let mut json = serde_json::to_value(&patch).unwrap();
+        json.as_object_mut().unwrap().remove("slug");
+        let old: Patch = serde_json::from_value(json).unwrap();
+        assert_eq!(old.slug, "");
+        assert_eq!(old.doc_key(), format!("patch:{}", patch.id));
     }
 
     #[test]
