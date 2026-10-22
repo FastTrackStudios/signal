@@ -148,9 +148,12 @@ pub fn TouchMenuButton(
     let place = if inline {
         // Its hit area overhangs the row (negative margins), so a small
         // label row keeps its height.
-        "position: relative; flex-shrink: 0; width: 32px; height: 32px; margin: -10px -6px -10px 0;".to_string()
+        "position: relative; flex-shrink: 0; width: 32px; height: 32px; margin: -10px -6px -10px 0;"
+            .to_string()
     } else {
-        format!("position: absolute; bottom: 2px; right: 2px; z-index: 3; width: {HIT_PX}px; height: {HIT_PX}px;")
+        format!(
+            "position: absolute; bottom: 2px; right: 2px; z-index: 3; width: {HIT_PX}px; height: {HIT_PX}px;"
+        )
     };
     rsx! {
         button {
