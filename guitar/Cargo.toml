@@ -14,6 +14,9 @@ default = ["vox"]
 pipewire = []
 ui = ["dep:anyrender", "dep:base64", "dep:comp", "dep:delay", "dep:dioxus", "dep:drums", "dep:eq", "dep:fts-audio-ui", "dep:kurbo", "dep:lumen-blocks", "dep:modulation", "dep:serde_json", "dep:signal-tone3000", "dep:signal-grid", "dep:signal-grid-ui", "dep:signal-rig-shell", "dep:signal-rig-perform-ui", "signal-tone3000?/ui", "dep:signal-widgets", "architect/atom", "architect/platform", "reverb/ui", "reverb/viz", "uuid/v4"]
 vox = ["architect/vox", "dep:vox"]
+# Serve Signal's Action List over MCP (signal_commands::serve_mcp): only
+# the engine binary turns it on, so the `ui` build never reaches axum.
+mcp = ["dep:architect-mcp"]
 
 [dependencies]
 anyrender = { workspace = true, optional = true }
@@ -62,14 +65,18 @@ vox = { workspace = true, optional = true }
 [dev-dependencies]
 # Its own tests and examples, with the features they need (see their
 # required-features): a plain `cargo test` of the workspace builds them all.
-guitar = { path = ".", features = ["ui"] }
+guitar = { path = ".", features = ["ui", "mcp"] }
 architect = { workspace = true, features = ["vox", "local"] }
 neural-amp-modeler = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 tracing-subscriber = { workspace = true }
 vox = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Signal's Action List served to a model over MCP (src/signal_commands.rs),
+# feature `mcp`.
+architect-mcp = { workspace = true, features = ["http"], optional = true }
 audio = { workspace = true, features = ["io"] }
 blitz-dom = { workspace = true, features = ["custom-widget"] }
 blitz-traits = { workspace = true }
@@ -123,6 +130,11 @@ path = "src/bin/signal-phones.rs"
 [[example]]
 name = "rig_shot"
 required-features = ["ui"]
+
+[[test]]
+name = "signal_mcp"
+path = "tests/signal_mcp.rs"
+required-features = ["mcp"]
 
 [[test]]
 name = "param_flood"

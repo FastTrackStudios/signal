@@ -48,6 +48,10 @@ pub mod profiles;
 // remote reaches a network engine through `proto`.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod session;
+// Signal's command core (`signal_proto::commands`) run by this rig, and its
+// MCP face for `signal-desktop --engine`.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod signal_commands;
 pub mod time_sync;
 pub mod web_bundle;
 
