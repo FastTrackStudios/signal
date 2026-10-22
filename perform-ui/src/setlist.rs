@@ -852,6 +852,7 @@ pub fn TabletSetlist(
                 }
                 if !songs.is_empty() && !reordering() && !filtering {
                     button {
+                        "aria-label": "Add songs",
                         style: "display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 0 18px; border: none; border-top: 1px solid {RULE}; background: transparent; color: {INK_3}; font-size: 15px; font-weight: 600; font-family: {FONT}; text-align: left; justify-content: flex-start; cursor: pointer;",
                         onclick: move |_| panel.set(Some(Panel::Add)),
                         Plus { size: 14 }
@@ -1019,6 +1020,7 @@ fn SetHeader(
             div { style: "display: flex; align-items: center; gap: 2px;",
                 // The set's name and a chevron: a tap opens the sets.
                 button {
+                    "aria-label": "Set: {heading}. Choose a set",
                     style: "flex: 1; min-width: 0; min-height: 44px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 3px; text-align: left; padding: 0 8px; margin: 0 0 0 -8px; border: none; border-radius: {R_MD}; background: transparent; color: {INK}; font-family: {FONT}; cursor: pointer;",
                     onclick: move |_| panel_w.set(Some(Panel::Sets)),
                     span { style: "display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%;",
@@ -1133,6 +1135,15 @@ fn SongRow(
     let next = index == at + 1;
     let count = perf.songs.len();
     let last = count.saturating_sub(1);
+    // What the row's button says to assistive tech (the song, and whether
+    // it is up or armed to load).
+    let row_label = if up {
+        format!("{}, playing", song.name)
+    } else if armed {
+        format!("Load {}", song.name)
+    } else {
+        song.name.clone()
+    };
     let colour = song_colour(&song.name, &song.colour);
     let lib_song = lib
         .songs
@@ -1290,6 +1301,7 @@ fn SongRow(
                 }
             }
             button {
+                "aria-label": "{row_label}",
                 style: "flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 8px 2px 8px 0; text-align: left; background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;",
                 onclick: {
                     let rig = rig.clone();

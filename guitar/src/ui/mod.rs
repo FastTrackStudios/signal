@@ -80,7 +80,7 @@ pub use signal_rig_perform_ui::PerformClients;
 pub use signal_widgets::PresetTree;
 pub use signal_widgets::{Knob, KnobSize, Picker, PickerSize};
 pub use state::{RigViewState, use_rig_state};
-pub use tablet::GigSlots;
+pub use tablet::{GigScreen, GigSlots};
 pub use tablet::drums::DrumTablet;
 pub use wire_param::{EditSink, WireParam, use_wire_params};
 
