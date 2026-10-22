@@ -16,7 +16,7 @@
 //! reports through channels, so a UI never needs a Tokio context.
 
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -68,18 +68,44 @@ pub fn runtime() -> &'static tokio::runtime::Runtime {
 }
 
 /// Where `info` lives under `dest_root`.
-#[must_use]
-pub fn local_path(dest_root: &Path, info: &ContentInfo) -> PathBuf {
-    info.id
-        .split('/')
-        .fold(dest_root.to_path_buf(), |p, seg| p.join(seg))
+///
+/// # Errors
+/// When the host's id is not a plain relative path (see [`under_root`]):
+/// a hostile or buggy host must not place files outside `dest_root`.
+pub fn local_path(dest_root: &Path, info: &ContentInfo) -> Result<PathBuf, String> {
+    under_root(dest_root, &info.id)
+}
+
+/// `rel`, a host-supplied `/`-separated path, joined under `root`.
+///
+/// # Errors
+/// Unless every segment is a plain name: an empty (`a//b`, a leading
+/// `/`), `.`, `..` or absolute/prefixed segment is refused, so the result
+/// always stays inside `root`.
+fn under_root(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let mut path = root.to_path_buf();
+    for seg in rel.split('/') {
+        let mut parts = Path::new(seg).components();
+        match (parts.next(), parts.next()) {
+            (Some(Component::Normal(name)), None) => path.push(name),
+            _ => {
+                return Err(format!(
+                    "refusing the host's path {rel:?}: not a plain relative path"
+                ));
+            }
+        }
+    }
+    Ok(path)
 }
 
 /// Whether `info` is already here, whole: the right size, and (when the
 /// host has a hash) the sidecar a finished transfer left says the same.
+/// A path the host may not use is never here.
 #[must_use]
 pub fn have(dest_root: &Path, info: &ContentInfo) -> bool {
-    let path = local_path(dest_root, info);
+    let Ok(path) = local_path(dest_root, info) else {
+        return false;
+    };
     if std::fs::metadata(&path).map(|m| m.len()).ok() != Some(info.size_bytes) {
         return false;
     }
@@ -140,7 +166,7 @@ pub fn download_file(
         let _ = tx.unbounded_send(match result {
             Ok(path) => TransferEvent::Done(path),
             Err(e) if e == PAUSED => {
-                let done = part_len(&local_path(&dest_root, &info));
+                let done = local_path(&dest_root, &info).map_or(0, |p| part_len(&p));
                 TransferEvent::Paused { done, total }
             }
             Err(e) => TransferEvent::Failed(e),
@@ -164,6 +190,7 @@ pub fn download_bundle(
     let flag = cancel.clone();
     runtime().spawn(async move {
         let result = async {
+            let library = under_root(&dest_root, &bundle.library)?;
             let files = client
                 .bundle_files(bundle.id.clone(), bundle.variant.clone())
                 .await
@@ -186,10 +213,7 @@ pub fn download_bundle(
                 done += info.size_bytes;
                 let _ = tx.unbounded_send(TransferEvent::Progress { done, total });
             }
-            Ok(bundle
-                .library
-                .split('/')
-                .fold(dest_root.clone(), |p, seg| p.join(seg)))
+            Ok(library)
         }
         .await;
         let _ = tx.unbounded_send(match result {
@@ -215,7 +239,7 @@ async fn fetch(
     events: &Events,
     cancel: &AtomicBool,
 ) -> Result<PathBuf, String> {
-    let final_path = local_path(dest_root, info);
+    let final_path = local_path(dest_root, info)?;
     if have(dest_root, info) {
         return Ok(final_path);
     }
@@ -278,7 +302,7 @@ pub fn download_url(
         let _ = tx.unbounded_send(match result {
             Ok(path) => TransferEvent::Done(path),
             Err(e) if e == PAUSED => {
-                let done = part_len(&local_path(&dest_root, &info));
+                let done = local_path(&dest_root, &info).map_or(0, |p| part_len(&p));
                 TransferEvent::Paused {
                     done,
                     total: info.size_bytes,
@@ -300,7 +324,7 @@ async fn mirror_fetch(
 ) -> Result<PathBuf, String> {
     /// Big enough to amortise a request, small enough that resume loses little.
     const RANGE: u64 = 16 * 1024 * 1024;
-    let final_path = local_path(dest_root, info);
+    let final_path = local_path(dest_root, info)?;
     if have(dest_root, info) {
         return Ok(final_path);
     }

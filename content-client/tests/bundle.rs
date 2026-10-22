@@ -4,7 +4,7 @@
 //! fetch finds it all there and moves nothing.
 
 use futures_util::StreamExt as _;
-use signal_content_client::{TransferEvent, download_bundle};
+use signal_content_client::{TransferEvent, download_bundle, download_file, local_path};
 use signal_content_library::ContentLibraryBackend;
 use signal_content_proto::content::ContentLibraryClient;
 
@@ -102,4 +102,92 @@ async fn a_kit_comes_down_in_the_hosts_layout_once() {
         fetched, 5,
         "one progress per file skipped, no chunk progress: {events:?}"
     );
+}
+
+/// The host's ids and library names are only ever plain relative paths:
+/// no `..`, `.`, empty or absolute segment reaches the device's disk.
+#[test]
+fn a_path_that_leaves_the_library_is_refused() {
+    let root = std::path::Path::new("/device/libraries");
+    let at = |id: &str| {
+        local_path(
+            root,
+            &signal_content_proto::ContentInfo {
+                id: id.into(),
+                ..Default::default()
+            },
+        )
+    };
+    assert_eq!(
+        at("Drum Kits/MM2/Packs/Kick A.signalpack"),
+        Ok(root.join("Drum Kits/MM2/Packs/Kick A.signalpack"))
+    );
+    for bad in [
+        "../x",
+        "/abs",
+        "a/../../x",
+        "..",
+        ".",
+        "./x",
+        "a//b",
+        "a/",
+        "",
+    ] {
+        assert!(at(bad).is_err(), "{bad:?} must be refused");
+    }
+}
+
+/// A hostile host: a file id or a bundle library that climbs out of the
+/// destination fails the transfer, and nothing lands outside it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_hostile_host_cannot_write_outside_the_libraries() {
+    let host_dir = tempfile::tempdir().unwrap();
+    let device_dir = tempfile::tempdir().unwrap();
+    studio(host_dir.path());
+    let host = ContentLibraryBackend::with_root(host_dir.path());
+    host.hash_all();
+    let server = architect::LocalServer::serve(host.router(), architect::Scope::new());
+    let client: ContentLibraryClient = server.establish().await.expect("client");
+    // The libraries dir sits one level down, so `../x` would land beside it.
+    let dest = device_dir.path().join("libraries");
+
+    for id in ["../x", "/abs"] {
+        let info = signal_content_proto::ContentInfo {
+            id: id.into(),
+            size_bytes: 3,
+            ..Default::default()
+        };
+        let (mut rx, _cancel) = download_file(client.clone(), info, dest.clone());
+        let mut end = None;
+        while let Some(ev) = rx.next().await {
+            if matches!(ev, TransferEvent::Failed(_) | TransferEvent::Done(_)) {
+                end = Some(ev);
+                break;
+            }
+        }
+        assert!(
+            matches!(&end, Some(TransferEvent::Failed(e)) if e.contains("plain relative path")),
+            "{id:?}: {end:?}"
+        );
+    }
+
+    let kit = client.bundles("drum-kit".into()).await.expect("bundles")[0].clone();
+    for library in ["../x", "/abs"] {
+        let hostile = signal_content_proto::BundleInfo {
+            library: library.into(),
+            ..kit.clone()
+        };
+        let (_, end) = run(client.clone(), hostile, dest.clone()).await;
+        assert!(
+            matches!(&end, TransferEvent::Failed(e) if e.contains("plain relative path")),
+            "{library:?}: {end:?}"
+        );
+    }
+
+    // Nothing was written anywhere: not beside the libraries, not in them.
+    let entries: Vec<_> = std::fs::read_dir(device_dir.path())
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert!(entries.is_empty(), "{entries:?}");
 }
