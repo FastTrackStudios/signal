@@ -107,6 +107,7 @@ pub(super) fn PerformerBar(middle: Element) -> Element {
     let resetting = use_signal(|| false);
     let midi = use_midi_health();
     let mut menu = use_signal(|| None::<BarMenu>);
+    let account = try_use_context::<super::BarAccountItem>();
     let set = model
         .setlists
         .get(model.setlist_index as usize)
@@ -186,6 +187,11 @@ pub(super) fn PerformerBar(middle: Element) -> Element {
                 }
                 if menu() == Some(BarMenu::Views) {
                     div { role: "menu", "aria-label": "Views", style: "{BAR_MENU} right: 0;",
+                        // The app's Account item first, above a hairline.
+                        if let Some(account) = account {
+                            {(account.0)(Callback::new(move |()| menu.set(None)))}
+                            div { style: "height: 1px; margin: 2px 6px; background: #2b2b31;" }
+                        }
                         for (id, label) in VIEW_ITEMS {
                             button {
                                 key: "{id}",

@@ -43,6 +43,13 @@ use signal_rig_shell::{
 };
 use signal_widgets::SwitchesMode;
 
+/// The app's account item for the app bar's ⋯ (STA-361, design spec
+/// STA-379 §4.2): drawn first in the Views menu, above a hairline. The
+/// app owns the account; the rig only gives it the menu's top row. Called
+/// with a callback that closes the menu.
+#[derive(Clone, Copy)]
+pub struct BarAccountItem(pub fn(Callback<()>) -> Element);
+
 /// The gig's pieces, lent by the app (which owns the gig, its charts and
 /// its practice player) to the iPad layout. Provided as context; without
 /// it the layout is the rig's own.
