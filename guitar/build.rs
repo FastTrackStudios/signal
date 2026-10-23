@@ -36,8 +36,15 @@ fn files(dir: &Path, exts: &[&str]) -> Vec<(String, String)> {
 /// `_PROFILES` (empty when the directory is not there).
 fn tables(src: &mut String, root: &Path, prefix: &str) {
     println!("cargo:rerun-if-changed={}", root.display());
+    // Only the ones that exist: cargo counts a missing rerun-if-changed path
+    // as changed, so the bass's absent `frozen/` re-ran this script — and
+    // recompiled guitar and everything above it — on every cargo call. The
+    // root above still sees one appear.
     for sub in ["models", "frozen", "profiles"] {
-        println!("cargo:rerun-if-changed={}", root.join(sub).display());
+        let dir = root.join(sub);
+        if dir.exists() {
+            println!("cargo:rerun-if-changed={}", dir.display());
+        }
     }
     let bytes = |src: &mut String, name: &str, list: &[(String, String)]| {
         writeln!(src, "const {name}: &[(&str, &[u8])] = &[").unwrap();
