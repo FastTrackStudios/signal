@@ -47,7 +47,7 @@ use guitar::proto::rig::{RigClient, RigStreamClient};
 /// Read from the app's assets rather than duplicated: a shot styled by a
 /// different stylesheet is a picture of a UI nobody runs.
 const SIGNAL_TAILWIND: &str =
-    include_str!("../../../../apps/signal/desktop/assets/tailwind-signal.css");
+    include_str!("../../../../apps/studio/desktop/assets/tailwind-signal.css");
 
 /// The clients the page needs, established against an in-process server.
 ///

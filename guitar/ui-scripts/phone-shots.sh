@@ -11,7 +11,7 @@
 # on a private X display of its own, so it takes no focus and leaves a
 # running app alone. SCALE 1 renders at points, 3 at the phone's pixels.
 # PAGE… renders only those (`drives amps`). Build first:
-# `cargo build -p signal-desktop`.
+# `cargo build -p studio-desktop`.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../../../.." && pwd)"
@@ -36,9 +36,9 @@ done
 sleep 1
 for i in "${!PAGES[@]}"; do
     env -u WAYLAND_DISPLAY DISPLAY=":$((BASE + i))" \
-        SIGNAL_RIG_DESIGN=1 FTS_FORM_FACTOR=phone FTS_PHONE_PAGE="${PAGES[$i]}" \
+        FTS_STUDIO_OPEN=signal SIGNAL_RIG_DESIGN=1 FTS_FORM_FACTOR=phone FTS_PHONE_PAGE="${PAGES[$i]}" \
         FTS_WINDOW_SIZE="874x381" WINIT_X11_SCALE_FACTOR="$SCALE" \
-        ./target/debug/signal-desktop >"$OUT/${PAGES[$i]}.log" 2>&1 &
+        ./target/debug/studio-desktop >"$OUT/${PAGES[$i]}.log" 2>&1 &
     PIDS+=($!)
 done
 

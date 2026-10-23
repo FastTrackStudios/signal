@@ -49,7 +49,7 @@ pub mod profiles;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod session;
 // Signal's command core (`signal_proto::commands`) run by this rig, and its
-// MCP face for `signal-desktop --engine`.
+// MCP face for `studio-desktop --engine`.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod signal_commands;
 pub mod time_sync;

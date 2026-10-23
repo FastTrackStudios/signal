@@ -1,6 +1,6 @@
 //! Signal's command core over MCP, end to end: a design-mode rig over a
 //! throwaway library, its Signal Action List served the way
-//! `signal-desktop --engine --mcp` serves it (`serve_mcp`: loopback, a
+//! `studio-desktop --engine --mcp` serves it (`serve_mcp`: loopback, a
 //! minted bearer token), and a model's `run` of `FTS_SIGNAL_NEXT_SONG`
 //! over HTTP moving the active song. Without the token the server refuses;
 //! a REAPER-only command answers disabled, with why.

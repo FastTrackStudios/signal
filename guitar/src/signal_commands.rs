@@ -8,7 +8,7 @@
 //! the list, disabled with [`REAPER_ONLY`] as the reason.
 //!
 //! [`serve_mcp`] serves such a list over `architect-mcp`'s HTTP transport on
-//! loopback, behind a bearer token it mints — what `signal-desktop
+//! loopback, behind a bearer token it mints — what `studio-desktop
 //! --engine` does when asked to (`--mcp` / `SIGNAL_MCP=1`); it needs the
 //! `mcp` feature, so a UI build of the rig never links the HTTP server.
 
