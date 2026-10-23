@@ -24,6 +24,7 @@ fn TwoButtons() -> Element {
 /// A knob dragged and let go over a footswitch must not press it: the
 /// release is not a click on whatever it ended over.
 #[tokio::test]
+#[ignore = "blitz fork bug, studio#178: fix there, bump the pin, drop this"]
 async fn a_press_released_over_another_control_clicks_neither() {
     let t = render(TwoButtons).build();
     t.pointer_down(50.0, 50.0);
@@ -73,6 +74,7 @@ fn HeaderWithDropdown() -> Element {
 /// The panel spans x 200–500 (its cell at 300–400, centred), y 60–160. A
 /// press on its left half is the panel's, not the switch's beneath.
 #[tokio::test]
+#[ignore = "blitz fork bug, studio#178: fix there, bump the pin, drop this"]
 async fn a_centred_dropdown_from_a_nested_layer_takes_its_presses() {
     let t = render(HeaderWithDropdown)
         .with_window_size(800, 600)

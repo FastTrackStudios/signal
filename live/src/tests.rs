@@ -1,5 +1,5 @@
 use super::*;
-use signal_proto::{ModuleType, seed_id};
+use signal_proto::{BlockParameter, ModuleType, seed_id};
 use signal_storage::{
     BlockRepoLive, Database, EngineRepoLive, LayerRepoLive, ModuleRepoLive, ProfileRepoLive,
     RackRepoLive, RigRepoLive, SceneTemplateRepoLive, SetlistRepoLive, SongRepoLive,
@@ -8,6 +8,22 @@ use signal_storage::{
 use std::time::{Duration, Instant};
 
 type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
+
+/// A block collection the tests own, so they do not depend on what the
+/// machine's library holds.
+fn fixture_amp_collection() -> Preset {
+    Preset::new(
+        seed_id("live-tests-fixture-amp"),
+        "Fixture Amp",
+        BlockType::Amp,
+        Snapshot::new(
+            seed_id("live-tests-fixture-amp-default"),
+            "Default",
+            Block::from_parameters(vec![BlockParameter::new("gain", "Gain", 0.5)]),
+        ),
+        vec![],
+    )
+}
 
 async fn seeded_service() -> Result<
     SignalLive<
@@ -27,7 +43,12 @@ async fn seeded_service() -> Result<
     let seeds = runtime_seed_bundle();
     let block_repo = BlockRepoLive::new(db.clone());
     block_repo.init_schema().await?;
-    block_repo.reseed_defaults(&seeds.block_collections).await?;
+    // The runtime seeds come from the machine's library on disk, which a CI
+    // runner does not have; one fixture collection keeps the service non-empty
+    // everywhere.
+    let mut block_collections = seeds.block_collections;
+    block_collections.push(fixture_amp_collection());
+    block_repo.reseed_defaults(&block_collections).await?;
     let module_repo = ModuleRepoLive::new(db.clone());
     module_repo.init_schema().await?;
     module_repo

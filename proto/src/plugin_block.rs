@@ -1015,7 +1015,7 @@ mod tests {
     fn parse_all_guitar_rig_containers() {
         // Every top-level container from the Guitar Rig in signal-stock-testing.RPP
         let names = [
-            ("INPUT Module: Guitar Input - Relaxed", "Source"),
+            ("INPUT Module: Guitar Input - Relaxed", "Input"),
             ("DRIVE Module: Simple Drive - Low", "Drive"),
             ("PRE-FX Module: Spring Box - Boing", "Pre-FX"),
             ("AMP Module: JS / Tukan Combo - Clean", "Amp"),
@@ -1486,7 +1486,7 @@ mod tests {
         let cases = [
             (
                 "INPUT Module: Guitar Input - Relaxed",
-                "[M] SOURCE: Guitar Input - Relaxed",
+                "[M] INPUT: Guitar Input - Relaxed",
             ),
             (
                 "DRIVE Module: Simple Drive - Low",

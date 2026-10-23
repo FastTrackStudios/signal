@@ -799,6 +799,14 @@ pub const fn rig_type_to_engine_type(rig_type: RigType) -> signal::EngineType {
 
 // region: --- Tests
 
+/// The signal crate's own test fixtures: the runtime seed ships no rigs, so
+/// the JM guitar megarig is built here the way signal's tests build it.
+/// Declared at file level, not inside `tests`: a `#[path]` in an inline
+/// module resolves through `src/data_fetching/tests/`, which does not exist.
+#[cfg(test)]
+#[path = "../../tests/fixtures.rs"]
+mod fixtures;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -809,6 +817,7 @@ mod tests {
         let signal = signal::bootstrap_in_memory_controller_async()
             .await
             .expect("bootstrap failed");
+        fixtures::seed_jm_megarig(&signal).await;
 
         let rigs = signal.rigs().list().await.unwrap();
         let guitar_rigs: Vec<_> = rigs
