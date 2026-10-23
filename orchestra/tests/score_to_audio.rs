@@ -13,10 +13,10 @@ use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings, part_to_document, ren
 const SR: u32 = 48_000;
 const SEED: u64 = 0x60D0_1234_D0C5_EED0;
 
+/// Eight bars of the "Going Home" theme for violin, slurred in phrases —
+/// small enough to keep in the tree, legato enough to prefire transitions.
 fn fixture() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-        "../../../crates/keyflow/examples/mxl/GOING HOME - Dvorak New World Symphony 1.6 mxml.mxl",
-    )
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/going-home.musicxml")
 }
 
 /// A CSS-shaped spec (legato engine + shorts + CC58 map) for spec-dependent
