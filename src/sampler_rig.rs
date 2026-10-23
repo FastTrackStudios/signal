@@ -2089,8 +2089,21 @@ fn warm_document(
         }
         return;
     }
-    for &(chan, cc, val) in states.iter().rev() {
+    // Every keyswitch state the document visits, each warmed under the
+    // engine as it will be then — and the engine put back afterwards. The
+    // render starts from the state the engine is in NOW, before the
+    // document's first keyswitch; leaving the warm-up's last state applied
+    // started a document that switches to Staccato at bar 9 in Staccato.
+    let before = bank.keyswitch_state(id);
+    for &(chan, cc, val) in &states {
         bank.cc_instrument_line(id, crate::document::line_for_chan(chan), cc, val);
+        for &p in &pitches {
+            let _ = bank.warm_note(id, p);
+        }
+    }
+    // The unswitched state too: the notes before the first keyswitch.
+    if let Some(state) = before {
+        bank.restore_keyswitch_state(id, state);
         for &p in &pitches {
             let _ = bank.warm_note(id, p);
         }

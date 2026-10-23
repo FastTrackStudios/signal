@@ -603,14 +603,34 @@ fn auto_divisi_counterpoint_is_deterministic_from_mid_piece() {
 
 #[test]
 fn strict_live_uses_low_latency_tables_and_lookahead_uses_expressive() {
-    // vel 30: expressive table ⇒ 333 ms, low_latency table ⇒ 100 ms.
-    // Live default (PlayMode::StrictLive) must take the low_latency value —
-    // no exceptions — while the document path keeps the expressive lead.
+    // The REACTIVE wait is the CSS Overlap-Delay (`LegatoEngineSpec::
+    // overlap_delay_ms`, spec §2.1): IOI-driven, and zero except for a soft
+    // note played fast. It is no longer the velocity-zone `delay_ms` this
+    // test was written against — that table now sets only the document
+    // prefire lead (signal 024cd2f8 / 7d3e0b1f, July 2026, "CSS-faithful";
+    // this suite was already red then and nobody saw it). So the table split
+    // is measured where the two Overlap-Delay curves differ: vel 30 (soft)
+    // after a 50 ms IOI. Live default (PlayMode::StrictLive) must take the
+    // low_latency curve — no exceptions — while the document path keeps the
+    // expressive velocity-zone lead.
     let block: usize = 64;
-    let fast_frames: u64 = 100 * u64::from(SR) / 1000;
-    let tick: u64 = 48_000;
+    let ioi_frames: u64 = 50 * u64::from(SR) / 1000;
+    let tick: u64 = ioi_frames;
 
     let (live, _g) = fixture_rig("strict-live");
+    let cfg = live
+        .instrument_spec("fixture")
+        .expect("spec")
+        .legato_engine
+        .expect("fixture declares a legato engine");
+    let low_latency_ms = cfg.overlap_delay_ms(50.0, 30, false);
+    let expressive_ms = cfg.overlap_delay_ms(50.0, 30, true);
+    assert_ne!(
+        low_latency_ms, expressive_ms,
+        "the probe must sit where the two tables differ"
+    );
+    let ll_frames = u64::from(low_latency_ms) * u64::from(SR) / 1000;
+
     live.set_legato_fire_log_enabled("fixture", true);
     let mut cur: u64 = 0;
     let render_until = |target: u64, cur: &mut u64| {
@@ -623,17 +643,19 @@ fn strict_live_uses_low_latency_tables_and_lookahead_uses_expressive() {
     };
     live.note_on("fixture", 60, 90);
     render_until(tick, &mut cur);
-    live.note_on("fixture", 62, 30); // slow-zone velocity
+    live.note_on("fixture", 62, 30); // soft, and fast after the first
     render_until(tick + 2 * SLOW_DELAY_FRAMES, &mut cur);
 
     let log = live.legato_fire_log("fixture");
     assert_eq!(log.len(), 1);
     let fire = log[0].frame;
     assert!(
-        fire >= tick + fast_frames - block as u64 && fire <= tick + fast_frames,
-        "StrictLive must fire on the low_latency table (~100 ms), got +{} frames",
+        fire + block as u64 >= tick + ll_frames && fire <= tick + ll_frames,
+        "StrictLive must wait the low_latency Overlap-Delay ({low_latency_ms} ms, not the \
+         expressive {expressive_ms} ms), got +{} frames",
         fire - tick
     );
+    let tick: u64 = 48_000;
 
     // The document path (Lookahead) keeps the expressive 333 ms lead.
     let doc = TrackDocument {
@@ -762,13 +784,28 @@ fn reactive_vs_document_arrival_differs_by_configured_delay() {
     let doc_arrival = doc_fire + SLOW_DELAY_FRAMES;
     assert_eq!(doc_arrival, tick);
 
-    // Reactive path: the same two notes played live at their ticks. The
-    // engine arms the countdown at note-on and the transition speaks
-    // delay_ms AFTER the tick (the famous latency every DAW compensates
-    // with negative track delay).
+    // Reactive path: the same two notes played live at their ticks. Live,
+    // nothing is known ahead: the transition can only START at the tick
+    // (plus the CSS Overlap-Delay, zero for a one-second IOI), so its
+    // in-sample pre-bow plays out after the tick. The document starts that
+    // same pre-bow `delay_ms` early instead.
+    //
+    // This test used to measure the reactive wait as the velocity-zone
+    // `delay_ms` itself. That table now sets only the document prefire lead;
+    // the reactive wait is the IOI-driven Overlap-Delay (signal 024cd2f8 /
+    // 7d3e0b1f, July 2026, "CSS-faithful" — this suite was already red
+    // then). What the A/B still has to show is the inversion: the document
+    // fires exactly `delay_ms` before the live path does.
     let (live_rig, _gl) = fixture_rig("ab-live");
     live_rig.set_legato_mode("fixture", true, true); // same expressive curve
     live_rig.set_legato_fire_log_enabled("fixture", true);
+    let wait_ms = live_rig
+        .instrument_spec("fixture")
+        .expect("spec")
+        .legato_engine
+        .expect("fixture declares a legato engine")
+        .overlap_delay_ms(1000.0, 30, true);
+    let wait_frames = u64::from(wait_ms) * u64::from(SR) / 1000;
     let mut cur: u64 = 0;
     let render_until = |target: u64, cur: &mut u64| {
         while *cur < target {
@@ -780,26 +817,28 @@ fn reactive_vs_document_arrival_differs_by_configured_delay() {
     };
     live_rig.note_on("fixture", 60, 90);
     render_until(tick, &mut cur);
-    live_rig.note_on("fixture", 62, 30); // vel 30 ⇒ 333 ms countdown
+    live_rig.note_on("fixture", 62, 30);
     render_until(tick + 2 * SLOW_DELAY_FRAMES, &mut cur);
     let live_log = live_rig.legato_fire_log("fixture");
     assert_eq!(live_log.len(), 1);
     let live_fire = live_log[0].frame;
 
-    // Reactive speaks late: fire ≈ tick + delay (block-quantised — the
-    // countdown fires at the head of the block in which it elapses).
+    // Reactive starts the transition at the tick + the Overlap-Delay
+    // (block-quantised: the countdown fires at the head of the block in
+    // which it elapses).
     assert!(
-        live_fire >= tick + SLOW_DELAY_FRAMES - block as u64
-            && live_fire <= tick + SLOW_DELAY_FRAMES,
-        "reactive transition speaks delay_ms after the tick (got {live_fire}, tick {tick})"
+        live_fire + block as u64 >= tick + wait_frames && live_fire <= tick + wait_frames,
+        "reactive transition starts {wait_ms} ms after the tick (got {live_fire}, tick {tick})"
     );
 
-    // THE INVERSION, measured: the document arrival is earlier than the
-    // reactive speak point by exactly the configured delay (± one live block).
-    let delta = live_fire - doc_arrival;
+    // THE INVERSION, measured: the document fires the same transition
+    // earlier than the reactive path by exactly the configured delay (± one
+    // live block), which is what puts its arrival on the tick.
+    let delta = live_fire - doc_fire;
     assert!(
-        (SLOW_DELAY_FRAMES - block as u64..=SLOW_DELAY_FRAMES).contains(&delta),
-        "document arrival must lead the reactive one by the configured delay \
+        (SLOW_DELAY_FRAMES + wait_frames - block as u64..=SLOW_DELAY_FRAMES + wait_frames)
+            .contains(&delta),
+        "document must fire the configured delay ahead of the reactive path \
          (delay {SLOW_DELAY_FRAMES}, measured {delta})"
     );
 }

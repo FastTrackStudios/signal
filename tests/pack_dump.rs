@@ -1,11 +1,17 @@
 use sampler::read_pack_header;
 
+/// A developer's machine-local Keyscape pack; not in any repo (the library
+/// is commercial). SKIPs where it is absent, like `keyscape_rhodes`.
+const PACK: &str =
+    "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs/Rhodes - Classic.signalpack";
+
 #[test]
 fn dump_rhodes() {
-    let h = read_pack_header(std::path::Path::new(
-        "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs/Rhodes - Classic.signalpack",
-    ))
-    .unwrap();
+    if !std::path::Path::new(PACK).exists() {
+        eprintln!("skipped — pack not present at {PACK}");
+        return;
+    }
+    let h = read_pack_header(std::path::Path::new(PACK)).unwrap();
     let s = &h.spec;
     eprintln!("name: {}", s.name);
     eprintln!("articulations ({}):", s.articulations.len());
@@ -22,10 +28,7 @@ fn dump_rhodes() {
     eprintln!("zones: {}", s.zones.len());
 
     // Dump the sample map to see which (note, artic, dyn) keys actually exist.
-    let patch = sampler::PlayerPatch::from_pack(std::path::Path::new(
-        "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs/Rhodes - Classic.signalpack",
-    ))
-    .unwrap();
+    let patch = sampler::PlayerPatch::from_pack(std::path::Path::new(PACK)).unwrap();
     use std::collections::BTreeMap;
     let mut by_artic: BTreeMap<String, BTreeMap<String, std::collections::BTreeSet<u8>>> =
         BTreeMap::new();
@@ -88,10 +91,8 @@ fn dump_rhodes() {
         eprintln!("  {}", p.display());
     }
     // Inspect pack-side entries for "RR01 lacrm 36 35.flac".
-    let pack = sampler::engine::cache::SignalPcmPack::open(std::path::Path::new(
-        "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs/Rhodes - Classic.signalpack",
-    ))
-    .expect("open pack");
+    let pack =
+        sampler::engine::cache::SignalPcmPack::open(std::path::Path::new(PACK)).expect("open pack");
     eprintln!("pack entries: {}", pack.entry_count());
     let r10_entries: Vec<_> = pack
         .entries_iter()

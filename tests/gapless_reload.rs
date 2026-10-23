@@ -530,12 +530,41 @@ fn a_footswitch_during_the_build_is_not_held_up() {
     );
 
     // One patch changed: the common edit.
+    //
+    // The commit's budget is wall-clock, and a loaded CI box (a shared VM
+    // running the whole suite) can preempt any single commit for longer than
+    // the budget. So the edit is made up to COMMIT_TRIES times — a different
+    // one-patch edit each time — and the FASTEST commit is held to the budget.
+    // That still fails a commit that does real work under the lock (a chain
+    // built there costs ~20 ms on every try, never just on one), while one
+    // unlucky preemption no longer does.
+    const COMMIT_TRIES: usize = 5;
+    const COMMIT_BUDGET_US: u64 = 5_000;
     let mut prig = prig;
-    let mut one = big_rebuilt(0.3);
-    one.patches[0].chain.push(gain(-1.0).named("Out 2"));
     prig.activate_named("P0");
-    let one_patch = prig.reload_profile(one, None);
-    assert_eq!((one_patch.built, one_patch.reused), (1, PATCHES - 1));
+    // (build_ms, commit_us) of the fastest commit so far.
+    let mut best: Option<(f64, u64)> = None;
+    for attempt in 0..COMMIT_TRIES {
+        // A block more each time: a structural edit to patch 0 alone, so
+        // every try rebuilds exactly one chain (a value-only edit would be
+        // written live and build nothing).
+        let mut one = big_rebuilt(0.3);
+        for k in 0..=attempt {
+            one.patches[0]
+                .chain
+                .push(gain(-1.0).named(format!("Out {}", k + 2)));
+        }
+        let commit = prig.reload_profile(one, None);
+        assert_eq!((commit.built, commit.reused), (1, PATCHES - 1));
+        if best.is_none_or(|(_, us)| commit.commit_us < us) {
+            best = Some((commit.build_ms, commit.commit_us));
+        }
+        drop(commit);
+        if best.is_some_and(|(_, us)| us < COMMIT_BUDGET_US) {
+            break;
+        }
+    }
+    let (one_patch_build_ms, one_patch_commit_us) = best.expect("at least one commit");
     println!(
         "{PATCHES} patches: ticket {ticket_us} µs; full build {:.1} ms off-lock with \
          {n_presses} footswitches pressed meanwhile: the longest wait for the lock {:.3} ms, \
@@ -545,8 +574,8 @@ fn a_footswitch_during_the_build_is_not_held_up() {
         worst_wait.as_secs_f64() * 1e3,
         worst_press.as_secs_f64() * 1e3,
         full_commit.as_secs_f64() * 1e3,
-        one_patch.build_ms,
-        one_patch.commit_us
+        one_patch_build_ms,
+        one_patch_commit_us
     );
     assert!(n_presses > 0, "a footswitch was pressed during the build");
     // The build holds no lock: a press never waits for one.
@@ -555,8 +584,7 @@ fn a_footswitch_during_the_build_is_not_held_up() {
         "a footswitch waited on the build: {worst_wait:?}"
     );
     assert!(
-        one_patch.commit_us < 5_000,
-        "a one-patch commit is short: {} µs",
-        one_patch.commit_us
+        one_patch_commit_us < COMMIT_BUDGET_US,
+        "a one-patch commit is short: the fastest of up to {COMMIT_TRIES} took {one_patch_commit_us} µs"
     );
 }

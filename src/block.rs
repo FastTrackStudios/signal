@@ -295,6 +295,17 @@ impl SamplerBlock {
     }
 
     /// Line-addressed CC — see [`SampleEngine::cc_line`].
+    /// See [`SampleEngine::keyswitch_state`].
+    #[must_use]
+    pub fn keyswitch_state(&self) -> crate::engine::KeyswitchState {
+        self.engine.keyswitch_state()
+    }
+
+    /// See [`SampleEngine::restore_keyswitch_state`].
+    pub fn restore_keyswitch_state(&mut self, state: crate::engine::KeyswitchState) {
+        self.engine.restore_keyswitch_state(state);
+    }
+
     pub fn cc_line(&mut self, line: crate::engine::LineId, controller: u8, value: u8) {
         self.engine.cc_line(line, controller, value);
     }

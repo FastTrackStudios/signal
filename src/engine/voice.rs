@@ -1973,6 +1973,15 @@ pub struct VoicePool {
     /// The current strike, stamped on every voice spawned (see
     /// [`begin_strike`](Self::begin_strike)).
     strike: u32,
+    /// Scratch for [`make_room_for_note`](Self::make_room_for_note): the
+    /// re-struck key's distinct strikes. Pre-allocated so a note-on never
+    /// allocates on the audio thread (`tests/rt_safety.rs`); a key's strikes
+    /// cannot outnumber the voices, so `MAX_VOICES` holds them.
+    room_strikes: Vec<u32>,
+    /// Scratch for [`make_room_for_note`](Self::make_room_for_note): the
+    /// sounding keys and whether each is all released. At most one entry per
+    /// MIDI key, so 128 is the bound.
+    room_notes: Vec<(u8, bool)>,
 }
 
 impl Default for VoicePool {
@@ -1993,6 +2002,8 @@ impl VoicePool {
             solo_notes: None,
             solo_scratch: Vec::new(),
             strike: 0,
+            room_strikes: Vec::with_capacity(MAX_VOICES),
+            room_notes: Vec::with_capacity(128),
         }
     }
 
@@ -2008,6 +2019,8 @@ impl VoicePool {
             solo_notes: None,
             solo_scratch: Vec::new(),
             strike: 0,
+            room_strikes: Vec::with_capacity(MAX_VOICES),
+            room_notes: Vec::with_capacity(128),
         }
     }
 
@@ -2483,7 +2496,8 @@ impl VoicePool {
         // a release nearly over — no longer counts.
         let fading = |v: &Voice| matches!(v.state, VoiceState::Releasing { frames_remaining } if frames_remaining <= REPEAT_FADE);
         // The same key: keep the latest strike, fade the older ones.
-        let mut strikes: Vec<u32> = Vec::new();
+        let strikes = &mut self.room_strikes;
+        strikes.clear();
         for v in &self.voices {
             if v.note == incoming
                 && v.state != VoiceState::Done
@@ -2511,7 +2525,8 @@ impl VoicePool {
         loop {
             // Sounding keys, in first-voice order, with whether all their
             // voices are already releasing.
-            let mut notes: Vec<(u8, bool)> = Vec::new();
+            let notes = &mut self.room_notes;
+            notes.clear();
             for v in &self.voices {
                 if v.state == VoiceState::Done || v.note == incoming || fading(v) {
                     continue;
@@ -3350,13 +3365,20 @@ mod tests {
         let mut voice = Voice::with_rate(data, 60, VoiceKind::Zoned, 1.0, 1.0, 8)
             .with_forward_loop(loop_start, loop_end);
 
-        // Play 30 seconds — many loop passes, and long enough that the idle
-        // sweep runs several times underneath.
+        // Play 12 seconds — six passes of the 2 s loop, and six runs of the
+        // streamer's idle sweep (every 2 s) underneath. It plays in real time,
+        // so this is also the test's wall time: it was 30 s, which nextest's
+        // 30 s slow-timeout killed every run.
         let mut block = vec![0.0f32; 512 * 2];
-        let blocks = (sr as usize * 30) / 512;
+        let blocks = (sr as usize * 12) / 512;
         let mut silent_runs = 0usize;
         let mut worst_run = 0usize;
-        for _ in 0..blocks {
+        // Paced against a deadline, not by a fixed sleep per block: a loaded
+        // machine oversleeps, and summed over a thousand blocks that would
+        // stretch the run and slow the streamer's clock relative to playback.
+        let period = std::time::Duration::from_micros(10_667);
+        let started = std::time::Instant::now();
+        for i in 0..blocks {
             block.fill(0.0);
             voice.render_block(&mut block);
             let peak = block.iter().fold(0.0f32, |a, b| a.max(b.abs()));
@@ -3368,7 +3390,8 @@ mod tests {
             }
             // Real time: the streamer gets the same wall clock a live rig
             // would give it (512 frames ≈ 10.7 ms).
-            std::thread::sleep(std::time::Duration::from_micros(10_667));
+            let due = started + period * (i as u32 + 1);
+            std::thread::sleep(due.saturating_duration_since(std::time::Instant::now()));
         }
         let _ = std::fs::remove_file(&tmp);
         assert!(

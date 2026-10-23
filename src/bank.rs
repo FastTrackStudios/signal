@@ -732,6 +732,19 @@ impl SamplerBank {
         self.with_block(id, |b| b.cc(controller, value));
     }
 
+    /// An instrument's keyswitch state — see
+    /// [`SampleEngine::keyswitch_state`](crate::engine::SampleEngine::keyswitch_state).
+    #[must_use]
+    pub fn keyswitch_state(&self, id: &str) -> Option<crate::engine::KeyswitchState> {
+        self.read_block(id, crate::block::SamplerBlock::keyswitch_state)
+    }
+
+    /// Put back an instrument's keyswitch state taken with
+    /// [`keyswitch_state`](Self::keyswitch_state).
+    pub fn restore_keyswitch_state(&mut self, id: &str, state: crate::engine::KeyswitchState) {
+        self.with_block(id, |b| b.restore_keyswitch_state(state));
+    }
+
     /// Line-addressed per-instrument CC (document scheduler — CC1/CC2 are
     /// per-line dynamics, other controllers engine-global).
     pub fn cc_instrument_line(

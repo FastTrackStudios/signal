@@ -19,7 +19,59 @@ const RETRIGGER_FADE_MS: u32 = 90;
 /// the S10 decay is NOT this fade.
 const CSS_OLD_OUT_MS: u32 = 250;
 
+/// Everything a keyswitch (CC58, a keyswitch note, a latched-CC selector)
+/// can change on an engine, captured so it can be put back — see
+/// [`SampleEngine::keyswitch_state`].
+#[derive(Debug, Clone)]
+pub struct KeyswitchState {
+    articulation: String,
+    cc58: u8,
+    pending_cc58_group: Option<usize>,
+    cc_values: [u8; 128],
+    cc2: u8,
+    con_sordino: bool,
+    legato_enabled: bool,
+    legato_expressive: bool,
+}
+
 impl SampleEngine {
+    /// The engine's keyswitch state, for [`restore_keyswitch_state`]
+    /// (Self::restore_keyswitch_state).
+    ///
+    /// Warming a document's samples walks its keyswitch states through the
+    /// engine; without putting the state back afterwards, the render began
+    /// in whichever keyswitch the warm-up applied last instead of the one the
+    /// document starts in.
+    #[must_use]
+    pub fn keyswitch_state(&self) -> KeyswitchState {
+        KeyswitchState {
+            articulation: self.articulation.clone(),
+            cc58: self.cc58,
+            pending_cc58_group: self.pending_cc58_group,
+            cc_values: self.cc_values,
+            cc2: self.cc2,
+            con_sordino: self.con_sordino,
+            legato_enabled: self.legato_enabled,
+            legato_expressive: self.legato_expressive,
+        }
+    }
+
+    /// Put back a state taken with [`keyswitch_state`](Self::keyswitch_state).
+    pub fn restore_keyswitch_state(&mut self, state: KeyswitchState) {
+        self.articulation = state.articulation;
+        self.cc58 = state.cc58;
+        self.pending_cc58_group = state.pending_cc58_group;
+        self.cc_values = state.cc_values;
+        self.cc2 = state.cc2;
+        if !state.con_sordino {
+            // Same as leaving Con Sordino live: no stale filter tail.
+            self.sord_filter.reset();
+        }
+        self.con_sordino = state.con_sordino;
+        self.legato_enabled = state.legato_enabled;
+        self.legato_expressive = state.legato_expressive;
+    }
+
     pub(crate) fn trigger_sustain(&mut self, note: u8) {
         let vib_blend = self.cc2_blend();
         let nv_scale = 1.0 - vib_blend;

@@ -63,6 +63,24 @@ impl SampleEngine {
         if self.patch.spec.legato_cfg().style == crate::spec::LegatoStyle::Pacific {
             return true;
         }
+        // Neither has any library without a CC2 vibrato dimension (Cinematic
+        // Brass, a plain legato library): the reciprocity test below needs a
+        // `vibrato_controller` and so answered "no" for EVERY sustain, and
+        // such a library never played a transition — live or from a document,
+        // whose annotator had scheduled them (it takes a declared legato
+        // engine as the capability, `document::annotate`). Reciprocity exists
+        // to tell Tremolo from Nonvib among CC2 pairs; with no pairs there is
+        // nothing to tell apart.
+        let no_vibrato_dimension = self
+            .patch
+            .spec
+            .dynamics
+            .vibrato_controller
+            .as_deref()
+            .is_none_or(str::is_empty);
+        if no_vibrato_dimension && self.patch.spec.legato_engine.is_some() {
+            return true;
+        }
         self.find_vibrato_pair_id(artic)
             .and_then(|p| self.find_vibrato_pair_id(&p))
             .as_deref()

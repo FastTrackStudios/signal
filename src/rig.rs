@@ -3761,8 +3761,11 @@ mod tests {
     /// *registered bytes* (keys that are not paths) still builds and plays.
     #[test]
     fn a_chain_builds_from_registered_bytes_alone() {
-        let model = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../rigs/guitar/default-config/models/King of Tone both sides.nam");
+        // Any capture will do — what is tested is that it arrives as bytes.
+        // The crate's own test model, not a rig's capture: those live in the
+        // private rig-models repo (`just assets`), and a clean checkout or CI
+        // without them failed here on a missing file.
+        let model = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/assets/amp_a.nam");
         let amp_key = "web-test://amp.nam";
         let cab_key = "web-test://cab.wav";
         crate::assets::install(amp_key, std::fs::read(model).unwrap());

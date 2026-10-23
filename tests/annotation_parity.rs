@@ -16,18 +16,35 @@ use keyflow_lang::orchestra::mirror::stage1_annotations as mirror_annotations;
 use keyflow_lang::orchestra::{Config, MidiNote, detect_profile, process_part};
 use sampler::document::{DocCc, DocNote, TrackDocument, stage1_annotations as doc_annotations};
 
-fn corpus_files() -> Vec<std::path::PathBuf> {
-    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../crates/keyflow/examples/mxl");
-    let mut files: Vec<_> = std::fs::read_dir(&dir)
-        .expect("keyflow mxl corpus missing")
+/// The keyflow orchestral `.mxl` corpus, or `None` to SKIP.
+///
+/// It is not in any public repo: the scores are transcriptions of commercial
+/// works, so keyflow keeps its own copy out of git too (its corpus tests are
+/// `#[ignore]`d for the same reason). It used to sit in-tree at
+/// `crates/keyflow/examples/mxl`, which went with the in-tree keyflow copies
+/// (#173). Point `KEYFLOW_MXL_CORPUS` at a local copy, or link one to
+/// `tests/assets/mxl` (`assets.txt`); without either the test skips, like the
+/// other tests here whose data lives off-repo (`load_pack`, `aiff_real`).
+fn corpus_files() -> Option<Vec<std::path::PathBuf>> {
+    let dir = std::env::var_os("KEYFLOW_MXL_CORPUS").map_or_else(
+        || std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets/mxl"),
+        std::path::PathBuf::from,
+    );
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        eprintln!(
+            "skipped — keyflow mxl corpus not present at {} (set KEYFLOW_MXL_CORPUS)",
+            dir.display()
+        );
+        return None;
+    };
+    let mut files: Vec<_> = entries
         .filter_map(std::result::Result::ok)
         .map(|e| e.path())
         .filter(|p| p.extension().is_some_and(|x| x == "mxl"))
         .collect();
     files.sort();
     assert!(files.len() >= 18, "corpus shrank: {}", files.len());
-    files
+    Some(files)
 }
 
 /// keyflow engine channels are 1-based; documents are 0-based.
@@ -66,7 +83,10 @@ fn to_document(
 /// (`ks_val`, `legato_from`, `re_bow_to`) for every note.
 #[test]
 fn document_annotation_matches_mirror_across_corpus() {
-    for f in corpus_files() {
+    let Some(files) = corpus_files() else {
+        return;
+    };
+    for f in files {
         let name = f.file_name().unwrap().to_string_lossy().to_string();
         let score = keyflow_lang::orchestra::score::load(&f).expect("parse");
         for part in &score.parts {

@@ -88,12 +88,19 @@ impl PitchShifter {
     /// Frames of the sample that must be fed through the shifter BEFORE its
     /// output is the intended content — the startup latency, in input frames.
     ///
-    /// The full-gain head starts [`STARTUP_HISTORY`] behind the write pointer
-    /// and its offset drifts at `|1 − ratio|` per sample, so it reaches the
-    /// first frame ever written after `STARTUP_HISTORY / ratio` frames (the
-    /// drift adds for a shift up and subtracts for a shift down). Until then
-    /// its output belongs to earlier sample content — or, with nothing
-    /// earlier, to silence.
+    /// The full-gain head starts [`STARTUP_HISTORY`] behind the write pointer.
+    /// [`prime`](Self::prime) only WRITES — it does not tick, so the heads do
+    /// not sweep while it runs — which means the head is still exactly
+    /// `STARTUP_HISTORY` behind when the first `tick` comes, whatever the
+    /// ratio. So that many frames must be written for it to read the first
+    /// one, and it does so on tick 0.
+    ///
+    /// This used to be `STARTUP_HISTORY / ratio`: the time an UNPRIMED head
+    /// takes to drift onto the first frame written, which is the wrong
+    /// question once priming is not ticking. Short of the full history by
+    /// `STARTUP_HISTORY · (1 − 1/ratio)`, a shift up read silence for that
+    /// many frames divided by the ratio: 14 ms for a whole-tone-grid fill
+    /// (+4 semitones), the late off-grid shorts `document_mode` caught.
     ///
     /// So a voice that wants frame `S` to be heard at tick 0 must feed frames
     /// `S .. S + startup_frames()` first and then continue from there;
@@ -101,7 +108,7 @@ impl PitchShifter {
     /// does exactly that.
     #[must_use]
     pub fn startup_frames(&self) -> usize {
-        (STARTUP_HISTORY as f64 / self.ratio).ceil() as usize
+        STARTUP_HISTORY
     }
 
     /// Pre-fill the delay line with `history` (the sample frames immediately
@@ -250,20 +257,26 @@ mod tests {
 
         // The engine feeds `startup_frames()` of the sample through the
         // shifter and then continues from there (`prime_pitch_shifters`).
-        let mut up = PitchShifter::new(100.0);
-        let startup = up.startup_frames();
-        let history: Vec<f32> = (0..startup).map(sine).collect();
-        up.prime(&history);
-
+        //
+        // Every shift, up and down, a semitone to a third: the old
+        // `STARTUP_HISTORY / ratio` passed a semitone up within 5 ms and left a
+        // third up silent for 14 ms. "Immediately" is the first 16 frames.
+        let n = 16;
+        for cents in [100.0, 200.0, 400.0, -100.0, -200.0, -400.0] {
+            let mut sh = PitchShifter::new(cents);
+            let startup = sh.startup_frames();
+            let history: Vec<f32> = (0..startup).map(sine).collect();
+            sh.prime(&history);
+            let peak = (0..n)
+                .map(|i| sh.tick(sine(startup + i)).abs())
+                .fold(0.0f32, f32::max);
+            assert!(
+                peak > 0.05,
+                "{cents} cents: a primed shifter must speak within {n} frames; peak was {peak:.4}"
+            );
+        }
         let first_ms = 5;
         let n = (sr as usize * first_ms) / 1000;
-        let peak = (0..n)
-            .map(|i| up.tick(sine(startup + i)).abs())
-            .fold(0.0f32, f32::max);
-        assert!(
-            peak > 0.1,
-            "primed shifter must produce audio within {first_ms} ms; peak was {peak:.4}"
-        );
 
         // And the unprimed path is what that guards against.
         let mut cold = PitchShifter::new(100.0);

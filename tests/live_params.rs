@@ -24,7 +24,7 @@
 use sampler::RigBlock;
 use sampler::block_params::{self, BlockDelta, ResolvedWrite};
 use sampler::rig::prepare_chain;
-use signal_plugin_host::{PluginEvents, PluginInstance};
+use signal_plugin_host::{PluginEvents, PluginInstance, PluginParamInfo};
 use signal_proto::block::BlockType;
 
 const SR: u32 = 48_000;
@@ -128,19 +128,58 @@ fn error_db(a: &[f32], b: &[f32]) -> f32 {
     20.0 * (rms(&err).max(1e-12) / rms(b).max(1e-12)).log10()
 }
 
-#[test]
-fn a_live_write_sets_every_builtin_effect_as_its_build_does() {
-    let x = input(SR as usize / 2);
-    let quiet = vec![0.0f32; SR as usize];
-    let settle = 2 * (SR as usize / 5); // 200 ms, interleaved stereo
-    let mut checked = 0;
-    let mut structural = Vec::new();
-    let mut failures = Vec::new();
-    let mut worst_running = (f32::NEG_INFINITY, String::new());
-    let mut gliding = Vec::new();
-    let mut slowest = (0.0f64, String::new());
-    let mut slow = Vec::new();
+/// Run `job` over every entry of `jobs` on all the cores, returning the
+/// results in `jobs` order.
+///
+/// The sweeps below are real DSP work, not a hang: a param is built,
+/// prepared and rendered four times over, and the reverb alone — its spring
+/// and plate engines ticking every sample of 1.5 s of audio per render, for
+/// every one of its params — took ~45 s of one core, over nextest's 30 s
+/// limit. Each (block, param) case is independent, so they run in parallel;
+/// the coverage is unchanged.
+fn par_map<J: Sync, R: Send>(jobs: &[J], job: impl Fn(&J) -> R + Sync) -> Vec<R> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let next = AtomicUsize::new(0);
+    let workers = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZero::get)
+        .clamp(1, jobs.len().max(1));
+    let mut done: Vec<(usize, R)> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..workers)
+            .map(|_| {
+                s.spawn(|| {
+                    let mut mine = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(j) = jobs.get(i) else { break };
+                        mine.push((i, job(j)));
+                    }
+                    mine
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().expect("a sweep worker panicked"))
+            .collect()
+    });
+    done.sort_by_key(|(i, _)| *i);
+    done.into_iter().map(|(_, r)| r).collect()
+}
+
+/// One (block, param) case of a sweep: the block with every param nudged
+/// off its default, and the param under test.
+struct Case {
+    bt: BlockType,
+    name: &'static str,
+    base: RigBlock,
+    param: PluginParamInfo,
+}
+
+/// Every param of every built-in effect, each with its block nudged off
+/// every default (so a write that disturbs another param shows).
+fn cases() -> Vec<Case> {
     let only = std::env::var("LIVE_PARAMS_ONLY").ok();
+    let mut out = Vec::new();
     for &(bt, name) in TYPES
         .iter()
         .filter(|(_, n)| only.as_deref().is_none_or(|o| o == *n))
@@ -148,89 +187,145 @@ fn a_live_write_sets_every_builtin_effect_as_its_build_does() {
         let infos = sampler::native::build_native(&RigBlock::of_type(bt), SR)
             .expect("registered")
             .params();
-        // Every param away from its default, so a write that disturbs
-        // another param (a mode resetting the rest) shows.
         let base = infos.iter().fold(RigBlock::effect(bt, name), |b, p| {
             b.with_param(p.name.clone(), fmt(nudged(p.default, p.min, p.max)))
         });
-        for p in &infos {
-            let from = nudged(p.default, p.min, p.max);
-            let v = changed(from, p.min, p.max);
-            if (v as f32) == (from as f32) {
-                continue;
-            }
-            let mut edited = base.clone();
-            for q in &mut edited.params {
-                if q.name == p.name {
-                    q.value = fmt(v);
-                }
-            }
-            let write = match block_params::block_delta(&base, &edited) {
-                BlockDelta::Live(w) => w,
-                BlockDelta::Same => {
-                    failures.push(format!("{name}.{}: seen as no change", p.name));
-                    continue;
-                }
-                BlockDelta::Structural => {
-                    structural.push(format!("{name}.{}", p.name));
-                    continue;
-                }
-            };
-            let resolved = ResolvedWrite::resolve(bt, &write).expect("resolves");
+        for p in infos {
+            out.push(Case {
+                bt,
+                name,
+                base: base.clone(),
+                param: p,
+            });
+        }
+    }
+    out
+}
 
-            // Exact: the conversion alone. Both then run a second of
-            // silence — an effect that glides a param (a reverb's decay, a
-            // gain) gets there — and are compared on the signal after.
-            let mut built = build(&edited);
-            built.prepare(f64::from(SR), 512).unwrap();
-            let mut written = build(&base);
-            resolved.apply(written.as_mut());
-            written.prepare(f64::from(SR), 512).unwrap();
-            render(&mut built, &quiet);
-            render(&mut written, &quiet);
-            let (want, got) = (render(&mut built, &x), render(&mut written, &x));
-            let d = max_abs_diff(&got, &want);
-            if d != 0.0 || got.iter().any(|s| !s.is_finite()) {
-                failures.push(format!("{name}.{} = {v}: exact differs by {d:e}", p.name));
-            }
+/// What one case of the live-write sweep found.
+enum LiveOutcome {
+    /// The change rounds away to nothing at `f32`.
+    Unchanged,
+    Structural(String),
+    Failure(String),
+    Checked {
+        param: String,
+        /// The least of three live writes, in µs (the renderer-lock hold).
+        write_us: f64,
+        /// Running error after 200 ms against the built block, in dB.
+        running_db: f32,
+        failure: Option<String>,
+    },
+}
 
-            // Running: written mid-song, glides allowed — and timed: this
-            // is the hold of the renderer's lock a live write costs.
-            let mut built = build(&edited);
-            let mut running = build(&base);
-            render(&mut running, &x[..SR as usize / 10]);
-            // The least of three writes (there, back, there again): the
-            // write's own cost, not the scheduler's.
-            let back = match block_params::block_delta(&edited, &base) {
-                BlockDelta::Live(w) => ResolvedWrite::resolve(bt, &w),
-                _ => None,
-            };
-            let mut us = f64::INFINITY;
-            for w in [Some(&resolved), back.as_ref(), Some(&resolved)]
-                .into_iter()
-                .flatten()
-            {
-                let t = std::time::Instant::now();
-                w.apply(running.as_mut());
-                us = us.min(t.elapsed().as_secs_f64() * 1e6);
+fn live_write_case(c: &Case, x: &[f32], quiet: &[f32]) -> LiveOutcome {
+    let (bt, name, base, p) = (c.bt, c.name, &c.base, &c.param);
+    let settle = 2 * (SR as usize / 5); // 200 ms, interleaved stereo
+    let from = nudged(p.default, p.min, p.max);
+    let v = changed(from, p.min, p.max);
+    if (v as f32) == (from as f32) {
+        return LiveOutcome::Unchanged;
+    }
+    let mut edited = base.clone();
+    for q in &mut edited.params {
+        if q.name == p.name {
+            q.value = fmt(v);
+        }
+    }
+    let write = match block_params::block_delta(base, &edited) {
+        BlockDelta::Live(w) => w,
+        BlockDelta::Same => {
+            return LiveOutcome::Failure(format!("{name}.{}: seen as no change", p.name));
+        }
+        BlockDelta::Structural => return LiveOutcome::Structural(format!("{name}.{}", p.name)),
+    };
+    let resolved = ResolvedWrite::resolve(bt, &write).expect("resolves");
+
+    // Exact: the conversion alone. Both then run a second of silence — an
+    // effect that glides a param (a reverb's decay, a gain) gets there — and
+    // are compared on the signal after.
+    let mut built = build(&edited);
+    built.prepare(f64::from(SR), 512).unwrap();
+    let mut written = build(base);
+    resolved.apply(written.as_mut());
+    written.prepare(f64::from(SR), 512).unwrap();
+    render(&mut built, quiet);
+    render(&mut written, quiet);
+    let (want, got) = (render(&mut built, x), render(&mut written, x));
+    let d = max_abs_diff(&got, &want);
+    let failure = (d != 0.0 || got.iter().any(|s| !s.is_finite()))
+        .then(|| format!("{name}.{} = {v}: exact differs by {d:e}", p.name));
+
+    // Running: written mid-song, glides allowed — and timed: this is the
+    // hold of the renderer's lock a live write costs.
+    let mut built = build(&edited);
+    let mut running = build(base);
+    render(&mut running, &x[..SR as usize / 10]);
+    // The least of three writes (there, back, there again): the write's own
+    // cost, not the scheduler's.
+    let back = match block_params::block_delta(&edited, base) {
+        BlockDelta::Live(w) => ResolvedWrite::resolve(bt, &w),
+        _ => None,
+    };
+    let mut us = f64::INFINITY;
+    for w in [Some(&resolved), back.as_ref(), Some(&resolved)]
+        .into_iter()
+        .flatten()
+    {
+        let t = std::time::Instant::now();
+        w.apply(running.as_mut());
+        us = us.min(t.elapsed().as_secs_f64() * 1e6);
+    }
+    let mut running = build(base);
+    resolved.apply(running.as_mut());
+    let (want, got) = (render(&mut built, x), render(&mut running, x));
+    LiveOutcome::Checked {
+        param: format!("{name}.{}", p.name),
+        write_us: us,
+        running_db: error_db(&got[settle..], &want[settle..]),
+        failure,
+    }
+}
+
+#[test]
+fn a_live_write_sets_every_builtin_effect_as_its_build_does() {
+    let x = input(SR as usize / 2);
+    let quiet = vec![0.0f32; SR as usize];
+    let mut checked = 0;
+    let mut structural = Vec::new();
+    let mut failures = Vec::new();
+    let mut worst_running = (f32::NEG_INFINITY, String::new());
+    let mut gliding = Vec::new();
+    let mut slowest = (0.0f64, String::new());
+    let mut slow = Vec::new();
+    // The writes are timed while the other cases render beside them, so
+    // the µs figures below are an upper bound; they are reported, not held.
+    for outcome in par_map(&cases(), |c| live_write_case(c, &x, &quiet)) {
+        match outcome {
+            LiveOutcome::Unchanged => {}
+            LiveOutcome::Structural(p) => structural.push(p),
+            LiveOutcome::Failure(f) => failures.push(f),
+            LiveOutcome::Checked {
+                param,
+                write_us: us,
+                running_db: e,
+                failure,
+            } => {
+                failures.extend(failure);
+                if us > slowest.0 {
+                    slowest = (us, param.clone());
+                }
+                if us > 50.0 {
+                    slow.push(format!("{param} {us:.0}µs"));
+                }
+                if e > worst_running.0 {
+                    worst_running = (e, param.clone());
+                }
+                if e > -60.0 {
+                    gliding.push(format!("{param} {e:.0} dB"));
+                }
+                checked += 1;
             }
-            if us > slowest.0 {
-                slowest = (us, format!("{name}.{}", p.name));
-            }
-            if us > 50.0 {
-                slow.push(format!("{name}.{} {us:.0}µs", p.name));
-            }
-            let mut running = build(&base);
-            resolved.apply(running.as_mut());
-            let (want, got) = (render(&mut built, &x), render(&mut running, &x));
-            let e = error_db(&got[settle..], &want[settle..]);
-            if e > worst_running.0 {
-                worst_running = (e, format!("{name}.{}", p.name));
-            }
-            if e > -60.0 {
-                gliding.push(format!("{name}.{} {e:.0} dB", p.name));
-            }
-            checked += 1;
         }
     }
     println!(
@@ -256,6 +351,42 @@ fn a_live_write_sets_every_builtin_effect_as_its_build_does() {
     assert!(checked > 100, "the sweep covered the params: {checked}");
 }
 
+/// What one case of the dropped-param sweep found: `None` when it does not
+/// apply, else the failure, if any.
+fn dropped_param_case(c: &Case, x: &[f32], quiet: &[f32]) -> Option<Option<String>> {
+    let (bt, name, base, p) = (c.bt, c.name, &c.base, &c.param);
+    // Stored at its default already (a whole-number range the nudge rounds
+    // back): dropping it changes nothing.
+    let stored = nudged(p.default, p.min, p.max);
+    if !block_params::is_live(bt, &p.name) || (stored as f32) == (p.default as f32) {
+        return None;
+    }
+    let mut dropped = base.clone();
+    dropped.params.retain(|q| q.name != p.name);
+    let listed = block_params::NO_DEFAULT
+        .iter()
+        .any(|(t, n)| *t == bt && n.eq_ignore_ascii_case(&p.name));
+    let write = match block_params::block_delta(base, &dropped) {
+        BlockDelta::Live(w) => w,
+        BlockDelta::Structural if listed => return None,
+        other => return Some(Some(format!("{name}.{} dropped: {other:?}", p.name))),
+    };
+    let resolved = ResolvedWrite::resolve(bt, &write).expect("resolves");
+    let mut built = build(&dropped);
+    built.prepare(f64::from(SR), 512).unwrap();
+    let mut written = build(base);
+    resolved.apply(written.as_mut());
+    written.prepare(f64::from(SR), 512).unwrap();
+    render(&mut built, quiet);
+    render(&mut written, quiet);
+    let (want, got) = (render(&mut built, x), render(&mut written, x));
+    let d = max_abs_diff(&got, &want);
+    Some(
+        (d != 0.0 || got.iter().any(|s| !s.is_finite()))
+            .then(|| format!("{name}.{} dropped: differs from its build by {d:e}", p.name)),
+    )
+}
+
 /// A param a preset sets and the next one does not: the next build holds
 /// the effect's default for it, so the live write is that default — and must
 /// set the running block exactly as that build does. Stepping presets that
@@ -268,55 +399,12 @@ fn a_param_dropped_from_a_preset_is_written_as_its_build_default() {
     let quiet = vec![0.0f32; SR as usize];
     let mut checked = 0;
     let mut failures = Vec::new();
-    let only = std::env::var("LIVE_PARAMS_ONLY").ok();
-    for &(bt, name) in TYPES
-        .iter()
-        .filter(|(_, n)| only.as_deref().is_none_or(|o| o == *n))
+    for outcome in par_map(&cases(), |c| dropped_param_case(c, &x, &quiet))
+        .into_iter()
+        .flatten()
     {
-        let infos = sampler::native::build_native(&RigBlock::of_type(bt), SR)
-            .expect("registered")
-            .params();
-        let base = infos.iter().fold(RigBlock::effect(bt, name), |b, p| {
-            b.with_param(p.name.clone(), fmt(nudged(p.default, p.min, p.max)))
-        });
-        for p in &infos {
-            // Stored at its default already (a whole-number range the nudge
-            // rounds back): dropping it changes nothing.
-            let stored = nudged(p.default, p.min, p.max);
-            if !block_params::is_live(bt, &p.name) || (stored as f32) == (p.default as f32) {
-                continue;
-            }
-            let mut dropped = base.clone();
-            dropped.params.retain(|q| q.name != p.name);
-            let listed = block_params::NO_DEFAULT
-                .iter()
-                .any(|(t, n)| *t == bt && n.eq_ignore_ascii_case(&p.name));
-            let write = match block_params::block_delta(&base, &dropped) {
-                BlockDelta::Live(w) => w,
-                BlockDelta::Structural if listed => continue,
-                other => {
-                    failures.push(format!("{name}.{} dropped: {other:?}", p.name));
-                    continue;
-                }
-            };
-            let resolved = ResolvedWrite::resolve(bt, &write).expect("resolves");
-            let mut built = build(&dropped);
-            built.prepare(f64::from(SR), 512).unwrap();
-            let mut written = build(&base);
-            resolved.apply(written.as_mut());
-            written.prepare(f64::from(SR), 512).unwrap();
-            render(&mut built, &quiet);
-            render(&mut written, &quiet);
-            let (want, got) = (render(&mut built, &x), render(&mut written, &x));
-            let d = max_abs_diff(&got, &want);
-            if d != 0.0 || got.iter().any(|s| !s.is_finite()) {
-                failures.push(format!(
-                    "{name}.{} dropped: differs from its build by {d:e}",
-                    p.name
-                ));
-            }
-            checked += 1;
-        }
+        failures.extend(outcome);
+        checked += 1;
     }
     assert!(
         failures.is_empty(),
