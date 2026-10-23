@@ -4,7 +4,7 @@
 //! headless, and that holds here too — the plugin editor talks to a
 //! `Tone3000Backend` through the generated clients, exactly as the desktop
 //! app and the browser remote do. The only difference is where the backend
-//! is: a plugin cannot assume a `signal-desktop --engine` is running on the
+//! is: a plugin cannot assume a `studio-desktop --engine` is running on the
 //! machine, so it serves one in-process over a memory link.
 //!
 //! # One engine per process, not per plugin instance
