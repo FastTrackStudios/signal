@@ -109,7 +109,7 @@ not:
 Pack a library:
 
 ```bash
-cargo run --release -p signal-desktop --features cli --bin signal -- sampler pack \
+cargo run --release -p studio-desktop --features cli --bin signal -- sampler pack \
   "/run/media/AudioHaven/Sampled/Keys/Keyscape/Wurlitzer 200A/library.styx" \
   --samples-root "/run/media/AudioHaven/Sampled/Keys/Keyscape/Wurlitzer 200A" \
   --output "/run/media/AudioHaven/Signal/Keys/Keyscape/Wurlitzer 200A.signalpack"
@@ -118,7 +118,7 @@ cargo run --release -p signal-desktop --features cli --bin signal -- sampler pac
 Export a pack:
 
 ```bash
-cargo run --release -p signal-desktop --features cli --bin signal -- sampler export \
+cargo run --release -p studio-desktop --features cli --bin signal -- sampler export \
   "/run/media/AudioHaven/Signal/Keys/Keyscape/Wurlitzer 200A.signalpack" \
   --output-dir /tmp/wurli-export
 ```
@@ -126,7 +126,7 @@ cargo run --release -p signal-desktop --features cli --bin signal -- sampler exp
 Play a sampled library from CLI:
 
 ```bash
-cargo run --release -p signal-desktop --features cli --bin signal -- sampler play \
+cargo run --release -p studio-desktop --features cli --bin signal -- sampler play \
   "/run/media/AudioHaven/Sampled/Keys/Keyscape/Wurlitzer 200A/library.styx" \
   --samples-root "/run/media/AudioHaven/Sampled/Keys/Keyscape/Wurlitzer 200A" \
   --sample-rate 48000 \
@@ -178,12 +178,12 @@ This passed after adding the Keyscape parsers and loose parser.
 Small signalpack relative-path check:
 
 ```bash
-cargo run --release -p signal-desktop --features cli --bin signal -- sampler pack \
+cargo run --release -p studio-desktop --features cli --bin signal -- sampler pack \
   "/run/media/AudioHaven/Sampled/Keys/Keyscape/Vinyl Keyscape 01/library.styx" \
   --samples-root "/run/media/AudioHaven/Sampled/Keys/Keyscape/Vinyl Keyscape 01" \
   --output /tmp/vinyl.signalpack
 
-cargo run --release -p signal-desktop --features cli --bin signal -- sampler export \
+cargo run --release -p studio-desktop --features cli --bin signal -- sampler export \
   /tmp/vinyl.signalpack \
   --output-dir /tmp/vinyl-export
 ```

@@ -9,7 +9,7 @@
 //! same action by the same id.
 //!
 //! What a command *does* depends on the host that runs it: the headless
-//! engine (`signal-desktop --engine`) steps the guitar rig's setlist; the
+//! engine (`studio-desktop --engine`) steps the guitar rig's setlist; the
 //! REAPER extension builds demo content and learns macros in a project. A
 //! host implements [`SignalCommandHost`]; [`register`] puts every command on
 //! the list with that host behind it. A command a host cannot run is still

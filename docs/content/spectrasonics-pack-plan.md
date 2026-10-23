@@ -97,7 +97,7 @@ largest target). Once format is known:
 
 ### 1c. Smoke-test in desktop sampler
 
-Load each pack in `signal-desktop`, MIDI-trigger a few notes per articulation,
+Load each pack in `studio-desktop`, MIDI-trigger a few notes per articulation,
 confirm release samples and round-robin behave per `.styx`.
 
 ## Phase 2 — Omnisphere (after Keyscape complete)

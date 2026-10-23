@@ -290,7 +290,7 @@ pub struct ExtensionFxState {
 
 /// Service implemented by each signal-extension instance (one per track).
 ///
-/// The fts-signal-controller CLAP plugin and signal-desktop app use this
+/// The fts-signal-controller CLAP plugin and studio-desktop app use this
 /// to control FX parameters on remote tracks via SHM. Each extension only
 /// touches its own track's parameters — cross-track modulation is routed
 /// through this service rather than calling REAPER APIs across tracks.
