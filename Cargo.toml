@@ -29,6 +29,6 @@ facet-styx.workspace = true
 
 # Observability (file logger — hosts eat stderr)
 tracing.workspace = true
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 
 eyre.workspace = true
