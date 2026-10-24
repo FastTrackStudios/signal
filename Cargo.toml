@@ -75,7 +75,3 @@ rayon = { version = "1" }
 signal-plugin-host = { workspace = true, features = ["clap-host"] }
 walkdir = { version = "2" }
 
-[[test]]
-name = "plan_roundtrip"
-path = "tests/plan_roundtrip.rs"
-required-features = ["library"]

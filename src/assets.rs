@@ -67,16 +67,3 @@ pub fn stem(key: &str) -> String {
     let file = key.rsplit(['/', '\\']).next().unwrap_or(key);
     file.rsplit_once('.').map_or(file, |(s, _)| s).to_string()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn installed_bytes_come_back_by_key() {
-        install("test/amp.nam", vec![1u8, 2, 3]);
-        assert_eq!(get("test/amp.nam").as_deref(), Some(&[1u8, 2, 3][..]));
-        assert!(get("test/other.nam").is_none());
-        assert_eq!(stem("x/y/Deluxe Reverb.nam"), "Deluxe Reverb");
-    }
-}

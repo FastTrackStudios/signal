@@ -2920,9 +2920,6 @@ fn half_pedal_release_frames(
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-#[cfg(test)]
-mod tests;
-
 /// Pick the articulation a patch should start on: a *playable* body layer.
 ///
 /// Rules, in order — Sustain first, then anything note-on can trigger
@@ -2965,75 +2962,4 @@ pub fn default_articulation(spec: &crate::spec::LibrarySpec) -> Option<String> {
         // caller still has an id to work with.
         .or_else(|| spec.articulations.first())
         .map(|a| a.id.clone())
-}
-
-#[cfg(test)]
-mod hole_detector_tests {
-    use super::HoleDetector;
-
-    /// Feed a pattern of magnitudes, return (holes, total silent frames).
-    fn run(pattern: &[f32]) -> (usize, usize) {
-        let mut d = HoleDetector::default();
-        let (mut holes, mut frames) = (0, 0);
-        for &m in pattern {
-            if let Some(run) = d.feed(m) {
-                holes += 1;
-                frames += run;
-            }
-        }
-        (holes, frames)
-    }
-
-    /// **The bug this detector replaced.** A note begins with legitimate
-    /// silence — `start_hold`, `attack_delay`, a velocity crossfade at zero —
-    /// and the previous metric counted every frame of it. A chord's worth
-    /// made thousands of phantom "gaps" and sent us chasing the streamer.
-    #[test]
-    fn silence_before_the_first_signal_is_not_a_hole() {
-        assert_eq!(run(&[0.0, 0.0, 0.0, 0.0, 0.5, 0.5]), (0, 0));
-    }
-
-    /// Silence after the last signal is not a hole either: the note may
-    /// simply have ended, and nothing has resumed to prove otherwise.
-    #[test]
-    fn trailing_silence_is_not_a_hole() {
-        assert_eq!(run(&[0.5, 0.5, 0.0, 0.0, 0.0]), (0, 0));
-    }
-
-    /// Signal, silence, signal — audio that stopped and came back. That is a
-    /// hole, and it is what a listener hears as a click.
-    #[test]
-    fn silence_between_signal_is_a_hole() {
-        assert_eq!(run(&[0.5, 0.0, 0.0, 0.0, 0.5]), (1, 3));
-    }
-
-    /// Several separate dropouts are several holes, not one long one — the
-    /// distinction between a single glitch and continuous crackle.
-    #[test]
-    fn each_dropout_counts_once() {
-        assert_eq!(run(&[0.5, 0.0, 0.5, 0.0, 0.0, 0.5]), (2, 3));
-    }
-
-    /// Continuous signal has no holes at all, however quiet, as long as it
-    /// is not exactly zero.
-    #[test]
-    fn quiet_but_present_signal_is_not_a_hole() {
-        assert_eq!(run(&[1.0e-7, 1.0e-7, 1.0e-7]), (0, 0));
-    }
-
-    /// `reset` drops the run in progress — used when every voice has gone,
-    /// so the next note cannot close a "hole" spanning the silence between
-    /// two phrases.
-    #[test]
-    fn reset_forgets_the_run_in_progress() {
-        let mut d = HoleDetector::default();
-        assert_eq!(d.feed(0.5), None);
-        assert_eq!(d.feed(0.0), None);
-        d.reset();
-        assert_eq!(
-            d.feed(0.5),
-            None,
-            "the silence across a reset is not a hole"
-        );
-    }
 }

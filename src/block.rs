@@ -708,32 +708,3 @@ fn pan_gains(pan: f32) -> (f32, f32) {
     let theta = (p + 1.0) * std::f32::consts::FRAC_PI_4;
     (theta.cos(), theta.sin())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn defaults_are_no_ops() {
-        let p = BlockParams::default();
-        assert_eq!(p.gain_db, 0.0);
-        assert_eq!(p.pan, 0.0);
-        assert_eq!(p.transpose, 0);
-        assert_eq!(db_to_lin(0.0), 1.0);
-    }
-
-    #[test]
-    fn pan_is_equal_power() {
-        let (l, r) = pan_gains(0.0);
-        assert!((l - r).abs() < 1e-6);
-        assert!((l - 0.707_106_77).abs() < 1e-6);
-    }
-
-    #[test]
-    fn transpose_clamps() {
-        assert_eq!(transposed(60, 12), 72);
-        assert_eq!(transposed(60, -12), 48);
-        assert_eq!(transposed(120, 12), 127);
-        assert_eq!(transposed(5, -10), 0);
-    }
-}

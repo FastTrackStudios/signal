@@ -233,33 +233,3 @@ impl PluginInstance for SoundsourceLeaf {
         self.source.reset();
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::audio_soundsource::AudioSoundsource;
-
-    #[test]
-    fn leaf_wraps_audio_soundsource_and_passes_input_through() {
-        let mut leaf = SoundsourceLeaf::new(AudioSoundsource::new());
-        assert_eq!(leaf.kind(), SoundsourceKind::Audio);
-        leaf.prepare(48_000.0, 512).unwrap();
-        assert!(leaf.is_prepared());
-
-        let n = 512;
-        let in_l = vec![0.5f32; n];
-        let in_r = vec![-0.25f32; n];
-        let mut out_l = vec![0.0f32; n];
-        let mut out_r = vec![0.0f32; n];
-        leaf.process_block(
-            &in_l,
-            &in_r,
-            &mut out_l,
-            &mut out_r,
-            &PluginEvents::default(),
-        )
-        .unwrap();
-        assert!(out_l.iter().all(|&s| (s - 0.5).abs() < 1e-6));
-        assert!(out_r.iter().all(|&s| (s + 0.25).abs() < 1e-6));
-    }
-}

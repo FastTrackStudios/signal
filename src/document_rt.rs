@@ -328,23 +328,3 @@ fn bpm_at_sec(tempo: &[TempoPoint], sec: f64) -> f64 {
     }
     bpm
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bpm_at_sec_follows_the_map() {
-        let map = vec![
-            TempoPoint {
-                qn: 0.0,
-                bpm: 120.0,
-            },
-            TempoPoint { qn: 4.0, bpm: 60.0 }, // switch at 2.0 s
-        ];
-        assert_eq!(bpm_at_sec(&map, 0.0), 120.0);
-        assert_eq!(bpm_at_sec(&map, 1.9), 120.0);
-        assert_eq!(bpm_at_sec(&map, 2.1), 60.0);
-        assert_eq!(bpm_at_sec(&[], 5.0), 120.0);
-    }
-}

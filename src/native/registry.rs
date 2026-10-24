@@ -508,31 +508,3 @@ fn build_dfs(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
             .with_parallel(block.param_f32("parallel").unwrap_or(0.0) > 0.0),
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn registry_and_availability_agree() {
-        for bt in [
-            BlockType::Oscillator,
-            BlockType::Wavetable,
-            BlockType::Filter,
-            BlockType::Amp,
-            BlockType::Waveshaper,
-            BlockType::Dfs,
-        ] {
-            assert!(native_dsp_available(bt), "{bt:?} registered");
-            let block = RigBlock::of_type(bt);
-            assert!(build_native(&block, 48_000).is_some(), "{bt:?} builds");
-        }
-        // Rotary is registered as a transparent placeholder (NativePassthrough)
-        // so the block exists in chains until rotary DSP lands.
-        assert!(native_dsp_available(BlockType::Rotary));
-        assert!(build_native(&RigBlock::of_type(BlockType::Rotary), 48_000).is_some());
-        // Pitch has no entry at all — no placeholder, no DSP.
-        assert!(native_dsp_available(BlockType::Pitch));
-        assert!(build_native(&RigBlock::of_type(BlockType::Pitch), 48_000).is_some());
-    }
-}

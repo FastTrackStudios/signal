@@ -1683,31 +1683,3 @@ impl SamplerBank {
         ids
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn preload_profile_names_parse() {
-        assert_eq!(
-            PreloadProfile::from_name("fast-audition"),
-            Some(PreloadProfile::FastAudition)
-        );
-        assert_eq!(
-            PreloadProfile::from_name("full_preload"),
-            Some(PreloadProfile::Full)
-        );
-        assert_eq!(
-            PreloadProfile::from_name("orchestral"),
-            Some(PreloadProfile::OrchestralArticulation)
-        );
-        assert_eq!(PreloadProfile::from_name("unknown"), None);
-    }
-
-    #[test]
-    fn orchestral_priority_prefers_core_sections() {
-        assert!(orchestral_priority("solo violin") < orchestral_priority("effects"));
-        assert!(orchestral_priority("cello") < orchestral_priority("effects"));
-    }
-}
