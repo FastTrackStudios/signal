@@ -22,5 +22,5 @@ session = { workspace = true }
 
 [dev-dependencies]
 sampler = { workspace = true, features = ["pipewire"] }
-hound = "3.5"
+hound = { workspace = true }
 eyre.workspace = true

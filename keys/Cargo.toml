@@ -49,8 +49,8 @@ tokio = { version = "1.48", default-features = false, features = ["rt", "sync", 
 [dev-dependencies]
 eyre = { workspace = true }
 fts-sample = { workspace = true }
-libc = { version = "0.2" }
-ratatui = { version = "0.30" }
+libc = { workspace = true }
+ratatui = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 tracing-subscriber = { workspace = true }
 vox-core = { workspace = true }

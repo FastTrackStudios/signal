@@ -19,7 +19,7 @@ architect = { workspace = true }
 dioxus = { workspace = true, optional = true }
 facet = { workspace = true }
 facet-styx = { workspace = true }
-flate2 = { version = "1" }
+flate2 = { workspace = true }
 fts-audio-ui = { workspace = true, optional = true }
 midi = { workspace = true, features = ["ui"] }
 sampler = { workspace = true }

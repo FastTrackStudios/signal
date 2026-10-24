@@ -44,5 +44,5 @@ unnecessary_cast = "allow"
 [dependencies]
 
 [dev-dependencies]
-hound = "3.5"
-midly = "0.5"
+hound = { workspace = true }
+midly = { workspace = true }

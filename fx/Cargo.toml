@@ -13,7 +13,7 @@ daw-standalone = { workspace = true }
 daw-proto = { workspace = true }
 sampler = { workspace = true }
 guitar = { workspace = true }
-dirs = "6"
+dirs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 num-traits = { workspace = true }
