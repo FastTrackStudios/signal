@@ -33,5 +33,5 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 eyre.workspace = true
 uuid.workspace = true
 futures.workspace = true
-base64 = "0.22"
+base64 = { workspace = true }
 serde_json.workspace = true

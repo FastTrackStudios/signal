@@ -18,7 +18,7 @@ vox.workspace = true
 eyre = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-base64 = "0.22"
+base64 = { workspace = true }
 tracing.workspace = true
 futures.workspace = true
 uuid = { workspace = true }

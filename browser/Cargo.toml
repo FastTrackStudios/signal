@@ -23,8 +23,8 @@ signal-proto.workspace = true
 signal-grid.workspace = true
 sampler = { workspace = true, optional = true }
 uuid = { version = "1", features = ["v4"] }
-walkdir = { version = "2", optional = true }
-rayon = { version = "1", optional = true }
+walkdir = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
