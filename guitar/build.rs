@@ -20,9 +20,14 @@ fn files(dir: &Path, exts: &[&str]) -> Vec<(String, String)> {
                         .is_some_and(|e| exts.contains(&e))
                 })
                 .map(|p| {
+                    // Embedded by its real path: `models/` is a link into
+                    // .assets (`just assets`), and a path through it is one
+                    // git cannot answer for, so cargo-rail could record no
+                    // evidence for any build of this crate.
+                    let real = std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone());
                     (
                         p.file_name().unwrap().to_string_lossy().into_owned(),
-                        p.to_string_lossy().into_owned(),
+                        real.to_string_lossy().into_owned(),
                     )
                 })
                 .collect()
