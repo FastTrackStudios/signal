@@ -23,7 +23,7 @@ plugin-core = { workspace = true }
 sampler = { workspace = true }
 
 # Lock-free Arc<Schedule> swap at block boundaries
-arc-swap = "1.7"
+arc-swap = { workspace = true }
 
 # Patch config (.styx) parsing — same stack as signal-sampler's LibrarySpec
 facet.workspace = true
@@ -35,9 +35,9 @@ serde_json.workspace = true
 
 # Observability
 tracing.workspace = true
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 
 eyre.workspace = true
 
 [dev-dependencies]
-hound = "3.5"
+hound = { workspace = true }
