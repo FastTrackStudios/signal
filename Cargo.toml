@@ -1,0 +1,40 @@
+[package]
+name = "tone3000"
+version = "0.1.0"
+edition = "2024"
+# Set by url -> idna_adapter -> icu_*, not by this crate's own code. Verified with
+# `cargo msrv`. An MSRV bump is a minor version bump.
+rust-version = "1.86"
+license = "MIT"
+description = "Async Rust client for the TONE3000 API (v1) — vendored onto reqwest 0.12's ring-backed rustls (see FTS-PATCH.md)"
+repository = "https://github.com/OpenSauce/tone3000-rs"
+keywords = ["tone3000", "nam", "neural-amp-modeler", "guitar", "api"]
+categories = ["api-bindings"]
+publish = false
+
+# The doc examples (README) need nam-rs, which is not carried here.
+[lib]
+doctest = false
+
+[dependencies]
+# FTS patch: 0.12's `rustls-tls` (ring) instead of 0.13's `rustls`, whose
+# only crypto backend is aws-lc-rs — a C build that was half of a clean
+# workspace check. 0.12 is already in the graph; `form`/`query` are
+# built into 0.12.
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+tokio = { version = "1", default-features = false, features = ["sync", "io-util"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+url = "2"
+sha2 = "0.11"
+base64 = "0.23"
+getrandom = "0.4"
+bytes = "1"
+futures-util = "0.3"
+
+[dev-dependencies]
+# Upstream's, minus nam-rs (doc examples only).
+wiremock = "0.6"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }
+serde_json = "1"
