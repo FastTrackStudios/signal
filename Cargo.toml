@@ -21,7 +21,7 @@ vox = ["architect/vox", "dep:vox", "dep:vox-types"]
 dsp-core = { workspace = true, features = ["audio"] }
 architect = { workspace = true }
 architect-telemetry = { workspace = true, optional = true }
-base64 = { version = "0.22" }
+base64 = { workspace = true }
 builtin = { workspace = true }
 daw = { workspace = true, features = ["standalone-decode"] }
 eyre = { workspace = true }
@@ -30,7 +30,7 @@ facet-json = { workspace = true, optional = true }
 facet-styx = { workspace = true }
 facet-toml = { workspace = true }
 fts-sample = { workspace = true, features = ["load", "engine-core"] }
-hound = { version = "3.5" }
+hound = { workspace = true }
 keyflow-annotate = { workspace = true }
 midi = { workspace = true, features = ["vox"] }
 neural-amp-modeler = { workspace = true }
@@ -38,7 +38,7 @@ openwurli-dsp = { workspace = true }
 realfft = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = { version = "0.10" }
+sha2 = { workspace = true }
 signal-plugin-host = { workspace = true }
 signal-proto = { workspace = true }
 signal-rig-host = { workspace = true }
@@ -55,11 +55,11 @@ walkdir = { workspace = true, optional = true }
 # required-features): a plain `cargo test` of the workspace builds them all.
 sampler = { path = ".", features = ["library"] }
 futures-util = { workspace = true }
-hound = { version = "3.5" }
+hound = { workspace = true }
 keyflow-lang = { workspace = true, features = ["orchestra"] }
-libc = { version = "0.2" }
+libc = { workspace = true }
 memmap2 = { workspace = true }
-ratatui = { version = "0.30" }
+ratatui = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tracing-subscriber = { workspace = true }
@@ -71,7 +71,7 @@ cpal = { workspace = true }
 daw = { workspace = true, features = ["standalone-audio", "clap-host"] }
 fts-sample = { workspace = true, features = ["engine"] }
 midi = { workspace = true, features = ["midir", "native", "pipewire"] }
-rayon = { version = "1" }
+rayon = { workspace = true }
 signal-plugin-host = { workspace = true, features = ["clap-host"] }
-walkdir = { version = "2" }
+walkdir = { workspace = true }
 
