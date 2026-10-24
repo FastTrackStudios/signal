@@ -6,9 +6,13 @@
 //!
 //! All methods return `Result<T, SignalServiceError>` using typed error variants
 //! for structured diagnostics.
+//!
+//! Everything in this file only travels the vox wire, so it derives facet
+//! alone (architect rule 1: wire types are facet-only, no serde beside).
+//! The domain types the traits carry keep serde for now: the Loro doc codec
+//! (`doc`) and the JSON/styx persistence still read them through serde.
 
 use facet::Facet;
-use serde::{Deserialize, Serialize};
 
 use crate::engine;
 use crate::ids::{ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId};
@@ -28,8 +32,14 @@ use crate::tagging;
 ///
 /// Replaces opaque `String` errors with structured variants that can be
 /// pattern-matched for error handling, logging, and user-facing messages.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet, thiserror::Error)]
-#[repr(C)]
+///
+/// `#[architect::error]` writes the wire derives (`Facet`, `Clone`, `Debug`,
+/// `PartialEq`, `thiserror::Error`, `#[repr(u8)]`), the `HttpError` impl
+/// (`NotFound` 404, `Internal` 500, the rest 400) and a `Transport(String)`
+/// variant with `From<architect::TransportError>`, so a call that never
+/// reached the service has its own arm instead of folding into `Internal`.
+#[architect::error]
+#[derive(Eq)]
 pub enum SignalServiceError {
     /// Entity not found by ID.
     #[error("{entity} not found: {id}")]
@@ -268,7 +278,7 @@ pub trait RackService {
 /// The controller (or fts-signal-controller CLAP plugin) sends these to
 /// a track's signal-extension via SHM. The extension applies them from
 /// its own audio thread using `TrackFX_SetParamNormalized` (same-track safe).
-#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Facet)]
 #[repr(C)]
 pub struct ParamWriteRequest {
     pub fx_index: u32,
@@ -277,7 +287,7 @@ pub struct ParamWriteRequest {
 }
 
 /// Snapshot of an extension's current FX chain state.
-#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Facet)]
 #[repr(C)]
 pub struct ExtensionFxState {
     /// Track GUID.
