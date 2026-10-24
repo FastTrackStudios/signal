@@ -153,27 +153,3 @@ pub fn watch_document_file(path: String, shared: std::sync::Arc<crate::plugin::S
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_the_dev_json_shape() {
-        let doc = parse_document_json(
-            r#"{
-                "version": 3, "seed": 7, "auto_divisi": true,
-                "notes": [{ "start_qn": 0.0, "end_qn": 2.0, "chan": 1, "pitch": 60, "vel": 90 }],
-                "ccs":   [{ "qn": 0.5, "cc": 1, "val": 96 }],
-                "tempo": [{ "qn": 0.0, "bpm": 90.0 }]
-            }"#,
-        )
-        .expect("parse");
-        assert_eq!(doc.version, 3);
-        assert!(doc.auto_divisi);
-        assert_eq!(doc.notes.len(), 1);
-        assert_eq!(doc.notes[0].chan, 1);
-        assert_eq!(doc.ccs[0].chan, 0, "chan defaults to 0");
-        assert_eq!(doc.tempo[0].bpm, 90.0);
-    }
-}

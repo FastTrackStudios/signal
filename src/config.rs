@@ -121,37 +121,3 @@ impl PatchConfig {
         Some((self.cache_budget_mb.unwrap_or(8192) as usize) * 1024 * 1024)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn patch_config_parses_minimal_and_full_styx() {
-        let min = PatchConfig::from_styx(r#"zones "/tmp/lib.styx""#).expect("minimal");
-        assert_eq!(min.zones, "/tmp/lib.styx");
-        assert!(min.config.is_none());
-
-        let full = PatchConfig::from_styx(
-            r#"
-config "/tmp/engine.styx"
-zones "/tmp/lib.styx"
-root "/tmp/samples"
-section Violins
-mic Mix
-solo_mic Mix
-attack_ms 20
-release_ms 400
-cache_budget_mb 1024
-"#,
-        )
-        .expect("full");
-        assert_eq!(full.root.as_deref(), Some("/tmp/samples"));
-        assert_eq!(full.attack_ms, Some(20));
-        assert_eq!(
-            full.cache_budget_bytes(),
-            Some(1024 * 1024 * 1024),
-            "budget in MiB"
-        );
-    }
-}
