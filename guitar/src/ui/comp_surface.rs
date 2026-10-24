@@ -108,7 +108,7 @@ fn smooth_path(samples: &[f32], w: f64, h: f64, from_bottom: bool, close: bool) 
     d
 }
 
-/// The compressor's circuit, as `comp::CompressionStyle` orders them.
+/// The compressor's circuit, as `dsp::comp::CompressionStyle` orders them.
 ///
 /// Named here rather than derived because the rig takes the DSP as a tagged
 /// git dep and these are wire values — a list that drifts would silently
@@ -171,7 +171,7 @@ const GRAB_PX: f32 = 22.0;
 /// Whichever surface paints the picture publishes its box here — the Blitz
 /// custom widget natively, the canvas in the browser — so a pointer maps
 /// into graph space the same way in both.
-type Metrics = comp::ui::viz::MetricsHandle;
+type Metrics = dsp::comp::ui::viz::MetricsHandle;
 
 fn css_height(metrics: &Metrics) -> f64 {
     f64::from(metrics.get().css_height())
@@ -232,7 +232,7 @@ struct CompPicture {
 /// replayed onto a canvas (`fts_audio_ui::scene_canvas`).
 fn comp_picture(p: CompPicture) -> Element {
     rsx! {
-        comp::ui::viz::CompViz {
+        dsp::comp::ui::viz::CompViz {
             threshold: p.threshold,
             ratio: p.ratio,
             knee: p.knee,
@@ -275,7 +275,7 @@ pub fn CompSurface(
     // await resolved — the press was dead for a frame or more, the first
     // movement was dropped, and the cached rect went stale for the rest of
     // the drag. `eq_graph` hit the same thing and says so in its own source.
-    let metrics = use_hook(comp::ui::viz::MetricsHandle::new);
+    let metrics = use_hook(dsp::comp::ui::viz::MetricsHandle::new);
     let mut dragging = use_signal(|| None::<CompDrag>);
     let bus = signal_widgets::DragBus::try_use();
     // Whether the pointer is close enough to the threshold to take it. A
@@ -310,7 +310,7 @@ pub fn CompSurface(
 
     // The only geometry this component still computes itself: where to put
     // the threshold's grab chip and its number. The traces, the transfer
-    // curve and the ball are `comp::ui::viz`'s, drawn on the GPU.
+    // curve and the ball are `dsp::comp::ui::viz`'s, drawn on the GPU.
     let thresh_y = db_to_y(f64::from(threshold), H);
 
     // Knob writes.

@@ -25,12 +25,12 @@
 use dioxus::prelude::*;
 use guitar::design;
 
-use comp::ui::viz::CompViz;
-use delay::ui::viz::{DelayViz, Family as DelayFamily};
-use eq::ui::eq_graph::{AnalyzerSnapshot, EqGraph};
-use eq::ui::eq_graph_model::EqBand;
-use modulation::ui::viz::{Engine, ModViz};
-use reverb::ui::viz::{Family as VerbFamily, ReverbViz};
+use dsp::comp::ui::viz::CompViz;
+use dsp::delay::ui::viz::{DelayViz, Family as DelayFamily};
+use dsp::eq::ui::eq_graph::{AnalyzerSnapshot, EqGraph};
+use dsp::eq::ui::eq_graph_model::EqBand;
+use dsp::modulation::ui::viz::{Engine, ModViz};
+use dsp::reverb::ui::viz::{Family as VerbFamily, ReverbViz};
 
 /// Cyan leads modulation, pink leads motion, blue delay, purple reverb — the
 /// rig's own grouping, so the gallery reads the way the rack does.

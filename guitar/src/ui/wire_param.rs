@@ -7,7 +7,7 @@
 //! `fts_audio_ui::ParamHandle`: a bundle of closures over one parameter —
 //! read it normalized, write it, name it, print it. In a plugin those
 //! closures wrap a `nice_plug` `ParamPtr`, which is a pointer into the
-//! processor's own memory (`eq::ui::param_adapter` does that).
+//! processor's own memory (`dsp::eq::ui::param_adapter` does that).
 //!
 //! A remote has no such pointer. The rig is in another process, sometimes on
 //! another machine, and the only way to move a parameter is

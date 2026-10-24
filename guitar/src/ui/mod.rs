@@ -13,8 +13,8 @@ mod control;
 /// Blitz host).
 pub mod fx_viz;
 /// The modulation visualisers live with the effect that owns them, so the
-/// plugins draw the same pictures — see `modulation::ui::viz`.
-pub use modulation::ui::viz as mod_viz;
+/// plugins draw the same pictures — see `dsp::modulation::ui::viz`.
+pub use dsp::modulation::ui::viz as mod_viz;
 /// The plugin's own vello EQ editor — native only (a painted scene needs a
 /// Blitz host natively, a canvas in a browser).
 mod eq_vello;

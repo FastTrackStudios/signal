@@ -121,9 +121,13 @@ fn decay_t60_secs(decay: f32) -> f64 {
 /// Hall-law estimate otherwise. The estimate alone read 4.5 s for a Hall
 /// the engine rings for 12.
 pub(crate) fn verb_seconds(algorithm: f32, variant: f32, decay: f32) -> (f64, bool) {
-    let alg = reverb::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
-    match reverb::algorithm::decay_seconds(alg, variant.round().max(0.0) as usize, f64::from(decay))
-    {
+    let alg =
+        dsp::reverb::algorithm::AlgorithmType::from_index(algorithm.round().max(0.0) as usize);
+    match dsp::reverb::algorithm::decay_seconds(
+        alg,
+        variant.round().max(0.0) as usize,
+        f64::from(decay),
+    ) {
         Some(t) => (t, true),
         None => (decay_t60_secs(decay), false),
     }
@@ -493,7 +497,7 @@ const DELAY_COLORS: [&str; 2] = ["#3b82f6", "#6366f1"];
 /// without going to the label.
 const VERB_COLORS: [&str; 2] = ["#a78bfa", "#c084fc"];
 
-/// Tempo-division labels — `delay::TapDivision` order (Quarter, dotted 8th,
+/// Tempo-division labels — `dsp::delay::TapDivision` order (Quarter, dotted 8th,
 /// 8th, 8th triplet, 16th, golden ratio, silver ratio, free-running, then
 /// the long ones added after Free: dotted quarter, half, quarter triplet).
 pub(crate) const DIV_LABELS: [&str; 11] = [
@@ -531,7 +535,7 @@ pub(crate) fn div_factor(idx: f32) -> f32 {
     .unwrap_or(0.0)
 }
 
-/// `delay::DelayStyle` order — the `TimeLine` MX machines.
+/// `dsp::delay::DelayStyle` order — the `TimeLine` MX machines.
 /// `chorus::EngineType` order — the modulation algorithms.
 pub(crate) const MOD_ENGINES: [&str; 11] = [
     "Cubic",
@@ -553,7 +557,7 @@ pub(crate) const DELAY_ALGOS: [&str; 13] = [
     "Tape", "Digital", "Analog", "Lo-Fi", "Shimmer", "Reverse", "Ice", "Rhythm", "Drum", "Oil Can",
     "MultiTap", "Spectral", "Filter",
 ];
-/// `reverb::AlgorithmType::ALL` order.
+/// `dsp::reverb::AlgorithmType::ALL` order.
 pub(crate) const VERB_ALGOS: [&str; 15] = [
     "Room",
     "Hall",
@@ -2630,7 +2634,7 @@ fn delay_lane(
     let color = crate::ui::fx_viz::rgb(color);
     // The style index is `DELAY_ALGOS`'s, which is the DSP's own order; the
     // effect owns the table that turns it into a machine.
-    let family = delay::ui::viz::family_of_style(style);
+    let family = dsp::delay::ui::viz::family_of_style(style);
     rsx! { crate::ui::fx_viz::DelayViz { taps, win_ms, on, beat_ms, division, family, color } }
 }
 
@@ -2796,7 +2800,7 @@ fn reverb_lane(
     let color = crate::ui::fx_viz::rgb(color);
     // The algorithm index is `VERB_ALGOS`'s, which is the DSP's own order;
     // the effect owns the table that turns it into a machine.
-    let family = reverb::ui::viz::family_of_algorithm(algorithm);
+    let family = dsp::reverb::ui::viz::family_of_algorithm(algorithm);
     rsx! { crate::ui::fx_viz::ReverbViz { decay, density, predelay, mix, damp, family, on, beat_ms, color } }
 }
 

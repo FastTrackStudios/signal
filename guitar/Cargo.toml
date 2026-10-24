@@ -12,7 +12,7 @@ workspace = true
 [features]
 default = ["vox"]
 pipewire = []
-ui = ["dep:anyrender", "dep:base64", "dep:comp", "dep:delay", "dep:dioxus", "dep:drums", "dep:eq", "dep:fts-audio-ui", "dep:kurbo", "dep:lumen-blocks", "dep:modulation", "dep:serde_json", "dep:signal-tone3000", "dep:signal-grid", "dep:signal-grid-ui", "dep:signal-rig-shell", "dep:signal-rig-perform-ui", "signal-tone3000?/ui", "dep:signal-widgets", "architect/atom", "architect/platform", "reverb/ui", "reverb/viz", "uuid/v4"]
+ui = ["dep:anyrender", "dep:base64", "dsp/comp", "dsp/comp-ui", "dsp/comp-viz", "dsp/delay", "dsp/delay-ui", "dsp/delay-viz", "dep:dioxus", "dep:drums", "dsp/eq", "dsp/eq-graph", "dsp/eq-ui", "dep:fts-audio-ui", "dep:kurbo", "dep:lumen-blocks", "dsp/modulation", "dsp/modulation-ui", "dsp/modulation-viz", "dep:serde_json", "dep:signal-tone3000", "dep:signal-grid", "dep:signal-grid-ui", "dep:signal-rig-shell", "dep:signal-rig-perform-ui", "signal-tone3000?/ui", "dep:signal-widgets", "architect/atom", "architect/platform", "dsp/reverb-ui", "dsp/reverb-viz", "uuid/v4"]
 vox = ["architect/vox", "dep:vox"]
 # Serve Signal's Action List over MCP (signal_commands::serve_mcp): only
 # the engine binary turns it on, so the `ui` build never reaches axum.
@@ -25,12 +25,10 @@ base64 = { workspace = true, optional = true }
 blake3 = { workspace = true }
 builtin = { workspace = true }
 chrono = { workspace = true }
-comp = { workspace = true, features = ["ui", "viz"], optional = true }
-delay = { workspace = true, features = ["ui", "viz"], optional = true }
+dsp = { workspace = true, features = ["reverb"] }
 dioxus = { workspace = true, optional = true }
 # The drum rig's wire contract, for its iPad surface (ui/tablet/drums.rs).
 drums = { workspace = true, optional = true }
-eq = { workspace = true, features = ["graph", "ui"], optional = true }
 facet = { workspace = true }
 facet-json = { workspace = true }
 facet-styx = { workspace = true }
@@ -41,8 +39,6 @@ libc = { workspace = true }
 lumen-blocks = { workspace = true, optional = true }
 memmap2 = { workspace = true }
 midi = { workspace = true, features = ["midir", "vox"] }
-modulation = { workspace = true, features = ["ui", "viz"], optional = true }
-reverb = { workspace = true }
 serde_json = { workspace = true, optional = true }
 signal-tone3000 = { workspace = true, optional = true, features = ["ui"] }
 signal-grid = { workspace = true, optional = true }
