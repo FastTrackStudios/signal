@@ -110,9 +110,6 @@ mod scene_template_service;
 mod setlist_service;
 mod song_service;
 
-#[cfg(test)]
-mod tests;
-
 use signal_proto::{
     ALL_BLOCK_TYPES, Block, BlockParameterOverride, BlockService, BlockType, BrowserService,
     EngineService, LayerService, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,

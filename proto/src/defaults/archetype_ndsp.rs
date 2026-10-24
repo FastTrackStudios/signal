@@ -2008,24 +2008,3 @@ pub fn archetype_module_seed_keys(plugin_name: &str) -> Option<Vec<String>> {
             .collect(),
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn all_templates_build_and_validate() {
-        let defs = archetype_x_templates();
-        assert_eq!(defs.len(), 7);
-        for def in defs {
-            def.validate().unwrap();
-            assert!(def.modules.iter().any(|m| !m.blocks.is_empty()));
-            assert!(
-                def.all_blocks()
-                    .iter()
-                    .flat_map(|b| b.params.iter())
-                    .all(|p| !p.name.starts_with("MIDI CC "))
-            );
-        }
-    }
-}

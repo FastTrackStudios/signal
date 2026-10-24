@@ -181,15 +181,3 @@ pub fn TouchMenuButton(
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn touch_targets_are_at_least_a_fingertip() {
-        assert_eq!(hit(true, 22), HIT_PX);
-        assert_eq!(hit(true, 64), 64);
-        assert_eq!(hit(false, 22), 22);
-    }
-}

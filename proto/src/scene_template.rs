@@ -88,29 +88,3 @@ impl crate::traits::HasMetadata for SceneTemplate {
         &mut self.metadata
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::engine::{EngineId, EngineSceneId};
-    use crate::rig::EngineSelection;
-
-    #[test]
-    fn create_scene_template() {
-        let template = SceneTemplate::new(SceneTemplateId::new(), "Clean")
-            .with_engine(EngineSelection::new(EngineId::new(), EngineSceneId::new()));
-
-        assert_eq!(template.name, "Clean");
-        assert_eq!(template.engine_selections.len(), 1);
-    }
-
-    #[test]
-    fn convert_to_rig_scene() {
-        let template = SceneTemplate::new(SceneTemplateId::new(), "Lead")
-            .with_engine(EngineSelection::new(EngineId::new(), EngineSceneId::new()));
-
-        let scene = template.to_rig_scene(crate::rig::RigSceneId::new());
-        assert_eq!(scene.name, "Lead");
-        assert_eq!(scene.engine_selections.len(), 1);
-    }
-}

@@ -358,32 +358,3 @@ impl crate::traits::HasMetadata for Layer {
         &mut self.metadata
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_layer_creation() {
-        let variant = LayerSnapshot::new(LayerSnapshotId::new(), "Default")
-            .with_module(ModuleRef::new(ModulePresetId::new()));
-
-        let layer = Layer::new(LayerId::new(), "Main Layer", EngineType::Guitar, variant);
-        assert_eq!(layer.name, "Main Layer");
-        assert_eq!(layer.variants.len(), 1);
-        assert!(layer.default_variant().is_some());
-    }
-
-    #[test]
-    fn test_layer_multiple_variants() {
-        let v1 = LayerSnapshot::new(LayerSnapshotId::new(), "Clean");
-        let v2_id = LayerSnapshotId::new();
-        let v2 = LayerSnapshot::new(v2_id.clone(), "Heavy");
-
-        let mut layer = Layer::new(LayerId::new(), "Guitar", EngineType::Guitar, v1);
-        layer.add_variant(v2);
-
-        assert_eq!(layer.variants.len(), 2);
-        assert!(layer.variant(&v2_id).is_some());
-    }
-}

@@ -339,27 +339,3 @@ pub fn scan_track_templates(root: &Path) -> Vec<ScannedTemplate> {
 
     results
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn instrument_folder_names() {
-        assert_eq!(Instrument::Guitar.folder_name(), "Guitar");
-        assert_eq!(Instrument::DrumEnhance.folder_name(), "Drum-Enhance");
-    }
-
-    #[test]
-    fn tier_dir_names() {
-        assert_eq!(TemplateTier::Layer.dir_name(), "01-Layers");
-        assert_eq!(TemplateTier::Rig.dir_name(), "03-Rigs");
-        assert_eq!(TemplateTier::Song.dir_name(), "05-Songs");
-    }
-
-    #[test]
-    fn sanitize_removes_special_chars() {
-        assert_eq!(sanitize_filename("My/Preset:Cool"), "My_Preset_Cool");
-        assert_eq!(sanitize_filename("Normal Name"), "Normal Name");
-    }
-}

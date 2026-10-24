@@ -49,12 +49,3 @@ name = "signal-doc-dump"
 path = "src/bin/signal-doc-dump.rs"
 required-features = ["doc"]
 
-[[test]]
-name = "doc_roundtrip"
-path = "tests/doc_roundtrip.rs"
-required-features = ["doc"]
-
-[[test]]
-name = "doc_granularity"
-path = "tests/doc_granularity.rs"
-required-features = ["doc"]

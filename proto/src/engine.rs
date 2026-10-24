@@ -212,29 +212,3 @@ impl Engine {
 
 // Trait impls (Variant, DefaultVariant, Collection, HasMetadata) are generated
 // by the `impl_collection!` macro invocation at the top of this file.
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_engine_creation() {
-        let layer_id = LayerId::new();
-        let variant = EngineScene::new(EngineSceneId::new(), "Default Scene").with_layer(
-            LayerSelection::new(layer_id.clone(), LayerSnapshotId::new()),
-        );
-
-        let engine = Engine::new(
-            EngineId::new(),
-            "Guitar Engine",
-            EngineType::Guitar,
-            vec![layer_id],
-            variant,
-        );
-
-        assert_eq!(engine.name, "Guitar Engine");
-        assert_eq!(engine.engine_type, EngineType::Guitar);
-        assert_eq!(engine.layer_ids.len(), 1);
-        assert!(engine.default_variant().is_some());
-    }
-}

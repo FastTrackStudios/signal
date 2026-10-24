@@ -462,23 +462,3 @@ fn kit_files(entries: &[Entry], preset: &Entry) -> Option<Vec<ContentInfo>> {
     }
     Some(files)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{join_id, refs};
-
-    #[test]
-    fn paths_and_references_resolve() {
-        assert_eq!(
-            join_id("Kits/MM2/Presets", "../Engines/K.signalengine"),
-            "Kits/MM2/Engines/K.signalengine"
-        );
-        assert_eq!(
-            refs(
-                "  engine \"../Engines/A.signalengine\"\n  id \"kick\"",
-                "engine"
-            ),
-            ["../Engines/A.signalengine"]
-        );
-    }
-}

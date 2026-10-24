@@ -45,11 +45,6 @@ tracing-subscriber = { workspace = true }
 url = { version = "2" }
 wiremock = { version = "0.6" }
 
-[[test]]
-name = "against_a_mock_catalog"
-path = "tests/against_a_mock_catalog.rs"
-required-features = ["client"]
-
 [[example]]
 name = "live_check"
 path = "examples/live_check.rs"

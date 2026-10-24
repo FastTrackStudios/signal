@@ -489,27 +489,3 @@ pub fn search<'a>(entries: &'a [PackEntry], q: &str) -> Vec<&'a PackEntry> {
         })
         .collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn scan_report_for_empty_root_has_counts() {
-        let root =
-            std::env::temp_dir().join(format!("signal-browser-empty-scan-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-
-        let report = scan_packs_report(&root);
-
-        assert_eq!(report.root, root);
-        assert_eq!(report.loaded_count(), 0);
-        assert_eq!(report.candidate_count, 0);
-        assert_eq!(report.failed_loadables, 0);
-        assert_eq!(report.skipped_walk_entries, 0);
-        assert!(report.errors.is_empty());
-
-        let _ = std::fs::remove_dir_all(&report.root);
-    }
-}

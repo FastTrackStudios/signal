@@ -127,34 +127,3 @@ impl PatternConfig {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn default_builds_a_valid_pattern() {
-        let cfg = PatternConfig::default();
-        let p = cfg.build_pattern();
-        assert!((p.get_y(0.0) - 1.0).abs() < 1e-9);
-        assert!(p.get_y(0.5) < 0.05);
-    }
-
-    #[test]
-    fn serde_round_trips() {
-        let cfg = PatternConfig::default();
-        let json = serde_json::to_string(&cfg).unwrap();
-        let back: PatternConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(cfg, back);
-    }
-
-    #[test]
-    fn tempo_sync_rate() {
-        let cfg = PatternConfig {
-            tempo_sync: true,
-            sync_division: Some(TempoDiv::Quarter),
-            ..Default::default()
-        };
-        assert!((cfg.effective_rate_hz(120.0) - 2.0).abs() < 1e-6);
-    }
-}

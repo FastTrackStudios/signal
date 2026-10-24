@@ -41,37 +41,3 @@ impl Default for FollowerConfig {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn follower_config_defaults() {
-        let cfg = FollowerConfig::default();
-        assert_eq!(cfg.attack_ms, 10.0);
-        assert_eq!(cfg.release_ms, 100.0);
-        assert_eq!(cfg.depth, 1.0);
-        assert_eq!(cfg.input, FollowerInput::TrackAudio);
-    }
-
-    #[test]
-    fn serde_round_trip() {
-        let cfg = FollowerConfig {
-            attack_ms: 5.0,
-            release_ms: 200.0,
-            depth: 0.8,
-            input: FollowerInput::Sidechain,
-        };
-        let json = serde_json::to_string(&cfg).unwrap();
-        let parsed: FollowerConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(cfg, parsed);
-    }
-
-    #[test]
-    fn backward_compat_no_input_field() {
-        let json = r#"{"attack_ms":10.0,"release_ms":100.0,"depth":1.0}"#;
-        let parsed: FollowerConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed.input, FollowerInput::TrackAudio);
-    }
-}

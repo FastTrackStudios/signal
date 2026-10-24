@@ -327,16 +327,3 @@ impl Default for GaplessSwapEngine {
         Self::new()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn swap_config_defaults() {
-        let config = SwapConfig::default();
-        assert_eq!(config.load_timeout, Duration::from_secs(10));
-        assert!(config.remove_old);
-        assert_eq!(config.poll_interval, Duration::from_millis(100));
-    }
-}

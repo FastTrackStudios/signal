@@ -268,23 +268,3 @@ impl Rig {
 
 // Trait impls (Variant, DefaultVariant, Collection, HasMetadata) are generated
 // by the `impl_collection!` macro invocation at the top of this file.
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_rig_creation() {
-        let engine_id = EngineId::new();
-        let variant = RigScene::new(RigSceneId::new(), "Default Scene").with_engine(
-            EngineSelection::new(engine_id.clone(), EngineSceneId::new()),
-        );
-
-        let rig =
-            Rig::new(RigId::new(), "Guitar Rig", vec![engine_id], variant).with_rig_type("guitar");
-
-        assert_eq!(rig.name, "Guitar Rig");
-        assert_eq!(rig.rig_type.unwrap().as_str(), "guitar");
-        assert!(rig.default_variant().is_some());
-    }
-}

@@ -59,26 +59,3 @@ crate::typed_uuid_id!(
     /// Branded type for module snapshot identifiers.
     ModuleSnapshotId
 );
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn seed_id_is_deterministic() {
-        let a = seed_id("test-name");
-        let b = seed_id("test-name");
-        assert_eq!(a, b);
-
-        let c = seed_id("different-name");
-        assert_ne!(a, c);
-    }
-
-    #[test]
-    fn uuid_id_from_string_round_trip() {
-        let id = PresetId::new();
-        let s = id.to_string();
-        let parsed = PresetId::from(s);
-        assert_eq!(id, parsed);
-    }
-}

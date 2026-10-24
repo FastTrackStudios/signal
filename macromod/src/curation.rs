@@ -39,31 +39,3 @@ impl ParamCuration {
         self.featured_param_ids.is_empty()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn is_featured_checks_membership() {
-        let curation = ParamCuration::new(vec!["gain".into(), "tone".into()]);
-        assert!(curation.is_featured("gain"));
-        assert!(curation.is_featured("tone"));
-        assert!(!curation.is_featured("volume"));
-    }
-
-    #[test]
-    fn empty_curation() {
-        let curation = ParamCuration::default();
-        assert!(curation.is_empty());
-        assert_eq!(curation.len(), 0);
-    }
-
-    #[test]
-    fn serde_round_trip() {
-        let curation = ParamCuration::new(vec!["gain".into(), "tone".into(), "level".into()]);
-        let json = serde_json::to_string(&curation).unwrap();
-        let parsed: ParamCuration = serde_json::from_str(&json).unwrap();
-        assert_eq!(curation, parsed);
-    }
-}

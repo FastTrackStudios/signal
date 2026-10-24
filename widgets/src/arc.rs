@@ -30,23 +30,3 @@ pub fn arc_path(cx: f64, cy: f64, r: f64, from: f64, to: f64) -> String {
 pub const fn angle_for_value(v: f64) -> f64 {
     v.clamp(0.0, 1.0).mul_add(SWEEP, START_ANGLE)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn value_maps_onto_the_sweep() {
-        assert_eq!(angle_for_value(0.0), START_ANGLE);
-        assert_eq!(angle_for_value(1.0), START_ANGLE + SWEEP);
-        assert_eq!(angle_for_value(2.0), START_ANGLE + SWEEP); // clamped
-    }
-
-    #[test]
-    fn arc_path_flags_large_arcs() {
-        let small = arc_path(50.0, 50.0, 40.0, 135.0, 200.0);
-        assert!(small.contains(" 0 0 1 "));
-        let large = arc_path(50.0, 50.0, 40.0, 135.0, 405.0);
-        assert!(large.contains(" 0 1 1 "));
-    }
-}

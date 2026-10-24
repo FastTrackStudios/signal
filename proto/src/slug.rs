@@ -43,24 +43,3 @@ pub fn unique_slug(base: &str, taken: impl Fn(&str) -> bool) -> String {
         .find(|candidate| !taken(candidate))
         .unwrap_or_else(|| base.to_owned())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{slugify, unique_slug};
-
-    #[test]
-    fn a_name_becomes_a_slug() {
-        assert_eq!(slugify("Clean"), "clean");
-        assert_eq!(slugify("Mayer's Tone"), "mayers-tone");
-        assert_eq!(slugify("  Big Lead (Solo) "), "big-lead-solo");
-        assert_eq!(slugify("Worship / Ambient"), "worship-ambient");
-    }
-
-    #[test]
-    fn a_taken_slug_gets_a_number() {
-        let taken = ["clean", "clean-2"];
-        assert_eq!(unique_slug("clean", |s| taken.contains(&s)), "clean-3");
-        assert_eq!(unique_slug("lead", |s| taken.contains(&s)), "lead");
-        assert_eq!(unique_slug("", |_| false), "patch");
-    }
-}

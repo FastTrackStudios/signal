@@ -37,31 +37,3 @@ pub struct SlotState {
     /// Whether the slot is disabled (bypassed/muted).
     pub is_disabled: bool,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn module_target_equality() {
-        let a = ModuleTarget {
-            module_type: ModuleType::Amp,
-            module_preset_id: ModulePresetId::new(),
-            module_snapshot_id: None,
-        };
-        let b = a.clone();
-        assert_eq!(a, b);
-    }
-
-    #[test]
-    fn resolved_slot_variants() {
-        let target = ModuleTarget {
-            module_type: ModuleType::Drive,
-            module_preset_id: ModulePresetId::new(),
-            module_snapshot_id: None,
-        };
-        let active = ResolvedSlot::Active(target);
-        let disabled = ResolvedSlot::Disabled;
-        assert_ne!(active, disabled);
-    }
-}

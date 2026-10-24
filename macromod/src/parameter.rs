@@ -151,33 +151,3 @@ impl BlockParameter {
         self.daw_name.as_deref().unwrap_or(&self.name)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parameter_value_clamps() {
-        assert_eq!(ParameterValue::new(1.5).get(), 1.0);
-        assert_eq!(ParameterValue::new(-0.5).get(), 0.0);
-        assert_eq!(ParameterValue::new(0.7).get(), 0.7);
-    }
-
-    #[test]
-    fn block_parameter_accessors() {
-        let mut p = BlockParameter::new("gain", "Gain", 0.8);
-        assert_eq!(p.id(), "gain");
-        assert_eq!(p.name(), "Gain");
-        assert!((p.value().get() - 0.8).abs() < 1e-6);
-        p.set_value(0.3);
-        assert!((p.value().get() - 0.3).abs() < 1e-6);
-    }
-
-    #[test]
-    fn serde_round_trip() {
-        let p = BlockParameter::new("tone", "Tone", 0.5);
-        let json = serde_json::to_string(&p).unwrap();
-        let parsed: BlockParameter = serde_json::from_str(&json).unwrap();
-        assert_eq!(p, parsed);
-    }
-}

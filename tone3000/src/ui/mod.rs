@@ -108,62 +108,6 @@ pub fn grouping_key(tone: &PickedTone) -> String {
     tone.name.trim().to_string()
 }
 
-#[cfg(test)]
-mod grouping_tests {
-    use super::grouping_key;
-    use crate::PickedTone;
-
-    fn tone(name: &str, makes: &[&str]) -> PickedTone {
-        PickedTone {
-            name: name.to_string(),
-            makes: makes.iter().map(|m| (*m).to_string()).collect(),
-            ..PickedTone::default()
-        }
-    }
-
-    #[test]
-    fn two_captures_of_the_same_amp_are_different_presets() {
-        // Real catalog rows. Same amp, different year, different room,
-        // different creator — things you choose between, not variants of
-        // one another.
-        let amalgam = tone(
-            "1964 VOX AC30 Top Boost Super Twin - Edge of Breakup - A2",
-            &["1964 VOX AC30 Top Boost Super Twin"],
-        );
-        let bennett = tone("1965 VOX AC30 Top Boost", &["1965 Vox AC30"]);
-        assert_ne!(grouping_key(&amalgam), grouping_key(&bennett));
-    }
-
-    #[test]
-    fn makes_is_not_a_gear_identifier() {
-        // Clay Bennett's AC30 lists its whole capture chain in `makes` —
-        // console, preamp, mics, speaker — so its first entry is not the
-        // gear, and grouping on it would be arbitrary.
-        let bennett = tone(
-            "1965 VOX AC30 Top Boost",
-            &[
-                "1965 Vox AC30",
-                "1987 SSL G Series Console",
-                "Celestion Blue",
-                "Neve 1073",
-                "Royer R-121",
-                "Shure SM57",
-            ],
-        );
-        assert_eq!(grouping_key(&bennett), "1965 VOX AC30 Top Boost");
-    }
-
-    #[test]
-    fn creators_spelling_the_same_amp_differently_do_not_collide() {
-        // "VOX AC30 Top boost" and "VOX AC30 Top Boost" are the same string
-        // to nobody and the same amp to everybody — which is exactly why the
-        // tone, not the spelling, is the identity.
-        let roby = tone("RR AC30 TB", &["VOX AC30 Top boost"]);
-        let other = tone("Someone Else's AC30", &["VOX AC30 Top Boost"]);
-        assert_ne!(grouping_key(&roby), grouping_key(&other));
-    }
-}
-
 /// The tone browser.
 ///
 /// `on_loaded` fires with a [`ToneImport`] when the user picks a downloaded

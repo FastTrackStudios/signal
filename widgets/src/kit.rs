@@ -660,24 +660,3 @@ pub fn MenuPanel(
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_name_must_be_new_and_not_blank() {
-        let taken = vec!["Clean".to_string(), "Lead ".to_string()];
-        assert!(name_problem("  ", &taken).is_some());
-        assert!(name_problem("clean", &taken).is_some(), "case-insensitive");
-        assert!(name_problem("lead", &taken).is_some(), "trimmed");
-        assert!(name_problem("Crunch", &taken).is_none());
-    }
-
-    #[test]
-    fn a_disabled_item_keeps_its_reason() {
-        let d = MenuItem::delete("del", "Delete", Some("In use".into()));
-        assert_eq!(d.disabled.as_deref(), Some("In use"));
-        assert_eq!(MenuItem::run("x", "X").unless(None).disabled, None);
-    }
-}

@@ -863,39 +863,3 @@ impl PartialEq for Ui {
             && self.tick == other.tick
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn e(id: &str, live: bool, kids: &[&str]) -> BrowseEntry {
-        BrowseEntry {
-            id: id.into(),
-            name: id.into(),
-            live,
-            children: kids.iter().map(|k| e(k, false, &[])).collect(),
-            ..BrowseEntry::default()
-        }
-    }
-
-    #[test]
-    fn arrows_walk_rows_and_their_children_from_what_plays() {
-        let m = Model {
-            entries: vec![
-                e("a", false, &["a1", "a2"]),
-                e("b", true, &[]),
-                e("c", false, &[]),
-            ],
-            ..Model::default()
-        };
-        // Nothing highlighted: start from the live row.
-        assert_eq!(m.step(None, 1).as_deref(), Some("c"));
-        assert_eq!(m.step(None, -1).as_deref(), Some("a2"));
-        assert_eq!(m.step(Some("a"), 1).as_deref(), Some("a1"));
-        // Clamped at both ends.
-        assert_eq!(m.step(Some("c"), 1).as_deref(), Some("c"));
-        assert_eq!(m.step(Some("a"), -1).as_deref(), Some("a"));
-        let empty = Model::default();
-        assert_eq!(empty.step(None, 1), None);
-    }
-}

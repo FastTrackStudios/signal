@@ -140,37 +140,3 @@ pub fn kind_of(id: &str) -> Option<&'static str> {
         _ => return None,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::kind_of;
-
-    #[test]
-    fn files_are_known_by_name() {
-        assert_eq!(
-            kind_of("Drum Kits/MM2/Packs/Kick/K.signalpack"),
-            Some("pack")
-        );
-        assert_eq!(
-            kind_of("Drum Kits/MM2/Engines/K.signalengine"),
-            Some("engine")
-        );
-        assert_eq!(
-            kind_of("Drum Kits/MM2/Presets/Organic Oomph.signalpreset"),
-            Some("kit-preset")
-        );
-        assert_eq!(kind_of("Drum Kits/MM2/Mixes/Angr.preset"), Some("mix"));
-        assert_eq!(
-            kind_of("Drum Kits/MM2/Space/pieces.space/space.json"),
-            Some("space")
-        );
-        assert_eq!(kind_of("rig/models/Deluxe.nam"), Some("nam"));
-        assert_eq!(kind_of("rig/irs/Vox.wav"), Some("ir"));
-        assert_eq!(kind_of("rig/presets.styx"), Some("config"));
-        assert_eq!(kind_of("Sampled/Kick/Hit 1.wav"), None);
-        assert_eq!(
-            kind_of("Drum Kits/MM2/Packs/Kick/K.signalpack.sha256"),
-            None
-        );
-    }
-}

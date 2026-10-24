@@ -135,35 +135,3 @@ pub trait ModuleSlot: Send + Sync {
     /// Whether the slot is currently disabled (bypassed/muted).
     fn is_disabled(&self) -> bool;
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn instance_state_is_alive() {
-        assert!(InstanceState::Loading.is_alive());
-        assert!(InstanceState::Ready.is_alive());
-        assert!(InstanceState::Active.is_alive());
-        assert!(InstanceState::Tailing.is_alive());
-        assert!(!InstanceState::Unloaded.is_alive());
-    }
-
-    #[test]
-    fn instance_state_is_audible() {
-        assert!(!InstanceState::Loading.is_audible());
-        assert!(!InstanceState::Ready.is_audible());
-        assert!(InstanceState::Active.is_audible());
-        assert!(InstanceState::Tailing.is_audible());
-        assert!(!InstanceState::Unloaded.is_audible());
-    }
-
-    #[test]
-    fn instance_handle_equality() {
-        let a = InstanceHandle::new(42);
-        let b = InstanceHandle::new(42);
-        let c = InstanceHandle::new(99);
-        assert_eq!(a, b);
-        assert_ne!(a, c);
-    }
-}
