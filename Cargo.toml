@@ -15,14 +15,14 @@ serde_json.workspace = true
 thiserror.workspace = true
 # Header-only WAV probing for the IR scanner (no features: probe is always on).
 fts-sample.workspace = true
-sha2 = "0.10"
-walkdir = "2"
+sha2 = { workspace = true }
+walkdir = { workspace = true }
 # The similarity space + the model inference the prober drives (#77 M5).
 signal-space = { workspace = true, features = ["engine"] }
 neural-amp-modeler.workspace = true
 tracing.workspace = true
-base64 = "0.22"
-regex = "1"
+base64 = { workspace = true }
+regex = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }
