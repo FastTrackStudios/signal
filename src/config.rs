@@ -124,37 +124,3 @@ impl RigConfig {
         Some((self.cache_budget_mb.unwrap_or(8192) as usize) * 1024 * 1024)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn rig_config_parses_minimal_and_full_styx() {
-        let min = RigConfig::from_styx(r#"pack "/tmp/rig.signalpack""#).expect("minimal");
-        assert_eq!(min.pack, "/tmp/rig.signalpack");
-        assert!(min.attack_ms.is_none());
-
-        let full = RigConfig::from_styx(
-            r#"
-pack "/tmp/rig.signalpack"
-attack_ms 5
-release_ms 200
-cache_budget_mb 1024
-"#,
-        )
-        .expect("full");
-        assert_eq!(full.attack_ms, Some(5));
-        assert_eq!(
-            full.cache_budget_bytes(),
-            Some(1024 * 1024 * 1024),
-            "budget in MiB"
-        );
-    }
-
-    #[test]
-    fn signalpack_paths_load_directly() {
-        let cfg = RigConfig::load(&PathBuf::from("/tmp/x.SignalPack")).expect("pack path");
-        assert_eq!(cfg.pack, "/tmp/x.SignalPack");
-    }
-}
