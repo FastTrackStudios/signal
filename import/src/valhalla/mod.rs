@@ -430,7 +430,7 @@ fn algorithm_and_variant_for(mode: &str, want_seconds: Option<f64>) -> (f64, f64
     let Some(want) = want_seconds else {
         return (algorithm, variant);
     };
-    let algo = reverb::algorithm::AlgorithmType::from_index(algorithm as usize);
+    let algo = dsp::reverb::algorithm::AlgorithmType::from_index(algorithm as usize);
     match algo.t60_range(variant as usize) {
         // Comfortably reachable, or an engine with no time model to consult.
         Some((floor, _)) if want < floor => {
@@ -499,7 +499,7 @@ pub fn to_native_reverb_params(v: &ValhallaState) -> Vec<(String, f64)> {
     // Algorithm and variant FIRST: both rebuild the reverb chain, so any
     // value written before them is discarded. Emitting them last silently
     // reverted every other parameter to its default.
-    let mut chosen: Option<reverb::algorithm::AlgorithmType> = None;
+    let mut chosen: Option<dsp::reverb::algorithm::AlgorithmType> = None;
     if let Some(mode) = v.mode_name() {
         // The decay estimate feeds engine selection, so a short preset is not
         // handed to an engine that cannot ring that briefly.
@@ -509,7 +509,7 @@ pub fn to_native_reverb_params(v: &ValhallaState) -> Vec<(String, f64)> {
         let (algorithm, variant) = algorithm_and_variant_for(mode, want);
         set("algorithm", algorithm);
         set("variant", variant);
-        chosen = Some(reverb::algorithm::AlgorithmType::from_index(
+        chosen = Some(dsp::reverb::algorithm::AlgorithmType::from_index(
             algorithm as usize,
         ));
     }
@@ -548,7 +548,8 @@ pub fn to_native_reverb_params(v: &ValhallaState) -> Vec<(String, f64)> {
     let remaps_predelay = matches!(
         chosen,
         Some(
-            reverb::algorithm::AlgorithmType::Magneto | reverb::algorithm::AlgorithmType::NonLinear
+            dsp::reverb::algorithm::AlgorithmType::Magneto
+                | dsp::reverb::algorithm::AlgorithmType::NonLinear
         )
     );
     if let Some(pd) = v.num_any(&["PreDelay", "predelay"]) {

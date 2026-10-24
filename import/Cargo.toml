@@ -19,8 +19,7 @@ base64.workspace = true
 # For `AlgorithmType::t60_range` only — the translator has to know what
 # reverberation times an engine can actually be asked for, so it does not
 # route a 0.3 s preset to an engine whose floor is a second. Data, not DSP.
-reverb = { workspace = true }
-eq = { workspace = true }
+dsp = { workspace = true, features = ["reverb", "eq"] }
 thiserror.workspace = true
 
 [dev-dependencies]

@@ -304,7 +304,7 @@ impl Band {
 
     /// The engine's shape index for this band.
     ///
-    /// Pro-Q and `eq::host::FilterShape` agree on every shape except two:
+    /// Pro-Q and `dsp::eq::host::FilterShape` agree on every shape except two:
     /// Pro-Q numbers **2 = Low Cut, 3 = High Shelf** (read back from the
     /// plugin itself), and the engine's canonical order has them the other way
     /// round. Passing the raw index through therefore turns every high shelf
