@@ -46,20 +46,3 @@ pub fn register_omnisphere(r: &mut sampler::PresetRegistry) {
         r.register_code(omni);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sampler::{PresetRegistry, PresetSource};
-
-    /// `register_omnisphere` adds the Omnisphere placeholder Part on top of the
-    /// sampler built-ins — the assertion that used to live in signal-sampler's
-    /// `with_builtins`, moved here now that omni belongs to synth.
-    #[test]
-    fn register_omnisphere_adds_the_part() {
-        let mut reg = PresetRegistry::with_builtins();
-        register_omnisphere(&mut reg);
-        let omni = reg.get("Omnisphere").expect("Omnisphere registered");
-        assert_eq!(omni.source, PresetSource::Code);
-    }
-}

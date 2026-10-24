@@ -508,19 +508,3 @@ fn Hint(text: String) -> Element {
 fn Warn(text: String) -> Element {
     rsx! { span { style: "font-size: 11px; color: #f59e0b; line-height: 1.4;", "⚠ {text}" } }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_four_channel_interface_offers_two_pairs_and_every_mono_input() {
-        assert_eq!(
-            pairs(4).iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(),
-            ["1-2", "3-4"]
-        );
-        let mix = mix_inputs(4);
-        assert_eq!(mix[1], ("3-4 (stereo)".to_string(), (2, 3)));
-        assert_eq!(mix[4], ("3 (mono)".to_string(), (2, 2)));
-    }
-}

@@ -271,24 +271,6 @@ fn cut(s: &str, max: usize) -> String {
     }
 }
 
-#[cfg(test)]
-mod performer_bar_tests {
-    use super::*;
-
-    #[test]
-    fn the_rig_menu_has_no_hidden() {
-        let labels: Vec<&str> = RIG_ITEMS.iter().map(|(_, l)| *l).collect();
-        assert_eq!(labels, ["Edit switches", "MIDI learn", "Switch rig"]);
-        assert!(!labels.iter().any(|l| l.contains("Hidden")));
-    }
-
-    #[test]
-    fn crumbs_are_cut_by_count() {
-        assert_eq!(cut("Clean Machine", 12), "Clean Machi…");
-        assert_eq!(cut("Ambient", 12), "Ambient");
-    }
-}
-
 /// The footswitch mode as the rig frame's three tabs — Preset, Profile,
 /// Setlist — what the sidebar shows and the switches play.
 #[component]

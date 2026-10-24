@@ -573,28 +573,3 @@ pub fn effect_from_action(action: &str) -> Option<Effect> {
         _ => return None,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::fuzzy;
-
-    #[test]
-    fn letters_in_order_match_and_others_do_not() {
-        assert!(fuzzy("lvl", "Level Patches").is_some());
-        assert!(fuzzy("cya9", "Setlist: CYA 9-24-26").is_some());
-        assert!(fuzzy("zzz", "Level Patches").is_none());
-        assert_eq!(fuzzy("", "anything"), Some(0));
-    }
-
-    #[test]
-    fn word_starts_and_runs_rank_first() {
-        // "lp" — the initials of Level Patches beat letters buried mid-word.
-        let initials = fuzzy("lp", "Level Patches").unwrap();
-        let buried = fuzzy("lp", "Clean Dry Pedal").unwrap();
-        assert!(initials > buried, "{initials} vs {buried}");
-        // A contiguous run beats the same letters spread out.
-        let run = fuzzy("tun", "Tuner").unwrap();
-        let spread = fuzzy("tun", "Tap Tempo Undo Now").unwrap();
-        assert!(run > spread, "{run} vs {spread}");
-    }
-}

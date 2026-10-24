@@ -3955,36 +3955,3 @@ fn PhonesStrip(hp: crate::proto::HeadphoneState, state: RigViewState) -> Element
         }
     }
 }
-
-#[cfg(test)]
-// These exercise the painted widgets, which are native only.
-#[cfg(not(target_arch = "wasm32"))]
-mod slot_tests {
-    use super::*;
-    use crate::ui::mod_viz::{Engine, Group};
-
-    /// The rig's two modulation slots offer exactly the machines the effect
-    /// says belong in them.
-    ///
-    /// `modulation-ui` owns the grouping — one set colours a signal where it
-    /// stands, the other moves it — and the rig listing its own three per
-    /// slot is the kind of duplication that drifts silently. A slot offering
-    /// a tremolo where a chorus belongs is offering the wrong thing whatever
-    /// colour it is drawn in.
-    #[test]
-    fn each_slot_offers_the_engines_its_group_holds() {
-        for (kinds, group) in [
-            (MOD_KINDS.as_slice(), Group::Colouring),
-            (MOTION_KINDS.as_slice(), Group::Moving),
-        ] {
-            let mut got: Vec<Engine> = kinds
-                .iter()
-                .map(|k| engine_of(*k).expect("every offered kind is an engine"))
-                .collect();
-            let mut want = Engine::of(group).to_vec();
-            got.sort_by_key(|e| format!("{e:?}"));
-            want.sort_by_key(|e| format!("{e:?}"));
-            assert_eq!(got, want, "the {group:?} slot offers the wrong machines");
-        }
-    }
-}

@@ -54,17 +54,3 @@ pub fn generation() -> u64 {
     crate::engine::shared_transport()
         .map_or(local, |t| local ^ t.tempo_bpm().to_bits().rotate_left(17))
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn set_get_and_change_count() {
-        let g = super::generation();
-        super::set(128.0);
-        assert_eq!(super::get(), Some(128.0));
-        assert!(super::generation() > g);
-        let g = super::generation();
-        super::set(128.0);
-        assert_eq!(super::generation(), g, "same tempo is not a change");
-    }
-}

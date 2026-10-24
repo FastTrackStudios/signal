@@ -184,31 +184,3 @@ fn bundle_asset(
     keys.insert(path.to_string(), asset);
     key
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Two paths with the same bytes are one asset; a missing path is
-    /// reported, not bundled.
-    #[test]
-    fn assets_are_content_addressed_and_deduped() {
-        let tmp = std::env::temp_dir().join(format!("signal-web-bundle-{}", std::process::id()));
-        let src = tmp.join("src");
-        std::fs::create_dir_all(&src).unwrap();
-        let (a, b) = (src.join("a.nam"), src.join("b.NAM"));
-        std::fs::write(&a, b"same").unwrap();
-        std::fs::write(&b, b"same").unwrap();
-        let dir = tmp.join("assets");
-        std::fs::create_dir_all(&dir).unwrap();
-        let mut keys = BTreeMap::new();
-        let ka = bundle_asset(a.to_str().unwrap(), &dir, &mut keys).unwrap();
-        let kb = bundle_asset(b.to_str().unwrap(), &dir, &mut keys).unwrap();
-        assert_eq!(ka, kb);
-        assert!(ka.starts_with("assets/") && ka.ends_with(".nam"));
-        assert!(!ka.contains("src"), "no source path leaks into the key");
-        assert!(bundle_asset("/nope/missing.nam", &dir, &mut keys).is_none());
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-}

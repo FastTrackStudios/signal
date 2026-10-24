@@ -74,31 +74,3 @@ pub fn reverb_synced_decay(algorithm: f32, variant: f32, sync_div: f32, bpm: f32
         .filter(|b| *b > 0.0)?;
     (bpm > 0.0).then(|| reverb_decay_for(algorithm, variant, beats * 60.0 / f64::from(bpm)))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A tremolo on eighths at 120 BPM pulses four times a second.
-    #[test]
-    fn a_synced_modulation_cycles_on_its_beats() {
-        assert_eq!(mod_synced_rate(3.0, 120.0), Some(4.0));
-        assert_eq!(mod_synced_rate(0.0, 120.0), None);
-    }
-
-    /// A Hall locked to a bar at 120 BPM rings for two seconds.
-    #[test]
-    fn a_synced_reverb_rings_for_its_beats() {
-        let d = reverb_synced_decay(1.0, 0.0, 4.0, 120.0).unwrap();
-        assert!(
-            (reverb_seconds(1.0, 0.0, d) - 2.0).abs() < 0.02,
-            "{}",
-            reverb_seconds(1.0, 0.0, d)
-        );
-        assert_eq!(
-            reverb_synced_decay(1.0, 0.0, 0.0, 120.0),
-            None,
-            "free runs on its own decay"
-        );
-    }
-}

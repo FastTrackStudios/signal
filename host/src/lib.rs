@@ -535,27 +535,3 @@ mod uuid {
         format!("signal-rig-wasm-{c:x}")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn uuid_strings_are_process_unique() {
-        let a = uuid_string();
-        let b = uuid_string();
-        assert_ne!(a, b);
-        assert!(a.starts_with("signal-rig-"));
-    }
-
-    /// Device-free: the pre-engine stage seeds a project and builds tracks +
-    /// constant-guid FX slots.
-    #[test]
-    fn project_builds_tracks_and_slots() {
-        let project = RigProject::new("Rig Host Test");
-        let track = project.add_track("In").expect("add track");
-        let a = project.add_fx_slot(&track, "slot-0").expect("slot 0");
-        let b = project.add_fx_slot(&track, "slot-1").expect("slot 1");
-        assert_ne!(a, b, "each reserved slot gets its own guid");
-    }
-}

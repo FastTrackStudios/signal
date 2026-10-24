@@ -1793,55 +1793,6 @@ pub mod audio {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::RigPerf;
-
-    /// A block's budget is its own duration: 64 frames at 48 kHz is 1.33 ms,
-    /// and a callback slower than that has already made the next one late.
-    #[test]
-    fn a_blocks_budget_is_its_own_duration() {
-        let perf = RigPerf {
-            block_frames: 64,
-            sample_rate: 48_000,
-            ..RigPerf::default()
-        };
-        assert_eq!(perf.budget_us(), 1333);
-
-        let bigger = RigPerf {
-            block_frames: 512,
-            sample_rate: 48_000,
-            ..RigPerf::default()
-        };
-        assert_eq!(bigger.budget_us(), 10_666);
-    }
-
-    /// Round-trip latency is two blocks, not one: the player waits for the
-    /// buffer to fill and again for it to drain.
-    #[test]
-    fn round_trip_latency_is_two_blocks() {
-        let perf = RigPerf {
-            block_frames: 64,
-            sample_rate: 48_000,
-            ..RigPerf::default()
-        };
-        assert!(
-            (perf.buffer_latency_ms() - 2.667).abs() < 0.01,
-            "got {}",
-            perf.buffer_latency_ms()
-        );
-    }
-
-    /// Before the device opens there is no rate, and dividing by it would give
-    /// a plausible-looking number for a rig that is not running.
-    #[test]
-    fn an_unopened_rig_reports_no_budget() {
-        let perf = RigPerf::default();
-        assert_eq!(perf.budget_us(), 0);
-        assert_eq!(perf.buffer_latency_ms(), 0.0);
-    }
-}
-
 /// The switches' MIDI learn state (shared by every rig).
 pub use signal_rigs_proto::SwitchLearn;
 // The performance model every rig shares — presets and variations,

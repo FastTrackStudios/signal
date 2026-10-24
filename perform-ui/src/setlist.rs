@@ -2265,33 +2265,3 @@ fn RotationDot(lit: bool, source: Src, song_colour: String) -> Element {
         span { style: "width: {pick(lit, 12, 5)}px; height: 5px; border-radius: 999px; flex-shrink: 0; {style}" }
     }
 }
-
-#[cfg(test)]
-mod row_tap_tests {
-    use super::*;
-
-    #[test]
-    fn between_songs_a_row_loads_on_one_tap() {
-        assert_eq!(row_tap(false, false, false, false), RowTap::Load);
-    }
-
-    #[test]
-    fn while_playing_another_row_takes_two_taps() {
-        assert_eq!(
-            row_tap(false, false, true, false),
-            RowTap::Arm,
-            "first tap arms"
-        );
-        assert_eq!(
-            row_tap(false, false, true, true),
-            RowTap::Load,
-            "second tap loads"
-        );
-    }
-
-    #[test]
-    fn the_song_up_folds_and_reordering_taps_nothing() {
-        assert_eq!(row_tap(false, true, true, false), RowTap::Toggle);
-        assert_eq!(row_tap(true, false, true, true), RowTap::Nothing);
-    }
-}

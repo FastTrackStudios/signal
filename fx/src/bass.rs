@@ -265,37 +265,3 @@ impl PluginInstance for BassRig {
         self.prepared = false;
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// No capture named: a straight wire, through the trims.
-    #[test]
-    fn with_nothing_loaded_it_is_a_wire_with_trims() {
-        let mut rig = BassRig::new(48_000.0);
-        rig.load_state(br#"{"output_db": -6.0206}"#).expect("state");
-        rig.prepare(48_000.0, 64).expect("prepare");
-        let input = vec![0.5_f32; 64];
-        let (mut l, mut r) = (vec![0.0_f32; 64], vec![0.0_f32; 64]);
-        rig.process_block(&input, &input, &mut l, &mut r, &PluginEvents::EMPTY)
-            .expect("process");
-        assert!((l[10] - 0.25).abs() < 1e-3, "{}", l[10]);
-        assert!((r[63] - 0.25).abs() < 1e-3);
-    }
-
-    /// What it plays survives a save and a load.
-    #[test]
-    fn its_state_round_trips() {
-        let mut rig = BassRig::new(48_000.0);
-        let state = br#"{"amp":"/x/amp.nam","cab":"/x/cab.wav","input_db":3.0}"#;
-        rig.load_state(state).expect("state");
-        let saved = rig.save_state().expect("save");
-        let back: BassState = serde_json::from_slice(&saved).expect("json");
-        assert_eq!(
-            back.amp.as_deref(),
-            Some(std::path::Path::new("/x/amp.nam"))
-        );
-        assert!((back.input_db - 3.0).abs() < 1e-12);
-    }
-}

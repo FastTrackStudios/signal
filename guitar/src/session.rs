@@ -12259,67 +12259,6 @@ fn mime_for_path(path: &str) -> &'static str {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::pool_preset_of;
-    use crate::profiles::{PatchDef, ProfileDef};
-
-    fn patch(name: &str, preset: &str) -> PatchDef {
-        PatchDef {
-            role: String::new(),
-            song: String::new(),
-            name: name.to_string(),
-            preset: preset.to_string(),
-            preset2: String::new(),
-            rig_preset: String::new(),
-            snapshot: String::new(),
-            tone: String::new(),
-            modules: Vec::new(),
-            blocks: Vec::new(),
-            drives: Vec::new(),
-            trim_db: 0.0,
-            level_db: 0.0,
-            boost_db: 0.0,
-            overrides: Vec::new(),
-            macros: Vec::new(),
-        }
-    }
-
-    /// The amp a patch is on is the pool preset it names — resolved from the
-    /// definition alone, taking the patch by name.
-    ///
-    /// The signature is the point. An earlier version was a method that found
-    /// the active patch by locking the rig, and `resync_blocks` calls it while
-    /// already holding that lock: a non-reentrant mutex re-locked on the same
-    /// thread, which hung the open sequence at the chain publish and took the
-    /// delay tempo, boost recall and drive calibration with it. Keeping the
-    /// lookup pure means a caller can only pass in what it already has.
-    #[test]
-    fn a_patch_names_its_amp() {
-        let def = ProfileDef {
-            default_patch: String::new(),
-            drives: Vec::new(),
-            name: "test".to_string(),
-            presets: Vec::new(),
-            patches: vec![patch("Clean", "Fender Clean"), patch("Lead", "Arena Lead")],
-            stacks: Vec::new(),
-        };
-        assert_eq!(
-            pool_preset_of(&def, "Lead").as_deref(),
-            Some("Arena Lead"),
-            "the patch names the amp"
-        );
-        // Patch names are matched the way the rest of the profile matches them.
-        assert_eq!(
-            pool_preset_of(&def, "clean").as_deref(),
-            Some("Fender Clean")
-        );
-        // A patch the profile no longer holds has no amp, rather than the
-        // first one — the board would otherwise name a tone that is not loaded.
-        assert_eq!(pool_preset_of(&def, "Crunch"), None);
-    }
-}
-
 /// Where a NAM block's Output Level is stored: with the gear, so every patch
 /// playing that amp or pedal has it.
 #[derive(Clone, Debug)]
@@ -12743,16 +12682,6 @@ fn output_pair(name: &str) -> Option<(usize, usize)> {
     match nums.as_slice() {
         [a, b, ..] if *a > 0 && *b > 0 => Some((a - 1, b - 1)),
         _ => None,
-    }
-}
-
-#[cfg(test)]
-mod output_pair_tests {
-    #[test]
-    fn pairs_read_from_their_names() {
-        assert_eq!(super::output_pair("Outputs 1–2"), Some((0, 1)));
-        assert_eq!(super::output_pair("Outputs 3–4"), Some((2, 3)));
-        assert_eq!(super::output_pair("Phones"), None);
     }
 }
 

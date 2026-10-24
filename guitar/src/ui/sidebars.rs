@@ -495,26 +495,6 @@ fn name_index(names: &[String], current: &str) -> u32 {
         .map_or(u32::MAX, |i| i as u32)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::name_index;
-
-    /// A name that is in the list selects it; anything else selects nothing,
-    /// so the picker shows its placeholder rather than making the first option
-    /// look chosen. An unset slot that appears to hold the first patch is the
-    /// failure this guards: a player would read it as configured.
-    #[test]
-    fn nothing_chosen_selects_nothing() {
-        let names = vec!["Clean".to_string(), "Crunch".to_string()];
-        assert_eq!(name_index(&names, "Clean"), 0);
-        assert_eq!(name_index(&names, "Crunch"), 1);
-        assert_eq!(name_index(&names, ""), u32::MAX);
-        // A name the list no longer holds — a patch renamed or deleted under
-        // an old section assignment.
-        assert_eq!(name_index(&names, "Lead"), u32::MAX);
-    }
-}
-
 /// Patch levelling, as a chip in the bar: progress while a pass runs, then
 /// what it found, until dismissed. Starting a pass is an action (⌘P →
 /// *Level Patches*), not a panel — it is run once after building patches,

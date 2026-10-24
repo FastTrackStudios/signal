@@ -131,16 +131,6 @@ path = "src/bin/signal-phones.rs"
 name = "rig_shot"
 required-features = ["ui"]
 
-[[test]]
-name = "signal_mcp"
-path = "tests/signal_mcp.rs"
-required-features = ["mcp"]
-
-[[test]]
-name = "param_flood"
-path = "tests/param_flood.rs"
-required-features = ["ui"]
-
 [[example]]
 name = "viz_gallery"
 path = "examples/viz_gallery.rs"

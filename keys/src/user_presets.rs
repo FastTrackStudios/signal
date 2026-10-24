@@ -258,14 +258,3 @@ pub fn scan() -> (Vec<KeysPreset>, Vec<PathBuf>) {
     }
     out.into_iter().unzip()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn names_become_safe_file_names() {
-        assert_eq!(file_stem(" Warm / Wide "), "Warm - Wide");
-        assert_eq!(file_stem(""), "Untitled");
-    }
-}

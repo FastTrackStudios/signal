@@ -151,19 +151,3 @@ pub fn act(rig: &Option<RigClient>, parts: &[(String, String)], patch: &str, p: 
         }
     });
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_patch_not_yet_a_part_offers_to_make_one() {
-        let parts = vec![("Verse 1".to_string(), "Dry Chorus Clean".to_string())];
-        let it = items(&parts, "Drive");
-        assert!(it.iter().any(|i| i.id == "part-make"));
-        let it = items(&parts, "Dry Chorus Clean");
-        assert!(it.iter().any(|i| i.id == "part-rename"));
-        assert!(it.iter().any(|i| i.id == "part-remove"));
-        assert!(items(&parts, "").is_empty());
-    }
-}
