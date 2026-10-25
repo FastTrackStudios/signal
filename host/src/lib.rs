@@ -52,6 +52,9 @@ use daw::standalone::metering::Meters;
 #[cfg(not(target_arch = "wasm32"))]
 use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
 
+/// A rig's library as one Loro doc in a `.session` file (feature `book`).
+#[cfg(all(feature = "book", not(target_arch = "wasm32")))]
+pub mod book;
 /// One engine per process, rigs as tracks in it.
 pub mod engine;
 pub mod gestures;

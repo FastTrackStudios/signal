@@ -93,6 +93,9 @@ fn line_col(text: &str, offset: usize) -> (usize, usize) {
 /// is on disk. Remembering it would make an unseen external edit look like
 /// the rig's own, and the watcher would never load it.
 pub fn read_quiet<T: for<'a> Facet<'a>>(path: &Path) -> Read<T> {
+    if let Some(read) = read_book::<T>(path) {
+        return read;
+    }
     match std::fs::read_to_string(path) {
         Err(_) => Read::Missing,
         Ok(text) => match parse(&text) {
@@ -105,6 +108,9 @@ pub fn read_quiet<T: for<'a> Facet<'a>>(path: &Path) -> Read<T> {
 /// Read `path` into the rig: remembered as the content its memory now holds
 /// (or, when it does not parse, as content never to overwrite).
 pub fn read_tracked<T: for<'a> Facet<'a>>(path: &Path) -> Read<T> {
+    if let Some(read) = read_book::<T>(path) {
+        return read;
+    }
     let Ok(text) = std::fs::read_to_string(path) else {
         return Read::Missing;
     };
@@ -117,6 +123,49 @@ pub fn read_tracked<T: for<'a> Facet<'a>>(path: &Path) -> Read<T> {
             note_bad(path, &text);
             Read::Bad(e)
         }
+    }
+}
+
+/// `path` as its library's book holds it, when a book stands for the
+/// library (`signal_rig_host::book`): the doc is the library, and there is
+/// no file to remember — what changes under the rig arrives as the book's
+/// changes ([`Watcher`]). `None`: no book, the file is read.
+fn read_book<T: for<'a> Facet<'a>>(path: &Path) -> Option<Read<T>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use signal_rig_host::book::{self, BookRead};
+        let (book, name) = book::for_path(path)?;
+        Some(match book.read::<T>(&name) {
+            BookRead::Ok(v) => Read::Ok(v),
+            BookRead::Missing => Read::Missing,
+            BookRead::Bad(e) => Read::Bad(e),
+        })
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = path;
+        None
+    }
+}
+
+/// Write `value` as `path` in its library's book, when one stands for it.
+/// `None`: no book, the file is written.
+fn write_book<T: for<'a> Facet<'a>>(path: &Path, value: &T) -> Option<Wrote> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (book, name) = signal_rig_host::book::for_path(path)?;
+        Some(match book.write(&name, value) {
+            Ok(()) => Wrote::Written,
+            Err(e) => {
+                tracing::warn!("rig store: {name} was not written to the book: {e}");
+                Wrote::Failed
+            }
+        })
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (path, value);
+        None
     }
 }
 
@@ -175,6 +224,11 @@ fn still_ours(path: &Path, on_disk: Option<&[u8]>) -> bool {
 /// rig's copy is then the older one, and writing it would silently undo
 /// somebody's edit; the file is left alone and the watcher loads it.
 pub fn write_guarded<T: for<'a> Facet<'a>>(path: &Path, value: &T) -> Wrote {
+    // A book merges what another device changed field by field, so there
+    // is nothing to guard: the write lands beside it.
+    if let Some(wrote) = write_book(path, value) {
+        return wrote;
+    }
     let text = match facet_styx::to_string(value) {
         Ok(t) => t,
         Err(e) => {
@@ -331,6 +385,22 @@ impl Watcher {
     }
 
     fn look(&mut self, dir: &Path, now: bool) -> Vec<Change> {
+        // A library that is a book: what changes under the rig is what
+        // another device changed, reported by the book itself, already
+        // settled (an import is whole).
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(book) = signal_rig_host::book::for_dir(dir) {
+            let _ = now;
+            return book
+                .take_changes()
+                .into_iter()
+                .filter(|name| !signal_rig_host::book::is_device_local(name))
+                .map(|name| Change {
+                    deleted: !book.contains(&name),
+                    path: dir.join(&name),
+                })
+                .collect();
+        }
         let mut paths = library_files(dir);
         paths.extend(self.seen.keys().filter(|p| p.starts_with(dir)).cloned());
         let mut changes = Vec::new();

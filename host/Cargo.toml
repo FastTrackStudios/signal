@@ -16,6 +16,9 @@ pipewire = []
 # Legacy JACK backend (pipewire-jack shim) — enables the PIPEWIRE_LATENCY
 # quantum request before the JACK client connects.
 jack = ["audio/io", "audio/jack"]
+# A rig's library as one Loro doc in a `.session` file (`book`), standing in
+# for its styx directory: what syncs between devices. Native only (Turso).
+book = ["dep:blake3", "dep:facet-json", "dep:loro", "dep:serde_json", "dep:session-format", "dep:signal-proto", "dep:thiserror"]
 
 [dependencies]
 # Note names (midi::note_name) on every target; the native table adds the
@@ -35,6 +38,15 @@ facet.workspace = true
 facet-styx.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The `book` feature's: the doc, its file, and the codec it is laid out by;
+# blake3, the content address of the assets a library uses.
+blake3 = { workspace = true, optional = true }
+facet-json = { workspace = true, optional = true }
+loro = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+session-format = { workspace = true, optional = true, features = ["store"] }
+signal-proto = { workspace = true, optional = true, features = ["doc"] }
+thiserror = { workspace = true, optional = true }
 # The MIDI attach lifecycle this crate instruments (src/midi.rs).
 # Native only — midir has no wasm backend.
 midi = { workspace = true, features = ["midir", "native", "pipewire"] }
@@ -46,4 +58,7 @@ daw = { workspace = true, features = ["standalone-audio"] }
 audio = { workspace = true, features = ["io"] }
 
 [dev-dependencies]
+signal-rig-host = { path = ".", features = ["book"] }
+tempfile.workspace = true
+blake3.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }

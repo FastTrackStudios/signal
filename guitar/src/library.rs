@@ -112,6 +112,7 @@ impl RigHome {
     #[must_use]
     pub fn new(instrument: Instrument, dir: impl Into<PathBuf>) -> Self {
         let dir = dir.into();
+        adopt_book(&dir);
         Self {
             instrument,
             origin: (instrument, dir.clone()),
@@ -126,6 +127,7 @@ impl RigHome {
     pub fn process_default() -> Self {
         let instrument = crate::instrument::current();
         let dir = rig_dir();
+        adopt_book(&dir);
         Self {
             instrument,
             origin: (instrument, dir.clone()),
@@ -177,6 +179,7 @@ impl RigHome {
                 |parent| parent.join(to.dir_name()),
             )
         };
+        adopt_book(&dir);
         Self {
             instrument: to,
             dir,
@@ -642,6 +645,28 @@ pub fn profile_file(name: &str) -> String {
     format!("{}.styx", if slug.is_empty() { "profile" } else { slug })
 }
 
+/// The library at `dir` as its book, when the app has turned books on
+/// (`signal_rig_host::book::enable`): the rig's reads and writes go to it.
+fn adopt_book(dir: &std::path::Path) {
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = signal_rig_host::book::adopt(dir);
+    #[cfg(target_arch = "wasm32")]
+    let _ = dir;
+}
+
+/// Whether the shipped defaults may be written into the library at `dir`:
+/// always for a directory; for a book, once it may
+/// (`signal_rig_host::book::RigBook::may_seed` — an account's book waits
+/// for the account's library, or defaults would land on top of it).
+fn may_seed(dir: &std::path::Path) -> bool {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some((book, _)) = signal_rig_host::book::for_tree(dir) {
+        return book.may_seed();
+    }
+    let _ = dir;
+    true
+}
+
 /// A file that does not parse: said loudly, in the log and the reload log,
 /// and otherwise left alone — never reseeded, never saved over.
 pub(crate) fn report_bad(path: &std::path::Path, err: &str) {
@@ -736,14 +761,7 @@ impl RigHome {
     /// may not write (design, ephemeral) reads it in place and leaves it alone.
     fn load_profiles(&self, store: &StyxDir) -> Vec<ProfileDef> {
         let dir = self.profiles_store();
-        let mut files: Vec<String> = std::fs::read_dir(dir.dir())
-            .map(|rd| {
-                rd.filter_map(Result::ok)
-                    .filter_map(|e| e.file_name().into_string().ok())
-                    .filter(|n| n.ends_with(".styx"))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut files: Vec<String> = profile_files(dir.dir());
         files.sort();
         let mut profiles: Vec<ProfileDef> = files
             .iter()
@@ -779,6 +797,28 @@ impl RigHome {
     }
 }
 
+/// The profile files in `dir`: a book's, and those of its old directory not
+/// moved in yet (they move in as they are read); else the directory's.
+fn profile_files(dir: &std::path::Path) -> Vec<String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some((book, prefix)) = signal_rig_host::book::for_tree(dir) {
+        return book
+            .names_with_files(&prefix)
+            .into_iter()
+            .filter_map(|n| n.strip_prefix(&prefix).map(str::to_owned))
+            .filter(|n| !n.contains('/'))
+            .collect();
+    }
+    std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter(|n| n.ends_with(".styx"))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The shipped profiles a library has been given, by name, one a line in
 /// `profiles/.seeded`: a shipped profile is seeded once, so one the player
 /// deletes stays deleted.
@@ -797,6 +837,9 @@ impl RigHome {
     /// this once: it was just seeded, or the library has not opened on it yet.
     fn seed_profiles(&self, profiles: &mut Vec<ProfileDef>) -> bool {
         let dir = self.profiles_store();
+        if !may_seed(dir.dir()) {
+            return false;
+        }
         let marker = dir.dir().join(SEEDED_MARKER);
         let mut seeded: Vec<String> = std::fs::read_to_string(&marker)
             .map(|t| t.lines().map(str::to_string).collect())
@@ -889,6 +932,9 @@ impl RigHome {
             tracing::warn!("rig library: shipped drive presets do not parse");
             return false;
         };
+        if !may_seed(store.dir()) {
+            return false;
+        }
         let marker = store.dir().join(SEEDED_DRIVES_MARKER);
         let mut seeded: Vec<String> = std::fs::read_to_string(&marker)
             .map(|t| t.lines().map(str::to_string).collect())
@@ -1085,6 +1131,9 @@ fn seed_entries<L, E>(
     E: Clone + for<'a> Facet<'a>,
 {
     let path = store.dir().join(file);
+    if !may_seed(store.dir()) {
+        return;
+    }
     let Read::Ok(mut lib) = config_watch::read_tracked::<L>(&path) else {
         return;
     };
@@ -1267,19 +1316,28 @@ impl RigHome {
         // More directories than any process plays from; the oldest goes.
         const KEEP: usize = 8;
         let dir = self.dir.clone();
-        let stamp: Stamp = [
-            crate::compose::MODULES_FILE,
-            crate::compose::PRESETS_FILE,
-            crate::compose::BLOCKS_FILE,
-            crate::compose::TONES_FILE,
-        ]
-        .iter()
-        .map(|f| {
-            std::fs::metadata(dir.join(f))
-                .ok()
-                .and_then(|m| Some((m.modified().ok()?, m.len())))
-        })
-        .collect();
+        // A book's compositions change with the book (another device's
+        // edit included): its generation is the stamp.
+        #[cfg(not(target_arch = "wasm32"))]
+        let book_stamp = signal_rig_host::book::for_dir(&dir)
+            .map(|b| vec![Some((std::time::UNIX_EPOCH, b.generation()))]);
+        #[cfg(target_arch = "wasm32")]
+        let book_stamp: Option<Stamp> = None;
+        let stamp: Stamp = book_stamp.unwrap_or_else(|| {
+            [
+                crate::compose::MODULES_FILE,
+                crate::compose::PRESETS_FILE,
+                crate::compose::BLOCKS_FILE,
+                crate::compose::TONES_FILE,
+            ]
+            .iter()
+            .map(|f| {
+                std::fs::metadata(dir.join(f))
+                    .ok()
+                    .and_then(|m| Some((m.modified().ok()?, m.len())))
+            })
+            .collect()
+        });
         if let Ok(cache) = CACHE.lock()
             && let Some((_, _, comp)) = cache.iter().find(|(d, st, _)| *d == dir && *st == stamp)
         {
@@ -1321,13 +1379,23 @@ impl RigHome {
                 // without it a shipped profile's composed patches resolve
                 // to nothing (written where this run may write).
                 Read::Missing => {
-                    if home.writable_store().is_some() {
+                    let v: T = facet_styx::from_str(seed).unwrap_or_default();
+                    if home.writable_store().is_some() && may_seed(&home.dir) {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if let Some((book, name)) = signal_rig_host::book::for_path(&path) {
+                            if let Err(e) = book.write(&name, &v) {
+                                tracing::warn!(
+                                    "rig library: seed {file} into the book failed: {e}"
+                                );
+                            }
+                            return Ok(v);
+                        }
                         let _ = std::fs::create_dir_all(&home.dir);
                         if let Err(e) = std::fs::write(&path, seed) {
                             tracing::warn!("rig library: seed {file} failed: {e}");
                         }
                     }
-                    Ok(facet_styx::from_str(seed).unwrap_or_default())
+                    Ok(v)
                 }
                 Read::Bad(e) => {
                     report_bad(&path, &e);
@@ -1591,6 +1659,11 @@ impl RigHome {
             return;
         }
         let path = self.profiles_dir().join(profile_file(name));
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some((book, entry)) = signal_rig_host::book::for_path(&path) {
+            book.remove(&entry);
+            return;
+        }
         if let Err(e) = std::fs::remove_file(&path) {
             tracing::warn!("rig library: cannot remove {}: {e}", path.display());
         }
@@ -1950,5 +2023,112 @@ pub fn seed_setup_for(instrument: Instrument) -> crate::proto::SetupModel {
             },
         ],
         controller_index: 0,
+    }
+}
+
+/// The library in a book (`signal_rig_host::book`): what the rig reads and
+/// writes, end to end through [`RigHome`], once a book stands for its
+/// directory.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod book_tests {
+    use loro::{ExportMode, VersionVector};
+    use signal_rig_host::book::{self, RigBook};
+
+    use super::*;
+
+    /// What `from` has that `to` has not.
+    fn delta(from: &RigBook, to: &RigBook) -> Vec<u8> {
+        let since: VersionVector = to.doc().oplog_vv();
+        from.doc()
+            .export(ExportMode::updates(&since))
+            .expect("an export")
+    }
+
+    #[test]
+    fn a_rig_library_moves_into_its_book_and_lives_there() {
+        let tmp = tempfile::tempdir().expect("a dir");
+        let dir = tmp.path().join("rig");
+        let home = RigHome::new(Instrument::Guitar, &dir);
+
+        // A library as it was: styx files, bootstrapped from the defaults.
+        let files = home.load_or_bootstrap();
+        let names = |lib: &RigLibrary| {
+            let mut n: Vec<String> = lib.profiles.iter().map(|p| p.name.clone()).collect();
+            n.sort();
+            n
+        };
+        assert!(!files.profiles.is_empty() && !files.setlists.is_empty());
+
+        // A book in its place: the same library, moved in as it is read.
+        let book = RigBook::open(&tmp.path().join("Guitar.session"), &dir, false).expect("a book");
+        book::register(book.clone());
+        let moved = home.load_or_bootstrap();
+        assert_eq!(names(&moved), names(&files), "every profile");
+        assert_eq!(moved.setlists.len(), files.setlists.len(), "every setlist");
+        assert!(book.contains("setlists.styx") && book.contains("songs.styx"));
+        assert_eq!(book.names("profiles/").len(), files.profiles.len());
+
+        // A save goes to the book; the old file is the backup.
+        let before = std::fs::read(dir.join("setlists.styx")).expect("the old file");
+        let mut sets = moved.setlists.clone();
+        let mut caa = sets[0].clone();
+        caa.name = "CAA 2026".into();
+        sets.push(caa);
+        home.save_setlists(&sets);
+        assert_eq!(
+            std::fs::read(dir.join("setlists.styx")).expect("file"),
+            before
+        );
+        assert!(
+            home.load_or_bootstrap()
+                .setlists
+                .iter()
+                .any(|s| s.name == "CAA 2026")
+        );
+
+        // A profile deleted stays deleted, its old file notwithstanding.
+        let gone = files.profiles[0].name.clone();
+        home.delete_profile(&gone);
+        assert!(
+            !home
+                .load_or_bootstrap()
+                .profiles
+                .iter()
+                .any(|p| p.name == gone)
+        );
+
+        // Another device's edit reaches the rig's hot reload, by name.
+        let other = RigBook::open(
+            &tmp.path().join("iPad.session"),
+            &tmp.path().join("ipad"),
+            false,
+        )
+        .expect("another device");
+        other
+            .doc()
+            .import(&delta(&book, &other))
+            .expect("it has the library");
+        let mut theirs = sets.clone();
+        theirs.retain(|s| s.name != "CAA 2026");
+        other
+            .write("setlists.styx", &SetlistLib { setlists: theirs })
+            .expect("their edit");
+        book.doc()
+            .import(&delta(&other, &book))
+            .expect("it arrives");
+        let changes = crate::config_watch::Watcher::new().poll(&dir);
+        assert!(
+            changes
+                .iter()
+                .any(|c| c.path == dir.join("setlists.styx") && !c.deleted),
+            "the watcher reports it: {changes:?}"
+        );
+        assert!(
+            !home
+                .load_or_bootstrap()
+                .setlists
+                .iter()
+                .any(|s| s.name == "CAA 2026")
+        );
     }
 }

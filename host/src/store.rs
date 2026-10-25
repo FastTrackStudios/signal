@@ -1,7 +1,9 @@
 //! Styx-directory persistence for rig libraries.
 //!
 //! The read / write / read-or-seed trio each rig's `library.rs` re-implemented, over one
-//! directory of plain styx text files (portable, git-trackable, editable).
+//! directory of plain styx text files (portable, git-trackable, editable) —
+//! or, when a [`crate::book::RigBook`] stands for the directory (feature
+//! `book`), over that book: the rig's library as one synced Loro doc.
 
 use std::path::PathBuf;
 
@@ -58,6 +60,7 @@ impl StyxDir {
         }
         let given = std::path::Path::new(path.as_str());
         if !given.is_absolute() {
+            self.note_asset(path);
             *path = self.dir.join(given).to_string_lossy().into_owned();
             return;
         }
@@ -85,13 +88,40 @@ impl StyxDir {
     pub fn relativize(&self, path: &mut String) {
         if let Ok(rel) = std::path::Path::new(path.as_str()).strip_prefix(&self.dir) {
             *path = rel.to_string_lossy().into_owned();
+            self.note_asset(path);
         }
+    }
+
+    /// A library's book keeps what each asset it uses is, by content
+    /// (`RigBook::note_asset`); a directory keeps nothing.
+    fn note_asset(&self, rel: &str) {
+        #[cfg(all(feature = "book", not(target_arch = "wasm32")))]
+        if let Some(book) = crate::book::for_dir(&self.dir) {
+            book.note_asset(rel);
+        }
+        #[cfg(not(all(feature = "book", not(target_arch = "wasm32"))))]
+        let _ = rel;
     }
 
     /// Read + parse `file`. `None` when missing; parse failures are logged
     /// and treated as missing (the caller falls back to defaults rather than
     /// dying mid-set over a hand-edit typo).
     pub fn read<T: for<'a> Facet<'a>>(&self, file: &str) -> Option<T> {
+        #[cfg(all(feature = "book", not(target_arch = "wasm32")))]
+        if let Some(book) =
+            crate::book::for_dir(&self.dir).filter(|_| !crate::book::is_device_local(file))
+        {
+            return match book.read::<T>(file) {
+                crate::book::BookRead::Ok(v) => Some(v),
+                crate::book::BookRead::Missing => None,
+                crate::book::BookRead::Bad(e) => {
+                    tracing::warn!(
+                        "rig store: {file} in the book is not readable ({e}) — using defaults"
+                    );
+                    None
+                }
+            };
+        }
         let path = self.dir.join(file);
         let text = std::fs::read_to_string(&path).ok()?;
         match facet_styx::from_str::<T>(&text) {
@@ -106,6 +136,15 @@ impl StyxDir {
     /// Serialize + write `value` to `file`, creating the directory. Failures
     /// are logged, never fatal (persistence must not take the rig down).
     pub fn write<T: for<'a> Facet<'a>>(&self, file: &str, value: &T) {
+        #[cfg(all(feature = "book", not(target_arch = "wasm32")))]
+        if let Some(book) =
+            crate::book::for_dir(&self.dir).filter(|_| !crate::book::is_device_local(file))
+        {
+            if let Err(e) = book.write(file, value) {
+                tracing::warn!("rig store: {file} was not written to the book: {e}");
+            }
+            return;
+        }
         if let Err(e) = std::fs::create_dir_all(&self.dir) {
             tracing::warn!("rig store: cannot create {}: {e}", self.dir.display());
             return;
@@ -132,6 +171,33 @@ impl StyxDir {
         seed: &str,
         fallback: impl FnOnce() -> T,
     ) -> T {
+        #[cfg(all(feature = "book", not(target_arch = "wasm32")))]
+        if let Some(book) =
+            crate::book::for_dir(&self.dir).filter(|_| !crate::book::is_device_local(file))
+        {
+            return match book.read::<T>(file) {
+                crate::book::BookRead::Ok(v) => v,
+                // Somebody's entry this build cannot read: the default
+                // plays, and the entry is left as it is.
+                crate::book::BookRead::Bad(e) => {
+                    tracing::error!(
+                        "rig store: {file} in the book does not parse ({e}) — playing the default"
+                    );
+                    facet_styx::from_str::<T>(seed).unwrap_or_else(|_| fallback())
+                }
+                crate::book::BookRead::Missing => {
+                    let v = facet_styx::from_str::<T>(seed).unwrap_or_else(|_| fallback());
+                    // Written in only when it may be: an account's book waits
+                    // for the account's library (`RigBook::may_seed`).
+                    if book.may_seed() {
+                        if let Err(e) = book.write(file, &v) {
+                            tracing::warn!("rig store: seeding {file} into the book failed: {e}");
+                        }
+                    }
+                    v
+                }
+            };
+        }
         if let Some(v) = self.read(file) {
             return v;
         }

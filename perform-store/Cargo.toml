@@ -22,3 +22,7 @@ facet.workspace = true
 # The performance hub (PubSub) every remote's stream reads.
 architect.workspace = true
 tracing.workspace = true
+
+# The library as a synced Loro doc (signal_rig_host::book): native only.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+signal-rig-host = { workspace = true, features = ["book"] }

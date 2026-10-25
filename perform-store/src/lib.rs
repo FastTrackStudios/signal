@@ -338,6 +338,12 @@ impl PerformStore {
     /// Open the store in `dir`, seeding what is missing from the rig's
     /// presets.
     pub fn open(dir: impl Into<std::path::PathBuf>, player: &dyn PresetPlayer) -> Self {
+        let dir: std::path::PathBuf = dir.into();
+        // The library as its book when the app has turned books on — a
+        // synced Loro doc in `<dir>.session` (signal_rig_host::book); the
+        // reads and writes below go to it through `StyxDir`.
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = signal_rig_host::book::adopt(&dir);
         let dir = StyxDir::new(dir);
         let mut profiles = dir
             .read::<ProfileLib>(PROFILES)
