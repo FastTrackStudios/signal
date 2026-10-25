@@ -120,7 +120,7 @@ pub(super) fn PerformerBar(middle: Element) -> Element {
     };
     let audio = if *state.running.read() { LIVE } else { VOID };
     rsx! {
-        div { style: "position: relative; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 48px; padding: 0 0 0 12px; box-sizing: border-box; font-family: {FONT};",
+        div { style: "position: relative; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 48px; padding: 0 0 0 {12 + signal_rig_shell::window_buttons()}px; box-sizing: border-box; font-family: {FONT};",
             span { style: "flex-shrink: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.04em; color: {INK};", "Signal" }
             if !set.is_empty() {
                 span { "aria-label": "Set: {set}", style: "flex-shrink: 0; padding: 0 10px; font-size: 15px; font-weight: 650; color: {INK_2}; white-space: nowrap;", "{cut(&set, 14)}" }

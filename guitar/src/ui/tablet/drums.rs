@@ -504,7 +504,7 @@ pub fn DrumTablet() -> Element {
                             },
                             View::Kit => rsx! {
                                 div { style: "flex: 1; min-height: 0; display: flex;",
-                                    div { style: "width: {SIDEBAR_W}px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid {RULE};",
+                                    div { style: "width: {signal_rig_shell::sidebar_w()}px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid {RULE};",
                                         PieceList { pieces: pieces.clone(), selected: sel, on_pick: move |id: String| picked.set(Some(id)) }
                                     }
                                     div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0;",

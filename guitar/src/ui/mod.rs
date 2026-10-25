@@ -76,6 +76,8 @@ pub use settings::{
 pub use sidebars::{LeftSidebar, LevellingChip};
 /// The rig's performance clients, for hosts to provide.
 pub use signal_rig_perform_ui::PerformClients;
+/// The room a Mac's window buttons take over the rig's top left.
+pub use signal_rig_shell::WindowButtons;
 /// The node/preset tree (moved to signal-widgets — both rigs draw it).
 pub use signal_widgets::PresetTree;
 pub use signal_widgets::{Knob, KnobSize, Picker, PickerSize};

@@ -78,11 +78,33 @@ pub fn Main(children: Element) -> Element {
     }
 }
 
+/// The room the window's own buttons take at the top left, in points: a
+/// Mac draws its close / minimise / zoom over the page (the title bar is
+/// drawn through), so the host says how wide they are. None on an iPad.
+/// The sidebar widens by it, so its tabs keep their room and the bar and
+/// the column below stay one width.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WindowButtons(pub u32);
+
+/// The window's buttons' room ([`WindowButtons`]), 0 when none was given.
+#[must_use]
+pub fn window_buttons() -> u32 {
+    try_consume_context::<WindowButtons>().map_or(0, |w| w.0)
+}
+
+/// The sidebar's width on this window: [`SIDEBAR_W`] and the window's
+/// buttons' room.
+#[must_use]
+pub fn sidebar_w() -> u32 {
+    SIDEBAR_W + window_buttons()
+}
+
 /// The sidebar, down the left.
 #[component]
 pub fn Sidebar(children: Element) -> Element {
+    let width = sidebar_w();
     rsx! {
-        aside { style: "width: {SIDEBAR_W}px; flex-shrink: 0; height: 100%; border-right: 1px solid {RULE}; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0;",
+        aside { style: "width: {width}px; flex-shrink: 0; height: 100%; border-right: 1px solid {RULE}; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0;",
             {children}
         }
     }
@@ -109,9 +131,10 @@ pub fn TopBar(
     children: Element,
 ) -> Element {
     let ink = if sidebar { INK } else { INK_3 };
+    let (width, buttons) = (sidebar_w(), window_buttons());
     rsx! {
         header { style: "height: {TOP_H}px; flex-shrink: 0; display: flex; align-items: stretch; border-bottom: 1px solid {RULE}; background: {SHEET}; box-sizing: border-box; font-family: {FONT};",
-            div { style: "width: {SIDEBAR_W}px; flex-shrink: 0; display: flex; align-items: stretch; border-right: 1px solid {RULE}; box-sizing: border-box;",
+            div { style: "width: {width}px; flex-shrink: 0; display: flex; align-items: stretch; padding-left: {buttons}px; border-right: 1px solid {RULE}; box-sizing: border-box;",
                 button {
                     "aria-label": if sidebar { "Hide the sidebar" } else { "Show the sidebar" },
                     style: "width: 52px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer;",

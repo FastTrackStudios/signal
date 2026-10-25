@@ -2906,16 +2906,18 @@ pub enum FormFactor {
     /// A phone held sideways (an iPhone 16 Pro: 874 × 402): the chain a
     /// page at a time.
     Phone,
-    /// An iPad: the touch layout (`tablet`) — the setlist beside the
-    /// performance, a foot bar of views.
+    /// The touch layout (`tablet`) — the setlist beside the performance, a
+    /// foot bar of views. Every window bigger than a phone: an iPad and a
+    /// desk draw the same rig.
     Tablet,
-    /// Everything larger: the Control view.
+    /// The older Control view, kept behind `FTS_FORM_FACTOR=desktop` until
+    /// everything it has is in the tablet layout.
     Desktop,
 }
 
 impl FormFactor {
-    /// From the window's size in points — or `FTS_FORM_FACTOR=phone` to
-    /// try a layout on a desktop.
+    /// From the window's size in points — or `FTS_FORM_FACTOR=phone`,
+    /// `tablet` or `desktop` to pick one.
     #[must_use]
     pub fn of(size: (f64, f64)) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
@@ -2926,6 +2928,9 @@ impl FormFactor {
             if v.eq_ignore_ascii_case("tablet") {
                 return Self::Tablet;
             }
+            if v.eq_ignore_ascii_case("desktop") {
+                return Self::Desktop;
+            }
         }
         // By the short side, not by which way up it is: a phone is a phone
         // held either way, and for a moment it is held "portrait" whatever
@@ -2935,11 +2940,10 @@ impl FormFactor {
         let short = size.0.min(size.1);
         if short > 0.0 && short <= 500.0 {
             Self::Phone
-        } else if cfg!(target_os = "ios") {
-            // Anything bigger on iOS is an iPad.
-            Self::Tablet
         } else {
-            Self::Desktop
+            // Anything bigger — an iPad, a laptop, a desk — is the one
+            // touch layout, so the rig is the same rig wherever it is played.
+            Self::Tablet
         }
     }
 }
