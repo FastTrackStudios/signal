@@ -102,8 +102,11 @@ pub struct RigBook {
     moved: Mutex<BTreeSet<String>>,
     /// Each asset as last hashed (modified, size): not hashed again unchanged.
     hashed: Mutex<std::collections::HashMap<String, (Option<std::time::SystemTime>, u64)>>,
-    _local: loro::Subscription,
+    /// The file's own writer, when the book keeps its file itself.
+    _local: Option<loro::Subscription>,
     _root: loro::Subscription,
+    /// What keeps a doc someone else owns alive ([`Self::over`]).
+    _keep: Option<Box<dyn std::any::Any + Send + Sync>>,
 }
 
 impl std::fmt::Debug for RigBook {
@@ -149,6 +152,41 @@ impl RigBook {
                 true
             }
         }));
+        Ok(Self::assemble(
+            dir,
+            file,
+            doc,
+            syncs,
+            fresh,
+            Some(local),
+            None,
+        ))
+    }
+
+    /// A book over `doc`, a replica someone else keeps — the sync
+    /// driver, which persists it to `file` and syncs it with the
+    /// account's other devices. `keep` is held as long as the book (the
+    /// driver's handle on the doc). The book only reads and writes it.
+    #[must_use]
+    pub fn over(
+        dir: &Path,
+        file: &Path,
+        doc: LoroDoc,
+        keep: Box<dyn std::any::Any + Send + Sync>,
+    ) -> Arc<Self> {
+        let fresh = doc.oplog_vv().is_empty();
+        Self::assemble(dir, file, doc, true, fresh, None, Some(keep))
+    }
+
+    fn assemble(
+        dir: &Path,
+        file: &Path,
+        doc: LoroDoc,
+        syncs: bool,
+        fresh: bool,
+        local: Option<loro::Subscription>,
+        keep: Option<Box<dyn std::any::Any + Send + Sync>>,
+    ) -> Arc<Self> {
         let changes = Arc::new(Mutex::new(BTreeSet::new()));
         let generation = Arc::new(AtomicU64::new(0));
         let root = doc.subscribe_root(Arc::new({
@@ -190,6 +228,7 @@ impl RigBook {
             moved: Mutex::new(read_moved(dir)),
             hashed: Mutex::new(std::collections::HashMap::new()),
             _local: local,
+            _keep: keep,
             _root: root,
         });
         tracing::info!(
@@ -197,7 +236,7 @@ impl RigBook {
             rig.book_fresh = fresh,
             "rig book: open"
         );
-        Ok(book)
+        book
     }
 
     /// The library directory this book stands for.
@@ -457,6 +496,19 @@ pub fn is_device_local(name: &str) -> bool {
 /// account's sync carries them ([`RigBook::may_seed`]).
 static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 
+/// What makes a book for a library directory when something other than
+/// the book keeps its doc (the sync service: [`set_provider`]).
+pub type Provider = Arc<dyn Fn(&Path) -> Option<Arc<RigBook>> + Send + Sync>;
+
+static PROVIDER: Mutex<Option<Provider>> = Mutex::new(None);
+
+/// Let `provider` make the books from now on ([`adopt`] asks it first): the
+/// sync service, once signed in, so a rig's book is the doc it syncs. A
+/// directory it gives no book for gets one of its own, as before.
+pub fn set_provider(provider: Provider) {
+    *locked(&PROVIDER) = Some(provider);
+}
+
 /// Turn books on for this process: every rig library [`adopt`]ed from now
 /// on is a book. The app calls it once, before its rigs start, and not for
 /// a run that must leave no mark (design, ephemeral). `syncs`: an account
@@ -471,6 +523,13 @@ pub fn enable(syncs: bool) {
 pub fn adopt(dir: &Path) -> Option<Arc<RigBook>> {
     let syncs = *ENABLED.get()?;
     if let Some(book) = for_dir(dir) {
+        return Some(book);
+    }
+    // Signed in, the sync service hands out the book: the doc its driver
+    // keeps and syncs, persisted to the same `<dir>.session`.
+    let provider = locked(&PROVIDER).clone();
+    if let Some(book) = provider.and_then(|p| p(dir)) {
+        register(Arc::clone(&book));
         return Some(book);
     }
     let file = dir.with_extension("session");
