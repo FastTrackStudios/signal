@@ -12,7 +12,7 @@ input (or a looped reference DI) with no added latency.
 | NAM worker | `NamWorker` in `features/adapters/web/worklet/src/guitar/web.rs` + `nam_worker.js` | one Web Worker per remote model |
 | planner | `worklet/src/plan.rs` (`planChain` in wasm) | page and worklet — same code, same answer |
 | page orchestrator | `features/adapters/web/worklet/js/guitar_rig.js` | main thread |
-| bundle | `signal rig web-bundle <dir>` (`features/rigs/guitar/src/web_bundle.rs`) | build time |
+| bundle | `studio rig web-bundle <dir>` (`features/rigs/guitar/src/web_bundle.rs`) | build time |
 
 One wasm module serves both the worklet (`GuitarWorklet`) and the workers
 (`NamWorker`). Chains are built by signal-sampler's own `prepare_chain`, so a
@@ -66,7 +66,7 @@ and `Cross-Origin-Embedder-Policy: require-corp` on the page — for
 
 ## The bundle
 
-`signal rig web-bundle <dir>` writes `rig.json` (every profile's patches,
+`studio rig web-bundle <dir>` writes `rig.json` (every profile's patches,
 resolved exactly as the live rig resolves them) and `assets/<blake3>.nam|wav`.
 Content addressing ships a shared capture once, lets assets be cached
 forever, and keeps local paths out of a public bundle. Plugin blocks (no
