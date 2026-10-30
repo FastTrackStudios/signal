@@ -504,6 +504,7 @@ fn activate(rig: &Option<RigClient>, row: &Row, model: &PerformanceModel) -> boo
 /// `position: relative` — the overlay covers that box, not the window.
 #[component]
 pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Element {
+    let keys = app_shell::ui::use_text_focus();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut query = use_signal(String::new);
     // The focused row, by kind and name: names are stable across the
@@ -692,6 +693,8 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                             }
                         }
                         input {
+                            onfocus: move |_| keys.focus(),
+                            onblur: move |_| keys.blur(),
                             style: "flex: 1; min-width: 0; background: transparent; border: none; \
                                     outline: none; color: {TEXT}; font-size: 13px;",
                             placeholder: if kind == Kind::All {
@@ -1152,6 +1155,7 @@ fn Detail(
 /// commits, Escape (or leaving the field) puts it back.
 #[component]
 fn NameLine(name: String, on_commit: Option<Callback<String>>) -> Element {
+    let keys = app_shell::ui::use_text_focus();
     let mut editing = use_signal(|| false);
     let mut text = use_signal(|| name.clone());
 
@@ -1159,6 +1163,7 @@ fn NameLine(name: String, on_commit: Option<Callback<String>>) -> Element {
         let original = name.clone();
         return rsx! {
             input {
+                onfocus: move |_| keys.focus(),
                 style: "font-size: 18px; font-weight: 700; color: {TEXT}; background: {BG}; \
                         border: 1px solid {FOCUS_FG}; border-radius: 7px; padding: 4px 8px; \
                         outline: none; min-width: 0;",
@@ -1169,7 +1174,7 @@ fn NameLine(name: String, on_commit: Option<Callback<String>>) -> Element {
                     });
                 },
                 oninput: move |e| text.set(e.value()),
-                onblur: move |_| editing.set(false),
+                onblur: move |_| { editing.set(false); keys.blur(); },
                 onkeydown: move |e: KeyboardEvent| {
                     // The field owns these keys: Enter here is "rename",
                     // not the picker's "load and close".
@@ -1311,6 +1316,7 @@ fn SetlistDetail(
     model: PerformanceModel,
     on_go: EventHandler<(Kind, String)>,
 ) -> Element {
+    let keys = app_shell::ui::use_text_focus();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut duplicating = use_signal(|| false);
     let mut adding = use_signal(|| false);
@@ -1435,6 +1441,8 @@ fn SetlistDetail(
             }
             if adding() {
                 input {
+                    onfocus: move |_| keys.focus(),
+                    onblur: move |_| keys.blur(),
                     style: "font-size: 12px; color: {TEXT}; background: {BG}; border: 1px solid {LINE}; \
                             border-radius: 7px; padding: 6px 8px; outline: none; margin-top: 4px;",
                     placeholder: "Filter songs…",
@@ -1476,6 +1484,7 @@ fn SongDetail(
     model: PerformanceModel,
     on_go: EventHandler<(Kind, String)>,
 ) -> Element {
+    let keys = app_shell::ui::use_text_focus();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut duplicating = use_signal(|| false);
     let mut name = use_signal(|| song.name.clone());
@@ -1524,6 +1533,8 @@ fn SongDetail(
             label { style: "display: flex; flex-direction: column; gap: 4px; flex: {width}; min-width: 0;",
                 span { style: "font-size: 10px; color: {FAINT};", "{label}" }
                 input {
+                    onfocus: move |_| keys.focus(),
+                    onblur: move |_| keys.blur(),
                     style: "font-size: 13px; color: {TEXT}; background: {BG}; border: 1px solid {LINE}; \
                             border-radius: 7px; padding: 6px 8px; outline: none; min-width: 0;",
                     value: "{value}",
@@ -2298,6 +2309,7 @@ fn NewForm(
     model: PerformanceModel,
     on_done: EventHandler<Option<String>>,
 ) -> Element {
+    let field_keys = app_shell::ui::use_text_focus();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut name = use_signal(String::new);
     let mut key = use_signal(|| "C".to_string());
@@ -2423,6 +2435,8 @@ fn NewForm(
                     border-radius: 10px; border: 1px solid {LINE}; background: {PANE}; flex-shrink: 0;",
             div { style: "display: flex; gap: 8px;",
                 input {
+                    onfocus: move |_| field_keys.focus(),
+                    onblur: move |_| field_keys.blur(),
                     style: "{input_style} flex: 2 1 0;",
                     placeholder: "New {kind.one()} name",
                     value: "{n}",
@@ -2436,6 +2450,8 @@ fn NewForm(
                 }
                 if kind == Kind::Songs {
                     input {
+                        onfocus: move |_| field_keys.focus(),
+                        onblur: move |_| field_keys.blur(),
                         style: "{input_style} flex: 0 0 64px;",
                         placeholder: "Key",
                         value: "{key}",
@@ -2443,6 +2459,8 @@ fn NewForm(
                         onkeydown: move |e| keys.call(e),
                     }
                     input {
+                        onfocus: move |_| field_keys.focus(),
+                        onblur: move |_| field_keys.blur(),
                         style: "{input_style} flex: 0 0 72px;",
                         placeholder: "bpm",
                         value: "{bpm}",
@@ -2452,6 +2470,8 @@ fn NewForm(
                 }
                 if kind == Kind::Presets {
                     input {
+                        onfocus: move |_| field_keys.focus(),
+                        onblur: move |_| field_keys.blur(),
                         style: "{input_style} flex: 3 1 0;",
                         placeholder: "/path/to/capture.nam",
                         value: "{path}",
