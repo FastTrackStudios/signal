@@ -15,6 +15,8 @@
 
 mod browser;
 mod captures;
+/// The layout's pieces as a host's dock panels.
+pub mod dock_panels;
 pub(crate) mod drums;
 mod edit;
 mod fx_row;

@@ -82,6 +82,8 @@ pub use signal_rig_shell::WindowButtons;
 pub use signal_widgets::PresetTree;
 pub use signal_widgets::{Knob, KnobSize, Picker, PickerSize};
 pub use state::{RigViewState, use_rig_state};
+/// The rig's pieces as dock panels, and what they share.
+pub use tablet::dock_panels as panels;
 pub use tablet::drums::DrumTablet;
 pub use tablet::{BarAccountItem, GigScreen, GigSlots};
 pub use wire_param::{EditSink, WireParam, use_wire_params};

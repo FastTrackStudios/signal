@@ -194,6 +194,10 @@ pub fn TouchSwitches(
     /// screen's dock).
     #[props(default)]
     size: SwitchSize,
+    /// Fill the box it is given (a dock panel): the two rows share its
+    /// height instead of keeping their own.
+    #[props(default)]
+    fill: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let stacks = perf.stacks.clone();
@@ -237,14 +241,23 @@ pub fn TouchSwitches(
     } else {
         (1.0, hold_h + main_h + 2.0, "#000", "1px solid #000")
     };
+    let (outer, rows, grid_h) = if fill {
+        (
+            "flex: 1; min-width: 0; min-height: 0;",
+            "minmax(0, 1fr) minmax(0, 2fr)".to_string(),
+            "auto; flex: 1; min-height: 0".to_string(),
+        )
+    } else {
+        ("", format!("{hold_h}px {main_h}px"), format!("{grid_h}px"))
+    };
     rsx! {
-        div { style: "display: flex; flex-direction: column; background: {pick(gig, TRANSPARENT, DOCK_BG)};",
+        div { style: "{outer} display: flex; flex-direction: column; background: {pick(gig, TRANSPARENT, DOCK_BG)};",
             // One grid, two rows of five, the same columns: the hold layer
             // slim above, the switches under the feet tall below. Flush: a
             // hairline of the ground between.
             // As tall as the FX row it swaps with (a landscape iPhone's
             // room): the grid above never moves.
-            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {hold_h}px {main_h}px; gap: {gap}px; background: {ground}; border-top: {top}; box-sizing: border-box; height: {grid_h}px;",
+            div { style: "display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: {rows}; gap: {gap}px; background: {ground}; border-top: {top}; box-sizing: border-box; height: {grid_h};",
                 if let Some((i, st)) = { let i = if five_is_stack { 5 } else { 4 }; stacks.get(i).cloned().map(|s| (i, s)) } {
                     StackTile { no: 6, stack: st, index: i, compact: !gig, gig }
                 } else {
