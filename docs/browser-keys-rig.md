@@ -763,7 +763,7 @@ Two halves, and both are needed:
    a `RefCell` in `KeysWorklet`), which is the real work.
 
 Risks to weigh before starting: nightly + `build-std` for the worklet crate
-(the rest of the tree stays stable 1.94); `require-corp` breaks any
+(the rest of the tree stays stable 1.99.1); `require-corp` breaks any
 cross-origin asset (we have none); AudioWorklet cannot spawn workers itself,
 so threads are page-spawned and handed in; and wasm32 still caps the SHARED
 memory at 4 GB — fine, because streaming keeps residency small.
