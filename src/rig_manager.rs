@@ -191,7 +191,7 @@ impl RigManager {
         if user.is_dir() {
             return user;
         }
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/library")
+        utils::paths::checkout_path("features/sampler/examples/library")
     }
 
     /// Build the library and resolve the chosen profile into a playable

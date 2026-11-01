@@ -17,6 +17,8 @@ pipewire = []
 vox = ["architect/vox", "dep:vox", "dep:vox-types"]
 
 [dependencies]
+# `utils::paths::checkout_root`: the checkout found at run time, not baked in.
+utils.workspace = true
 # BS.1770 loudness (crate::loudness re-exports it).
 dsp-core = { workspace = true, features = ["audio"] }
 architect = { workspace = true }
