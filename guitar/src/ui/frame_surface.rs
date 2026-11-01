@@ -34,9 +34,8 @@ pub(crate) fn design_dir() -> std::path::PathBuf {
     if let Some(dir) = std::env::var_os("SIGNAL_FRAME_DIR") {
         return dir.into();
     }
-    // The faces `just faces` generates, in this repo (features/rigs/guitar/ui →
-    // features/ui/plugin-faces/generated).
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/plugin-faces/generated")
+    // The faces `just faces` generates, in the checkout this runs from.
+    utils::paths::checkout_path("features/ui/plugin-faces/generated")
 }
 
 /// One frame face, `name` (its path under the faces directory without

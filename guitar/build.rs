@@ -5,11 +5,37 @@
 //! `default-config/ship-library.sh` puts there ships, with no list to keep.
 //! The `models/` directories are links into the rig-models repo (`just
 //! assets`); a release build refuses to run without them.
+//!
+//! The table names each file by its path relative to `OUT_DIR` (an
+//! `include_bytes!` in an `include!`d file resolves against that file), so
+//! it holds no absolute path: with the target dir in the checkout it is the
+//! same text in every worktree, and the compiler cache (kache, which hashes
+//! it) serves one worktree's `guitar` — and everything above it — to the
+//! next.
 
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
-fn files(dir: &Path, exts: &[&str]) -> Vec<(String, String)> {
+/// `to` relative to the directory `from` (both canonical), or `to` itself
+/// when they share no root (another drive).
+fn relative(from: &Path, to: &Path) -> PathBuf {
+    let from: Vec<Component> = from.components().collect();
+    let to_parts: Vec<Component> = to.components().collect();
+    let common = from
+        .iter()
+        .zip(&to_parts)
+        .take_while(|(a, b)| a == b)
+        .count();
+    if common == 0 {
+        return to.to_path_buf();
+    }
+    let ups = std::iter::repeat_n(Component::ParentDir, from.len().saturating_sub(common));
+    ups.chain(to_parts.into_iter().skip(common)).collect()
+}
+
+/// `(file name, path relative to out_dir)` of every file in `dir` with one
+/// of `exts`, by name.
+fn files(dir: &Path, out_dir: &Path, exts: &[&str]) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = std::fs::read_dir(dir)
         .map(|rd| {
             rd.filter_map(Result::ok)
@@ -27,7 +53,7 @@ fn files(dir: &Path, exts: &[&str]) -> Vec<(String, String)> {
                     let real = std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone());
                     (
                         p.file_name().unwrap().to_string_lossy().into_owned(),
-                        real.to_string_lossy().into_owned(),
+                        relative(out_dir, &real).to_string_lossy().into_owned(),
                     )
                 })
                 .collect()
@@ -39,7 +65,7 @@ fn files(dir: &Path, exts: &[&str]) -> Vec<(String, String)> {
 
 /// One shipped library's tables, named `<prefix>_MODELS`, `_FROZEN`,
 /// `_PROFILES` (empty when the directory is not there).
-fn tables(src: &mut String, root: &Path, prefix: &str) {
+fn tables(src: &mut String, root: &Path, out_dir: &Path, prefix: &str) {
     println!("cargo:rerun-if-changed={}", root.display());
     // Only the ones that exist: cargo counts a missing rerun-if-changed path
     // as changed, so the bass's absent `frozen/` re-ran this script — and
@@ -61,22 +87,26 @@ fn tables(src: &mut String, root: &Path, prefix: &str) {
     bytes(
         src,
         &format!("{prefix}_MODELS"),
-        &files(&root.join("models"), &["nam", "wav"]),
+        &files(&root.join("models"), out_dir, &["nam", "wav"]),
     );
     bytes(
         src,
         &format!("{prefix}_FROZEN"),
-        &files(&root.join("frozen"), &["nam"]),
+        &files(&root.join("frozen"), out_dir, &["nam"]),
     );
     writeln!(src, "const {prefix}_PROFILES: &[(&str, &str)] = &[").unwrap();
-    for (file, path) in files(&root.join("profiles"), &["styx"]) {
+    for (file, path) in files(&root.join("profiles"), out_dir, &["styx"]) {
         writeln!(src, "    ({file:?}, include_str!({path:?})),").unwrap();
     }
     writeln!(src, "];").unwrap();
 }
 
 fn main() {
-    let here = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Read at run time, not `env!`: that would put this checkout's path in
+    // the build script's own cache key.
+    let here = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let out_dir = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    let out_real = std::fs::canonicalize(&out_dir).unwrap_or_else(|_| out_dir.clone());
     // The captures live in the rig-models repo, linked in by `just assets`.
     // A debug build without them is fine (a rig with no captures, tests
     // that need them fail); a release would ship that rig to people.
@@ -89,15 +119,19 @@ fn main() {
     if ships_a_rig && std::env::var("PROFILE").as_deref() == Ok("release") {
         for dir in ["default-config/models", "default-config-bass/models"] {
             assert!(
-                !files(&here.join(dir), &["nam", "wav"]).is_empty(),
+                !files(&here.join(dir), &out_real, &["nam", "wav"]).is_empty(),
                 "{dir} is empty: run `just assets` before a release build — the rig's captures are in the rig-models repo",
             );
         }
     }
     let mut src = String::new();
     // The guitar's (`DEFAULT_*`, as they always were) and the bass's.
-    tables(&mut src, &here.join("default-config"), "DEFAULT");
-    tables(&mut src, &here.join("default-config-bass"), "BASS");
-    let out = Path::new(&std::env::var("OUT_DIR").unwrap()).join("default_files.rs");
-    std::fs::write(out, src).unwrap();
+    tables(&mut src, &here.join("default-config"), &out_real, "DEFAULT");
+    tables(
+        &mut src,
+        &here.join("default-config-bass"),
+        &out_real,
+        "BASS",
+    );
+    std::fs::write(out_dir.join("default_files.rs"), src).unwrap();
 }

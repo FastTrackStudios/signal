@@ -19,6 +19,8 @@ vox = ["architect/vox", "dep:vox"]
 mcp = ["dep:architect-mcp"]
 
 [dependencies]
+# `utils::paths::checkout_root`: the checkout found at run time, not baked in.
+utils.workspace = true
 anyrender = { workspace = true, optional = true }
 # The text fields' hold on the keyboard (app_shell::ui::use_text_focus),
 # so global hotkeys stand aside while the library is typed into.
