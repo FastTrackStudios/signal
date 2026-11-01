@@ -211,9 +211,12 @@ pub fn mint_token() -> String {
 pub async fn serve_mcp(list: ActionList, port: u16, token: String) -> io::Result<Serving> {
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).await?;
     let addr = listener.local_addr()?;
-    let server =
-        architect_mcp::Server::new("FastTrackStudio Signal", env!("CARGO_PKG_VERSION"), list)
-            .with_instructions(INSTRUCTIONS);
+    let server = architect_mcp::Server::new(
+        "FastTrackStudio Signal",
+        app_shell::version::current(),
+        list,
+    )
+    .with_instructions(INSTRUCTIONS);
     let task = tokio::spawn(architect_mcp::http::serve(
         listener,
         server,

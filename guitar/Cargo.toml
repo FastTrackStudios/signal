@@ -16,14 +16,15 @@ ui = ["dep:anyrender", "app-shell/ui", "dep:base64", "dsp/comp", "dsp/comp-ui", 
 vox = ["architect/vox", "dep:vox"]
 # Serve Signal's Action List over MCP (signal_commands::serve_mcp): only
 # the engine binary turns it on, so the `ui` build never reaches axum.
-mcp = ["dep:architect-mcp"]
+mcp = ["dep:architect-mcp", "dep:app-shell"]
 
 [dependencies]
 # `utils::paths::checkout_root`: the checkout found at run time, not baked in.
 utils.workspace = true
 anyrender = { workspace = true, optional = true }
 # The text fields' hold on the keyboard (app_shell::ui::use_text_focus),
-# so global hotkeys stand aside while the library is typed into.
+# so global hotkeys stand aside while the library is typed into; and (mcp)
+# the running app's version for the MCP server (app_shell::version).
 app-shell = { workspace = true, optional = true }
 architect = { workspace = true, features = ["rig", "vox"] }
 base64 = { workspace = true, optional = true }
