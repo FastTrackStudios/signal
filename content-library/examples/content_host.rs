@@ -40,7 +40,8 @@ async fn main() {
     }
     let host = ContentLibraryBackend::with_roots(roots);
     tracing::info!(%addr, "content host: ws://{addr}/vox");
-    architect::host::EngineHost::new(host.router(), addr)
+    // Ungated as before: no PermissionsGate on this engine yet (FastTrackStudios/studio#362).
+    architect::host::EngineHost::ungated(host.router(), addr)
         .serve()
         .await;
 }

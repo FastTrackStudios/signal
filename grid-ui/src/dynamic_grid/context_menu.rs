@@ -211,7 +211,7 @@ fn render_block_menu(
                     onkeydown: {
                         let slot = slot.clone();
                         move |evt: KeyboardEvent| {
-                            if evt.key() == Key::Enter {
+                            if evt.key() == Key::Named(NamedKey::Enter) {
                                 let name = name_for_keydown.clone();
                                 if !name.is_empty() {
                                     match active_action {
@@ -229,7 +229,7 @@ fn render_block_menu(
                                     }
                                     on_close.call(());
                                 }
-                            } else if evt.key() == Key::Escape {
+                            } else if evt.key() == Key::Named(NamedKey::Escape) {
                                 name_action.set(None);
                                 save_name.set(String::new());
                             }
@@ -356,7 +356,7 @@ fn render_module_menu(
                     onkeydown: {
                         let slots = module_slots.clone();
                         move |evt: KeyboardEvent| {
-                            if evt.key() == Key::Enter {
+                            if evt.key() == Key::Named(NamedKey::Enter) {
                                 let name = name_for_keydown.clone();
                                 if !name.is_empty() {
                                     match active_action {
@@ -374,7 +374,7 @@ fn render_module_menu(
                                     }
                                     on_close.call(());
                                 }
-                            } else if evt.key() == Key::Escape {
+                            } else if evt.key() == Key::Named(NamedKey::Escape) {
                                 name_action.set(None);
                                 save_name.set(String::new());
                             }

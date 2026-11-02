@@ -11,7 +11,7 @@
 
 use std::time::Duration;
 
-use dioxus::dioxus_core::Task;
+use dioxus::core::Task;
 use dioxus::prelude::*;
 
 use crate::PopupHost;

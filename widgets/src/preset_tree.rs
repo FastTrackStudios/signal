@@ -248,8 +248,8 @@ fn SavePreset(node: String, name: String, on_save: EventHandler<(String, String)
                 onkeydown: {
                     let node = node.clone();
                     move |e: KeyboardEvent| match e.key() {
-                        Key::Enter => save(on_save, naming, draft, node.clone()),
-                        Key::Escape => {
+                        Key::Named(NamedKey::Enter) => save(on_save, naming, draft, node.clone()),
+                        Key::Named(NamedKey::Escape) => {
                             naming.set(false);
                             draft.set(String::new());
                         }

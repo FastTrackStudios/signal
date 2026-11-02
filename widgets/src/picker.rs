@@ -117,7 +117,7 @@ pub fn Picker(
             tabindex: "-1",
             onfocusout: move |_| open.set(false),
             onkeydown: move |e: KeyboardEvent| {
-                if e.key() == Key::Escape {
+                if e.key() == Key::Named(NamedKey::Escape) {
                     open.set(false);
                 }
             },

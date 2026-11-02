@@ -218,8 +218,8 @@ pub fn NamePrompt(
                     onkeydown: move |e: KeyboardEvent| {
                         e.stop_propagation();
                         match e.key() {
-                            Key::Enter => commit(),
-                            Key::Escape => on_done.call(None),
+                            Key::Named(NamedKey::Enter) => commit(),
+                            Key::Named(NamedKey::Escape) => on_done.call(None),
                             _ => {}
                         }
                     },
@@ -595,7 +595,7 @@ pub fn MenuPanel(
         div { style: "{panel}",
             onclick: move |e: MouseEvent| e.stop_propagation(),
             onkeydown: move |e: KeyboardEvent| {
-                if e.key() == Key::Escape {
+                if e.key() == Key::Named(NamedKey::Escape) {
                     on_close.call(());
                 }
             },

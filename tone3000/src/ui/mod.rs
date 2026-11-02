@@ -276,7 +276,7 @@ pub fn ToneBrowser(on_loaded: Callback<ToneImport>) -> Element {
                         value: "{query_text}",
                         oninput: move |e| query_text.set(e.value()),
                         onkeydown: move |e| {
-                            if e.key() == Key::Enter {
+                            if e.key() == Key::Named(NamedKey::Enter) {
                                 let text = query_text.read().clone();
                                 view.set(if text.trim().is_empty() {
                                     View::Shelf(ToneShelf::Trending)

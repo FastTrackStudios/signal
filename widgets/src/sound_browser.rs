@@ -229,9 +229,9 @@ impl Ui {
     /// The search field's keys.
     fn key(mut self, h: Handlers, model: &Model, e: &KeyboardEvent) -> bool {
         match e.key() {
-            Key::ArrowDown => self.arrow(h, model, 1),
-            Key::ArrowUp => self.arrow(h, model, -1),
-            Key::Enter => {
+            Key::Named(NamedKey::ArrowDown) => self.arrow(h, model, 1),
+            Key::Named(NamedKey::ArrowUp) => self.arrow(h, model, -1),
+            Key::Named(NamedKey::Enter) => {
                 if *self.auditioning.peek() {
                     self.tick += 1;
                     let cursor = self.cursor.peek().clone();
@@ -245,7 +245,7 @@ impl Ui {
                     self.load(h, first.id.clone());
                 }
             }
-            Key::Escape => {
+            Key::Named(NamedKey::Escape) => {
                 if *self.auditioning.peek() {
                     self.tick += 1;
                     self.end(h, false);
@@ -461,7 +461,7 @@ fn Body(
                         if ui.key(h, &m, &e) {
                             e.prevent_default();
                             e.stop_propagation();
-                        } else if e.key() == Key::Escape
+                        } else if e.key() == Key::Named(NamedKey::Escape)
                             && let Some(close) = on_close
                         {
                             close.call(());

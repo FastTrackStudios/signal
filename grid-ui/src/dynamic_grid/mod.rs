@@ -15,8 +15,8 @@ pub mod minimap;
 mod module_bg;
 pub(crate) mod types;
 
+use dioxus::html::geometry::WheelDelta;
 use dioxus::html::input_data::MouseButton;
-use dioxus::prelude::dioxus_elements::geometry::WheelDelta;
 use dioxus::prelude::*;
 use std::rc::Rc;
 use uuid::Uuid;
