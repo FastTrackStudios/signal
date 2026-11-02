@@ -176,7 +176,7 @@ macro_rules! call {
         if let Some($r) = $rig.clone() {
             // Forever, not the component's: a panel that closes itself
             // would take the call with it.
-            let _ = dioxus_core::spawn_forever(async move {
+            let _ = dioxus_vdom::spawn_forever(async move {
                 let _ = $body.await;
             });
         }

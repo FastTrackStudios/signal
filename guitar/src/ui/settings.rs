@@ -207,7 +207,7 @@ pub fn AudioSettingsModal(
     rsx! {
         div {
             style: "flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; background: #09090b; color: #e4e4e7;",
-            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Escape { on_close.call(()) },
+            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Named(NamedKey::Escape) { on_close.call(()) },
             // Header
             div { style: "display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #27272a; flex-shrink: 0;",
                 span { style: "font-size: 15px; font-weight: 700;", "Audio Settings" }

@@ -274,13 +274,13 @@ pub fn PickList(
                     onkeydown: move |e: KeyboardEvent| {
                         e.stop_propagation();
                         match e.key() {
-                            Key::Enter => {
+                            Key::Named(NamedKey::Enter) => {
                                 if let Some(i) = first {
                                     on_pick.call(i);
                                     on_close.call(());
                                 }
                             }
-                            Key::Escape => on_close.call(()),
+                            Key::Named(NamedKey::Escape) => on_close.call(()),
                             _ => {}
                         }
                     },

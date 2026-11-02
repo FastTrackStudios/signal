@@ -641,8 +641,8 @@ fn Field(
             },
             oninput: move |e| on_input.call(e.value()),
             onkeydown: move |e: KeyboardEvent| match e.key() {
-                Key::Enter => on_enter.call(()),
-                Key::Escape => on_escape.call(()),
+                Key::Named(NamedKey::Enter) => on_enter.call(()),
+                Key::Named(NamedKey::Escape) => on_escape.call(()),
                 _ => {}
             },
         }

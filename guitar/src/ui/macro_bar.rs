@@ -1422,9 +1422,9 @@ fn TuneKnob(
                 let h = active().or(hover());
                 let step = if e.modifiers().contains(Modifiers::SHIFT) { 0.002 } else { 0.01 };
                 let nudge = match e.key() {
-                    Key::ArrowUp | Key::ArrowRight => step,
-                    Key::ArrowDown | Key::ArrowLeft => -step,
-                    Key::Backspace | Key::Delete => {
+                    Key::Named(NamedKey::ArrowUp) | Key::Named(NamedKey::ArrowRight) => step,
+                    Key::Named(NamedKey::ArrowDown) | Key::Named(NamedKey::ArrowLeft) => -step,
+                    Key::Named(NamedKey::Backspace) | Key::Named(NamedKey::Delete) => {
                         e.prevent_default();
                         match h {
                             Some(h) => w_key.tune_op(&p_key, &t_key, reset_of(h), ""),

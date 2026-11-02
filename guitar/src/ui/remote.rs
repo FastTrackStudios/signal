@@ -402,11 +402,11 @@ pub fn GuitarRigRemote() -> Element {
                     // Normalize the pressed combo to "ctrl+shift+x" form.
                     let key_name = match e.key() {
                         Key::Character(c) => if c == " " { "space".to_string() } else { c.to_lowercase() },
-                        Key::ArrowLeft => "arrowleft".into(),
-                        Key::ArrowRight => "arrowright".into(),
-                        Key::ArrowUp => "arrowup".into(),
-                        Key::ArrowDown => "arrowdown".into(),
-                        Key::Enter | Key::Escape | Key::Tab => return,
+                        Key::Named(NamedKey::ArrowLeft) => "arrowleft".into(),
+                        Key::Named(NamedKey::ArrowRight) => "arrowright".into(),
+                        Key::Named(NamedKey::ArrowUp) => "arrowup".into(),
+                        Key::Named(NamedKey::ArrowDown) => "arrowdown".into(),
+                        Key::Named(NamedKey::Enter) | Key::Named(NamedKey::Escape) | Key::Named(NamedKey::Tab) => return,
                         k => format!("{k:?}").to_lowercase(),
                     };
                     let mut combo = String::new();

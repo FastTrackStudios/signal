@@ -633,21 +633,21 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                     let list = list.clone();
                     let model = model.clone();
                     move |e: KeyboardEvent| match e.key() {
-                        Key::Escape => {
+                        Key::Named(NamedKey::Escape) => {
                             e.prevent_default();
                             if creating() { creating.set(false) } else { close() }
                         }
-                        Key::ArrowDown | Key::ArrowUp if !list.is_empty() => {
+                        Key::Named(NamedKey::ArrowDown) | Key::Named(NamedKey::ArrowUp) if !list.is_empty() => {
                             e.prevent_default();
                             let at = cursor.unwrap_or(0);
-                            let next = if e.key() == Key::ArrowDown {
+                            let next = if e.key() == Key::Named(NamedKey::ArrowDown) {
                                 (at + 1).min(list.len() - 1)
                             } else {
                                 at.saturating_sub(1)
                             };
                             focus.set(Some((list[next].kind, list[next].name.clone())));
                         }
-                        Key::Enter => {
+                        Key::Named(NamedKey::Enter) => {
                             if let Some(row) = cursor.and_then(|c| list.get(c)) {
                                 e.prevent_default();
                                 if activate(&rig, row, &model) {
@@ -715,7 +715,7 @@ pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Ele
                             // Backspace past the start of the text takes the
                             // tag off, as in a token field.
                             onkeydown: move |e: KeyboardEvent| {
-                                if e.key() == Key::Backspace
+                                if e.key() == Key::Named(NamedKey::Backspace)
                                     && query.peek().is_empty()
                                     && kind != Kind::All
                                 {
@@ -1180,7 +1180,7 @@ fn NameLine(name: String, on_commit: Option<Callback<String>>) -> Element {
                     // not the picker's "load and close".
                     e.stop_propagation();
                     match e.key() {
-                        Key::Enter => {
+                        Key::Named(NamedKey::Enter) => {
                             let new = text.peek().trim().to_string();
                             if !new.is_empty() && new != original {
                                 if let Some(cb) = on_commit {
@@ -1189,7 +1189,7 @@ fn NameLine(name: String, on_commit: Option<Callback<String>>) -> Element {
                             }
                             editing.set(false);
                         }
-                        Key::Escape => {
+                        Key::Named(NamedKey::Escape) => {
                             text.set(original.clone());
                             editing.set(false);
                         }
@@ -1455,7 +1455,7 @@ fn SetlistDetail(
                     oninput: move |e| filter.set(e.value()),
                     onkeydown: move |e: KeyboardEvent| {
                         e.stop_propagation();
-                        if e.key() == Key::Escape {
+                        if e.key() == Key::Named(NamedKey::Escape) {
                             adding.set(false);
                         }
                     },
@@ -1541,7 +1541,7 @@ fn SongDetail(
                     oninput: move |e| value.set(e.value()),
                     onkeydown: move |e: KeyboardEvent| {
                         e.stop_propagation();
-                        if e.key() == Key::Enter {
+                        if e.key() == Key::Named(NamedKey::Enter) {
                             save();
                         }
                     },
@@ -2423,8 +2423,8 @@ fn NewForm(
     let keys = use_callback(move |e: KeyboardEvent| {
         e.stop_propagation();
         match e.key() {
-            Key::Enter => create.call(()),
-            Key::Escape => on_done.call(None),
+            Key::Named(NamedKey::Enter) => create.call(()),
+            Key::Named(NamedKey::Escape) => on_done.call(None),
             _ => {}
         }
     });

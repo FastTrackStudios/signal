@@ -346,9 +346,9 @@ fn MenuPanel(
                         style: "min-height: 48px; padding: 0 12px; border: 1px solid {RULE_STRONG}; border-radius: {R}; background: #0a0a0d; color: {INK}; font-size: 17px; font-family: {FONT}; box-sizing: border-box;",
                         oninput: move |e| text.set(e.value()),
                         onkeydown: move |e: KeyboardEvent| {
-                            if e.key() == Key::Enter && ok {
+                            if e.key() == Key::Named(NamedKey::Enter) && ok {
                                 commit();
-                            } else if e.key() == Key::Escape {
+                            } else if e.key() == Key::Named(NamedKey::Escape) {
                                 on_close.call(());
                             }
                         },
@@ -375,7 +375,7 @@ fn MenuPanel(
     }
     rsx! {
         div { role: "menu", style: "{panel}", tabindex: "-1", onmounted: place,
-            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Escape { on_close.call(()) },
+            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Named(NamedKey::Escape) { on_close.call(()) },
             for (i, it) in items.iter().cloned().enumerate() {
                 match it {
                     Item::Sep => rsx! { div { key: "{i}", style: "height: 1px; margin: 4px 6px; background: {RULE};" } },

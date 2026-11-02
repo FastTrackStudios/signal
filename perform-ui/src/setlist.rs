@@ -47,7 +47,7 @@ macro_rules! rig_call {
         if let Some($r) = $rig.clone() {
             // Forever, not the component's: a panel that closes itself
             // would take the call with it.
-            let _ = dioxus_core::spawn_forever(async move {
+            let _ = dioxus_vdom::spawn_forever(async move {
                 let _ = $body.await;
             });
         }
@@ -154,7 +154,7 @@ pub fn sections_of(parts: &[PerfPart]) -> Vec<Section> {
 /// one `move_part` at a time, in order — what moving a section is.
 pub fn reorder_parts(rig: Option<RigPerformClient>, want: Vec<usize>) {
     let Some(r) = rig else { return };
-    let _ = dioxus_core::spawn_forever(async move {
+    let _ = dioxus_vdom::spawn_forever(async move {
         let mut now: Vec<usize> = (0..want.len()).collect();
         for (pos, &part) in want.iter().enumerate() {
             let Some(at) = now.iter().position(|&p| p == part) else {
@@ -511,7 +511,7 @@ pub fn give_part(
 ) {
     let Some(r) = rig else { return };
     let (name, had) = (part.name.clone(), !part.profile.is_empty());
-    let _ = dioxus_core::spawn_forever(async move {
+    let _ = dioxus_vdom::spawn_forever(async move {
         let _ = r.set_part_patch(name.clone(), patch).await;
         match borrowed {
             Some(p) => {
@@ -528,7 +528,7 @@ pub fn give_part(
 /// Play `patch` by name: the rig's patch list says its index.
 pub fn play_patch(rig: Option<RigPerformClient>, patch: String) {
     let Some(r) = rig else { return };
-    let _ = dioxus_core::spawn_forever(async move {
+    let _ = dioxus_vdom::spawn_forever(async move {
         if let Ok(list) = r.patches().await
             && let Some(i) = list
                 .iter()
@@ -1596,7 +1596,7 @@ fn Sections(
 /// song that is not up).
 fn reorder_song_parts(rig: Option<RigPerformClient>, song: String, want: Vec<usize>) {
     let Some(r) = rig else { return };
-    let _ = dioxus_core::spawn_forever(async move {
+    let _ = dioxus_vdom::spawn_forever(async move {
         let mut now: Vec<usize> = (0..want.len()).collect();
         for (pos, &part) in want.iter().enumerate() {
             let Some(at) = now.iter().position(|&p| p == part) else {
@@ -1621,7 +1621,7 @@ fn reorder_song_parts(rig: Option<RigPerformClient>, song: String, want: Vec<usi
 /// Play song `song` of the set from part `part`.
 fn go_to(rig: Option<RigPerformClient>, song: usize, part: usize) {
     let Some(r) = rig else { return };
-    let _ = dioxus_core::spawn_forever(async move {
+    let _ = dioxus_vdom::spawn_forever(async move {
         let _ = r.select_song(song as u32).await;
         let _ = r.select_part(part as u32).await;
     });

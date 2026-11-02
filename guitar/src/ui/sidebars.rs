@@ -265,7 +265,7 @@ pub fn LeftSidebar(
                         autofocus: true,
                         oninput: move |e| new_name.set(e.value()),
                         onkeydown: move |e: KeyboardEvent| {
-                            if e.key() == Key::Escape {
+                            if e.key() == Key::Named(NamedKey::Escape) {
                                 adding_patch.set(false);
                             }
                         },

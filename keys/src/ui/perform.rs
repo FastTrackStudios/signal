@@ -239,7 +239,7 @@ fn StackMenu(index: u32, name: String, learn: SwitchLearn) -> Element {
                         onkeydown: {
                             let text = text.clone();
                             move |e: KeyboardEvent| {
-                                if e.key() == Key::Enter {
+                                if e.key() == Key::Named(NamedKey::Enter) {
                                     rename(text.clone());
                                 }
                             }

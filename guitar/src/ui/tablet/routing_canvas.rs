@@ -640,7 +640,7 @@ mod native {
             }
         }
         let update = {
-            let schedule = dioxus_core::schedule_update();
+            let schedule = dioxus_vdom::schedule_update();
             std::sync::Arc::new(move || schedule()) as std::sync::Arc<dyn Fn() + Send + Sync>
         };
         let attr = use_hook(|| {
@@ -1549,7 +1549,7 @@ mod native {
             r.x0 + (r.width() - iw * k) / 2.0,
             r.y0 + (r.height() - ih * k) / 2.0,
         );
-        scene.push_clip_layer(t, &RoundedRect::from_rect(r, 9.0));
+        scene.push_clip_layer(Fill::NonZero, t, &RoundedRect::from_rect(r, 9.0));
         scene.draw_image(
             img.into(),
             t * Affine::translate((dx, dy)) * Affine::scale(k),
@@ -1683,7 +1683,8 @@ mod native {
                     r.font(),
                     r.font_size(),
                     false,
-                    r.normalized_coords(),
+                    // parley 0.12 hands out `NormalizedCoord`s, anyrender takes their bits.
+                    bytemuck::cast_slice(r.normalized_coords()),
                     kurbo::Vec2::ZERO,
                     Fill::NonZero,
                     &anyrender::Paint::from(colour),
@@ -1712,7 +1713,8 @@ mod native {
                         r.font(),
                         r.font_size(),
                         false,
-                        r.normalized_coords(),
+                        // parley 0.12 hands out `NormalizedCoord`s, anyrender takes their bits.
+                        bytemuck::cast_slice(r.normalized_coords()),
                         kurbo::Vec2::ZERO,
                         Fill::NonZero,
                         &anyrender::Paint::from(colour),

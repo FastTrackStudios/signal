@@ -555,7 +555,7 @@ fn StartAudio() -> Element {
                 style: "height: {HIT}px; padding: 0 14px; border-radius: 999px; border: 1.5px solid {MODIFIED}; background: transparent; color: {MODIFIED}; font-family: {FONT}; font-size: 13px; font-weight: 750; white-space: nowrap; cursor: pointer;",
                 onclick: move |_| {
                     if let Some(r) = rig.clone() {
-                        let _ = dioxus_core::spawn_forever(async move { let _ = r.start().await; });
+                        let _ = dioxus_vdom::spawn_forever(async move { let _ = r.start().await; });
                     }
                 },
                 "Start audio"
@@ -961,7 +961,7 @@ fn DrumSetup(tab: Signal<SetupTab>, status: DrumStatus, live: bool) -> Element {
                                     style: "{row(running)}",
                                     onclick: move |_| {
                                         if let Some(r) = rig.clone() {
-                                            let _ = dioxus_core::spawn_forever(async move {
+                                            let _ = dioxus_vdom::spawn_forever(async move {
                                                 let _ = if running { r.stop().await } else { r.start().await };
                                             });
                                         }

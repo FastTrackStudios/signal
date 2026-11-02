@@ -271,7 +271,7 @@ pub fn TonesPanel(slot: String) -> Element {
                             placeholder: "Search TONE3000",
                             style: "flex: 1; min-width: 0; height: 100%; border: none; background: transparent; color: {INK}; font-size: 15px; font-family: {FONT};",
                             oninput: move |e| query.set(e.value()),
-                            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Enter { run_search(()) },
+                            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Named(NamedKey::Enter) { run_search(()) },
                         }
                         button { style: "height: {HIT}px; padding: 0 10px; border: none; border-radius: 6px; background: rgba(255,255,255,0.1); color: {INK}; font-size: 13px; font-weight: 650; font-family: {FONT}; cursor: pointer;", onclick: move |_| run_search(()), "Search" }
                     }

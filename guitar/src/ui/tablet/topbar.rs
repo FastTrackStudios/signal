@@ -282,7 +282,7 @@ fn ModeTabs(mode: u32) -> Element {
             aria: "Footswitches play the %",
             on_pick: move |m: u32| {
                 if let Some(r) = rig.clone() {
-                    let _ = dioxus_core::spawn_forever(async move { let _ = r.set_perform_mode(m).await; });
+                    let _ = dioxus_vdom::spawn_forever(async move { let _ = r.set_perform_mode(m).await; });
                 }
             },
         }
@@ -310,7 +310,7 @@ fn PanicButton(busy: Signal<bool>) -> Element {
                 if busy() { return; }
                 busy.set(true);
                 if let Some(r) = rig.clone() {
-                    let _ = dioxus_core::spawn_forever(async move { let _ = r.panic().await; });
+                    let _ = dioxus_vdom::spawn_forever(async move { let _ = r.panic().await; });
                 }
                 spawn(async move {
                     // 1.2 s, the arrow turning once every 0.8 s.
@@ -456,7 +456,7 @@ fn MuteButton(house: bool, phones: bool) -> Element {
 
 fn set_mutes(rig: Option<RigClient>, house: bool, phones: bool) {
     if let Some(r) = rig {
-        let _ = dioxus_core::spawn_forever(async move {
+        let _ = dioxus_vdom::spawn_forever(async move {
             let _ = r.set_mutes(house, phones).await;
         });
     }
@@ -534,7 +534,7 @@ fn AudioBadge(failed: bool) -> Element {
                 onclick: move |_| {
                     starting.set(true);
                     if let Some(r) = rig.clone() {
-                        let _ = dioxus_core::spawn_forever(async move {
+                        let _ = dioxus_vdom::spawn_forever(async move {
                             let _ = if failed { r.restart().await } else { r.start().await };
                         });
                     }

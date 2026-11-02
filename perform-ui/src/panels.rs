@@ -527,7 +527,7 @@ fn DetailsBody(
                     let x = m();
                     let name = set_name(&x);
                     if let Some(r) = rig.clone() {
-                        let _ = dioxus_core::spawn_forever(async move {
+                        let _ = dioxus_vdom::spawn_forever(async move {
                             let at = match mode {
                                 DetailsMode::Edit => {
                                     let _ = r.rename_setlist(set_index as u32, name).await;
@@ -707,7 +707,7 @@ fn AddBody(perf: PerformState, lib: LibraryModel) -> Element {
                                     move |()| {
                                         let (name, k, b) = (typed.clone(), key(), bpm());
                                         if let Some(r) = rig.clone() {
-                                            let _ = dioxus_core::spawn_forever(async move {
+                                            let _ = dioxus_vdom::spawn_forever(async move {
                                                 let _ = r.add_song(name.clone(), k, b).await;
                                                 let _ = r.add_setlist_entry(set, name).await;
                                             });

@@ -274,7 +274,7 @@ impl Setup {
     fn save(self) {
         let model = self.model.peek().clone();
         if let Some(r) = self.rig.peek().clone() {
-            let _ = dioxus_core::spawn_forever(async move {
+            let _ = dioxus_vdom::spawn_forever(async move {
                 let _ = r.save_setup(model).await;
             });
         }
@@ -1741,7 +1741,7 @@ fn TextField(value: String, placeholder: &'static str, on_commit: EventHandler<S
             placeholder,
             style: "width: 100%; min-width: 0; height: 40px; flex-shrink: 0; padding: 0 12px; border-radius: {R}; border: 1px solid {RULE_STRONG}; background: transparent; color: {INK}; font-size: 15px; font-family: {FONT}; box-sizing: border-box;",
             oninput: move |e| draft.set(e.value()),
-            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Enter { commit() },
+            onkeydown: move |e: KeyboardEvent| if e.key() == Key::Named(NamedKey::Enter) { commit() },
             onblur: move |_| commit(),
         }
     }

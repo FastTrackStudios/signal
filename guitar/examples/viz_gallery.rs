@@ -65,7 +65,7 @@ fn Gallery() -> Element {
     let mut now = use_signal(|| 0.0_f32);
     use_hook(|| {
         let start = std::time::Instant::now();
-        let updater = dioxus_core::schedule_update();
+        let updater = dioxus_vdom::schedule_update();
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(33));

@@ -244,7 +244,7 @@ mod native {
         // something new to draw or is moving, and hands edits back through
         // `update`. All this loop does is notice a regenerated design; the
         // reloaded face is then new to draw.
-        let update = use_hook(dioxus_core::schedule_update);
+        let update = use_hook(dioxus_vdom::schedule_update);
         use_future({
             let live: Shared = Rc::clone(&live);
             move || {

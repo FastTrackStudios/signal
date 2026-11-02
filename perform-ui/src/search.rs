@@ -78,7 +78,7 @@ pub fn SongSearch(query: Signal<String>) -> Element {
                     style: "flex: 1; min-width: 0; height: 100%; border: none; background: transparent; color: {INK}; font-size: 15px; font-family: {FONT};",
                     oninput: move |e| query.set(e.value()),
                     onkeydown: move |e: KeyboardEvent| {
-                        if e.key() == Key::Escape {
+                        if e.key() == Key::Named(NamedKey::Escape) {
                             query.set(String::new());
                         }
                     },

@@ -156,7 +156,7 @@ fn Card(
                             style: "width: 48px; height: 48px; border-radius: 999px; border: none; display: flex; align-items: center; justify-content: center; background: {pick(playing, INK, LIVE)}; cursor: pointer; flex-shrink: 0;",
                             onclick: move |_| {
                                 let (Some(r), id) = (rig.clone(), id.clone()) else { return };
-                                let _ = dioxus_core::spawn_forever(async move {
+                                let _ = dioxus_vdom::spawn_forever(async move {
                                     if playing {
                                         let _ = r.play_di(0, false).await;
                                     } else if let Some(id) = id {
@@ -208,7 +208,7 @@ fn Card(
                             onclick: move |_| {
                                 let secs = seconds();
                                 if let Some(r) = rig.clone() {
-                                    let _ = dioxus_core::spawn_forever(async move { let _ = r.record_loop(secs).await; });
+                                    let _ = dioxus_vdom::spawn_forever(async move { let _ = r.record_loop(secs).await; });
                                 }
                             },
                             span { style: "width: 10px; height: 10px; border-radius: 5px; background: {pick(recording, \"#fff\", RECORD)};" }
@@ -241,7 +241,7 @@ fn ClipRow(clip: DiClip, on: bool) -> Element {
     let (r_play, r_name, r_gain, r_del) = (rig.clone(), rig.clone(), rig.clone(), rig);
     let save = move |rig: Option<RigClient>, c: DiClip| {
         if let Some(r) = rig {
-            let _ = dioxus_core::spawn_forever(async move {
+            let _ = dioxus_vdom::spawn_forever(async move {
                 let _ = r.edit_di_clip(c).await;
             });
         }
@@ -260,7 +260,7 @@ fn ClipRow(clip: DiClip, on: bool) -> Element {
                     onclick: move |_| {
                         let id = id_play.clone();
                         if let Some(r) = r_play.clone() {
-                            let _ = dioxus_core::spawn_forever(async move {
+                            let _ = dioxus_vdom::spawn_forever(async move {
                                 let _ = if on { r.play_di(0, false).await } else { r.play_di_clip(id).await };
                             });
                         }
@@ -289,7 +289,7 @@ fn ClipRow(clip: DiClip, on: bool) -> Element {
                         onclick: move |_| {
                             let id = id_del.clone();
                             if let Some(r) = r_del.clone() {
-                                let _ = dioxus_core::spawn_forever(async move { let _ = r.delete_di_clip(id).await; });
+                                let _ = dioxus_vdom::spawn_forever(async move { let _ = r.delete_di_clip(id).await; });
                             }
                         },
                         svg { width: "16", height: "16", view_box: "0 0 16 16",

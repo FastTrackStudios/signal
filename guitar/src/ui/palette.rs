@@ -380,7 +380,7 @@ pub fn CommandPalette(
                         let mut run = run.clone();
                         let filtered = filtered.clone();
                         move |e: KeyboardEvent| match e.key() {
-                            Key::Escape => {
+                            Key::Named(NamedKey::Escape) => {
                                 e.prevent_default();
                                 if pending().is_some() {
                                     pending.set(None);
@@ -389,15 +389,15 @@ pub fn CommandPalette(
                                     close();
                                 }
                             }
-                            Key::ArrowDown => {
+                            Key::Named(NamedKey::ArrowDown) => {
                                 e.prevent_default();
                                 cursor.set((sel + 1).min(filtered.len().saturating_sub(1)));
                             }
-                            Key::ArrowUp => {
+                            Key::Named(NamedKey::ArrowUp) => {
                                 e.prevent_default();
                                 cursor.set(sel.saturating_sub(1));
                             }
-                            Key::Enter => {
+                            Key::Named(NamedKey::Enter) => {
                                 e.prevent_default();
                                 if let Some(effect) = pending() {
                                     if !query.peek().trim().is_empty()

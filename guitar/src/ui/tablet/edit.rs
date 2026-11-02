@@ -87,7 +87,7 @@ fn OverrideBar(perf: PerformanceModel, edits: usize, picked: Option<usize>) -> E
                         // Back to its sound as it is: no overrides, no picks.
                         if let Some(r) = r1.clone() {
                             let (part, picks) = (name1.clone(), picks.clone());
-                            let _ = dioxus_core::spawn_forever(async move {
+                            let _ = dioxus_vdom::spawn_forever(async move {
                                 let _ = r.set_part_overrides(part.clone(), Vec::new()).await;
                                 for kind in picks {
                                     let _ = r.clear_part_pick(part.clone(), kind).await;
@@ -104,7 +104,7 @@ fn OverrideBar(perf: PerformanceModel, edits: usize, picked: Option<usize>) -> E
                         if !can_save { return; }
                         if let Some(r) = r2.clone() {
                             let part = name2.clone();
-                            let _ = dioxus_core::spawn_forever(async move { let _ = r.save_part_changes(part).await; });
+                            let _ = dioxus_vdom::spawn_forever(async move { let _ = r.save_part_changes(part).await; });
                         }
                     },
                     "{save_label}"
