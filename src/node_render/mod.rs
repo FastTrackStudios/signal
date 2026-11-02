@@ -217,7 +217,7 @@ pub enum RenderNode {
 // node alone took four, and they are taken while the tree is being walked,
 // so a deep patch allocated dozens of times per callback. Allocation is not
 // realtime-safe (the allocator can take a lock and, worse, can block), which
-// is the rule stated in CLAUDE.md for exactly this code.
+// is the rule stated in AGENTS.md for exactly this code.
 //
 // Pooled per thread rather than stored per node so the enum keeps its shape:
 // `Serial`/`Parallel` stay tuple variants and the dozen walker arms that
