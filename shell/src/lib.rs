@@ -15,7 +15,7 @@
 //! when the app provides a [`PhoneHost`]) — two steps from the stage, so a
 //! rig is never left by accident mid-song.
 //!
-//! Inline styles only: Blitz takes no stylesheet (CLAUDE.md).
+//! Inline styles only: Blitz takes no stylesheet (AGENTS.md).
 
 //! The tokens are the studio shell's (`app_shell::tokens`): one set for the
 //! desktop frame (`app_shell::ui::ShellFrame`) and this iPad rig frame, so

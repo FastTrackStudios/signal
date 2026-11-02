@@ -1627,7 +1627,7 @@ pub struct CircuitState {
     /// Diagnostic: number of times matrix inversion detected a singular matrix
     pub diag_singular_matrix_count: u64,
     /// Diagnostic: number of samples hit by the global voltage-damping safety
-    /// net. Per CLAUDE.md ("never use output attenuation to mask simulation
+    /// net. Per AGENTS.md ("never use output attenuation to mask simulation
     /// errors"), any nonzero value here is a symptom to investigate, not an
     /// acceptable steady-state.
     pub diag_voltage_damp_count: u64,
@@ -3598,7 +3598,7 @@ pub fn process_sample(input: f64, state: &mut CircuitState) -> [f64; NUM_OUTPUTS
             // This is a last-ditch safety net that should only fire when the
             // solver has produced a pathological step. A nonzero value here is
             // a symptom that needs investigation, not an acceptable steady-state
-            // (per CLAUDE.md: "never use output attenuation to mask simulation
+            // (per AGENTS.md: "never use output attenuation to mask simulation
             // errors"). Surfaced via state.diag_voltage_damp_count.
             state.diag_voltage_damp_count = state.diag_voltage_damp_count.saturating_add(1);
             let damp = (damp_thresh / max_delta).max(0.01);

@@ -8251,7 +8251,7 @@ pub struct CircuitState {
     /// Diagnostic: number of samples hit by the global voltage-damping
     /// safety net. This is a legacy safeguard that scales v_new toward
     /// v_prev when any node moves more than ~2V (or 5% of max DC OP) in
-    /// one sample. Per CLAUDE.md, output limiting must never mask solver
+    /// one sample. Per AGENTS.md, output limiting must never mask solver
     /// bugs — treat a nonzero count here as a signal that the solver needs
     /// investigation, not as an acceptable steady-state.
     pub diag_voltage_damp_count: u64,
