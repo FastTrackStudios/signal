@@ -1,0 +1,103 @@
+// Shreddage 3.5 Argent (Impact Soundworks) — library spec.
+//
+// A nine-string guitar (F# B E A D G B E below: C# F# B E A D G B E,
+// opens 25-64), two pickups ("Neck", "Bridge"); the shipped patch plays
+// the Bridge pickup only. The Shreddage 3.5 engine places every note on a
+// string and fret; the engine's fretboard stage does the same from
+// `fretboard` in the instrument's section.styx, which
+// features/rigs/fretted/tests/shreddage_section_meta.py writes from the
+// decode (Argent ships its TACT meta). Zones: tests/shreddage_zones.py.
+// Decode notes on AudioHaven: Sampled/Guitar/Shreddage Argent/_notes/
+// engine-model.md (the delta over Abyss).
+//
+// Modelled so far, at the shipped settings (hand fixed at fret 0, Natural
+// fretting, economy picking, double-tracked "Dbl 1+2" hard left/right,
+// anti-repetition off): single picked notes with their extra pick, pitched
+// and unpitched releases, Force Same-String hammers, the idle hand reset,
+// Rake (velocity 116-126) and Pinch Harmonics (127) on KS 0, palm mute with
+// its detune table, power chords (strings 4-9 below fret 15, their own
+// pitched release), stitched slides (KS 21) and slide-ins (key 23) with
+// fret squeaks, fret noise (key 22), wide chokes (keys 12-15) and FX mode
+// (KS 11), with the second track's KSP random() detune and shift.
+// slide-out (key 23 over ringing strings). Not yet: strumming; slide levels
+// are open (see the commit log).
+
+name    "Shreddage 3.5 Argent"
+vendor  "Impact Soundworks"
+version "3.5"
+
+sections (
+    { id argent, label "Argent", lowest_note C#1, highest_note E6 }
+)
+
+mics (
+    { id Bridge, label "Bridge", kind close, default true }
+    { id Neck,   label "Neck",   kind close }
+)
+
+performance {
+    resample_transpose true
+    mono_balance_pan   true   // mono recordings; a track's hard pan sends it whole to one side
+    release_curve_k    2.662588
+    strict_key_ranges  true
+    max_repeat_strikes 0
+    zone_pitch_tolerance 0
+    release_delay_ms   0.0
+}
+
+dynamics {
+    short_note_controller  velocity
+    enable_velocity_layers true
+}
+
+// TACT articulations in their shipped order (`!argent_artic_names`); RR and
+// layer counts from `%_argent_meta` (m4, m5). Layer edges, levels and
+// envelopes are the instrument's (section.styx).
+articulations (
+    { id Sustain,            label "Sustain",              kind @Sustain, dynamics (v1 v2 v3),       rr 4, dyn_ctrl velocity, notes full }
+    { id Mute,               label "Palm Mute",            kind @Sustain, dynamics (v1 v2 v3 v4 v5), rr 4, dyn_ctrl velocity, notes full }
+    { id Staccato,           label "Staccato",             kind @Sustain, dynamics (v1 v2),          rr 4, dyn_ctrl velocity, notes full }
+    { id PowerChordSustain,  label "Power Chord Sustain",  kind @Sustain, dynamics (v1 v2),          rr 2, dyn_ctrl velocity, notes full }
+    { id PowerChordMute,     label "Power Chord Mute",     kind @Sustain, dynamics (v1 v2 v3 v4 v5), rr 4, dyn_ctrl velocity, notes full }
+    { id PowerChordStaccato, label "Power Chord Staccato", kind @Sustain, dynamics (v1 v2),          rr 4, dyn_ctrl velocity, notes full }
+    // its layer table is empty: always the first layer
+    { id Choke,              label "Choke",                kind @Sustain, dynamics (v1),             rr 3, dyn_ctrl velocity, notes full }
+    { id Tapping,            label "Tapping",              kind @Sustain, dynamics (v1),             rr 2, dyn_ctrl velocity, notes full }
+    { id NaturalHarmonics,   label "Natural Harmonics",    kind @Sustain, dynamics (v1),             rr 2, dyn_ctrl velocity, notes full }
+    { id ArtificialHarmonics, label "Artificial Harmonics", kind @Sustain, dynamics (v1),            rr 2, dyn_ctrl velocity, notes full }
+    { id PinchHarmonics,     label "Pinch Harmonics",      kind @Sustain, dynamics (v1),             rr 4, dyn_ctrl velocity, notes full }
+    { id Rake,               label "Rake",                 kind @Sustain, rr 4, dyn_ctrl velocity, notes full }
+    { id Tremolo,            label "Tremolo",              kind @Sustain, dynamics (v1),             rr 2, dyn_ctrl velocity, notes full }
+    { id HammerPull,         label "Legato (Hammer/Pull)", kind @Sustain, dynamics (v1),             rr 2, dyn_ctrl velocity, notes full }
+    { id Slide,              label "Legato (Slide)",       kind @Sustain, rr 1, dyn_ctrl velocity, notes full }
+    { id PitchedRelease,     label "Pitched Release",      kind @Sustain, rr 4, dyn_ctrl velocity, notes full }
+    { id PowerChordPitchedRelease, label "Power Chord Pitched Release", kind @Sustain, rr 4, dyn_ctrl velocity, notes full }
+    { id UnpitchedRelease,   label "Unpitched Release",    kind @OneShot, rr 1, dyn_ctrl velocity, notes full }
+    { id FX,                 label "FX",                   kind @OneShot, rr 1, dyn_ctrl velocity, notes full }
+    // side recordings outside TACT (never selected)
+    { id ExtraPick,          label "Extra Pick",           kind @OneShot, rr 1, dyn_ctrl velocity, notes full }
+    { id FretSqueak,         label "Fret Squeak",          kind @OneShot, rr 1, dyn_ctrl velocity, notes full }
+    { id FretNoise,          label "Fret Noise",           kind @OneShot, rr 1, dyn_ctrl velocity, notes full }
+    { id WideChoke,          label "Wide Choke",           kind @OneShot, rr 1, dyn_ctrl velocity, notes full }
+)
+
+// TACT keyswitches as shipped (latched; `%tact___matrix[128·a + 11]`).
+// C0 = MIDI 12, so the keyswitches sit at MIDI 0-11.
+keyswitch {
+    velocity_sensitive false
+    user_configurable  true
+    notes (
+        { note "C-1",  label "Sustain",              vel_map { 0-127 "Sustain" } }
+        { note "C#-1", label "Palm Mute",            vel_map { 0-127 "Mute" } }
+        { note "D-1",  label "Staccato",             vel_map { 0-127 "Staccato" } }
+        { note "D#-1", label "Power Chord Sustain",  vel_map { 0-127 "PowerChordSustain" } }
+        { note "E-1",  label "Power Chord Mute",     vel_map { 0-127 "PowerChordMute" } }
+        { note "F-1",  label "Power Chord Staccato", vel_map { 0-127 "PowerChordStaccato" } }
+        { note "F#-1", label "Tremolo",              vel_map { 0-127 "Tremolo" } }
+        { note "G-1",  label "Choke",                vel_map { 0-127 "Choke" } }
+        { note "G#-1", label "Tapping",              vel_map { 0-127 "Tapping" } }
+        { note "A-1",  label "Natural Harmonics",    vel_map { 0-127 "NaturalHarmonics" } }
+        { note "A#-1", label "Artificial Harmonics", vel_map { 0-127 "ArtificialHarmonics" } }
+        { note "B-1",  label "FX",                   vel_map { 0-127 "FX" } }
+    )
+}
