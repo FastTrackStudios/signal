@@ -14,10 +14,8 @@
 //!   4. Fit a minimum-phase biquad cascade to the difference curve.
 //!   5. Drop the result here.
 
-/// Placeholder Con Sordino lowpass cutoff (Hz).
-pub const SORD_FC: f32 = 2500.0;
-/// Placeholder Q factor for the lowpass.
-pub const SORD_Q: f32 = 0.9;
+// The Con Sordino lowpass's cutoff and Q are library data:
+// `performance.sordino_filter` (`crate::spec::SordinoFilterSpec`).
 
 /// Stereo biquad filter — Direct Form I.
 ///

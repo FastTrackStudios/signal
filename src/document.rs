@@ -383,7 +383,7 @@ fn kind_for_ks(spec: &LibrarySpec, ks_val: Option<u8>) -> ArticulationKind {
     let Some(val) = ks_val else {
         return ArticulationKind::Sustain;
     };
-    let Some(label) = spec.keyswitch.as_ref().and_then(|ks| ks.cc58_function(val)) else {
+    let Some(label) = spec.keyswitch.as_ref().and_then(|ks| ks.cc58_target(val)) else {
         return ArticulationKind::Sustain;
     };
     spec.articulations
@@ -411,7 +411,7 @@ fn kind_for_selector(
 /// zone articulation ids, not just the kind.
 fn artic_for_ks(spec: &LibrarySpec, ks_val: Option<u8>) -> Option<&crate::spec::ArticulationSpec> {
     let val = ks_val?;
-    let label = spec.keyswitch.as_ref()?.cc58_function(val)?;
+    let label = spec.keyswitch.as_ref()?.cc58_target(val)?;
     spec.articulations
         .iter()
         .find(|a| a.id == label || a.label == label)

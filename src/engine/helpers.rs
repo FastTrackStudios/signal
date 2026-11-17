@@ -136,8 +136,10 @@ impl SampleEngine {
         // forces voice-stealing on every subsequent key press and produces
         // intermittent silence/clicks. 2 s is plenty for any real damper
         // click + decay tail.
-        let release_lifetime_frames =
-            (RELEASE_MAX_LIFETIME_MS as usize) * (self.sample_rate as usize) / 1000;
+        let release_lifetime_frames = (self.patch.spec.performance.voice_timing.release_max_ms
+            as usize)
+            * (self.sample_rate as usize)
+            / 1000;
         // Stem class: releases follow the parent articulation (see
         // `artic_class_for`); direct triggers are classed by their own.
         let artic_class = if matches!(kind, VoiceKind::Release) {
@@ -342,6 +344,95 @@ impl SampleEngine {
         self.patch.spec.dynamics.cc1_expression_gain(cc1)
     }
 
+    /// Kontakt per-group CC volume for one dynamic layer of `artic`: the
+    /// product of its decoded tables at the current CC1/CC2. `None` when the
+    /// articulation declares no `group_curves` — callers then use the legacy
+    /// equal-power crossfade + `cc1_expression`.
+    pub(crate) fn group_curve_gain(&self, artic: &str, dynamic: &str) -> Option<f32> {
+        let a = self.patch.spec.articulation(artic)?;
+        if a.group_curves.is_empty() {
+            return None;
+        }
+        let mut g = 1.0f32;
+        for c in a.group_curves.iter().filter(|c| c.dynamic == dynamic) {
+            let v = match c.cc {
+                1 => self.cc1,
+                // The tremolo/trill transition groups carry only the CC1
+                // table (null test: Leg plays at CC2 0 under a tremolo).
+                2 if self.curves_cc1_only => continue,
+                2 => self.cc2,
+                // The KSP sets CC36 := the last CC1 just before a release
+                // sample plays (script 21422); release groups crossfade on it.
+                36 => self.cc1,
+                _ => continue,
+            };
+            g *= crate::spec::kontakt_table_value(&c.points, f32::from(v) / 127.0);
+        }
+        Some(g)
+    }
+
+    /// Whether `artic`'s decoded group curves carry the vibrato crossfade
+    /// themselves (a CC2 table, CSS). A pair whose groups have none (CSW:
+    /// the script switches nonvib/vib groups on CC2) takes its level from
+    /// the engine's vibrato blend instead (`cc2_blend`).
+    pub(crate) fn curves_carry_vibrato(&self, artic: &str) -> bool {
+        self.patch
+            .spec
+            .articulation(artic)
+            .is_some_and(|a| a.group_curves.iter().any(|c| c.cc == 2))
+    }
+
+    /// The vibrato side's share of `artic`'s level when its group curves do
+    /// not carry the crossfade themselves (see `curves_carry_vibrato`): its
+    /// side of the engine's CC2 blend. 1 for an articulation with no vibrato
+    /// partner or with a CC2 table.
+    pub(crate) fn vibrato_side_gain(&self, artic: &str) -> f32 {
+        if self.curves_carry_vibrato(artic) || self.find_vibrato_pair_id(artic).is_none() {
+            return 1.0;
+        }
+        let (nv, vb) = Self::equal_power(self.cc2_blend());
+        let vib = self
+            .patch
+            .spec
+            .articulation(artic)
+            .is_some_and(crate::spec::ArticulationSpec::is_vibrato);
+        if vib { vb } else { nv }
+    }
+
+    /// A script's start offset (`play_note`'s offset) as Kontakt applies it
+    /// to zone `idx`: none where the zone allows none, and none once the
+    /// zone's start-modulation range is no more than the offset
+    /// (`BEngine::DispatchVoice` 0x3dc128, `(float)range <= offset`).
+    pub(crate) fn script_offset(&self, idx: usize, frames: usize) -> usize {
+        match self.patch.spec.zones.get(idx).and_then(|z| z.start_mod) {
+            Some(m) if m < 0 => 0,
+            Some(m) if m as f32 <= frames as f32 => 0,
+            _ => frames,
+        }
+    }
+
+    /// Add `artic`'s script start offset (`script_start_ms`) to the body's
+    /// extra start for a fresh note; returns the previous value to restore.
+    pub(crate) fn with_script_start(&mut self, artic: &str) -> usize {
+        let saved = self.spawn_extra_start;
+        if !self.in_transition {
+            let ms = self
+                .patch
+                .spec
+                .articulation(artic)
+                .map_or(0.0, |a| a.script_start_ms);
+            // a player's humanized offset joins the note's (`players.rs`)
+            let ms = match self.spawn_player {
+                Some(m) if ms > 0.0 => ms + m.start_ms as f32,
+                _ => ms,
+            };
+            if ms > 0.0 {
+                self.spawn_extra_start += kontakt_offset_frames(ms, self.sample_rate);
+            }
+        }
+        saved
+    }
+
     /// The CC1 layer slice for a given articulation (by its dynamics count).
     pub(crate) fn cc1_layers_for(&self, artic_id: &str) -> &[Cc1Layer] {
         let Some(artic) = self.patch.spec.articulation(artic_id) else {
@@ -411,6 +502,13 @@ impl SampleEngine {
         // Band → recorded dynamic: 1:1 when counts match, else TOP-align (the
         // extra softest recorded dynamics sit below the short's %g1qri floor).
         let n_dyn = artic.dynamics.len();
+        if n_dyn == 0 {
+            // No recorded dynamics (CSB Rips): any zone at the key and RR.
+            return (
+                String::new(),
+                self.short_velocity_volume_db(artic_id, velocity),
+            );
+        }
         let offset = n_dyn.saturating_sub(n_bands);
         let dyn_idx = (band + offset).min(n_dyn - 1);
         let velvol = self.short_velocity_volume_db(artic_id, velocity);
@@ -528,5 +626,30 @@ impl SampleEngine {
             .spec
             .sordino_counterpart(artic_id, active)
             .unwrap_or_else(|| artic_id.to_string())
+    }
+}
+
+/// A script's `play_note` offset in frames as Kontakt forms it
+/// (`BEngine::DispatchVoice` 0x3dc128): the script's microseconds
+/// (`real_to_int(ms · 1000)`) times the rate times 1e-6, all in f32, then
+/// truncated — 375 000 µs at 48 kHz is 17 999 frames, not 18 000.
+#[must_use]
+pub(crate) fn kontakt_offset_frames(ms: f32, sample_rate: u32) -> usize {
+    let us = (ms * 1000.0) as u32;
+    (us as f32 * sample_rate as f32 * 1e-6_f32) as usize
+}
+
+#[cfg(test)]
+mod kontakt_offset_tests {
+    use super::kontakt_offset_frames;
+
+    /// KONTRA's trace of MOJO 2's shake release (375 ms → 17 999) and its
+    /// commit's CSSS case (447 ms → 21 455); 444 ms is exact.
+    #[test]
+    fn offsets_truncate_an_f32_product() {
+        assert_eq!(kontakt_offset_frames(375.0, 48_000), 17_999);
+        assert_eq!(kontakt_offset_frames(447.0, 48_000), 21_455);
+        assert_eq!(kontakt_offset_frames(444.0, 48_000), 21_312);
+        assert_eq!(kontakt_offset_frames(169.0, 48_000), 8_112);
     }
 }

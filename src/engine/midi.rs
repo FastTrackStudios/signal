@@ -48,6 +48,15 @@ impl SampleEngine {
     /// global legato toggle is on. (Reciprocity is what rejects the false
     /// `find_vibrato_pair_id` matches: Tremolo→Nonvib, but Nonvib→Vibsus.)
     pub(crate) fn is_legato_capable_artic(&self, artic: &str) -> bool {
+        // CSS marcato plays legato through its own two-stage transition.
+        if self
+            .patch
+            .spec
+            .articulation(artic)
+            .is_some_and(|a| a.marcato_transition.is_some() || a.simple_transition.is_some())
+        {
+            return true;
+        }
         let kind = self.patch.spec.articulation(artic).map(|a| a.kind.clone());
         if matches!(kind, Some(ArticulationKind::Legato)) {
             return true;
@@ -121,7 +130,13 @@ impl SampleEngine {
         // Polyphony: make room before the new note's voices spawn.
         if let Some(max) = self.max_notes {
             if velocity > 0 && !self.keyswitch_notes.contains_key(&note) {
-                self.voices.make_room_for_note(note, max);
+                let repeats = self
+                    .patch
+                    .spec
+                    .performance
+                    .max_repeat_strikes
+                    .map_or(voice::MAX_REPEAT_STRIKES, |n| n as usize);
+                self.voices.make_room_for_note_with(note, max, repeats);
             }
         }
 
@@ -129,8 +144,43 @@ impl SampleEngine {
         // from THIS note's velocity before any routing decision — so the live
         // auto-divisi gate below and every downstream path see the real artic
         // (a playable note; keyswitch notes select via `try_keyswitch` instead).
-        if velocity > 0 && !self.keyswitch_notes.contains_key(&note) {
+        // (A generated trill note keeps the articulation its pair chose.)
+        if velocity > 0 && !self.trill_bypass && !self.keyswitch_notes.contains_key(&note) {
             self.resolve_pending_cc58(velocity);
+        }
+
+        // Trills from key pairs (see `PerformanceSpec::trill_pair`).
+        if velocity > 0 && !self.trill_bypass && !self.keyswitch_notes.contains_key(&note) {
+            if let Some(tp) = self.patch.spec.performance.trill_pair.clone() {
+                if self.articulation.eq_ignore_ascii_case(&tp.half)
+                    || self.articulation.eq_ignore_ascii_case(&tp.whole)
+                {
+                    let now = self.frames_rendered;
+                    let window = ms_to_frames_f(tp.window_ms, self.sample_rate) as u64;
+                    match self.trill_first.take() {
+                        Some((first, vel, at))
+                            if now.saturating_sub(at) <= window
+                                && matches!(note.abs_diff(first), 1 | 2) =>
+                        {
+                            let artic = if note.abs_diff(first) == 1 {
+                                tp.half
+                            } else {
+                                tp.whole
+                            };
+                            let due = at + ms_to_frames_f(tp.delay_ms, self.sample_rate) as u64;
+                            self.trill_due = Some((due, note.min(first), vel, artic));
+                            self.trill_silent[usize::from(note.max(first) & 127)] = true;
+                        }
+                        _ => {
+                            if let Some((lone, ..)) = self.trill_first {
+                                self.trill_silent[usize::from(lone & 127)] = true;
+                            }
+                            self.trill_first = Some((note, velocity, now));
+                        }
+                    }
+                    return;
+                }
+            }
         }
 
         // Live auto-divisi (StrictLive + mono-legato patch): the greedy line
@@ -175,6 +225,16 @@ impl SampleEngine {
     /// - Otherwise: fresh attack on a free line (LRU-silent first; if every
     ///   line is sounding, the least-recently-active line is retagged).
     pub(crate) fn live_divisi_note_on(&mut self, note: u8, velocity: u8) {
+        // The same per-note bookkeeping `note_on_line` does. Without it the
+        // velocity zone of a fresh live note came from the PREVIOUS note (90 at
+        // startup), so a soft first note took the zone-2 attack swap —
+        // body muted 40 ms and a Legzero attack voice on top — where Kontakt
+        // plays the plain body (probe null test).
+        self.voices.begin_strike();
+        self.last_velocity = velocity;
+        self.recent_velocity =
+            (((self.recent_velocity as u16 * 3 + velocity as u16) / 4) as u8).max(1);
+        self.note_strike_vel[note as usize] = velocity;
         let now = self.frames_rendered;
         let window = ms_to_frames(
             self.patch.spec.live_chord_window_ms.max(0.0).round() as u32,
@@ -239,11 +299,19 @@ impl SampleEngine {
             Some((_, _, Some(rel))) => {
                 self.start_legato_transition(rel, note, velocity);
             }
-            // Fresh sustain attack on its own line.
+            // Fresh sustain attack on its own line — the first-note branch of
+            // `note_on_line`, line for line.
             None => {
                 self.play_direction = "up".to_string();
                 self.trigger_zoned_sustain(note);
-                self.line_mut().note = Some(note);
+                self.spawn_attack_layer(note);
+                self.spawn_marcato_overlay(note, velocity);
+                self.ab_anchor_frame = now;
+                let l = self.line_mut();
+                l.note = Some(note);
+                l.last_onset_frame = now;
+                l.marcato_ioi = None;
+                l.connected = false;
             }
         }
     }
@@ -316,17 +384,59 @@ impl SampleEngine {
         // proxy for current playing dynamic — used to scale note-independent
         // ambience (pedal/mechanical noise). Also remember this note's strike
         // velocity so its release tail can match it.
+        self.keys_down[usize::from(note & 127)] = true;
         self.recent_velocity =
             (((self.recent_velocity as u16 * 3 + velocity as u16) / 4) as u8).max(1);
         self.note_strike_vel[note as usize] = velocity;
 
         // Velocity-sensitive keyswitches (CSS-style): a keyswitch note selects
         // an articulation / mode and does NOT sound.
+        // A release-type key latches a type, sounding nothing; an override
+        // key struck hard releases the held notes (`ReleaseTypesSpec`).
+        if self.release_type_key(note, velocity) {
+            return;
+        }
+
         if self.try_keyswitch(note, velocity) {
             return;
         }
 
         self.resolve_pending_cc58(velocity);
+
+        // A script legato's natural key toggles it and sounds nothing.
+        if self.script_natural_key(note) {
+            return;
+        }
+
+        // A key outside the articulation's playable range plays nothing
+        // (MOJO 2: the whole note callback sits in `if in_range(note,
+        // %ArtRange[art])`, script_1.ksp:25170).
+        if let Some(a) = self.patch.spec.articulation(&self.articulation)
+            && let [lo, hi] = a.key_range[..]
+            && !(lo..=hi).contains(&note)
+        {
+            return;
+        }
+        // The first note of another articulation cuts everything sounding
+        // (MOJO 2's DoArticulationCutoff, 25171).
+        let cut = self.patch.spec.performance.artic_change_fade_ms;
+        if cut > 0.0 {
+            if self
+                .last_note_artic
+                .as_deref()
+                .is_some_and(|a| !a.eq_ignore_ascii_case(&self.articulation))
+            {
+                self.voices
+                    .fade_out_all(ms_to_frames_f(cut, self.sample_rate));
+                self.clear_divisi();
+            }
+            self.last_note_artic = Some(self.articulation.clone());
+        }
+
+        // A fretted instrument places the note on a string (`fretboard.rs`).
+        if self.fretted_note_on(note, velocity) {
+            return;
+        }
 
         if self.patch.is_zoned() {
             // CSS-style legato: a legato articulation, with another note already
@@ -382,6 +492,7 @@ impl SampleEngine {
                         // Pacific atk+sus: layer the one-shot attack on a
                         // fresh phrase start (no-op without `attack_artic`).
                         self.spawn_attack_layer(note);
+                        self.spawn_marcato_overlay(note, velocity);
                         let now = self.frames_rendered;
                         // `$0nind := $e44qy` (script 17528) — the AB dip's
                         // anchor is planted here and nowhere else.
@@ -389,6 +500,8 @@ impl SampleEngine {
                         let l = self.line_mut();
                         l.note = Some(note);
                         l.last_onset_frame = now;
+                        l.marcato_ioi = None;
+                        l.connected = false;
                     }
                     // Transition from the currently-sounding note to this one,
                     // delayed by the velocity-mapped legato latency. A note that
@@ -403,8 +516,13 @@ impl SampleEngine {
                 self.trigger_zoned_sustain(note);
             } else if is_short {
                 // One-shot short: velocity picks the dynamic layer, nearest-key
-                // pitch-shift, plays to completion.
-                self.trigger_zoned_short(note, velocity);
+                // pitch-shift, plays to completion (a phrase articulation
+                // schedules its hits instead).
+                if !self.phrase_note_on(note, velocity)
+                    && !self.script_legato_note_on(note, velocity)
+                {
+                    self.trigger_zoned_short(note, velocity);
+                }
             } else {
                 // Anything unusual: fall back to the generic zoned trigger.
                 self.trigger_zoned(note, velocity, ZoneTrigger::Attack, true);
@@ -482,8 +600,22 @@ impl SampleEngine {
     }
 
     pub(crate) fn note_off_with_velocity_on_line(&mut self, note: u8, release_velocity: u8) {
+        self.keys_down[usize::from(note & 127)] = false;
+        // A key a trill pair absorbed sounds nothing, so its key-up neither.
+        if std::mem::take(&mut self.trill_silent[usize::from(note & 127)]) {
+            return;
+        }
+        if self.trill_first.is_some_and(|(n, ..)| n == note) {
+            self.trill_first = None;
+            return;
+        }
+        // A phrase key's hits ring to their ends: its key-up only ends the
+        // phrase (see `phrase.rs`).
+        if self.phrase_note_off(note) {
+            return;
+        }
         let release_frames = self.pedal_release_frames();
-        if self.cc64_held {
+        if self.cc64_held && !self.patch.spec.performance.pedal_ignored {
             // Sustain pedal held — defer release.
             self.deferred_note_off_velocities
                 .insert(note, release_velocity);
@@ -493,8 +625,28 @@ impl SampleEngine {
         self.held_notes.remove(&note);
         self.deferred_note_off_velocities.remove(&note);
         self.trace_push(TraceKind::NoteOff { note });
+        if self.fretted_note_off(note) {
+            return;
+        }
         if self.patch.is_zoned() {
             let cur_line = self.cur_line as u8;
+            if self.script_legato_note_off(note) {
+                self.line_mut().order.retain(|&n| n != note);
+                return;
+            }
+            let held = std::mem::take(&mut self.release_sample_notes[usize::from(note & 127)]);
+            if !held.is_empty() {
+                self.line_mut().order.retain(|&n| n != note);
+                // the key-up reaches every voice's envelope; the script's
+                // fade only the key's tracked body (below)
+                self.voices.release_note_envelopes(cur_line, note);
+                for (artic, dynamic, velocity) in held {
+                    self.script_release(cur_line, note, &artic, &dynamic, velocity);
+                }
+                self.divisi_note_off(note);
+                return;
+            }
+            self.divisi_note_off(note);
             self.line_mut().order.retain(|&n| n != note);
             // Monophonic legato: releasing the SOUNDING note falls back to the
             // most-recent still-held note via a legato transition; releasing the
@@ -511,6 +663,15 @@ impl SampleEngine {
                 // passage's legato lead-in outruns the note length). Document
                 // note-offs only end phrases.
                 if self.play_mode != PlayMode::Lookahead {
+                    // A transition away from this note is already counting
+                    // down (the overlap delay outlasts the key-up): Kontakt
+                    // fires that ONE transition on schedule and leaves the old
+                    // body untouched until then — starting another here fired
+                    // it twice (null test, 80 ms legato).
+                    if matches!(self.line().state, LegatoState::Pending { from_note, .. } if from_note == note)
+                    {
+                        return;
+                    }
                     if let Some(&prev) = self.line().order.last() {
                         // Fall back at a medium transition speed.
                         let fallback_vel = self.patch.spec.legato_cfg().fallback_velocity;
@@ -526,6 +687,9 @@ impl SampleEngine {
                 l.released_note = Some(note);
                 l.last_release_frame = now;
             }
+            let marcato_phrase = self
+                .marcato_transition()
+                .zip(self.line_mut().marcato_ioi.take());
             // Recorded release tail (CSS Vsusrel/NVrel) — default OFF
             // (`$4p5kj=0`, spec §6). Only fires when "Releases" is enabled.
             if !self.spawn_piano_release(note) && self.releases_enabled {
@@ -534,15 +698,313 @@ impl SampleEngine {
             // Held-sustain note-off (spec §6): immediate note_off + overlapping
             // fade (~`$tukcw=200` ms). This line's voices only, so a unison
             // note held by another divisi line keeps sounding.
-            let sus_off = ms_to_frames(
-                self.patch.spec.performance.sustain_noteoff_ms,
-                self.sample_rate,
-            )
-            .max(release_frames);
+            let held_ms = self.note_on_frame.get(&note).map_or(1000.0, |&f| {
+                frames_to_ms(self.frames_rendered.saturating_sub(f), self.sample_rate)
+            });
+            let by_held = self
+                .patch
+                .spec
+                .articulation(&self.articulation)
+                .map(|a| a.release_ms_by_held.clone())
+                .unwrap_or_default();
+            let sus_off = if by_held.is_empty() {
+                ms_to_frames(
+                    self.patch.spec.performance.sustain_noteoff_ms,
+                    self.sample_rate,
+                )
+                .max(release_frames)
+            } else {
+                ms_to_frames_f(crate::spec::lerp_table(&by_held, held_ms), self.sample_rate)
+            };
             self.voices.note_off_line(cur_line, note, Some(sus_off));
+            // the script's own fade over that release (CSB / CSW `fade_out`)
+            let cut = self.patch.spec.performance.sustain_noteoff_cut_ms;
+            if cut > 0.0 {
+                self.voices
+                    .cut_release_line(cur_line, note, ms_to_frames_f(cut, self.sample_rate));
+            }
+            // A note reached by a marcato transition: its transition voice
+            // fades by that transition's IOI (the body keeps the held-time
+            // fade — measured, Kontakt ends a phrase note like a single one).
+            if let Some((mt, ioi)) = marcato_phrase {
+                let lt = crate::spec::ksp_lerp(&mt.lt_noteoff_ms, ioi as i64) as f32;
+                self.voices.fade_out_note_line(
+                    cur_line,
+                    note,
+                    ms_to_frames_f(lt, self.sample_rate),
+                    0,
+                );
+            }
             return;
         }
         self.do_note_off_with_release_frames(note, release_velocity, release_frames);
+    }
+
+    /// A tempo-synced length's take and stretch (`TimedLengthSpec`).
+    fn timed_take(&self, artic: &str) -> Option<(String, f64)> {
+        let t = self.patch.spec.articulation(artic)?.timed_length.clone()?;
+        let c = usize::from(t.beats_cc & 127);
+        let beats = if self.cc_sent[c] {
+            i32::from(self.cc_values[c]) * 15 / 127 + 1
+        } else {
+            t.beats
+        };
+        let (take, pct) = timed_length_take(&t, self.quarter_us, beats)?;
+        Some((t.takes.get(take)?.clone(), self.stretch_ratio(pct)))
+    }
+
+    /// The articulation's key noise after a note (`KeynoiseSpec`): tried on
+    /// a note other than the last tried, `random(1, 100) <= chance`, then
+    /// the zone of `random(1, 127)`'s band at the spec's key, its own
+    /// strike, fading out from its start.
+    pub(crate) fn keynoise(&mut self, artic: &str, note: u8, velocity: u8, player: usize) {
+        let Some(kn) = self
+            .patch
+            .spec
+            .articulation(artic)
+            .and_then(|a| a.keynoise.clone())
+        else {
+            return;
+        };
+        let forced = kn
+            .force_key
+            .is_some_and(|k| self.keys_down[usize::from(k & 127)]);
+        let last = &mut self.players.keynoise_last[player];
+        if *last == Some(note) && !forced {
+            return;
+        }
+        *last = Some(note);
+        if self.script_draw(1, 100) > kn.chance_pct && !forced {
+            return;
+        }
+        let v = self.script_draw(1, 127) as u8;
+        let Some(idx) = self.zone_keys.get(usize::from(kn.key)).and_then(|c| {
+            c.iter().map(|&i| i as usize).find(|&i| {
+                let z = &self.patch.spec.zones[i];
+                (z.vel_min..=z.vel_max).contains(&v) && self.zone_passes(z, &kn.artic, "", "")
+            })
+        }) else {
+            return;
+        };
+        let gain = kn
+            .gain_db
+            .get(usize::from(velocity.min(127)))
+            .map_or(1.0, |&db| db_to_gain(db));
+        let saved = (
+            self.spawn_extra_start,
+            self.spawn_fade_in,
+            self.spawn_stretch,
+        );
+        (
+            self.spawn_extra_start,
+            self.spawn_fade_in,
+            self.spawn_stretch,
+        ) = (0, 0, 1.0);
+        self.voices.begin_strike();
+        let strike = self.voices.current_strike();
+        self.spawn_zone_voice(idx, kn.key, VoiceKind::Short, gain, None, 0.0);
+        (
+            self.spawn_extra_start,
+            self.spawn_fade_in,
+            self.spawn_stretch,
+        ) = saved;
+        self.voices
+            .fade_out_strike_bodies(strike, ms_to_frames_f(kn.fade_ms, self.sample_rate));
+    }
+
+    /// A script's release (`ArticulationSpec::release_sample`): `note`'s
+    /// voices fade out over `fade_ms` and a zone of the release articulation
+    /// in the note-on's `dynamic` starts `start_ms` in, at
+    /// `gain_db[velocity]` (its own `amp_env` fades it in and out).
+    pub(crate) fn script_release(
+        &mut self,
+        line: u8,
+        note: u8,
+        artic: &str,
+        dynamic: &str,
+        velocity: u8,
+    ) {
+        let Some(a) = self.patch.spec.articulation(artic) else {
+            return;
+        };
+        // The release type (`ReleaseTypesSpec`): a pending override first,
+        // else the latched one; a key outside the type's range plays the
+        // normal release (36448-36481).
+        let (rs, muted) = match a.release_types.clone() {
+            Some(rt) => {
+                let t = self
+                    .release_override
+                    .take()
+                    .unwrap_or_else(|| self.release_type_latched.unwrap_or(rt.latched));
+                let pick = rt.types.get(usize::from(t)).filter(|r| {
+                    let [lo, hi] = r.key_range[..] else {
+                        return true;
+                    };
+                    (lo..=hi).contains(&note)
+                });
+                let Some(rs) = pick.or(rt.types.first()).cloned() else {
+                    return;
+                };
+                (
+                    rs,
+                    rt.cutoff && !self.articulation.eq_ignore_ascii_case(artic),
+                )
+            }
+            None => match a.release_sample.clone() {
+                Some(rs) => (rs, false),
+                None => return,
+            },
+        };
+        // the variant (a controller's choice of zone group), and its own
+        // offset and fade
+        let variant = rs.variant_cc.map(|cc| {
+            let c = usize::from(cc & 127);
+            if self.cc_sent[c] {
+                rs.variant_edges
+                    .iter()
+                    .filter(|&&e| self.cc_values[c] >= e)
+                    .count()
+            } else {
+                usize::from(rs.variant_default)
+            }
+        });
+        let start_ms = variant
+            .and_then(|i| rs.variant_start_ms.get(i).copied())
+            .unwrap_or(rs.start_ms);
+        let fade_ms = variant
+            .and_then(|i| rs.variant_fade_ms.get(i).copied())
+            .unwrap_or(rs.fade_ms);
+        let fade = ms_to_frames_f(fade_ms, self.sample_rate);
+        let ensemble = self.players_active();
+        if ensemble {
+            // every player's body of the key (`%gbku1[10·note + p]`)
+            self.players_fade_bodies(note, fade);
+            if let Some(strike) = self.release_body_strike[usize::from(note & 127)].take() {
+                self.voices.fade_out_strike_bodies(strike, fade);
+            }
+        } else {
+            match self.release_body_strike[usize::from(note & 127)] {
+                Some(strike) => self.voices.fade_out_strike_bodies(strike, fade),
+                None => self.voices.fade_out_note_bodies(line, note, fade),
+            }
+        }
+        let rr = self
+            .short_random_rr(&rs.artic, note)
+            .unwrap_or_else(|| self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize));
+        // Another articulation selected: the release is silent, its round
+        // robin drawn all the same (`$12s10`, 36567).
+        if muted {
+            if ensemble && self.divisi_applies(artic) {
+                self.divisi_note_off(note);
+            }
+            return;
+        }
+        // its zones: the note-on's layer, the variant's, or any
+        let dynamic = if rs.layered {
+            dynamic.to_string()
+        } else {
+            variant
+                .and_then(|i| rs.variants.get(i).cloned())
+                .unwrap_or_default()
+        };
+        let Some(idx) = self
+            .find_layer_zone_rr_index(&rs.artic, &dynamic, note, rr)
+            .or_else(|| self.find_layer_zone(&rs.artic, "", &dynamic, note, rr))
+        else {
+            return;
+        };
+        let gain = rs
+            .gain_db
+            .get(usize::from(velocity.min(127)))
+            .map_or(1.0, |&db| db_to_gain(db));
+        let saved = (self.spawn_fade_in, self.spawn_delayed_fade);
+        if ensemble {
+            // the release type's range moves the extra players' keys
+            // (`%ArtRange[$jqs2e]`), else the parent articulation's
+            let range = match rs.key_range[..] {
+                [lo, hi] => Some((lo, hi)),
+                _ => self
+                    .patch
+                    .spec
+                    .articulation(artic)
+                    .and_then(|a| match a.key_range[..] {
+                        [lo, hi] => Some((lo, hi)),
+                        _ => None,
+                    }),
+            };
+            if rs.tail_ms > 0.0 {
+                self.spawn_fade_in = fade;
+                self.spawn_delayed_fade =
+                    Some((fade, ms_to_frames_f(rs.tail_ms, self.sample_rate)));
+            }
+            let parent = artic.to_string();
+            self.players_release(
+                &parent, &rs.artic, &dynamic, note, rr, range, gain, start_ms,
+            );
+            (self.spawn_fade_in, self.spawn_delayed_fade) = saved;
+            return;
+        }
+        let offset = self.script_offset(idx, kontakt_offset_frames(start_ms, self.sample_rate));
+        // its own envelope: fade in over the fade, `wait(fade)`, fade out
+        // over the tail (36892-36970)
+        if rs.tail_ms > 0.0 {
+            self.spawn_fade_in = fade;
+            self.spawn_delayed_fade = Some((fade, ms_to_frames_f(rs.tail_ms, self.sample_rate)));
+        }
+        self.spawn_zone_voice_at(idx, note, VoiceKind::Release, gain, None, 0.0, offset);
+        (self.spawn_fade_in, self.spawn_delayed_fade) = saved;
+    }
+
+    /// A release-type key (`ReleaseTypesSpec`): a type key latches its type;
+    /// an override key struck hard while notes of the articulation are held
+    /// releases them all now, lowest first, the first with its type
+    /// (25057-25110, 25162-25169). `true` when the key was taken.
+    fn release_type_key(&mut self, note: u8, velocity: u8) -> bool {
+        let Some((artic, rt)) = self
+            .patch
+            .spec
+            .articulations
+            .iter()
+            .find_map(|a| a.release_types.clone().map(|rt| (a.id.clone(), rt)))
+        else {
+            return false;
+        };
+        if let Some(t) = rt.keys.iter().position(|&k| k == note) {
+            self.release_type_latched = Some(t as u8);
+            return true;
+        }
+        if velocity < rt.override_velocity.max(1) {
+            return false;
+        }
+        let Some(t) = rt
+            .overrides
+            .chunks_exact(2)
+            .find(|p| p[0] == note)
+            .map(|p| p[1])
+        else {
+            return false;
+        };
+        let held: Vec<u8> = (0..128u8)
+            .filter(|&n| {
+                self.release_sample_notes[usize::from(n)]
+                    .iter()
+                    .any(|(a, ..)| a.eq_ignore_ascii_case(&artic))
+            })
+            .collect();
+        if held.is_empty() {
+            return false;
+        }
+        self.release_override = Some(t);
+        let line = self.cur_line as u8;
+        for n in held {
+            let records = std::mem::take(&mut self.release_sample_notes[usize::from(n)]);
+            self.voices.release_note_envelopes(line, n);
+            for (a, dynamic, v) in records {
+                self.script_release(line, n, &a, &dynamic, v);
+            }
+        }
+        self.release_override = None;
+        true
     }
 
     /// Release every held/sounding note and reset pedal-deferred state.
@@ -569,6 +1031,7 @@ impl SampleEngine {
             l.last_release_frame = 0;
             l.last_activity = 0;
         }
+        self.script_leg = Default::default();
         self.live_last_onset = None;
     }
 
@@ -720,14 +1183,73 @@ impl SampleEngine {
     }
 
     pub(crate) fn trigger_zoned_sustain(&mut self, note: u8) {
+        if !self.in_transition {
+            let sets = self
+                .patch
+                .spec
+                .articulation(&self.articulation)
+                .map(|a| a.note_on_cc.clone())
+                .unwrap_or_default();
+            for [cc, v] in sets {
+                if let Some(slot) = self.cc_values.get_mut(usize::from(cc)) {
+                    *slot = v.min(127);
+                }
+            }
+        }
+        self.body_tune_cents = self.held_random_tune(note);
+        self.trigger_zoned_sustain_inner(note);
+        self.body_tune_cents = 0.0;
+    }
+
+    /// `ArticulationSpec::held_random_tune_cents` for a body of `note`: a
+    /// draw (or the next forced one) when another key is down, else 0.
+    fn held_random_tune(&mut self, note: u8) -> f32 {
+        let n = self
+            .patch
+            .spec
+            .articulation(&self.articulation)
+            .map_or(0, |a| i32::from(a.held_random_tune_cents));
+        let others = self.held_notes.keys().any(|&k| k != note);
+        if n == 0 || !others || self.suppress_random_tune {
+            return 0.0;
+        }
+        if let Some(t) = self.forced_tunes.pop_front() {
+            return f32::from(t);
+        }
+        let mut x = self.tune_rng;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.tune_rng = x;
+        ((x % (2 * n as u64 + 1)) as i32 - n) as f32
+    }
+
+    fn trigger_zoned_sustain_inner(&mut self, note: u8) {
         let direction = self.play_direction.clone();
         // Honour the forced-RR pin like every other RR-bearing trigger —
         // document mode pins a stable per-note slot here so playback never
         // consults the mutable counter (position-independent determinism).
-        let rr = self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize);
-        self.zone_rr_counter = self.zone_rr_counter.wrapping_add(1);
-
         let nv_artic = self.articulation.clone();
+        let per_note = self
+            .patch
+            .spec
+            .articulation(&nv_artic)
+            .is_some_and(|a| a.rr_per_note);
+        let rr = if let (true, None) = (per_note, self.forced_rr) {
+            let class = self.rr_note_class(&nv_artic, note);
+            let c = &mut self.note_rr[usize::from(class & 127)];
+            let rr = usize::from(*c);
+            *c = c.wrapping_add(1);
+            rr
+        } else {
+            // the bodies' own toggle (CSB marcato `$d3x3j := 1 - $d3x3j`):
+            // a short played alongside (the marcato overlay) must not move it
+            let rr = self
+                .forced_rr
+                .map_or(self.sustain_rr_counter, |f| f as usize);
+            self.sustain_rr_counter = self.sustain_rr_counter.wrapping_add(1);
+            rr
+        };
 
         // CC2 picks the non-vib vs vib balance (equal-power) — in pure playback
         // too: the CC2 vibrato crossfade IS CSS (pure = exact CSS; the old
@@ -754,7 +1276,8 @@ impl SampleEngine {
         };
         // CSS FIRST-NOTE attack SWAP (decoded round 2, §11): zones 2/3 do NOT
         // stack an ornament on the body — the body is MUTED 40 ms while the
-        // attack sample plays, then FADES IN over 230 ms (z2) / 180 ms (z3)
+        // attack sample plays, then FADES IN over `first_note_fade_ms`
+        // (1st Violins 230 ms z2 / 180 ms z3)
         // underneath it. Zone 1 (soft) plays the plain body only. Our previous
         // full-gain stacked ornament doubled the same pitch for ~2.5 s — the
         // audible "phasy overlap". The attack sample is bounded: it rings its
@@ -769,23 +1292,60 @@ impl SampleEngine {
         // the hammer and most of the note's identity — measured on The
         // Grandeur as a first non-zero sample 1940 frames (40 ms) after
         // note-on against 1 frame in the source recording.
-        let fresh_vz = if !self.legato_sustain && self.cs_family() {
-            self.patch
-                .spec
-                .legato_cfg()
-                .velocity_range(self.last_velocity)
-        } else {
-            0
-        };
+        // The loud-first-note body swap is the SUSTAIN path's (KSP `$ocjln=0`):
+        // marcato and the other unpaired articulations start their body at
+        // full level from sample 0 (null test, CSS marcato at velocity 120).
+        let sustain_family = vib_id.as_ref().is_some_and(|v| *v != nv_id);
+        let fresh_vz =
+            if !self.legato_sustain && !self.in_transition && sustain_family && self.cs_family() {
+                self.patch
+                    .spec
+                    .legato_cfg()
+                    .velocity_range(self.last_velocity)
+            } else {
+                0
+            };
         if fresh_vz >= 2 {
-            let mute = ms_to_frames(40, self.sample_rate);
-            let fade = ms_to_frames(if fresh_vz == 3 { 180 } else { 230 }, self.sample_rate);
+            let cfg = self.patch.spec.legato_cfg();
+            let mute_ms = cfg
+                .first_note_mute_ms
+                .get(usize::from(fresh_vz - 2))
+                .copied()
+                .unwrap_or(40.0);
+            let mute = ms_to_frames_f(mute_ms, self.sample_rate);
+            let fade_ms = cfg
+                .first_note_fade_ms
+                .get(usize::from(fresh_vz - 2))
+                .copied()
+                .unwrap_or(if fresh_vz == 3 { 180.0 } else { 230.0 });
+            let fade = ms_to_frames_f(fade_ms, self.sample_rate);
             self.sustain_fade_in = Some((mute, fade, fade, 0));
+            // The body is a scripted VARIANT of the recording (KSP
+            // `%v2aqt[$2ekvq]`, then `$2ekvq++`).
+            let n = cfg.first_note_variants.len();
+            if n > 0 && cfg.first_note_variant_random {
+                // a forced draw (null-test replay) is the variant itself
+                let v = self.forced_variants.pop_front().unwrap_or_else(|| {
+                    let lo = cfg.first_note_variants.iter().copied().min().unwrap_or(2);
+                    let hi = cfg.first_note_variants.iter().copied().max().unwrap_or(lo);
+                    lo + (super::next_zone_random(&mut self.tune_rng) % usize::from(hi - lo + 1))
+                        as u8
+                });
+                self.spawn_variant = Some(v);
+            } else if n > 0 {
+                self.spawn_variant = Some(cfg.first_note_variants[self.variant_counter % n]);
+                self.variant_counter = (self.variant_counter + 1) % n;
+            }
         }
         if nv_scale > 0.0 || self.cc_driven_layers() {
+            let saved = self.with_script_start(&nv_id);
             self.spawn_sustain_layers(&nv_id, false, nv_scale, &direction, note, rr);
+            self.spawn_extra_start = saved;
         }
-        if let Some(vib_id) = vib_id {
+        // An articulation with no vibrato pair resolves to ITSELF on both
+        // sides; spawning the "vibrato side" too played every layer twice
+        // (+6 dB — null test, CSS marcato).
+        if let Some(vib_id) = vib_id.filter(|v| *v != nv_id) {
             // A layer at gain 0 costs a full voice render every block and can
             // never be heard. CSS still needs it: CC2 can sweep the vibrato
             // side up under a held note, and `update_sustain_gains` can only
@@ -793,11 +1353,22 @@ impl SampleEngine {
             // control — nothing will ever raise this voice — so spawning it is
             // pure waste, and on a piano it is HALF the voices.
             if vb_scale > 0.0 || self.cc_driven_layers() {
+                let saved = self.with_script_start(&vib_id);
                 self.spawn_sustain_layers(&vib_id, true, vb_scale, &direction, note, rr);
+                self.spawn_extra_start = saved;
             }
         }
+        self.spawn_variant = None;
+        let attack_voice = self
+            .patch
+            .spec
+            .legato_cfg()
+            .first_note_attack_voice
+            .unwrap_or(true);
         if fresh_vz >= 2 {
             self.sustain_fade_in = None;
+        }
+        if fresh_vz >= 2 && attack_voice {
             let (nv_ret, vib_ret) = self.legato_pair_ids(true);
             let expr = self.cc1_expression(self.cc1);
             let hold = ms_to_frames(300, self.sample_rate);
@@ -821,6 +1392,59 @@ impl SampleEngine {
                 }
             }
         }
+        // The attack lives in the vibsus groups: where CC2 switches the sides
+        // (`vibrato_mode "on_off"`, CSSS / CSW) it sounds on the vib side only
+        // (a crossfade library levels it by its CC2 group curves instead).
+        let on_off_nonvib = self.patch.spec.dynamics.vibrato_mode.as_deref() == Some("on_off")
+            && self.cc2_blend() < 0.5;
+        if fresh_vz >= 2 && !on_off_nonvib {
+            self.spawn_first_note_attack(note, fresh_vz);
+        }
+    }
+
+    /// The loud first note's attack voice (`FirstNoteAttackSpec`): one zone
+    /// per dynamic layer of the vibsus side, at a drawn velocity, at that
+    /// layer's group-curve level.
+    fn spawn_first_note_attack(&mut self, note: u8, zone: u8) {
+        let Some(atk) = self.patch.spec.legato_cfg().first_note_attack.clone() else {
+            return;
+        };
+        let Some(&[lo, hi]) = atk.velocities.get(usize::from(zone - 2)) else {
+            return;
+        };
+        // KSP `random(lo,hi)`; a forced draw is an index into the range.
+        let vel = match self.forced_attacks.pop_front() {
+            Some(i) => lo.saturating_add(i).min(hi),
+            None => self.draw_uniform(lo, hi),
+        };
+        let dynamics = self
+            .patch
+            .spec
+            .articulation(&atk.layer_articulation)
+            .map(|a| a.dynamics.clone())
+            .unwrap_or_default();
+        for dynamic in dynamics {
+            let g = self
+                .group_curve_gain(&atk.layer_articulation, &dynamic)
+                .unwrap_or(0.0);
+            if g <= 0.0 {
+                continue;
+            }
+            let idx = self.patch.spec.zones.iter().position(|z| {
+                !z.disabled
+                    && z.articulation.eq_ignore_ascii_case(&atk.articulation)
+                    && z.dynamic.eq_ignore_ascii_case(&dynamic)
+                    && z.rr_index == u32::from(vel)
+                    && (z.key_min..=z.key_max).contains(&note)
+                    && self
+                        .solo_mic
+                        .as_ref()
+                        .is_none_or(|m| z.mic.eq_ignore_ascii_case(m))
+            });
+            if let Some(idx) = idx {
+                self.spawn_zone_voice(idx, note, VoiceKind::Short, g, None, 0.0);
+            }
+        }
     }
 
     /// Trigger a one-shot short note (spiccato / staccato / sfz / pizz / …). The
@@ -835,27 +1459,379 @@ impl SampleEngine {
     /// the flag is off or the artic carries no thresholds this falls back to the
     /// even-split dynamic with the velocity² loudness curve (non-CSS libraries).
     pub(crate) fn trigger_zoned_short(&mut self, note: u8, velocity: u8) {
-        let rr = self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize);
-        self.zone_rr_counter = self.zone_rr_counter.wrapping_add(1);
         let artic = self.articulation.clone();
-
-        // VELOCITY → dynamic layer (`%g1qri` band) + intra-band volume (`$arhiq`).
-        let (dynamic, velvol_db) = self.short_layer_and_velvol(&artic, velocity);
-        let n_dyn = self
+        // A note of this articulation fades every sounding release sample
+        // (MOJO 2 sustains: `fade_out(by_marks($MARK_3), 75 ms)`).
+        let fade_rel = self
             .patch
             .spec
             .articulation(&artic)
-            .map_or(0, |a| a.dynamics.len());
-        // With ≥2 recorded dynamics the loudness IS the sampled layer plus the
-        // `$arhiq` intra-band trim; only single-layer artics use velocity².
-        let gain = if n_dyn > 1 {
-            1.0
-        } else {
-            velocity_gain(velocity)
-        } * db_to_gain(css_short_makeup_db(&artic) + velvol_db);
-        if let Some(idx) = self.find_layer_zone(&artic, "", &dynamic, note, rr) {
-            self.spawn_zone_voice(idx, note, VoiceKind::Short, gain, None, 0.0);
+            .map_or(0.0, |a| a.fade_releases_ms);
+        if fade_rel > 0.0 {
+            self.voices
+                .fade_out_releases(ms_to_frames_f(fade_rel, self.sample_rate));
         }
+        let per_key = self.forced_rr.is_none()
+            && self
+                .patch
+                .spec
+                .articulation(&artic)
+                .is_some_and(|a| a.rr_per_note && a.rr_sequence.is_empty());
+        let rr = if per_key {
+            // KSP `%nkhtz[%dtnvu[note]]`: the RR alternates per note-class
+            // (`rr_note_class`), not through the patch-wide counter.
+            let class = self.rr_note_class(&artic, note);
+            let c = &mut self.short_key_rr[usize::from(class & 127)];
+            let rr = usize::from(*c);
+            *c = c.wrapping_add(1);
+            rr
+        } else {
+            let rr = self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize);
+            self.zone_rr_counter = self.zone_rr_counter.wrapping_add(1);
+            rr
+        };
+        // A phrase hit names its recording by RR index (`phrase.rs`).
+        let seq_rr = self
+            .phrase_rr
+            .take()
+            .or_else(|| self.short_sequence_rr(&artic, note, velocity))
+            .or_else(|| self.short_random_rr(&artic, note));
+        let tune_cents = self.short_random_tune(&artic, note);
+
+        // VELOCITY → dynamic layer (`%g1qri` band) + intra-band volume (`$arhiq`).
+        let (dynamic, velvol_db) = self.short_layer_and_velvol(&artic, velocity);
+        // A tempo-synced length picks its take (the dynamic) and stretch.
+        let (dynamic, stretch) = match self.timed_take(&artic) {
+            Some((take, speed)) => (take, speed),
+            None => (dynamic, self.spawn_stretch),
+        };
+        let saved_stretch = std::mem::replace(&mut self.spawn_stretch, stretch);
+        let (n_dyn, decoded_law, table_db) =
+            self.patch
+                .spec
+                .articulation(&artic)
+                .map_or((0, false, None), |a| {
+                    (
+                        a.dynamics.len(),
+                        !a.vel_layer_db.is_empty(),
+                        a.vel_gain_db.get(usize::from(velocity.min(127))).copied(),
+                    )
+                });
+        // A velocity table is the whole level law (MOJO 2: the group volume
+        // the script sets by velocity). Otherwise: with ≥2 recorded dynamics
+        // the loudness IS the sampled layer plus the `$arhiq` intra-band
+        // trim, and so it is for a single layer that carries the decoded trim
+        // (CSB Rips: `(127 − vel) · %tccxl / 126` dB, nothing else); only
+        // other single-layer artics use velocity².
+        let gain = match table_db {
+            Some(db) => db_to_gain(css_short_makeup_db(&artic) + db),
+            None if n_dyn > 1 || decoded_law => db_to_gain(css_short_makeup_db(&artic) + velvol_db),
+            None => velocity_gain(velocity) * db_to_gain(css_short_makeup_db(&artic) + velvol_db),
+        };
+        // More than one player: the ensemble plays it (`players.rs`).
+        if self.players_active() {
+            let plan = super::players::ShortPlan {
+                artic,
+                dynamic,
+                gain,
+                stretch,
+                tune_cents,
+                rr: seq_rr,
+                counter_rr: rr,
+                velocity,
+                line: self.cur_line as u8,
+                parent: note,
+            };
+            self.players_note_on(note, plan);
+            self.spawn_stretch = saved_stretch;
+            return;
+        }
+        let idx = match seq_rr {
+            Some(r) => self
+                .find_layer_zone_rr_index(&artic, &dynamic, note, r)
+                .or_else(|| self.find_layer_zone(&artic, "", &dynamic, note, r)),
+            None => self.find_layer_zone(&artic, "", &dynamic, note, rr),
+        };
+        if let Some(idx) = idx {
+            // Kontakt plays every zone its group maps at this key and
+            // velocity: the borrowed zones layer (CSS 1st Violins' top
+            // Spiccato notes carry a quiet Staccatissimo) or stand in.
+            let z = &self.patch.spec.zones[idx];
+            let (dynamic_of, rr_of, mic_of) = (z.dynamic.clone(), z.rr_index, z.mic.clone());
+            let layers: Vec<usize> = self
+                .patch
+                .spec
+                .zones
+                .iter()
+                .enumerate()
+                .filter(|(i, o)| {
+                    *i != idx
+                        && !o.disabled
+                        && o.rr_index == rr_of
+                        && (o.key_min..=o.key_max).contains(&note)
+                        && o.articulation.eq_ignore_ascii_case(&artic)
+                        && o.dynamic.eq_ignore_ascii_case(&dynamic_of)
+                        && o.mic.eq_ignore_ascii_case(&mic_of)
+                })
+                .map(|(i, _)| i)
+                .collect();
+            // The script's `play_note` offset (`script_start_ms`), as on the
+            // sustain path; 0 for every short that sets none.
+            let saved = self.with_script_start(&artic);
+            for i in std::iter::once(idx).chain(layers) {
+                self.spawn_zone_voice(
+                    i,
+                    note,
+                    VoiceKind::Short,
+                    gain,
+                    None,
+                    f64::from(tune_cents) / 100.0,
+                );
+            }
+            self.spawn_extra_start = saved;
+            // a script release sample at this key's note-off plays the
+            // layer this note-on played
+            let wants_release = self
+                .patch
+                .spec
+                .articulation(&artic)
+                .is_some_and(|a| a.release_sample.is_some() || a.release_types.is_some());
+            if wants_release {
+                self.release_body_strike[usize::from(note & 127)] =
+                    Some(self.voices.current_strike());
+                self.release_sample_notes[usize::from(note & 127)].push((
+                    artic.clone(),
+                    dynamic_of.clone(),
+                    velocity,
+                ));
+            }
+            self.keynoise(&artic, note, velocity, 0);
+        }
+        self.spawn_stretch = saved_stretch;
+    }
+
+    /// A marcato phrase's first-note overlay (see `OverlaySpec`). After a
+    /// hard transition (`$kbqnb`) Kontakt draws a marcato-mod zone at
+    /// velocity 5/6 instead — those zones are not modelled, so none plays.
+    /// The note-class a per-note round robin counts on: the zone root this
+    /// key plays from, or the key itself (`PerformanceSpec::rr_per_key`).
+    fn rr_note_class(&self, artic: &str, note: u8) -> u8 {
+        if self.patch.spec.performance.rr_per_key {
+            return note;
+        }
+        self.patch
+            .spec
+            .zones
+            .iter()
+            .find(|z| {
+                z.articulation.eq_ignore_ascii_case(artic)
+                    && (z.key_min..=z.key_max).contains(&note)
+            })
+            .map_or(note, |z| z.root_key)
+    }
+
+    fn spawn_marcato_overlay(&mut self, note: u8, velocity: u8) {
+        // `$kbqnb` is the last transition's: a loud first note after a pause
+        // still plays the Spiccato overlay (null test: every section's
+        // marcato+overlay v120 first note) — where the library skips it
+        // after a hard transition (`OverlaySpec::skip_after_hard_transition`).
+        let skip_hard = self
+            .patch
+            .spec
+            .articulation(&self.articulation)
+            .and_then(|a| a.overlay.as_ref())
+            .is_none_or(|o| o.skip_after_hard_transition);
+        if skip_hard && self.marcato_kbqnb {
+            return;
+        }
+        self.spawn_marcato_overlay_unconditional(note, velocity);
+    }
+
+    /// The marcato overlay voice, whenever the overlay is switched on.
+    pub(crate) fn spawn_marcato_overlay_unconditional(&mut self, note: u8, velocity: u8) {
+        if !self.marcato_overlay {
+            return;
+        }
+        let Some(ov) = self
+            .patch
+            .spec
+            .articulation(&self.articulation)
+            .and_then(|a| a.overlay.clone())
+        else {
+            return;
+        };
+        let scale = ov
+            .cc1_scale
+            .get(usize::from(self.cc1))
+            .copied()
+            .unwrap_or(100);
+        let v = ((u32::from(velocity) * u32::from(scale)) / 100).max(1) as u8;
+        let keep = std::mem::replace(&mut self.articulation, ov.articulation);
+        self.suppress_random_tune = true;
+        self.trigger_zoned_short(note, v);
+        self.suppress_random_tune = false;
+        self.articulation = keep;
+    }
+
+    /// A random short RR that is none of the last
+    /// `ArticulationSpec::rr_random_avoid_last` RRs this key played (0-based),
+    /// or `None` when the articulation does not draw at random.
+    fn short_random_rr(&mut self, artic_id: &str, note: u8) -> Option<usize> {
+        let a = self.patch.spec.articulation(artic_id)?;
+        let avoid = usize::from(a.rr_random_avoid_last).min(3);
+        let n = a.rr;
+        if avoid == 0 || n == 0 {
+            return None;
+        }
+        let key = usize::from(note & 127);
+        let recent = self.short_rr_hist[key];
+        let pick = if let Some(f) = self.forced_rrs.pop_front() {
+            usize::from(f) % n
+        } else if self.patch.spec.performance.rr_random_global && n > 1 {
+            // one global last pick; `while (new = last) new := random(0, n−1)`
+            let last = usize::from(self.rr_global_last);
+            let mut r = last;
+            while r == last {
+                r = self.script_draw(0, n as i32 - 1) as usize;
+            }
+            r
+        } else if n <= avoid {
+            // Nothing is free: Kontakt would spin forever; take the oldest.
+            usize::from(recent[avoid - 1]).min(n - 1)
+        } else {
+            loop {
+                let r = next_zone_random(&mut self.tune_rng) % n;
+                if !recent[..avoid].contains(&(r as u8)) {
+                    break r;
+                }
+            }
+        };
+        let h = &mut self.short_rr_hist[key];
+        h.copy_within(0..3, 1);
+        h[0] = pick as u8;
+        self.rr_global_last = pick as u8;
+        Some(pick)
+    }
+
+    /// Kontakt's short RR pick (`ArticulationSpec::rr_sequence`, KSP
+    /// `SpiccRR1`…): the band's counter walks the sequence; a pick equal to
+    /// the last RR this note-class played in the band advances once more.
+    /// 0-based RR index, or `None` when the articulation has no sequence.
+    fn short_sequence_rr(&mut self, artic_id: &str, note: u8, velocity: u8) -> Option<usize> {
+        let a = self.patch.spec.articulation(artic_id)?;
+        if a.rr_sequence.is_empty() {
+            return None;
+        }
+        let seq = a.rr_sequence.clone();
+        let band = Self::short_band(a, velocity).map_or(0, |b| b.0);
+        // Note-class = the zone root this key plays from.
+        let class = self
+            .patch
+            .spec
+            .zones
+            .iter()
+            .find(|z| {
+                z.articulation.eq_ignore_ascii_case(artic_id)
+                    && (z.key_min..=z.key_max).contains(&note)
+            })
+            .map_or(note, |z| z.root_key);
+        let base = self.seq_rr_base;
+        let c = self
+            .seq_rr_counter
+            .entry((artic_id.to_string(), band))
+            .or_insert(base);
+        let mut pick = seq[*c % seq.len()];
+        *c = (*c + 1) % seq.len();
+        let last = self
+            .seq_rr_last
+            .get(&(artic_id.to_string(), band, class))
+            .copied();
+        if last == Some(pick) {
+            pick = seq[*c % seq.len()];
+            *c = (*c + 1) % seq.len();
+        }
+        self.seq_rr_last
+            .insert((artic_id.to_string(), band, class), pick);
+        Some(usize::from(pick.max(1) - 1))
+    }
+
+    /// Kontakt's short detune (`ArticulationSpec::random_tune_cents`): a
+    /// uniform integer draw unless the key struck within the gate.
+    fn short_random_tune(&mut self, artic_id: &str, note: u8) -> i32 {
+        let Some(a) = self.patch.spec.articulation(artic_id) else {
+            return 0;
+        };
+        let (n, gate_ms) = (i32::from(a.random_tune_cents), a.random_tune_gate_ms);
+        let now = self.frames_rendered;
+        let slot = &mut self.short_key_frame[usize::from(note & 127)];
+        let recent =
+            slot.is_some_and(|f| frames_to_ms(now.saturating_sub(f), self.sample_rate) < gate_ms);
+        *slot = Some(now);
+        if n == 0 || recent || self.suppress_random_tune {
+            return 0;
+        }
+        if let Some(t) = self.forced_tunes.pop_front() {
+            return i32::from(t);
+        }
+        // xorshift64
+        let mut x = self.tune_rng;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.tune_rng = x;
+        (x % (2 * n as u64 + 1)) as i32 - n
+    }
+
+    /// The pitch envelope of a strike of `note` under `r`: `(cents,
+    /// decay_ms)`, drawn once per strike (every layer spawned at this frame
+    /// shares it), the last draw kept when the key struck within the gate.
+    fn random_pitch_env(&mut self, r: &crate::spec::RandomPitchEnvSpec, note: u8) -> (f32, f32) {
+        let now = self.frames_rendered;
+        if let Some(((n, f), d)) = self.pitch_env_draw {
+            if n == note && f == now {
+                return d;
+            }
+        }
+        let slot = &mut self.pitch_env_key_frame[usize::from(note & 127)];
+        let recent =
+            slot.is_some_and(|f| frames_to_ms(now.saturating_sub(f), self.sample_rate) < r.gate_ms);
+        *slot = Some(now);
+        let d = if recent {
+            self.pitch_env_draw.map_or((0.0, r.decay_ms[0]), |(_, d)| d)
+        } else if let Some(d) = self.forced_pitch_envs.pop_front() {
+            d
+        } else {
+            let mut next = || {
+                let mut x = self.tune_rng;
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                self.tune_rng = x;
+                (x >> 11) as f64 / (1u64 << 53) as f64
+            };
+            let u = next().mul_add(2.0, -1.0) as f32;
+            let cents = u.signum() * u.abs().powf(r.taper) * r.max_cents;
+            let decay = r.decay_ms[0] + (r.decay_ms[1] - r.decay_ms[0]) * next() as f32;
+            (cents, decay)
+        };
+        self.pitch_env_draw = Some(((note, now), d));
+        d
+    }
+
+    /// The zone of `artic`/`dynamic` covering `note` with round-robin
+    /// `rr_index` (passing the solo-mic filter).
+    pub(crate) fn find_layer_zone_rr_index(
+        &self,
+        artic: &str,
+        dynamic: &str,
+        note: u8,
+        rr_index: usize,
+    ) -> Option<usize> {
+        let cands = self.zone_keys.get(note as usize)?;
+        cands.iter().map(|&i| i as usize).find(|&i| {
+            let z = &self.patch.spec.zones[i];
+            z.rr_index as usize == rr_index && self.zone_passes(z, artic, "", dynamic)
+        })
     }
 
     /// VELOCITY → dynamic band + `$arhiq` volume for a SHORT note, per the
@@ -880,7 +1856,10 @@ impl SampleEngine {
         artic: &crate::spec::ArticulationSpec,
         velocity: u8,
     ) -> Option<(usize, usize, i32, i32)> {
-        if artic.dynamics.is_empty() {
+        // One band and no recorded dynamics is a band too when the library
+        // gives its dB (CSB Rips: `%tccxl[0]` over velocity 1-127).
+        let single = !artic.vel_layer_db.is_empty();
+        if artic.dynamics.is_empty() && !single {
             return None;
         }
         // Interior boundaries = thresholds, minus a trailing terminal 127.
@@ -888,7 +1867,7 @@ impl SampleEngine {
         if bounds.last() == Some(&127) {
             bounds.pop();
         }
-        if bounds.is_empty() {
+        if bounds.is_empty() && !single {
             return None;
         }
         let n_bands = bounds.len() + 1;
@@ -995,6 +1974,40 @@ impl SampleEngine {
         // crossfade). Both paths spawn every declared dynamic layer and blend
         // the active pair equal-power by CC1; `update_sustain_gains` re-levels
         // them live as CC1 sweeps.
+        // Kontakt group curves, when decoded: every layer at its own table
+        // value — the CC2 side is one of the curves (CSS), so `side_scale`
+        // (the legacy equal-power split) applies only to an articulation
+        // whose curves have no CC2 table (CSW).
+        if self
+            .patch
+            .spec
+            .articulation(artic)
+            .is_some_and(|a| !a.group_curves.is_empty())
+        {
+            // no CC2 table: the vibrato side is the engine's blend
+            let side = if self.curves_carry_vibrato(artic) {
+                1.0
+            } else {
+                side_scale
+            };
+            for (i, label) in dyn_labels.iter().enumerate() {
+                let gain = side * self.group_curve_gain(artic, label).unwrap_or(0.0);
+                if let Some(idx) = self.find_layer_zone(artic, direction, label, note, rr) {
+                    self.spawn_zone_voice(
+                        idx,
+                        note,
+                        VoiceKind::SustainLayer,
+                        gain,
+                        Some(DynLayer {
+                            vib,
+                            index: i as u8,
+                        }),
+                        0.0,
+                    );
+                }
+            }
+            return;
+        }
         let expr = self.cc1_expression(self.cc1);
         if dyn_labels.len() <= 1 {
             // Single (or no) declared dynamic — one zone, loudness from CC1.
@@ -1061,6 +2074,17 @@ impl SampleEngine {
         let ioi_frames = now.saturating_sub(self.line().last_onset_frame);
         self.line_mut().last_onset_frame = now;
         let ioi_ms = frames_to_ms(ioi_frames, self.sample_rate);
+        // A marcato transition has no overlap delay: it fires on the note-on.
+        if from != to {
+            if let Some(mt) = self.marcato_transition() {
+                self.fire_marcato_transition(from, to, velocity, ioi_ms, &mt);
+                return;
+            }
+            if let Some(st) = self.simple_transition() {
+                self.fire_simple_transition(from, to, velocity, &st);
+                return;
+            }
+        }
         let (delay_ms, portamento) = self.legato_timing(velocity, ioi_frames);
         let frames = ms_to_frames(delay_ms, self.sample_rate);
         if frames == 0 {
@@ -1388,12 +2412,12 @@ impl SampleEngine {
                 // keep the arrival on the tick. That silent-gap + head-skip IS
                 // the CSS Overlap-Delay + `$1fvjk` structure, and it masks the
                 // audible NVLeg onset. Never skip past the arrival marker itself.
+                let cfg = self.patch.spec.legato_cfg();
                 let kbqnb_hard =
-                    self.patch.spec.legato_cfg().velocity_range(velocity) == 3 && ioi_ms > 50.0;
-                let min_skip_ms = crate::engine::css_lt_min_skip_ms(
-                    kbqnb_hard,
-                    self.patch.spec.zones[idx].interval,
-                );
+                    cfg.velocity_range(velocity) == 3 && ioi_ms > cfg.shape.hard_ioi_ms;
+                let min_skip_ms = cfg
+                    .shape
+                    .transition_min_skip(kbqnb_hard, self.patch.spec.zones[idx].interval);
                 let min_skip = ms_to_frames(min_skip_ms, self.sample_rate) as u64;
                 raw.max(min_skip.min(lead_sample_frames.saturating_sub(1))) as usize
             }
@@ -1416,18 +2440,17 @@ impl SampleEngine {
         // declick that reads as an artificial onset (the NVLeg sample has no
         // silent head). Same shape as the destination swell (igmiu / IOI-scaled
         // $x444h), capped at the audible window so it lands full at the arrival.
+        let shape = self.patch.spec.legato_cfg().shape.clone();
+        let declick_ms = self.patch.spec.performance.voice_timing.sustain_declick_ms;
         self.transition_fade = sched_lead.map(|_| {
             let arrival_wall = ((lead_sample_frames.saturating_sub(start_offset as u64)) as f64
                 / rate.max(1e-9))
             .round() as usize;
-            let total = ms_to_frames(crate::engine::CSS_XTIME_MS, self.sample_rate)
+            let total = ms_to_frames(shape.swell_ms, self.sample_rate)
                 .min(arrival_wall)
-                .max(ms_to_frames(
-                    crate::engine::SUSTAIN_DECLICK_MS,
-                    self.sample_rate,
-                ));
-            let igmiu = crate::engine::CSS_ATK_FADE_PCT as usize;
-            let x444h = crate::engine::css_node_vol_div(ioi_ms) as usize;
+                .max(ms_to_frames(declick_ms, self.sample_rate));
+            let igmiu = shape.swell_split_pct as usize;
+            let x444h = shape.swell_divisor_at(ioi_ms) as usize;
             let s1 = total * igmiu / 100;
             let s1d = (total * igmiu / x444h).max(1);
             let s2 = total * (100 - igmiu) / 100;
@@ -1530,14 +2553,37 @@ impl SampleEngine {
     /// current sustain articulation when a note is released — CSS's release
     /// tail. No-op if the articulation declares no `release_artic`.
     pub(crate) fn spawn_release(&mut self, note: u8) {
-        let rel_id = self
-            .patch
-            .spec
-            .articulation(&self.articulation)
-            .and_then(|a| a.release_artic.clone());
-        let Some(rel_id) = rel_id else {
+        let release_of = |engine: &Self, artic: &str| {
+            engine
+                .patch
+                .spec
+                .articulation(artic)
+                .and_then(|a| a.release_artic.clone())
+        };
+        let Some(rel_id) = release_of(self, &self.articulation) else {
             return;
         };
+        // Kontakt releases BOTH sides of the CC2 vibrato pair (NVrel and
+        // Vsusrel each on their own CC2 curve), the way both bodies played.
+        // Only when the pair's release carries decoded group curves — the
+        // legacy single-side release is unchanged elsewhere.
+        let pair_rel = self
+            .find_vibrato_pair_id(&self.articulation)
+            .and_then(|p| release_of(self, &p))
+            .filter(|r| *r != rel_id)
+            .filter(|r| {
+                self.patch
+                    .spec
+                    .articulation(r)
+                    .is_some_and(|a| !a.group_curves.is_empty())
+            });
+        self.spawn_release_of(note, rel_id);
+        if let Some(r) = pair_rel {
+            self.spawn_release_of(note, r);
+        }
+    }
+
+    fn spawn_release_of(&mut self, note: u8, rel_id: String) {
         let (lo, hi, blend) = self.layers_for_artic(&rel_id);
         let dynamic = if blend >= 0.5 { hi } else { lo };
         let rr = self.forced_rr.map_or(self.zone_rr_counter, |f| f as usize);
@@ -1545,7 +2591,16 @@ impl SampleEngine {
         // CSS's recorded releases are a subtle bow-off tail UNDER the note's
         // decay — but these samples are normalised loud, so at unity (×makeup)
         // they spike louder than the note itself ("note-off noise"). Trim them.
-        if let Some(idx) = self.find_layer_zone(&rel_id, "", &dynamic, note, rr) {
+        // With decoded group curves the layer is chosen below, per curve — the
+        // legacy single-layer pick must not gate it (it found no zone for
+        // CSS marcato's mf/f/fff releases and skipped the release entirely).
+        let has_curves = self
+            .patch
+            .spec
+            .articulation(&rel_id)
+            .is_some_and(|a| !a.group_curves.is_empty());
+        let legacy = self.find_layer_zone(&rel_id, "", &dynamic, note, rr);
+        if let Some(idx) = legacy.or(has_curves.then_some(usize::MAX)) {
             // DECODED release level (§11): base −6.0 dB ($jljyh/$ofpdo) × the
             // linear held-time curve %ru5pa — a further −6 dB at 10 ms held,
             // fading to 0 dB extra by ≥ 1 s. Short taps get quiet bow-offs;
@@ -1556,14 +2611,81 @@ impl SampleEngine {
                     self.sample_rate,
                 )
             });
-            let held_db = if held_ms >= 1000.0 {
-                0.0
+            let perf = &self.patch.spec.performance;
+            let held_gain = if perf.release_held_table.is_empty() {
+                let held_db = if held_ms >= 1000.0 {
+                    0.0
+                } else {
+                    -6.0 * (1.0 - ((held_ms - 10.0).max(0.0) / 990.0))
+                };
+                db_to_gain(-6.0 + held_db)
             } else {
-                -6.0 * (1.0 - ((held_ms - 10.0).max(0.0) / 990.0))
+                // KSP 21171-21196: `$gflmk = $ofpdo·%ru5pa[held/10 − 1]/100`.
+                let t = &perf.release_held_table;
+                let i = ((held_ms / 10.0) as i64 - 1).clamp(0, t.len() as i64 - 1) as usize;
+                db_to_gain(perf.release_held_db * f32::from(t[i]) / 100.0)
             };
-            let release_gain =
-                self.patch.spec.performance.release_gain * db_to_gain(-6.0 + held_db);
+            // The body's own held-time curves, by context (CSB): they replace
+            // the library curve and the connection's flat in-phrase level.
+            let by_held = self
+                .patch
+                .spec
+                .articulation(&self.articulation)
+                .and_then(|a| a.release_by_held.clone());
+            let release_gain = if let Some(rb) = by_held {
+                let ctx = self.release_context.unwrap_or(if !self.legato_enabled {
+                    crate::spec::ReleaseContext::Detached
+                } else if self.line().connected {
+                    crate::spec::ReleaseContext::PhraseEnd
+                } else {
+                    crate::spec::ReleaseContext::First
+                });
+                let Some(db) = rb.db(ctx, held_ms) else {
+                    return;
+                };
+                perf.release_gain * db_to_gain(db)
+            } else {
+                self.release_gain_override
+                    .unwrap_or(perf.release_gain * held_gain)
+            };
+            // Kontakt plays the release `wait(2000)` µs after the note-off
+            // (KSP 20788) — the spec's `release_delay_ms` — on top of any hold
+            // the caller set (a marcato transition waiting a script tick).
+            let outer_hold = self.spawn_extra_hold;
+            self.spawn_extra_hold = outer_hold
+                + ms_to_frames_f(perf.release_delay_ms, self.sample_rate)
+                + self.release_extra_hold;
+            // Decoded group curves: every release layer plays, crossfaded by
+            // CC36 (= last CC1) and CC2 — like the body it ends.
+            let curves = self
+                .patch
+                .spec
+                .articulation(&rel_id)
+                .filter(|a| !a.group_curves.is_empty())
+                .map(|a| a.dynamics.clone());
+            if let Some(dyns) = curves {
+                let side = self.vibrato_side_gain(&rel_id);
+                for label in dyns {
+                    let g = side * self.group_curve_gain(&rel_id, &label).unwrap_or(0.0);
+                    if g <= 0.0 {
+                        continue;
+                    }
+                    if let Some(i) = self.find_layer_zone(&rel_id, "", &label, note, rr) {
+                        self.spawn_zone_voice(
+                            i,
+                            note,
+                            VoiceKind::Release,
+                            release_gain * g,
+                            None,
+                            0.0,
+                        );
+                    }
+                }
+                self.spawn_extra_hold = outer_hold;
+                return;
+            }
             self.spawn_zone_voice(idx, note, VoiceKind::Release, release_gain, None, 0.0);
+            self.spawn_extra_hold = outer_hold;
         }
     }
 
@@ -1766,19 +2888,23 @@ impl SampleEngine {
             return Some(i);
         }
         // No zone covers the key: the nearest recorded pitch (the rare
-        // whole-tone-grid library) — the full scan.
+        // whole-tone-grid library) — the full scan. Kontakt itself plays
+        // nothing there (`strict_key_ranges`: CSS harmonics below G3).
+        if self.patch.spec.performance.strict_key_ranges {
+            return None;
+        }
         self.find_layer_zone_scan(artic, direction, dynamic, note, rr)
     }
 
     /// Whether zone `z` is one `find_layer_zone` may play for this layer.
-    fn zone_passes(
+    pub(crate) fn zone_passes(
         &self,
         z: &crate::spec::ZoneSpec,
         artic: &str,
         direction: &str,
         dynamic: &str,
     ) -> bool {
-        if !z.articulation.eq_ignore_ascii_case(artic) {
+        if z.disabled || !z.articulation.eq_ignore_ascii_case(artic) {
             return false;
         }
         if !z.direction.is_empty() && !z.direction.eq_ignore_ascii_case(direction) {
@@ -1930,11 +3056,24 @@ impl SampleEngine {
         } else {
             gain_scale
         };
+        // a player's volume, pan and key (`players.rs`)
+        let player = self.spawn_player.unwrap_or_default();
+        let gain_scale = if player.gain_db == 0.0 {
+            gain_scale
+        } else {
+            gain_scale * db_to_gain(player.gain_db)
+        };
         // Copy out the zone fields up front so no borrow of `self.patch`
         // outlives the `&mut self` cache-miss bookkeeping below.
         let z = &self.patch.spec.zones[idx];
-        let (root_key, tune_cents, gain_db, mic, pan) =
-            (z.root_key, z.tune_cents, z.gain_db, z.mic.clone(), z.pan);
+        // a zone with Kontakt's Tracking off sounds its root on every key
+        let root_key = if z.fixed_pitch { note } else { z.root_key };
+        let (tune_cents, gain_db, mic, pan) = (
+            z.tune_cents,
+            z.gain_db,
+            z.mic.clone(),
+            self.spawn_pan.unwrap_or(z.pan),
+        );
         // Copied out for the same borrow reason: the piano-voice gain below
         // needs it after `self` has been mutably borrowed.
         let zone_artic = z.articulation.clone();
@@ -2014,7 +3153,12 @@ impl SampleEngine {
         // `pitch_offset` lets legato keep the correct note-tag (`to`, for
         // note-off/silence) while shifting the recorded transition so it lands
         // on the target (CSS legato samples are source-labelled a grid step away).
-        let semitones = note as f64 - root_key as f64 + pitch_offset + artic_transpose;
+        let body_tune = if matches!(kind, VoiceKind::SustainLayer) {
+            f64::from(self.body_tune_cents) / 100.0
+        } else {
+            0.0
+        };
+        let semitones = note as f64 - root_key as f64 + pitch_offset + artic_transpose + body_tune;
         // Split pitch from playback speed (whole-tone-grid fill): the integer
         // TRANSPOSITION (note - root_key) becomes a time-preserving pitch
         // shift on the voice so an off-grid note keeps its recorded arrival
@@ -2033,14 +3177,25 @@ impl SampleEngine {
         // rare (a release tail reaching past its sampled range) and nobody
         // minds it running a few milliseconds short. Fold it into the playback
         // rate instead, which is free.
-        let (transpose_cents, resample_semitones) = if self.cs_family() {
-            (semitones * 100.0, 0.0)
-        } else {
-            (0.0, semitones)
-        };
+        let (transpose_cents, resample_semitones) =
+            if self.cs_family() && !self.patch.spec.performance.resample_transpose {
+                (semitones * 100.0, 0.0)
+            } else {
+                (0.0, semitones)
+            };
+        // the articulation's per-key tuning (`key_pitch_cents`)
+        let key_cents = self
+            .patch
+            .spec
+            .articulation(&self.patch.spec.zones[idx].articulation)
+            .and_then(|a| a.key_pitch_cents.get(usize::from(note & 127)))
+            .copied()
+            .unwrap_or(0.0);
         let tune_cents_total = tune_cents as f64
+            + f64::from(self.spawn_tune_cents)
             + self.master_tune_cents()
-            + f64::from(self.piano_key_cents[usize::from(note & 127)]);
+            + f64::from(self.piano_key_cents[usize::from(note & 127)])
+            + f64::from(key_cents);
         let rate = 2.0f64.powf(tune_cents_total / 1200.0 + resample_semitones / 12.0);
 
         // Marker position for playback emission (FILE frames): the zone's
@@ -2138,7 +3293,7 @@ impl SampleEngine {
                 }
             }
             None => 0,
-        };
+        } + self.spawn_extra_hold;
         let is_sustain_layer = matches!(
             kind,
             VoiceKind::SustainNVLo
@@ -2216,8 +3371,34 @@ impl SampleEngine {
             let v = f32::from(self.last_velocity) / 127.0;
             1.0 - s + s * v * v
         });
-        let gain =
-            10.0f32.powf(gain_db / 20.0) * gain_scale * makeup * db_to_gain(piano_db) * vel_law;
+        // Everything but the controller-driven `gain_scale`: what CC
+        // re-levelling must keep (`Voice::level`).
+        let artic = self
+            .patch
+            .spec
+            .articulation(&self.patch.spec.zones[idx].articulation);
+        // A sustained body's level by velocity (`ArticulationSpec::
+        // vel_gain_db`; shorts apply it in `trigger_zoned_short`): CSSS
+        // marcato, `(127 − vel) · %lwgt4[50] / 100` from `$5n14h` (CSSS
+        // 12036-12037, the connection path that draws the random offset).
+        let body_vel_db = if is_sustain_layer {
+            artic
+                .and_then(|a| {
+                    a.vel_gain_db
+                        .get(usize::from(self.last_velocity.min(127)))
+                        .copied()
+                })
+                .unwrap_or(0.0)
+        } else {
+            0.0
+        };
+        let artic_level_db = artic.map_or(0.0, |a| a.level_db) + body_vel_db;
+        let level = 10.0f32.powf((gain_db + artic_level_db) / 20.0)
+            * makeup
+            * db_to_gain(piano_db)
+            * vel_law
+            * db_to_gain(self.patch.spec.performance.instrument_gain_db + self.ensemble_db());
+        let gain = level * gain_scale;
         let mic_index = self.mic_index_for(&mic);
 
         // Decoded ENV_FLEX amp envelope for this voice's articulation family
@@ -2228,10 +3409,57 @@ impl SampleEngine {
         let flex_env = amp_env_for(
             &self.patch.spec,
             &flex_artic,
+            &self.patch.spec.zones[idx].dynamic,
             &kind,
             is_sustain_layer,
             self.sample_rate,
         );
+        let flex_env2 = self
+            .patch
+            .spec
+            .articulation(&flex_artic)
+            .filter(|a| !a.amp_env2.is_empty())
+            .and_then(|a| {
+                let t: Vec<(f32, f32, f32)> = a
+                    .amp_env2
+                    .iter()
+                    .map(|s| (s.time_ms, s.level, s.curve))
+                    .collect();
+                FlexEnv::from_segments(&t, 0.0, self.sample_rate, false)
+            });
+
+        let pitch_env = match self
+            .patch
+            .spec
+            .articulation(&flex_artic)
+            .filter(|a| !a.pitch_env.is_empty())
+            .map(|a| {
+                (
+                    a.pitch_env.clone(),
+                    a.pitch_env_cents,
+                    a.pitch_env_random.clone(),
+                )
+            }) {
+            Some((segs, cents, random)) => {
+                let mut t: Vec<(f32, f32, f32)> =
+                    segs.iter().map(|s| (s.time_ms, s.level, s.curve)).collect();
+                let cents = match random {
+                    Some(r) => {
+                        let (c, decay) = self.random_pitch_env(&r, note);
+                        if let Some(last) = t.last_mut() {
+                            last.0 = decay;
+                        }
+                        c
+                    }
+                    None => cents,
+                };
+                (cents != 0.0)
+                    .then(|| FlexEnv::from_segments(&t, 0.0, self.sample_rate, false))
+                    .flatten()
+                    .map(|e| (e, cents))
+            }
+            None => None,
+        };
 
         // CSS-style sustains ship no loop points but have a slow ~0.8s natural
         // attack pre-roll that CSS skips (Kontakt sample-start) for a fast attack.
@@ -2278,7 +3506,39 @@ impl SampleEngine {
         // jump. The loop below still holds the body for indefinite sustain.
         // (`start_offset` shifts into the window for prefired legato
         // transitions whose measured lead-in exceeds the scheduled lead.)
-        let start_frame = sample_start as usize + start_offset;
+        // A scripted body variant enters the same file deeper (Kontakt's
+        // velocity-2.. zone over it).
+        let sample_start = match self.spawn_variant {
+            Some(v) if is_sustain_layer && v >= 2 => self.patch.spec.zones[idx]
+                .variant_starts
+                .get(usize::from(v - 2))
+                .copied()
+                .unwrap_or(sample_start),
+            _ => sample_start,
+        };
+        let start_frame = sample_start as usize
+            + start_offset
+            + if is_sustain_layer {
+                // a script offset on the body (a leap's entry, a marcato's
+                // body offset, a sustain's own start, a handoff layer's
+                // entry): the zone may limit it
+                let z = &self.patch.spec.zones[idx];
+                let layer = self
+                    .sustain_fade_in_by_dyn
+                    .iter()
+                    .find(|(a, d, _, _)| {
+                        d.eq_ignore_ascii_case(&z.dynamic)
+                            && (a.is_empty() || a.eq_ignore_ascii_case(&z.articulation))
+                    })
+                    .map_or(0, |(_, _, _, o)| *o);
+                self.script_offset(idx, self.spawn_extra_start + layer)
+            } else if matches!(kind, VoiceKind::Short) && self.spawn_extra_start > 0 {
+                // a short's `play_note` offset (`script_start_ms`, set by
+                // `trigger_zoned_short`), limited by the zone the same way
+                self.script_offset(idx, self.spawn_extra_start)
+            } else {
+                0
+            };
 
         // Attack envelope. Sustain layers get the full musical attack. Legato
         // transitions and release tails — and ANY voice that starts mid-sample
@@ -2286,8 +3546,10 @@ impl SampleEngine {
         // get a short declick ramp: without it the onset steps from silence to
         // a non-zero sample value and clicks on every note change. Shorts keep
         // their sharp natural attack (they start at true sample-start silence).
-        let _ = SUSTAIN_DECLICK_MS;
-        let attack = if matches!(kind, VoiceKind::Legato) && self.transition_fade.is_some() {
+        let attack = if self.spawn_fade_attack > 0 {
+            // A script `fade_in` on this voice (the fretboard's slides).
+            self.spawn_fade_attack
+        } else if matches!(kind, VoiceKind::Legato) && self.transition_fade.is_some() {
             // The two-stage transition swell (below) IS the fade-in — no
             // separate declick attack, which would double the onset.
             0
@@ -2305,9 +3567,15 @@ impl SampleEngine {
             } else if start_offset > 0 {
                 // Mid-sample entry starts at a non-zero sample value and WILL
                 // click without a ramp — which is the only thing the declick
-                // is for; see `SUSTAIN_DECLICK_MS`, "starts mid-sample at full
-                // level".
-                ms_to_frames(crate::engine::SUSTAIN_DECLICK_MS.max(20), self.sample_rate)
+                // is for.
+                ms_to_frames(
+                    self.patch
+                        .spec
+                        .performance
+                        .voice_timing
+                        .mid_sample_declick_ms,
+                    self.sample_rate,
+                )
             } else {
                 // True sample start: the recording begins at silence, so there
                 // is nothing to declick and the ramp only destroys the onset.
@@ -2317,6 +3585,11 @@ impl SampleEngine {
                 // what "the piano fades in and has no attack" was.
                 0
             }
+        } else if start_offset > 0 && self.spawn_script_offset {
+            // A script's `play_note` offset (the fretboard's lead-in body):
+            // Kontakt enters there under the group envelope alone, whose
+            // attack the voice's authored `amp_env` already plays.
+            0
         } else if start_offset > 0 {
             // Deep mid-sample entry (skipped-swell Low-Latency prefire): fade
             // in over a longer window, scaled to how far we skipped (capped),
@@ -2327,7 +3600,10 @@ impl SampleEngine {
             )
             .min(start_offset)
         } else if matches!(kind, VoiceKind::Legato | VoiceKind::Release) {
-            ms_to_frames(ONSET_DECLICK_MS, self.sample_rate)
+            ms_to_frames(
+                self.patch.spec.performance.voice_timing.onset_declick_ms,
+                self.sample_rate,
+            )
         } else {
             0
         };
@@ -2336,7 +3612,15 @@ impl SampleEngine {
         // IMMEDIATELY at full level, it is NOT muted/held silent. Overrides the
         // normal attack for this voice only.
         let fade_in_under = if is_sustain_layer {
-            self.sustain_fade_in
+            let z = &self.patch.spec.zones[idx];
+            self.sustain_fade_in_by_dyn
+                .iter()
+                .find(|(a, d, _, _)| {
+                    d.eq_ignore_ascii_case(&z.dynamic)
+                        && (a.is_empty() || a.eq_ignore_ascii_case(&z.articulation))
+                })
+                .map(|(_, _, f, _)| *f)
+                .or(self.sustain_fade_in)
         } else if matches!(kind, VoiceKind::Legato) {
             // Transition voice: emerge via the two-stage swell (delay 0 — the
             // `start_hold` above already provides the silent pre-roll).
@@ -2344,8 +3628,15 @@ impl SampleEngine {
         } else {
             None
         };
+        // A Time Machine II zone's pitch marks (found when it was warmed).
+        let tm2_marks = (self.patch.spec.zones[idx].tm2_block > 0)
+            .then(|| self.patch.tm2_marks.get(idx).cloned())
+            .flatten();
         // Unison: spawn N copies spread across ±detune/2 cents + a pan spread,
         // level-compensated. copies == 1 is the normal single-voice path.
+        // a player's pan runs ahead of the layer's inserts when it has any
+        // (Kontakt's group inserts follow the amplifier), else at the output
+        let insert_pan = player.pan != 0.0 && self.insert_plan(idx).is_some();
         let (copies, det_cents, width) = self.unison;
         let copies = copies.max(1);
         let comp = 1.0 / (copies as f32).sqrt();
@@ -2358,7 +3649,11 @@ impl SampleEngine {
             // Source-vs-output sample-rate compensation (see Voice::with_rate_scale).
             let sr_scale = data.sample_rate as f64 / self.sample_rate as f64;
             let u_rate = rate * 2f64.powf((off * det_cents * 0.5) as f64 / 1200.0) * sr_scale;
-            let u_pan = (pan + off * width).clamp(-1.0, 1.0);
+            let u_pan = (pan
+                + off * width
+                + self.patch.spec.performance.instrument_pan
+                + if insert_pan { 0.0 } else { player.pan })
+            .clamp(-1.0, 1.0);
             let mut voice = Voice::with_rate(
                 data.clone(),
                 note,
@@ -2369,12 +3664,41 @@ impl SampleEngine {
             )
             .with_mic_index(mic_index)
             .with_line(line)
+            .with_env_key(player.parent.unwrap_or(note))
             .with_artic_class(artic_class)
-            .with_pan(u_pan)
+            .with_pan_law(u_pan, self.patch.spec.performance.mono_balance_pan)
             .with_attack(attack)
             .with_start_hold(start_hold)
             .with_pitch_cents(transpose_cents)
+            .with_level(level * comp)
             .with_sample_window(start_frame, (sample_end > 0).then_some(sample_end as usize));
+            // A Time Machine II zone plays grain by grain at any speed; one
+            // whose marks are not found yet (never warmed) stretches plainly.
+            voice = match tm2_marks.clone() {
+                Some(marks) => voice.with_tm2(
+                    marks,
+                    self.spawn_stretch,
+                    f64::from(data.sample_rate as f32 / self.sample_rate as f32),
+                ),
+                None => voice.with_stretch(self.spawn_stretch),
+            }
+            .with_fade_in_under(0, self.spawn_fade_in);
+            if let Some((hold, fade)) = self.spawn_delayed_fade {
+                voice = voice.with_delayed_fade(hold, fade);
+            }
+            // the layer's Kontakt group insert filters/EQs (`group_fx`)
+            if let Some(plan) = self.insert_plan(idx) {
+                let l = usize::from(line);
+                let chain = super::inserts::InsertState::new(plan, self.sample_rate as f32, |cc| {
+                    self.line_cc(l, cc)
+                })
+                .with_velocity(self.note_strike_vel[usize::from(note & 127)])
+                .with_key(player.key.unwrap_or(note));
+                voice = voice.with_inserts(Some(chain));
+                if insert_pan {
+                    voice = voice.with_insert_pan(player.pan);
+                }
+            }
             // A patch layer's breakpoint amp envelope (not on the release
             // samples, which play after the key).
             if !matches!(kind, VoiceKind::Release) {
@@ -2412,6 +3736,34 @@ impl SampleEngine {
             // DYNAMICS, not the utility fades / arrival timing.
             if let Some(flex) = flex_env.clone() {
                 voice = voice.with_flex_env(flex);
+            }
+            if let Some((env, cents)) = pitch_env.clone() {
+                voice = voice.with_pitch_env(env, cents);
+            }
+            if let Some(env2) = flex_env2.clone() {
+                voice = voice.with_flex_env2(env2);
+            }
+            // A marcato transition's CC-driven body envelopes replace the
+            // articulation's own.
+            if is_sustain_layer {
+                if let Some((e1, e2)) = &self.sustain_flex {
+                    if let Some(e) = e1 {
+                        voice.set_flex_env(e.clone());
+                    }
+                    if let Some(e) = e2 {
+                        voice.set_flex_env2(e.clone());
+                    }
+                }
+            }
+            // A held zoned voice (a fretted note) releases on the same law.
+            if is_sustain_layer || matches!(kind, VoiceKind::Zoned) {
+                let k = self
+                    .patch
+                    .spec
+                    .articulation(&flex_artic)
+                    .and_then(|a| a.release_curve_k)
+                    .unwrap_or(self.patch.spec.performance.release_curve_k);
+                voice = voice.with_release_curve(k);
             }
             let loop_xfade =
                 ms_to_frames(self.patch.spec.performance.loop_xfade_ms, self.sample_rate);
@@ -2656,11 +4008,12 @@ impl SampleEngine {
             // pitch — the routed note is a trigger selector, not a transpose.
             // Without this a drum routed to any note other than its zone key
             // would detune (e.g. a tom on note 45 vs root 50 = -5 semitones).
-            let semitones = if self.percussion || self.pinned_articulation.is_some() {
-                0.0
-            } else {
-                note as f64 - z.root_key as f64
-            };
+            let semitones =
+                if self.percussion || self.pinned_articulation.is_some() || z.fixed_pitch {
+                    0.0
+                } else {
+                    note as f64 - z.root_key as f64
+                };
             // Same pitch/speed split as spawn_zone_voice_at: transposition →
             // time-preserving shifter; tuning → rate.
             // Resample mode (Spectrasonics sources): the key offset is
@@ -2742,7 +4095,9 @@ impl SampleEngine {
                     let u_rate = rate
                         * 2f64.powf(((off * det_cents * 0.5) as f64 + h_rate) / 1200.0)
                         * sr_scale;
-                    let u_pan = (z.pan + off * width + h_pan).clamp(-1.0, 1.0);
+                    let u_pan =
+                        (z.pan + off * width + h_pan + self.patch.spec.performance.instrument_pan)
+                            .clamp(-1.0, 1.0);
                     let mut voice = Voice::with_rate(
                         data.clone(),
                         note,
@@ -2755,7 +4110,7 @@ impl SampleEngine {
                     .with_line(line)
                     .with_artic_class(artic_class)
                     .with_choke_group(choke_group)
-                    .with_pan(u_pan)
+                    .with_pan_law(u_pan, self.patch.spec.performance.mono_balance_pan)
                     .with_attack(self.attack_frames)
                     .with_decay(self.decay_frames, self.sustain_level)
                     .with_amp_points(self.amp_points.clone(), self.sample_rate)
@@ -2784,6 +4139,20 @@ impl SampleEngine {
     /// Process a MIDI CC event.
     pub fn cc(&mut self, controller: u8, value: u8) {
         self.cc_line(0, controller, value);
+        // A fixed controller ignores MIDI on every line, not just line 0
+        // (`dynamics.fixed_ccs`; CSB holds CC2 at 126): broadcasting it put a
+        // later phrase, allocated to another line, at CC2 0 — its release
+        // curves read 0 and the release never played.
+        if self
+            .patch
+            .spec
+            .dynamics
+            .fixed_ccs
+            .iter()
+            .any(|f| f.cc == controller)
+        {
+            return;
+        }
         // Live single-channel dispatch: CC1 (dynamics) and CC2 (vibrato) are the
         // one player's mod / expression wheel and govern EVERY mono-legato /
         // auto-divisi line the allocator may place a note on — not just line 0.
@@ -2801,8 +4170,10 @@ impl SampleEngine {
                 }
                 self.set_active_line(l as LineId);
                 if controller == 2 {
-                    self.next_cc_ramp =
-                        Some(ms_to_frames(crate::engine::CC2_RAMP_MS, self.sample_rate));
+                    self.next_cc_ramp = Some(ms_to_frames(
+                        self.patch.spec.performance.voice_timing.cc2_lag_ms,
+                        self.sample_rate,
+                    ));
                 }
                 self.update_sustain_gains();
             }
@@ -2818,7 +4189,20 @@ impl SampleEngine {
     /// level. Document CCs carry their channel; the scheduler resolves it to
     /// a line before calling this.
     pub fn cc_line(&mut self, line: LineId, controller: u8, value: u8) {
+        self.players_cc(controller, value);
+        // a fixed controller ignores MIDI (`dynamics.fixed_ccs`)
+        if self
+            .patch
+            .spec
+            .dynamics
+            .fixed_ccs
+            .iter()
+            .any(|f| f.cc == controller)
+        {
+            return;
+        }
         self.set_active_line(line);
+        self.cc_sent[usize::from(controller & 127)] = true;
         let old_value = self
             .cc_values
             .get(controller as usize)
@@ -2826,6 +4210,15 @@ impl SampleEngine {
             .unwrap_or(0);
         if let Some(slot) = self.cc_values.get_mut(controller as usize) {
             *slot = value;
+        }
+        // a script copying this controller to another (`performance.mirror_ccs`)
+        for i in 0..self.patch.spec.performance.mirror_ccs.len() {
+            let m = &self.patch.spec.performance.mirror_ccs[i];
+            if m.from == controller {
+                let to = usize::from(m.to & 127);
+                self.cc_values[to] = value;
+                self.cc_sent[to] = true;
+            }
         }
         if self.patch.is_zoned() {
             self.trigger_cc_zones(controller, old_value, value);
@@ -2866,8 +4259,10 @@ impl SampleEngine {
                 self.cc2 = value;
                 self.line_mut().cc2 = value;
                 // CC2 (vibrato crossfade) re-levels over its decoded 1000 ms lag.
-                self.next_cc_ramp =
-                    Some(ms_to_frames(crate::engine::CC2_RAMP_MS, self.sample_rate));
+                self.next_cc_ramp = Some(ms_to_frames(
+                    self.patch.spec.performance.voice_timing.cc2_lag_ms,
+                    self.sample_rate,
+                ));
                 self.update_sustain_gains();
             }
             58 => {
@@ -2880,7 +4275,21 @@ impl SampleEngine {
                 // plays back the same RR sequence every time.
                 self.rr.borrow_mut().reset_to(value as usize);
                 self.zone_rr_counter = value as usize;
+                self.sustain_rr_counter = value as usize;
                 self.zone_rr_last_slots.clear();
+                self.note_rr = [0; 128];
+                self.short_key_rr = [0; 128];
+                // Short sequence counters `:= CC59 mod 16`, no-repeat tables 0.
+                self.seq_rr_counter.clear();
+                self.seq_rr_last.clear();
+                self.short_rr_hist = [[u8::MAX; 4]; 128];
+                self.seq_rr_base = usize::from(value) % 16;
+                // KSP SetRR: the first-note body-variant counter too
+                // (`$2ekvq := CC59 mod 18`).
+                let n = self.patch.spec.legato_cfg().first_note_variants.len();
+                if n > 0 {
+                    self.variant_counter = value as usize % n;
+                }
             }
             64 => {
                 let was_held = self.cc64_held;
@@ -2984,5 +4393,71 @@ impl SampleEngine {
         if self.patch.is_zoned() {
             self.trigger_aftertouch_zones(Some(note), old_value, value);
         }
+    }
+}
+
+/// A tempo-synced length's take and speed % at `quarter_us` µs per quarter
+/// (MOJO 2's GetDesiredSwellOrCrescLengthMS, GetBestCrescOrSwellNum and
+/// the speed, 20249-20328, all in the script's integers).
+pub(crate) fn timed_length_take(
+    t: &crate::spec::TimedLengthSpec,
+    quarter_us: u32,
+    beats: i32,
+) -> Option<(usize, i32)> {
+    let bpm = 60_000_000 / i64::from(quarter_us.max(1));
+    let desired = ((60_000_000 / bpm.max(1)) * i64::from(beats)) as f64 / 1000.0;
+    let desired = desired as i64;
+    if t.rec_ms.is_empty() || desired <= 0 {
+        return None;
+    }
+    let mut best = 0;
+    for (i, &r) in t.rec_ms.iter().enumerate() {
+        if (i64::from(r) - desired).abs() <= (i64::from(t.rec_ms[best]) - desired).abs() {
+            best = i;
+        }
+    }
+    let pct = |i: usize| (f64::from(t.rec_ms[i]) / desired as f64 * 100.0) as i32;
+    if pct(best) < t.min_speed_pct && best + 1 < t.rec_ms.len() {
+        best += 1;
+    }
+    Some((best, pct(best).max(1)))
+}
+
+#[cfg(test)]
+mod timed_tests {
+    use super::timed_length_take;
+    use crate::spec::TimedLengthSpec;
+
+    fn spec(rec: &[i32], min: i32) -> TimedLengthSpec {
+        TimedLengthSpec {
+            takes: vec!["L1".into(), "L2".into(), "L3".into()],
+            rec_ms: rec.to_vec(),
+            min_speed_pct: min,
+            beats_cc: 20,
+            beats: 4,
+        }
+    }
+
+    /// The decode's table at 120 BPM (KONTRA's trace): Trumpet swell 4 beats
+    /// L2 115 %, Trumpet crescendo 5 beats L2 106 %, Alto swell L1 76 %,
+    /// Alto crescendo 7 beats L3 153 % (L2 at 65 % is under 70, bumped).
+    #[test]
+    fn swell_and_crescendo_takes_at_120() {
+        assert_eq!(
+            timed_length_take(&spec(&[769, 2307, 5384], 65), 500_000, 4),
+            Some((1, 115))
+        );
+        assert_eq!(
+            timed_length_take(&spec(&[1333, 2666, 5333], 65), 500_000, 5),
+            Some((1, 106))
+        );
+        assert_eq!(
+            timed_length_take(&spec(&[1538, 3076, 6153], 70), 500_000, 4),
+            Some((0, 76))
+        );
+        assert_eq!(
+            timed_length_take(&spec(&[769, 2307, 5384], 70), 500_000, 7),
+            Some((2, 153))
+        );
     }
 }

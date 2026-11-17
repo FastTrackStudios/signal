@@ -327,6 +327,33 @@ enum ZonesCmd {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Sync the NKI's per-zone playback numbers into EXISTING zones, matched
+    /// by file: `tune_cents` (zone tune), `gain_db` (zone volume), and the
+    /// key range / root. Kontakt plays a zone retuned by the group tune
+    /// (`master_tune_cents`) PLUS this zone tune, across `key_min..=key_max`
+    /// (CSS maps each whole-tone sample over two keys); without them no
+    /// note can null against a Kontakt render. Every other field (loops,
+    /// measured arrivals) is left alone.
+    SyncTsv {
+        /// A .signalpack or a loose library.styx.
+        target: PathBuf,
+        /// zones.tsv from the `nki` decoder.
+        #[arg(long)]
+        from_tsv: PathBuf,
+        /// Section label used in extracted WAV paths (e.g. "1st Violins").
+        #[arg(long)]
+        section: String,
+        /// Flat `<Mic>/<Section>/<Artic>/` extraction (CSB/CSW/Solo Strings).
+        #[arg(long)]
+        flat: bool,
+        /// Report what would change without writing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Mark zones whose file the NKI never maps `disabled` (Kontakt
+        /// never plays them).
+        #[arg(long)]
+        disable_unmatched: bool,
+    },
     /// Set scalar fields on matching zones: `--set loop_xfade=4800 …`.
     Set {
         /// A .signalpack (embedded spec is rewritten) or a loose .styx
@@ -365,6 +392,10 @@ enum LoopsCmd {
         /// Section label used in extracted WAV paths (e.g. "1st Violins").
         #[arg(long)]
         section: String,
+        /// Samples sit flat, `<mic>/<section>/<artic>/…` (CSW, CSB, CSSS),
+        /// not under the strings' category folders.
+        #[arg(long)]
+        flat: bool,
         /// Compare against loops already present instead of writing.
         #[arg(long)]
         check: bool,
@@ -422,6 +453,24 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
         ),
         Cmd::Zones {
             command:
+                ZonesCmd::SyncTsv {
+                    target,
+                    from_tsv,
+                    section,
+                    flat,
+                    dry_run,
+                    disable_unmatched,
+                },
+        } => zones_sync_tsv(
+            &target,
+            &from_tsv,
+            &section,
+            flat,
+            dry_run,
+            disable_unmatched,
+        ),
+        Cmd::Zones {
+            command:
                 ZonesCmd::Set {
                     target,
                     sets,
@@ -437,10 +486,11 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
                     target,
                     from_tsv,
                     section,
+                    flat,
                     check,
                     dry_run,
                 },
-        } => loops_inject(&target, &from_tsv, &section, check, dry_run),
+        } => loops_inject(&target, &from_tsv, &section, flat, check, dry_run),
         Cmd::Check { pack, src_root } => {
             if run_check(&pack, src_root.as_deref())? {
                 Ok(())
@@ -842,6 +892,150 @@ fn zones_set(
     tgt.write(&new_spec)
 }
 
+// ── zones sync-tsv ───────────────────────────────────────────────────────────
+
+/// The NKI numbers a zone block should carry, as styx field values.
+fn tsv_zone_fields(z: &TsvZone) -> Vec<(&'static str, String)> {
+    let mut v = vec![
+        // Full precision: 0.001 c of rate error drifts a sustain ~0.02 rad at
+        // 2 kHz over 3 s — enough to cap a Kontakt null near −35 dB.
+        ("tune_cents", format!("{:.6}", z.tune_cents)),
+        ("gain_db", format!("{:.3}", z.gain_db)),
+        ("key_min", z.key_min.to_string()),
+        ("key_max", z.key_max.to_string()),
+        ("root_key", z.root_key.to_string()),
+    ];
+    // A rip's round robin is its file's last number; the zones nki-styx
+    // wrote all sit on RR 0.
+    if cs_is_rip(&z.articulation) {
+        v.push(("rr_index", z.rr_index.to_string()));
+    }
+    // A transition's interval is its velocity code (the decoded zone map's);
+    // a zone map written from file names alone carries none (CSSS).
+    if z.direction.is_some() {
+        v.push(("interval", z.interval.to_string()));
+    }
+    if let Some(s) = z.sample_start {
+        v.push(("sample_start", s.to_string()));
+    }
+    if let Some(m) = z.start_mod {
+        v.push(("start_mod", m.to_string()));
+    }
+    // Variants only when they form the contiguous run velocity 2, 3, … that
+    // `ZoneSpec::variant_starts` indexes.
+    let run: Vec<u64> = (2..)
+        .map_while(|vel| z.variant_starts.get(&vel).copied())
+        .collect();
+    if !run.is_empty() {
+        let list = run.iter().map(u64::to_string).collect::<Vec<_>>().join(" ");
+        v.push(("variant_starts", format!("({list})")));
+    }
+    if let Some(&(_, start, _)) = z.marcato.first() {
+        v.push(("marcato_start", start.to_string()));
+        let mut rows = z.marcato.clone();
+        rows.sort_by_key(|r| r.0);
+        // One level per zone set (the f and fff sets repeat a file once each).
+        let list = rows
+            .iter()
+            .map(|r| format!("{:.3}", if r.2 > 0.0 { 20.0 * r.2.log10() } else { -96.0 }))
+            .collect::<Vec<_>>()
+            .join(" ");
+        v.push(("marcato_gains_db", format!("({list})")));
+    }
+    v
+}
+
+fn zones_sync_tsv(
+    target: &Path,
+    tsv: &Path,
+    section: &str,
+    flat: bool,
+    dry_run: bool,
+    disable_unmatched: bool,
+) -> Result<()> {
+    let by_file = load_tsv_zones(tsv, section, flat)?;
+    let (tgt, spec_text) = Target::open(target)?;
+    let (mut matched, mut unmatched, mut unreachable) = (0usize, 0usize, 0usize);
+    let mut field_changes: BTreeMap<&'static str, usize> = BTreeMap::new();
+    let borrowed = load_borrowed_zones(tsv, section, flat)?;
+    let (new_spec, changed) = edit_zones(&spec_text, |block| {
+        // borrowed zones are regenerated below
+        if styx_edit::entry_field(block, "borrowed").as_deref() == Some("true") {
+            return Some(String::new());
+        }
+        let file = styx_edit::entry_field(block, "file")?;
+        let Some(z) = by_file.get(file.as_str()) else {
+            unmatched += 1;
+            if disable_unmatched
+                && styx_edit::entry_field(block, "disabled").as_deref() != Some("true")
+            {
+                return Some(styx_edit::set_entry_field(block, "disabled", "true"));
+            }
+            return None;
+        };
+        matched += 1;
+        if disable_unmatched && z.unreachable_sustain() {
+            unreachable += 1;
+            if styx_edit::entry_field(block, "disabled").as_deref() != Some("true") {
+                return Some(styx_edit::set_entry_field(block, "disabled", "true"));
+            }
+            return None;
+        }
+        let mut b = block.to_string();
+        // A zone the decode maps again plays again (Cellos' fourth Spiccato
+        // band was disabled while its swapped file names went unmatched).
+        if styx_edit::entry_field(&b, "disabled").as_deref() == Some("true") {
+            b = styx_edit::set_entry_field(&b, "disabled", "false");
+            *field_changes.entry("disabled").or_default() += 1;
+        }
+        for (k, v) in tsv_zone_fields(z) {
+            let old = styx_edit::entry_field(&b, k);
+            let same = old.as_deref().is_some_and(|o| {
+                o.parse::<f64>()
+                    .ok()
+                    .zip(v.parse::<f64>().ok())
+                    .map_or(o.trim() == v.trim(), |(o, n)| (o - n).abs() < 1e-7)
+            });
+            if !same {
+                *field_changes.entry(k).or_default() += 1;
+                b = styx_edit::set_entry_field(&b, k, &v);
+            }
+        }
+        (b != block).then_some(b)
+    })?;
+
+    let mut new_spec = new_spec;
+    if !borrowed.is_empty() {
+        let (_, _, ie, _) = styx_edit::find_list_block(&new_spec, "zones")
+            .ok_or_else(|| eyre::eyre!("spec has no `zones (…)` block"))?;
+        let mut appended = String::new();
+        for z in &borrowed {
+            appended.push_str(&emit_borrowed_block(z, section));
+        }
+        new_spec.insert_str(ie, &appended);
+        println!(
+            "  {} borrowed zone(s): another articulation's recordings in a short or vibsus group",
+            borrowed.len()
+        );
+    }
+    let changed = changed + borrowed.len();
+    println!("{matched} zone(s) matched a tsv file, {unmatched} did not, {changed} edited");
+    if unreachable > 0 {
+        println!("  {unreachable} sustain zone(s) on velocities Kontakt never plays: disabled");
+    }
+    for (k, n) in &field_changes {
+        println!("  {k:<10} changed on {n} zone(s)");
+    }
+    if matched == 0 {
+        bail!("no zone's `file` matched a zones.tsv sample (wrong --section or --flat?)");
+    }
+    if dry_run || changed == 0 {
+        println!("(nothing written)");
+        return Ok(());
+    }
+    tgt.write(&new_spec)
+}
+
 // ── zones normalize-pacific ──────────────────────────────────────────────────
 
 /// Parsed form of a Pacific baked-suffix articulation id.
@@ -962,6 +1156,33 @@ struct TsvZone {
     key_max: u8,
     root_key: u8,
     tune_cents: f64,
+    /// Zone volume (`zvol`, a linear amplitude factor) in dB.
+    gain_db: f64,
+    /// Kontakt zone sample start (frames) of the file's velocity-1 zone —
+    /// the plain note-on entry. CSS reuses one file across velocity-2..4
+    /// zones with deeper starts for scripted variants; those are not zones
+    /// of ours. `None` when the decode has no `sample_start` column.
+    sample_start: Option<u64>,
+    /// Sample starts of the file's velocity-2.. zones (CSS body variants),
+    /// keyed by velocity.
+    variant_starts: BTreeMap<i32, u64>,
+    /// A transition file's deeper-entered rows (CSS `marc leg` zones):
+    /// `(tsv row, start, zvol)`, emitted in row order.
+    marcato: Vec<(usize, u64, f64)>,
+    /// `(velocity, start, zvol)` of the file's main row when it has no
+    /// velocity-1 row; `sample_start_vel1` = that row's start when it does.
+    main_row: Option<(i32, Option<u64>, f64)>,
+    sample_start_vel1: Option<Option<u64>>,
+    vel1_zvol: Option<f64>,
+    /// The lowest velocity any of the file's rows sits on.
+    min_vel: Option<i32>,
+    /// The file's sample-start modulation range (frames; -1 = none), from
+    /// its plain note-on row (velocity 1) or else its first row.
+    start_mod: Option<i64>,
+    /// A transition file's earliest row start (frames). CS Brass enters
+    /// every legato transition zone 3984 frames in (no row from 0, unlike
+    /// CSS / CSW): that start is the zone's.
+    min_transition_start: Option<u64>,
     rr_index: u32,
     mic: String,
     articulation: String,
@@ -974,11 +1195,39 @@ struct TsvZone {
     file: String,
 }
 
+impl TsvZone {
+    /// A sustain body Kontakt can never play: CSS plays a sustain's plain
+    /// note-on at velocity 1 and its loud-note variants at 2-4, and some
+    /// sections' NKIs put a whole dynamic on other velocities (Violas mf
+    /// Nonvib 12-15 and Vibsus 17-20, Basses Vibsus ppp 10-13) — silent in
+    /// Kontakt, so silent here.
+    fn unreachable_sustain(&self) -> bool {
+        matches!(self.articulation.as_str(), "Vibsus" | "Nonvib")
+            && self.min_vel.is_some_and(|v| v > 4)
+    }
+}
+
+/// A Cinematic Studio sample stem split at `_` (`Ce_Spiccato_Mix_ff_C2_1`),
+/// with the mic back in third place where an NKI swapped it with the dynamic
+/// (Cellos' fourth Spiccato band: `Ce_Spiccato_ff_Mix_C2_1`). Strings mics
+/// and the woodwinds' Close / OH.
+fn cs_name_parts(stem: &str) -> Vec<&str> {
+    const MICS: [&str; 7] = ["Mix", "Main", "Room", "Spot1", "Spot2", "Close", "OH"];
+    let mut parts: Vec<&str> = stem.split('_').collect();
+    if parts.len() > 3 && !MICS.contains(&parts[2]) && MICS.contains(&parts[3]) {
+        parts.swap(2, 3);
+    }
+    parts
+}
+
 fn cs_is_legato(artic: &str) -> bool {
     matches!(artic, "Leg" | "NVLeg" | "MLeg" | "Port")
 }
 fn cs_is_zero(artic: &str) -> bool {
     matches!(artic, "Legzero" | "NVLegzero")
+}
+fn cs_is_rip(artic: &str) -> bool {
+    artic == "Rips"
 }
 
 /// Parse an `nki --zones` zones.tsv into per-FILE zones (key ranges unioned
@@ -1012,10 +1261,16 @@ fn load_tsv_zones(
         col("loop_end")?,
         col("sample")?,
     );
+    // Older decodes have no zone-volume / sample-start columns.
+    let c_zvol = header.iter().position(|h| *h == "zvol");
+    let c_start = header.iter().position(|h| *h == "sample_start");
+    let c_vel_lo = header.iter().position(|h| *h == "vel_lo");
+    // the decoder's sample-start modulation range (absent from older decodes)
+    let c_start_mod = header.iter().position(|h| *h == "start_mod");
 
     let mut by_file: BTreeMap<String, TsvZone> = BTreeMap::new();
     let mut skipped = 0usize;
-    for line in lines {
+    for (row, line) in lines.enumerate() {
         let f: Vec<&str> = line.split('\t').collect();
         let Some(sample) = f.get(c_sample).filter(|s| !s.is_empty()) else {
             skipped += 1;
@@ -1026,7 +1281,7 @@ fn load_tsv_zones(
             .strip_suffix(".ncw")
             .or_else(|| base.strip_suffix(".wav"))
             .unwrap_or(base);
-        let parts: Vec<&str> = stem.split('_').collect();
+        let parts = cs_name_parts(stem);
         if parts.len() < 4 {
             skipped += 1;
             continue;
@@ -1059,7 +1314,9 @@ fn load_tsv_zones(
             let rr = rest.last().and_then(|s| s.parse::<u32>().ok()).unwrap_or(1);
             (None, 0, rr.saturating_sub(1))
         } else {
-            let rr = if rest.len() >= 3 {
+            // `<dyn>_<note>_<rr>`, or a brass rip's `<note>_<rr>` (no dynamic:
+            // CSB `Rips/A#3_1`, `A#3_2` are two round robins).
+            let rr = if rest.len() >= 3 || cs_is_rip(&artic) {
                 rest.last().and_then(|s| s.parse::<u32>().ok()).unwrap_or(1)
             } else {
                 1
@@ -1071,6 +1328,18 @@ fn load_tsv_zones(
         let key_hi: i32 = f.get(c_khi).and_then(|v| v.parse().ok()).unwrap_or(0);
         let root: i32 = f.get(c_root).and_then(|v| v.parse().ok()).unwrap_or(60);
         let tune: f64 = f.get(c_tune).and_then(|v| v.parse().ok()).unwrap_or(1.0);
+        let zvol: f64 = c_zvol
+            .and_then(|c| f.get(c))
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1.0);
+        let start: Option<u64> = c_start
+            .and_then(|c| f.get(c))
+            .and_then(|v| v.parse::<i64>().ok())
+            .map(|v| v.max(0) as u64);
+        let vel_lo: Option<i32> = c_vel_lo.and_then(|c| f.get(c)).and_then(|v| v.parse().ok());
+        let start_mod: Option<i64> = c_start_mod
+            .and_then(|c| f.get(c))
+            .and_then(|v| v.parse().ok());
         let (ls, le) = (
             f.get(c_ls).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0),
             f.get(c_le).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0),
@@ -1085,6 +1354,16 @@ fn load_tsv_zones(
             } else {
                 0.0
             },
+            gain_db: if zvol > 0.0 { 20.0 * zvol.log10() } else { 0.0 },
+            sample_start: None,
+            variant_starts: BTreeMap::new(),
+            marcato: Vec::new(),
+            main_row: None,
+            sample_start_vel1: None,
+            min_transition_start: None,
+            start_mod: None,
+            vel1_zvol: None,
+            min_vel: None,
             rr_index,
             mic,
             articulation: artic,
@@ -1096,8 +1375,79 @@ fn load_tsv_zones(
             section: section_label.to_string(),
             file,
         });
+        if let Some(v) = vel_lo {
+            entry.min_vel = Some(entry.min_vel.map_or(v, |m| m.min(v)));
+        }
+        if start_mod.is_some() && (entry.start_mod.is_none() || vel_lo == Some(1)) {
+            entry.start_mod = start_mod;
+        }
         entry.key_min = entry.key_min.min(key_lo.clamp(0, 127) as u8);
         entry.key_max = entry.key_max.max(key_hi.clamp(0, 127) as u8);
+        // The velocity-1 row is the plain note-on zone; without a vel column
+        // the first row stands in for it.
+        // Without a velocity column the first row stands in for the
+        // velocity-1 one (chosen below when there is one).
+        if start.is_some() && vel_lo.is_none() && entry.sample_start.is_none() {
+            entry.sample_start = start;
+        }
+        // A file with no velocity-1 row (a short: one zone per velocity, each
+        // its own RR/band) plays from its MAIN row — the one at unity level
+        // (CSS lists some files again in other groups, quieter and entered
+        // elsewhere); its start and level are the zone's.
+        if entry.direction.is_none() && vel_lo != Some(1) && entry.sample_start_vel1.is_none() {
+            // A trill ties go to the lower velocity — the note-on's: Cellos
+            // WTrills ff C2 (and 1st Violins' Room mic) sits at unity on
+            // velocity 2 from 0 and on velocity 3 from 48000, a variant, and
+            // Kontakt plays the first. Other ties go to the later start (a
+            // short's velocity is its band, not the note-on's): CSS Staccato
+            // mp lists RR1 twice at unity, from 0 and from 288; Kontakt
+            // plays the 288 one.
+            let v = vel_lo.unwrap_or(0);
+            let by_vel = matches!(entry.articulation.as_str(), "HTrills" | "WTrills");
+            let better = entry.main_row.is_none_or(|(vel, st, zv)| {
+                let (d, dn) = ((zv - 1.0).abs(), (zvol - 1.0).abs());
+                let later = if by_vel && v != vel {
+                    v < vel
+                } else {
+                    start > st
+                };
+                dn < d - 1e-9 || ((dn - d).abs() <= 1e-9 && later)
+            });
+            if better {
+                entry.main_row = Some((v, start, zvol));
+            }
+        }
+        if vel_lo == Some(1) {
+            // The plain note-on zone: its start and level are the zone's
+            // (not the first row read — CSS lists a file again in quieter
+            // groups, e.g. Sfz mf RR1 at 0.315 under vel 8). Several
+            // velocity-1 rows (HTrills ff G3: unity from 0, ×2 from 96000,
+            // ×1.41 from 48000 — other groups'): the one nearest unity.
+            let better = entry
+                .vel1_zvol
+                .is_none_or(|zv| (zvol - 1.0).abs() < (zv - 1.0).abs() - 1e-9);
+            if better {
+                entry.vel1_zvol = Some(zvol);
+                entry.sample_start_vel1 = Some(start);
+                entry.sample_start = start;
+                entry.gain_db = if zvol > 0.0 { 20.0 * zvol.log10() } else { 0.0 };
+            }
+        }
+        // A transition file's velocity column is its interval code, not a
+        // velocity: its deeper-entered rows are the marcato transition zones.
+        if entry.direction.is_some() {
+            if let Some(st) = start {
+                entry.min_transition_start =
+                    Some(entry.min_transition_start.map_or(st, |m| m.min(st)));
+            }
+            if let Some(st) = start.filter(|&st| st > 0) {
+                entry.marcato.push((row, st, zvol));
+            }
+        } else if let (Some(v), Some(st)) = (vel_lo, start) {
+            if v >= 2 {
+                entry.variant_starts.insert(v, st);
+            }
+        }
         if le > ls && entry.loop_end <= entry.loop_start {
             entry.loop_start = ls;
             entry.loop_end = le;
@@ -1106,7 +1456,259 @@ fn load_tsv_zones(
     if skipped > 0 {
         eprintln!("  NOTE: {skipped} tsv row(s) skipped (unparseable/unmapped)");
     }
+    for z in by_file.values_mut() {
+        // a transition file played only from deeper in (CSB): start there
+        if z.direction.is_some() && z.sample_start.is_none() {
+            if let Some(st) = z.min_transition_start.filter(|&st| st > 0) {
+                z.sample_start = Some(st);
+            }
+        }
+        if z.sample_start_vel1.is_none() {
+            if let Some((vel, start, zvol)) = z.main_row {
+                z.sample_start = start;
+                z.gain_db = if zvol > 0.0 { 20.0 * zvol.log10() } else { 0.0 };
+                z.variant_starts.remove(&vel);
+            }
+        }
+    }
     Ok(by_file)
+}
+
+/// The short articulation a CSS group family plays (`Mix spiccato` →
+/// `Spiccato`), for the groups whose zones may borrow other recordings.
+fn cs_short_group_artic(family: &str) -> Option<&'static str> {
+    Some(match family {
+        "spiccato" => "Spiccato",
+        "staccatissimo" => "Staccatissimo",
+        "staccato" => "Staccato",
+        "sfz" => "Sfz",
+        "pizzicato" => "Pizzicato",
+        "bartok" => "Bartokpizz",
+        "col legno" => "Clegno",
+        _ => return None,
+    })
+}
+
+/// A zone the NKI maps into another articulation's group (see
+/// `ZoneSpec::borrowed`): the short group's articulation, the dynamic and RR
+/// its own recordings carry on the same velocity, the borrowed file's
+/// level and start.
+struct BorrowedZone {
+    file: String,
+    mic: String,
+    articulation: String,
+    dynamic: String,
+    rr_index: u32,
+    key_min: u8,
+    key_max: u8,
+    root_key: u8,
+    tune_cents: f64,
+    gain_db: f64,
+    sample_start: u64,
+}
+
+/// The borrowed zones of a decoded NKI, from `zones.tsv`'s `group` column
+/// and the `groups.json` beside it; empty for an older decode. `flat` = the
+/// extracted tree has no category folder (CSW), as in [`load_tsv_zones`].
+fn load_borrowed_zones(tsv: &Path, section_label: &str, flat: bool) -> Result<Vec<BorrowedZone>> {
+    let Some(groups_path) = tsv.parent().map(|d| d.join("groups.json")) else {
+        return Ok(Vec::new());
+    };
+    let text = std::fs::read_to_string(tsv)?;
+    let mut lines = text.lines();
+    let header: Vec<&str> = lines.next().unwrap_or("").split('\t').collect();
+    let col = |name: &str| header.iter().position(|h| *h == name);
+    let (Some(c_group), Ok(groups_text)) = (col("group"), std::fs::read_to_string(&groups_path))
+    else {
+        return Ok(Vec::new());
+    };
+    let groups: Vec<serde_json::Value> = serde_json::from_str(&groups_text)?;
+    let names: Vec<String> = groups
+        .iter()
+        .map(|g| g["name"].as_str().unwrap_or("").to_string())
+        .collect();
+    let need = |n: &str| col(n).ok_or_else(|| eyre::eyre!("zones.tsv missing column {n:?}"));
+    let (c_klo, c_khi, c_vlo, c_root, c_tune, c_zvol, c_sample, c_start) = (
+        need("key_lo")?,
+        need("key_hi")?,
+        need("vel_lo")?,
+        need("root")?,
+        need("tune")?,
+        need("zvol")?,
+        need("sample")?,
+        need("sample_start")?,
+    );
+    struct Row {
+        group: String,
+        artic: String,
+        mic: String,
+        rest: Vec<String>,
+        rr: u32,
+        vel: i32,
+        key: (i32, i32),
+        root: i32,
+        tune: f64,
+        zvol: f64,
+        start: u64,
+    }
+    let mut rows = Vec::new();
+    for line in lines {
+        let f: Vec<&str> = line.split('\t').collect();
+        let Some(g) = f
+            .get(c_group)
+            .and_then(|v| v.parse::<usize>().ok())
+            .and_then(|i| names.get(i))
+        else {
+            continue;
+        };
+        let sample = f.get(c_sample).copied().unwrap_or("");
+        let base = sample.rsplit('/').next().unwrap_or(sample);
+        let stem = base.strip_suffix(".ncw").unwrap_or(base);
+        let parts = cs_name_parts(stem);
+        if parts.len() < 4 {
+            continue;
+        }
+        let num = |c: usize| f.get(c).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+        rows.push(Row {
+            group: g.clone(),
+            artic: parts[1].to_string(),
+            mic: parts[2].to_string(),
+            rest: parts[3..].iter().map(|s| (*s).to_string()).collect(),
+            rr: parts
+                .last()
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(1)
+                .saturating_sub(1),
+            vel: num(c_vlo) as i32,
+            key: (num(c_klo) as i32, num(c_khi) as i32),
+            root: num(c_root) as i32,
+            tune: num(c_tune),
+            zvol: num(c_zvol),
+            start: num(c_start).max(0.0) as u64,
+        });
+    }
+    // the extracted file a row plays (CSS keeps a category folder, CSW not)
+    let borrowed_file = |mic: &str, artic: &str, rest: &[String]| -> Option<String> {
+        let stem = rest.join("_");
+        if flat {
+            return Some(format!("{mic}/{section_label}/{artic}/{stem}.wav"));
+        }
+        let cat = cs_category(artic)?;
+        Some(format!("{mic}/{section_label}/{cat}/{artic}/{stem}.wav"))
+    };
+    fn own_artic(a: &str) -> &str {
+        if a == "Pizz" { "Pizzicato" } else { a }
+    }
+    // (group, velocity) → the (dynamic, RR) the group's own recordings carry
+    let mut own: BTreeMap<(String, i32), (String, u32)> = BTreeMap::new();
+    for r in &rows {
+        let family = r.group.split_once(' ').map_or("", |(_, f)| f);
+        if cs_short_group_artic(family) == Some(own_artic(&r.artic)) {
+            own.entry((r.group.clone(), r.vel))
+                .or_insert_with(|| (r.rest[0].clone(), r.rr));
+        }
+    }
+    let mut out = Vec::new();
+    for r in &rows {
+        let family = r.group.split_once(' ').map_or("", |(_, f)| f);
+        // The vibsus groups' loud first-note attack zones (velocities 5-9:
+        // Staccato / Sfz recordings), as `VibsusAtk` zones of the group's
+        // dynamic whose `rr_index` is the Kontakt velocity.
+        if let Some(dynamic) = family.strip_prefix("vibsus ")
+            && !dynamic.contains(' ')
+            && (5..=9).contains(&r.vel)
+            && r.artic != "Vibsus"
+        {
+            let Some(file) = borrowed_file(r.mic.as_str(), &r.artic, &r.rest) else {
+                continue;
+            };
+            out.push(BorrowedZone {
+                file,
+                mic: r.mic.clone(),
+                articulation: "VibsusAtk".to_string(),
+                dynamic: dynamic.to_string(),
+                rr_index: r.vel as u32,
+                key_min: r.key.0.clamp(0, 127) as u8,
+                key_max: r.key.1.clamp(0, 127) as u8,
+                root_key: r.root.clamp(0, 127) as u8,
+                tune_cents: if r.tune > 0.0 {
+                    1200.0 * r.tune.log2()
+                } else {
+                    0.0
+                },
+                gain_db: if r.zvol > 0.0 {
+                    20.0 * r.zvol.log10()
+                } else {
+                    0.0
+                },
+                sample_start: r.start,
+            });
+            continue;
+        }
+        let Some(artic) = cs_short_group_artic(family) else {
+            continue;
+        };
+        if artic == own_artic(&r.artic) {
+            continue;
+        }
+        let Some((dynamic, rr)) = own.get(&(r.group.clone(), r.vel)) else {
+            continue;
+        };
+        let Some(file) = borrowed_file(r.mic.as_str(), &r.artic, &r.rest) else {
+            continue;
+        };
+        out.push(BorrowedZone {
+            file,
+            mic: r.mic.clone(),
+            articulation: artic.to_string(),
+            dynamic: dynamic.clone(),
+            rr_index: *rr,
+            key_min: r.key.0.clamp(0, 127) as u8,
+            key_max: r.key.1.clamp(0, 127) as u8,
+            root_key: r.root.clamp(0, 127) as u8,
+            tune_cents: if r.tune > 0.0 {
+                1200.0 * r.tune.log2()
+            } else {
+                0.0
+            },
+            gain_db: if r.zvol > 0.0 {
+                20.0 * r.zvol.log10()
+            } else {
+                0.0
+            },
+            sample_start: r.start,
+        });
+    }
+    Ok(out)
+}
+
+fn emit_borrowed_block(z: &BorrowedZone, section: &str) -> String {
+    let mut s = String::from("    {\n");
+    let mut f = |k: &str, v: String| {
+        let _ = write!(s, "        {k:<12} {v}\n");
+    };
+    f("section", format!("{section:?}"));
+    f("file", format!("{:?}", z.file));
+    f("key_min", z.key_min.to_string());
+    f("key_max", z.key_max.to_string());
+    f("root_key", z.root_key.to_string());
+    f("vel_min", "0".into());
+    f("vel_max", "127".into());
+    f("rr_index", z.rr_index.to_string());
+    f("mic", format!("{:?}", z.mic));
+    f("articulation", format!("{:?}", z.articulation));
+    f("dynamic", format!("{:?}", z.dynamic));
+    f("gain_db", format!("{:.3}", z.gain_db));
+    let cents = if z.tune_cents.abs() < 1e-2 {
+        0.0
+    } else {
+        z.tune_cents
+    };
+    f("tune_cents", format!("{cents:.3}"));
+    f("sample_start", z.sample_start.to_string());
+    f("borrowed", "true".into());
+    s.push_str("    }\n");
+    s
 }
 
 fn emit_zone_block(z: &TsvZone) -> String {
@@ -1125,7 +1727,7 @@ fn emit_zone_block(z: &TsvZone) -> String {
     f("mic", format!("{:?}", z.mic));
     f("articulation", format!("{:?}", z.articulation));
     f("dynamic", format!("{:?}", z.dynamic));
-    f("gain_db", "0.000".into());
+    f("gain_db", format!("{:.3}", z.gain_db));
     let cents = if z.tune_cents.abs() < 1e-2 {
         0.0
     } else {
@@ -1250,7 +1852,11 @@ fn cs_category(artic: &str) -> Option<&'static str> {
 
 /// wav-relative-path → (`loop_start`, `loop_end`) for looped NKI zones.
 /// First-wins on per-file loop variants (matches nki-styx accumulation).
-fn load_loop_map(tsv: &Path, section_label: &str) -> Result<BTreeMap<String, (u64, u64)>> {
+fn load_loop_map(
+    tsv: &Path,
+    section_label: &str,
+    flat: bool,
+) -> Result<BTreeMap<String, (u64, u64)>> {
     let text = std::fs::read_to_string(tsv)?;
     let mut lines = text.lines();
     let header: Vec<&str> = lines
@@ -1292,12 +1898,16 @@ fn load_loop_map(tsv: &Path, section_label: &str) -> Result<BTreeMap<String, (u6
             continue;
         }
         let (artic, mic) = (parts[1], parts[2]);
-        let Some(cat) = cs_category(artic) else {
-            eprintln!("  WARNING: looped zone with unmapped articulation {artic:?}: {base}");
-            continue;
-        };
         let rest = parts[3..].join("_");
-        let wav = format!("{mic}/{section_label}/{cat}/{artic}/{rest}.wav");
+        let wav = if flat {
+            format!("{mic}/{section_label}/{artic}/{rest}.wav")
+        } else {
+            let Some(cat) = cs_category(artic) else {
+                eprintln!("  WARNING: looped zone with unmapped articulation {artic:?}: {base}");
+                continue;
+            };
+            format!("{mic}/{section_label}/{cat}/{artic}/{rest}.wav")
+        };
         if loops.contains_key(&wav) {
             if loops[&wav] != (ls, le) {
                 conflicts += 1;
@@ -1316,10 +1926,11 @@ fn loops_inject(
     target: &Path,
     from_tsv: &Path,
     section: &str,
+    flat: bool,
     check: bool,
     dry_run: bool,
 ) -> Result<()> {
-    let loops = load_loop_map(from_tsv, section)?;
+    let loops = load_loop_map(from_tsv, section, flat)?;
     println!(
         "{section}: {} looped file(s) mapped from {}",
         loops.len(),

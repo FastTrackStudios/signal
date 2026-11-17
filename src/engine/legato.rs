@@ -90,6 +90,7 @@ impl SampleEngine {
                 self.play_direction = "up".to_string();
                 self.trigger_zoned_sustain(note);
                 self.line_mut().note = Some(note);
+                self.line_mut().connected = false;
                 // The IOI clock runs on the document path too — see below.
                 let now = self.frames_rendered;
                 self.line_mut().last_onset_frame = now;
@@ -155,11 +156,18 @@ impl SampleEngine {
         // articulation and its vib pair — otherwise note-off cache-misses and the
         // release tail is silent (CSS rings out ~0.7s). These are separate
         // articulations triggered on key-up by `spawn_release`.
+        // A script release sample (`release_sample`) is the same trap.
         let rel = |a: &str| {
-            self.patch
-                .spec
-                .articulation(a)
-                .and_then(|art| art.release_artic.clone())
+            self.patch.spec.articulation(a).and_then(|art| {
+                art.release_artic
+                    .clone()
+                    .or_else(|| art.release_sample.as_ref().map(|r| r.artic.clone()))
+                    .or_else(|| {
+                        art.release_types
+                            .as_ref()
+                            .and_then(|t| t.types.first().map(|r| r.artic.clone()))
+                    })
+            })
         };
         // And the legato + portamento TRANSITION articulations (Leg/NVLeg/
         // Legzero/NVLegzero/Port), which `spawn_legato_transition` fires on
@@ -189,6 +197,103 @@ impl SampleEngine {
         .into_iter()
         .flatten()
         .collect();
+        // A script legato's transitions (`script_legato`) and key noise
+        // (`keynoise`): cold, they are silent the same way.
+        if let Some(a) = artic
+            .as_deref()
+            .and_then(|a| self.patch.spec.articulation(a))
+        {
+            if let Some(sl) = a.script_legato.as_ref() {
+                warm_ids.extend([sl.up.clone(), sl.down.clone()]);
+                if let Some(o) = &sl.octave {
+                    warm_ids.extend([o.up.clone(), o.down.clone()]);
+                }
+                if let Some(n) = &sl.natural {
+                    warm_ids.push(n.tail.clone());
+                }
+            }
+            if let Some(k) = a.keynoise.as_ref() {
+                warm_ids.push(k.artic.clone());
+            }
+            // every release type's release (the first is warmed above)
+            if let Some(rt) = a.release_types.as_ref() {
+                warm_ids.extend(rt.types.iter().skip(1).map(|r| r.artic.clone()));
+            }
+        }
+        // A fretted articulation's lead-in (`FretLeadInSpec`: Shreddage's
+        // pop before a loud Sustain) plays first, so it must be resident too.
+        if let (Some(a), Some(fb)) = (artic.as_deref(), self.patch.spec.fretboard.as_ref()) {
+            warm_ids.extend(
+                fb.lead_ins
+                    .iter()
+                    .filter(|l| l.articulation.eq_ignore_ascii_case(a))
+                    .map(|l| l.lead.clone()),
+            );
+            // and what its notes may become or leave: a hammer, a release
+            warm_ids.extend(fb.hammer.as_ref().map(|h| h.articulation.clone()));
+            warm_ids.extend(fb.release_layer.as_ref().map(|r| r.articulation.clone()));
+            if let Some(r) = fb.release_layer.as_ref() {
+                warm_ids.extend(r.mapped.iter().map(|m| m.articulation.clone()));
+            }
+            warm_ids.extend(fb.slide.as_ref().map(|s| s.articulation.clone()));
+            warm_ids.extend(fb.tap.as_ref().map(|t| t.open_as.clone()));
+        }
+        // Side recordings every fretted note may play at keys of their own
+        // (the extra pick, the release noise, the slide squeak): every zone
+        // of theirs.
+        let side_ids: Vec<String> = self
+            .patch
+            .spec
+            .fretboard
+            .as_ref()
+            .map(|fb| {
+                fb.extra_pick
+                    .as_ref()
+                    .map(|e| e.articulation.clone())
+                    .into_iter()
+                    .chain(fb.noise_release.as_ref().map(|n| n.articulation.clone()))
+                    .chain(
+                        fb.slide
+                            .as_ref()
+                            .and_then(|s| s.stitched.as_ref())
+                            .and_then(|st| st.squeak.as_ref())
+                            .map(|q| q.articulation.clone()),
+                    )
+                    .chain(fb.side_keys.iter().map(|k| k.articulation.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        warm_ids.extend(side_ids.iter().cloned());
+        let stitch_reach: Option<(String, u8)> = self
+            .patch
+            .spec
+            .fretboard
+            .as_ref()
+            .and_then(|fb| fb.slide.as_ref())
+            .filter(|s| s.stitched.is_some())
+            .map(|s| (s.articulation.clone(), s.max_interval.max(24)));
+        // a slide-out lands a release recording anywhere on the way down
+        let release_reach: Option<String> = self
+            .patch
+            .spec
+            .fretboard
+            .as_ref()
+            .filter(|fb| {
+                fb.slide
+                    .as_ref()
+                    .and_then(|s| s.stitched.as_ref())
+                    .is_some_and(|st| st.slide_out_max > 0)
+            })
+            .and_then(|fb| fb.release_layer.as_ref().map(|r| r.articulation.clone()));
+        // What a fretted note may be chosen as by its velocity (Argent's
+        // Rake, Pinch Harmonics), with every lead-in's lead and body.
+        if let Some(fb) = self.patch.spec.fretboard.as_ref() {
+            warm_ids.extend(fb.velocity_splits.iter().map(|v| v.plays.clone()));
+            for l in &fb.lead_ins {
+                warm_ids.push(l.lead.clone());
+                warm_ids.extend(l.body.clone());
+            }
+        }
         // A pending CC58 velocity-group resolves to its concrete articulation
         // only at note-on (from the note's velocity), so `effective_articulation`
         // above can't see it yet — warm EVERY possible resolution (Trills →
@@ -221,6 +326,47 @@ impl SampleEngine {
                 }
             }
         }
+        // A trill key pair plays the OTHER trill articulation from the one
+        // selected (`PerformanceSpec::trill_pair`: HTrills selected, a
+        // whole-tone pair plays WTrills): warm both sides and their releases,
+        // or the side no keyswitch reaches starts cold and silent.
+        if let Some(tp) = &self.patch.spec.performance.trill_pair {
+            if warm_ids
+                .iter()
+                .any(|id| id.eq_ignore_ascii_case(&tp.half) || id.eq_ignore_ascii_case(&tp.whole))
+            {
+                for id in [tp.half.clone(), tp.whole.clone()] {
+                    if let Some(r) = rel(&id) {
+                        warm_ids.push(r);
+                    }
+                    warm_ids.push(id);
+                }
+            }
+        }
+        // And what an articulation plays besides itself: a marcato first
+        // note's overlay short, a tremolo/marcato transition's legato zones.
+        let extra: Vec<String> = warm_ids
+            .iter()
+            .filter_map(|id| self.patch.spec.articulation(id))
+            .flat_map(|a| {
+                [
+                    a.overlay.as_ref().map(|o| o.articulation.clone()),
+                    a.simple_transition
+                        .as_ref()
+                        .map(|t| t.lt_articulation.clone())
+                        .filter(|s| !s.is_empty()),
+                    a.marcato_transition
+                        .as_ref()
+                        .map(|m| m.lt_articulation.clone()),
+                ]
+            })
+            .flatten()
+            .collect();
+        warm_ids.extend(extra);
+        // A loud first note's attack voice (vibsus groups' attack zones).
+        if let Some(a) = &self.patch.spec.legato_cfg().first_note_attack {
+            warm_ids.push(a.articulation.clone());
+        }
         let mut stats = PreloadStats::default();
         for (i, z) in self.patch.spec.zones.iter().enumerate() {
             if !zone_trigger_matches(z, ZoneTrigger::Attack) {
@@ -228,10 +374,31 @@ impl SampleEngine {
             }
             // Within the zone's range, or within pitch-shift tolerance of its
             // recorded key (whole-tone grid → even notes warm their neighbour).
-            let in_range = note >= z.key_min && note <= z.key_max;
+            // An ensemble's extra players play from neighbouring keys
+            // (`players.rs`): warm every key they can reach.
+            let reach = if self.patch.spec.performance.players.is_some() {
+                self.players.count.saturating_sub(1)
+            } else {
+                0
+            };
+            let in_range =
+                note.saturating_add(reach) >= z.key_min && note.saturating_sub(reach) <= z.key_max;
             let near = (z.root_key as i32 - note as i32).unsigned_abs() as u8
                 <= self.patch.spec.performance.zone_pitch_tolerance;
-            if !in_range && !near {
+            let side = side_ids
+                .iter()
+                .any(|id| z.articulation.eq_ignore_ascii_case(id));
+            // a stitched slide plays its one-fret zones at every key on its way
+            let stitch = stitch_reach.as_ref().is_some_and(|(id, reach)| {
+                z.articulation.eq_ignore_ascii_case(id)
+                    && (z.root_key as i32 - note as i32).unsigned_abs() <= u32::from(*reach)
+            });
+            let landing = release_reach.as_ref().is_some_and(|id| {
+                z.articulation.eq_ignore_ascii_case(id)
+                    && z.root_key <= note
+                    && note - z.root_key <= 24
+            });
+            if !in_range && !near && !side && !stitch && !landing {
                 continue;
             }
             if artic.is_some() {
@@ -249,18 +416,35 @@ impl SampleEngine {
                 }
             }
             let path = &self.patch.zone_paths[i];
-            if self.cache.get_loaded(path).is_some() {
+            if let Some(data) = self.cache.get_loaded(path) {
+                self.analyse_tm2(i, &data);
                 continue;
             }
             match self.cache.get(path) {
                 Ok(data) => {
                     stats.loaded += 1;
                     stats.bytes += data.decoded_bytes();
+                    self.analyse_tm2(i, &data);
                 }
                 Err(_) => stats.failed += 1,
             }
         }
         stats
+    }
+
+    /// Find zone `zone`'s Time Machine II pitch marks from its sample
+    /// `data`, once (a no-op for any other zone): where a sample is warmed,
+    /// never on the audio thread ([`super::tm2::MarkTable::analyse`]).
+    pub(crate) fn analyse_tm2(&self, zone: usize, data: &super::cache::SampleData) {
+        let Some(z) = self.patch.spec.zones.get(zone).filter(|z| z.tm2_block > 0) else {
+            return;
+        };
+        let Some(path) = self.patch.zone_paths.get(zone) else {
+            return;
+        };
+        self.patch
+            .tm2_marks
+            .analyse(zone, self.patch.spec.zones.len(), path, data, z.tm2_block);
     }
 
     /// Returns the currently active articulation ID.

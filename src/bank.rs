@@ -339,6 +339,19 @@ impl SamplerBank {
         Ok(())
     }
 
+    /// Install an already-loaded patch under `id` (see
+    /// [`SamplerRig::load_patch`](crate::SamplerRig::load_patch)).
+    pub fn load_patch(
+        &mut self,
+        id: impl Into<InstrumentId>,
+        patch: crate::PlayerPatch,
+        name: impl Into<String>,
+        section: impl Into<String>,
+        mic: impl Into<String>,
+    ) {
+        self.install_patch(id.into(), patch, name.into(), section, mic);
+    }
+
     /// Wrap a loaded [`PlayerPatch`](crate::PlayerPatch) into a bank instrument
     /// slot under `id`.
     fn install_patch(
@@ -849,6 +862,50 @@ impl SamplerBank {
     /// Enable/disable an instrument's structured render trace.
     pub fn set_trace_enabled(&mut self, id: &str, enabled: bool) {
         self.with_block(id, |b| b.set_trace_enabled(enabled));
+    }
+
+    pub fn force_random_attacks(&mut self, id: &str, v: &[u8]) {
+        self.with_block(id, |b| b.force_random_attacks(v));
+    }
+
+    pub fn force_random_offsets(&mut self, id: &str, v: &[u16]) {
+        self.with_block(id, |b| b.force_random_offsets(v));
+    }
+
+    pub fn force_random_variants(&mut self, id: &str, v: &[u8]) {
+        self.with_block(id, |b| b.force_random_variants(v));
+    }
+
+    pub fn set_host_tempo(&mut self, id: &str, bpm: f64) {
+        self.with_block(id, |b| b.set_host_tempo(bpm));
+    }
+
+    pub fn skip_script_draws(&mut self, id: &str, n: u32) {
+        self.with_block(id, |b| b.skip_script_draws(n));
+    }
+
+    pub fn force_humanize(&mut self, id: &str, v: &[i32]) {
+        self.with_block(id, |b| b.force_humanize(v));
+    }
+
+    pub fn set_script_seed(&mut self, id: &str, seed: u32) {
+        self.with_block(id, |b| b.set_script_seed(seed));
+    }
+
+    pub fn force_random_rrs(&mut self, id: &str, v: &[u8]) {
+        self.with_block(id, |b| b.force_random_rrs(v));
+    }
+
+    pub fn force_random_tunes(&mut self, id: &str, cents: &[i8]) {
+        self.with_block(id, |b| b.force_random_tunes(cents));
+    }
+
+    pub fn set_ksp_seed(&mut self, id: &str, seed: u32) {
+        self.with_block(id, |b| b.set_ksp_seed(seed));
+    }
+
+    pub fn force_random_pitch_envs(&mut self, id: &str, draws: &[(f32, f32)]) {
+        self.with_block(id, |b| b.force_random_pitch_envs(draws));
     }
 
     pub fn set_solo_notes(&mut self, id: &str, notes: Option<std::collections::BTreeSet<u8>>) {

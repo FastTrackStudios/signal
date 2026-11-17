@@ -1126,10 +1126,15 @@ fn db_to_lin(db: f32) -> f32 {
     }
 }
 
+/// Stereo BALANCE law: unity at centre, only the far side attenuated as the
+/// pan moves off it — what Kontakt and REAPER do to a stereo source, and what
+/// `Voice::with_pan` uses for stereo samples. The old equal-power law put a
+/// centred stereo layer at 0.7071 (−3 dB) on BOTH channels, so declaring a
+/// layer at its defaults played 3 dB quieter than the implicit default layer
+/// (null-tested against Kontakt: the whole CSS render sat exactly −3.0 dB).
 fn pan_gains(pan: f32) -> (f32, f32) {
     let p = pan.clamp(-1.0, 1.0);
-    let theta = (p + 1.0) * std::f32::consts::FRAC_PI_4;
-    (theta.cos(), theta.sin())
+    ((1.0 - p).min(1.0), (1.0 + p).min(1.0))
 }
 
 // `RoutingRule` reference so unused import doesn't trip clippy.

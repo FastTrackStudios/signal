@@ -398,6 +398,60 @@ impl SamplerBlock {
         self.engine.set_solo_notes(notes);
     }
 
+    /// See [`SampleEngine::force_random_attacks`].
+    pub fn force_random_attacks(&mut self, v: &[u8]) {
+        self.engine.force_random_attacks(v);
+    }
+
+    /// See [`SampleEngine::force_random_offsets`].
+    pub fn force_random_offsets(&mut self, v: &[u16]) {
+        self.engine.force_random_offsets(v);
+    }
+
+    /// See [`SampleEngine::force_random_variants`].
+    pub fn force_random_variants(&mut self, v: &[u8]) {
+        self.engine.force_random_variants(v);
+    }
+
+    /// See [`SampleEngine::set_host_tempo`].
+    pub fn set_host_tempo(&mut self, bpm: f64) {
+        self.engine.set_host_tempo(bpm);
+    }
+
+    /// See [`SampleEngine::skip_script_draws`].
+    pub fn skip_script_draws(&mut self, n: u32) {
+        self.engine.skip_script_draws(n);
+    }
+
+    /// See [`SampleEngine::force_humanize`].
+    pub fn force_humanize(&mut self, v: &[i32]) {
+        self.engine.force_humanize(v);
+    }
+
+    /// See [`SampleEngine::set_script_seed`].
+    pub fn set_script_seed(&mut self, seed: u32) {
+        self.engine.set_script_seed(seed);
+    }
+
+    /// See [`SampleEngine::force_random_rrs`].
+    pub fn force_random_rrs(&mut self, v: &[u8]) {
+        self.engine.force_random_rrs(v);
+    }
+
+    /// See [`SampleEngine::force_random_tunes`].
+    pub fn force_random_tunes(&mut self, cents: &[i8]) {
+        self.engine.force_random_tunes(cents);
+    }
+
+    /// See [`SampleEngine::set_ksp_seed`].
+    pub fn set_ksp_seed(&mut self, seed: u32) {
+        self.engine.set_ksp_seed(seed);
+    }
+
+    pub fn force_random_pitch_envs(&mut self, draws: &[(f32, f32)]) {
+        self.engine.force_random_pitch_envs(draws);
+    }
+
     pub fn set_pure_playback(&mut self, on: bool) {
         self.engine.set_pure_playback(on);
     }
@@ -702,9 +756,13 @@ fn db_to_lin(db: f32) -> f32 {
     }
 }
 
-/// Equal-power pan: at centre both L and R are 0.7071 (-3 dB).
+/// Stereo BALANCE law: unity at centre, only the far side attenuated as the
+/// pan moves off it — what Kontakt and REAPER do to a stereo source, and what
+/// `Voice::with_pan` uses for stereo samples. The old equal-power law put a
+/// centred stereo layer at 0.7071 (−3 dB) on BOTH channels, so declaring a
+/// layer at its defaults played 3 dB quieter than the implicit default layer
+/// (null-tested against Kontakt: the whole CSS render sat exactly −3.0 dB).
 fn pan_gains(pan: f32) -> (f32, f32) {
     let p = pan.clamp(-1.0, 1.0);
-    let theta = (p + 1.0) * std::f32::consts::FRAC_PI_4;
-    (theta.cos(), theta.sin())
+    ((1.0 - p).min(1.0), (1.0 + p).min(1.0))
 }

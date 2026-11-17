@@ -424,6 +424,13 @@ pub struct PlayerPatch {
     /// `SampleEngine` builds its cache directly from this rather than from
     /// disk, so no on-disk source files need exist.
     pub pack: Option<SignalPcmPack>,
+    /// A sample cache shared with other engines built from this patch (one
+    /// decode per sample, process-wide): offline renderers that run many
+    /// engines over the same library. `None`: each engine builds its own.
+    pub shared_cache: Option<engine::cache::SampleCache>,
+    /// Its Time Machine II zones' pitch marks (`ZoneSpec::tm2_block`),
+    /// found as their samples are warmed; clones share them.
+    pub tm2_marks: engine::tm2::MarkTable,
 }
 
 /// Resolved zone match: where to read the sample plus how to play it.
@@ -490,6 +497,8 @@ impl PlayerPatch {
             wavetable_paths,
             prepared_cache_dir,
             pack: None,
+            shared_cache: None,
+            tm2_marks: engine::tm2::MarkTable::default(),
         })
     }
 
@@ -523,7 +532,21 @@ impl PlayerPatch {
         patch.spec.legato_engine = cfg.legato_engine;
         patch.spec.short_note_timing = cfg.short_note_timing;
         patch.spec.keyswitch = cfg.keyswitch;
+        patch.spec.fretboard = cfg.fretboard;
         patch.spec.performance = cfg.performance;
+        // Live legato gating is playing behaviour too — it belongs with the
+        // config (CSS sets it so every connected note is a transition, as in
+        // Kontakt). Dropping it here left the engine's 2-semitone default.
+        patch.spec.live_legato_interval_max = cfg.live_legato_interval_max;
+        patch.spec.live_chord_window_ms = cfg.live_chord_window_ms;
+        // A section's own decoded numbers (`section.styx` beside its zones).
+        if let Some(overlay) = zones_path
+            .parent()
+            .map(|d| d.join("section.styx"))
+            .filter(|p| p.exists())
+        {
+            crate::spec::SectionOverlay::from_file(&overlay)?.apply(&mut patch.spec);
+        }
         Ok(patch)
     }
 
@@ -538,6 +561,8 @@ impl PlayerPatch {
             wavetable_paths: Vec::new(),
             prepared_cache_dir: None,
             pack: None,
+            shared_cache: None,
+            tm2_marks: engine::tm2::MarkTable::default(),
         }
     }
 
@@ -610,6 +635,14 @@ impl PlayerPatch {
                     pan: 0.0,
                     tune_cents: 0.0,
                     sample_start: 0,
+                    start_mod: None,
+                    tm2_block: 0,
+                    fixed_pitch: false,
+                    variant_starts: Vec::new(),
+                    disabled: false,
+                    borrowed: false,
+                    marcato_start: 0,
+                    marcato_gains_db: Vec::new(),
                     sample_end: 0,
                     loop_start: 0,
                     loop_end: 0,
@@ -627,6 +660,8 @@ impl PlayerPatch {
                     dynamic: String::new(),
                     direction: String::new(),
                     interval: 0,
+                    string: 0,
+                    stroke: String::new(),
                     lead_in_ms: 0.0,
                     arrival_ms: 0.0,
                     group: String::new(),
@@ -703,6 +738,8 @@ impl PlayerPatch {
             wavetable_paths: Vec::new(),
             prepared_cache_dir: None,
             pack: Some(pack),
+            shared_cache: None,
+            tm2_marks: engine::tm2::MarkTable::default(),
         })
     }
 

@@ -362,6 +362,8 @@ pub struct Voice {
     bp_ctrl: (f32, f32, u32, bool),
     /// Per-voice filter envelope (`with_filter_env`); `None` = no filter.
     filter: Option<VoiceFilter>,
+    /// The layer's Kontakt group insert filters/EQs (`with_inserts`).
+    inserts: Option<super::inserts::InsertState>,
     /// Vibrato (`with_vibrato`): phase and step (cycles/frame), depth in
     /// cents, frames left before it starts, and its fade-in.
     vib_phase: f32,
@@ -375,6 +377,11 @@ pub struct Voice {
 
     /// MIDI note this voice belongs to (for note-off matching).
     pub note: u8,
+    /// The key whose note-off releases this voice (its envelope, a
+    /// note-off fade): its own note, or the key of the event that played it
+    /// (a script's `play_note(…, −1)` child ends with its parent — MOJO 2's
+    /// divisi plays a chord's voices from one note's callback).
+    pub env_key: u8,
 
     /// Index into the patch's `LibrarySpec.mics` declaration order.
     /// `None` for libraries without explicit mics (folds to mic 0 in
@@ -390,6 +397,31 @@ pub struct Voice {
     /// For `SustainLayer` voices: which vib side + dynamic-layer index this is,
     /// so the engine can set its CC1/CC2 crossfade gain. `None` otherwise.
     pub dyn_layer: Option<DynLayer>,
+    /// The CC-independent part of this voice's gain (zone volume, instrument
+    /// gain, makeup, unison compensation). CC1/CC2 re-levelling multiplies the
+    /// controller gain by THIS — re-levelling to the bare controller gain
+    /// dropped it (a held note fell to its unscaled level on the first CC).
+    pub level: f32,
+    /// Curvature of the note-off release (`k` of `(e^(−k·x) − e^(−k)) /
+    /// (1 − e^(−k))`, x = elapsed fraction). 0 = the linear fade. Kontakt's
+    /// AHDSR release on CSS sustains measured k = 2.6 over 580 ms.
+    release_k: f32,
+    /// Frames of a linear fade multiplied onto the key-up release
+    /// (`cut_release`); 0 = none.
+    release_cut: usize,
+    /// `release_k` while a NOTE-OFF release runs; retire/steal fades leave it
+    /// 0 (linear), as Kontakt's script fades are.
+    release_k_active: f32,
+    /// Second amplitude envelope multiplied with `flex` — Kontakt runs a
+    /// group's ENV_FLEX and ENV_AHDSR together (release samples: AHD 250 ms
+    /// attack / 25 s decay to 0.25 under the flex tail).
+    flex2: Option<FlexEnv>,
+    /// A pitch envelope (`with_pitch_env`): its level (0..1) times
+    /// `pitch_env_cents` nudges the read rate — Kontakt's group ENV_AHDSR
+    /// routed to pitch (CSW marcato: ~+10 c held 333 ms, decaying 333 ms).
+    /// Dropped once it settles at 0.
+    pitch_env: Option<FlexEnv>,
+    pitch_env_cents: f32,
 
     /// Mono legato line this voice belongs to (engine `LineId`). Line-scoped
     /// operations (legato fade of the outgoing note, per-line note-off,
@@ -435,10 +467,142 @@ pub struct Voice {
     /// Render-trace correlation id (set at spawn when tracing) — pairs this
     /// voice's lifetime with its `TraceKind::VoiceSpawn`/`VoiceEnd` events.
     pub trace_id: Option<u64>,
+    /// A script's handle on this voice (0 = none): the fretboard tags the
+    /// voices it must later release or fade by themselves (a stitch, a
+    /// squeak), as Kontakt scripts keep `play_note` event ids.
+    pub script_tag: u32,
     /// Time-preserving pitch shift (L/R), `None` when the note is on the
     /// recorded grid (`pitch_cents == 0`) — those voices pay nothing.
     pitch: Option<[crate::engine::pitch_shift::PitchShifter; 2]>,
+    /// Time stretch (a script's `ENGINE_PAR_SPEED` on a time-machine
+    /// group): the playhead moves at `speed` × the pitch's rate while two
+    /// read heads play the sample at its pitch. `None` plays it plainly.
+    stretch: Option<Stretch>,
+    /// A script's `fade_out` owns this voice's end (see `script_fade`).
+    script_faded: bool,
+    /// Its key went up (a note-off reached it). A script's fade is not a
+    /// key-up: Kontakt's `fade_out` ramps the voice's level and leaves its
+    /// envelopes held, so a script-faded voice's envelopes release only
+    /// with the key.
+    key_up: bool,
+    /// Reads through Kontakt's Normal-quality resampler
+    /// ([`super::resample`]) instead of the linear one: set by the pool for a
+    /// library whose `performance.interpolation` asks for it.
+    kt: Option<KontaktVoice>,
+    /// Plays grain by grain through Kontakt's Time Machine II
+    /// ([`super::tm2`]): set for a zone of a Time Machine II group whose
+    /// marks are found. Boxed (its block buffers are ~12 KB): one allocation
+    /// at the spawn, none while it plays.
+    tm2: Option<Box<Tm2Voice>>,
 }
+
+/// A Time Machine II voice: its machine (made at its first frame, from the
+/// voice's start), the engine frame it started at (its blocks lie on the
+/// engine's [`KONTAKT_BLOCK`](super::resample::KONTAKT_BLOCK) grid, as
+/// `BDsp::GetBlockMachine` runs the machine once a host block), and the
+/// block of frames planned.
+#[derive(Clone)]
+struct Tm2Voice {
+    marks: super::tm2::Marks,
+    /// Speed (1 = as recorded) and the sample's rate over the engine's.
+    speed: f64,
+    ratio: f64,
+    origin: u64,
+    machine: Option<super::tm2::Machine>,
+    layout: super::resample::Layout,
+    frames: [super::tm2::Frame; super::resample::KONTAKT_BLOCK],
+    old: [super::resample::Tap; 2 * super::resample::KONTAKT_BLOCK],
+    new: [super::resample::Tap; super::resample::KONTAKT_BLOCK],
+    len: usize,
+    used: usize,
+    /// The step the last frame moved at, which forms the next block's.
+    step: f64,
+    /// The virtual position at the planned block's start, and its move a
+    /// frame: the voice's position.
+    vstart: f64,
+    per: f32,
+}
+
+impl std::fmt::Debug for Tm2Voice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tm2Voice")
+            .field("speed", &self.speed)
+            .field("origin", &self.origin)
+            .field("used", &self.used)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A voice reading through Kontakt's Normal-quality resampler: the engine
+/// frame it started at (its blocks lie on the engine's absolute
+/// [`KONTAKT_BLOCK`](super::resample::KONTAKT_BLOCK) grid), what it plays,
+/// its float cursor and the block of reads planned. Inline, so spawning one
+/// allocates nothing.
+#[derive(Clone, Copy, Debug)]
+struct KontaktVoice {
+    origin: u64,
+    started: bool,
+    layout: super::resample::Layout,
+    /// The cursor after the planned block.
+    cursor: super::resample::Cursor,
+    /// The planned block: `taps[used..len]` are the next frames' reads.
+    taps: super::resample::Plan,
+    len: usize,
+    used: usize,
+    /// The block was copied whole (`|step − 1| ≤ 1e-4`): each read is its
+    /// frame, its fraction ignored.
+    copy: bool,
+    /// The step the last frame moved at, which forms the next block's.
+    step: f64,
+}
+
+impl KontaktVoice {
+    fn new(origin: u64) -> Self {
+        Self {
+            origin,
+            started: false,
+            layout: super::resample::Layout {
+                start: 0,
+                end: 0,
+                looped: None,
+            },
+            cursor: super::resample::Cursor::default(),
+            taps: [super::resample::Tap::default(); super::resample::KONTAKT_BLOCK],
+            len: 0,
+            used: 0,
+            copy: false,
+            step: 1.0,
+        }
+    }
+}
+
+/// A stretching voice's grain, output frames (43 ms at 48 kHz).
+pub const STRETCH_GRAIN: u64 = 2048;
+
+/// The state of a time-stretched voice: two read heads, each a pitch-rate
+/// cursor that restarts at the playhead once a grain, half a grain apart,
+/// crossfaded by triangles that sum to one — KONTRA's model of Kontakt's
+/// time machine (head 0 plays the note's start in full).
+#[derive(Clone, Copy, Debug)]
+pub struct Stretch {
+    speed: f64,
+    heads: [f64; 2],
+    /// Output frames since the stretch began, which place its grains.
+    grain: u64,
+}
+
+/// Catmull-Rom between `y1` and `y2` at `t` (KONTRA's stretched read).
+#[inline]
+fn hermite(y0: f32, y1: f32, y2: f32, y3: f32, t: f32) -> f32 {
+    let c1 = 0.5 * (y2 - y0);
+    let c2 = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
+    let c3 = 0.5 * (y3 - y0) + 1.5 * (y1 - y2);
+    ((c3 * t + c2) * t + c1) * t + y1
+}
+
+/// Kontakt `ENV_FLEX` segment shape: `a = (0.5 − tension)·FLEX_CURVE_SCALE`,
+/// level `(e^{a·t} − 1)/(e^a − 1)` along the segment.
+pub const FLEX_CURVE_SCALE: f32 = 15.0;
 
 /// One decoded Kontakt `ENV_FLEX` amplitude envelope, evaluated per frame and
 /// multiplied into the voice's output.
@@ -474,6 +638,21 @@ pub struct FlexEnv {
     seg: usize,
     t: f64,
     eat: f64,
+    /// The segment a note-off jumps to (from the current level) — Kontakt's
+    /// release stage after the sustain loop. `None` = keep walking.
+    release_seg: Option<usize>,
+    /// Modulation intensity: the gain is `1 − depth·(1 − level)` (Kontakt's
+    /// volume envelope routed at less than full intensity sits above a
+    /// floor of `1 − depth`). 1 = the plain envelope.
+    depth: f32,
+    /// Once released and past its last segment the envelope is off: silent,
+    /// and its voice is done (Kontakt stops a voice when its volume envelope
+    /// ends, whatever the intensity).
+    stops_voice: bool,
+    released: bool,
+    /// Runs as Kontakt's control-rate AHDSR instead of the segments
+    /// ([`Self::kontakt_ahdsr`]).
+    kontakt: Option<super::kontakt_ahdsr::Ahdsr>,
 }
 
 impl FlexEnv {
@@ -525,7 +704,90 @@ impl FlexEnv {
             seg: 0,
             t: 0.0,
             eat: 1.0,
+            release_seg: None,
+            depth: 1.0,
+            stops_voice: false,
+            released: false,
+            kontakt: None,
         })
+    }
+
+    /// Run at `depth` intensity (see [`FlexEnv::depth`]); the voice ends
+    /// with the envelope.
+    #[must_use]
+    pub fn with_depth_and_stop(mut self, depth: f32) -> Self {
+        self.depth = depth.clamp(0.0, 1.0);
+        self.stops_voice = true;
+        self
+    }
+
+    /// Released and run past its last segment, with `stops_voice` set; a
+    /// Kontakt AHDSR once it is off (Kontakt ends a voice with its volume
+    /// envelope, whatever the depth).
+    #[must_use]
+    pub fn ended(&self) -> bool {
+        if let Some(k) = &self.kontakt {
+            return k.is_off();
+        }
+        self.stops_voice && self.released && self.settled()
+    }
+
+    /// Kontakt's volume AHDSR at its control rate
+    /// ([`super::kontakt_ahdsr`]): `settings` replace the segments; the
+    /// depth and the key-up behave as before.
+    #[must_use]
+    pub fn kontakt_ahdsr(settings: super::kontakt_ahdsr::Settings) -> Self {
+        Self {
+            segs: Vec::new(),
+            curve: Vec::new(),
+            pos: 0.0,
+            hold_end: None,
+            seg: 0,
+            t: 0.0,
+            eat: 1.0,
+            release_seg: None,
+            depth: 1.0,
+            stops_voice: true,
+            released: false,
+            kontakt: Some(super::kontakt_ahdsr::Ahdsr::new(settings)),
+        }
+    }
+
+    /// Declare the release segment (see [`Self::release`]).
+    #[must_use]
+    pub fn with_release_segment(mut self, seg: Option<usize>) -> Self {
+        self.release_seg = seg.filter(|&s| s < self.segs.len());
+        self
+    }
+
+    /// Note-off: jump to the release segment from the current level (once;
+    /// a no-op when there is none or the envelope is already past it).
+    pub fn release(&mut self) {
+        if let Some(k) = self.kontakt.as_mut() {
+            if !self.released {
+                k.release();
+            }
+            self.released = true;
+            return;
+        }
+        self.released = true;
+        let Some(rs) = self.release_seg.take() else {
+            return;
+        };
+        if self.seg >= rs {
+            // Already at (or past) the release segment — a held envelope
+            // frozen at its hold point sits on the release segment's first
+            // frame. The key-up still lifts the freeze, so it walks on.
+            self.hold_end = None;
+            return;
+        }
+        let lvl = self.level_here();
+        self.segs[rs].1 = lvl;
+        self.pos = self.segs[..rs].iter().map(|s| s.0).sum();
+        self.seg = rs;
+        self.t = 0.0;
+        self.eat = 1.0;
+        self.hold_end = None;
     }
 
     /// Kontakt segment-tension shape law. `t` is normalized progress [0,1]
@@ -533,13 +795,16 @@ impl FlexEnv {
     /// (0.5 = linear, <0.5 concave, >0.5 convex). PINNED law (not fitted): a
     /// fixed exponential-tension curve, the standard shape for Kontakt bipolar
     /// curve controls — `f(t) = (e^{a t} − 1)/(e^a − 1)` with
-    /// `a = (tension − 0.5)·2·K`, `K = 6` (full-scale curvature), linear at
-    /// tension = 0.5. The A/B metric (RMS over ~1 s windows) is insensitive to
-    /// the exact curvature — only segment levels/times move it — so this is
-    /// identified, not tuned.
+    /// `a = (0.5 − tension)·FLEX_CURVE_SCALE`, linear at tension = 0.5
+    /// (sign and scale null-tested against Kontakt).
     #[inline]
     fn shape(t: f32, tension: f32) -> f32 {
-        let a = (tension - 0.5) * 12.0;
+        // Sign measured against Kontakt (CSS legato envelope, null −41 dB):
+        // tension > 0.5 is CONCAVE (fast start), < 0.5 convex. The earlier
+        // `(tension − 0.5)` had every curved segment mirrored. Scale 15: the
+        // decoded CSS marcato body/transition envelopes null Kontakt at
+        // −42 dB with it, −37 at 12 or 16.
+        let a = (0.5 - tension) * FLEX_CURVE_SCALE;
         if a.abs() < 1.0e-3 {
             t
         } else {
@@ -549,7 +814,7 @@ impl FlexEnv {
 
     /// The shape law's `a` for `tension` — 0 for a (near-)linear segment.
     fn curvature(tension: f32) -> f64 {
-        let a = (f64::from(tension) - 0.5) * 12.0;
+        let a = (0.5 - f64::from(tension)) * f64::from(FLEX_CURVE_SCALE);
         if a.abs() < 1.0e-3 { 0.0 } else { a }
     }
 
@@ -617,13 +882,36 @@ impl FlexEnv {
     /// Advance one frame (respecting the sustain-hold freeze) and return the
     /// level. `released` = the voice has received note-off (freeze lifts).
     #[inline]
-    fn next(&mut self, released: bool) -> f32 {
+    pub(crate) fn next(&mut self, released: bool) -> f32 {
+        if self.ended() {
+            return 0.0;
+        }
+        if self.kontakt.is_some() {
+            if released {
+                self.release();
+            }
+            let lvl = self
+                .kontakt
+                .as_mut()
+                .map_or(0.0, super::kontakt_ahdsr::Ahdsr::tick);
+            return 1.0 - self.depth * (1.0 - lvl);
+        }
         let lvl = self.level_here();
         let frozen = !released && self.hold_end.is_some_and(|h| self.pos >= h);
         if !frozen {
             self.step();
         }
-        lvl
+        if self.depth < 1.0 {
+            1.0 - self.depth * (1.0 - lvl)
+        } else {
+            lvl
+        }
+    }
+
+    /// The walk is past the last segment: the level holds from here on.
+    #[inline]
+    fn settled(&self) -> bool {
+        self.seg >= self.segs.len()
     }
 }
 
@@ -671,6 +959,13 @@ impl Voice {
             pan_l: 1.0,
             pan_r: 1.0,
             target_gain: gain,
+            level: 1.0,
+            release_k: 0.0,
+            release_cut: 0,
+            release_k_active: 0.0,
+            flex2: None,
+            pitch_env: None,
+            pitch_env_cents: 0.0,
             gain_ramp_frames: 0,
             stage1_run: 0,
             stage2_frames: 0,
@@ -696,6 +991,7 @@ impl Voice {
             amp_bp: None,
             bp_ctrl: (0.0, 0.0, 0, false),
             filter: None,
+            inserts: None,
             vib_phase: 0.0,
             vib_inc: 0.0,
             vib_cents: 0.0,
@@ -706,6 +1002,7 @@ impl Voice {
             bloom_target: 1.0,
             kind,
             note,
+            env_key: note,
             mic_index: None,
             choke_group: None,
             release_frames,
@@ -718,7 +1015,13 @@ impl Voice {
             env_peak: 0.0,
             max_peak: 0.0,
             trace_id: None,
+            script_tag: 0,
             pitch: None,
+            stretch: None,
+            script_faded: false,
+            key_up: false,
+            kt: None,
+            tm2: None,
         }
     }
 
@@ -754,6 +1057,13 @@ impl Voice {
             pan_l: 1.0,
             pan_r: 1.0,
             target_gain: gain,
+            level: 1.0,
+            release_k: 0.0,
+            release_cut: 0,
+            release_k_active: 0.0,
+            flex2: None,
+            pitch_env: None,
+            pitch_env_cents: 0.0,
             gain_ramp_frames: 0,
             stage1_run: 0,
             stage2_frames: 0,
@@ -779,6 +1089,7 @@ impl Voice {
             amp_bp: None,
             bp_ctrl: (0.0, 0.0, 0, false),
             filter: None,
+            inserts: None,
             vib_phase: 0.0,
             vib_inc: 0.0,
             vib_cents: 0.0,
@@ -789,6 +1100,7 @@ impl Voice {
             bloom_target: 1.0,
             kind,
             note,
+            env_key: note,
             mic_index: None,
             choke_group: None,
             release_frames,
@@ -801,7 +1113,13 @@ impl Voice {
             env_peak: 0.0,
             max_peak: 0.0,
             trace_id: None,
+            script_tag: 0,
             pitch: None,
+            stretch: None,
+            script_faded: false,
+            key_up: false,
+            kt: None,
+            tm2: None,
         }
     }
 
@@ -830,6 +1148,87 @@ impl Voice {
             self.pitch = Some([PitchShifter::new(cents), PitchShifter::new(cents)]);
         }
         self
+    }
+
+    /// Stretch time by `speed` (1.0 = as recorded) at the voice's pitch: the
+    /// playhead advances `speed` × faster while the pitch holds. A unity
+    /// speed is a no-op.
+    #[must_use]
+    pub fn with_stretch(mut self, speed: f64) -> Self {
+        self.stretch = ((speed - 1.0).abs() > 1e-9 && speed.is_finite()).then_some(Stretch {
+            speed: speed.clamp(0.0, 8.0),
+            heads: [0.0; 2],
+            grain: 0,
+        });
+        self
+    }
+
+    /// Play through Kontakt's Time Machine II at `speed` (1 = as recorded),
+    /// grain by grain from `marks` (the sample's, [`super::tm2::MarkTable`]);
+    /// `ratio` is the sample's rate over the engine's. Unlike
+    /// [`Self::with_stretch`], unity speed plays grains too, as Kontakt's
+    /// does for every voice of a Time Machine II group.
+    #[must_use]
+    pub fn with_tm2(mut self, marks: super::tm2::Marks, speed: f64, ratio: f64) -> Self {
+        use super::resample::{KONTAKT_BLOCK, Layout, Tap};
+        self.stretch = None;
+        self.tm2 = Some(Box::new(Tm2Voice {
+            marks,
+            speed: if speed.is_finite() { speed } else { 1.0 },
+            ratio,
+            origin: 0,
+            machine: None,
+            layout: Layout {
+                start: 0,
+                end: 0,
+                looped: None,
+            },
+            frames: [super::tm2::Frame::default(); KONTAKT_BLOCK],
+            old: [Tap::default(); 2 * KONTAKT_BLOCK],
+            new: [Tap::default(); KONTAKT_BLOCK],
+            len: 0,
+            used: 0,
+            step: 1.0,
+            vstart: 0.0,
+            per: 0.0,
+        }));
+        self
+    }
+
+    /// One stretched frame: the two heads at the playhead's grain, each read
+    /// through a four-point Hermite, crossfaded by their triangles.
+    fn read_stretched(&mut self) -> (f32, f32) {
+        let pos = self.position;
+        let Some(st) = self.stretch.as_mut() else {
+            return (0.0, 0.0);
+        };
+        let half = STRETCH_GRAIN / 2;
+        let g = st.grain % STRETCH_GRAIN;
+        if st.grain == 0 {
+            st.heads = [pos; 2];
+        } else if g == half {
+            st.heads[0] = pos;
+        } else if g == 0 {
+            st.heads[1] = pos;
+        }
+        let phase = ((st.grain + half) % STRETCH_GRAIN) as f32 / STRETCH_GRAIN as f32;
+        let w = 1.0 - (2.0 * phase - 1.0).abs();
+        let heads = st.heads;
+        let (a, b) = (self.read_hermite(heads[0]), self.read_hermite(heads[1]));
+        (w * a.0 + (1.0 - w) * b.0, w * a.1 + (1.0 - w) * b.1)
+    }
+
+    /// A four-point Hermite read at `pos`, the frames clamped to the sample.
+    fn read_hermite(&self, pos: f64) -> (f32, f32) {
+        let i = pos.floor() as i64;
+        let t = (pos - i as f64) as f32;
+        let last = self.end_frame.saturating_sub(1) as i64;
+        let f = |k: i64| self.data.frame((i + k).clamp(0, last.max(0)) as usize);
+        let (y0, y1, y2, y3) = (f(-1), f(0), f(1), f(2));
+        (
+            hermite(y0.0, y1.0, y2.0, y3.0, t),
+            hermite(y0.1, y1.1, y2.1, y3.1, t),
+        )
     }
 
     /// Compensate the pitch shifter's startup latency, so the voice's intended
@@ -916,6 +1315,12 @@ impl Voice {
         self
     }
 
+    /// The key whose note-off releases this voice (see [`Voice::env_key`]).
+    pub fn with_env_key(mut self, key: u8) -> Self {
+        self.env_key = key;
+        self
+    }
+
     /// Tag this voice with the stem class of its source articulation.
     #[must_use]
     pub fn with_artic_class(mut self, class: ArticClass) -> Self {
@@ -930,9 +1335,17 @@ impl Voice {
     }
 
     #[must_use]
-    pub fn with_pan(mut self, pan: f32) -> Self {
+    pub fn with_pan(self, pan: f32) -> Self {
+        self.with_pan_law(pan, false)
+    }
+
+    /// [`with_pan`](Self::with_pan), with `mono_balance` putting a mono
+    /// source on the stereo balance law (see
+    /// `PerformanceSpec::mono_balance_pan`).
+    #[must_use]
+    pub fn with_pan_law(mut self, pan: f32, mono_balance: bool) -> Self {
         let pan = pan.clamp(-1.0, 1.0);
-        if self.data.channels >= 2 {
+        if self.data.channels >= 2 || mono_balance {
             // Stereo source: use a *balance* law so a centered (pan=0) stereo
             // sample passes L→L / R→R at unity. An equal-power law would apply
             // a spurious −3 dB at center to material that is already stereo —
@@ -953,6 +1366,70 @@ impl Voice {
     #[must_use]
     pub fn with_dyn_layer(mut self, layer: DynLayer) -> Self {
         self.dyn_layer = Some(layer);
+        self
+    }
+
+    /// Curve the note-off release (see [`Self::release_k`]).
+    #[must_use]
+    pub fn with_release_curve(mut self, k: f32) -> Self {
+        self.release_k = k;
+        self
+    }
+
+    /// Replace this voice's flex envelope after spawn (a per-event envelope,
+    /// e.g. the CSS transition shaped by that transition's CC66–68).
+    pub fn set_flex_env(&mut self, env: FlexEnv) {
+        self.flex = Some(env);
+    }
+
+    /// Replace the second envelope after spawn (see [`Self::flex2`]).
+    pub fn set_flex_env2(&mut self, env: FlexEnv) {
+        self.flex2 = Some(env);
+    }
+
+    /// Attach the second envelope (see [`Self::flex2`]).
+    #[must_use]
+    pub fn with_flex_env2(mut self, env: FlexEnv) -> Self {
+        self.flex2 = Some(env);
+        self
+    }
+
+    /// Attach a pitch envelope: its level (0..1, one-shot) times `cents`
+    /// offsets the voice's pitch (see [`Self::pitch_env`]).
+    #[must_use]
+    pub fn with_pitch_env(mut self, env: FlexEnv, cents: f32) -> Self {
+        if cents != 0.0 {
+            self.pitch_env = Some(env);
+            self.pitch_env_cents = cents;
+        }
+        self
+    }
+
+    /// Whether `idx` is before the playable window. A position inside the
+    /// loop is always playable: a voice that STARTS past its loop start (a
+    /// CSS body variant entering the file deep, Kontakt's velocity-3 zone at
+    /// frame 168000 looping 48010..end) wraps below its start frame — which
+    /// used to end the voice at its first wrap.
+    #[inline]
+    fn below_window(&self, idx: usize) -> bool {
+        idx < self.start_frame && !self.loop_range.is_some_and(|(ls, _)| idx >= ls)
+    }
+
+    /// Release-fade gain for `t` = remaining fraction (1 → 0).
+    #[inline]
+    fn release_shape(&self, t: f32) -> f32 {
+        let k = self.release_k_active;
+        if k < 1e-4 {
+            return t;
+        }
+        let x = 1.0 - t;
+        ((-k * x).exp() - (-k).exp()) / (1.0 - (-k).exp())
+    }
+
+    /// Record the CC-independent part of the gain (see [`Self::level`]).
+    #[must_use]
+    pub fn with_level(mut self, level: f32) -> Self {
+        self.level = level;
         self
     }
 
@@ -1020,6 +1497,49 @@ impl Voice {
     pub fn with_filter_env(mut self, filter: Option<VoiceFilter>) -> Self {
         self.filter = filter;
         self
+    }
+
+    /// Fade a key-up release linearly to silence over `frames` on top of
+    /// its own shape, ending the voice there (see
+    /// `PerformanceSpec::sustain_noteoff_cut_ms`). A voice not releasing
+    /// from a key-up is left alone.
+    pub fn cut_release(&mut self, frames: usize) {
+        if frames > 0
+            && matches!(self.state, VoiceState::Releasing { .. })
+            && !matches!(self.kind, VoiceKind::Release | VoiceKind::Short)
+        {
+            self.release_cut = frames;
+        }
+    }
+
+    /// Run the layer's group insert chain (see [`super::inserts`]).
+    #[must_use]
+    pub fn with_inserts(mut self, inserts: Option<super::inserts::InsertState>) -> Self {
+        self.inserts = inserts;
+        self
+    }
+
+    /// Whether the voice runs a group insert chain.
+    /// A balance (−1..1) the insert chain applies after its drive stages
+    /// (see [`super::inserts::InsertState::set_pan`]); none without inserts.
+    #[must_use]
+    pub fn with_insert_pan(mut self, pan: f32) -> Self {
+        if let Some(f) = &mut self.inserts {
+            f.set_pan(pan);
+        }
+        self
+    }
+
+    #[must_use]
+    pub fn has_inserts(&self) -> bool {
+        self.inserts.is_some()
+    }
+
+    /// The controllers the insert chain's routes follow, read again.
+    pub fn set_insert_ccs(&mut self, cc: impl Fn(u8) -> u8) {
+        if let Some(f) = &mut self.inserts {
+            f.set_ccs(cc);
+        }
     }
 
     /// Follow the layer's cutoff knobs on a held note.
@@ -1245,6 +1765,18 @@ impl Voice {
         }
     }
 
+    /// A script's `wait(hold)` + `fade_out(fade)` on a voice it just
+    /// started: full for `hold_frames` (its fade-in included), then a
+    /// linear fade to silence over `fade_frames`.
+    #[must_use]
+    pub fn with_delayed_fade(mut self, hold_frames: usize, fade_frames: usize) -> Self {
+        self.release_hold = hold_frames.max(1);
+        self.pending_fade = fade_frames.max(1);
+        self.release_k_active = 0.0;
+        self.script_faded = true;
+        self
+    }
+
     pub fn ramp_gain(&mut self, target: f32, frames: usize) {
         self.target_gain = target;
         self.gain_ramp_frames = frames;
@@ -1256,10 +1788,17 @@ impl Voice {
     }
 
     pub fn note_off_with_release_frames(&mut self, release_frames: usize) {
+        self.key_up = true;
         match self.kind {
             // A one-shot plays to its end — unless a breakpoint amp envelope
             // shapes it, which releases with the key like any other voice.
-            VoiceKind::Short if self.amp_bp.is_none() => {}
+            // A one-shot plays to its end; its envelope still takes the
+            // key-up (Kontakt's short groups release from the note-off).
+            VoiceKind::Short if self.amp_bp.is_none() => {
+                if let Some(f) = &mut self.flex {
+                    f.release();
+                }
+            }
             VoiceKind::Release => {
                 // Play to end — do not release early.
             }
@@ -1287,6 +1826,7 @@ impl Voice {
                     // voice's stored `release_frames` the envelope amplifies
                     // beyond 1.0 instead of fading. Sync them now.
                     self.release_frames = frames;
+                    self.release_k_active = self.release_k;
                     self.state = VoiceState::Releasing {
                         frames_remaining: frames,
                     };
@@ -1301,15 +1841,24 @@ impl Voice {
             _ => {
                 if matches!(self.state, VoiceState::Releasing { .. }) {
                     self.state = VoiceState::Playing;
+                    self.release_cut = 0;
                 }
             }
         }
     }
 
+    /// Whether the voice's envelopes walk past their hold: it is fading
+    /// (`state`, the state the frame plays in) by its key-up or by anything
+    /// but a script.
+    #[inline]
+    fn envelopes_released(state: &VoiceState, key_up: bool, script_faded: bool) -> bool {
+        !matches!(state, VoiceState::Playing) && (key_up || !script_faded)
+    }
+
     /// Returns true when this voice should be removed from the pool.
     #[must_use]
     pub fn is_done(&self) -> bool {
-        self.state == VoiceState::Done
+        self.state == VoiceState::Done || self.flex.as_ref().is_some_and(FlexEnv::ended)
     }
 
     /// Linearly-interpolated stereo read at fractional frame `pos`. Does not
@@ -1327,6 +1876,222 @@ impl Voice {
             &mut self.stream_cursor,
         );
         (l0 + (l1 - l0) * frac, r0 + (r1 - r0) * frac)
+    }
+
+    /// One frame read through Kontakt's Normal-quality resampler: plans a
+    /// block of reads when the last is used up (from the voice's first frame
+    /// to the engine's next [`KONTAKT_BLOCK`] boundary, then a whole block
+    /// at a time, each at the step its first frame moves at), and plays the
+    /// next read — the frame itself in a copied block, else the 4-point
+    /// Lagrange about it. A voice Kontakt's path does not model (reversed,
+    /// ping-pong, stretched, pitch-shifted, crossfaded loop) falls back to
+    /// the linear read at its first frame.
+    ///
+    /// [`KONTAKT_BLOCK`]: super::resample::KONTAKT_BLOCK
+    fn read_kontakt(&mut self) -> (f32, f32) {
+        use super::resample::{self, Cursor, KONTAKT_BLOCK, Layout};
+        let modelled = !self.reverse
+            && !self.alternating_loop
+            && self.stretch.is_none()
+            && self.pitch.is_none()
+            && self.loop_xfade == 0;
+        let now = self.frames_out.saturating_sub(1);
+        let (bend, rate, glide) = (self.bend, self.rate, self.glide_cents);
+        let glide_on = self.glide_frames > 0;
+        let (start, end, looped, position) = (
+            self.start_frame as i64,
+            self.end_frame as i64,
+            self.loop_range,
+            self.position,
+        );
+        let Some(kt) = self.kt.as_mut() else {
+            return (0.0, 0.0);
+        };
+        if !kt.started {
+            if !modelled {
+                self.kt = None;
+                return self.read_interp(self.position);
+            }
+            let pos = position.floor();
+            kt.cursor = Cursor {
+                pos: pos as i64,
+                frac: (position - pos) as f32,
+            };
+            kt.layout = Layout {
+                start,
+                end,
+                // Kontakt takes a loop while the playhead is before its end.
+                looped: looped
+                    .map(|(a, b)| (a as i64, b as i64))
+                    .filter(|&(_, le)| kt.cursor.pos < le),
+            };
+            kt.step = bend
+                * if glide_on {
+                    rate * 2f64.powf(f64::from(glide) / 1200.0)
+                } else {
+                    rate
+                };
+            kt.started = true;
+            kt.len = 0;
+            kt.used = 0;
+        }
+        if kt.used >= kt.len {
+            let at = kt.origin + now;
+            let frames = KONTAKT_BLOCK - (at % KONTAKT_BLOCK as u64) as usize;
+            let layout = kt.layout;
+            kt.copy = resample::block(
+                &layout,
+                &mut kt.cursor,
+                kt.step as f32,
+                &mut kt.taps[..frames],
+            );
+            kt.len = frames;
+            kt.used = 0;
+        }
+        let (tap, copy, layout) = (kt.taps[kt.used], kt.copy, kt.layout);
+        let last = self.end_frame.saturating_sub(1);
+        if copy {
+            return match layout.frame(tap.at) {
+                Some(f) => {
+                    self.data
+                        .frame_pair_cursored(f, last, &mut self.stream_cursor)
+                        .0
+                }
+                None => (0.0, 0.0),
+            };
+        }
+        let f = [-1i64, 0, 1, 2].map(|k| layout.frame(tap.at + k));
+        let y = match f {
+            // The common case: four frames in a row, two cursored reads.
+            [Some(a), _, _, Some(d)] if d == a + 3 => {
+                let (y0, y1) = self
+                    .data
+                    .frame_pair_cursored(a, last, &mut self.stream_cursor);
+                let (y2, y3) = self
+                    .data
+                    .frame_pair_cursored(a + 2, last, &mut self.stream_cursor);
+                [y0, y1, y2, y3]
+            }
+            _ => f.map(|f| {
+                f.map_or((0.0, 0.0), |f| {
+                    self.data
+                        .frame_pair_cursored(f, last, &mut self.stream_cursor)
+                        .0
+                })
+            }),
+        };
+        (
+            resample::lagrange(tap.frac, y[0].0, y[1].0, y[2].0, y[3].0),
+            resample::lagrange(tap.frac, y[0].1, y[1].1, y[2].1, y[3].1),
+        )
+    }
+
+    /// One frame of a Time Machine II voice: plans a block of grain frames
+    /// when the last is used up (from the voice's first frame to the
+    /// engine's next [`KONTAKT_BLOCK`] boundary, then a whole block at a
+    /// time, each at the step its first frame moves at), and plays the next:
+    /// the grain's read at its weight plus the fading grain's at its own,
+    /// each by Normal quality's Lagrange (a copied block reads frames).
+    /// `None` once the grains ran out.
+    ///
+    /// [`KONTAKT_BLOCK`]: super::resample::KONTAKT_BLOCK
+    fn read_tm2(&mut self) -> Option<(f32, f32)> {
+        use super::resample::{KONTAKT_BLOCK, Layout};
+        let now = self.frames_out.saturating_sub(1);
+        let glide = (self.glide_frames > 0).then_some(self.glide_cents);
+        let (bend, rate, end, position) = (self.bend, self.rate, self.end_frame, self.position);
+        let t = self.tm2.as_deref_mut()?;
+        if t.machine.is_none() {
+            t.layout = Layout {
+                start: 0,
+                end: end as i64,
+                looped: None,
+            };
+            t.step = bend * glide.map_or(rate, |g| rate * 2f64.powf(f64::from(g) / 1200.0));
+            t.machine = Some(super::tm2::Machine::new(
+                t.marks.clone(),
+                end as i64,
+                (t.speed, t.ratio),
+                position,
+            ));
+            t.len = 0;
+            t.used = 0;
+        }
+        if t.used >= t.len {
+            let at = t.origin + now;
+            let frames = KONTAKT_BLOCK - (at % KONTAKT_BLOCK as u64) as usize;
+            let layout = t.layout;
+            let step = t.step as f32;
+            let m = t.machine.as_mut()?;
+            t.vstart = m.vpos;
+            t.per = m.per_frame();
+            m.block(
+                &layout,
+                step,
+                &mut t.frames[..frames],
+                &mut t.old,
+                &mut t.new,
+            );
+            t.len = frames;
+            t.used = 0;
+        }
+        let (f, layout) = (t.frames[t.used], t.layout);
+        if f.silent {
+            return None;
+        }
+        let mut out = (0.0, 0.0);
+        for (tap, gain) in [(f.new, f.w), (f.old, f.g)] {
+            if gain != 0.0 {
+                let v = self.read_tap(&layout, tap, f.copy);
+                out = (out.0 + gain * v.0, out.1 + gain * v.1);
+            }
+        }
+        Some(out)
+    }
+
+    /// One planned read of Kontakt's resampler: the frame itself in a copied
+    /// block, else the 4-point Lagrange about it.
+    fn read_tap(
+        &mut self,
+        layout: &super::resample::Layout,
+        tap: super::resample::Tap,
+        copy: bool,
+    ) -> (f32, f32) {
+        use super::resample;
+        let last = self.end_frame.saturating_sub(1);
+        if copy {
+            return match layout.frame(tap.at) {
+                Some(f) => {
+                    self.data
+                        .frame_pair_cursored(f, last, &mut self.stream_cursor)
+                        .0
+                }
+                None => (0.0, 0.0),
+            };
+        }
+        let f = [-1i64, 0, 1, 2].map(|k| layout.frame(tap.at + k));
+        let y = match f {
+            [Some(a), _, _, Some(d)] if d == a + 3 => {
+                let (y0, y1) = self
+                    .data
+                    .frame_pair_cursored(a, last, &mut self.stream_cursor);
+                let (y2, y3) = self
+                    .data
+                    .frame_pair_cursored(a + 2, last, &mut self.stream_cursor);
+                [y0, y1, y2, y3]
+            }
+            _ => f.map(|f| {
+                f.map_or((0.0, 0.0), |f| {
+                    self.data
+                        .frame_pair_cursored(f, last, &mut self.stream_cursor)
+                        .0
+                })
+            }),
+        };
+        (
+            resample::lagrange(tap.frac, y[0].0, y[1].0, y[2].0, y[3].0),
+            resample::lagrange(tap.frac, y[0].1, y[1].1, y[2].1, y[3].1),
+        )
     }
 
     /// Render one stereo frame. Returns (L, R) and advances internal state.
@@ -1427,20 +2192,45 @@ impl Voice {
                     return (0.0, 0.0);
                 }
                 let t = *frames_remaining as f32 / self.release_frames.max(1) as f32;
+                let elapsed = self.release_frames.saturating_sub(*frames_remaining);
                 *frames_remaining -= 1;
-                t
+                if self.release_cut > 0 {
+                    // the script's fade on top of the release: silent at its end
+                    let lin = 1.0 - elapsed as f32 / self.release_cut as f32;
+                    if lin <= 0.0 {
+                        self.state = VoiceState::Done;
+                        return (0.0, 0.0);
+                    }
+                    self.release_shape(t) * lin
+                } else {
+                    self.release_shape(t)
+                }
             }
             VoiceState::Done => return (0.0, 0.0),
         };
 
         // Read sample with linear interpolation
         let frame_idx = self.position as usize;
-        if frame_idx >= self.end_frame || frame_idx < self.start_frame {
+        if frame_idx >= self.end_frame || self.below_window(frame_idx) {
             self.state = VoiceState::Done;
             return (0.0, 0.0);
         }
 
-        let (mut l, mut r) = self.read_interp(self.position);
+        let (mut l, mut r) = if self.tm2.is_some() {
+            match self.read_tm2() {
+                Some(v) => v,
+                None => {
+                    self.state = VoiceState::Done;
+                    return (0.0, 0.0);
+                }
+            }
+        } else if self.stretch.is_some() {
+            self.read_stretched()
+        } else if self.kt.is_some() {
+            self.read_kontakt()
+        } else {
+            self.read_interp(self.position)
+        };
 
         // Seamless forward-loop crossfade. As the read approaches `loop_end`,
         // blend in the pre-`loop_start` material so the wrap has no
@@ -1487,12 +2277,19 @@ impl Voice {
         if let Some(f) = &mut self.filter {
             (l, r) = f.tick(l, r);
         }
+        if let Some(f) = &mut self.inserts {
+            (l, r) = f.tick(l, r);
+        }
 
         // Decoded ENV_FLEX amplitude envelope. Freezes at the sustain-hold
         // point while Playing (held note stays steady); advances through the
         // decay once Releasing. Multiplied on top of the note-off release fade.
+        let released = Self::envelopes_released(&self.state, self.key_up, self.script_faded);
         let flex = match &mut self.flex {
-            Some(f) => f.next(!matches!(self.state, VoiceState::Playing)),
+            Some(f) => f.next(released),
+            None => 1.0,
+        } * match &mut self.flex2 {
+            Some(f) => f.next(released),
             None => 1.0,
         };
 
@@ -1546,20 +2343,60 @@ impl Voice {
         } else {
             1.0
         };
+        // Pitch envelope: e^y to second order (y ≤ ~0.01 here; the error is
+        // y³/6), so no exp per frame.
+        let penv = match &mut self.pitch_env {
+            Some(e) => {
+                let lvl = e.next(true);
+                if lvl == 0.0 && e.settled() {
+                    self.pitch_env = None;
+                }
+                let y = f64::from(lvl * self.pitch_env_cents) * (std::f64::consts::LN_2 / 1200.0);
+                1.0 + y + 0.5 * y * y
+            }
+            None => 1.0,
+        };
         let step = self.bend
             * vib
+            * penv
             * if self.glide_frames > 0 {
                 let s = self.rate * 2f64.powf(self.glide_cents as f64 / 1200.0);
                 self.glide_cents += self.glide_step;
                 self.glide_frames -= 1;
                 if self.glide_frames == 0 {
-                    self.glide_cents = self.glide_end;
+                    // The glide's end pitch holds (an outgoing voice stays
+                    // bent toward the new note until it is cut).
+                    self.rate *= 2f64.powf(f64::from(self.glide_end) / 1200.0);
+                    self.glide_cents = 0.0;
+                    self.glide_end = 0.0;
                 }
                 s
             } else {
                 self.rate
             };
-        if self.reverse {
+        let step = match self.stretch.as_mut() {
+            Some(st) => {
+                for h in &mut st.heads {
+                    *h += step;
+                }
+                st.grain += 1;
+                step * st.speed
+            }
+            None => step,
+        };
+        if let Some(t) = self.tm2.as_deref_mut() {
+            // The machine's virtual position, frame by frame.
+            t.step = step;
+            t.used += 1;
+            self.position = t.vstart + t.used as f64 * f64::from(t.per);
+        } else if let Some(kt) = self.kt.as_mut() {
+            // Kontakt's cursor: the next planned read, folded into the loop.
+            kt.step = step;
+            kt.used += 1;
+            let next = kt.taps.get(kt.used).filter(|_| kt.used < kt.len);
+            let (at, frac) = next.map_or((kt.cursor.pos, kt.cursor.frac), |t| (t.at, t.frac));
+            self.position = kt.layout.map(at) as f64 + f64::from(frac);
+        } else if self.reverse {
             self.position -= step;
         } else {
             self.position += step;
@@ -1568,10 +2405,13 @@ impl Voice {
         // fade out over its loop, not stop looping and run forward into the
         // sample's abrupt end (which clicks → "note-off noise"). Only a Done
         // voice ignores the loop.
-        if matches!(
-            self.state,
-            VoiceState::Playing | VoiceState::Releasing { .. }
-        ) {
+        if self.kt.is_none()
+            && self.tm2.is_none()
+            && matches!(
+                self.state,
+                VoiceState::Playing | VoiceState::Releasing { .. }
+            )
+        {
             if let Some((loop_start, loop_end)) = self.loop_range {
                 if self.alternating_loop {
                     if !self.reverse && self.position >= loop_end as f64 {
@@ -1647,9 +2487,15 @@ impl Voice {
             && self.bloom_frames == 0
             && self.decay_left == 0
             && self.pitch.is_none()
+            && self.stretch.is_none()
+            && self.kt.is_none()
+            && self.tm2.is_none()
             && self.filter.is_none()
+            && self.inserts.is_none()
+            && self.release_cut == 0
             && self.vib_cents <= 0.0
             && self.glide_frames == 0
+            && self.pitch_env.is_none()
             && !self.reverse
             && !(self.alternating_loop && self.loop_range.is_some())
             && (self.marker_arrival_file.is_none() || self.arrival_emitted.is_some())
@@ -1682,6 +2528,9 @@ impl Voice {
             (Some((_, loop_end)), true) => loop_end as f64 - self.loop_xfade as f64,
             _ => f64::INFINITY,
         };
+        // Copied out: `span` below borrows the voice mutably for the loop.
+        let (win_start, loop_lo) = (self.start_frame, self.loop_range.map(|(ls, _)| ls));
+        let below = move |idx: usize| idx < win_start && !loop_lo.is_some_and(|ls| idx >= ls);
         let Some((span, base)) = self.data.span_cursored(idx0, &mut self.stream_cursor) else {
             return 0;
         };
@@ -1693,7 +2542,7 @@ impl Voice {
             let idx = position as usize;
             // Frames `next_frame` decides: past the sample, at its last
             // frame, out of this run, at the loop seam, the fade's end.
-            if idx >= self.end_frame || idx < self.start_frame || idx + 1 > last {
+            if idx >= self.end_frame || below(idx) || idx + 1 > last {
                 break;
             }
             if idx < base || idx + 1 >= span_end || position >= seam {
@@ -1721,7 +2570,13 @@ impl Voice {
                     }
                     let t = *frames_remaining as f32 / self.release_frames.max(1) as f32;
                     *frames_remaining -= 1;
-                    t
+                    let k = self.release_k_active;
+                    if k < 1e-4 {
+                        t
+                    } else {
+                        let x = 1.0 - t;
+                        ((-k * x).exp() - (-k).exp()) / (1.0 - (-k).exp())
+                    }
                 }
                 VoiceState::Done => break,
             };
@@ -1739,8 +2594,12 @@ impl Voice {
             furthest = b;
             let (l, r) = (l0 + (l1 - l0) * frac, r0 + (r1 - r0) * frac);
             // The envelopes, as `next_frame` steps them.
+            let released = Self::envelopes_released(&state, self.key_up, self.script_faded);
             let flex = match &mut self.flex {
-                Some(f) => f.next(!matches!(state, VoiceState::Playing)),
+                Some(f) => f.next(released),
+                None => 1.0,
+            } * match &mut self.flex2 {
+                Some(f) => f.next(released),
                 None => 1.0,
             };
             let (env, bp) = match &mut self.amp_bp {
@@ -1982,6 +2841,12 @@ pub struct VoicePool {
     /// sounding keys and whether each is all released. At most one entry per
     /// MIDI key, so 128 is the bound.
     room_notes: Vec<(u8, bool)>,
+    /// How spawned voices read between frames (the library's
+    /// `performance.interpolation`).
+    interp: super::resample::Interp,
+    /// The engine frame the next rendered frame is (and a voice spawned now
+    /// starts at): the grid Kontakt's resampler plans its blocks on.
+    now: u64,
 }
 
 impl Default for VoicePool {
@@ -2004,6 +2869,8 @@ impl VoicePool {
             strike: 0,
             room_strikes: Vec::with_capacity(MAX_VOICES),
             room_notes: Vec::with_capacity(128),
+            interp: super::resample::Interp::Linear,
+            now: 0,
         }
     }
 
@@ -2021,7 +2888,19 @@ impl VoicePool {
             strike: 0,
             room_strikes: Vec::with_capacity(MAX_VOICES),
             room_notes: Vec::with_capacity(128),
+            interp: super::resample::Interp::Linear,
+            now: 0,
         }
+    }
+
+    /// How voices spawned from now on read between frames.
+    pub fn set_interp(&mut self, interp: super::resample::Interp) {
+        self.interp = interp;
+    }
+
+    /// The engine frame the next rendered frame is.
+    pub fn set_now(&mut self, now: u64) {
+        self.now = now;
     }
 
     pub fn set_max_voices(&mut self, max_voices: usize) {
@@ -2060,11 +2939,37 @@ impl VoicePool {
         self.strike = self.strike.wrapping_add(1);
     }
 
+    /// The strike the voices spawned from here on carry (see
+    /// [`begin_strike`](Self::begin_strike)).
+    #[must_use]
+    pub fn current_strike(&self) -> u32 {
+        self.strike
+    }
+
+    /// Fade every still-playing voice of `strike` to silence over
+    /// `fade_frames` (a phrase hit fading the key's previous hit only).
+    pub fn fade_strike(&mut self, strike: u32, fade_frames: usize) {
+        for v in &mut self.voices {
+            if v.strike == strike && matches!(v.state, VoiceState::Playing) {
+                v.ramp_gain(0.0, fade_frames);
+                v.state = VoiceState::Releasing {
+                    frames_remaining: fade_frames,
+                };
+            }
+        }
+    }
+
     pub fn spawn(&mut self, voice: Voice) {
         let mut voice = voice;
         // New voices sound at the current wheel position.
         voice.bend = self.bend;
         voice.strike = self.strike;
+        if let Some(t) = voice.tm2.as_deref_mut() {
+            // A Time Machine II voice reads through its own machine.
+            t.origin = self.now;
+        } else if self.interp == super::resample::Interp::KontaktNormal {
+            voice.kt = Some(KontaktVoice::new(self.now));
+        }
         // Remove done voices first
         self.voices.retain(|v| !v.is_done());
 
@@ -2163,9 +3068,18 @@ impl VoicePool {
     /// lines playing the same pitch don't cut each other off. Live/single-line
     /// play (everything on line 0) behaves exactly like
     /// [`note_off_with_release_frames`](Self::note_off_with_release_frames).
-    pub fn note_off_line(&mut self, line: u8, note: u8, release_frames: Option<usize>) {
+    /// [`Voice::cut_release`] on `line`'s voices of `note`.
+    pub fn cut_release_line(&mut self, line: u8, note: u8, frames: usize) {
         for v in &mut self.voices {
             if v.note == note && v.line == line {
+                v.cut_release(frames);
+            }
+        }
+    }
+
+    pub fn note_off_line(&mut self, line: u8, note: u8, release_frames: Option<usize>) {
+        for v in &mut self.voices {
+            if v.env_key == note && v.line == line {
                 match release_frames {
                     Some(frames) => v.note_off_with_release_frames(frames),
                     None => v.note_off(),
@@ -2272,6 +3186,246 @@ impl VoicePool {
                 v.state = VoiceState::Releasing {
                     frames_remaining: fade,
                 };
+            }
+        }
+    }
+
+    /// A script's `fade_out` of every voice `note` sounds on `line` except
+    /// release voices: linear from the current level over `frames`.
+    pub fn fade_out_note_bodies(&mut self, line: u8, note: u8, frames: usize) {
+        for v in &mut self.voices {
+            if v.note != note || v.line != line || matches!(v.kind, VoiceKind::Release) {
+                continue;
+            }
+            Self::script_fade(v, frames.max(1));
+        }
+    }
+
+    /// The key-up of `note` on `line` as the engine's envelopes take it:
+    /// every non-release voice's flex envelope enters its release (a voice
+    /// a script no longer tracks still ends with its envelope).
+    pub fn release_note_envelopes(&mut self, line: u8, note: u8) {
+        for v in &mut self.voices {
+            if v.env_key == note && v.line == line && !matches!(v.kind, VoiceKind::Release) {
+                if let Some(f) = &mut v.flex {
+                    f.release();
+                }
+            }
+        }
+    }
+
+    /// A script's `fade_out` of every voice on `line` but the release
+    /// samples (a monophonic legato's `MARK_1 + MARK_2 + MARK_7`), linear
+    /// from the current level over `frames`.
+    pub fn fade_out_line_bodies(&mut self, line: u8, frames: usize) {
+        for v in &mut self.voices {
+            // a released note still ringing is faded too (the script
+            // fades by marks, key up or down); one already fading by a
+            // script keeps its fade
+            if v.line == line && !matches!(v.kind, VoiceKind::Release) && !v.script_faded {
+                Self::script_fade(v, frames.max(1));
+            }
+        }
+    }
+
+    /// A script's `fade_out($ALL_EVENTS)`: every voice not already fading
+    /// by a script, linear from its current level over `frames`.
+    pub fn fade_out_all(&mut self, frames: usize) {
+        for v in &mut self.voices {
+            if !v.script_faded {
+                Self::script_fade(v, frames.max(1));
+            }
+        }
+    }
+
+    /// A script's `fade_out` of the voices of one strike (its note-on), from
+    /// their current level, linear over `frames`.
+    pub fn fade_out_strike_bodies(&mut self, strike: u32, frames: usize) {
+        for v in &mut self.voices {
+            if v.strike == strike && !matches!(v.kind, VoiceKind::Release) {
+                Self::script_fade(v, frames.max(1));
+            }
+        }
+    }
+
+    /// A script's `fade_out` of every sounding release voice (MOJO 2's
+    /// `by_marks($MARK_3)`): linear from the current level over `frames`.
+    /// A voice already in a script's fade (a release sample's tail) is taken
+    /// over from where that fade is, as Kontakt's later fade takes over
+    /// (`ScriptFadeOut` 0x3d6aac); one released by its key keeps its release.
+    pub fn fade_out_releases(&mut self, frames: usize) {
+        for v in &mut self.voices {
+            if !matches!(v.kind, VoiceKind::Release) {
+                continue;
+            }
+            match v.state {
+                VoiceState::Playing => Self::script_fade(v, frames.max(1)),
+                VoiceState::Releasing { frames_remaining } if v.script_faded => {
+                    // the running fade's level becomes the voice's gain
+                    let level = frames_remaining as f32 / v.release_frames.max(1) as f32;
+                    v.gain *= level;
+                    Self::script_fade(v, frames.max(1));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn script_fade(v: &mut Voice, fade: usize) {
+        v.script_faded = true;
+        v.target_gain = v.gain;
+        v.gain_ramp_frames = 0;
+        v.stage1_run = 0;
+        v.stage2_frames = 0;
+        v.release_frames = fade;
+        v.release_k_active = 0.0;
+        v.state = VoiceState::Releasing {
+            frames_remaining: fade,
+        };
+    }
+
+    /// Kontakt `fade_out`: a LINEAR fade to silence over `trans_fade` frames
+    /// for `note`'s transition voices on `line` and `sus_fade` for its body
+    /// layers — no gain ramp on top (which made `retire_note_line` a
+    /// (1 − t)² curve).
+    /// Kontakt `fade_out` on every voice of `note` on `line`, whatever its
+    /// kind: a linear fade over `frames` from the voice's current level.
+    /// Release the voices tagged `tag` (`Voice::script_tag`): KSP
+    /// `note_off` on a `play_note` id.
+    pub fn release_tagged(&mut self, tag: u32, release_frames: Option<usize>) {
+        for v in &mut self.voices {
+            if tag != 0 && v.script_tag == tag {
+                match release_frames {
+                    Some(frames) => v.note_off_with_release_frames(frames),
+                    None => v.note_off(),
+                }
+            }
+        }
+    }
+
+    /// Kontakt `fade_out` on the voices tagged `tag`: a linear fade over
+    /// `frames` (≤ 1: at once) from the current level.
+    pub fn fade_out_tagged(&mut self, tag: u32, frames: usize) {
+        for v in &mut self.voices {
+            if tag == 0 || v.script_tag != tag {
+                continue;
+            }
+            v.target_gain = v.gain;
+            v.gain_ramp_frames = 0;
+            v.stage1_run = 0;
+            v.stage2_frames = 0;
+            v.release_frames = frames.max(1);
+            v.release_k_active = 0.0;
+            v.state = VoiceState::Releasing {
+                frames_remaining: frames.max(1),
+            };
+        }
+    }
+
+    pub fn fade_out_note_line_any(&mut self, line: u8, note: u8, frames: usize) {
+        for v in &mut self.voices {
+            if v.note != note || v.line != line {
+                continue;
+            }
+            v.target_gain = v.gain;
+            v.gain_ramp_frames = 0;
+            v.stage1_run = 0;
+            v.stage2_frames = 0;
+            v.release_frames = frames.max(1);
+            v.release_k_active = 0.0;
+            v.state = VoiceState::Releasing {
+                frames_remaining: frames.max(1),
+            };
+        }
+    }
+
+    pub fn fade_out_note_line(&mut self, line: u8, note: u8, trans_fade: usize, sus_fade: usize) {
+        for v in &mut self.voices {
+            if v.note != note || v.line != line {
+                continue;
+            }
+            let fade = match v.kind {
+                VoiceKind::Legato => trans_fade,
+                // `sus_fade == 0`: leave the bodies as they are.
+                VoiceKind::SustainLayer
+                | VoiceKind::SustainNVLo
+                | VoiceKind::SustainNVHi
+                | VoiceKind::SustainVibLo
+                | VoiceKind::SustainVibHi
+                | VoiceKind::SustainLo
+                | VoiceKind::SustainHi
+                    if sus_fade > 0 =>
+                {
+                    sus_fade
+                }
+                _ => continue,
+            }
+            .max(1);
+            // Kontakt's fade_out starts from the voice's CURRENT level and
+            // replaces any fade-in still running (null test: a zone-3 first
+            // note mid fade-in, ×0.23, fades linearly to 0 from there). Freeze
+            // the gain ramp and any staged fade-in where they are.
+            v.target_gain = v.gain;
+            v.gain_ramp_frames = 0;
+            v.stage1_run = 0;
+            v.stage2_frames = 0;
+            v.release_frames = fade;
+            v.release_k_active = 0.0;
+            v.state = VoiceState::Releasing {
+                frames_remaining: fade,
+            };
+        }
+    }
+
+    /// Retire a CSS marcato transition's outgoing pair on `line`: the body
+    /// fades linearly over `body_fade` (and is cut there), bends 0 → `bend`
+    /// cents over `glide` frames and takes `sink` as its second envelope; the
+    /// previous transition voice fades over `lt_fade`. Each fade starts from
+    /// the voice's current level (see [`Self::fade_out_note_line`]).
+    pub fn marcato_retire(
+        &mut self,
+        line: u8,
+        note: u8,
+        body_fade: usize,
+        lt_fade: usize,
+        bend: f32,
+        glide: usize,
+        sink: Option<&FlexEnv>,
+    ) {
+        for v in &mut self.voices {
+            if v.note != note || v.line != line || v.is_done() {
+                continue;
+            }
+            let body = matches!(
+                v.kind,
+                VoiceKind::SustainLayer
+                    | VoiceKind::SustainNVLo
+                    | VoiceKind::SustainNVHi
+                    | VoiceKind::SustainVibLo
+                    | VoiceKind::SustainVibHi
+                    | VoiceKind::SustainLo
+                    | VoiceKind::SustainHi
+            );
+            let fade = match v.kind {
+                VoiceKind::Legato => lt_fade,
+                _ if body => body_fade,
+                _ => continue,
+            }
+            .max(1);
+            v.target_gain = v.gain;
+            v.gain_ramp_frames = 0;
+            v.stage1_run = 0;
+            v.stage2_frames = 0;
+            v.release_frames = fade;
+            v.release_k_active = 0.0;
+            v.state = VoiceState::Releasing {
+                frames_remaining: fade,
+            };
+            if body {
+                v.set_pitch_glide(0.0, bend, glide);
+                if let Some(e) = sink {
+                    v.set_flex_env2(e.clone());
+                }
             }
         }
     }
@@ -2393,11 +3547,20 @@ impl VoicePool {
     /// out-of-bounds) fold into buffer 0. **No allocation** — caller owns
     /// the `Vec<Vec<f32>>` storage.
     pub fn render_multi(&mut self, outputs: &mut [Vec<f32>]) {
+        let frames = outputs.first().map_or(0, |b| b.len() / 2);
+        self.render_multi_range(outputs, 0, frames);
+    }
+
+    /// [`render_multi`](Self::render_multi) into frames `start..start + frames`
+    /// of every buffer — so the engine can split a block at a sample-exact
+    /// event (a legato transition firing mid-block).
+    pub fn render_multi_range(&mut self, outputs: &mut [Vec<f32>], start: usize, frames: usize) {
         if outputs.is_empty() {
             return;
         }
         let nmics = outputs.len();
-        let len = outputs[0].len();
+        let (a, b) = (start * 2, (start + frames) * 2);
+        let len = b - a;
         for v in &mut self.voices {
             // Solo filter: muted voices render into a discard buffer so their
             // lifecycle (and every soloed note's timing) is unchanged.
@@ -2418,7 +3581,7 @@ impl VoicePool {
                 Some(i) if (i as usize) < nmics => i as usize,
                 _ => 0,
             };
-            v.render_block(&mut outputs[idx]);
+            v.render_block(&mut outputs[idx][a..b]);
         }
         self.voices.retain(|v| !v.is_done());
     }
@@ -2432,11 +3595,25 @@ impl VoicePool {
     /// to the same bus the per-buffer accumulation — and therefore the audio,
     /// bit for bit — is identical to the unsplit render.
     pub fn render_matrix(&mut self, outputs: &mut [Vec<f32>], nmics: usize, route: [usize; 2]) {
+        let frames = outputs.first().map_or(0, |b| b.len() / 2);
+        self.render_matrix_range(outputs, nmics, route, 0, frames);
+    }
+
+    /// [`render_matrix`](Self::render_matrix) into frames `start..start + frames`.
+    pub fn render_matrix_range(
+        &mut self,
+        outputs: &mut [Vec<f32>],
+        nmics: usize,
+        route: [usize; 2],
+        start: usize,
+        frames: usize,
+    ) {
         if outputs.is_empty() || nmics == 0 {
             return;
         }
         let nbuses = outputs.len() / nmics;
-        let len = outputs[0].len();
+        let (a, b) = (start * 2, (start + frames) * 2);
+        let len = b - a;
         for v in &mut self.voices {
             if self
                 .solo_notes
@@ -2460,7 +3637,7 @@ impl VoicePool {
                 Some(i) if (i as usize) < nmics => i as usize,
                 _ => 0,
             };
-            v.render_block(&mut outputs[bus * nmics + mic]);
+            v.render_block(&mut outputs[bus * nmics + mic][a..b]);
         }
         self.voices.retain(|v| !v.is_done());
     }
@@ -2491,6 +3668,18 @@ impl VoicePool {
     /// worship passage). Counting each strike against the note limit instead
     /// held the voices down but stole the chord under a pedalled melody.
     pub fn make_room_for_note(&mut self, incoming: u8, max_notes: usize) -> usize {
+        self.make_room_for_note_with(incoming, max_notes, MAX_REPEAT_STRIKES)
+    }
+
+    /// [`make_room_for_note`](Self::make_room_for_note) keeping
+    /// `repeat_strikes` strikes of the same key (0 = every strike rings on,
+    /// as Kontakt plays a library like CSS).
+    pub fn make_room_for_note_with(
+        &mut self,
+        incoming: u8,
+        max_notes: usize,
+        repeat_strikes: usize,
+    ) -> usize {
         const STEAL_NOTE_FADE: usize = 240; // 5 ms: fast, not a click
         // A voice with no more than a repeat fade left — a steal, a repeat,
         // a release nearly over — no longer counts.
@@ -2507,8 +3696,8 @@ impl VoicePool {
                 strikes.push(v.strike);
             }
         }
-        if strikes.len() >= MAX_REPEAT_STRIKES {
-            let keep = &strikes[strikes.len() + 1 - MAX_REPEAT_STRIKES..];
+        if repeat_strikes > 0 && strikes.len() >= repeat_strikes {
+            let keep = &strikes[strikes.len() + 1 - repeat_strikes..];
             for v in self.voices.iter_mut().filter(|v| {
                 v.note == incoming && v.state != VoiceState::Done && !keep.contains(&v.strike)
             }) {
@@ -2730,4 +3919,200 @@ pub static NOTE_STEALS: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomic
 #[must_use]
 pub fn note_steals() -> u64 {
     NOTE_STEALS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(test)]
+mod stretch_tests {
+    use super::*;
+
+    fn ramp(n: usize) -> Arc<SampleData> {
+        let pcm: Vec<f32> = (0..n).map(|i| i as f32 / 65_536.0).collect();
+        Arc::new(SampleData::from_f32(pcm, 1, 48_000, n))
+    }
+
+    /// Kontakt's Normal quality plays a ramp along its line (a copy at
+    /// unity, the Lagrange at another step), across cache seams and blocks,
+    /// and ends when the sample does (KONTRA's
+    /// `kontakts_resampler_reads_a_ramp_along_its_line_at_every_quality`).
+    #[test]
+    fn kontakts_resampler_reads_a_ramp_along_its_line() {
+        for step in [1.0, 1.25, 0.8, 0.943_874_3] {
+            for origin in [0u64, 77] {
+                let mut v = Voice::with_rate(ramp(4096), 60, VoiceKind::Short, step, 1.0, 64);
+                v.kt = Some(KontaktVoice::new(origin));
+                let out: Vec<f32> = (0..2000).map(|_| v.next_frame().0).collect();
+                for (n, x) in out.iter().enumerate().skip(4).take(1500) {
+                    let want = n as f64 * step / 65_536.0;
+                    let tol = if step == 1.0 { 0.0 } else { 2e-4 * want + 1e-7 };
+                    assert!(
+                        (f64::from(*x) - want).abs() <= tol,
+                        "step {step} origin {origin} frame {n}: {x} vs {want}"
+                    );
+                }
+                for _ in 0..(4096.0 / step) as usize {
+                    v.next_frame();
+                }
+                assert!(v.is_done(), "step {step}: ends with its sample");
+            }
+        }
+    }
+
+    /// A looped voice keeps reading the loop through Kontakt's path.
+    #[test]
+    fn a_kontakt_voice_loops() {
+        let mut v = Voice::with_rate(ramp(4096), 60, VoiceKind::Short, 1.5, 1.0, 64)
+            .with_forward_loop(1000, 3000);
+        v.kt = Some(KontaktVoice::new(0));
+        for i in 0..20_000 {
+            // The Lagrange about the fold reads both sides of the jump, so
+            // it may overshoot the loop's end a little (as Kontakt does).
+            let (l, _) = v.next_frame();
+            assert!(
+                i < 2000 || (800.0 / 65_536.0..3300.0 / 65_536.0).contains(&l),
+                "{l}"
+            );
+        }
+        assert!(!v.is_done());
+        let x = v.position;
+        assert!((1000.0..3000.0).contains(&x), "{x}");
+    }
+
+    fn marks(frames: i64, every: i64) -> super::super::tm2::Marks {
+        super::super::tm2::Marks {
+            frames,
+            at: (0..frames / every)
+                .map(|i| i * every)
+                .collect::<Vec<_>>()
+                .into(),
+        }
+    }
+
+    /// A Time Machine II voice at unity speed and pitch walks its sample
+    /// frame by frame (the grains tile it) from the mark nearest its start
+    /// (grains start on marks: 1000 plays from 800), and ends with its
+    /// grains; the pool gives it no other resampler.
+    #[test]
+    fn a_time_machine_2_voice_at_unity_plays_the_sample() {
+        let mut pool = VoicePool::new();
+        pool.set_interp(super::super::resample::Interp::KontaktNormal);
+        pool.set_now(77);
+        pool.spawn(
+            Voice::with_rate(ramp(8192), 60, VoiceKind::Short, 1.0, 1.0, 64)
+                .with_sample_window(1000, None)
+                .with_tm2(marks(8192, 400), 1.0, 1.0),
+        );
+        let v = &mut pool.voices_mut()[0];
+        assert!(v.kt.is_none());
+        for n in 0..6000 {
+            let (l, _) = v.next_frame();
+            // The fading grain reads the same frames as the new one here, so
+            // the crossfade sums to the frame (to rounding).
+            let want = (800 + n) as f32 / 65_536.0;
+            assert!((l - want).abs() <= want * 1e-6, "frame {n}: {l} vs {want}");
+        }
+        for _ in 0..2000 {
+            v.next_frame();
+        }
+        assert!(v.is_done());
+    }
+
+    /// At half speed a Time Machine II voice keeps its pitch (each frame one
+    /// step on from the last, but at the grain seams) and lasts twice as long.
+    #[test]
+    fn a_time_machine_2_voice_at_half_speed_keeps_its_pitch() {
+        let mut v = Voice::with_rate(ramp(8192), 60, VoiceKind::Short, 1.0, 1.0, 64).with_tm2(
+            marks(8192, 400),
+            0.5,
+            1.0,
+        );
+        let out: Vec<f32> = (0..15_000).map(|_| v.next_frame().0).collect();
+        assert!(
+            !v.is_done(),
+            "still playing at twice its length less a grain"
+        );
+        let steady = out
+            .windows(2)
+            .filter(|w| ((w[1] - w[0]) * 65_536.0 - 1.0).abs() < 1e-3)
+            .count();
+        assert!(steady > 7000, "{steady}");
+        for _ in 0..2000 {
+            v.next_frame();
+        }
+        assert!(v.is_done());
+    }
+
+    /// A script's fade is not a key-up: the voice's held envelope stays at
+    /// its hold while the fade runs (Kontakt's `fade_out` ramps the level
+    /// alone), so the fade is linear; the key-up then releases it.
+    #[test]
+    fn a_script_fade_leaves_the_envelope_held() {
+        let ones = Arc::new(SampleData::from_f32(vec![0.5; 48_000], 1, 48_000, 48_000));
+        let env = FlexEnv::from_segments(&[(1.0, 1.0, 0.5), (100.0, 0.0, 0.5)], 0.0, 48_000, true)
+            .map(|e| e.with_release_segment(Some(1)));
+        let mut pool = VoicePool::new();
+        let mut v = Voice::with_rate(ones, 60, VoiceKind::Short, 1.0, 1.0, 64);
+        if let Some(e) = env {
+            v = v.with_flex_env(e);
+        }
+        pool.spawn(v);
+        let v = &mut pool.voices_mut()[0];
+        for _ in 0..1000 {
+            v.next_frame();
+        }
+        VoicePool::script_fade(v, 1000);
+        for k in 0..900 {
+            let (l, _) = v.next_frame();
+            let want = 0.5 * (1.0 - k as f32 / 1000.0);
+            assert!((l - want).abs() < 1e-3, "frame {k}: {l} vs {want}");
+        }
+    }
+
+    /// A voice without the setting never takes Kontakt's path.
+    #[test]
+    fn a_default_pool_spawns_linear_voices() {
+        let mut pool = VoicePool::new();
+        pool.spawn(Voice::with_rate(
+            ramp(64),
+            60,
+            VoiceKind::Short,
+            1.25,
+            1.0,
+            64,
+        ));
+        assert!(pool.voices_mut()[0].kt.is_none());
+        pool.set_interp(super::super::resample::Interp::KontaktNormal);
+        pool.spawn(Voice::with_rate(
+            ramp(64),
+            60,
+            VoiceKind::Short,
+            1.25,
+            1.0,
+            64,
+        ));
+        assert!(pool.voices_mut()[1].kt.is_some());
+    }
+
+    /// A stretched voice plays its start as recorded (head 0 alone, at the
+    /// pitch's step) and lasts the sample's length over its speed.
+    #[test]
+    fn a_stretching_voice_keeps_its_pitch_and_takes_its_speeds_time() {
+        for (speed, ends) in [(2.0, 4096usize), (0.5, 16_384)] {
+            let mut v =
+                Voice::new(ramp(8192), 60, VoiceKind::Short, 0, 1.0, 64).with_stretch(speed);
+            let first: Vec<f32> = (0..4).map(|_| v.next_frame().0).collect();
+            assert_eq!(
+                first[1] - first[0],
+                1.0 / 65_536.0,
+                "speed {speed}: pitch holds"
+            );
+            for _ in 4..ends - 512 {
+                v.next_frame();
+            }
+            assert!(!v.is_done(), "speed {speed}: still playing before its end");
+            for _ in 0..1024 {
+                v.next_frame();
+            }
+            assert!(v.is_done(), "speed {speed}: ended on time");
+        }
+    }
 }
