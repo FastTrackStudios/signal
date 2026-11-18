@@ -1,0 +1,8 @@
+# nextest (`cargo nextest run --workspace`). Studio's default profile,
+# which these crates ran under there (studio#510). `cargo test` does not
+# read this file.
+[profile.default]
+# A test is reported slow at 60 s and killed at 120 s: two minutes still
+# catches a hang, and a test that is merely slow on a loaded box shows up
+# as SLOW, not as red.
+slow-timeout = { period = "60s", terminate-after = 2 }

@@ -1,0 +1,17 @@
+target/
+# Any scratch target dir: agents run parallel builds into their own, and one
+# that lands inside the source tree gets swept into a commit.
+target-*/
+**/target/
+.DS_Store
+.direnv/
+.claude/worktrees/
+# devenv: state, eval cache and per-user overrides.
+.devenv/
+.devenv.flake.nix
+devenv.local.nix
+devenv.local.yaml
+# The rigs' private captures, if linked in for a local build (build.rs and
+# default-config*/.gitignore say more): never committed here.
+features/rigs/guitar/default-config*/models
+features/rigs/guitar/default-config*/frozen

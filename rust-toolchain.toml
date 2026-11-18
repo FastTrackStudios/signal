@@ -1,0 +1,7 @@
+# The workspace's compiler, for rustup (GitHub's runners, anyone outside
+# the devenv shell, which has no rustup). Must match the devenv shell's
+# 1.99.1 (devenv-fleet's pins.json) and checks.yml's dtolnay/rust-toolchain
+# version: halves of one pin that drift silently if only one moves. Channel
+# only: each CI job installs the components and targets it needs.
+[toolchain]
+channel = "1.99.1"

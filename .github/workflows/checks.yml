@@ -1,0 +1,80 @@
+# signal: the one PR/push gate. GitHub's hosted runner, rustup and apt (the
+# native headers Studio's hosted jobs install), no nix: the same shape as
+# daw's and fts-fx's.
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # A draft runs nothing; marking it ready starts the run.
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Build + test
+    # Skipped on a draft PR: marking it ready starts the run.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      # The workspace's debug build (the rig UIs on Blitz/Vello/wgpu, the
+      # sampler, NAM) does not fit the runner's free disk as it comes.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: actions/checkout@v4
+      # The workspace pin (rust-toolchain.toml); keep the two in step.
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: rustfmt
+          targets: wasm32-unknown-unknown
+      - name: Native headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev libfontconfig1-dev libfreetype-dev \
+            libclang-dev clang llvm mold libasound2-dev libudev-dev \
+            libjack-jackd2-dev libpipewire-0.3-dev libspa-0.2-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev libayatana-appindicator3-dev \
+            libdbus-1-dev libwayland-dev libxdo-dev
+      - uses: Swatinem/rust-cache@v2
+      - name: Manifests + lockfile
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+      - name: cargo check --workspace --all-targets
+        run: cargo check --workspace --all-targets --locked
+      # The rigs' private captures are not in this repository (guitar's
+      # build.rs): the tests run without them, as a debug build does.
+      - name: cargo test --workspace
+        run: cargo test --workspace --locked
+      # What Studio's browser builds take from here, with the features they
+      # turn on (`cargo tree -e features --target wasm32-unknown-unknown` in
+      # Studio): the Signal site (signal-web) and the Signal browser remote
+      # (studio-desktop --no-default-features --features signal).
+      - name: wasm32 check (the rigs, as signal-web takes them)
+        run: >
+          cargo check --locked --target wasm32-unknown-unknown
+          -p guitar -p keys -p drums -p synth -p sampler -p signal-proto
+          -p signal-rigs-proto -p signal-space -p signal-tone3000
+          -p signal-widgets -p signal-rig-perform-ui
+          --features guitar/ui,keys/ui,signal-space/engine,signal-tone3000/ui,signal-widgets/piano
+      - name: wasm32 check (the rigs, as the Signal browser remote takes them)
+        run: >
+          cargo check --locked --target wasm32-unknown-unknown
+          -p guitar -p keys -p drums -p ekit -p synth -p sampler
+          -p signal-proto -p signal-rigs-proto -p signal-space
+          -p signal-content-proto -p signal-tone3000 -p signal-widgets
+          -p signal-rig-perform-ui
+          --features guitar/ui,guitar/mcp,keys/ui,drums/ui,synth/ui,signal-space/engine,signal-tone3000/ui,signal-widgets/piano

@@ -1,0 +1,9 @@
+# nice-plug bundler metadata for the Signal plugins —
+# `cargo run -p fts-plugin-xtask -- bundle <package> --release` reads this
+# to name the .clap/.vst3 bundles (see apps/plugins/).
+
+[nam-plugin]
+name = "FTS NAM"
+
+[signal-plugin]
+name = "FTS Signal"
