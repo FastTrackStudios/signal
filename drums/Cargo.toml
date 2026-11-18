@@ -43,7 +43,7 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 # USB HID keyboard: desktop only (`lightguide_none.rs` on a phone, tablet or
 # in the browser).
 [target.'cfg(not(any(target_os = "ios", target_os = "android", target_arch = "wasm32")))'.dependencies]
-control-surfaces = { workspace = true, features = ["kontrol"] }
+kontrol = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 midi = { workspace = true, features = ["midir", "pipewire", "vox"] }
