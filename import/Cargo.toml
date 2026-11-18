@@ -26,4 +26,12 @@ thiserror.workspace = true
 # The translation is only worth anything if the engine on the other side acts
 # on it, so `tests/proq4_dynamics.rs` drives real audio through `NativeEq`.
 builtin = { workspace = true }
-signal-plugin-host.workspace = true
+# The comparison tools that check a translated preset against the plugin it
+# came from (examples/: eq_match, reverb_match, proq_params, and the
+# eq_sweep / preset_sweep drivers): they host the commercial plugin (a
+# VST3, hence `vst3-host`) and render ours beside it. They were builtin's
+# examples until the engine left for the daw repo (studio#510).
+signal-plugin-host = { workspace = true, features = ["vst3-host"] }
+dsp = { workspace = true, features = ["analyzer"] }
+hound = { workspace = true }
+realfft = { workspace = true }
