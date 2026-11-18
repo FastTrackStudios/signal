@@ -1,0 +1,11 @@
+drives ()
+
+name Metal
+
+presets ()
+
+patches ({name Clean, song "", preset "", preset2 "", rig_preset Parallax, snapshot Clean, tone "", role "", modules ({module Time, preset Dry, snapshot Dry}), blocks (), drives (), trim_db 0, level_db 0, boost_db 0, overrides (), macros ()} {name Crunch, song "", preset "", preset2 "", rig_preset Parallax, snapshot Crunch, tone "", role "", modules ({module Time, preset Dry, snapshot Dry}), blocks (), drives (), trim_db 0, level_db 0, boost_db 0, overrides (), macros ()} {name Drive, song "", preset "", preset2 "", rig_preset Parallax, snapshot Drive, tone "", role "", modules ({module Time, preset Dry, snapshot Dry}), blocks (), drives (), trim_db 0, level_db 0, boost_db 0, overrides (), macros ()})
+
+stacks ({name Clean, patches (Clean), momentary false, no_rotate false} {name Crunch, patches (Crunch), momentary false, no_rotate false} {name Drive, patches (Drive), momentary false, no_rotate false})
+
+default_patch Drive

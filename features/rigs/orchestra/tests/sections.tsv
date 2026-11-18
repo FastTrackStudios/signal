@@ -1,0 +1,31 @@
+# section	library	chain tag	probe transposition
+1st Violins	strings	1v	0
+2nd Violins	strings	2v	0
+Violas	strings	va	-7
+Cellos	strings	vc	-19
+Basses	strings	cb	-24
+2 Bassoons	woodwinds	ww_bn2	-7
+2 Clarinets	woodwinds	ww_cl2	0
+2 Flutes	woodwinds	ww_fl2	0
+2 Oboes	woodwinds	ww_ob2	0
+Saf	woodwinds	ww_afl	0
+Sbc	woodwinds	ww_bcl	-7
+Solo Bassoon	woodwinds	ww_bn	-7
+Solo Clarinet	woodwinds	ww_cl	0
+Scb	woodwinds	ww_cbn	-11
+Sca	woodwinds	ww_ca	0
+Solo Flute	woodwinds	ww_fl	0
+Solo Oboe	woodwinds	ww_ob	0
+Spi	woodwinds	ww_picc	0
+2 Trombones	brass	br_tb2	-10
+2 Trumpets	brass	br_tpt2	0
+4 French Horns	brass	br_hn4	-3
+Solo Bass Trombone	brass	br_btb	-10
+Solo French Horn	brass	br_hn	-3
+Solo Trombone	brass	br_tb	-10
+Solo Trumpet	brass	br_tpt	0
+Tuba	brass	br_tuba	-11
+Solo Violin	solo-strings	ss_v1	0
+Solo Violin II	solo-strings	ss_v2	0
+Solo Viola	solo-strings	ss_va	-7
+Solo Cello	solo-strings	ss_vc	-19

@@ -1,0 +1,67 @@
+// Pacific - Brass (Performance Samples, perf064) — engine config.
+//
+// Minimal config: sections + mics + performance. Pacific's zonemap bakes
+// release-variant / RR / velocity suffixes into articulation ids
+// (normrel4, normrep2.5, …), so articulations are NOT enumerated here —
+// the pack builder synthesizes per-pack declarations from the zone census
+// (kind inferred from the id tokens). Refine into curated articulations
+// when the Pacific performance-legato engine model is built.
+//
+// Note ranges measured from the _patches zone maps (MIDI C4 = 60).
+
+name    "Pacific - Brass"
+version "1.0"
+vendor  "Performance Samples"
+
+sections (
+    {
+        id           bbn
+        label        "Baritone Bone"   // baritone/euphonium + trombone hybrid section
+        lowest_note  F1
+        highest_note G#4
+    }
+    {
+        id           cbn
+        label        "Contrabass Bone" // contrabass trombone
+        lowest_note  D1
+        highest_note D4
+    }
+    {
+        id           hn
+        label        Horn
+        lowest_note  C#2
+        highest_note E5
+    }
+    {
+        id           tbn
+        label        Trombone
+        lowest_note  E2
+        highest_note C#5
+    }
+    {
+        id           tpt
+        label        Trumpet
+        lowest_note  E3
+        highest_note B5
+    }
+    {
+        id           tba
+        label        Tuba
+        lowest_note  D#1
+        highest_note G3
+    }
+)
+
+// Two mic positions ship (filename tokens ab/cl). Close default — the more
+// immediate single choice; Ambient is the hall perspective.
+mics (
+    {id Close,   label Close,   kind separate, default true}
+    {id Ambient, label Ambient, kind separate}
+)
+
+performance {
+    // Pacific sustains are unlooped performance recordings; keep the engine's
+    // default envelope/makeup behaviour and rely on zone data.
+    zone_pitch_tolerance 2
+    attack_placement     start_at_tick
+}

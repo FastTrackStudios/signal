@@ -1,0 +1,22 @@
+[package]
+name = "kontrol"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "A driver for the Native Instruments Komplete Kontrol keyboards' Light Guide (the per-key RGB LEDs over the keybed). Native hardware I/O only."
+
+[lints]
+workspace = true
+
+[dependencies]
+eyre = { workspace = true }
+# The Light Guide: HID output reports (`usb`).
+hidapi = { workspace = true }
+# The MIDI output ports (`output`): the falsification probe's seam.
+midi = { workspace = true, features = ["midir"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# examples/screenprobe, screennihia: raw USB to the keyboard's screens.
+rusb = { workspace = true }

@@ -1,0 +1,49 @@
+[package]
+name = "drums"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "The drum rig: kits, samples, triggers, and its editor"
+
+[lints]
+workspace = true
+
+[features]
+default = ["vox"]
+pipewire = []
+ui = ["dep:dioxus", "midi/ui", "dep:signal-widgets", "signal-widgets/piano", "architect/atom", "architect/platform"]
+vox = ["architect/vox", "dep:vox"]
+
+[dependencies]
+architect = { workspace = true, features = ["rig", "vox"] }
+daw = { workspace = true }
+dioxus = { workspace = true, optional = true }
+facet = { workspace = true }
+builtin = { workspace = true }
+midi = { workspace = true, features = ["midir", "native", "ui", "vox"] }
+signal-plugin-host = { workspace = true }
+signal-rig-host = { workspace = true }
+# The drums' own profiles, songs and setlists (apart from the guitar's).
+signal-rig-perform-store = { workspace = true }
+signal-rigs-proto = { workspace = true }
+sampler = { workspace = true }
+signal-space = { workspace = true, features = ["engine"] }
+signal-widgets = { workspace = true, optional = true }
+tracing = { workspace = true }
+vox = { workspace = true, optional = true }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
+# perform_rpc: the shared performance surface served in-process.
+architect = { workspace = true, features = ["vox", "local"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+# NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs. A
+# USB HID keyboard: desktop only (`lightguide_none.rs` on a phone, tablet or
+# in the browser).
+[target.'cfg(not(any(target_os = "ios", target_os = "android", target_arch = "wasm32")))'.dependencies]
+kontrol = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+midi = { workspace = true, features = ["midir", "pipewire", "vox"] }
