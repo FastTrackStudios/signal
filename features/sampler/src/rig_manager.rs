@@ -181,7 +181,7 @@ impl RigManager {
 
     /// Directory of the library this rig browses/loads from: `library_path` if
     /// set, else the user library (`<config>/signal/library`) if it exists, else
-    /// the shipped example library (`signal-sampler/examples/library`).
+    /// the shipped example library ([`example_library`]).
     #[must_use]
     pub fn library_root(&self) -> PathBuf {
         if !self.library_path.is_empty() {
@@ -191,7 +191,7 @@ impl RigManager {
         if user.is_dir() {
             return user;
         }
-        utils::paths::checkout_path("features/sampler/examples/library")
+        example_library()
     }
 
     /// Build the library and resolve the chosen profile into a playable
@@ -279,5 +279,144 @@ impl RigManager {
     /// subsequent [`save`](Self::save) remembers exactly what was used.
     pub fn remember_opened(&mut self, rig: &GuitarRig) {
         self.audio = rig.prefs().clone();
+    }
+}
+
+/// The shipped example library (`examples/library`), compiled in: each
+/// file by its path under the library root.
+const EXAMPLE_LIBRARY: &[(&str, &str)] = &[
+    (
+        "presets/fender-deluxe-reverb.styx",
+        include_str!("../examples/library/presets/fender-deluxe-reverb.styx"),
+    ),
+    (
+        "presets/friedman-be-100.styx",
+        include_str!("../examples/library/presets/friedman-be-100.styx"),
+    ),
+    (
+        "presets/marshall-jcm800.styx",
+        include_str!("../examples/library/presets/marshall-jcm800.styx"),
+    ),
+    (
+        "presets/mesa-dual-rectifier.styx",
+        include_str!("../examples/library/presets/mesa-dual-rectifier.styx"),
+    ),
+    (
+        "presets/mesa-mark-iv.styx",
+        include_str!("../examples/library/presets/mesa-mark-iv.styx"),
+    ),
+    (
+        "presets/orange-rockerverb.styx",
+        include_str!("../examples/library/presets/orange-rockerverb.styx"),
+    ),
+    (
+        "presets/peavey-5150.styx",
+        include_str!("../examples/library/presets/peavey-5150.styx"),
+    ),
+    (
+        "presets/roland-jc-120.styx",
+        include_str!("../examples/library/presets/roland-jc-120.styx"),
+    ),
+    (
+        "presets/vox-ac30.styx",
+        include_str!("../examples/library/presets/vox-ac30.styx"),
+    ),
+    (
+        "profiles/worship.styx",
+        include_str!("../examples/library/profiles/worship.styx"),
+    ),
+    (
+        "songs/amazing-grace.styx",
+        include_str!("../examples/library/songs/amazing-grace.styx"),
+    ),
+    (
+        "songs/build-my-life.styx",
+        include_str!("../examples/library/songs/build-my-life.styx"),
+    ),
+];
+
+/// The shipped example library on disk. In a checkout of this repository
+/// it is the checkout's own copy, so an edit shows up live. Anywhere else —
+/// an app that takes this crate by git, an installed build — it is the
+/// compiled-in copy, written to `<config>/signal/example-library` (each
+/// file rewritten only where it differs, so a newer build's example
+/// replaces an older one). Not the user library: that stays
+/// `<config>/signal/library`, which a user creates.
+#[must_use]
+pub fn example_library() -> PathBuf {
+    let checkout = utils::paths::checkout_path("features/sampler/examples/library");
+    if checkout.is_dir() {
+        return checkout;
+    }
+    write_example_library(&signal_config_dir().join("example-library"))
+}
+
+/// Write the compiled-in example library under `dir` (each file only where
+/// it differs from what is there) and return `dir`. A file that cannot be
+/// written is skipped, with one warning: the library is then short of it.
+pub fn write_example_library(dir: &Path) -> PathBuf {
+    for (rel, text) in EXAMPLE_LIBRARY {
+        let path = dir.join(rel);
+        if std::fs::read_to_string(&path).ok().as_deref() == Some(*text) {
+            continue;
+        }
+        let written = path
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::write(&path, text));
+        if let Err(error) = written {
+            tracing::warn!(%error, library.file = rel, "example library: not written");
+        }
+    }
+    dir.to_path_buf()
+}
+
+#[cfg(test)]
+mod example_library_tests {
+    use super::{EXAMPLE_LIBRARY, write_example_library};
+
+    /// Written out, the example library is every file, byte for byte, and a
+    /// second write leaves an edited file's neighbours alone but restores it.
+    #[test]
+    fn the_example_library_writes_out_whole_and_restores_a_changed_file() {
+        let dir =
+            std::env::temp_dir().join(format!("sampler-example-library-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let root = write_example_library(&dir);
+        for (rel, text) in EXAMPLE_LIBRARY {
+            assert_eq!(
+                std::fs::read_to_string(root.join(rel)).unwrap(),
+                *text,
+                "{rel}"
+            );
+        }
+        let (rel, text) = EXAMPLE_LIBRARY[0];
+        std::fs::write(root.join(rel), "changed").unwrap();
+        write_example_library(&dir);
+        assert_eq!(std::fs::read_to_string(root.join(rel)).unwrap(), text);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The compiled-in example library is the whole of `examples/library`:
+    /// a file added there and not here would ship nowhere.
+    #[test]
+    fn the_compiled_in_example_library_is_every_file_of_the_directory() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/library");
+        let mut on_disk = Vec::new();
+        let mut dirs = vec![root.clone()];
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(&dir).expect("examples/library") {
+                let path = entry.expect("entry").path();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else {
+                    let rel = path.strip_prefix(&root).expect("under root");
+                    on_disk.push(rel.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
+        on_disk.sort();
+        let compiled: Vec<&str> = EXAMPLE_LIBRARY.iter().map(|(rel, _)| *rel).collect();
+        assert_eq!(on_disk, compiled);
     }
 }
