@@ -221,7 +221,9 @@ mod tests {
         // Grandeur, vel 100, held 50 ms (script_2 case 92‥109, 0‥100 ms):
         // VelVol (−2 + 100 − 107)·400 − 12000 = −15600, layer 8 → vel 99,
         // key C4's position term +5500 → −10100 mdB.
-        let r = ReleaseLaw::of(NiPiano::Grandeur).release(60, 100, 50.0).unwrap();
+        let r = ReleaseLaw::of(NiPiano::Grandeur)
+            .release(60, 100, 50.0)
+            .unwrap();
         assert_eq!(r.layer_velocity, 99);
         assert!((r.gain_db + 10.1).abs() < 0.05, "{r:?}");
         assert!((r.fade_in_ms - 120.0).abs() < 1e-3);
@@ -237,7 +239,12 @@ mod tests {
 
     #[test]
     fn every_piano_parses_with_a_band_at_every_velocity() {
-        for p in [NiPiano::Grandeur, NiPiano::Gentleman, NiPiano::Maverick, NiPiano::Giant] {
+        for p in [
+            NiPiano::Grandeur,
+            NiPiano::Gentleman,
+            NiPiano::Maverick,
+            NiPiano::Giant,
+        ] {
             let law = ReleaseLaw::of(p);
             for v in 1..=127u8 {
                 assert!(law.release(60, v, 500.0).is_some(), "{p:?} vel {v}");

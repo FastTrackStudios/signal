@@ -50,10 +50,13 @@ define_class!(
         fn draw_rect(&self, rect: CGRect) {
             let mtm = MainThreadMarker::new().unwrap();
             let window = self.window().unwrap();
-            app_state::handle_nonuser_event(mtm, EventWrapper::Window {
-                window_id: window.id(),
-                event: WindowEvent::RedrawRequested,
-            });
+            app_state::handle_nonuser_event(
+                mtm,
+                EventWrapper::Window {
+                    window_id: window.id(),
+                    event: WindowEvent::RedrawRequested,
+                },
+            );
             let _: () = unsafe { msg_send![super(self), drawRect: rect] };
         }
 
@@ -71,10 +74,13 @@ define_class!(
             .to_physical(scale_factor);
 
             let window = self.window().unwrap();
-            app_state::handle_nonuser_event(mtm, EventWrapper::Window {
-                window_id: window.id(),
-                event: WindowEvent::SurfaceResized(size),
-            });
+            app_state::handle_nonuser_event(
+                mtm,
+                EventWrapper::Window {
+                    window_id: window.id(),
+                    event: WindowEvent::SurfaceResized(size),
+                },
+            );
         }
 
         #[unsafe(method(setContentScaleFactor:))]
@@ -110,11 +116,13 @@ define_class!(
             let window_id = window.id();
             app_state::handle_nonuser_events(
                 mtm,
-                std::iter::once(EventWrapper::ScaleFactorChanged(app_state::ScaleFactorChanged {
-                    window,
-                    scale_factor,
-                    suggested_size: size.to_physical(scale_factor),
-                }))
+                std::iter::once(EventWrapper::ScaleFactorChanged(
+                    app_state::ScaleFactorChanged {
+                        window,
+                        scale_factor,
+                        suggested_size: size.to_physical(scale_factor),
+                    },
+                ))
                 .chain(std::iter::once(EventWrapper::Window {
                     window_id,
                     event: WindowEvent::SurfaceResized(size.to_physical(scale_factor)),
@@ -157,26 +165,30 @@ define_class!(
                 UIGestureRecognizerState::Began => {
                     self.ivars().pinch_last_delta.set(recognizer.scale());
                     (TouchPhase::Started, 0.0)
-                },
+                }
                 UIGestureRecognizerState::Changed => {
                     let last_scale: f64 = self.ivars().pinch_last_delta.replace(recognizer.scale());
                     (TouchPhase::Moved, recognizer.scale() - last_scale)
-                },
+                }
                 UIGestureRecognizerState::Ended => {
                     let last_scale: f64 = self.ivars().pinch_last_delta.replace(0.0);
                     (TouchPhase::Moved, recognizer.scale() - last_scale)
-                },
+                }
                 UIGestureRecognizerState::Cancelled | UIGestureRecognizerState::Failed => {
                     self.ivars().rotation_last_delta.set(0.0);
                     // Pass -delta so that action is reversed
                     (TouchPhase::Cancelled, -recognizer.scale())
-                },
+                }
                 state => panic!("unexpected recognizer state: {state:?}"),
             };
 
             let gesture_event = EventWrapper::Window {
                 window_id: window.id(),
-                event: WindowEvent::PinchGesture { device_id: None, delta: delta as f64, phase },
+                event: WindowEvent::PinchGesture {
+                    device_id: None,
+                    delta: delta as f64,
+                    phase,
+                },
             };
 
             let mtm = MainThreadMarker::new().unwrap();
@@ -207,24 +219,26 @@ define_class!(
                     self.ivars().rotation_last_delta.set(0.0);
 
                     (TouchPhase::Started, 0.0)
-                },
+                }
                 UIGestureRecognizerState::Changed => {
-                    let last_rotation =
-                        self.ivars().rotation_last_delta.replace(recognizer.rotation());
+                    let last_rotation = self
+                        .ivars()
+                        .rotation_last_delta
+                        .replace(recognizer.rotation());
 
                     (TouchPhase::Moved, recognizer.rotation() - last_rotation)
-                },
+                }
                 UIGestureRecognizerState::Ended => {
                     let last_rotation = self.ivars().rotation_last_delta.replace(0.0);
 
                     (TouchPhase::Ended, recognizer.rotation() - last_rotation)
-                },
+                }
                 UIGestureRecognizerState::Cancelled | UIGestureRecognizerState::Failed => {
                     self.ivars().rotation_last_delta.set(0.0);
 
                     // Pass -delta so that action is reversed
                     (TouchPhase::Cancelled, -recognizer.rotation())
-                },
+                }
                 state => panic!("unexpected recognizer state: {state:?}"),
             };
 
@@ -253,7 +267,7 @@ define_class!(
                     self.ivars().pan_last_delta.set(translation);
 
                     (TouchPhase::Started, 0.0, 0.0)
-                },
+                }
                 UIGestureRecognizerState::Changed => {
                     let last_pan: CGPoint = self.ivars().pan_last_delta.replace(translation);
 
@@ -261,23 +275,27 @@ define_class!(
                     let dy = translation.y - last_pan.y;
 
                     (TouchPhase::Moved, dx, dy)
-                },
+                }
                 UIGestureRecognizerState::Ended => {
-                    let last_pan: CGPoint =
-                        self.ivars().pan_last_delta.replace(CGPoint { x: 0.0, y: 0.0 });
+                    let last_pan: CGPoint = self
+                        .ivars()
+                        .pan_last_delta
+                        .replace(CGPoint { x: 0.0, y: 0.0 });
 
                     let dx = translation.x - last_pan.x;
                     let dy = translation.y - last_pan.y;
 
                     (TouchPhase::Ended, dx, dy)
-                },
+                }
                 UIGestureRecognizerState::Cancelled | UIGestureRecognizerState::Failed => {
-                    let last_pan: CGPoint =
-                        self.ivars().pan_last_delta.replace(CGPoint { x: 0.0, y: 0.0 });
+                    let last_pan: CGPoint = self
+                        .ivars()
+                        .pan_last_delta
+                        .replace(CGPoint { x: 0.0, y: 0.0 });
 
                     // Pass -delta so that action is reversed
                     (TouchPhase::Cancelled, -last_pan.x, -last_pan.y)
-                },
+                }
                 state => panic!("unexpected recognizer state: {state:?}"),
             };
 
@@ -450,7 +468,9 @@ impl WinitView {
                 };
                 rotation.setDelegate(Some(ProtocolObject::from_ref(self)));
                 self.addGestureRecognizer(&rotation);
-                self.ivars().rotation_gesture_recognizer.replace(Some(rotation));
+                self.ivars()
+                    .rotation_gesture_recognizer
+                    .replace(Some(rotation));
             }
         } else if let Some(recognizer) = self.ivars().rotation_gesture_recognizer.take() {
             self.removeGestureRecognizer(&recognizer);
@@ -518,7 +538,7 @@ impl WinitView {
                                 );
                                 ivars.primary_finger.set(Some(finger_id));
                                 true
-                            },
+                            }
                         }
                     };
 
@@ -549,15 +569,15 @@ impl WinitView {
                             },
                         },
                     });
-                },
+                }
                 UITouchPhase::Moved => {
                     let (primary, source) = if let UITouchType::Pencil = touch_type {
                         (true, PointerSource::Unknown)
                     } else {
-                        (ivars.primary_finger.get().unwrap() == finger_id, PointerSource::Touch {
-                            finger_id,
-                            force,
-                        })
+                        (
+                            ivars.primary_finger.get().unwrap() == finger_id,
+                            PointerSource::Touch { finger_id, force },
+                        )
                     };
 
                     touch_events.push(EventWrapper::Window {
@@ -569,7 +589,7 @@ impl WinitView {
                             source,
                         },
                     });
-                },
+                }
                 // 2 is UITouchPhase::Stationary and is not expected here
                 UITouchPhase::Ended | UITouchPhase::Cancelled => {
                     let primary = if let UITouchType::Pencil = touch_type {
@@ -613,7 +633,7 @@ impl WinitView {
                             },
                         },
                     });
-                },
+                }
                 _ => panic!("unexpected touch phase: {phase:?}"),
             }
         }

@@ -433,7 +433,9 @@ fn settle_amp_stage(
         // leaf is whichever capture the patch swapped in, which carries only
         // what its own preset set, so the patch's word on Amp L lands here.
         for ov in patch.overrides.iter().filter(|o| {
-            o.block.eq_ignore_ascii_case("Amp L") && o.op.eq_ignore_ascii_case("set") && !o.param.is_empty()
+            o.block.eq_ignore_ascii_case("Amp L")
+                && o.op.eq_ignore_ascii_case("set")
+                && !o.param.is_empty()
         }) {
             match amp.params.iter_mut().find(|p| p.name == ov.param) {
                 Some(p) => p.value = ov.value.to_string(),

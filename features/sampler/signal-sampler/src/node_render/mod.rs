@@ -549,7 +549,13 @@ impl RenderNode {
             // 1e-10, not zero, so they took every note and rendered every
             // voice (their oscillators, envelopes and filters) to be
             // multiplied by nothing — ~10% of the keys rig's render.
-            let db_gain = |db: f32| if db <= OFF_DB { 0.0 } else { 10f32.powf(db / 20.0) };
+            let db_gain = |db: f32| {
+                if db <= OFF_DB {
+                    0.0
+                } else {
+                    10f32.powf(db / 20.0)
+                }
+            };
             node = Self::Gain {
                 asleep: false,
                 input: db_gain(container.input_db),
@@ -596,18 +602,28 @@ impl RenderNode {
         // Tempo-synced parameters, resolved to the processor's param ids now
         // so a tempo change is a plain write on the audio thread.
         for p in &block.params {
-            let (hz, target) = match (p.name.strip_prefix("sync_ms_"), p.name.strip_prefix("sync_hz_")) {
+            let (hz, target) = match (
+                p.name.strip_prefix("sync_ms_"),
+                p.name.strip_prefix("sync_hz_"),
+            ) {
                 (Some(t), _) => (false, t),
                 (_, Some(t)) => (true, t),
                 _ => continue,
             };
-            let Ok(beats) = p.value.parse::<f32>() else { continue };
+            let Ok(beats) = p.value.parse::<f32>() else {
+                continue;
+            };
             if let Some(param_id) = params
                 .iter()
                 .find(|i| i.name.eq_ignore_ascii_case(target))
                 .map(|i| i.id)
             {
-                mc.tempo_followers.push(modmatrix::TempoFollower { leaf: id, param_id, beats, hz });
+                mc.tempo_followers.push(modmatrix::TempoFollower {
+                    leaf: id,
+                    param_id,
+                    beats,
+                    hz,
+                });
             }
         }
         mc.leaves.push((

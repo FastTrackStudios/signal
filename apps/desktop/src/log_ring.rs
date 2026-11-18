@@ -62,7 +62,9 @@ pub fn persist() {
 /// rest. The file is then moved aside so the next crash writes fresh.
 pub fn restore_previous() {
     let Some(path) = persist_path() else { return };
-    let Ok(text) = std::fs::read_to_string(&path) else { return };
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return;
+    };
     let lines: Vec<&str> = text.lines().collect();
     let tail = &lines[lines.len().saturating_sub(200)..];
     push("──── the previous run's last lines ────".to_string());

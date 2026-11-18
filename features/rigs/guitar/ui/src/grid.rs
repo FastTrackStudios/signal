@@ -158,7 +158,13 @@ pub fn RigGraph(
     // A grid selection, by name.
     let names: Vec<(uuid::Uuid, String, Option<String>)> = slots
         .iter()
-        .map(|s| (s.id, s.block_preset_name.clone().unwrap_or_default(), s.module_group.clone()))
+        .map(|s| {
+            (
+                s.id,
+                s.block_preset_name.clone().unwrap_or_default(),
+                s.module_group.clone(),
+            )
+        })
         .collect();
     rsx! {
         RigGridPanel {

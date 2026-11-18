@@ -16,8 +16,8 @@ use signal_keys_proto::keys::KeysRigClient;
 use signal_keys_proto::{KeysPerform, SwitchLearn};
 use signal_widgets::PopupHost;
 use signal_widgets::switches::{
-    MenuRow, MidiLearnRows, SwitchMenuFrame, SwitchTile, SwitchesMode, SwitchesToggle,
-    close_menu, open_menu,
+    MenuRow, MidiLearnRows, SwitchMenuFrame, SwitchTile, SwitchesMode, SwitchesToggle, close_menu,
+    open_menu,
 };
 
 /// Per-stack color — the worship set's shape, left to right: intimate →
@@ -40,9 +40,9 @@ pub fn stack_color(name: &str) -> (&'static str, &'static str) {
                 ("#3a2f1f", "#fdba74"),
                 ("#1f2a3a", "#93c5fd"),
             ];
-            let h = name
-                .bytes()
-                .fold(0usize, |h, b| h.wrapping_mul(31).wrapping_add(usize::from(b)));
+            let h = name.bytes().fold(0usize, |h, b| {
+                h.wrapping_mul(31).wrapping_add(usize::from(b))
+            });
             OWN[h % OWN.len()]
         }
     }
@@ -218,7 +218,9 @@ fn StackMenu(index: u32, name: String, learn: SwitchLearn) -> Element {
     let rename = {
         let rig = rig.clone();
         move |text: String| {
-            with_rig(&rig, move |r| async move { let _ = r.rename_stack(index, text).await; });
+            with_rig(&rig, move |r| async move {
+                let _ = r.rename_stack(index, text).await;
+            });
             close_menu(host);
         }
     };

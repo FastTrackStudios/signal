@@ -958,7 +958,11 @@ impl GuitarEntry {
     /// The parts of its tone `rig` overrides.
     #[must_use]
     pub fn overridden_on(&self, rig: &str) -> Vec<String> {
-        self.overrides.iter().find(|o| o.rig == rig).map(|o| o.parts.clone()).unwrap_or_default()
+        self.overrides
+            .iter()
+            .find(|o| o.rig == rig)
+            .map(|o| o.parts.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -1468,13 +1472,19 @@ impl Applied {
     /// It took.
     #[must_use]
     pub fn done() -> Self {
-        Self { ok: true, message: String::new() }
+        Self {
+            ok: true,
+            message: String::new(),
+        }
     }
 
     /// It did not, and why.
     #[must_use]
     pub fn refused(message: impl Into<String>) -> Self {
-        Self { ok: false, message: message.into() }
+        Self {
+            ok: false,
+            message: message.into(),
+        }
     }
 }
 
@@ -1551,9 +1561,10 @@ pub mod rig {
     use facet::Facet;
 
     use super::{
-        SetupModel, Artwork, CaptureImport, CompTrace, CompositionModel, DiClip, ImportOutcome, LevelProgress, LocalCapture, LibraryModel, LiveBlock, LiveNode,
-        Applied, MacroKnobView, MacroResult, MacroSave, MacroTune, PartOverride, PatchInfo,
-        PerformanceModel, PresetInfo, RigStatus, SongChange, SwitchTuning, TunerReading,
+        Applied, Artwork, CaptureImport, CompTrace, CompositionModel, DiClip, ImportOutcome,
+        LevelProgress, LibraryModel, LiveBlock, LiveNode, LocalCapture, MacroKnobView, MacroResult,
+        MacroSave, MacroTune, PartOverride, PatchInfo, PerformanceModel, PresetInfo, RigStatus,
+        SetupModel, SongChange, SwitchTuning, TunerReading,
     };
 
     /// One live rig change. Every variant carries **full state** (idempotent
@@ -1927,7 +1938,13 @@ pub mod rig {
         fn save_part_changes(&self, part: String) -> String;
         /// Section `part` plays a module preset's snapshot over its patch —
         /// the section's own (its overrides), not the patch's.
-        fn choose_part_module(&self, part: String, module: String, preset: String, snapshot: String) -> Applied;
+        fn choose_part_module(
+            &self,
+            part: String,
+            module: String,
+            preset: String,
+            snapshot: String,
+        ) -> Applied;
         /// Section `part` plays a block preset on `block`, its own.
         fn choose_part_block(&self, part: String, block: String, preset: String) -> Applied;
         /// Drop section `part`'s own pick of `kind` (a module kind, or
@@ -1937,7 +1954,13 @@ pub mod rig {
         /// a module (`Amp`) with `value` `Preset · Variation`, or
         /// `block:<block>` with a block preset. An empty `value` clears it:
         /// back to what the variation chose.
-        fn set_variation_pick(&self, preset: String, variation: String, kind: String, value: String);
+        fn set_variation_pick(
+            &self,
+            preset: String,
+            variation: String,
+            kind: String,
+            value: String,
+        );
         /// Clear every pick put over a variation.
         fn clear_variation_picks(&self, preset: String, variation: String);
         /// Add a song to the library with default key + tempo.

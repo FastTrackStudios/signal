@@ -109,7 +109,10 @@ pub fn GuitarRigRemote() -> Element {
     let selected_module = use_signal(|| {
         try_consume_context::<crate::module_sidebar::InitialSelection>()
             .and_then(|i| i.0)
-            .or_else(|| cfg!(target_os = "macos").then(|| crate::module_sidebar::Selection::Module("Core".to_string())))
+            .or_else(|| {
+                cfg!(target_os = "macos")
+                    .then(|| crate::module_sidebar::Selection::Module("Core".to_string()))
+            })
     });
     use_context_provider(|| crate::module_sidebar::SelectedModule(selected_module));
     // The view actions the palette and the keymap can ask for.
@@ -196,7 +199,11 @@ pub fn GuitarRigRemote() -> Element {
         m => m,
     };
     // Play's switches take the whole bottom, whatever the toggle says.
-    let sw = if view == Mode::Play { Switches::Full } else { switches() };
+    let sw = if view == Mode::Play {
+        Switches::Full
+    } else {
+        switches()
+    };
 
     // The five rig controls, shared by the standalone Perform view and the
     // Edit view's bottom dock.
@@ -282,7 +289,10 @@ pub fn GuitarRigRemote() -> Element {
     let mut tablet_drawn = use_signal(|| false);
     use_hook(move || {
         spawn(async move {
-            architect::platform::sleep(std::time::Duration::from_millis(crate::tablet::splash::DRAWN_MS)).await;
+            architect::platform::sleep(std::time::Duration::from_millis(
+                crate::tablet::splash::DRAWN_MS,
+            ))
+            .await;
             tablet_drawn.set(true);
         });
     });
@@ -1082,7 +1092,9 @@ fn PlayPanes(
     let picker = try_use_context::<crate::module_sidebar::SelectedModule>();
     use_effect(move || {
         if let Some(crate::module_sidebar::SelectedModule(mut sel)) = picker {
-            sel.set(Some(crate::module_sidebar::Selection::Module("Preset".to_string())));
+            sel.set(Some(crate::module_sidebar::Selection::Module(
+                "Preset".to_string(),
+            )));
         }
     });
     // Half each, as a 50% basis: Blitz lays wrapping text out at the flex

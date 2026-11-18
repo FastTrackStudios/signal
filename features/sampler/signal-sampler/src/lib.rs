@@ -116,9 +116,9 @@ pub mod gapless;
 pub mod input_stage;
 pub mod instrument;
 pub mod keys_rig;
-pub mod lane_health;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod kit_tracks;
+pub mod lane_health;
 pub mod loudness;
 pub mod midi;
 pub mod mixer;

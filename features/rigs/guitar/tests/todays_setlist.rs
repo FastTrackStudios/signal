@@ -10,7 +10,10 @@ fn the_setlist_dated_today_opens_with_the_rig() {
     let _ = std::fs::remove_dir_all(&root);
     let dir = root.join("rig");
     std::fs::create_dir_all(&dir).unwrap();
-    let today = chrono::Local::now().date_naive().format("%Y-%m-%d").to_string();
+    let today = chrono::Local::now()
+        .date_naive()
+        .format("%Y-%m-%d")
+        .to_string();
     std::fs::write(
         dir.join("setlists.styx"),
         format!(

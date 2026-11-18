@@ -524,10 +524,14 @@ fn MacroCell(
                 EventHandler::new(move |p: crate::kit::Picked| match p.id {
                     "tune" => tuning.set(true),
                     "positions_patch" => {
-                        wire.run(&id, |r| async move { r.save_macro_positions("patch".into()).await });
+                        wire.run(&id, |r| async move {
+                            r.save_macro_positions("patch".into()).await
+                        });
                     }
                     "positions_snapshot" => {
-                        wire.run(&id, |r| async move { r.save_macro_positions("snapshot".into()).await });
+                        wire.run(&id, |r| async move {
+                            r.save_macro_positions("snapshot".into()).await
+                        });
                     }
                     _ => {}
                 }),

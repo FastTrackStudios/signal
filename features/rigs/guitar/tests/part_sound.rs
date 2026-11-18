@@ -46,8 +46,15 @@ fn a_section_plays_a_stack_or_a_variation() {
     assert_eq!(part.stack, stack.name);
     assert!(part.patch.is_empty(), "one sound at a time");
     assert!(Rig::select_part(&rig, at as u32).ok);
-    let playing = Rig::patches(&rig).into_iter().find(|p| p.active).map(|p| p.name);
-    assert_eq!(playing.as_deref(), Some(stack.patches[0].as_str()), "it plays the stack's first patch");
+    let playing = Rig::patches(&rig)
+        .into_iter()
+        .find(|p| p.active)
+        .map(|p| p.name);
+    assert_eq!(
+        playing.as_deref(),
+        Some(stack.patches[0].as_str()),
+        "it plays the stack's first patch"
+    );
 
     // A preset's variation: it replaces the stack, and plays.
     let comp = Rig::compositions(&rig);
@@ -57,13 +64,21 @@ fn a_section_plays_a_stack_or_a_variation() {
         .find(|p| !p.snapshots.is_empty())
         .expect("the shipped library has presets");
     let variation = preset.snapshots[0].name.clone();
-    Rig::set_part_preset(&rig, "Sound Check".into(), preset.name.clone(), variation.clone());
+    Rig::set_part_preset(
+        &rig,
+        "Sound Check".into(),
+        preset.name.clone(),
+        variation.clone(),
+    );
     let part = Rig::perf(&rig).parts[at].clone();
     assert_eq!(part.preset, format!("{} · {variation}", preset.name));
     assert!(part.stack.is_empty(), "one sound at a time");
     assert!(Rig::select_part(&rig, at as u32).ok);
     let comp = Rig::compositions(&rig);
-    assert_eq!((comp.active_preset.as_str(), comp.active_snapshot.as_str()), (preset.name.as_str(), variation.as_str()));
+    assert_eq!(
+        (comp.active_preset.as_str(), comp.active_snapshot.as_str()),
+        (preset.name.as_str(), variation.as_str())
+    );
 
     // A patch again clears both.
     Rig::set_part_patch(&rig, "Sound Check".into(), stack.patches[0].clone());
@@ -89,9 +104,18 @@ fn a_variation_pick_takes_and_clears_back() {
     let rig = GuitarRigBackend::new();
     rig.open_blocking();
     let comp = Rig::compositions(&rig);
-    let preset = comp.presets.iter().find(|p| !p.snapshots.is_empty()).expect("a preset").clone();
+    let preset = comp
+        .presets
+        .iter()
+        .find(|p| !p.snapshots.is_empty())
+        .expect("a preset")
+        .clone();
     let variation = preset.snapshots[0].clone();
-    let before: Vec<(String, String)> = variation.modules.iter().map(|m| (m.module.clone(), m.preset.clone())).collect();
+    let before: Vec<(String, String)> = variation
+        .modules
+        .iter()
+        .map(|m| (m.module.clone(), m.preset.clone()))
+        .collect();
     let amp = comp
         .modules
         .iter()
@@ -100,18 +124,56 @@ fn a_variation_pick_takes_and_clears_back() {
         .clone();
     let snap = amp.snapshots.first().cloned().unwrap_or_default();
 
-    Rig::set_variation_pick(&rig, preset.name.clone(), variation.name.clone(), "Amp".into(), format!("{} · {snap}", amp.name));
+    Rig::set_variation_pick(
+        &rig,
+        preset.name.clone(),
+        variation.name.clone(),
+        "Amp".into(),
+        format!("{} · {snap}", amp.name),
+    );
     let now = Rig::compositions(&rig);
-    let v = now.presets.iter().find(|p| p.name == preset.name).unwrap().snapshots.iter().find(|s| s.name == variation.name).unwrap().clone();
-    assert!(v.picks.iter().any(|p| p.kind == "Amp" && p.preset == amp.name), "the pick shows: {:?}", v.picks);
-    let own: Vec<(String, String)> = v.modules.iter().map(|m| (m.module.clone(), m.preset.clone())).collect();
+    let v = now
+        .presets
+        .iter()
+        .find(|p| p.name == preset.name)
+        .unwrap()
+        .snapshots
+        .iter()
+        .find(|s| s.name == variation.name)
+        .unwrap()
+        .clone();
+    assert!(
+        v.picks
+            .iter()
+            .any(|p| p.kind == "Amp" && p.preset == amp.name),
+        "the pick shows: {:?}",
+        v.picks
+    );
+    let own: Vec<(String, String)> = v
+        .modules
+        .iter()
+        .map(|m| (m.module.clone(), m.preset.clone()))
+        .collect();
     assert_eq!(own, before, "its own choices read as they were");
 
     Rig::clear_variation_picks(&rig, preset.name.clone(), variation.name.clone());
     let now = Rig::compositions(&rig);
-    let v = now.presets.iter().find(|p| p.name == preset.name).unwrap().snapshots.iter().find(|s| s.name == variation.name).unwrap().clone();
+    let v = now
+        .presets
+        .iter()
+        .find(|p| p.name == preset.name)
+        .unwrap()
+        .snapshots
+        .iter()
+        .find(|s| s.name == variation.name)
+        .unwrap()
+        .clone();
     assert!(v.picks.is_empty());
-    let mut back: Vec<(String, String)> = v.modules.iter().map(|m| (m.module.clone(), m.preset.clone())).collect();
+    let mut back: Vec<(String, String)> = v
+        .modules
+        .iter()
+        .map(|m| (m.module.clone(), m.preset.clone()))
+        .collect();
     let mut was = before.clone();
     back.sort();
     was.sort();

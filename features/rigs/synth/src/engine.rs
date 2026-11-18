@@ -769,9 +769,8 @@ pub fn apply_settings_to_omni_layer(
     };
     let base = set.baseline.as_deref();
     // Whether a knob moved off the patch (always, with no baseline).
-    let moved = |f: &dyn Fn(&ModuleSettings) -> f32| {
-        base.is_none_or(|b| (f(b) - f(set)).abs() > 1e-6)
-    };
+    let moved =
+        |f: &dyn Fn(&ModuleSettings) -> f32| base.is_none_or(|b| (f(b) - f(set)).abs() > 1e-6);
     let secs = |ms: f32| format!("{:.4}", ms.max(0.0) / 1000.0);
     let depth = set.filter_env_depth.clamp(-1.0, 1.0);
     // The filter section's own envelope route is the first Filter Env →
@@ -805,7 +804,8 @@ pub fn apply_settings_to_omni_layer(
     // A sample-mode layer the patch gives no filter-envelope route takes the
     // knobs' as its voices' own filter (as a keys module does), and its
     // shared filter opens for it.
-    let voice_filter = is_sampler && !routed && set.voice_filter_on() && moved(&|s| s.filter_env_depth);
+    let voice_filter =
+        is_sampler && !routed && set.voice_filter_on() && moved(&|s| s.filter_env_depth);
     let voice_params = set.sampler_voice_params(RigBlock::of_type(BlockType::Sampler));
     let base_voice = base.map(|b| b.sampler_voice_params(RigBlock::of_type(BlockType::Sampler)));
     let amp = set.amp_block();

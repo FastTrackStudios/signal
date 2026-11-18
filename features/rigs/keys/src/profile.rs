@@ -648,7 +648,11 @@ impl KeysProfile {
                 // The part's LFOs (shared by its layers) from module A's knobs.
                 let part = module_set(&layer.name, 0);
                 let base = part.baseline.as_deref();
-                signal_synth::engine::apply_lfos_to_omni(&mut tree, &part.lfos, base.map(|b| &b.lfos));
+                signal_synth::engine::apply_lfos_to_omni(
+                    &mut tree,
+                    &part.lfos,
+                    base.map(|b| &b.lfos),
+                );
                 signal_synth::engine::apply_lfo_fades_to_omni(
                     &mut tree,
                     &part.lfo_fade_ms,
@@ -1243,7 +1247,7 @@ mod tests {
     }
 
     #[test]
-        fn the_worship_piano_lane_plays_the_gig_snapshot() {
+    fn the_worship_piano_lane_plays_the_gig_snapshot() {
         let p = worship_profile();
         let tree = p.build_tree(|name| Some(format!("/packs/{name}.signalpack")));
         let lane = tree.find("Keys 1").expect("Keys 1 lane");
@@ -1445,7 +1449,10 @@ mod order_tests {
         // in "Bass"), and a plain `find` returns the engine.
         let layers = tree.of_role(signal_sampler::rig_node::Role::Layer);
         for lane in split_lanes {
-            let found = layers.iter().find(|c| c.name == lane.name).expect(&lane.name);
+            let found = layers
+                .iter()
+                .find(|c| c.name == lane.name)
+                .expect(&lane.name);
             assert_eq!(found.zone.key_lo, lane.key_lo, "{} key_lo", lane.name);
             assert_eq!(found.zone.key_hi, lane.key_hi, "{} key_hi", lane.name);
         }

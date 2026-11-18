@@ -68,12 +68,34 @@ struct Popup {
 }
 
 impl Popup {
-    fn new(x: f64, y: f64, min_width: f64, render: Render, on_close: Rc<dyn Fn()>, above: bool, sheet: bool, wake: Option<Wake>) -> Self {
+    fn new(
+        x: f64,
+        y: f64,
+        min_width: f64,
+        render: Render,
+        on_close: Rc<dyn Fn()>,
+        above: bool,
+        sheet: bool,
+        wake: Option<Wake>,
+    ) -> Self {
         let alive = Rc::new(Cell::new(true));
         // Created in the scope opening it — an event handler runs in its own
         // component's scope — so it drops with that scope.
-        let mark = CopyValue::new(Opener { alive: Rc::clone(&alive), wake });
-        Self { x, y, min_width, render, on_close: Some(on_close), above, sheet, alive, mark }
+        let mark = CopyValue::new(Opener {
+            alive: Rc::clone(&alive),
+            wake,
+        });
+        Self {
+            x,
+            y,
+            min_width,
+            render,
+            on_close: Some(on_close),
+            above,
+            sheet,
+            alive,
+            mark,
+        }
     }
 }
 
@@ -138,7 +160,16 @@ impl PopupHost {
         let mut this = self;
         this.close();
         let wake = (*this.wake.peek()).clone();
-        this.open.set(Some(Popup::new(0.0, 0.0, 0.0, Rc::new(render), Rc::new(on_close), false, true, wake)));
+        this.open.set(Some(Popup::new(
+            0.0,
+            0.0,
+            0.0,
+            Rc::new(render),
+            Rc::new(on_close),
+            false,
+            true,
+            wake,
+        )));
     }
 
     /// Whether a sheet is showing.
@@ -158,12 +189,23 @@ impl PopupHost {
     ) {
         self.close();
         let wake = (*self.wake.peek()).clone();
-        self.open.set(Some(Popup::new(x, y, min_width, render, Rc::new(on_close), above, false, wake)));
+        self.open.set(Some(Popup::new(
+            x,
+            y,
+            min_width,
+            render,
+            Rc::new(on_close),
+            above,
+            false,
+            wake,
+        )));
     }
 
     /// Close whatever is open.
     pub fn close(mut self) {
-        let Some(popup) = self.open.write().take() else { return };
+        let Some(popup) = self.open.write().take() else {
+            return;
+        };
         // An opener that is gone takes its `on_close` with it: what it would
         // reset no longer exists.
         if !popup.alive.get() {

@@ -62,7 +62,9 @@ impl Stimulus {
 
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|s| s.name().eq_ignore_ascii_case(name))
+        Self::ALL
+            .into_iter()
+            .find(|s| s.name().eq_ignore_ascii_case(name))
     }
 
     /// Where the stimulus stops driving the reverb, in seconds — decay is
@@ -105,7 +107,9 @@ impl Stimulus {
             Self::Burst => {
                 let n = frames(0.05);
                 let mut rng = Lcg(7);
-                (0..n).map(|i| rng.white() * 0.35 * fade(i, n, 1.0, sr)).collect()
+                (0..n)
+                    .map(|i| rng.white() * 0.35 * fade(i, n, 1.0, sr))
+                    .collect()
             }
             Self::Snare => {
                 let n = frames(0.25);
@@ -138,7 +142,10 @@ impl Stimulus {
                         let t = i as f64 / sr;
                         let v: f64 = [220.0, 261.63, 329.63]
                             .iter()
-                            .flat_map(|f| (1..=8).map(move |h| (TAU * f * f64::from(h) * t).sin() / f64::from(h)))
+                            .flat_map(|f| {
+                                (1..=8)
+                                    .map(move |h| (TAU * f * f64::from(h) * t).sin() / f64::from(h))
+                            })
                             .sum();
                         v * 0.08 * (t / 0.15).min(1.0) * fade(i, n, 20.0, sr)
                     })
@@ -153,14 +160,20 @@ impl Stimulus {
 fn pluck(n: usize, sr: f64) -> Vec<f64> {
     let mut out = vec![0.0f64; n];
     let mut rng = Lcg(3);
-    for (k, f) in [82.41, 123.47, 164.81, 207.65, 246.94, 329.63].iter().enumerate() {
+    for (k, f) in [82.41, 123.47, 164.81, 207.65, 246.94, 329.63]
+        .iter()
+        .enumerate()
+    {
         let start = (0.025 * k as f64 * sr) as usize;
         let period = (sr / f).round().max(2.0) as usize;
         let mut buf: Vec<f64> = (0..period).map(|_| rng.white()).collect();
         let mut idx = 0;
         for o in out.iter_mut().skip(start) {
             let next = (idx + 1) % period;
-            let (a, b) = (buf.get(idx).copied().unwrap_or(0.0), buf.get(next).copied().unwrap_or(0.0));
+            let (a, b) = (
+                buf.get(idx).copied().unwrap_or(0.0),
+                buf.get(next).copied().unwrap_or(0.0),
+            );
             *o += a * 0.12;
             if let Some(slot) = buf.get_mut(idx) {
                 *slot = 0.996 * 0.5 * (a + b);
@@ -169,7 +182,10 @@ fn pluck(n: usize, sr: f64) -> Vec<f64> {
         }
     }
     let len = out.len();
-    out.iter().enumerate().map(|(i, v)| v * fade(i, len, 2.0, sr)).collect()
+    out.iter()
+        .enumerate()
+        .map(|(i, v)| v * fade(i, len, 2.0, sr))
+        .collect()
 }
 
 /// Deterministic white noise in [-1, 1).

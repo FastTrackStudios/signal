@@ -161,7 +161,8 @@ impl SoundsourceIndex {
                     if let Ok(names) = std::fs::read_to_string(&list) {
                         for name in names.lines().map(str::trim).filter(|n| !n.is_empty()) {
                             self.by_name.insert(name.to_lowercase(), path.clone());
-                            self.articulation.insert(name.to_lowercase(), name.to_string());
+                            self.articulation
+                                .insert(name.to_lowercase(), name.to_string());
                         }
                     }
                 }
@@ -225,7 +226,9 @@ impl SoundsourceIndex {
     /// several soundsources.
     #[must_use]
     pub fn articulation_for(&self, name: &str) -> Option<&str> {
-        self.articulation.get(&name.to_lowercase()).map(String::as_str)
+        self.articulation
+            .get(&name.to_lowercase())
+            .map(String::as_str)
     }
 
     /// Like [`find`](Self::find), but only a playable source — a pack or a
@@ -234,10 +237,15 @@ impl SoundsourceIndex {
     /// soundsources ("Choir Men Ohs - mf"), and a sampler cannot play one.
     pub fn find_source(&self, name: &str) -> Option<&Path> {
         let is_source = |p: &Path| {
-            !p.extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn"))
+            !p.extension().is_some_and(|e| {
+                e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn")
+            })
         };
-        if let Some(p) = self.by_name.get(&name.to_lowercase()).filter(|p| is_source(p)) {
+        if let Some(p) = self
+            .by_name
+            .get(&name.to_lowercase())
+            .filter(|p| is_source(p))
+        {
             return Some(p.as_path());
         }
         if normalize_soundsource_name(name).is_empty() {

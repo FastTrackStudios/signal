@@ -53,11 +53,16 @@ pub struct ToneValues {
 impl InputTone {
     /// Set the tone (any thread); the audio thread picks it up next block.
     pub fn set(&self, v: ToneValues) {
-        self.trim_db.store(v.trim_db.clamp(-24.0, 24.0).to_bits(), Ordering::Relaxed);
-        self.low_cut_hz.store(v.low_cut_hz.clamp(10.0, 400.0).to_bits(), Ordering::Relaxed);
-        self.bass_db.store(v.bass_db.clamp(-15.0, 15.0).to_bits(), Ordering::Relaxed);
-        self.mid_db.store(v.mid_db.clamp(-15.0, 15.0).to_bits(), Ordering::Relaxed);
-        self.treble_db.store(v.treble_db.clamp(-15.0, 15.0).to_bits(), Ordering::Relaxed);
+        self.trim_db
+            .store(v.trim_db.clamp(-24.0, 24.0).to_bits(), Ordering::Relaxed);
+        self.low_cut_hz
+            .store(v.low_cut_hz.clamp(10.0, 400.0).to_bits(), Ordering::Relaxed);
+        self.bass_db
+            .store(v.bass_db.clamp(-15.0, 15.0).to_bits(), Ordering::Relaxed);
+        self.mid_db
+            .store(v.mid_db.clamp(-15.0, 15.0).to_bits(), Ordering::Relaxed);
+        self.treble_db
+            .store(v.treble_db.clamp(-15.0, 15.0).to_bits(), Ordering::Relaxed);
         self.generation.fetch_add(1, Ordering::Release);
     }
 
@@ -88,7 +93,13 @@ struct Coeffs {
 }
 
 impl Coeffs {
-    const UNITY: Self = Self { b0: 1.0, b1: 0.0, b2: 0.0, a1: 0.0, a2: 0.0 };
+    const UNITY: Self = Self {
+        b0: 1.0,
+        b1: 0.0,
+        b2: 0.0,
+        a1: 0.0,
+        a2: 0.0,
+    };
 
     fn norm(b0: f64, b1: f64, b2: f64, a0: f64, a1: f64, a2: f64) -> Self {
         Self {
@@ -103,7 +114,14 @@ impl Coeffs {
     fn high_pass(sr: f64, f: f64, q: f64) -> Self {
         let w = std::f64::consts::TAU * (f / sr).min(0.49);
         let (c, a) = (w.cos(), w.sin() / (2.0 * q));
-        Self::norm((1.0 + c) / 2.0, -(1.0 + c), (1.0 + c) / 2.0, 1.0 + a, -2.0 * c, 1.0 - a)
+        Self::norm(
+            (1.0 + c) / 2.0,
+            -(1.0 + c),
+            (1.0 + c) / 2.0,
+            1.0 + a,
+            -2.0 * c,
+            1.0 - a,
+        )
     }
 
     fn peak(sr: f64, f: f64, q: f64, db: f64) -> Self {
@@ -113,7 +131,14 @@ impl Coeffs {
         let a = 10f64.powf(db / 40.0);
         let w = std::f64::consts::TAU * (f / sr).min(0.49);
         let (c, al) = (w.cos(), w.sin() / (2.0 * q));
-        Self::norm(1.0 + al * a, -2.0 * c, 1.0 - al * a, 1.0 + al / a, -2.0 * c, 1.0 - al / a)
+        Self::norm(
+            1.0 + al * a,
+            -2.0 * c,
+            1.0 - al * a,
+            1.0 + al / a,
+            -2.0 * c,
+            1.0 - al / a,
+        )
     }
 
     fn shelf(sr: f64, f: f64, db: f64, high: bool) -> Self {
@@ -181,7 +206,14 @@ pub struct InputStage {
 
 impl Default for InputStage {
     fn default() -> Self {
-        Self { sample_rate: 48_000.0, seen: 0, gain: 1.0, coeffs: [Coeffs::UNITY; BANDS], state: [[State::default(); BANDS]; 2], flat: true }
+        Self {
+            sample_rate: 48_000.0,
+            seen: 0,
+            gain: 1.0,
+            coeffs: [Coeffs::UNITY; BANDS],
+            state: [[State::default(); BANDS]; 2],
+            flat: true,
+        }
     }
 }
 
@@ -199,12 +231,20 @@ impl InputStage {
         let sr = self.sample_rate;
         self.gain = 10f32.powf(v.trim_db / 20.0);
         self.coeffs = [
-            if v.low_cut_hz > 20.5 { Coeffs::high_pass(sr, f64::from(v.low_cut_hz), std::f64::consts::FRAC_1_SQRT_2) } else { Coeffs::UNITY },
+            if v.low_cut_hz > 20.5 {
+                Coeffs::high_pass(sr, f64::from(v.low_cut_hz), std::f64::consts::FRAC_1_SQRT_2)
+            } else {
+                Coeffs::UNITY
+            },
             Coeffs::shelf(sr, 120.0, f64::from(v.bass_db), false),
             Coeffs::peak(sr, 800.0, 0.8, f64::from(v.mid_db)),
             Coeffs::shelf(sr, 3200.0, f64::from(v.treble_db), true),
         ];
-        self.flat = v.trim_db.abs() < 0.01 && v.low_cut_hz <= 20.5 && v.bass_db.abs() < 0.01 && v.mid_db.abs() < 0.01 && v.treble_db.abs() < 0.01;
+        self.flat = v.trim_db.abs() < 0.01
+            && v.low_cut_hz <= 20.5
+            && v.bass_db.abs() < 0.01
+            && v.mid_db.abs() < 0.01
+            && v.treble_db.abs() < 0.01;
     }
 
     /// Run a stereo block in place.
@@ -235,7 +275,9 @@ mod tests {
     use super::*;
 
     fn sine(f: f64, n: usize) -> Vec<f32> {
-        (0..n).map(|i| (std::f64::consts::TAU * f * i as f64 / 48_000.0).sin() as f32 * 0.5).collect()
+        (0..n)
+            .map(|i| (std::f64::consts::TAU * f * i as f64 / 48_000.0).sin() as f32 * 0.5)
+            .collect()
     }
 
     fn peak(x: &[f32]) -> f32 {
@@ -252,7 +294,13 @@ mod tests {
         peak(&l) / 0.5
     }
 
-    const FLAT: ToneValues = ToneValues { trim_db: 0.0, low_cut_hz: 20.0, bass_db: 0.0, mid_db: 0.0, treble_db: 0.0 };
+    const FLAT: ToneValues = ToneValues {
+        trim_db: 0.0,
+        low_cut_hz: 20.0,
+        bass_db: 0.0,
+        mid_db: 0.0,
+        treble_db: 0.0,
+    };
 
     #[test]
     fn flat_passes_the_guitar_untouched() {
@@ -261,23 +309,59 @@ mod tests {
 
     #[test]
     fn trim_is_a_gain() {
-        let g = run(ToneValues { trim_db: 6.0, ..FLAT }, 440.0);
+        let g = run(
+            ToneValues {
+                trim_db: 6.0,
+                ..FLAT
+            },
+            440.0,
+        );
         assert!((g - 10f32.powf(6.0 / 20.0)).abs() < 0.01, "{g}");
     }
 
     #[test]
     fn the_low_cut_takes_the_lows() {
-        let low = run(ToneValues { low_cut_hz: 120.0, ..FLAT }, 40.0);
-        let mid = run(ToneValues { low_cut_hz: 120.0, ..FLAT }, 1000.0);
+        let low = run(
+            ToneValues {
+                low_cut_hz: 120.0,
+                ..FLAT
+            },
+            40.0,
+        );
+        let mid = run(
+            ToneValues {
+                low_cut_hz: 120.0,
+                ..FLAT
+            },
+            1000.0,
+        );
         assert!(low < 0.2, "{low}");
         assert!((mid - 1.0).abs() < 0.05, "{mid}");
     }
 
     #[test]
     fn the_bands_move_their_part() {
-        let bass = run(ToneValues { bass_db: 6.0, ..FLAT }, 50.0);
-        let treble = run(ToneValues { treble_db: -6.0, ..FLAT }, 10_000.0);
-        let mid = run(ToneValues { mid_db: 6.0, ..FLAT }, 800.0);
+        let bass = run(
+            ToneValues {
+                bass_db: 6.0,
+                ..FLAT
+            },
+            50.0,
+        );
+        let treble = run(
+            ToneValues {
+                treble_db: -6.0,
+                ..FLAT
+            },
+            10_000.0,
+        );
+        let mid = run(
+            ToneValues {
+                mid_db: 6.0,
+                ..FLAT
+            },
+            800.0,
+        );
         assert!((bass - 2.0).abs() < 0.15, "{bass}");
         assert!((treble - 0.5).abs() < 0.05, "{treble}");
         assert!((mid - 2.0).abs() < 0.05, "{mid}");

@@ -76,8 +76,16 @@ fn wait_for_route_input(within: std::time::Duration) -> bool {
         let routed = unsafe {
             let session: *mut AnyObject = msg_send![class!(AVAudioSession), sharedInstance];
             let route: *mut AnyObject = msg_send![session, currentRoute];
-            let inputs: *mut AnyObject = if route.is_null() { std::ptr::null_mut() } else { msg_send![route, inputs] };
-            let count: usize = if inputs.is_null() { 0 } else { msg_send![inputs, count] };
+            let inputs: *mut AnyObject = if route.is_null() {
+                std::ptr::null_mut()
+            } else {
+                msg_send![route, inputs]
+            };
+            let count: usize = if inputs.is_null() {
+                0
+            } else {
+                msg_send![inputs, count]
+            };
             (0..count).any(|i| {
                 let port: *mut AnyObject = msg_send![inputs, objectAtIndex: i];
                 let ptype: *mut AnyObject = msg_send![port, portType];
@@ -159,7 +167,8 @@ pub fn configure() {
             &*session, setPreferredIOBufferDuration: (128.0f64 / 48_000.0), error: _
         ];
 
-        let active: Result<(), Retained<NSObject>> = msg_send![&*session, setActive: true, error: _];
+        let active: Result<(), Retained<NSObject>> =
+            msg_send![&*session, setActive: true, error: _];
         if active.is_err() {
             tracing::warn!("AVAudioSession activation failed");
         }
@@ -175,7 +184,10 @@ pub fn configure() {
             // until it is the route's input, so what is built next — the
             // channel count, the rig's streams — is built on it.
             let routed = wait_for_route_input(std::time::Duration::from_secs(1));
-            tracing::info!(audio.routed = routed, "AVAudioSession: external interface present — input pinned");
+            tracing::info!(
+                audio.routed = routed,
+                "AVAudioSession: external interface present — input pinned"
+            );
         } else {
             // Clear any preferred input; the rig won't read the built-in mic.
             let _: Result<(), Retained<NSObject>> = msg_send![
@@ -240,7 +252,10 @@ pub fn request_record_permission() {
     }
     unsafe {
         let done = block2::RcBlock::new(|granted: objc2::runtime::Bool| {
-            tracing::info!(granted = granted.as_bool(), "ios: record permission answered");
+            tracing::info!(
+                granted = granted.as_bool(),
+                "ios: record permission answered"
+            );
         });
         match objc2::runtime::AnyClass::get(c"AVAudioApplication") {
             // A class method from iOS 17.

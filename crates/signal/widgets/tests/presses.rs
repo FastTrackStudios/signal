@@ -29,8 +29,16 @@ async fn a_press_released_over_another_control_clicks_neither() {
     t.pointer_down(50.0, 50.0);
     t.pointer_up(300.0, 50.0);
     t.pump().await.ok();
-    assert_eq!(A.load(Ordering::SeqCst), 0, "pressed A, released over B: not a click on A");
-    assert_eq!(B.load(Ordering::SeqCst), 0, "pressed A, released over B: not a click on B");
+    assert_eq!(
+        A.load(Ordering::SeqCst),
+        0,
+        "pressed A, released over B: not a click on A"
+    );
+    assert_eq!(
+        B.load(Ordering::SeqCst),
+        0,
+        "pressed A, released over B: not a click on B"
+    );
     // Pressed and released on B: a click on B.
     t.pointer_down(300.0, 50.0);
     t.pointer_up(300.0, 50.0);
@@ -66,10 +74,20 @@ fn HeaderWithDropdown() -> Element {
 /// press on its left half is the panel's, not the switch's beneath.
 #[tokio::test]
 async fn a_centred_dropdown_from_a_nested_layer_takes_its_presses() {
-    let t = render(HeaderWithDropdown).with_window_size(800, 600).build();
+    let t = render(HeaderWithDropdown)
+        .with_window_size(800, 600)
+        .build();
     t.pointer_down(250.0, 110.0);
     t.pointer_up(250.0, 110.0);
     t.pump().await.ok();
-    assert_eq!(UNDER.load(Ordering::SeqCst), 0, "the press went through the panel");
-    assert_eq!(PANEL.load(Ordering::SeqCst), 1, "the panel's button took it");
+    assert_eq!(
+        UNDER.load(Ordering::SeqCst),
+        0,
+        "the press went through the panel"
+    );
+    assert_eq!(
+        PANEL.load(Ordering::SeqCst),
+        1,
+        "the panel's button took it"
+    );
 }

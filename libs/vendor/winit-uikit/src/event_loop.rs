@@ -300,7 +300,7 @@ fn setup_control_flow_observers() {
             #[allow(non_upper_case_globals)]
             match activity {
                 CFRunLoopActivity::BeforeWaiting => app_state::handle_main_events_cleared(mtm),
-                CFRunLoopActivity::Exit => {}, // may happen when running on macOS
+                CFRunLoopActivity::Exit => {} // may happen when running on macOS
                 _ => unreachable!(),
             }
         }
@@ -315,7 +315,7 @@ fn setup_control_flow_observers() {
             #[allow(non_upper_case_globals)]
             match activity {
                 CFRunLoopActivity::BeforeWaiting => app_state::handle_events_cleared(mtm),
-                CFRunLoopActivity::Exit => {}, // may happen when running on macOS
+                CFRunLoopActivity::Exit => {} // may happen when running on macOS
                 _ => unreachable!(),
             }
         }

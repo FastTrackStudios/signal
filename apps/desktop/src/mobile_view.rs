@@ -20,7 +20,9 @@
 #[cfg(feature = "signal-keys-rig")]
 use crate::keys_view;
 use dioxus::prelude::*;
-use signal_guitar_ui::{GuitarRigRemote, IslandLeft, PhoneHost, ScreenCorners, WindowAspect, WindowSize};
+use signal_guitar_ui::{
+    GuitarRigRemote, IslandLeft, PhoneHost, ScreenCorners, WindowAspect, WindowSize,
+};
 
 use crate::rigs::{Rig, RigMenu};
 
@@ -95,7 +97,10 @@ pub fn MobileApp() -> Element {
     let mut corners = use_context_provider(|| ScreenCorners(Signal::new(PHONE_CORNER_RADIUS)));
     // The log ring, for the Audio mode's Log tab (copied for pasting into a
     // message when the audio misbehaves).
-    use_context_provider(|| signal_guitar_ui::LogFeed { lines: crate::log_ring::snapshot, copy: copy_log });
+    use_context_provider(|| signal_guitar_ui::LogFeed {
+        lines: crate::log_ring::snapshot,
+        copy: copy_log,
+    });
     use_future(move || {
         let window = window.clone();
         async move {
@@ -109,7 +114,11 @@ pub fn MobileApp() -> Element {
                         size.0.set(pt);
                         aspect.0.set(pt.0 / pt.1);
                         // A phone's short side is under 500 points.
-                        let radius = if pt.0.min(pt.1) < 500.0 { PHONE_CORNER_RADIUS } else { PAD_CORNER_RADIUS };
+                        let radius = if pt.0.min(pt.1) < 500.0 {
+                            PHONE_CORNER_RADIUS
+                        } else {
+                            PAD_CORNER_RADIUS
+                        };
                         if *corners.0.peek() != radius {
                             corners.0.set(radius);
                         }

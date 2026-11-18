@@ -110,15 +110,22 @@ fn main() {
         src.name = "Soundsource".into();
         // `--source-param name=value`: build-time params on the Sampler
         // block, as a keys layer sets them (e.g. `piano_snapshot=worship`).
-        for kv in args.windows(2).filter(|w| w[0] == "--source-param").map(|w| &w[1]) {
+        for kv in args
+            .windows(2)
+            .filter(|w| w[0] == "--source-param")
+            .map(|w| &w[1])
+        {
             if let Some((k, v)) = kv.split_once('=') {
                 src = src.with_param(k, v);
             }
         }
         Container::preset("pack").add(Container::module("Oscillator").add(src))
     } else {
-        load_patch_file(std::path::Path::new(patch), &SoundsourceIndex::scan_default())
-            .unwrap_or_else(|e| panic!("import {patch}: {e}"))
+        load_patch_file(
+            std::path::Path::new(patch),
+            &SoundsourceIndex::scan_default(),
+        )
+        .unwrap_or_else(|e| panic!("import {patch}: {e}"))
     };
     if std::env::var_os("RENDER_DEBUG").is_some() {
         if let Ok(xml) = std::fs::read_to_string(patch) {

@@ -81,7 +81,11 @@ fn every_macro_call_reports_what_it_did() {
     let before = RigLibrary::load_compositions().blocks.len();
     let r = Rig::save_macro_tune(&rig, save("space", "block", ""));
     assert!(!r.ok && r.offer == "new_block_preset", "{r:?}");
-    assert_eq!(RigLibrary::load_compositions().blocks.len(), before, "nothing written");
+    assert_eq!(
+        RigLibrary::load_compositions().blocks.len(),
+        before,
+        "nothing written"
+    );
     // Saved as a new one: the preset exists, with the tuning in it.
     let r = Rig::save_macro_tune(&rig, save("space", "block", "Test Wash"));
     assert!(r.ok && r.message.contains("Test Wash"), "{r:?}");

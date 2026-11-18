@@ -39,7 +39,13 @@ fn tone_items(name: &str, names: &[String], used_by: &[String]) -> Vec<MenuItem>
         MenuItem::head(format!("Preset · {name}")),
         MenuItem::run("save", format!("Save what plays to “{name}”")),
         MenuItem::name("rename", "Rename…", "Rename", name, others),
-        MenuItem::name("duplicate", "Duplicate…", "Duplicate", format!("{name} 2"), names.to_vec()),
+        MenuItem::name(
+            "duplicate",
+            "Duplicate…",
+            "Duplicate",
+            format!("{name} 2"),
+            names.to_vec(),
+        ),
         MenuItem::delete("delete", "Delete", in_use(used_by)),
     ]
 }
@@ -50,19 +56,35 @@ fn in_use(used_by: &[String]) -> Option<String> {
     match used_by.len() {
         0 => None,
         n if n <= 3 => Some(format!("In use: {}", used_by.join(", "))),
-        n => Some(format!("In use: {} +{} more", used_by[..2].join(", "), n - 2)),
+        n => Some(format!(
+            "In use: {} +{} more",
+            used_by[..2].join(", "),
+            n - 2
+        )),
     }
 }
 
 fn tone_act(rig: &Option<RigClient>, name: &str, p: Picked) {
     let (n, text) = (name.to_string(), p.text.trim().to_string());
     match p.id {
-        "new" if !text.is_empty() => send(rig, move |r| async move { let _ = r.new_tone(text).await; }),
-        "from_patches" => send(rig, |r| async move { let _ = r.presets_from_patches().await; }),
-        "save" => send(rig, move |r| async move { let _ = r.save_tone(n).await; }),
-        "rename" if !text.is_empty() => send(rig, move |r| async move { let _ = r.rename_tone(n, text).await; }),
-        "duplicate" if !text.is_empty() => send(rig, move |r| async move { let _ = r.duplicate_tone(n, text).await; }),
-        "delete" => send(rig, move |r| async move { let _ = r.delete_tone(n).await; }),
+        "new" if !text.is_empty() => send(rig, move |r| async move {
+            let _ = r.new_tone(text).await;
+        }),
+        "from_patches" => send(rig, |r| async move {
+            let _ = r.presets_from_patches().await;
+        }),
+        "save" => send(rig, move |r| async move {
+            let _ = r.save_tone(n).await;
+        }),
+        "rename" if !text.is_empty() => send(rig, move |r| async move {
+            let _ = r.rename_tone(n, text).await;
+        }),
+        "duplicate" if !text.is_empty() => send(rig, move |r| async move {
+            let _ = r.duplicate_tone(n, text).await;
+        }),
+        "delete" => send(rig, move |r| async move {
+            let _ = r.delete_tone(n).await;
+        }),
         _ => {}
     }
 }
@@ -117,13 +139,27 @@ pub fn PresetSidebar(
     let names: Vec<String> = rows.iter().map(|r| r.name.clone()).collect();
     let up = comp
         .as_ref()
-        .and_then(|c| c.active_modules.iter().find(|m| m.module == "Preset").map(|m| m.preset.clone()))
+        .and_then(|c| {
+            c.active_modules
+                .iter()
+                .find(|m| m.module == "Preset")
+                .map(|m| m.preset.clone())
+        })
         .unwrap_or_default();
 
-    let up_row = rows.iter().find(|r| r.name.eq_ignore_ascii_case(&up)).cloned();
+    let up_row = rows
+        .iter()
+        .find(|r| r.name.eq_ignore_ascii_case(&up))
+        .cloned();
     // The header's menu: a new preset, then the one up on the bench.
     let mut header_menu = vec![
-        MenuItem::name("new", "New preset from what plays…", "Create", "", names.clone()),
+        MenuItem::name(
+            "new",
+            "New preset from what plays…",
+            "Create",
+            "",
+            names.clone(),
+        ),
         MenuItem::run("from_patches", "Make presets from this profile's patches"),
     ];
     if let Some(r) = &up_row {

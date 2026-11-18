@@ -53,7 +53,9 @@ define_class!(
 
         #[unsafe(method(preferredScreenEdgesDeferringSystemGestures))]
         fn preferred_screen_edges_deferring_system_gestures(&self) -> UIRectEdge {
-            self.ivars().preferred_screen_edges_deferring_system_gestures.get()
+            self.ivars()
+                .preferred_screen_edges_deferring_system_gestures
+                .get()
         }
     }
 );
@@ -88,10 +90,16 @@ impl WinitViewController {
 
     pub(crate) fn set_preferred_screen_edges_deferring_system_gestures(&self, val: ScreenEdge) {
         let val = {
-            assert_eq!(val.bits() & !ScreenEdge::ALL.bits(), 0, "invalid `ScreenEdge`");
+            assert_eq!(
+                val.bits() & !ScreenEdge::ALL.bits(),
+                0,
+                "invalid `ScreenEdge`"
+            );
             UIRectEdge(val.bits().into())
         };
-        self.ivars().preferred_screen_edges_deferring_system_gestures.set(val);
+        self.ivars()
+            .preferred_screen_edges_deferring_system_gestures
+            .set(val);
         if available!(ios = 11.0, visionos = 1.0) {
             self.setNeedsUpdateOfScreenEdgesDeferringSystemGestures();
         } else {
@@ -107,19 +115,22 @@ impl WinitViewController {
         mtm: MainThreadMarker,
         valid_orientations: ValidOrientations,
     ) {
-        let mask = match (valid_orientations, UIDevice::currentDevice(mtm).userInterfaceIdiom()) {
+        let mask = match (
+            valid_orientations,
+            UIDevice::currentDevice(mtm).userInterfaceIdiom(),
+        ) {
             (ValidOrientations::LandscapeAndPortrait, UIUserInterfaceIdiom::Phone) => {
                 UIInterfaceOrientationMask::AllButUpsideDown
-            },
+            }
             (ValidOrientations::LandscapeAndPortrait, _) => UIInterfaceOrientationMask::All,
             (ValidOrientations::Landscape, _) => UIInterfaceOrientationMask::Landscape,
             (ValidOrientations::Portrait, UIUserInterfaceIdiom::Phone) => {
                 UIInterfaceOrientationMask::Portrait
-            },
+            }
             (ValidOrientations::Portrait, _) => {
                 UIInterfaceOrientationMask::Portrait
                     | UIInterfaceOrientationMask::PortraitUpsideDown
-            },
+            }
         };
         self.ivars().supported_orientations.set(mask);
         #[allow(deprecated)]

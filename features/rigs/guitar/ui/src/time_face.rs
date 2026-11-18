@@ -30,18 +30,35 @@ pub struct TimeView {
 }
 
 fn v(b: &LiveBlock, name: &str, dflt: f32) -> f32 {
-    b.params.iter().find(|p| p.name == name).map_or(dflt, |p| p.value)
+    b.params
+        .iter()
+        .find(|p| p.name == name)
+        .map_or(dflt, |p| p.value)
 }
 
 fn seconds_text(s: f64) -> String {
-    if s < 1.0 { format!("{:.0} ms", s * 1000.0) } else if s < 10.0 { format!("{s:.1} s") } else { format!("{s:.0} s") }
+    if s < 1.0 {
+        format!("{:.0} ms", s * 1000.0)
+    } else if s < 10.0 {
+        format!("{s:.1} s")
+    } else {
+        format!("{s:.0} s")
+    }
 }
 
 /// A modulation's rate range the knob sweeps in Time (Hz), logarithmically.
 const MOD_HZ: (f64, f64) = (0.05, 12.0);
 
 fn is_mod(bt: BlockType) -> bool {
-    matches!(bt, BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato | BlockType::Trem | BlockType::Phaser | BlockType::Rotary)
+    matches!(
+        bt,
+        BlockType::Chorus
+            | BlockType::Flanger
+            | BlockType::Vibrato
+            | BlockType::Trem
+            | BlockType::Phaser
+            | BlockType::Rotary
+    )
 }
 
 fn hz_text(hz: f64) -> String {
@@ -71,12 +88,26 @@ pub fn view(b: &LiveBlock, bpm: f32) -> Option<TimeView> {
     let quarter = 60.0 / f64::from(bpm.max(1.0));
     match b.block_type {
         BlockType::Reverb => {
-            let (alg, var, decay) = (v(b, "algorithm", 1.0), v(b, "variant", 0.0), v(b, "decay", 0.4));
+            let (alg, var, decay) = (
+                v(b, "algorithm", 1.0),
+                v(b, "variant", 0.0),
+                v(b, "decay", 0.4),
+            );
             let secs = verb_seconds(alg, var, decay).0;
             let div = v(b, "sync_div", 0.0).round().max(0.0) as usize;
             Some(match REVERB_BEATS.get(div).filter(|_| div > 0) {
-                Some((label, _)) => TimeView { time: (div as f64 - 1.0) / 6.0, sync: 1.0, text: format!("{label} · {}", seconds_text(secs)), playing_ms: None },
-                None => TimeView { time: f64::from(decay), sync: 0.0, text: seconds_text(secs), playing_ms: None },
+                Some((label, _)) => TimeView {
+                    time: (div as f64 - 1.0) / 6.0,
+                    sync: 1.0,
+                    text: format!("{label} · {}", seconds_text(secs)),
+                    playing_ms: None,
+                },
+                None => TimeView {
+                    time: f64::from(decay),
+                    sync: 0.0,
+                    text: seconds_text(secs),
+                    playing_ms: None,
+                },
             })
         }
         BlockType::Delay => {
@@ -84,12 +115,22 @@ pub fn view(b: &LiveBlock, bpm: f32) -> Option<TimeView> {
             Some(match DELAY_BEATS.iter().position(|d| d.1 == div) {
                 Some(k) => {
                     let (label, _, len) = DELAY_BEATS[k];
-                    TimeView { time: k as f64 / (DELAY_BEATS.len() - 1) as f64, sync: 1.0, text: format!("{label} · {:.0} ms", len * quarter * 1000.0), playing_ms: Some(len * quarter * 1000.0) }
+                    TimeView {
+                        time: k as f64 / (DELAY_BEATS.len() - 1) as f64,
+                        sync: 1.0,
+                        text: format!("{label} · {:.0} ms", len * quarter * 1000.0),
+                        playing_ms: Some(len * quarter * 1000.0),
+                    }
                 }
                 None => {
                     let ms = f64::from(v(b, "time", 350.0));
                     let t = (ms / DELAY_MS.0).ln() / (DELAY_MS.1 / DELAY_MS.0).ln();
-                    TimeView { time: t.clamp(0.0, 1.0), sync: 0.0, text: format!("{ms:.0} ms"), playing_ms: Some(ms) }
+                    TimeView {
+                        time: t.clamp(0.0, 1.0),
+                        sync: 0.0,
+                        text: format!("{ms:.0} ms"),
+                        playing_ms: Some(ms),
+                    }
                 }
             })
         }
@@ -99,9 +140,19 @@ pub fn view(b: &LiveBlock, bpm: f32) -> Option<TimeView> {
             Some(match MOD_BEATS.get(div).filter(|_| div > 0) {
                 Some((label, beats)) => {
                     let synced = 1.0 / (beats * quarter);
-                    TimeView { time: (div as f64 - 1.0) / (MOD_BEATS.len() - 2) as f64, sync: 1.0, text: format!("{label} · {}", hz_text(synced)), playing_ms: None }
+                    TimeView {
+                        time: (div as f64 - 1.0) / (MOD_BEATS.len() - 2) as f64,
+                        sync: 1.0,
+                        text: format!("{label} · {}", hz_text(synced)),
+                        playing_ms: None,
+                    }
                 }
-                None => TimeView { time: ((hz / MOD_HZ.0).ln() / (MOD_HZ.1 / MOD_HZ.0).ln()).clamp(0.0, 1.0), sync: 0.0, text: hz_text(hz), playing_ms: None },
+                None => TimeView {
+                    time: ((hz / MOD_HZ.0).ln() / (MOD_HZ.1 / MOD_HZ.0).ln()).clamp(0.0, 1.0),
+                    sync: 0.0,
+                    text: hz_text(hz),
+                    playing_ms: None,
+                },
             })
         }
         _ => None,
@@ -118,14 +169,25 @@ pub fn turn(b: &LiveBlock, bpm: f32, pos: f64) -> Vec<(&'static str, f32)> {
         (BlockType::Reverb, true) => {
             let div = 1 + (pos * 6.0).round() as usize;
             let secs = REVERB_BEATS[div].1 * 60.0 / f64::from(bpm.max(1.0));
-            vec![("sync_div", div as f32), ("decay", verb_decay_for(v(b, "algorithm", 1.0), v(b, "variant", 0.0), secs))]
+            vec![
+                ("sync_div", div as f32),
+                (
+                    "decay",
+                    verb_decay_for(v(b, "algorithm", 1.0), v(b, "variant", 0.0), secs),
+                ),
+            ]
         }
-        (BlockType::Delay, false) => vec![("time", (DELAY_MS.0 * (DELAY_MS.1 / DELAY_MS.0).powf(pos)) as f32)],
+        (BlockType::Delay, false) => vec![(
+            "time",
+            (DELAY_MS.0 * (DELAY_MS.1 / DELAY_MS.0).powf(pos)) as f32,
+        )],
         (BlockType::Delay, true) => {
             let div = DELAY_BEATS[(pos * (DELAY_BEATS.len() - 1) as f64).round() as usize].1 as f32;
             vec![("tap_div_l", div), ("tap_div_r", div)]
         }
-        (bt, false) if is_mod(bt) => vec![("rate", (MOD_HZ.0 * (MOD_HZ.1 / MOD_HZ.0).powf(pos)) as f32)],
+        (bt, false) if is_mod(bt) => {
+            vec![("rate", (MOD_HZ.0 * (MOD_HZ.1 / MOD_HZ.0).powf(pos)) as f32)]
+        }
         (bt, true) if is_mod(bt) => {
             let div = 1 + (pos * (MOD_BEATS.len() - 2) as f64).round() as usize;
             let hz = f64::from(bpm.max(1.0)) / 60.0 / MOD_BEATS[div].1;
@@ -145,27 +207,61 @@ pub fn flip(b: &LiveBlock, bpm: f32, beat: bool) -> Vec<(&'static str, f32)> {
         BlockType::Reverb if beat => {
             let (alg, var) = (v(b, "algorithm", 1.0), v(b, "variant", 0.0));
             let beats = verb_seconds(alg, var, v(b, "decay", 0.4)).0 / quarter;
-            let div = (1..REVERB_BEATS.len()).min_by(|&x, &y| (REVERB_BEATS[x].1.ln() - beats.ln()).abs().total_cmp(&(REVERB_BEATS[y].1.ln() - beats.ln()).abs())).unwrap_or(4);
-            vec![("sync_div", div as f32), ("decay", verb_decay_for(alg, var, REVERB_BEATS[div].1 * quarter))]
+            let div = (1..REVERB_BEATS.len())
+                .min_by(|&x, &y| {
+                    (REVERB_BEATS[x].1.ln() - beats.ln())
+                        .abs()
+                        .total_cmp(&(REVERB_BEATS[y].1.ln() - beats.ln()).abs())
+                })
+                .unwrap_or(4);
+            vec![
+                ("sync_div", div as f32),
+                (
+                    "decay",
+                    verb_decay_for(alg, var, REVERB_BEATS[div].1 * quarter),
+                ),
+            ]
         }
         BlockType::Reverb => vec![("sync_div", 0.0)],
         BlockType::Delay if beat => {
             let quarters = f64::from(v(b, "time", 350.0)) / 1000.0 / quarter;
-            let k = (0..DELAY_BEATS.len()).min_by(|&x, &y| (DELAY_BEATS[x].2.ln() - quarters.ln()).abs().total_cmp(&(DELAY_BEATS[y].2.ln() - quarters.ln()).abs())).unwrap_or(5);
+            let k = (0..DELAY_BEATS.len())
+                .min_by(|&x, &y| {
+                    (DELAY_BEATS[x].2.ln() - quarters.ln())
+                        .abs()
+                        .total_cmp(&(DELAY_BEATS[y].2.ln() - quarters.ln()).abs())
+                })
+                .unwrap_or(5);
             let div = DELAY_BEATS[k].1 as f32;
             vec![("tap_div_l", div), ("tap_div_r", div)]
         }
         BlockType::Delay => {
             // Free at the time it was playing, so nothing jumps.
             let div = v(b, "tap_div_l", FREE_DIV as f32).round() as usize;
-            let ms = DELAY_BEATS.iter().find(|d| d.1 == div).map_or(f64::from(v(b, "time", 350.0)), |d| d.2 * quarter * 1000.0);
-            vec![("time", ms as f32), ("tap_div_l", FREE_DIV as f32), ("tap_div_r", FREE_DIV as f32)]
+            let ms = DELAY_BEATS
+                .iter()
+                .find(|d| d.1 == div)
+                .map_or(f64::from(v(b, "time", 350.0)), |d| d.2 * quarter * 1000.0);
+            vec![
+                ("time", ms as f32),
+                ("tap_div_l", FREE_DIV as f32),
+                ("tap_div_r", FREE_DIV as f32),
+            ]
         }
         bt if is_mod(bt) && beat => {
             // The length nearest its cycle now.
             let beats = 1.0 / (f64::from(v(b, "rate", 1.0)).max(0.01) * quarter);
-            let div = (1..MOD_BEATS.len()).min_by(|&x, &y| (MOD_BEATS[x].1.ln() - beats.ln()).abs().total_cmp(&(MOD_BEATS[y].1.ln() - beats.ln()).abs())).unwrap_or(5);
-            vec![("sync_div", div as f32), ("rate", (1.0 / (MOD_BEATS[div].1 * quarter)) as f32)]
+            let div = (1..MOD_BEATS.len())
+                .min_by(|&x, &y| {
+                    (MOD_BEATS[x].1.ln() - beats.ln())
+                        .abs()
+                        .total_cmp(&(MOD_BEATS[y].1.ln() - beats.ln()).abs())
+                })
+                .unwrap_or(5);
+            vec![
+                ("sync_div", div as f32),
+                ("rate", (1.0 / (MOD_BEATS[div].1 * quarter)) as f32),
+            ]
         }
         bt if is_mod(bt) => vec![("sync_div", 0.0)],
         _ => Vec::new(),
@@ -193,7 +289,16 @@ mod tests {
             asset: String::new(),
             module: String::new(),
             empty: false,
-            params: params.iter().map(|(n, v)| BlockParam { name: (*n).to_string(), value: *v, min: 0.0, max: 1.0, overridden: false }).collect(),
+            params: params
+                .iter()
+                .map(|(n, v)| BlockParam {
+                    name: (*n).to_string(),
+                    value: *v,
+                    min: 0.0,
+                    max: 1.0,
+                    overridden: false,
+                })
+                .collect(),
             preset: String::new(),
             options: Vec::new(),
             option: 0,
@@ -205,14 +310,24 @@ mod tests {
     /// and its decay rings exactly that long; turned, it steps by length.
     #[test]
     fn a_reverb_locks_to_the_beat() {
-        let hall = block(BlockType::Reverb, &[("algorithm", 1.0), ("decay", verb_decay_for(1.0, 0.0, 2.1))]);
+        let hall = block(
+            BlockType::Reverb,
+            &[("algorithm", 1.0), ("decay", verb_decay_for(1.0, 0.0, 2.1))],
+        );
         let w = flip(&hall, 120.0, true);
         assert_eq!(w[0], ("sync_div", 4.0), "2.1 s at 120 BPM is a bar");
-        let synced = block(BlockType::Reverb, &[("algorithm", 1.0), ("decay", w[1].1), ("sync_div", 4.0)]);
+        let synced = block(
+            BlockType::Reverb,
+            &[("algorithm", 1.0), ("decay", w[1].1), ("sync_div", 4.0)],
+        );
         let t = view(&synced, 120.0).unwrap();
         assert_eq!(t.sync, 1.0);
         assert!(t.text.starts_with("1 bar · 2.0"), "{}", t.text);
-        assert_eq!(turn(&synced, 120.0, 1.0)[0], ("sync_div", 7.0), "full turn: 8 bars");
+        assert_eq!(
+            turn(&synced, 120.0, 1.0)[0],
+            ("sync_div", 7.0),
+            "full turn: 8 bars"
+        );
         assert_eq!(flip(&synced, 120.0, false), vec![("sync_div", 0.0)]);
     }
 
@@ -223,9 +338,16 @@ mod tests {
         let free = block(BlockType::Delay, &[("time", 375.0), ("tap_div_l", 7.0)]);
         assert_eq!(view(&free, 120.0).unwrap().text, "375 ms");
         let w = flip(&free, 120.0, true);
-        assert_eq!(w, vec![("tap_div_l", 1.0), ("tap_div_r", 1.0)], "1/8. is division 1");
+        assert_eq!(
+            w,
+            vec![("tap_div_l", 1.0), ("tap_div_r", 1.0)],
+            "1/8. is division 1"
+        );
         let synced = block(BlockType::Delay, &[("time", 375.0), ("tap_div_l", 1.0)]);
         assert_eq!(view(&synced, 120.0).unwrap().text, "1/8. · 375 ms");
-        assert_eq!(flip(&synced, 100.0, false), vec![("time", 450.0), ("tap_div_l", 7.0), ("tap_div_r", 7.0)]);
+        assert_eq!(
+            flip(&synced, 100.0, false),
+            vec![("time", 450.0), ("tap_div_l", 7.0), ("tap_div_r", 7.0)]
+        );
     }
 }

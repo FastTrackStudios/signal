@@ -310,7 +310,10 @@ fn a_param_dropped_from_a_preset_is_written_as_its_build_default() {
             let (want, got) = (render(&mut built, &x), render(&mut written, &x));
             let d = max_abs_diff(&got, &want);
             if d != 0.0 || got.iter().any(|s| !s.is_finite()) {
-                failures.push(format!("{name}.{} dropped: differs from its build by {d:e}", p.name));
+                failures.push(format!(
+                    "{name}.{} dropped: differs from its build by {d:e}",
+                    p.name
+                ));
             }
             checked += 1;
         }

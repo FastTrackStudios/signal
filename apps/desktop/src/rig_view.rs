@@ -301,7 +301,10 @@ fn GuitarRigView(instrument: &'static str) -> Element {
     #[allow(unused_mut)]
     let mut size = use_signal(|| (0.0_f64, 0.0_f64));
     use_context_provider(|| signal_guitar_ui::WindowSize(size));
-    #[cfg(all(not(any(target_arch = "wasm32", target_os = "ios")), not(feature = "webview")))]
+    #[cfg(all(
+        not(any(target_arch = "wasm32", target_os = "ios")),
+        not(feature = "webview")
+    ))]
     {
         let window = dioxus_native::use_window();
         use_future(move || {

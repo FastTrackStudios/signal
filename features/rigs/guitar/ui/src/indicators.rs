@@ -96,7 +96,11 @@ pub fn Indicator(
     });
     let on = !flash || lit();
     let dot_now = if on { dot.clone() } else { DIM.to_string() };
-    let label_color = if flash && on { dot.clone() } else { MUTED.to_string() };
+    let label_color = if flash && on {
+        dot.clone()
+    } else {
+        MUTED.to_string()
+    };
     let pill_dot = if on { "#ffffff" } else { ALARM };
     rsx! {
         div {

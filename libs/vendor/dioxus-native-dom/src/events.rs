@@ -771,7 +771,10 @@ pub(crate) fn apply_pending_focus(doc: &mut BaseDocument) {
     // Every parked scroll (several lists can open on a row at once), each
     // kept until its node is laid out.
     let parked = PENDING_SCROLL.with(|p| std::mem::take(&mut *p.borrow_mut()));
-    let waiting: Vec<NodeId> = parked.into_iter().filter(|&id| !doc.scroll_node_into_view(id)).collect();
+    let waiting: Vec<NodeId> = parked
+        .into_iter()
+        .filter(|&id| !doc.scroll_node_into_view(id))
+        .collect();
     if !waiting.is_empty() {
         PENDING_SCROLL.with(|p| p.borrow_mut().extend(waiting));
     }

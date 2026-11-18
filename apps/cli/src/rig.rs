@@ -436,19 +436,34 @@ pub fn run(command: Command) -> ExitCode {
                 ExitCode::SUCCESS
             }
         }
-        Command::Freeze { preset, snapshot, epochs, play, check_only } => freeze(&preset, snapshot.as_deref(), epochs, play, check_only),
-        Command::Frozen { preset, snapshot, state } => {
+        Command::Freeze {
+            preset,
+            snapshot,
+            epochs,
+            play,
+            check_only,
+        } => freeze(&preset, snapshot.as_deref(), epochs, play, check_only),
+        Command::Frozen {
+            preset,
+            snapshot,
+            state,
+        } => {
             let mut comp = signal_guitar::library::RigLibrary::load_compositions();
             let Some(s) = signal_guitar::freeze::snapshot_mut(&mut comp, &preset, &snapshot) else {
                 eprintln!("no Core snapshot {preset} · {snapshot}");
                 return ExitCode::FAILURE;
             };
             if s.frozen_nam.is_empty() {
-                eprintln!("{preset} · {snapshot} has not been frozen — `signal rig freeze` it first");
+                eprintln!(
+                    "{preset} · {snapshot} has not been frozen — `signal rig freeze` it first"
+                );
                 return ExitCode::FAILURE;
             }
             s.frozen = matches!(state.as_str(), "on" | "frozen" | "true" | "1");
-            println!("{preset} · {snapshot} plays {}", if s.frozen { "frozen" } else { "live" });
+            println!(
+                "{preset} · {snapshot} plays {}",
+                if s.frozen { "frozen" } else { "live" }
+            );
             signal_guitar::library::RigLibrary::save_compositions(&comp);
             ExitCode::SUCCESS
         }
@@ -688,20 +703,39 @@ fn reload(timeout: u64) -> ExitCode {
 }
 
 /// The NAM trainer script, written next to each freeze.
-const TRAIN_SCRIPT: &str = include_str!("../../../features/rigs/guitar/scripts/nam_freeze_train.py");
+const TRAIN_SCRIPT: &str =
+    include_str!("../../../features/rigs/guitar/scripts/nam_freeze_train.py");
 
-fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_only: bool) -> ExitCode {
+fn freeze(
+    preset: &str,
+    snapshot: Option<&str>,
+    epochs: u32,
+    play: bool,
+    check_only: bool,
+) -> ExitCode {
     use signal_guitar::freeze;
     let cal = signal_guitar::levelling::apply_nam_calibration();
-    println!("NAM calibration: {}", cal.map_or("off".to_string(), |c| format!("{c} dBu interface")));
+    println!(
+        "NAM calibration: {}",
+        cal.map_or("off".to_string(), |c| format!("{c} dBu interface"))
+    );
     let lib = signal_guitar::library::RigLibrary::load_or_bootstrap();
     let mut comp = signal_guitar::library::RigLibrary::load_compositions();
-    let Some(p) = comp.presets.iter().find(|p| p.name.eq_ignore_ascii_case(preset)) else {
+    let Some(p) = comp
+        .presets
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(preset))
+    else {
         eprintln!("no Core preset {preset}");
         return ExitCode::FAILURE;
     };
     let preset = p.name.clone();
-    let snaps: Vec<String> = p.snapshots.iter().map(|s| s.name.clone()).filter(|n| snapshot.is_none_or(|w| n.eq_ignore_ascii_case(w))).collect();
+    let snaps: Vec<String> = p
+        .snapshots
+        .iter()
+        .map(|s| s.name.clone())
+        .filter(|n| snapshot.is_none_or(|w| n.eq_ignore_ascii_case(w)))
+        .collect();
     if snaps.is_empty() {
         eprintln!("{preset} has no snapshot {}", snapshot.unwrap_or_default());
         return ExitCode::FAILURE;
@@ -720,15 +754,31 @@ fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_o
         let dir = freeze::freeze_dir(&preset, snap);
         println!("{preset} · {snap}  →  {}", dir.display());
         let (nam_l, nam_r) = if check_only {
-            let Some(s) = freeze::snapshot_mut(&mut comp, &preset, snap).filter(|s| !s.frozen_nam.is_empty()) else {
+            let Some(s) =
+                freeze::snapshot_mut(&mut comp, &preset, snap).filter(|s| !s.frozen_nam.is_empty())
+            else {
                 println!("  not frozen yet");
                 failed += 1;
                 continue;
             };
-            (s.frozen_nam.clone(), if s.frozen_nam2.is_empty() { s.frozen_nam.clone() } else { s.frozen_nam2.clone() })
+            (
+                s.frozen_nam.clone(),
+                if s.frozen_nam2.is_empty() {
+                    s.frozen_nam.clone()
+                } else {
+                    s.frozen_nam2.clone()
+                },
+            )
         } else {
             let t = std::time::Instant::now();
-            let rendered = match freeze::render_training(&comp, &lib.profile, &lib.drive_presets, &preset, snap, &dir) {
+            let rendered = match freeze::render_training(
+                &comp,
+                &lib.profile,
+                &lib.drive_presets,
+                &preset,
+                snap,
+                &dir,
+            ) {
                 Ok(r) => r,
                 Err(e) => {
                     println!("  did not render: {e}");
@@ -736,7 +786,16 @@ fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_o
                     continue;
                 }
             };
-            println!("  rendered in {:.0}s ({}, {:+.1} dB headroom)", t.elapsed().as_secs_f64(), if rendered.output_r.is_some() { "stereo" } else { "mono" }, rendered.headroom_db);
+            println!(
+                "  rendered in {:.0}s ({}, {:+.1} dB headroom)",
+                t.elapsed().as_secs_f64(),
+                if rendered.output_r.is_some() {
+                    "stereo"
+                } else {
+                    "mono"
+                },
+                rendered.headroom_db
+            );
             let script = dir.join("train.py");
             if let Err(e) = std::fs::write(&script, TRAIN_SCRIPT) {
                 println!("  {e}");
@@ -760,7 +819,18 @@ fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_o
                 let line = stdout.lines().rev().find(|l| l.starts_with('{'))?;
                 let v: serde_json::Value = serde_json::from_str(line).ok()?;
                 let Some(model) = v.get("model").and_then(|m| m.as_str()) else {
-                    println!("  {side}: training failed\n{}", String::from_utf8_lossy(&out.stderr).lines().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"));
+                    println!(
+                        "  {side}: training failed\n{}",
+                        String::from_utf8_lossy(&out.stderr)
+                            .lines()
+                            .rev()
+                            .take(12)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    );
                     return None;
                 };
                 // Kept in the NAM library; the working copy stays in the cache.
@@ -770,7 +840,9 @@ fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_o
                 println!(
                     "  {side}: trained in {:.0} min, validation ESR {}",
                     t.elapsed().as_secs_f64() / 60.0,
-                    v.get("esr").and_then(serde_json::Value::as_f64).map_or("?".into(), |e| format!("{e:.5}"))
+                    v.get("esr")
+                        .and_then(serde_json::Value::as_f64)
+                        .map_or("?".into(), |e| format!("{e:.5}"))
                 );
                 Some(kept.to_string_lossy().into_owned())
             };
@@ -791,16 +863,31 @@ fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_o
             (l, r)
         };
         // The proof: a guitar the training never heard, live against frozen.
-        match freeze::compare(&comp, &lib.profile, &lib.drive_presets, &preset, snap, &nam_l, &nam_r) {
+        match freeze::compare(
+            &comp,
+            &lib.profile,
+            &lib.drive_presets,
+            &preset,
+            snap,
+            &nam_l,
+            &nam_r,
+        ) {
             Ok((cl, cr)) => {
                 for (side, c) in [("L", cl), ("R", cr)] {
-                    println!("  {side}: frozen vs live  ESR {:.5}  level {:+.2} dB  lag {} samples", c.esr, c.trim_db, c.lag);
+                    println!(
+                        "  {side}: frozen vs live  ESR {:.5}  level {:+.2} dB  lag {} samples",
+                        c.esr, c.trim_db, c.lag
+                    );
                 }
                 // One trim for both sides (they share it): the mean.
                 let trim = (cl.trim_db + cr.trim_db) / 2.0;
                 if let Some(s) = freeze::snapshot_mut(&mut comp, &preset, snap) {
                     s.frozen_nam = nam_l.clone();
-                    s.frozen_nam2 = if nam_r == nam_l { String::new() } else { nam_r.clone() };
+                    s.frozen_nam2 = if nam_r == nam_l {
+                        String::new()
+                    } else {
+                        nam_r.clone()
+                    };
                     s.frozen_trim_db = trim;
                     s.frozen_esr = cl.esr.max(cr.esr);
                     if play {
@@ -808,7 +895,10 @@ fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_o
                     }
                 }
                 signal_guitar::library::RigLibrary::save_compositions(&comp);
-                println!("  saved beside the live Core (trim {trim:+.2} dB){}", if play { " — playing frozen" } else { "" });
+                println!(
+                    "  saved beside the live Core (trim {trim:+.2} dB){}",
+                    if play { " — playing frozen" } else { "" }
+                );
             }
             Err(e) => {
                 println!("  did not compare: {e}");
@@ -816,6 +906,9 @@ fn freeze(preset: &str, snapshot: Option<&str>, epochs: u32, play: bool, check_o
             }
         }
     }
-    if failed == 0 { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    if failed == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
-

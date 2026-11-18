@@ -45,9 +45,8 @@ const CE_DIVISIONS: [f32; 15] = [
 /// single-block ones in [`effect_block`].
 #[must_use]
 pub fn effect_chain(name: &str, p: &[f32; 15]) -> Option<Container> {
-    let gain = |db: f32| {
-        RigBlock::of_type(BlockType::Volume).with_param("gain_db", format!("{db:.2}"))
-    };
+    let gain =
+        |db: f32| RigBlock::of_type(BlockType::Volume).with_param("gain_db", format!("{db:.2}"));
     // A mono tremolo swinging `swing_db` once every `beats` (following the
     // tempo), and the makeup that puts its average at `mean_db` (the tremolo
     // alone averages 1 − depth/2).

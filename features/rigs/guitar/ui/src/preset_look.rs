@@ -421,7 +421,6 @@ fn usage(used_by: &[String]) -> (String, String) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -42,7 +42,12 @@ fn stacks_set_up_on_the_switches_are_kept() {
 
     // A restart loads the player's stacks, not the built-in ones.
     let again = KeysRigBackend::new();
-    let names: Vec<String> = again.perform().stacks.iter().map(|s| s.name.clone()).collect();
+    let names: Vec<String> = again
+        .perform()
+        .stacks
+        .iter()
+        .map(|s| s.name.clone())
+        .collect();
     assert_eq!(names.len(), built_in);
     assert_eq!(names.last().map(String::as_str), Some("Outro"));
 

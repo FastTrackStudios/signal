@@ -32,10 +32,10 @@ mod engine_watch;
 #[cfg(all(feature = "tone3000", not(target_arch = "wasm32")))]
 mod engine_tone3000;
 // The sign-in page in an in-app Safari sheet (iOS).
-#[cfg(all(feature = "tone3000", target_os = "ios"))]
-mod ios_safari;
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engines;
+#[cfg(all(feature = "tone3000", target_os = "ios"))]
+mod ios_safari;
 /// In-memory log ring (tracing capture + panic hook) — rendered by the
 /// keys Logs tab on the phone, harmless elsewhere.
 #[expect(dead_code)]
@@ -254,7 +254,10 @@ fn main() {
         }
         // frame's faces ship in the bundle (ios/app-plist.sh copies them in),
         // beside the executable.
-        if let Some(bundle) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|d| d.join("frame"))) {
+        if let Some(bundle) = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|d| d.join("frame")))
+        {
             // SAFETY: single-threaded, before the engine bootstrap spawns.
             unsafe { std::env::set_var("SIGNAL_FRAME_DIR", bundle) };
         }
@@ -487,24 +490,30 @@ fn launch_app() {
     use dioxus_native::{Config, WindowAttributes, launch_cfg};
     // Before UIKit looks the delegate up by the name Info.plist gives it.
     ios_scene::register();
-    let window = WindowAttributes::default().with_title("Signal").with_platform_attributes(Box::new(
-        // Orientations are Info.plist's (ios/app-plist.sh): an iPhone
-        // sideways only, an iPad every way (it keeps multitasking).
-        //
-        // The bottom edge is the rig's (the chain runs along it): locked —
-        // a swipe there only wakes the home indicator, and it takes a second
-        // to leave the app or switch apps, so a stray one mid-song does
-        // neither. (Not auto-hidden too: an auto-hidden indicator overrides
-        // the deferral, and the first swipe goes through.)
-        WindowAttributesIos::default()
-            .with_prefers_status_bar_hidden(true)
-            .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::BOTTOM),
-    ));
+    let window = WindowAttributes::default()
+        .with_title("Signal")
+        .with_platform_attributes(Box::new(
+            // Orientations are Info.plist's (ios/app-plist.sh): an iPhone
+            // sideways only, an iPad every way (it keeps multitasking).
+            //
+            // The bottom edge is the rig's (the chain runs along it): locked —
+            // a swipe there only wakes the home indicator, and it takes a second
+            // to leave the app or switch apps, so a stray one mid-song does
+            // neither. (Not auto-hidden too: an auto-hidden indicator overrides
+            // the deferral, and the first swipe goes through.)
+            WindowAttributesIos::default()
+                .with_prefers_status_bar_hidden(true)
+                .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::BOTTOM),
+        ));
     #[cfg(feature = "signal-guitar")]
     let root = mobile_view::MobileApp;
     #[cfg(not(feature = "signal-guitar"))]
     let root = App;
-    launch_cfg(root, vec![], vec![Box::new(Config::new().with_window_attributes(window))]);
+    launch_cfg(
+        root,
+        vec![],
+        vec![Box::new(Config::new().with_window_attributes(window))],
+    );
 }
 
 /// Top-level workspaces. Which ones exist depends on compiled features;

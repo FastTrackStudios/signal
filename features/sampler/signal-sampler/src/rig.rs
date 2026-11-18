@@ -814,7 +814,11 @@ impl PluginInstance for InputProbe {
         // meters, the tuner, the gate's key, the chain — hears it trimmed.
         out_l[..frames].copy_from_slice(&in_l[..frames]);
         out_r[..frames].copy_from_slice(&in_r[..frames]);
-        self.stage.process(&self.shared.tone, &mut out_l[..frames], &mut out_r[..frames]);
+        self.stage.process(
+            &self.shared.tone,
+            &mut out_l[..frames],
+            &mut out_r[..frames],
+        );
         let muted = self.shared.input_muted.load(Ordering::Relaxed);
         // A new test signal (or its removal): re-read it, from the top. Only
         // locks when the generation moved, and never waits for the lock.
@@ -1617,7 +1621,10 @@ pub(crate) fn build_sample_source(
     if let Some(v) = block.param_f32("zone_velocity") {
         engine.set_zone_velocity(Some(v.round() as u8));
     }
-    if block.param_str("transpose_mode").is_some_and(|m| m == "resample") {
+    if block
+        .param_str("transpose_mode")
+        .is_some_and(|m| m == "resample")
+    {
         engine.set_resample_transpose(true);
     }
     // Harmonia voices (an Omnisphere sample layer's).

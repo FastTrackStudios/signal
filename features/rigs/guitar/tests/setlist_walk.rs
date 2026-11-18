@@ -23,7 +23,10 @@ fn every_shipped_setlist_walks_through_with_a_tempo() {
     rig.open_blocking();
     Rig::set_perform_mode(&rig, 2);
     let sets = Rig::perf(&rig).setlists;
-    assert!(sets.iter().any(|s| s.starts_with("HSM 10-6-26")), "{sets:?}");
+    assert!(
+        sets.iter().any(|s| s.starts_with("HSM 10-6-26")),
+        "{sets:?}"
+    );
     for (i, set) in sets.iter().enumerate() {
         let a = Rig::select_setlist(&rig, i as u32);
         assert!(a.ok, "{set}: {}", a.message);

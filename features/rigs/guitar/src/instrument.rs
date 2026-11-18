@@ -33,7 +33,11 @@ impl Instrument {
     /// From its wire name; anything else is the guitar.
     #[must_use]
     pub fn from_id(id: &str) -> Self {
-        if id.trim().eq_ignore_ascii_case("bass") { Self::Bass } else { Self::Guitar }
+        if id.trim().eq_ignore_ascii_case("bass") {
+            Self::Bass
+        } else {
+            Self::Guitar
+        }
     }
 
     /// The library's directory under the config root (`rig` stays the
@@ -71,7 +75,11 @@ impl Instrument {
 /// The instrument the rig is now.
 #[must_use]
 pub fn current() -> Instrument {
-    if CURRENT.load(Ordering::Relaxed) == 1 { Instrument::Bass } else { Instrument::Guitar }
+    if CURRENT.load(Ordering::Relaxed) == 1 {
+        Instrument::Bass
+    } else {
+        Instrument::Guitar
+    }
 }
 
 /// Make the rig this instrument — before the library is read

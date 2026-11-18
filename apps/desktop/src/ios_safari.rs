@@ -27,7 +27,9 @@ static OPEN: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
 /// The view controller at the top of the window: what presents the sheet.
 fn top_controller(mtm: MainThreadMarker) -> Option<Retained<UIViewController>> {
     let scenes = UIApplication::sharedApplication(mtm).connectedScenes();
-    let scene = scenes.iter().find_map(|s| s.downcast::<UIWindowScene>().ok())?;
+    let scene = scenes
+        .iter()
+        .find_map(|s| s.downcast::<UIWindowScene>().ok())?;
     let windows = scene.windows();
     let window = windows.iter().next()?;
     let mut top = window.rootViewController()?;
@@ -64,13 +66,19 @@ pub fn open(url: &str) {
     };
     let Some(sheet) = sheet else { return };
     top.presentViewController_animated_completion(&sheet, true, None);
-    *OPEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = true;
+    *OPEN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
 }
 
 /// Close the sheet, if one is up (the sign-in finished).
 pub fn close() {
-    let Some(mtm) = MainThreadMarker::new() else { return };
-    let mut open = OPEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let mut open = OPEN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if !*open {
         return;
     }
