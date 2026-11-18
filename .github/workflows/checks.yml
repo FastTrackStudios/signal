@@ -62,17 +62,19 @@ jobs:
       # What Studio's browser builds take from here, with the features they
       # turn on (`cargo tree -e features --target wasm32-unknown-unknown` in
       # Studio): the Signal site (signal-web) and the Signal browser remote
-      # (studio-desktop --no-default-features --features signal).
+      # (studio-desktop --no-default-features --features signal). `--lib`:
+      # Studio takes these as libraries; guitar's `signal-phones` binary is
+      # native-only.
       - name: wasm32 check (the rigs, as signal-web takes them)
         run: >
-          cargo check --locked --target wasm32-unknown-unknown
+          cargo check --locked --target wasm32-unknown-unknown --lib
           -p guitar -p keys -p drums -p synth -p sampler -p signal-proto
           -p signal-rigs-proto -p signal-space -p signal-tone3000
           -p signal-widgets -p signal-rig-perform-ui
           --features guitar/ui,keys/ui,signal-space/engine,signal-tone3000/ui,signal-widgets/piano
       - name: wasm32 check (the rigs, as the Signal browser remote takes them)
         run: >
-          cargo check --locked --target wasm32-unknown-unknown
+          cargo check --locked --target wasm32-unknown-unknown --lib
           -p guitar -p keys -p drums -p ekit -p synth -p sampler
           -p signal-proto -p signal-rigs-proto -p signal-space
           -p signal-content-proto -p signal-tone3000 -p signal-widgets
