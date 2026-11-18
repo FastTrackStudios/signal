@@ -576,10 +576,6 @@ panic = "abort"
 # into an AudioWorklet, twenty-odd stems in real time — which stays at
 # full speed. These overrides do hold under fat LTO: without them the
 # module is 0.2 MB smaller, which is what they cost.
-[profile.wasm-release.package.audiocore-dsp]
-opt-level = 3
-[profile.wasm-release.package.daw-audio-graph]
-opt-level = 3
 [profile.wasm-release.package.daw-standalone]
 opt-level = 3
 [profile.wasm-release.package.fts-sample]
@@ -623,10 +619,6 @@ strip = "debuginfo"
 # overrides may not carry through `inherits`), so dx dev bundles mix ~20
 # stems in realtime instead of grinding the main thread.
 [profile.wasm-dev.package."*"]
-opt-level = 3
-[profile.wasm-dev.package.audiocore-dsp]
-opt-level = 3
-[profile.wasm-dev.package.daw-audio-graph]
 opt-level = 3
 [profile.wasm-dev.package.daw-standalone]
 opt-level = 3
@@ -718,8 +710,6 @@ debug = false
 # even in dev builds: a debug rig must never xrun. (Launch paths default
 # to --release regardless; this is the safety net for dev runs.)
 [profile.dev.package.dsp-core]
-opt-level = 3
-[profile.dev.package.daw-audio-graph]
 opt-level = 3
 [profile.dev.package.audio]
 opt-level = 3
@@ -861,9 +851,6 @@ opt-level = 3
 [profile.dev.package.read-fonts]
 opt-level = 3
 
-# from signal
-[profile.dev.package.swash]
-opt-level = 3
 
 # from signal
 [profile.dev.package.fontique]
