@@ -20,8 +20,9 @@
 //! 2. **Audio onset cross-check** — spectral flux over the rendered audio
 //!    validates the markers themselves (a wrong/missing `lead_in_ms` in the
 //!    pack data would make prediction and acoustics disagree).
-//! 3. **Ears** — the same tempo map drives a session-guide click render
-//!    mixed over the music, so the owner can HEAR the grid.
+//! 3. **Ears** — the same tempo map drives a click render
+//!    ([`render_click`]) mixed over the music, so the owner can HEAR the
+//!    grid.
 
 use sampler::SamplerRig;
 use sampler::document::{DocCc, DocNote, TempoPoint, TrackDocument, qn_to_sec};
@@ -63,12 +64,12 @@ pub fn bpm_at_sec(tempo: &[TempoPoint], sec: f64) -> f64 {
     bpm
 }
 
-// ── Click render (session-guide, same tempo map) ─────────────────────────────
+// ── Click render (same tempo map) ────────────────────────────────────────────
 
-/// Synthesized click: a short sine burst with exponential decay.
-fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> session::guide::engine::AudioSample {
+/// Synthesized click: a short sine burst with exponential decay (mono).
+fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> Vec<f32> {
     let n = (dur_sec * f64::from(sr)).round() as usize;
-    let samples: Vec<f32> = (0..n)
+    (0..n)
         .map(|i| {
             let t = i as f64 / f64::from(sr);
             let env = (-t * 10.0 / dur_sec).exp() as f32;
@@ -76,8 +77,27 @@ fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> session::guide::e
             // sample marks the beat (a sine's first sample would be 0).
             (2.0 * std::f64::consts::PI * freq * t).cos() as f32 * amp * env
         })
-        .collect();
-    session::guide::engine::AudioSample::mono(samples, sr)
+        .collect()
+}
+
+/// The frame `qn` falls on, on `tempo` at `sr` (nearest frame).
+fn frame_at(tempo: &[TempoPoint], qn: f64, sr: u32) -> usize {
+    (qn_to_sec(tempo, qn) * f64::from(sr)).round().max(0.0) as usize
+}
+
+/// Strike the mono `sample` into the interleaved stereo `out` at each of
+/// `onsets` (frames, ascending), on both channels. A strike restarts the
+/// voice: the one before stops at the next onset, as a metronome's click
+/// does.
+fn strike(out: &mut [f32], sample: &[f32], onsets: &[usize]) {
+    let frames = out.len() / 2;
+    for (i, &at) in onsets.iter().enumerate() {
+        let until = onsets.get(i + 1).copied().unwrap_or(frames).min(frames);
+        for (f, s) in (at..until).zip(sample) {
+            out[f * 2] += s;
+            out[f * 2 + 1] += s;
+        }
+    }
 }
 
 /// Optional count-in: `beats` count cues starting at `start_qn` (one per
@@ -89,12 +109,12 @@ pub struct CountIn {
 }
 
 /// Render a stereo (interleaved) click track of `total_frames` from `tempo`
-/// — THE SAME map the document render uses — via the session-guide engine.
+/// — THE SAME map the document render uses.
 ///
-/// Accented downbeats (4/4), plain quarter clicks elsewhere, plus an
-/// optional count-in on its own voice. Sample-accurate: the guide engine
-/// places each hit from the `BlockClock` beat grid this function derives
-/// from the map (see `features/guide/tests/guide_engine.rs`).
+/// A click on every quarter note, the downbeat (4/4) accented with its own
+/// sound, plus an optional count-in on a third voice (at most 8 counts).
+/// Sample-accurate: each click starts on the frame its beat falls on
+/// ([`qn_to_sec`], rounded to the nearest frame).
 #[must_use]
 pub fn render_click(
     tempo: &[TempoPoint],
@@ -102,72 +122,29 @@ pub fn render_click(
     sr: u32,
     count_in: Option<CountIn>,
 ) -> Vec<f32> {
-    let mut engine =
-        session::guide::engine::GuideEngine::new(session::guide::engine::GuideConfig {
-            // Every beat with the downbeat accented, no subdivisions.
-            // (subdivisions default to off.)
-            click: session::guide::engine::ClickSubdivisions {
-                beat: true,
-                measure_accent: true,
-                ..Default::default()
-            },
-            enable_count: count_in.is_some(),
-            enable_guide: false,
-            ..Default::default()
-        });
-    engine.bank_mut().beat = Some(click_sample(1000.0, 0.045, 0.7, sr));
-    engine.bank_mut().measure_accent = Some(click_sample(1600.0, 0.055, 0.85, sr));
-    if let Some(ci) = count_in {
-        let mut schedule = session::guide::engine::CueSchedule::default();
-        for i in 0..ci.beats.min(8) {
-            engine.bank_mut().counts[i as usize] = Some(click_sample(760.0, 0.09, 0.8, sr));
-            schedule.cues.push(session::guide::engine::ScheduledCue {
-                time_seconds: qn_to_sec(tempo, ci.start_qn + f64::from(i)),
-                event: session::guide::engine::CueEvent::Count { index: i as usize },
-            });
+    let (mut beats, mut downbeats) = (Vec::new(), Vec::new());
+    for k in 0u32.. {
+        let at = frame_at(tempo, f64::from(k), sr);
+        if at >= total_frames {
+            break;
         }
-        engine.set_schedule(schedule);
+        if k % 4 == 0 {
+            downbeats.push(at);
+        } else {
+            beats.push(at);
+        }
     }
+    let counts: Vec<usize> = count_in.map_or_else(Vec::new, |ci| {
+        (0..ci.beats.min(8))
+            .map(|i| frame_at(tempo, ci.start_qn + f64::from(i), sr))
+            .filter(|&at| at < total_frames)
+            .collect()
+    });
 
-    const BLOCK: usize = 256;
     let mut out = vec![0.0f32; total_frames * 2];
-    let mut cl = vec![0.0f32; BLOCK];
-    let mut cr = vec![0.0f32; BLOCK];
-    let mut nl = vec![0.0f32; BLOCK];
-    let mut nr = vec![0.0f32; BLOCK];
-    let mut gl = vec![0.0f32; BLOCK];
-    let mut gr = vec![0.0f32; BLOCK];
-    let mut start = 0usize;
-    while start < total_frames {
-        let n = BLOCK.min(total_frames - start);
-        for b in [&mut cl, &mut cr, &mut nl, &mut nr, &mut gl, &mut gr] {
-            b[..n].fill(0.0);
-        }
-        let pos_seconds = start as f64 / f64::from(sr);
-        let clock = session::guide::engine::BlockClock {
-            playing: true,
-            pos_seconds,
-            pos_beats: sec_to_qn(tempo, pos_seconds),
-            tempo_bpm: bpm_at_sec(tempo, pos_seconds),
-            time_sig_num: 4,
-            time_sig_den: 4,
-            sample_rate: f64::from(sr),
-        };
-        let mut buses = session::guide::engine::GuideBuses {
-            click_l: &mut cl[..n],
-            click_r: &mut cr[..n],
-            count_l: &mut nl[..n],
-            count_r: &mut nr[..n],
-            guide_l: &mut gl[..n],
-            guide_r: &mut gr[..n],
-        };
-        engine.render(&mut buses, &clock);
-        for i in 0..n {
-            out[(start + i) * 2] += cl[i] + nl[i];
-            out[(start + i) * 2 + 1] += cr[i] + nr[i];
-        }
-        start += n;
-    }
+    strike(&mut out, &click_sample(1000.0, 0.045, 0.7, sr), &beats);
+    strike(&mut out, &click_sample(1600.0, 0.055, 0.85, sr), &downbeats);
+    strike(&mut out, &click_sample(760.0, 0.09, 0.8, sr), &counts);
     out
 }
 
