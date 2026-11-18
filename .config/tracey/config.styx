@@ -1,0 +1,27 @@
+// Tracey — requirement traceability for the rigs (from Studio's
+// .config/tracey/config.styx, studio#510). The rigs' specs are
+// features/rigs/*/spec/**; code references a requirement with
+// r[impl <id>] / r[verify <id>]. Studio's docs/spec (signal.* and the
+// rest) stay in Studio.
+
+specs (
+    {
+        name signal
+        include (
+            features/rigs/*/spec/**/*.md
+        )
+        impls (
+            {
+                name rust
+                include (
+                    features/**/*.rs
+                    apps/**/*.rs
+                )
+                exclude (
+                    target/**
+                    **/target/**
+                )
+            }
+        )
+    }
+)
