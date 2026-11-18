@@ -32,6 +32,4 @@ vox = { workspace = true, optional = true }
 daw = { workspace = true }
 facet-styx = { workspace = true }
 signal-plugin-host = { workspace = true }
-song = { workspace = true }
 tracing-subscriber = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
