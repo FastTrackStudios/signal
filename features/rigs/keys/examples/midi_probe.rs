@@ -15,11 +15,11 @@
 //! is audible end-to-end). 1 = the rig opened but stayed deaf or silent.
 //! 2 = the rig never opened.
 
-use signal_keys_proto::keys::KeysRig as KeysRigSvc;
+use keys::proto::keys::KeysRig as KeysRigSvc;
 
 fn main() {
     tracing_subscriber::fmt().with_env_filter("info").init();
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     KeysRigSvc::start(&backend);
 
     // Wait for the rig to open (pack preload can take a few seconds).
@@ -50,7 +50,7 @@ fn main() {
 
     // Inject chords into the ALSA loopback (captured by the omni attach) and
     // watch for them coming back through the monitor + the master meter.
-    let mut out = match midicore::midir::MidiOutput::open(midicore::PortSelector::NameContains(
+    let mut out = match midi::midir::MidiOutput::open(midi::PortSelector::NameContains(
         "Midi Through".into(),
     )) {
         Ok(o) => {

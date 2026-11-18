@@ -4,7 +4,7 @@
 //! headless, and that holds here too — the plugin editor talks to a
 //! `Tone3000Backend` through the generated clients, exactly as the desktop
 //! app and the browser remote do. The only difference is where the backend
-//! is: a plugin cannot assume a `signal-desktop --engine` is running on the
+//! is: a plugin cannot assume a `studio-desktop --engine` is running on the
 //! machine, so it serves one in-process over a memory link.
 //!
 //! # One engine per process, not per plugin instance
@@ -21,8 +21,8 @@
 
 use std::sync::OnceLock;
 
-use signal_tone3000::{Config, Tone3000Backend};
-use signal_tone3000_proto::tone3000::{Tone3000Client, Tone3000StreamClient};
+use signal_tone3000::client::{Config, Tone3000Backend};
+use signal_tone3000::tone3000::{Tone3000Client, Tone3000StreamClient};
 
 /// The established clients, plus the scope keeping the server's acceptor
 /// tasks alive.
@@ -57,7 +57,7 @@ fn start() -> Option<Engine> {
     ));
 
     runtime.block_on(async {
-        let config_dir = signal_sampler::rig_prefs::signal_config_dir();
+        let config_dir = sampler::rig_prefs::signal_config_dir();
         let backend = Tone3000Backend::new(Config::from_env(
             &config_dir,
             signal_nam::nam_root_from_env(&config_dir.join("nam")),

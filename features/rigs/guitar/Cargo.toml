@@ -1,79 +1,139 @@
 [package]
-name = "signal-guitar"
+name = "guitar"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 authors.workspace = true
+license.workspace = true
+description = "The guitar and bass rigs: amps, cabs, pedals, the Time block, and their editors"
 
 [lints]
 workspace = true
 
 [features]
-# PipeWire mode: route this rig's hardware MIDI through the pipewire-jack
-# backend (routable graph node, not an exclusive ALSA grab). midir's jack
-# swap is compile-time and whole-binary. Audio pipewire is picked up via
-# signal-sampler when the app enables it.
-# PipeWire (audio + MIDI) is DEFAULT on Linux — audio is target-gated in
-# daw-audio-io, MIDI via the linux target table below. Alias only.
+default = ["vox"]
 pipewire = []
+ui = ["dep:anyrender", "dep:base64", "dsp/comp", "dsp/comp-ui", "dsp/comp-viz", "dsp/delay", "dsp/delay-ui", "dsp/delay-viz", "dep:dioxus", "dep:drums", "dsp/eq", "dsp/eq-graph", "dsp/eq-ui", "dep:fts-audio-ui", "dep:kurbo", "dep:lumen-blocks", "dsp/modulation", "dsp/modulation-ui", "dsp/modulation-viz", "dep:serde_json", "dep:signal-tone3000", "dep:signal-grid", "dep:signal-grid-ui", "dep:signal-rig-shell", "dep:signal-rig-perform-ui", "signal-tone3000?/ui", "dep:signal-widgets", "architect/atom", "architect/platform", "dsp/reverb-ui", "dsp/reverb-viz", "uuid/v4"]
+vox = ["architect/vox", "dep:vox"]
+# Serve Signal's Action List over MCP (signal_commands::serve_mcp): only
+# the engine binary turns it on, so the `ui` build never reaches axum.
+mcp = ["dep:architect-mcp"]
 
 [dependencies]
-# A setlist dated today opens on its own (`SetlistDef::day`).
-chrono.workspace = true
-# WAV output for the switch probe (`SIGNAL_SWITCH_PROBE`, session.rs).
-hound = "3.5"
-uuid.workspace = true
-# getrusage — the process's own CPU time, for the bar's CPU meter.
-libc.workspace = true
-signal-rigs-proto.workspace = true
-# The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
-# RigAudioPrefs. The guitar feature is a thin live-handle layer on top.
-signal-sampler.workspace = true
-signal-phones.workspace = true
-# Cross-rig utilities: poison-tolerant locking, panic payload text.
-signal-rig-host.workspace = true
-signal-macromod.workspace = true
-
-# The wire contract this crate's headless backend implements (Rig +
-# AudioSettings services); front-ends consume the same crate's clients.
-signal-guitar-proto.workspace = true
-# A reverb locked to the tempo: its decay ↔ seconds law (`time_sync`).
-reverb-dsp.workspace = true
-# Layer/Services composition + dispatchers for mounting the services.
-architect = { workspace = true, features = ["vox", "rig"] }
-# BlockType — primary-param mapping per block type.
-signal-proto.workspace = true
-# The NAM library catalog: a preset stores its capture's content hash, and
-# resolves creator / licence / cover art through the catalog by it.
-signal-nam.workspace = true
-# EQ band-param naming (EQ_BANDS × EQ_FIELDS) — one source of truth with the DSP.
-fx-blocks.workspace = true
-# Styx-serializable rig definitions (the runtime library files).
-facet.workspace = true
-facet-styx.workspace = true
-# `signal rig web-bundle`: rig.json, and content-addressed asset keys.
-facet-json.workspace = true
-blake3.workspace = true
-# MIDI capture for the core's monitor (native only — the headless core).
-midicore = { workspace = true, features = ["vox", "midir"] }
-tracing.workspace = true
-# Runtime handle only: the audio-open thread carries the caller's tokio
-# handle across so the transport pump's `architect::platform::spawn`
-# (→ `tokio::spawn` on native) has a runtime (see Rig::start).
-tokio = { workspace = true, features = ["rt"] }
+# `utils::paths::checkout_root`: the checkout found at run time, not baked in.
+utils.workspace = true
+anyrender = { workspace = true, optional = true }
+architect = { workspace = true, features = ["rig", "vox"] }
+base64 = { workspace = true, optional = true }
+blake3 = { workspace = true }
+builtin = { workspace = true }
+chrono = { workspace = true }
+dsp = { workspace = true, features = ["reverb"] }
+dioxus = { workspace = true, optional = true }
+# The drum rig's wire contract, for its iPad surface (ui/tablet/drums.rs).
+drums = { workspace = true, optional = true }
+facet = { workspace = true }
+facet-json = { workspace = true }
+facet-styx = { workspace = true }
+fts-audio-ui = { workspace = true, optional = true }
+hound = { workspace = true }
+kurbo = { workspace = true, optional = true }
+libc = { workspace = true }
+lumen-blocks = { workspace = true, optional = true }
+memmap2 = { workspace = true }
+midi = { workspace = true, features = ["midir", "vox"] }
+serde_json = { workspace = true, optional = true }
+signal-tone3000 = { workspace = true, optional = true, features = ["ui"] }
+signal-grid = { workspace = true, optional = true }
+signal-grid-ui = { workspace = true, optional = true }
+signal-macromod = { workspace = true }
+signal-nam = { workspace = true }
+signal-proto = { workspace = true }
+signal-rig-host = { workspace = true }
+signal-rigs-proto = { workspace = true }
+# The iPad rig frame every rig shares (top bar, sidebar, dock, foot bar).
+signal-rig-shell = { workspace = true, optional = true }
+# The performance screens every rig shares (Preset, Profile, Setlist).
+signal-rig-perform-ui = { workspace = true, optional = true }
+sampler = { workspace = true }
+signal-widgets = { workspace = true, optional = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+vox = { workspace = true, optional = true }
 
 [dev-dependencies]
-# The startup benchmarks (examples/startup_cost.rs, examples/nam_split.rs)
-# load captures directly, outside a rig.
-neural-amp-modeler = { workspace = true }
-tracing-subscriber.workspace = true
-# headless_rig example: serve the backend on an in-process vox link and drive
-# it like a remote GUI would.
+# Its own tests and examples, with the features they need (see their
+# required-features): a plain `cargo test` of the workspace builds them all.
+guitar = { path = ".", features = ["ui", "mcp"] }
 architect = { workspace = true, features = ["vox", "local"] }
-vox.workspace = true
+neural-amp-modeler = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+loro = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+tracing-subscriber = { workspace = true }
+vox = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The rig library as a synced Loro doc (signal_rig_host::book): native only.
+signal-rig-host = { workspace = true, features = ["book"] }
+# Signal's Action List served to a model over MCP (src/signal_commands.rs),
+# feature `mcp`.
+architect-mcp = { workspace = true, features = ["http"], optional = true }
+audio = { workspace = true, features = ["io"] }
+blitz-dom = { workspace = true, features = ["custom-widget"] }
+blitz-traits = { workspace = true }
+bytemuck = { workspace = true, features = ["derive"] }
+dioxus-native-dom = { workspace = true }
+frame = { workspace = true, features = ["host-scene", "live"] }
+image = { workspace = true }
+parley = { workspace = true }
+# The workspace tokio is `full`; on wasm only sync/macros/io-util/rt/time
+# exist (mio has no wasm backend), so the browser remote gets its own line.
+tokio = { workspace = true, features = ["rt"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+vello = { workspace = true }
+wgpu = { workspace = true }
+wgpu_context = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+anyrender = { workspace = true }
+anyrender_vello = { workspace = true }
+architect = { workspace = true, features = ["atom", "vox", "platform", "local"] }
+blitz-dom = { workspace = true }
+blitz-paint = { workspace = true, features = ["custom-widget"] }
+blitz-traits = { workspace = true }
+dioxus-native = { workspace = true }
+dioxus-native-dom = { workspace = true }
+futures = { workspace = true }
+image = { workspace = true }
+naga = { workspace = true, features = ["wgsl-in"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+anyrender_vello_hybrid = { workspace = true, features = ["webgl"] }
+rustc-hash = { workspace = true }
+tokio = { version = "1.48", default-features = false, features = ["rt", "sync", "macros", "time"] }
+vello_gpu = { workspace = true, features = ["webgl"] }
+wasm-bindgen = { workspace = true }
+web-sys = { workspace = true, features = ["Window", "Document", "Element", "HtmlCanvasElement"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# Hardware MIDI as a routable PipeWire graph node (midir on the
-# pipewire-jack backend) — the Linux default, matching the audio host.
-midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
+midi = { workspace = true, features = ["midir", "pipewire", "vox"] }
+
+[[bin]]
+name = "signal-phones"
+path = "src/bin/signal-phones.rs"
+
+[[example]]
+name = "rig_shot"
+required-features = ["ui"]
+
+[[example]]
+name = "viz_gallery"
+path = "examples/viz_gallery.rs"
+required-features = ["ui"]

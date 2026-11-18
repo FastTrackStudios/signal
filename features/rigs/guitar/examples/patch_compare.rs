@@ -11,11 +11,11 @@
 
 use std::sync::Arc;
 
-use signal_guitar::library::RigLibrary;
-use signal_guitar::measure::apply_chain_bypass;
-use signal_sampler::nam_calibrate::DiReference;
-use signal_sampler::rig::GuitarRig;
-use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
+use guitar::library::RigLibrary;
+use guitar::measure::apply_chain_bypass;
+use sampler::nam_calibrate::DiReference;
+use sampler::rig::GuitarRig;
+use sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 
 const SR: u32 = 48_000;
 
@@ -41,10 +41,7 @@ fn render(patch: &RigPatch, input: &[f32]) -> Option<f64> {
         .zip(&r)
         .map(|(a, b)| f64::from(a + b) * 0.5)
         .collect();
-    Some(signal_sampler::loudness::integrated_lufs(
-        &mono,
-        f64::from(SR),
-    ))
+    Some(sampler::loudness::integrated_lufs(&mono, f64::from(SR)))
 }
 
 fn main() {
@@ -54,7 +51,7 @@ fn main() {
         eprintln!("usage: patch_compare <Profile> <playing.wav>");
         std::process::exit(2);
     };
-    signal_guitar::levelling::apply_nam_calibration();
+    guitar::levelling::apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let Some(def) = lib
         .profiles
@@ -64,7 +61,7 @@ fn main() {
         eprintln!("no profile {name}");
         std::process::exit(2);
     };
-    let built = signal_guitar::nodes::profile_from_library(def, &lib.drive_presets);
+    let built = guitar::nodes::profile_from_library(def, &lib.drive_presets);
     let f32s = |d: DiReference| d.samples.iter().map(|&s| s as f32).collect::<Vec<f32>>();
     let di = f32s(DiReference::load_or_synthetic(f64::from(SR)));
     let playing = match DiReference::load(std::path::Path::new(wav), f64::from(SR)) {
@@ -74,9 +71,8 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let rows = signal_guitar::levelling::par_map(&built.patches, 0, |p| {
-        (render(p, &di), render(p, &playing))
-    });
+    let rows =
+        guitar::levelling::par_map(&built.patches, 0, |p| (render(p, &di), render(p, &playing)));
     let clean = rows.first().and_then(|r| r.0.zip(r.1));
     println!(
         "{:<16} {:>10} {:>10}   vs first patch (ref / playing)",

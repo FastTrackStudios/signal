@@ -1,0 +1,17 @@
+[package]
+name = "signal-macromod"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+dsp-core = { workspace = true, features = ["modulation"] }
+serde.workspace = true
+serde_json.workspace = true
+facet.workspace = true
+
+[dev-dependencies]

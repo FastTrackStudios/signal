@@ -8,9 +8,9 @@
 //!     [--note 48 --vel 100 --hold 1.5 --tail 0.3 --sr 48000 --cc 1=127]
 //! ```
 
+use sampler::node_render::RenderNode;
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
-use signal_sampler::node_render::RenderNode;
-use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
+use synth::omni_import::{SoundsourceIndex, load_patch_file};
 
 fn note_event(on: bool, key: u8, vel: u8) -> PluginMidiEvent {
     use daw::service::{Channel, KeyNumber, MidiEvent, Velocity};
@@ -56,8 +56,8 @@ fn write_wav(path: &str, sr: u32, l: &[f32], r: &[f32]) {
 }
 
 /// Keep only the Soundsource in every Oscillator container (a bisect aid).
-fn source_only(c: &signal_sampler::rig_node::Container) -> signal_sampler::rig_node::Container {
-    use signal_sampler::rig_node::RigNode;
+fn source_only(c: &sampler::rig_node::Container) -> sampler::rig_node::Container {
+    use sampler::rig_node::RigNode;
     let mut out = c.clone();
     if out.name == "Oscillator" {
         out.children.retain(
@@ -105,24 +105,31 @@ fn main() {
     // A `.signalpack` plays as a keys layer would hold it: one Sampler block
     // as the Soundsource of an Oscillator module (NI / Keyscape pianos).
     let tree = if patch.ends_with(".signalpack") {
-        use signal_sampler::rig_node::Container;
-        let mut src = signal_sampler::RigBlock::sample_lib(patch.as_str());
+        use sampler::rig_node::Container;
+        let mut src = sampler::RigBlock::sample_lib(patch.as_str());
         src.name = "Soundsource".into();
         // `--source-param name=value`: build-time params on the Sampler
         // block, as a keys layer sets them (e.g. `piano_snapshot=worship`).
-        for kv in args.windows(2).filter(|w| w[0] == "--source-param").map(|w| &w[1]) {
+        for kv in args
+            .windows(2)
+            .filter(|w| w[0] == "--source-param")
+            .map(|w| &w[1])
+        {
             if let Some((k, v)) = kv.split_once('=') {
                 src = src.with_param(k, v);
             }
         }
         Container::preset("pack").add(Container::module("Oscillator").add(src))
     } else {
-        load_patch_file(std::path::Path::new(patch), &SoundsourceIndex::scan_default())
-            .unwrap_or_else(|e| panic!("import {patch}: {e}"))
+        load_patch_file(
+            std::path::Path::new(patch),
+            &SoundsourceIndex::scan_default(),
+        )
+        .unwrap_or_else(|e| panic!("import {patch}: {e}"))
     };
     if std::env::var_os("RENDER_DEBUG").is_some() {
         if let Ok(xml) = std::fs::read_to_string(patch) {
-            if let Ok(p) = signal_synth::omni_import::parse_patch(&xml) {
+            if let Ok(p) = synth::omni_import::parse_patch(&xml) {
                 for (i, l) in p.layers.iter().enumerate() {
                     eprintln!(
                         "layer {i}: enabled {} level {:.3} ss {:?} waves {:?} shape {:.2}",
@@ -169,7 +176,7 @@ fn main() {
         }
     }
     let tree = if std::env::var_os("RENDER_BARE").is_some() {
-        use signal_sampler::rig_node::Container;
+        use sampler::rig_node::Container;
         let osc = tree
             .find("Layer A")
             .and_then(|l| l.find("Oscillator"))
@@ -232,7 +239,7 @@ fn main() {
     // Wait for the sample blocks to finish opening their zones (bounded),
     // so the note never races the preload.
     let t0 = std::time::Instant::now();
-    while signal_sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 120 {
+    while sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 120 {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     for i in 0..preroll_blocks {

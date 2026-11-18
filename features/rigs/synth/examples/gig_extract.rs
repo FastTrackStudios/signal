@@ -13,7 +13,7 @@
 //! Multi dialect, so `omni_state wrap` turns it straight back into loadable
 //! plugin state.
 
-use signal_synth::gig::{GigProcessor, read_gig};
+use synth::gig::{GigProcessor, read_gig};
 
 /// The eight source-select toggles on the global rackspace: the four NI pianos
 /// and the four Keyscape layers. A preset turning one on is the *only* record
@@ -109,7 +109,7 @@ fn load(path: &str) -> Vec<GigProcessor> {
 
 fn presets(path: &str) {
     let xml = std::fs::read_to_string(path).expect("read gig file");
-    let presets = signal_synth::gig::read_presets(&xml);
+    let presets = synth::gig::read_presets(&xml);
     println!(
         "{:<30} {:<20} {:<38} MACROS",
         "PATCH", "RACKSPACE", "SOURCES"
@@ -154,8 +154,8 @@ fn presets(path: &str) {
 
 fn songs(path: &str) {
     let xml = std::fs::read_to_string(path).expect("read gig file");
-    let all = signal_synth::gig::read_songs(&xml);
-    let setlists = signal_synth::gig::read_setlists(&xml);
+    let all = synth::gig::read_songs(&xml);
+    let setlists = synth::gig::read_setlists(&xml);
 
     let mut seen = std::collections::BTreeMap::new();
     for s in &all {
@@ -228,7 +228,7 @@ fn main() {
                 // The Multi parsed properly, so each part's layers (and the
                 // soundsource each one loads) come out too — which is what you
                 // actually need to rebuild the patch, not just its name.
-                let parsed = signal_synth::omni_import::parse_multi(&xml).ok();
+                let parsed = synth::omni_import::parse_multi(&xml).ok();
                 for (i, (name, library)) in part_names(&xml).into_iter().enumerate() {
                     if name.is_empty() || name == "Empty" {
                         continue;
@@ -324,13 +324,13 @@ mod tests {
     fn recovered_multi_parses() {
         let path = std::env::var("GIG_FILE").expect("set GIG_FILE");
         let xml = std::fs::read_to_string(path).unwrap();
-        let procs = signal_synth::gig::read_gig(&xml);
+        let procs = synth::gig::read_gig(&xml);
         let mut checked = 0;
         for p in &procs {
             let Some(multi_xml) = p.omni_multi_xml() else {
                 continue;
             };
-            let multi = signal_synth::omni_import::parse_multi(&multi_xml)
+            let multi = synth::omni_import::parse_multi(&multi_xml)
                 .unwrap_or_else(|e| panic!("{} / {}: {e}", p.rackspace, p.node_name));
             assert_eq!(multi.parts.len(), 8, "{}: 8 parts", p.node_name);
             checked += 1;

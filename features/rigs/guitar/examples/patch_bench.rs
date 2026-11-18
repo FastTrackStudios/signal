@@ -25,9 +25,9 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use signal_guitar::library::RigLibrary;
-use signal_sampler::rig::GuitarRig;
-use signal_sampler::rig_profile::{ProfileRig, RigProfile};
+use guitar::library::RigLibrary;
+use sampler::rig::GuitarRig;
+use sampler::rig_profile::{ProfileRig, RigProfile};
 
 struct Args {
     profile: Option<String>,
@@ -113,7 +113,7 @@ impl Stats {
 
 fn main() {
     let a = args();
-    signal_guitar::levelling::apply_nam_calibration();
+    guitar::levelling::apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let def = match &a.profile {
         None => lib.profile.clone(),
@@ -137,7 +137,7 @@ fn main() {
             .map(|e| e.song.clone())
             .collect()
     });
-    let wanted = |p: &signal_guitar::profiles::PatchDef| -> bool {
+    let wanted = |p: &guitar::profiles::PatchDef| -> bool {
         if !a.patches.is_empty() {
             return a.patches.iter().any(|n| n.eq_ignore_ascii_case(&p.name));
         }
@@ -149,7 +149,7 @@ fn main() {
         }
     };
 
-    let mut built = signal_guitar::nodes::profile_from_library(&def, &lib.drive_presets);
+    let mut built = guitar::nodes::profile_from_library(&def, &lib.drive_presets);
     let comp = RigLibrary::load_compositions();
     for patch in &mut built.patches {
         if let Some(d) = def
@@ -157,7 +157,7 @@ fn main() {
             .iter()
             .find(|d| d.name.eq_ignore_ascii_case(&patch.name))
         {
-            signal_guitar::macros::apply_positions(d, &comp, patch);
+            guitar::macros::apply_positions(d, &comp, patch);
         }
     }
     let chosen: Vec<_> = built
@@ -176,7 +176,7 @@ fn main() {
     }
 
     if a.blocks {
-        let di = signal_sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(a.rate));
+        let di = sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(a.rate));
         let input: Vec<f32> = di.samples.iter().map(|&s| s as f32).collect();
         let budget = a.block as f64 / f64::from(a.rate) * 1e6;
         for p in &chosen {
@@ -190,7 +190,7 @@ fn main() {
                 })
                 .cloned()
                 .collect();
-            let costs = signal_sampler::block_profile::profile_chain(
+            let costs = sampler::block_profile::profile_chain(
                 &playing,
                 a.rate,
                 a.block,
@@ -248,14 +248,14 @@ fn main() {
         a.block as f64 / f64::from(a.rate) * 1e6
     );
 
-    let di = signal_sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(a.rate));
+    let di = sampler::nam_calibrate::DiReference::load_or_synthetic(f64::from(a.rate));
     let samples: Arc<Vec<f32>> = Arc::new(di.samples.iter().map(|&s| s as f32).collect());
     let budget_us = a.block as f64 / f64::from(a.rate) * 1e6;
     let blocks = (a.secs * f64::from(a.rate) / a.block as f64) as usize;
 
     // Warm the first patch so its switch is measured against a playing rig.
     prig.activate(0);
-    signal_guitar::measure::apply_chain_bypass(&prig);
+    guitar::measure::apply_chain_bypass(&prig);
     prig.rig().start_test_signal(samples.clone());
     prig.rig().render_offline(a.rate as usize);
 
@@ -267,7 +267,7 @@ fn main() {
     for i in 0..chosen.len() {
         let target = (i + 1) % chosen.len();
         prig.activate(target);
-        signal_guitar::measure::apply_chain_bypass(&prig);
+        guitar::measure::apply_chain_bypass(&prig);
         let backed: Vec<_> = chosen[target]
             .chain
             .iter()

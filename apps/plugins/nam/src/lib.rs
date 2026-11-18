@@ -20,8 +20,8 @@
 //! track). Scratch buffers are preallocated to the host's max buffer size in
 //! `initialize()`; `process()` never allocates.
 //!
-use audiocore_core::prelude::{DioxusState, create_dioxus_editor_with_state};
 use nice_plug::prelude::*;
+use plugin_core::prelude::{DioxusState, create_dioxus_editor_with_state};
 use std::sync::Arc;
 
 use neural_amp_modeler::NamModel;
@@ -148,7 +148,7 @@ impl Plugin for FtsNam {
 
     // `Plugin::Editor` is an associated type as of the baseview 0.3 rework,
     // so the editor is named here rather than returned as a trait object.
-    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
+    type Editor = plugin_core::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 

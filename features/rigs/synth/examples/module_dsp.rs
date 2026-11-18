@@ -7,11 +7,11 @@
 //! ```
 
 use daw::service::{Channel, KeyNumber, MidiEvent, Velocity};
+use sampler::node_render::RenderNode;
+use sampler::rig_node::Container;
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
-use signal_sampler::node_render::RenderNode;
-use signal_sampler::rig_node::Container;
-use signal_synth::Source;
-use signal_synth::engine::{ModuleSettings, signal_module_with};
+use synth::Source;
+use synth::engine::{ModuleSettings, signal_module_with};
 
 const SR: u32 = 48_000;
 

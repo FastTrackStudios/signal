@@ -7,7 +7,7 @@
 //! ## What v0 actually is
 //!
 //! An INSTRUMENT+FX hybrid shell (MIDI in, stereo audio in AND out) over
-//! [`signal_sampler::SamplerBank`] — the one rig backend the signal stack
+//! [`sampler::SamplerBank`] — the one rig backend the signal stack
 //! exposes headlessly today. It loads a `.signalpack` rig at `initialize()`
 //! (see [`config`] for resolution: `$FTS_SIGNAL_RIG`, else
 //! `~/.config/signal/plugin/rig.styx`), plays it from live MIDI, and sums the
@@ -24,7 +24,7 @@
 //! `SignalController`/`SignalLive` manage rigs/blocks/presets in a database
 //! and *apply* them to DAW-hosted FX via the daw-bridge
 //! (`DawPatchApplier`, morph engine, state chunks). Audio for FX-chain rigs
-//! is hosted by `features/plugin-host/signal-plugin-host` (a CLAP/VST3 host
+//! is hosted by `daw:features/plugin-host` (`signal-plugin-host`) (a CLAP/VST3 host
 //! over `daw`), which the facade does not re-export — there is no
 //! "give me a rig chain I can push audio blocks through" API yet. Until that
 //! exists, guitar/vocal FX-chain rigs cannot be hosted here and v0 mirrors

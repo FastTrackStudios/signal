@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use nice_plug::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use signal_sampler::SamplerBank;
+use sampler::SamplerBank;
 
 use crate::config::{INSTRUMENT_ID, RigConfig};
 

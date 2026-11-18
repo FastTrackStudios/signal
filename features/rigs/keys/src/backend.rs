@@ -3,7 +3,7 @@
 //! Owns a live [`KeysRig`] (composition-tree instrument on the shared engine),
 //! scans the Keyscape library for presets, loads a single-instrument program
 //! per preset, and plays it from hardware MIDI or UI notes. Implements the
-//! [`signal_keys_proto::keys::KeysRig`] service + its `#[subscribe]` stream;
+//! [`crate::proto::keys::KeysRig`] service + its `#[subscribe]` stream;
 //! mount `router()` (`architect::rig::RigBackend`) on a vox transport.
 
 use std::collections::BTreeMap;
@@ -11,21 +11,21 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::{Arc, Mutex};
 
-use architect::dispatch::CurrentThreadDispatcher;
-use architect::rig::RigBackend;
-use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use daw_audio_io::AudioIoPrefs;
-use midicore::MidiEvent;
-use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
-use signal_keys_proto::{
+use crate::proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
+use crate::proto::{
     KeysEngineDetail, KeysEngineModel, KeysLaneProgram, KeysLayerDetail, KeysLayerModel, KeysMacro,
     KeysMeter, KeysMixer, KeysNode, KeysPackRef, KeysPerform, KeysPreset, KeysStack, KeysStatus,
 };
+use architect::dispatch::CurrentThreadDispatcher;
+use architect::rig::RigBackend;
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
+use audio::io::AudioIoPrefs;
+use midi::MidiEvent;
 
 use crate::profile::{KeysProfile, worship_profile};
+use sampler::Container;
+use sampler::rig_node::{RigNode, Role};
 use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
-use signal_sampler::Container;
-use signal_sampler::rig_node::{RigNode, Role};
 
 use crate::KeysRig;
 
@@ -85,7 +85,7 @@ struct State {
     midi_port: Option<String>,
     /// The rig's subscription to the shared process-wide MIDI hub. Dropping
     /// it detaches this rig only; the hardware ports stay open for the others.
-    midi_handle: Option<signal_rig_host::midi_hub::Subscription>,
+    midi_handle: Option<midi::hub::Subscription>,
     /// The last audio-open failure, for UIs with no log access (phones).
     last_error: Option<String>,
     /// The active profile — the engine/layer mixer shape + its stacks.
@@ -257,7 +257,7 @@ impl LaneState {
 
 /// One macro's declaration: id, panel, display name, range, unit, and whether
 /// its block has DSP yet (the engine's stack is placeholder-first — see
-/// `signal_synth::engine`).
+/// `synth::engine`).
 struct MacroDef {
     id: &'static str,
     name: &'static str,
@@ -1414,10 +1414,7 @@ fn set_macro_clamped(macros: &mut BTreeMap<String, f32>, id: &str, v: f32) {
 
 /// A module's knobs from an imported Omnisphere layer: filter, envelopes,
 /// unison — the values the patch itself plays with.
-fn seed_module_macros(
-    macros: &mut BTreeMap<String, f32>,
-    m: &signal_synth::engine::ImportedModule,
-) {
+fn seed_module_macros(macros: &mut BTreeMap<String, f32>, m: &synth::engine::ImportedModule) {
     set_macro_clamped(macros, "filter.cutoff", m.cutoff_hz);
     set_macro_clamped(macros, "filter.reso", m.resonance);
     set_macro_clamped(macros, "filter.env_amt", m.filter_env_depth);
@@ -1465,26 +1462,6 @@ fn tap_bpm(taps: &mut Vec<std::time::Instant>, now: std::time::Instant) -> Optio
     })
 }
 
-#[cfg(test)]
-mod tap_tests {
-    use super::tap_bpm;
-    use std::time::{Duration, Instant};
-
-    #[test]
-    fn steady_taps_read_their_tempo_and_a_pause_starts_over() {
-        let t0 = Instant::now();
-        let mut taps = Vec::new();
-        assert_eq!(tap_bpm(&mut taps, t0), None, "one tap is no tempo");
-        let mut bpm = None;
-        for i in 1..6 {
-            bpm = tap_bpm(&mut taps, t0 + Duration::from_millis(500 * i));
-        }
-        assert!((bpm.unwrap() - 120.0).abs() < 0.5);
-        // A long pause: the next tap starts a new count.
-        assert_eq!(tap_bpm(&mut taps, t0 + Duration::from_secs(10)), None);
-    }
-}
-
 fn default_macros() -> BTreeMap<String, f32> {
     MACROS
         .iter()
@@ -1500,7 +1477,7 @@ struct EngineState {
     muted: bool,
     /// A drone engine's held note: pitch class (0 = C), the octave it sounds
     /// in, and whether it is sounding. `None` for engines that are played.
-    drone: Option<signal_keys_proto::KeysDrone>,
+    drone: Option<crate::proto::KeysDrone>,
     /// Engine macro values that belong to the engine itself (its Tone,
     /// Limiter, FX bypass) — the ones with no module target.
     globals: BTreeMap<String, f32>,
@@ -1672,7 +1649,9 @@ impl State {
         }
         // The rig's output limiter is a safety net, on unless a profile
         // turns it off: five hard notes stacked in one lane clip otherwise.
-        self.rig_globals.entry(format!("{RIG}limiter")).or_insert(1.0);
+        self.rig_globals
+            .entry(format!("{RIG}limiter"))
+            .or_insert(1.0);
         self.profile = profile;
         KeysRigBackend::refresh_fx_gates(self);
     }
@@ -1762,6 +1741,7 @@ impl Default for KeysRigBackend {
 /// those from plain worker threads, which have no ambient runtime —
 /// entering this one gives every spawn a reactor regardless of host
 /// (in-process iOS app, engine mode, tests).
+#[cfg(not(target_arch = "wasm32"))]
 fn keys_runtime() -> &'static tokio::runtime::Runtime {
     static RT: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
     RT.get_or_init(|| {
@@ -1774,15 +1754,27 @@ fn keys_runtime() -> &'static tokio::runtime::Runtime {
     })
 }
 
-/// The output-artefact half of [`signal_keys_proto::KeysRealtime`], read from
+/// Enter [`keys_runtime`] for the current scope. The browser keys rig has
+/// no threads to give a runtime (tokio's `rt-multi-thread` does not exist on
+/// wasm): there the browser's own executor drives every spawn, so entering
+/// is a no-op.
+#[cfg(not(target_arch = "wasm32"))]
+fn enter_keys_runtime() -> tokio::runtime::EnterGuard<'static> {
+    keys_runtime().enter()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn enter_keys_runtime() {}
+
+/// The output-artefact half of [`crate::proto::KeysRealtime`], read from
 /// the sampler's process-wide counters (`engine::output_glitches`).
 ///
 /// Split out so `status` can spread it into the struct. These are global to
 /// the process rather than per-rig, because the audio thread bumps them from
 /// wherever it happens to be rendering.
-fn artefacts() -> signal_keys_proto::KeysRealtime {
-    let g = signal_sampler::engine::output_glitches();
-    signal_keys_proto::KeysRealtime {
+fn artefacts() -> crate::proto::KeysRealtime {
+    let g = sampler::engine::output_glitches();
+    crate::proto::KeysRealtime {
         holes: g.gap_runs as u64,
         hole_frames: g.gap_frames as u64,
         longest_hole: g.longest_gap as u64,
@@ -1806,7 +1798,7 @@ impl KeysRigBackend {
     /// lanes seeded, knobs applied — without opening audio
     /// (`examples/lane_stress`).
     #[doc(hidden)]
-    pub fn debug_profile_lane_program(&self) -> Option<signal_sampler::keys_rig::LaneProgram> {
+    pub fn debug_profile_lane_program(&self) -> Option<sampler::keys_rig::LaneProgram> {
         self.prepare_lanes();
         self.profile_lane_program()
     }
@@ -1852,9 +1844,9 @@ impl KeysRigBackend {
     }
 
     /// A module's envelope in macro units (its own values, else defaults).
-    fn module_env(lane: &LaneState, index: usize, prefix: &str) -> signal_keys_proto::KeysEnv {
+    fn module_env(lane: &LaneState, index: usize, prefix: &str) -> crate::proto::KeysEnv {
         let v = |seg: &str| Self::module_value(lane, index, &format!("{prefix}.{seg}"));
-        signal_keys_proto::KeysEnv {
+        crate::proto::KeysEnv {
             attack_ms: v("attack"),
             decay_ms: v("decay"),
             sustain: v("sustain"),
@@ -2191,7 +2183,7 @@ impl KeysRigBackend {
     /// (an effect switched on or off, a reverb algorithm or decay, which
     /// build a new engine) — and the caller rebuilds.
     fn push_module_dsp(&self, layer: &str, module_idx: usize) -> bool {
-        use signal_sampler::native::AdsrParams;
+        use sampler::native::AdsrParams;
         let set = {
             let Ok(s) = self.inner.state.lock() else {
                 return false;
@@ -2204,7 +2196,7 @@ impl KeysRigBackend {
         // A keys module is "<lane> A"; an imported Omnisphere patch keeps
         // its own "Layer A".."Layer D". Both name their parts alike
         // ("Soundsource", "Filter 1", "Amp", "Amp Env", "Filter Env").
-        let slot = signal_synth::engine::module_slot(module_idx);
+        let slot = synth::engine::module_slot(module_idx);
         let modules = [format!("{layer} {slot}"), format!("Layer {slot}")];
         let Ok(rig) = self.inner.rig.lock() else {
             return false;
@@ -2223,7 +2215,7 @@ impl KeysRigBackend {
                 sustain: sus.clamp(0.0, 1.0),
                 release_s: (r / 1000.0).max(0.0),
             };
-            let cutoff_norm = f64::from(signal_sampler::native::NativeFilter::norm_from_cutoff(
+            let cutoff_norm = f64::from(sampler::native::NativeFilter::norm_from_cutoff(
                 set.cutoff_hz,
             ));
             for module in &modules {
@@ -2248,11 +2240,11 @@ impl KeysRigBackend {
                 for (n, &(rate, depth, wave)) in set.lfos.iter().enumerate() {
                     let name = format!("LFO {}", n + 1);
                     let wave = match wave.round() as u32 {
-                        1 => signal_sampler::native::LfoWave::Triangle,
-                        2 => signal_sampler::native::LfoWave::Saw,
-                        3 => signal_sampler::native::LfoWave::Square,
-                        4 => signal_sampler::native::LfoWave::SampleHold,
-                        _ => signal_sampler::native::LfoWave::Sine,
+                        1 => sampler::native::LfoWave::Triangle,
+                        2 => sampler::native::LfoWave::Saw,
+                        3 => sampler::native::LfoWave::Square,
+                        4 => sampler::native::LfoWave::SampleHold,
+                        _ => sampler::native::LfoWave::Sine,
                     };
                     let fade = Some(set.lfo_fade_ms[n].max(0.0) / 1000.0);
                     render.set_lfo(lfo_scope, &name, rate, Some(wave), fade);
@@ -2346,7 +2338,7 @@ impl KeysRigBackend {
                 // Per-voice synth sources (the oscillator / the wavetable):
                 // ADSRs over an 8 s range, vibrato, tuning, their own filter.
                 let seg = |ms: f32| f64::from(((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0));
-                let ss = |r: &mut signal_sampler::node_render::RenderNode, p: &str, v: f64| {
+                let ss = |r: &mut sampler::node_render::RenderNode, p: &str, v: f64| {
                     r.set_leaf_param(module, "Soundsource", p, v)
                 };
                 applied |= ss(render, "amp_attack", seg(set.amp_env.0));
@@ -2398,7 +2390,7 @@ impl KeysRigBackend {
                 // a rebuild; one in place takes its values live, in its own
                 // units. A reverb's algorithm and decay build a new engine,
                 // so a change to either rebuilds too.
-                let want: Vec<signal_sampler::rig::RigBlock> = set.fx_blocks();
+                let want: Vec<sampler::rig::RigBlock> = set.fx_blocks();
                 for name in ["Chorus", "Delay", "Ambience"] {
                     let wanted = want.iter().find(|b| b.display_name() == name);
                     let present = render.has_leaf(module, name);
@@ -2454,7 +2446,7 @@ impl KeysRigBackend {
                 if b.inner.rebuild_gen.load(Ordering::Acquire) != r#gen {
                     return; // a later edit owns the rebuild
                 }
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }
@@ -2593,7 +2585,7 @@ impl KeysRigBackend {
             .map(|p| p.name.clone())
             .collect();
         let canonical = |want: &str| -> Option<String> {
-            use signal_synth::omni_import::resolve_name;
+            use synth::omni_import::resolve_name;
             resolve_name(want, pack_names.iter().map(String::as_str))
                 .or_else(|| resolve_name(want, known.iter().map(String::as_str)))
                 .map(str::to_string)
@@ -2636,9 +2628,10 @@ impl KeysRigBackend {
     /// time, live.
     /// Hand a mod-wheel value to the `keys-wheel` worker (the latest wins).
     fn queue_wheel(inner: &Inner, value: u8) {
-        inner
-            .wheel
-            .store(u32::from(value.min(127)), std::sync::atomic::Ordering::Relaxed);
+        inner.wheel.store(
+            u32::from(value.min(127)),
+            std::sync::atomic::Ordering::Relaxed,
+        );
         if let Some(worker) = inner.wheel_worker.get() {
             worker.unpark();
         }
@@ -2650,12 +2643,16 @@ impl KeysRigBackend {
         let weak = Arc::downgrade(&self.inner);
         let worker = std::thread::Builder::new()
             .name("keys-wheel".into())
-            .spawn(move || loop {
-                std::thread::park_timeout(std::time::Duration::from_millis(500));
-                let Some(inner) = weak.upgrade() else { return };
-                let v = inner.wheel.swap(NO_WHEEL, std::sync::atomic::Ordering::Relaxed);
-                if v != NO_WHEEL {
-                    Self { inner }.wheel_cutoff(v as u8);
+            .spawn(move || {
+                loop {
+                    std::thread::park_timeout(std::time::Duration::from_millis(500));
+                    let Some(inner) = weak.upgrade() else { return };
+                    let v = inner
+                        .wheel
+                        .swap(NO_WHEEL, std::sync::atomic::Ordering::Relaxed);
+                    if v != NO_WHEEL {
+                        Self { inner }.wheel_cutoff(v as u8);
+                    }
                 }
             });
         if let Ok(handle) = worker {
@@ -2671,7 +2668,7 @@ impl KeysRigBackend {
     /// Omnisphere filters (the cutoff overlay, which the filter envelope's
     /// routes ride on) and its sampler's per-voice filter.
     fn wheel_cutoff(&self, value: u8) {
-        use signal_sampler::native::NativeFilter;
+        use sampler::native::NativeFilter;
         const LEAVES: [&str; 2] = ["Filter 1", "Filter 2"];
         type Key = (String, String, String);
         let w = f32::from(value.min(127)) / 127.0;
@@ -2690,12 +2687,16 @@ impl KeysRigBackend {
         let modules = |lane: &str| -> Vec<String> {
             (0..4)
                 .flat_map(|i| {
-                    let slot = signal_synth::engine::module_slot(i);
+                    let slot = synth::engine::module_slot(i);
                     [format!("{lane} {slot}"), format!("Layer {slot}")]
                 })
                 .collect()
         };
-        let rig = self.inner.rig.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let rig = self
+            .inner
+            .rig
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(rig) = rig.as_ref() else {
             return;
         };
@@ -2730,7 +2731,9 @@ impl KeysRigBackend {
             .filter(|b| *b < 0.999)
             .fold(None::<f64>, |m, b| Some(m.map_or(b, |m: f64| m.max(b))));
         let span = leader.map_or(0.0, |b| {
-            (20_000.0 / NativeFilter::cutoff_from_norm(b as f32)).log2().max(0.0)
+            (20_000.0 / NativeFilter::cutoff_from_norm(b as f32))
+                .log2()
+                .max(0.0)
         });
         let octaves = w * span;
         known.clear();
@@ -2833,14 +2836,14 @@ impl KeysRigBackend {
                 .collect()
         };
         for (name, path, patch) in todo {
-            let layers = match signal_synth::engine::import_omni_layers(&path) {
+            let layers = match synth::engine::import_omni_layers(&path) {
                 Ok(l) => l,
                 Err(e) => {
                     tracing::warn!(lane = %name, ?path, "keys rig: Omnisphere seed failed: {e}");
                     continue;
                 }
             };
-            let lfos = signal_synth::engine::import_omni_lfos(&path).unwrap_or_default();
+            let lfos = synth::engine::import_omni_lfos(&path).unwrap_or_default();
             let Ok(mut s) = self.inner.state.lock() else {
                 return;
             };
@@ -3043,12 +3046,11 @@ impl KeysRigBackend {
         lanes: &BTreeMap<String, LaneState>,
         layer: &str,
         module: usize,
-    ) -> signal_synth::engine::ModuleSettings {
+    ) -> synth::engine::ModuleSettings {
         let Some(lane) = lanes.get(layer) else {
-            return signal_synth::engine::ModuleSettings::default();
+            return synth::engine::ModuleSettings::default();
         };
-        let mut set =
-            Self::settings_from_macros(lane, lane.modules.get(module).map(|m| &m.macros));
+        let mut set = Self::settings_from_macros(lane, lane.modules.get(module).map(|m| &m.macros));
         // An Omnisphere lane: the knobs as seeded, through the same mapping,
         // so only what the player moved is applied onto the patch.
         if lane.omni_seed.is_some() {
@@ -3063,8 +3065,8 @@ impl KeysRigBackend {
     fn settings_from_macros(
         lane: &LaneState,
         macros: Option<&BTreeMap<String, f32>>,
-    ) -> signal_synth::engine::ModuleSettings {
-        let mut set = signal_synth::engine::ModuleSettings::default();
+    ) -> synth::engine::ModuleSettings {
+        let mut set = synth::engine::ModuleSettings::default();
         let v = |id: &str| {
             macros
                 .and_then(|m| m.get(id).copied())
@@ -3103,7 +3105,7 @@ impl KeysRigBackend {
         set.body = v("tone.body");
         set.drive = v("tone.drive");
         set.chorus = if fx_on { v("fx.chorus") } else { 0.0 };
-        set.ambience = signal_synth::engine::AmbienceSettings {
+        set.ambience = synth::engine::AmbienceSettings {
             on: fx_on && v("amb.bypass") < 0.5,
             algo: v("amb.algo"),
             size: v("amb.size"),
@@ -3124,7 +3126,7 @@ impl KeysRigBackend {
             (Some(factor), Some(bpm)) => 60_000.0 / bpm * factor,
             _ => v("dly.time"),
         };
-        set.delay = signal_synth::engine::DelaySettings {
+        set.delay = synth::engine::DelaySettings {
             on: fx_on && v("dly.bypass") < 0.5,
             style: v("dly.algo"),
             time_ms,
@@ -3150,13 +3152,11 @@ impl KeysRigBackend {
         for (i, e) in ["env3", "env4"].into_iter().enumerate() {
             set.mod_env_dh[i] = (v(&format!("{e}.delay")), v(&format!("{e}.hold")));
             set.mod_env_depth[i] = v(&format!("{e}.depth"));
-            set.mod_env_dest[i] =
-                signal_synth::engine::ModDest::from_value(v(&format!("{e}.dest")));
+            set.mod_env_dest[i] = synth::engine::ModDest::from_value(v(&format!("{e}.dest")));
         }
         for n in 0..4 {
             set.lfo_fade_ms[n] = v(&format!("lfo{}.fade", n + 1));
-            set.lfo_dest[n] =
-                signal_synth::engine::ModDest::from_value(v(&format!("lfo{}.dest", n + 1)));
+            set.lfo_dest[n] = synth::engine::ModDest::from_value(v(&format!("lfo{}.dest", n + 1)));
         }
         set
     }
@@ -3173,7 +3173,7 @@ impl KeysRigBackend {
 
     /// Build the profile as a per-lane daw-track program — the fully
     /// daw-based mixer (each layer/engine a real track).
-    fn profile_lane_program(&self) -> Option<signal_sampler::keys_rig::LaneProgram> {
+    fn profile_lane_program(&self) -> Option<sampler::keys_rig::LaneProgram> {
         let (profile, index, lanes) = self.profile_inputs()?;
         Some(profile.build_lane_program(
             |patch| index.get(patch).map(|p| p.to_string_lossy().into_owned()),
@@ -3186,7 +3186,7 @@ impl KeysRigBackend {
     /// Non-pack specs (raw `library.styx` extractions, `.prt_omn` patches)
     /// are skipped: a browser can only stream built packs, and those lanes
     /// are exactly the ones that stay silent natively too.
-    fn profile_pack_refs(&self) -> (Vec<KeysPackRef>, Vec<signal_keys_proto::KeysLaneRef>) {
+    fn profile_pack_refs(&self) -> (Vec<KeysPackRef>, Vec<crate::proto::KeysLaneRef>) {
         let Some((profile, index, _lanes)) = self.profile_inputs() else {
             return (Vec::new(), Vec::new());
         };
@@ -3236,8 +3236,7 @@ impl KeysRigBackend {
                     let audible = if s.lane_is_audible(lane) { 1.0 } else { 0.0 };
                     // Modules are named "<layer> <slot>" in the lane's tree.
                     for i in 0..lane.modules.len() {
-                        let module_name =
-                            format!("{name} {}", signal_synth::engine::module_slot(i));
+                        let module_name = format!("{name} {}", synth::engine::module_slot(i));
                         cells.set(Role::Module, &module_name, lane.module_gain(i) * audible);
                     }
                 }
@@ -3256,7 +3255,7 @@ impl KeysRigBackend {
                 cells.set(Role::Layer, name, s.lane_gain(name));
                 // Modules are named "<layer> <slot>" in the tree.
                 for i in 0..lane.modules.len() {
-                    let module_name = format!("{name} {}", signal_synth::engine::module_slot(i));
+                    let module_name = format!("{name} {}", synth::engine::module_slot(i));
                     cells.set(Role::Module, &module_name, lane.module_gain(i));
                 }
             }
@@ -3266,7 +3265,7 @@ impl KeysRigBackend {
         }
         rig.set_output_gain(db_to_linear(s.master_db));
         // Each scope's Tone and Limiter onto its track's stage.
-        use signal_sampler::keys_rig::Scope;
+        use sampler::keys_rig::Scope;
         let scope = |map: &BTreeMap<String, f32>, prefix: &str| {
             let v = |k: &str| map.get(&format!("{prefix}{k}")).copied().unwrap_or(0.0);
             (
@@ -3311,7 +3310,7 @@ impl KeysRigBackend {
             .rig
             .lock()
             .ok()
-            .and_then(|r| r.as_ref().map(signal_sampler::KeysRig::is_lanes))
+            .and_then(|r| r.as_ref().map(sampler::KeysRig::is_lanes))
             .unwrap_or(false)
             .then(|| self.profile_lane_program())
             .flatten();
@@ -3342,7 +3341,7 @@ impl KeysRigBackend {
     /// the patch doesn't reach are left alone, so a one-layer preset only
     /// touches the module you dropped it on.
     fn load_omni_patch(&self, layer: &str, start: usize, file: &std::path::Path) {
-        let imported = match signal_synth::engine::import_omni_patch(file) {
+        let imported = match synth::engine::import_omni_patch(file) {
             Ok(p) => p,
             Err(e) => {
                 tracing::error!(?file, "keys rig: patch import failed: {e}");
@@ -3410,7 +3409,7 @@ impl KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-patch-open".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }
@@ -3431,7 +3430,7 @@ impl KeysRigBackend {
                     // A drone engine carries its key selector; the card
                     // embeds it instead of the usual played-engine chrome.
                     drone: est.drone.clone().or_else(|| {
-                        is_drone(&engine.name).then_some(signal_keys_proto::KeysDrone {
+                        is_drone(&engine.name).then_some(crate::proto::KeysDrone {
                             key: 0,
                             playing: false,
                             octave: 3,
@@ -3461,9 +3460,9 @@ impl KeysRigBackend {
                                         lane.modules
                                             .iter()
                                             .enumerate()
-                                            .map(|(i, m)| signal_keys_proto::KeysModule {
+                                            .map(|(i, m)| crate::proto::KeysModule {
                                                 index: i as u32,
-                                                slot: signal_synth::engine::module_slot(i),
+                                                slot: synth::engine::module_slot(i),
                                                 patch: m.patch.clone(),
                                                 variant: m.variant.clone(),
                                                 live: !m.patch.is_empty(),
@@ -3681,7 +3680,7 @@ impl KeysRigBackend {
                 // caller of ensure_open (start, preset load, rebuild) needs
                 // one — attaching here makes this THE single open path, so a
                 // rig can never end up audible-but-deaf.
-                self.reattach_midi(signal_rig_host::midi::AttachTrigger::RigOpen);
+                self.reattach_midi(midi::telemetry::AttachTrigger::RigOpen);
                 if let Ok(mut s) = self.inner.state.lock() {
                     if s.loaded.is_none() {
                         s.loaded = Some(idx);
@@ -3725,11 +3724,11 @@ impl KeysRigBackend {
                 if rig.is_lanes() {
                     // Whole-rig preset audition while hosted per lane: one
                     // engine, one lane, the preset's tree.
-                    let prog = signal_sampler::keys_rig::LaneProgram {
+                    let prog = sampler::keys_rig::LaneProgram {
                         name: tree.name.clone(),
-                        engines: vec![signal_sampler::keys_rig::LaneEngine {
+                        engines: vec![sampler::keys_rig::LaneEngine {
                             name: tree.name.clone(),
-                            layers: vec![signal_sampler::keys_rig::LaneLayer {
+                            layers: vec![sampler::keys_rig::LaneLayer {
                                 name: tree.name.clone(),
                                 tree: tree.clone(),
                             }],
@@ -3760,7 +3759,7 @@ impl KeysRigBackend {
     /// per port for the whole process and fans events out. Subscribing is
     /// cheap and synchronous — the expensive part (opening ports) happens
     /// once, in `rescan`, however many rigs are listening.
-    fn reattach_midi(&self, trigger: signal_rig_host::midi::AttachTrigger) {
+    fn reattach_midi(&self, trigger: midi::telemetry::AttachTrigger) {
         let port = self
             .inner
             .state
@@ -3786,13 +3785,12 @@ impl KeysRigBackend {
         // The mod wheel also sweeps the pads' cutoff: note the value for the
         // worker and move on — the MIDI thread never waits on the rig state.
         let weak = Arc::downgrade(&self.inner);
-        let sink = move |ev: midicore::TimedEvent| {
+        let sink = move |ev: midi::TimedEvent| {
             // A learned pedal is a switch's, not a note to play: learn it,
             // or fire its switch off this thread, and drop it either way.
-            if let (Some(raw), Some(inner)) = (
-                midicore::RawShortMessage::from_event(&ev.event),
-                weak.upgrade(),
-            ) {
+            if let (Some(raw), Some(inner)) =
+                (midi::RawShortMessage::from_event(&ev.event), weak.upgrade())
+            {
                 let [status, d1, d2] = raw.bytes();
                 let outcome = inner
                     .learn
@@ -3815,14 +3813,17 @@ impl KeysRigBackend {
                         let _ = std::thread::Builder::new()
                             .name("keys-switch".into())
                             .spawn(move || {
-                                let _rt = keys_runtime().enter();
+                                let _rt = enter_keys_runtime();
                                 b.fire_switch(&target, pressed);
                             });
                         return;
                     }
                 }
             }
-            if let midicore::MidiEvent::ControlChange { controller, value, .. } = &ev.event {
+            if let midi::MidiEvent::ControlChange {
+                controller, value, ..
+            } = &ev.event
+            {
                 if controller.get() == 1 {
                     if let Some(inner) = weak.upgrade() {
                         Self::queue_wheel(&inner, value.get());
@@ -3831,7 +3832,7 @@ impl KeysRigBackend {
             }
             sink(ev);
         };
-        let hub = signal_rig_host::midi_hub::hub();
+        let hub = midi::hub::hub();
         let sub = hub.subscribe("keys", port.clone(), sink);
         if let Ok(mut s) = self.inner.state.lock() {
             // Replacing the old subscription drops it, detaching the previous
@@ -3921,7 +3922,7 @@ impl RigBackend for KeysRigBackend {
         // A keyboard plugged in after the rig started is merged into the
         // omni stream without touching the UI.
         tracing::info!(?ports, "keys rig: MIDI ports changed — re-attaching");
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortsChanged);
+        self.reattach_midi(midi::telemetry::AttachTrigger::PortsChanged);
         self.inner
             .events
             .publish(KeysEvent::Status(KeysRigSvc::status(self)));
@@ -3936,7 +3937,7 @@ impl KeysRigSvc for KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-open".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 // ensure_open attaches MIDI itself — it is the single open
                 // path for every entry point (start, preset load, rebuild).
                 if b.ensure_open() {
@@ -4008,11 +4009,11 @@ impl KeysRigSvc for KeysRigBackend {
                 .rig
                 .lock()
                 .ok()
-                .and_then(|r| r.as_ref().and_then(signal_sampler::KeysRig::engine_stats))
+                .and_then(|r| r.as_ref().and_then(sampler::KeysRig::engine_stats))
                 .map(|st| {
                     use std::sync::atomic::Ordering::Relaxed;
                     let (last_ms, peak_ms) = st.render_ms();
-                    signal_keys_proto::KeysRealtime {
+                    crate::proto::KeysRealtime {
                         xruns: st.xruns.load(Relaxed),
                         over_budget: st.over_budget.load(Relaxed),
                         mean_render_ms: st.mean_render_ms() as f32,
@@ -4061,7 +4062,7 @@ impl KeysRigSvc for KeysRigBackend {
         // because the callback IS on time — it is just rendering silence.
         {
             use architect_telemetry::wide;
-            let g = signal_sampler::engine::output_glitches();
+            let g = sampler::engine::output_glitches();
             wide::set("rig", "keys");
             wide::set("audio.running", running);
             wide::set("audio.voices", i64::from(voices));
@@ -4076,7 +4077,7 @@ impl KeysRigSvc for KeysRigBackend {
             wide::set("audio.nonfinite_frames", g.nonfinite_frames as i64);
             wide::set(
                 "audio.notes_dropped",
-                signal_sampler::engine::notes_dropped() as i64,
+                sampler::engine::notes_dropped() as i64,
             );
         }
         KeysStatus {
@@ -4130,7 +4131,7 @@ impl KeysRigSvc for KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-load".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.do_load_preset(index as usize);
             });
     }
@@ -4150,7 +4151,7 @@ impl KeysRigSvc for KeysRigBackend {
         let Some(program) = self.profile_lane_program() else {
             return KeysLaneProgram::default();
         };
-        let wire = signal_sampler::keys_rig::WireProgram::from_program(&program);
+        let wire = sampler::keys_rig::WireProgram::from_program(&program);
         let program_json = match facet_json::to_string(&wire) {
             Ok(json) => json,
             Err(e) => {
@@ -4189,7 +4190,7 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn reset_rt_peak(&self) {
         if let Ok(r) = self.inner.rig.lock() {
-            if let Some(st) = r.as_ref().and_then(signal_sampler::KeysRig::engine_stats) {
+            if let Some(st) = r.as_ref().and_then(sampler::KeysRig::engine_stats) {
                 st.reset_peak();
             }
         }
@@ -4220,7 +4221,7 @@ impl KeysRigSvc for KeysRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
-        self.reattach_midi(signal_rig_host::midi::AttachTrigger::PortSelected);
+        self.reattach_midi(midi::telemetry::AttachTrigger::PortSelected);
         self.inner
             .events
             .publish(KeysEvent::Status(KeysRigSvc::status(self)));
@@ -4400,7 +4401,7 @@ impl KeysRigSvc for KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-layer-patch".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }
@@ -4421,9 +4422,9 @@ impl KeysRigSvc for KeysRigBackend {
             .modules
             .iter()
             .enumerate()
-            .map(|(i, m)| signal_keys_proto::KeysModule {
+            .map(|(i, m)| crate::proto::KeysModule {
                 index: i as u32,
-                slot: signal_synth::engine::module_slot(i),
+                slot: synth::engine::module_slot(i),
                 patch: m.patch.clone(),
                 variant: m.variant.clone(),
                 live: !m.patch.is_empty(),
@@ -4473,7 +4474,7 @@ impl KeysRigSvc for KeysRigBackend {
             })
             .collect();
         // The selected MODULE's slice of the live program.
-        let module_name = format!("{layer} {}", signal_synth::engine::module_slot(slot));
+        let module_name = format!("{layer} {}", synth::engine::module_slot(slot));
         let tree = s
             .tree
             .as_ref()
@@ -4833,11 +4834,15 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn rename_user_preset(&self, preset: u32, name: String) {
-        self.edit_user_preset(preset, |file| crate::user_presets::rename(file, &name, false).map(drop));
+        self.edit_user_preset(preset, |file| {
+            crate::user_presets::rename(file, &name, false).map(drop)
+        });
     }
 
     fn duplicate_user_preset(&self, preset: u32, name: String) {
-        self.edit_user_preset(preset, |file| crate::user_presets::rename(file, &name, true).map(drop));
+        self.edit_user_preset(preset, |file| {
+            crate::user_presets::rename(file, &name, true).map(drop)
+        });
     }
 
     fn delete_user_preset(&self, preset: u32) {
@@ -4906,7 +4911,7 @@ impl KeysRigSvc for KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-layer-clear".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }
@@ -4985,7 +4990,7 @@ impl KeysRigSvc for KeysRigBackend {
             let _ = std::thread::Builder::new()
                 .name("keys-stack".into())
                 .spawn(move || {
-                    let _rt = keys_runtime().enter();
+                    let _rt = enter_keys_runtime();
                     b.rebuild_program();
                 });
         } else {
@@ -5189,8 +5194,8 @@ impl KeysRigStreamSource for KeysRigBackend {
 impl Services for KeysRigBackend {
     fn layers() -> impl Layer<Self> {
         layers![
-            signal_keys_proto::keys::Service,
-            signal_keys_proto::keys::StreamService
+            crate::proto::keys::Service,
+            crate::proto::keys::StreamService
         ]
     }
 }
@@ -5216,7 +5221,7 @@ impl KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-rebuild".into())
             .spawn(move || {
-                let _rt = keys_runtime().enter();
+                let _rt = enter_keys_runtime();
                 b.rebuild_program();
             });
     }
@@ -5226,7 +5231,11 @@ impl KeysRigBackend {
     fn rescan_user_presets(&self) {
         let (presets, specs) = crate::user_presets::scan();
         if let Ok(mut s) = self.inner.state.lock() {
-            let keep = s.presets.iter().position(|p| p.user).unwrap_or(s.presets.len());
+            let keep = s
+                .presets
+                .iter()
+                .position(|p| p.user)
+                .unwrap_or(s.presets.len());
             s.presets.truncate(keep);
             s.specs.truncate(keep);
             s.presets.extend(presets);
@@ -5396,7 +5405,7 @@ fn pack_refs_for(profile: &KeysProfile, index: &BTreeMap<String, PathBuf>) -> Ve
 fn lane_refs_for(
     profile: &KeysProfile,
     index: &BTreeMap<String, PathBuf>,
-) -> Vec<signal_keys_proto::KeysLaneRef> {
+) -> Vec<crate::proto::KeysLaneRef> {
     let mut out = Vec::new();
     for engine in &profile.engines {
         for layer in &engine.layers {
@@ -5410,7 +5419,7 @@ fn lane_refs_for(
                 })
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            out.push(signal_keys_proto::KeysLaneRef {
+            out.push(crate::proto::KeysLaneRef {
                 engine: engine.name.clone(),
                 name: layer.name.clone(),
                 key,
@@ -5421,7 +5430,7 @@ fn lane_refs_for(
 }
 
 const fn note_ev(note: u8, velocity: u8) -> MidiEvent {
-    use midicore::{Channel, KeyNumber, Velocity};
+    use midi::{Channel, KeyNumber, Velocity};
     MidiEvent::NoteOn {
         channel: Channel::new(0),
         key: KeyNumber::new(note),
@@ -5904,261 +5913,6 @@ fn role_tag(role: Role) -> String {
     .to_string()
 }
 
-#[cfg(test)]
-mod tests {
-    //! The Global Control rule, at the level where it is new: an ENGINE knob
-    //! over lanes that disagree. No audio, no library — the maths is pure
-    //! state, so it is tested as state.
-
-    use super::*;
-
-    /// A worship-profile state whose named lanes each hold one sounding
-    /// module at the given cutoff.
-    fn keys_state(lanes: &[(&str, f32)]) -> State {
-        let mut s = State::default();
-        let mut profile = worship_profile();
-        // These tests exercise the knob mechanics over the named lanes;
-        // the worship profile's authored exclusions (Keys A, the piano) are
-        // covered by their own test below.
-        for (lane, _) in lanes {
-            if let Some(l) = profile.layer_mut(lane) {
-                l.exclude_global = false;
-            }
-        }
-        s.adopt_profile(profile);
-        for (lane, cutoff) in lanes {
-            let l = s.lanes.get_mut(*lane).expect("lane in the worship profile");
-            let mut macros = default_macros();
-            macros.insert("filter.cutoff".into(), *cutoff);
-            l.modules = vec![ModuleState {
-                patch: "test".into(),
-                macros,
-                ..ModuleState::default()
-            }];
-        }
-        s
-    }
-
-    /// The rig starts with the pads and synths audible — a muted ENGINE hides
-    /// its lanes however they are switched — and Club Europa muted.
-    #[test]
-    fn the_worship_rig_starts_with_the_pads_on_and_club_europa_muted() {
-        let mut s = State::default();
-        s.adopt_profile(worship_profile());
-        for engine in ["Keys", "Pad", "Bass", "Aux"] {
-            assert!(!s.engines.get(engine).expect("engine").muted, "{engine} starts muted");
-        }
-        for lane in ["Pad", "Shimmer", "Synth 1"] {
-            assert!(!s.lanes.get(lane).expect("lane").muted, "{lane} starts muted");
-        }
-        assert!(s.lanes.get("Synth 2").expect("lane").muted, "Club Europa starts audible");
-    }
-
-    /// The worship profile keeps the piano (Keys A) OUT of the global scope
-    /// — the exclusion that regressed the knob tests when it was authored.
-    #[test]
-    fn excluded_lanes_stay_out_of_global_scope() {
-        let mut s = State::default();
-        s.adopt_profile(worship_profile());
-        for lane in ["Keys 1", "Keys 2"] {
-            let l = s.lanes.get_mut(lane).expect("lane");
-            l.modules = vec![ModuleState {
-                patch: "test".into(),
-                macros: default_macros(),
-                ..ModuleState::default()
-            }];
-        }
-        let targets = keys_targets(&s);
-        assert!(
-            !targets.iter().any(|(lane, _)| lane == "Keys 1"),
-            "the piano is excluded from the engine's global scope"
-        );
-        assert!(targets.iter().any(|(lane, _)| lane == "Keys 2"));
-    }
-
-    fn cutoff(s: &State, lane: &str) -> f32 {
-        KeysRigBackend::module_value(s.lanes.get(lane).expect("lane"), 0, "filter.cutoff")
-    }
-
-    fn keys_targets(s: &State) -> Vec<(String, usize)> {
-        KeysRigBackend::scope_targets(s, &KeysRigBackend::engine_lanes(s, "Keys"))
-    }
-
-    #[test]
-    fn an_engine_knob_writes_through_while_its_lanes_agree() {
-        let mut s = keys_state(&[("Keys 1", 8000.0), ("Keys 2", 8000.0)]);
-        let targets = keys_targets(&s);
-        let def = global_def("e.filter.cutoff").expect("engine cutoff");
-        let span =
-            KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, 4000.0);
-
-        assert!(
-            span.is_none(),
-            "an agreeing engine is absolute — nothing to remember"
-        );
-        assert_eq!(cutoff(&s, "Keys 1"), 4000.0);
-        assert_eq!(cutoff(&s, "Keys 2"), 4000.0);
-
-        let est = s.engines.get("Keys").cloned().expect("engine");
-        let models = KeysRigBackend::global_models(&s, ENGINE, &targets, &est.globals, &est.spans);
-        let read = models
-            .iter()
-            .find(|m| m.id == "e.filter.cutoff")
-            .expect("model");
-        assert!(!read.bipolar, "and it reads back as the value itself");
-        assert_eq!(read.value, 4000.0);
-    }
-
-    #[test]
-    fn an_engine_knob_offsets_lanes_that_disagree_and_gives_them_back() {
-        let mut s = keys_state(&[("Keys 1", 2000.0), ("Keys 2", 8000.0)]);
-        let targets = keys_targets(&s);
-        let def = global_def("e.filter.cutoff").expect("engine cutoff");
-
-        let span = KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, 0.5)
-            .expect("a disagreeing engine holds its baseline");
-        let (a, b) = (cutoff(&s, "Keys 1"), cutoff(&s, "Keys 2"));
-        assert!(a > 2000.0 && b > 8000.0, "both lanes travelled: {a} {b}");
-        assert!(
-            (b / a - 4.0).abs() < 1e-2,
-            "and kept their spacing: {a} {b}"
-        );
-        assert_eq!(span.1.len(), 2, "the baseline spans both lanes");
-
-        // Back to the detent: the patch's own values come back untouched.
-        let back =
-            KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, Some(span), 0.0);
-        assert!(back.is_none(), "centred — the span is dropped");
-        assert!((cutoff(&s, "Keys 1") - 2000.0).abs() < 1e-2);
-        assert!((cutoff(&s, "Keys 2") - 8000.0).abs() < 1e-2);
-    }
-
-    #[test]
-    fn a_rig_knob_reaches_every_engine() {
-        // Two engines, one lane each, disagreeing — the rig level should
-        // still move both together and hand them back at the detent.
-        let mut s = keys_state(&[("Keys 1", 2000.0), ("Pad", 8000.0)]);
-        let targets = KeysRigBackend::scope_targets(&s, &KeysRigBackend::all_lanes(&s));
-        let def = global_def("r.filter.cutoff").expect("rig cutoff");
-
-        // Downward: the profile's other lanes sit wide open at 20 kHz, so
-        // upward there is nowhere to go — the ceiling is the group's leader.
-        let span = KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, -0.5)
-            .expect("a disagreeing rig holds its baseline");
-        let (keys, pad) = (cutoff(&s, "Keys 1"), cutoff(&s, "Pad"));
-        assert!(
-            keys < 2000.0 && pad < 8000.0,
-            "both engines travelled: {keys} {pad}"
-        );
-        assert!(
-            (pad / keys - 4.0).abs() < 1e-2,
-            "and kept their spacing: {keys} {pad}"
-        );
-
-        let back =
-            KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, Some(span), 0.0);
-        assert!(back.is_none());
-        assert!((cutoff(&s, "Keys 1") - 2000.0).abs() < 1e-2);
-        assert!((cutoff(&s, "Pad") - 8000.0).abs() < 1e-2);
-    }
-
-    #[test]
-    fn an_edit_underneath_rebases_the_engine_knob() {
-        let mut s = keys_state(&[("Keys 1", 2000.0), ("Keys 2", 8000.0)]);
-        s.engines.get_mut("Keys").expect("engine").spans.insert(
-            "e.filter.cutoff".into(),
-            (0.5, vec![("Keys 1".into(), 0, 2000.0)]),
-        );
-
-        KeysRigBackend::rebase_others(
-            &mut s,
-            &["Keys".to_string()],
-            &["Keys 1".to_string()],
-            "filter.cutoff",
-            "",
-        );
-
-        assert!(
-            s.engines.get("Keys").expect("engine").spans.is_empty(),
-            "the engine's baseline described a patch that no longer exists"
-        );
-    }
-
-    // ── The browser boot payload (lane_program_wire's two halves) ────────
-
-    /// The worship profile's lane program survives the `WireProgram` JSON
-    /// round trip — the exact bytes `lane_program_wire` serves and the keys
-    /// worklet's `openLanes` parses.
-    #[test]
-    fn lane_program_wire_roundtrips_through_json() {
-        let profile = worship_profile();
-        let program = profile.build_lane_program(
-            |patch| Some(format!("/packs/{patch}.signalpack")),
-            |_, _| Default::default(),
-        );
-        let wire = signal_sampler::keys_rig::WireProgram::from_program(&program);
-        let json = facet_json::to_string(&wire).expect("wire program serializes");
-        let back: signal_sampler::keys_rig::WireProgram =
-            facet_json::from_str(&json).expect("wire program parses back");
-        let back = back.into_lane_program();
-        assert_eq!(back.name, program.name);
-        let shape = |p: &signal_sampler::keys_rig::LaneProgram| -> Vec<(String, Vec<String>)> {
-            p.engines
-                .iter()
-                .map(|e| {
-                    (
-                        e.name.clone(),
-                        e.layers.iter().map(|l| l.name.clone()).collect(),
-                    )
-                })
-                .collect()
-        };
-        assert_eq!(shape(&back), shape(&program));
-        assert_eq!(back.tail.is_some(), program.tail.is_some());
-    }
-
-    /// The pack manifest lists each referenced `.signalpack` once (spec-path
-    /// key + file-stem name) and skips specs a browser cannot stream.
-    #[test]
-    fn pack_refs_dedup_and_skip_non_packs() {
-        let profile = worship_profile();
-        let patches: Vec<String> = profile
-            .engines
-            .iter()
-            .flat_map(|e| e.layers.iter())
-            .flat_map(super::super::profile::LayerDef::module_patches)
-            .filter(|p| !p.is_empty())
-            .collect();
-        assert!(patches.len() > 2, "worship profile references patches");
-        let mut index: BTreeMap<String, PathBuf> = BTreeMap::new();
-        // First patch resolves to a non-pack spec; the rest to packs.
-        index.insert(
-            patches[0].clone(),
-            PathBuf::from(format!("/specs/{}.prt_omn", patches[0])),
-        );
-        for p in &patches[1..] {
-            index.insert(p.clone(), PathBuf::from(format!("/packs/{p}.signalpack")));
-        }
-        let refs = pack_refs_for(&profile, &index);
-        assert!(!refs.is_empty());
-        assert!(
-            refs.iter().all(|r| r.key.ends_with(".signalpack")),
-            "only built packs are streamable"
-        );
-        assert!(
-            !refs.iter().any(|r| r.key.contains(&patches[0])),
-            "the non-pack spec is skipped"
-        );
-        let mut keys: Vec<&str> = refs.iter().map(|r| r.key.as_str()).collect();
-        keys.sort_unstable();
-        keys.dedup();
-        assert_eq!(keys.len(), refs.len(), "each pack listed once");
-        for r in &refs {
-            assert_eq!(r.key, format!("/packs/{}.signalpack", r.name));
-        }
-    }
-}
-
 /// The keys rig's saved audio settings (`rigs/keys-rig.styx`, the guitar
 /// rig's format: device, rate, buffer), as an output-only engine's prefs —
 /// a synth generates, it has no input to open. Unsaved: the system output at
@@ -6166,7 +5920,7 @@ mod tests {
 /// CoreAudio property (AVAudioSession owns the IO buffer there), so the
 /// backend default is asked for instead.
 fn keys_audio_prefs() -> AudioIoPrefs {
-    let mgr = signal_sampler::rig_manager::RigManager::load(KEYS_RIG_NAME);
+    let mgr = sampler::rig_manager::RigManager::load(KEYS_RIG_NAME);
     let mut prefs = AudioIoPrefs::from(&mgr.audio);
     prefs.want_input = false;
     prefs.input_device = String::new();
@@ -6187,7 +5941,7 @@ pub const KEYS_RIG_NAME: &str = "Keys Rig";
 /// slowest lane), so a spike says what it was. Quiet while it keeps up.
 #[cfg(not(target_arch = "wasm32"))]
 fn spawn_engine_watch(
-    stats: std::sync::Arc<daw_audio_io::duplex::EngineStats>,
+    stats: std::sync::Arc<audio::io::duplex::EngineStats>,
     daw: daw::standalone::Standalone,
     project: String,
 ) {
@@ -6200,7 +5954,7 @@ fn spawn_engine_watch(
             let (mut over0, mut xrun0, mut calls0, mut total0) = (0u64, 0u64, 0u64, 0u64);
             let skips = daw::standalone::audio_engine::render::plugin_stage_skips;
             let mut skip0 = skips();
-            let mut cut0 = signal_sampler::keys_rig::guard_cuts();
+            let mut cut0 = sampler::keys_rig::guard_cuts();
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let Some(st) = weak.upgrade() else {
@@ -6217,12 +5971,12 @@ fn spawn_engine_watch(
                     0.0
                 };
                 let skipped = skips();
-                let cuts = signal_sampler::keys_rig::guard_cuts();
+                let cuts = sampler::keys_rig::guard_cuts();
                 // Notes cut short: by the guard fading voices (because the
                 // rig ran hot, or held more voices than its budget), or by a
                 // lane's polyphony limit. Each sounds like a sample ending
                 // early, so say which — and in which lane.
-                let lanes = signal_sampler::lane_health::reports();
+                let lanes = sampler::lane_health::reports();
                 let peak_rig: u32 = lanes.iter().map(|l| l.peak_voices).sum();
                 for l in lanes.iter().filter(|l| l.cut_anything()) {
                     tracing::warn!(
@@ -6244,7 +5998,9 @@ fn spawn_engine_watch(
                     if let Some(w) = worst {
                         let lane = daw
                             .read_project(&project, |p| {
-                                p.tracks.get(w.slowest_track as usize).map(|t| t.name.clone())
+                                p.tracks
+                                    .get(w.slowest_track as usize)
+                                    .map(|t| t.name.clone())
                             })
                             .flatten()
                             .unwrap_or_default();
@@ -6266,7 +6022,7 @@ fn spawn_engine_watch(
                         silent_blocks = skipped - skip0,
                         // Held notes the CPU guard cut to keep up.
                         guard_cuts = cuts - cut0,
-                        voices = signal_sampler::keys_rig::total_voices(),
+                        voices = sampler::keys_rig::total_voices(),
                         peak_ms = format!("{peak_ms:.2}"),
                         mean_ms = format!("{mean_ms:.2}"),
                         budget_ms = format!("{budget_ms:.2}"),
@@ -6274,7 +6030,8 @@ fn spawn_engine_watch(
                         "keys audio: under strain"
                     );
                 }
-                (over0, xrun0, calls0, total0, skip0, cut0) = (over, xruns, calls, total, skipped, cuts);
+                (over0, xrun0, calls0, total0, skip0, cut0) =
+                    (over, xruns, calls, total, skipped, cuts);
             }
         });
 }

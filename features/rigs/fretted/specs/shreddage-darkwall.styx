@@ -1,0 +1,86 @@
+// Shreddage 3.5 Darkwall (Impact Soundworks) — library spec.
+//
+// A seven-string baritone guitar (C G D A E B E' from the top, opens
+// 48 43 38 33 28 23 16), three sampled pickups ("Neck", "Middle",
+// "Bridge"); the shipped patch plays the Bridge pickup only. The engine's
+// fretboard stage places notes from `fretboard` in the instrument's
+// section.styx, which features/rigs/fretted/tests/shreddage_section_meta.py
+// writes from the decode (Darkwall ships its TACT meta). Zones:
+// tests/shreddage_zones.py. Decode notes on AudioHaven: Sampled/Guitar/
+// Shreddage Darkwall/_notes/engine-model.md (the delta over Abyss).
+//
+// Modelled so far, at the shipped settings (hand fixed at fret 0, reset on
+// transport start, Natural fretting, economy picking, one track,
+// anti-repetition off): single picked notes with pitched and unpitched
+// releases, Force Same-String hammers, the idle hand reset, palm mute with
+// its detune table, stitched slides (key 12, the last stitch ringing on as
+// the destination) and slide-ins (key 14), fret noise (key 13) and key FX
+// (10, 11).
+// Slide-out (key 14 over ringing strings). Not yet: strumming.
+
+name    "Shreddage 3.5 Darkwall"
+vendor  "Impact Soundworks"
+version "3.5"
+
+sections (
+    { id darkwall, label "Darkwall", lowest_note E0, highest_note C4 }
+)
+
+mics (
+    { id Bridge, label "Bridge", kind close, default true }
+    { id Middle, label "Middle", kind close }
+    { id Neck,   label "Neck",   kind close }
+)
+
+performance {
+    resample_transpose true
+    mono_balance_pan   true
+    release_curve_k    2.662588
+    strict_key_ranges  true
+    max_repeat_strikes 0
+    zone_pitch_tolerance 0
+    release_delay_ms   0.0
+}
+
+dynamics {
+    short_note_controller  velocity
+    enable_velocity_layers true
+}
+
+// TACT articulations in their shipped order (`!darkwall_artic_names`); RR
+// and layer counts from `%_darkwall_meta` (m4, m5).
+articulations (
+    { id Sustain,       label "Sustain",        kind @Sustain, dynamics (v1 v2 v3), rr 2, dyn_ctrl velocity, notes full }
+    { id SustainShort,  label "Sustain Short",  kind @Sustain, dynamics (v1 v2 v3), rr 2, dyn_ctrl velocity, notes full }
+    { id StaccatoLong,  label "Staccato Long",  kind @Sustain, dynamics (v1),       rr 2, dyn_ctrl velocity, notes full }
+    { id StaccatoShort, label "Staccato Short", kind @Sustain, dynamics (v1),       rr 2, dyn_ctrl velocity, notes full }
+    { id Mute,          label "Palm Mute",      kind @Sustain, dynamics (v1 v2 v3), rr 3, dyn_ctrl velocity, notes full }
+    { id Harmonics,     label "Harmonics",      kind @Sustain, dynamics (v1),       rr 2, dyn_ctrl velocity, notes full }
+    { id Tapping,       label "Tapping",        kind @Sustain, dynamics (v1),       rr 2, dyn_ctrl velocity, notes full }
+    { id BuzzTrill,     label "Buzz Trill",     kind @Sustain, dynamics (v1 v2),    rr 4, dyn_ctrl velocity, notes full }
+    { id HammerPull,    label "Legato (Hammer/Pull)", kind @Sustain, dynamics (v1), rr 2, dyn_ctrl velocity, notes full }
+    { id Slide,         label "Legato (Slide)", kind @Sustain, rr 2, dyn_ctrl velocity, notes full }
+    { id PitchedRelease,   label "Pitched Release",   kind @Sustain, rr 2,  dyn_ctrl velocity, notes full }
+    { id UnpitchedRelease, label "Unpitched Release", kind @OneShot, rr 1,  dyn_ctrl velocity, notes full }
+    // side recordings outside TACT (never selected)
+    { id FretSqueak, label "Fret Squeak", kind @OneShot, rr 1, dyn_ctrl velocity, notes full }
+    { id FretNoise,  label "Fret Noise",  kind @OneShot, rr 1, dyn_ctrl velocity, notes full }
+    { id KeyFX,      label "Key FX",      kind @OneShot, rr 1, dyn_ctrl velocity, notes full }
+)
+
+// TACT keyswitches as shipped (latched; `%tact___matrix[128·a + 11]`).
+// C0 = MIDI 12, so the keyswitches sit at MIDI 0-7.
+keyswitch {
+    velocity_sensitive false
+    user_configurable  true
+    notes (
+        { note "C-1",  label "Sustain",        vel_map { 0-127 "Sustain" } }
+        { note "C#-1", label "Sustain Short",  vel_map { 0-127 "SustainShort" } }
+        { note "D-1",  label "Staccato Long",  vel_map { 0-127 "StaccatoLong" } }
+        { note "D#-1", label "Staccato Short", vel_map { 0-127 "StaccatoShort" } }
+        { note "E-1",  label "Palm Mute",      vel_map { 0-127 "Mute" } }
+        { note "F-1",  label "Harmonics",      vel_map { 0-127 "Harmonics" } }
+        { note "F#-1", label "Tapping",        vel_map { 0-127 "Tapping" } }
+        { note "G-1",  label "Buzz Trill",     vel_map { 0-127 "BuzzTrill" } }
+    )
+}

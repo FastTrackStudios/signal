@@ -11,10 +11,10 @@
 
 use std::path::PathBuf;
 
+use sampler::SamplerRig;
+use sampler::document::TempoPoint;
 use signal_orchestra::timing::{mix_click, render_click};
 use signal_orchestra::{CSS_CONFIG, CSS_ROOT, load_strings, render_part_offline};
-use signal_sampler::SamplerRig;
-use signal_sampler::document::TempoPoint;
 
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
@@ -52,7 +52,8 @@ fn main() -> eyre::Result<()> {
         .nth(3)
         .unwrap_or_else(|| "listen/going_home_violin1".into());
 
-    let sc = keyflow_orchestra::score::load(&mxl).map_err(|e| eyre::eyre!("score load: {e}"))?;
+    let sc =
+        keyflow_lang::orchestra::score::load(&mxl).map_err(|e| eyre::eyre!("score load: {e}"))?;
     let part = sc
         .parts
         .iter()
@@ -69,7 +70,7 @@ fn main() -> eyre::Result<()> {
         ID,
         part,
         &sc.meta.tempos,
-        keyflow_orchestra::ProfileKind::Strings,
+        keyflow_lang::orchestra::ProfileKind::Strings,
         SEED,
     )
     .map_err(|e| eyre::eyre!(e))?;
@@ -98,7 +99,7 @@ fn main() -> eyre::Result<()> {
             .markers
             .iter()
             .filter(|m| {
-                m.kind == signal_sampler::document::MarkerKind::Arrival
+                m.kind == sampler::document::MarkerKind::Arrival
                     && m.note == t.to_note
                     && m.line == t.line
             })

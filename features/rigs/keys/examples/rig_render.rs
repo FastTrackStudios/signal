@@ -13,7 +13,7 @@
 //! ```
 
 use daw::standalone::audio_engine::render::ProjectRenderer;
-use signal_keys_proto::keys::KeysRig as _;
+use keys::proto::keys::KeysRig as _;
 
 const SR: u32 = 48_000;
 const BLOCK: usize = 128;
@@ -23,7 +23,9 @@ fn main() {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
         .try_init();
-    let out = std::env::args().nth(1).unwrap_or_else(|| "rig_render.wav".into());
+    let out = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "rig_render.wav".into());
     let env = |k: &str| std::env::var(k).ok();
     let hold: f32 = env("RIG_HOLD").and_then(|v| v.parse().ok()).unwrap_or(6.0);
     let wheel: Option<u32> = env("RIG_WHEEL").and_then(|v| v.parse().ok());
@@ -35,9 +37,13 @@ fn main() {
         .map(|v| v.split(',').filter_map(|k| k.trim().parse().ok()).collect())
         .unwrap_or_else(|| vec![48, 55, 60, 64, 67]);
 
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     assert!(backend.debug_open_headless(SR), "open headless");
-    for lane in env("RIG_MUTE").unwrap_or_default().split(',').filter(|l| !l.is_empty()) {
+    for lane in env("RIG_MUTE")
+        .unwrap_or_default()
+        .split(',')
+        .filter(|l| !l.is_empty())
+    {
         backend.set_layer_mute(lane.to_string(), true);
     }
     let renderer = backend
@@ -45,7 +51,7 @@ fn main() {
         .expect("rig");
     renderer.connect_live_midi(256);
     let t0 = std::time::Instant::now();
-    while signal_sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 180 {
+    while sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 180 {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     for _ in 0..400 {
@@ -57,7 +63,7 @@ fn main() {
     let (up_at, down_at) = (2 * SR as usize / BLOCK, 4 * SR as usize / BLOCK);
     let (mut l, mut r) = (Vec::new(), Vec::new());
     for b in 0..total {
-        let note = |f: &dyn Fn(&signal_sampler::KeysRig)| backend.debug_with_rig(f);
+        let note = |f: &dyn Fn(&sampler::KeysRig)| backend.debug_with_rig(f);
         if b == 0 {
             note(&|rig| chord.iter().for_each(|&k| rig.note_on(k, 90)));
         }
@@ -71,7 +77,7 @@ fn main() {
         // RIG_REBUILD=1: rebuild the program at 2 s (then let it load).
         if b == up_at && std::env::var_os("RIG_REBUILD").is_some() {
             backend.debug_rebuild();
-            while signal_sampler::rig::preloads_pending() > 0 {
+            while sampler::rig::preloads_pending() > 0 {
                 std::thread::sleep(std::time::Duration::from_millis(20));
             }
         }
@@ -87,7 +93,11 @@ fn main() {
         if b == SR as usize / BLOCK {
             backend.debug_with_rig(|rig| {
                 for (role, name, peak) in rig.cell_peaks() {
-                    println!("  meter {:>8} {name:<10} {:6.1} dB", role.tag(), 20.0 * peak.max(1e-9).log10());
+                    println!(
+                        "  meter {:>8} {name:<10} {:6.1} dB",
+                        role.tag(),
+                        20.0 * peak.max(1e-9).log10()
+                    );
                 }
             });
         }
@@ -96,7 +106,9 @@ fn main() {
             r.push(f.get(1).copied().unwrap_or(f[0]));
         }
         // Real time, so the wheel's worker gets its turn as in the app.
-        std::thread::sleep(std::time::Duration::from_secs_f64(BLOCK as f64 / f64::from(SR)));
+        std::thread::sleep(std::time::Duration::from_secs_f64(
+            BLOCK as f64 / f64::from(SR),
+        ));
     }
 
     let half = SR as usize / 2;

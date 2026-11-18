@@ -1,0 +1,1018 @@
+//! Headless synth-rig backend — the vox-served core behind the detachable GUI.
+//!
+//! Owns a live [`KeysRig`] (the shared composition-tree host on the engine),
+//! scans an Omnisphere patch library for presets, imports the selected
+//! `.prt_omn` / `.mlt_omn` into a composition tree (realizing its Soundsources
+//! against the local extraction), and plays it from hardware MIDI or UI notes.
+//! Implements the [`synth::proto::synth::SynthRig`] service + its
+//! `#[subscribe]` stream; mount `router()` (`architect::rig::RigBackend`) on a
+//! vox transport.
+
+use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex, OnceLock};
+
+use architect::dispatch::CurrentThreadDispatcher;
+use architect::rig::RigBackend;
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
+use audio::io::AudioIoPrefs;
+use keys::KeysRig;
+use midi::MidiEvent;
+use sampler::rig_node::{Container, RigNode, Role};
+use synth::omni_import::{
+    OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,
+};
+use synth::proto::synth::{SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource};
+use synth::proto::{
+    BrowseItem, SynthArticulation, SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer,
+    SynthMapping, SynthMic, SynthModRoute, SynthNode, SynthPreset, SynthStatus, SynthZone,
+};
+
+/// Root of the Omnisphere patch library to browse. Defaults to the factory
+/// **Live Keyboardist** bundle (where the default patch lives); override with
+/// `FTS_OMNISPHERE_PATCHES`.
+const PATCHES_ROOT: &str = "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/Factory/Live Keyboardist";
+
+/// Root of the built `.signalpack` soundsource library the BROWSE view scans —
+/// the same root [`SoundsourceIndex::scan_default`] overlays. Override with
+/// `FTS_OMNISPHERE_PACKS`.
+const OMNISPHERE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
+
+/// Substring of the preset selected on first open — "American Obesity" (a
+/// Live Keyboardist pad built on the OB-8 PWM Big Strings + Prophet 5 Classic
+/// soundsources). Falls back to the first preset if absent.
+const DEFAULT_PATCH: &str = "American Obesity";
+/// Default master output gain — a −12 dB pad, because summed multi-layer
+/// soundsource patches (two full-level layers + the loop) run hot and clip at
+/// unity. The UI volume slider adjusts it live.
+const DEFAULT_VOLUME: f32 = 0.25;
+
+#[derive(Default)]
+struct State {
+    presets: Vec<SynthPreset>,
+    /// Absolute patch path per preset (index-aligned).
+    paths: Vec<PathBuf>,
+    loaded: Option<usize>,
+    /// The loaded composition tree (for the control-view structure).
+    tree: Option<Container>,
+    midi_port: Option<String>,
+    /// Subscription to the shared process-wide MIDI hub — see
+    /// `midi::hub`. Dropping it detaches this rig only.
+    midi_handle: Option<midi::hub::Subscription>,
+    /// Master output gain (linear), applied to the rig on open + live changes.
+    volume: f32,
+    /// Live global controls (Omnisphere-style macros over the loaded patch).
+    globals: SynthGlobals,
+}
+
+struct Inner {
+    rig: Mutex<Option<KeysRig>>,
+    state: Mutex<State>,
+    /// The local soundsource extraction index — realizes Sample-mode patches.
+    /// Scanned once at construction (may be empty on machines without it).
+    index: SoundsourceIndex,
+    events: PubSub<SynthEvent>,
+    pump_started: AtomicBool,
+    /// Lazily-scanned soundsource-pack browse index (1400+ packs). Scanned once
+    /// on the first `browse()` call, then served from cache.
+    browse_cache: OnceLock<Vec<BrowseItem>>,
+}
+
+/// The synth-rig backend handle. Cheap to clone (all state shared).
+#[derive(Clone, HasDispatcher)]
+#[dispatch(CurrentThreadDispatcher)]
+pub struct SynthRigBackend {
+    inner: Arc<Inner>,
+}
+
+impl Default for SynthRigBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SynthRigBackend {
+    /// Build the backend, scan the patch library + soundsource extraction. Does
+    /// not open audio.
+    pub fn new() -> Self {
+        let (presets, paths) = scan_patches();
+        let index = SoundsourceIndex::scan_default();
+        // Default patch: American Obesity if present, else the first found.
+        let default_idx = presets
+            .iter()
+            .position(|p| p.name.contains(DEFAULT_PATCH))
+            .or_else(|| (!presets.is_empty()).then_some(0));
+        tracing::info!(
+            presets = presets.len(),
+            soundsources = index.len(),
+            "synth rig: scanned library"
+        );
+        let backend = Self {
+            inner: Arc::new(Inner {
+                rig: Mutex::new(None),
+                state: Mutex::new(State {
+                    presets,
+                    paths,
+                    loaded: default_idx,
+                    volume: DEFAULT_VOLUME,
+                    globals: SynthGlobals::neutral(),
+                    ..State::default()
+                }),
+                index,
+                events: architect::rig::events_hub(),
+                pump_started: AtomicBool::new(false),
+                browse_cache: OnceLock::new(),
+            }),
+        };
+        backend.spawn_meter_pump("synth-meter-pump");
+        backend
+    }
+
+    /// Import preset `index` into a composition tree (realizing soundsources),
+    /// with the current Live globals folded in for single-part patches.
+    fn program_for(&self, index: usize) -> Option<Container> {
+        let (path, globals) = {
+            let s = self.inner.state.lock().ok()?;
+            (s.paths.get(index)?.clone(), s.globals.clone())
+        };
+        if path.extension().is_some_and(|e| e == "prt_omn") {
+            let xml = std::fs::read_to_string(&path).ok()?;
+            match parse_patch(&xml) {
+                Ok(mut patch) => {
+                    apply_globals_to_patch(&mut patch, &globals);
+                    return Some(patch_to_container(&patch, &self.inner.index));
+                }
+                Err(e) => {
+                    tracing::error!(?path, "synth rig: patch parse failed: {e}");
+                    return None;
+                }
+            }
+        }
+        match load_patch_file(&path, &self.inner.index) {
+            Ok(tree) => Some(tree),
+            Err(e) => {
+                tracing::error!(?path, "synth rig: patch import failed: {e}");
+                None
+            }
+        }
+    }
+
+    /// Open audio with the given (or first) preset, if not already open.
+    fn ensure_open(&self) -> bool {
+        {
+            if self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false) {
+                return true;
+            }
+        }
+        let idx = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.loaded)
+            .unwrap_or(0);
+        let Some(tree) = self.program_for(idx) else {
+            return false;
+        };
+        let prefs = AudioIoPrefs {
+            output_device: String::new(),
+            sample_rate: 0,
+            buffer_size: 256,
+            ..Default::default()
+        };
+        let volume = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .map_or(DEFAULT_VOLUME, |s| s.volume);
+        match KeysRig::open(&prefs, &tree) {
+            Ok(r) => {
+                r.set_output_gain(volume); // pad the hot summed output
+                {
+                    let mut rig = self
+                        .inner
+                        .rig
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    *rig = Some(r);
+                }
+                // A freshly opened rig has no MIDI input yet, and every
+                // caller of ensure_open needs one — attaching here makes
+                // this THE single open path, so a rig can never end up
+                // audible-but-deaf.
+                self.reattach_midi(midi::telemetry::AttachTrigger::RigOpen);
+                if let Ok(mut s) = self.inner.state.lock() {
+                    if s.loaded.is_none() {
+                        s.loaded = Some(idx);
+                    }
+                    for (i, p) in s.presets.iter_mut().enumerate() {
+                        p.loaded = i == idx;
+                    }
+                    s.tree = Some(tree);
+                }
+                true
+            }
+            Err(e) => {
+                tracing::error!("synth rig: audio open failed: {e}");
+                false
+            }
+        }
+    }
+
+    fn do_load_preset(&self, index: usize) {
+        let Some(tree) = self.program_for(index) else {
+            return;
+        };
+        if !self.ensure_open() {
+            return;
+        }
+        if let Ok(mut rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_mut() {
+                rig.load_preset(&tree);
+            }
+        }
+        if let Ok(mut s) = self.inner.state.lock() {
+            for (i, p) in s.presets.iter_mut().enumerate() {
+                p.loaded = i == index;
+            }
+            s.loaded = Some(index);
+            s.tree = Some(tree);
+        }
+        self.publish_all();
+    }
+
+    fn reattach_midi(&self, trigger: midi::telemetry::AttachTrigger) {
+        let port = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.midi_port.clone());
+        // Build the sink under the rig lock (cheap clones) and release it
+        // before touching the hub: a stalled port open during a PipeWire
+        // graph reconfiguration must not pin the rig mutex (it wedges
+        // status() and the UI).
+        let sink = {
+            let rig = self
+                .inner
+                .rig
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            match rig.as_ref() {
+                Some(rig) => rig.midi_sink(),
+                None => return,
+            }
+        };
+        let hub = midi::hub::hub();
+        let sub = hub.subscribe("synth", port.clone(), sink);
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.midi_handle = Some(sub);
+        }
+        let reopened = hub.rescan();
+        tracing::info!(
+            midi.rig = "synth",
+            midi.trigger = trigger.as_str(),
+            midi.selector = if port.is_some() { "named" } else { "omni" },
+            midi.ports_seen = hub.ports().len(),
+            midi.hub_reopened = reopened,
+            "midi attach"
+        );
+    }
+
+    fn publish_all(&self) {
+        self.inner
+            .events
+            .publish(SynthEvent::Library(SynthRigSvc::presets(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Tree(SynthRigSvc::tree(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
+    }
+}
+
+// r[impl primitives.architect.rig-backend]
+impl RigBackend for SynthRigBackend {
+    type Event = SynthEvent;
+    type Tick = ();
+
+    fn events_hub(&self) -> &PubSub<SynthEvent> {
+        &self.inner.events
+    }
+
+    fn is_running(&self) -> bool {
+        self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false)
+    }
+
+    fn pump_started(&self) -> &AtomicBool {
+        &self.inner.pump_started
+    }
+
+    fn on_running_edge(&self, _running: bool) {
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Tree(SynthRigSvc::tree(self)));
+    }
+
+    fn on_running_tick(&self) {
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(SynthEvent::Midi(SynthRigSvc::midi_recent(self)));
+    }
+}
+
+// ── service impl ─────────────────────────────────────────────────────────────
+
+impl SynthRigSvc for SynthRigBackend {
+    fn start(&self) {
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("synth-open".into())
+            .spawn(move || {
+                // ensure_open attaches MIDI itself — the single open path.
+                let _ = b.ensure_open();
+                b.publish_all();
+            });
+    }
+
+    fn stop(&self) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.midi_handle = None;
+        }
+        if let Ok(mut rig) = self.inner.rig.lock() {
+            *rig = None;
+        }
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
+    }
+
+    fn status(&self) -> SynthStatus {
+        let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
+        let s = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let loaded_preset = s
+            .loaded
+            .and_then(|i| s.presets.get(i))
+            .map(|p| p.name.clone());
+        let master_peak = if running {
+            self.inner
+                .rig
+                .lock()
+                .ok()
+                .and_then(|r| r.as_ref().map(keys::KeysRig::output_peak))
+                .unwrap_or(0.0)
+        } else {
+            0.0
+        };
+        SynthStatus {
+            running,
+            loaded_preset,
+            master_peak,
+            voices: 0,
+            midi_port: s.midi_port.clone(),
+            volume: s.volume,
+        }
+    }
+
+    fn presets(&self) -> Vec<SynthPreset> {
+        self.inner
+            .state
+            .lock()
+            .map(|s| s.presets.clone())
+            .unwrap_or_default()
+    }
+
+    fn browse(&self) -> Vec<BrowseItem> {
+        self.inner.browse_cache.get_or_init(scan_browse).clone()
+    }
+
+    fn load_preset(&self, index: u32) {
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("synth-load".into())
+            .spawn(move || b.do_load_preset(index as usize));
+    }
+
+    fn tree(&self) -> SynthNode {
+        self.inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.tree.as_ref().map(|t| node_of(t, "")))
+            .unwrap_or_default()
+    }
+
+    fn trigger(&self, note: u32, velocity: u32) {
+        let (note, velocity) = (note as u8, velocity as u8);
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                if velocity > 0 {
+                    rig.note_on(note, velocity);
+                    rig.midi_monitor().record(&note_ev(note, velocity));
+                } else {
+                    rig.note_off(note);
+                }
+            }
+        }
+    }
+
+    fn midi_ports(&self) -> Vec<String> {
+        KeysRig::midi_input_ports()
+    }
+
+    fn set_midi_port(&self, name: String) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.midi_port = if name.is_empty() { None } else { Some(name) };
+        }
+        self.reattach_midi(midi::telemetry::AttachTrigger::PortSelected);
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
+    }
+
+    fn set_volume(&self, gain_milli: u32) {
+        let gain = gain_milli as f32 / 1000.0;
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.volume = gain;
+        }
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                rig.set_output_gain(gain);
+            }
+        }
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
+    }
+
+    fn midi_recent(&self) -> Vec<MidiEvent> {
+        self.inner
+            .rig
+            .lock()
+            .ok()
+            .and_then(|r| r.as_ref().map(|r| r.midi_monitor().recent()))
+            .unwrap_or_default()
+    }
+
+    fn soundsources(&self) -> Vec<String> {
+        let mut blocks = Vec::new();
+        if let Ok(s) = self.inner.state.lock() {
+            if let Some(tree) = s.tree.as_ref() {
+                sample_blocks(tree, &mut blocks);
+            }
+        }
+        let mut names: Vec<String> = blocks.into_iter().map(|(n, _)| n).collect();
+        names.dedup();
+        names
+    }
+
+    fn mapping(&self, soundsource: String) -> SynthMapping {
+        // Resolve the soundsource → its spec path: prefer the exact pack the
+        // loaded tree references; fall back to the library index by name.
+        let path = {
+            let Ok(s) = self.inner.state.lock() else {
+                return SynthMapping::default();
+            };
+            let mut blocks = Vec::new();
+            if let Some(tree) = s.tree.as_ref() {
+                sample_blocks(tree, &mut blocks);
+            }
+            if soundsource.is_empty() {
+                blocks.into_iter().next().map(|(_, p)| p)
+            } else {
+                blocks
+                    .into_iter()
+                    .find(|(n, _)| n == &soundsource)
+                    .map(|(_, p)| p)
+                    .or_else(|| {
+                        self.inner
+                            .index
+                            .find(&soundsource)
+                            .map(std::path::Path::to_path_buf)
+                    })
+            }
+        };
+        let Some(path) = path else {
+            return SynthMapping::default();
+        };
+        match spec_of(&path) {
+            Some(spec) => project_mapping(&spec, &soundsource),
+            None => SynthMapping::default(),
+        }
+    }
+
+    fn layers(&self) -> Vec<SynthLayer> {
+        let path = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.loaded.and_then(|i| s.paths.get(i).cloned()));
+        let Some(path) = path else { return Vec::new() };
+        // Single-part patches for now (a Multi's parts come later).
+        if path.extension().is_some_and(|e| e == "mlt_omn") {
+            return Vec::new();
+        }
+        let Ok(xml) = std::fs::read_to_string(&path) else {
+            return Vec::new();
+        };
+        match parse_patch(&xml) {
+            Ok(patch) => project_layers(&patch),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    fn globals(&self) -> SynthGlobals {
+        self.inner
+            .state
+            .lock()
+            .map_or_else(|_| SynthGlobals::neutral(), |s| s.globals.clone())
+    }
+
+    fn set_globals(&self, globals: SynthGlobals) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.globals = globals;
+        }
+        // Rebuild the loaded tree with the new macros folded in + re-host
+        // (glitch-free re-insert). Cheap: XML parse + tree build, no re-decode.
+        let idx = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.loaded)
+            .unwrap_or(0);
+        if let Some(tree) = self.program_for(idx) {
+            if let Ok(mut rig) = self.inner.rig.lock() {
+                if let Some(rig) = rig.as_mut() {
+                    rig.load_preset(&tree);
+                }
+            }
+            if let Ok(mut s) = self.inner.state.lock() {
+                s.tree = Some(tree);
+            }
+        }
+        self.inner
+            .events
+            .publish(SynthEvent::Status(SynthRigSvc::status(self)));
+    }
+}
+
+/// Fold the Live global macros into a parsed patch before it becomes a tree.
+/// Bipolar controls are neutral at 0.5; unipolar at 0.0. Implemented for the
+/// controls that map onto existing patch fields / native DSP; the rest are
+/// stored in [`SynthGlobals`] and applied once their DSP lands (see the TODO).
+fn apply_globals_to_patch(patch: &mut OmniPatch, g: &SynthGlobals) {
+    // 0.5 → 1× time; ±0.5 → ×2.8 / ×0.35 (perceptually even).
+    let envscale = |x: f32| ((x - 0.5) * 3.0).exp2();
+    for l in &mut patch.layers {
+        // Filter cutoff / resonance offsets (Omnisphere-normalized 0..1).
+        l.filter_freq = (g.filter_cutoff - 0.5)
+            .mul_add(0.8, l.filter_freq)
+            .clamp(0.0, 1.0);
+        l.filter_res = (l.filter_res + (g.filter_reso - 0.5)).clamp(0.0, 1.0);
+        // Filter-envelope amount (0.5 neutral → 1×).
+        l.filter_env_depth *= (g.filter_env * 2.0).clamp(0.0, 2.0);
+        // Amp / filter A/D/S/R offsets + sustain scale.
+        if let Some((a, d, s, r)) = l.amp_env {
+            l.amp_env = Some((
+                a * envscale(g.amp_attack),
+                d * envscale(g.amp_decay),
+                (s * g.amp_sustain * 2.0).clamp(0.0, 1.0),
+                r * envscale(g.amp_release),
+            ));
+        }
+        if let Some((a, d, s, r)) = l.filter_env {
+            l.filter_env = Some((
+                a * envscale(g.filt_attack),
+                d * envscale(g.filt_decay),
+                (s * g.filt_sustain * 2.0).clamp(0.0, 1.0),
+                r * envscale(g.filt_release),
+            ));
+        }
+        // Unison: adds detuned voices (2..8).
+        if g.unison_amount > 0.0 {
+            l.unison_count = g.unison_amount.mul_add(6.0, 2.0).round() as u32;
+            l.unison_detune = g.unison_detune;
+        }
+        // Effects off strips the layer FX rack.
+        if !g.effects_on {
+            l.fx.clear();
+        }
+    }
+    if !g.effects_on {
+        patch.common_fx.clear();
+        patch.aux_fx.clear();
+    }
+    // TODO (need added DSP / params, stored in globals meanwhile): vibrato
+    // (rate/depth → pitch LFO), velocity sensitivity (amp/filt envelopes),
+    // ambience (a master reverb amount+length), tone (a 3-band master EQ), and
+    // the master limiter.
+}
+
+impl SynthRigStreamSource for SynthRigBackend {
+    fn events_hub(&self) -> &PubSub<SynthEvent> {
+        &self.inner.events
+    }
+}
+
+impl Services for SynthRigBackend {
+    fn layers() -> impl Layer<Self> {
+        layers![
+            synth::proto::synth::Service,
+            synth::proto::synth::StreamService
+        ]
+    }
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+const fn note_ev(note: u8, velocity: u8) -> MidiEvent {
+    use midi::{Channel, KeyNumber, Velocity};
+    MidiEvent::NoteOn {
+        channel: Channel::new(0),
+        key: KeyNumber::new(note),
+        velocity: Velocity::new(velocity),
+    }
+}
+
+/// Recursively scan the Omnisphere patch library for `.prt_omn` / `.mlt_omn`
+/// files. The patch's library folder becomes its `kind` (category); macOS
+/// `AppleDouble` sidecars (`._*`) are skipped. Env `FTS_OMNISPHERE_PATCHES`
+/// overrides the root.
+fn scan_patches() -> (Vec<SynthPreset>, Vec<PathBuf>) {
+    let root = std::env::var("FTS_OMNISPHERE_PATCHES").unwrap_or_else(|_| PATCHES_ROOT.into());
+    let mut found: Vec<(String, String, PathBuf)> = Vec::new();
+    let mut stack = vec![PathBuf::from(&root)];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            if name.starts_with("._") {
+                continue; // AppleDouble resource-fork sidecar
+            }
+            if p.is_dir() {
+                stack.push(p);
+            } else if p
+                .extension()
+                .is_some_and(|x| x == "prt_omn" || x == "mlt_omn")
+            {
+                let stem = p
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                if stem.is_empty() {
+                    continue;
+                }
+                let kind = p
+                    .parent()
+                    .and_then(|d| d.file_name())
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Patches")
+                    .to_string();
+                found.push((stem, kind, p));
+            }
+        }
+    }
+    found.sort_by(|a, b| a.2.cmp(&b.2));
+    let mut presets = Vec::with_capacity(found.len());
+    let mut paths = Vec::with_capacity(found.len());
+    for (name, kind, path) in found {
+        presets.push(SynthPreset {
+            name,
+            kind,
+            loaded: false,
+        });
+        paths.push(path);
+    }
+    (presets, paths)
+}
+
+/// Scan the built `.signalpack` soundsource library (`FTS_OMNISPHERE_PACKS`
+/// override) into faceted [`BrowseItem`]s. Reuses `signal_browser`'s
+/// rayon-parallel header scan + tag materialisation — no audio decode. Runs
+/// once (cached by the caller); ~1400 packs scan in well under a second.
+fn scan_browse() -> Vec<BrowseItem> {
+    let root =
+        std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
+    let entries = signal_browser::pack_registry::scan_packs(Path::new(&root));
+    tracing::info!(packs = entries.len(), root = %root, "synth rig: scanned browse library");
+    entries.iter().map(project_browse_item).collect()
+}
+
+/// Project a scanned `PackEntry` into the wire [`BrowseItem`]. Tags are encoded
+/// `"category:value"` keys so the UI can re-parse them into a `TagSet`.
+fn project_browse_item(e: &signal_browser::pack_registry::PackEntry) -> BrowseItem {
+    BrowseItem {
+        id: e.path.to_string_lossy().into_owned(),
+        name: e.name.clone(),
+        kind: e.kind.label().to_string(),
+        instrument: e.instrument.clone(),
+        category: e.category.clone(),
+        vendor: e.vendor.clone(),
+        tags: e
+            .tags
+            .values()
+            .map(signal_browser::StructuredTag::encode)
+            .collect(),
+        style: e.style.clone(),
+        folder: e.folder.clone(),
+        sample_count: e.sample_count as u32,
+    }
+}
+
+fn slug(s: &str) -> String {
+    s.to_ascii_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
+}
+
+/// Convert a composition [`Container`] into a wire [`SynthNode`] tree.
+fn node_of(c: &Container, parent: &str) -> SynthNode {
+    let id = if parent.is_empty() {
+        slug(&c.name)
+    } else {
+        format!("{parent}/{}", slug(&c.name))
+    };
+    let mut children = Vec::new();
+    let mut any_live = false;
+    for n in &c.children {
+        let child = match n {
+            RigNode::Container { container } => node_of(container, &id),
+            RigNode::Block { block } => SynthNode {
+                id: format!("{id}/{}", slug(&block.name)),
+                label: block.name.clone(),
+                role: "block".into(),
+                live: block.has_backend(),
+                children: Vec::new(),
+            },
+        };
+        any_live |= child.live;
+        children.push(child);
+    }
+    SynthNode {
+        id,
+        label: c.name.clone(),
+        role: role_tag(c.role),
+        live: any_live,
+        children,
+    }
+}
+
+fn role_tag(role: Role) -> String {
+    match role {
+        Role::Preset => "preset",
+        Role::Engine => "engine",
+        Role::Layer => "layer",
+        Role::Module => "module",
+    }
+    .to_string()
+}
+
+/// Project a parsed patch's layers into the wire [`SynthLayer`]s for the Edit
+/// page. Filter cutoff is the calibrated Hz; routes are scoped to the layer by
+/// the `A/B/C/D ` target prefix.
+fn project_layers(patch: &synth::omni_import::OmniPatch) -> Vec<SynthLayer> {
+    use synth::omni_import::{classify_filter_full, filter_model, omni_cutoff_hz};
+    const NAMES: [&str; 4] = ["Layer A", "Layer B", "Layer C", "Layer D"];
+    const LETTERS: [&str; 4] = ["A", "B", "C", "D"];
+
+    let env = |e: Option<(f32, f32, f32, f32)>| {
+        let (a, d, s, r) = e.unwrap_or((0.0, 0.0, 1.0, 0.0));
+        SynthEnvelope {
+            attack: a,
+            decay: d,
+            sustain: s,
+            release: r,
+        }
+    };
+
+    patch
+        .layers
+        .iter()
+        .take(4)
+        .enumerate()
+        .map(|(i, l)| {
+            // The measured model when the algorithm is known, else the
+            // name's family.
+            let corner = |t: Option<f32>, setting: f32| {
+                t.and_then(filter_model)
+                    .map_or_else(|| omni_cutoff_hz(setting), |m| m.corner_hz(setting))
+            };
+            let (mode, poles) = l.filter_type1.and_then(filter_model).map_or_else(
+                || {
+                    let (m, p, _) = classify_filter_full(&l.filter_name);
+                    (m, p)
+                },
+                |m| (m.mode, m.poles),
+            );
+            let mut filters = vec![SynthFilter {
+                name: l.filter_name.clone(),
+                cutoff_hz: corner(l.filter_type1, l.filter_freq),
+                resonance: l.filter_res,
+                env_depth: l.filter_env_depth,
+                mode: mode.to_string(),
+                poles,
+            }];
+            if let Some((f2, r2)) = l.filter2 {
+                filters.push(SynthFilter {
+                    name: "Filter 2".to_string(),
+                    cutoff_hz: corner(l.filter_type2, f2),
+                    resonance: r2,
+                    env_depth: 0.0,
+                    mode: l
+                        .filter_type2
+                        .and_then(filter_model)
+                        .map_or("lowpass", |m| m.mode)
+                        .to_string(),
+                    poles: l.filter_type2.and_then(filter_model).map_or(2, |m| m.poles),
+                });
+            }
+            let prefix = format!("{} ", LETTERS[i]);
+            let routes = patch
+                .mod_routes
+                .iter()
+                .filter(|r| r.target.starts_with(&prefix))
+                .map(|r| SynthModRoute {
+                    source: r.source.clone(),
+                    target: r.target.clone(),
+                    depth: r.depth,
+                })
+                .collect();
+            SynthLayer {
+                name: NAMES[i].to_string(),
+                active: !l.soundsource.is_empty() || l.filter_active || l.amp_env.is_some(),
+                source: l.soundsource.clone(),
+                // Omni layers are Sample soundsources when one is referenced;
+                // an empty reference means the layer runs in synth (DSP
+                // wavetable) mode — the Oscillator kind.
+                source_kind: if l.soundsource.is_empty() {
+                    sampler::SoundsourceKind::Oscillator
+                } else {
+                    sampler::SoundsourceKind::Sample
+                }
+                .tag()
+                .to_string(),
+                level: l.level,
+                filters,
+                amp_env: env(l.amp_env),
+                filter_env: env(l.filter_env),
+                routes,
+            }
+        })
+        .collect()
+}
+
+/// Collect `(soundsource name, spec path)` for every sample block in the tree.
+fn sample_blocks(c: &Container, out: &mut Vec<(String, PathBuf)>) {
+    for n in &c.children {
+        match n {
+            RigNode::Block { block } if !block.sample.is_empty() => {
+                out.push((block.display_name().clone(), PathBuf::from(&block.sample)));
+            }
+            RigNode::Container { container } => sample_blocks(container, out),
+            _ => {}
+        }
+    }
+}
+
+/// Read a soundsource's `LibrarySpec` from its `.signalpack` (header only, no
+/// audio decode) or raw `library.styx`.
+fn spec_of(path: &std::path::Path) -> Option<sampler::LibrarySpec> {
+    if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"))
+    {
+        sampler::read_pack_header(path).ok().map(|h| h.spec)
+    } else {
+        sampler::LibrarySpec::from_file(path).ok()
+    }
+}
+
+/// Project a `LibrarySpec` into the wire [`SynthMapping`].
+fn project_mapping(spec: &sampler::LibrarySpec, name: &str) -> SynthMapping {
+    let zones = spec
+        .zones
+        .iter()
+        .map(|z| SynthZone {
+            file: z.file.clone(),
+            key_min: z.key_min,
+            key_max: z.key_max,
+            root_key: z.root_key,
+            vel_min: z.vel_min,
+            vel_max: z.vel_max,
+            rr_index: z.rr_index,
+            rr_mode: z.rr_mode.clone(),
+            gain_db: z.gain_db,
+            pan: z.pan,
+            tune_cents: z.tune_cents,
+            sample_start: z.sample_start,
+            sample_end: z.sample_end,
+            loop_start: z.loop_start,
+            loop_end: z.loop_end,
+            loop_xfade: z.loop_xfade,
+            fade_in: z.fade_in,
+            release_start: z.release_start,
+            trigger_mode: z.trigger_mode.clone(),
+            mic: z.mic.clone(),
+            articulation: z.articulation.clone(),
+            dynamic: z.dynamic.clone(),
+            group: z.group.clone(),
+            variant: z.variant.clone(),
+        })
+        .collect();
+    let mics = spec
+        .mics
+        .iter()
+        .map(|m| SynthMic {
+            id: m.id.clone(),
+            label: m.label.clone(),
+            kind: m.kind.clone(),
+            default: m.default,
+        })
+        .collect();
+    let articulations = spec
+        .articulations
+        .iter()
+        .map(|a| SynthArticulation {
+            id: a.id.clone(),
+            label: a.label.clone(),
+            kind: format!("{:?}", a.kind),
+            rr: a.rr as u32,
+        })
+        .collect();
+    let mut groups: Vec<String> = spec
+        .zones
+        .iter()
+        .map(|z| z.group.clone())
+        .filter(|g| !g.is_empty())
+        .collect();
+    groups.sort();
+    groups.dedup();
+    SynthMapping {
+        name: if name.is_empty() {
+            spec.name.clone()
+        } else {
+            name.to_string()
+        },
+        vendor: spec.vendor.clone(),
+        zones,
+        mics,
+        articulations,
+        groups,
+    }
+}
+
+// ── shared RigCore (mounted instance-scoped as "synth") ──────────────────────
+impl signal_rigs_proto::rig_core::RigCore for SynthRigBackend {
+    fn start(&self) {
+        SynthRigSvc::start(self);
+    }
+    fn stop(&self) {
+        SynthRigSvc::stop(self);
+    }
+    fn running(&self) -> bool {
+        architect::rig::RigBackend::is_running(self)
+    }
+    fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
+        SynthRigSvc::presets(self)
+            .into_iter()
+            .map(|p| signal_rigs_proto::RigPresetInfo {
+                name: p.name,
+                loaded: p.loaded,
+            })
+            .collect()
+    }
+    fn load_preset(&self, index: u32) {
+        SynthRigSvc::load_preset(self, index);
+    }
+    fn midi_ports(&self) -> Vec<String> {
+        SynthRigSvc::midi_ports(self)
+    }
+    fn set_midi_port(&self, name: String) {
+        SynthRigSvc::set_midi_port(self, name);
+    }
+    fn midi_recent(&self) -> Vec<String> {
+        SynthRigSvc::midi_recent(self)
+            .iter()
+            .map(|e| format!("{e:?}"))
+            .collect()
+    }
+}

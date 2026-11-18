@@ -8,8 +8,8 @@
 //! the product.
 //!
 //! ```no_run
-//! use signal_guitar::AmpEngine;
-//! use signal_sampler::RigAudioPrefs;
+//! use guitar::AmpEngine;
+//! use sampler::RigAudioPrefs;
 //! let mut amp = AmpEngine::open(&RigAudioPrefs::default())?;
 //! amp.load_model("/path/to/amp.nam")?;
 //! // audio is now live: guitar in → NAM → out
@@ -17,51 +17,74 @@
 //! # Ok::<(), String>(())
 //! ```
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod phones;
+pub mod proto;
+#[cfg(feature = "ui")]
+pub mod ui;
+
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 pub mod compose;
 pub mod config_watch;
 pub mod design;
 pub mod di_player;
-pub mod instrument;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod drop_log;
 pub mod freeze;
+pub mod instrument;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod levelling;
 pub mod library;
 pub mod macros;
 pub mod manage;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod measure;
 pub mod node_store;
 pub mod nodes;
 pub mod profiles;
+// The rig engine (architect::rig, threads, audio) is native-only; the browser
+// remote reaches a network engine through `proto`.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod session;
+// Signal's command core (`signal_proto::commands`) run by this rig, and its
+// MCP face for `studio-desktop --engine`.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod signal_commands;
 pub mod time_sync;
 pub mod web_bundle;
 
-pub use session::GuitarRigBackend;
+pub use library::RigHome;
+#[cfg(not(target_arch = "wasm32"))]
+pub use session::{GuitarRigBackend, RigHost};
 // Re-export the wire contract so front-end/app crates get types + clients
 // from one place.
-pub use signal_guitar_proto as proto;
-
 /// What the audio session says about input, on one line — `None` where
 /// there is no session (everywhere but iOS). For the shell's own telemetry
 /// (route changes, access), beside the rig's at open.
+#[cfg(not(target_arch = "wasm32"))]
 #[must_use]
 pub fn audio_session_report() -> Option<String> {
-    signal_sampler::rig::GuitarRig::session_report()
+    sampler::rig::GuitarRig::session_report()
 }
 
-use signal_sampler::GuitarRig;
-use signal_sampler::RigAudioPrefs;
-use signal_sampler::{ProfileRig, RigPatch, RigProfile};
+#[cfg(not(target_arch = "wasm32"))]
+use sampler::GuitarRig;
+#[cfg(not(target_arch = "wasm32"))]
+use sampler::RigAudioPrefs;
+#[cfg(not(target_arch = "wasm32"))]
+use sampler::{ProfileRig, RigPatch, RigProfile};
 
 /// A running amp: live duplex audio + at most one loaded NAM model.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct AmpEngine {
     rig: ProfileRig,
     model_name: String,
     model_path: Option<String>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AmpEngine {
     /// Open the live duplex audio (guitar in → out) with no amp loaded yet —
     /// the signal passes through clean until [`load_model`](Self::load_model).
@@ -109,7 +132,7 @@ impl AmpEngine {
     /// render in the signal grid. Empty block names are filled with the model
     /// name so the grid always has a label. Empty if no model is loaded.
     // r[impl guitar.amp.chain-blocks]
-    pub fn active_blocks(&self) -> Vec<signal_sampler::RigBlock> {
+    pub fn active_blocks(&self) -> Vec<sampler::RigBlock> {
         let patch = self
             .rig
             .active_patch()
@@ -158,6 +181,7 @@ impl AmpEngine {
 // `AmpEngine` is `Send` (movable across threads) but not `Sync` — with the
 // pipewire backend it owns a `*mut pw_thread_loop`. Front-ends share it as
 // `Arc<Mutex<AmpEngine>>`, which is `Send + Sync` because `AmpEngine: Send`.
+#[cfg(not(target_arch = "wasm32"))]
 #[expect(dead_code)]
 const fn _assert_send() {
     const fn is_send<T: Send>() {}

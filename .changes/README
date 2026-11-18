@@ -1,0 +1,11 @@
+Change files: release intent, one per PR, in cargo-rail's format
+(`cargo rail change add <crates> --bump <none|patch|minor|major> -m
+"<release note>"`). The note is for the user: start with a verb and end
+with the app, `(signal)` or `(session)`.
+
+The files dated before Signal came here from Studio (2026-11-17) came
+from Studio's .changes with these crates' lines; Studio keeps the lines
+for its own crates.
+
+This file has no .md extension on purpose: cargo-rail reads every .md
+here as a change file.

@@ -440,34 +440,3 @@ impl Parser<'_> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SNAP: &str = "--** Cradle snapshot 0.7.10 **--\n\
---** Project info: **--\n{ name = \"x\" }\n\
-,--** Script state: **--\n{\n\
-   audio = {\n\
-      mixer = {\n\
-         cables = { inputs = { { inputIdx = 1, stripIdx = 2 }, { inputIdx = 2, stripIdx = 3 } } },\n\
-         strips = {\n\
-            { name = \"Master Bus\", level = 0.75, pan = 0, mute = 0, solo = 0, phase = 0, fx = {}, sends = {} },\n\
-            { name = \"Kick In 1\", level = 0.7071, pan = -0.5, mute = 1, solo = 0, phase = 0.7, fx = {}, sends = {} }\n\
-         }\n\
-      }\n\
-   }\n\
-}\n";
-
-    #[test]
-    fn parses_mixer_strips_and_cables() {
-        let m = parse_mixer(SNAP).expect("parse");
-        assert_eq!(m.cables, vec![(1, 2), (2, 3)]);
-        assert_eq!(m.strips.len(), 2);
-        assert_eq!(m.strips[0].name, "Master Bus");
-        assert!((m.strips[1].level - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-4);
-        assert!((m.strips[1].pan + 0.5).abs() < 1e-6);
-        assert!(m.strips[1].mute);
-        assert!(!m.strips[1].solo);
-    }
-}

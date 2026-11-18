@@ -6,8 +6,8 @@
 //! cargo run -p signal-synth --release --example dump_patch -- "<patch.prt_omn>"
 //! ```
 
-use signal_sampler::rig_node::{Container, RigNode};
-use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
+use sampler::rig_node::{Container, RigNode};
+use synth::omni_import::{SoundsourceIndex, load_patch_file};
 
 fn walk<'a>(c: &'a Container, out: &mut Vec<&'a Container>) {
     out.push(c);
@@ -82,7 +82,7 @@ fn main() {
 /// and mod matrix (what a module preset has to carry).
 fn dump_raw(path: &std::path::Path) {
     let xml = std::fs::read_to_string(path).expect("read");
-    let p = signal_synth::omni_import::parse_patch(&xml).expect("parse");
+    let p = synth::omni_import::parse_patch(&xml).expect("parse");
     println!(
         "\n--- raw parse: {} ({} layers) ---",
         p.name,

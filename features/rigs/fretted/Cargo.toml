@@ -1,0 +1,22 @@
+[package]
+name = "signal-fretted"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Sampled guitars and basses: their library specs, loaders and Kontakt null tests"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The shared sampler engine plays the libraries; its fretboard stage picks
+# each note's string and fret. This crate is the definitions on top.
+sampler = { workspace = true }
+# `checkout_path`: specs are found in the checkout at run time.
+utils.workspace = true
+
+[dev-dependencies]
+sampler = { workspace = true, features = ["pipewire"] }
+hound = { workspace = true }
+eyre.workspace = true

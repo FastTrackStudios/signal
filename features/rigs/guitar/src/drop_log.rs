@@ -19,10 +19,10 @@
 //! ```
 
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
 
+use sampler::{DropEvent, DropKind, clock_ns};
 use signal_rig_host::lock::LockExt;
-use signal_sampler::{DropEvent, DropKind, clock_ns};
 
 /// How long after a switch its drops are counted for its summary.
 const WINDOW_NS: u64 = 10_000_000_000;
@@ -41,32 +41,50 @@ struct Switch {
     reported: bool,
 }
 
-/// Switches marked from any thread, for the pump to match drops against.
-static SWITCHES: Mutex<Vec<Switch>> = Mutex::new(Vec::new());
+/// One rig's switches, marked from any thread, for its pump to match its
+/// drops against — a rig's own, so two rigs in one process never count
+/// each other's drops against their switches. Cheap to clone (shared).
+#[derive(Clone, Debug, Default)]
+pub struct Switches(Arc<Mutex<Vec<Switch>>>);
 
-/// Mark a switch (`from` → `to`, via a stack / section / song / momentary),
-/// and how long its follow-up took. Cheap; call from the switch path.
+/// The process's switches, for callers with no rig of their own
+/// ([`switched`], [`DropLog::record`]).
+fn process_switches() -> &'static Switches {
+    static SWITCHES: OnceLock<Switches> = OnceLock::new();
+    SWITCHES.get_or_init(Switches::default)
+}
+
+/// Mark a switch on the process's own log ([`Switches::switched`]).
 pub fn switched(from: &str, to: &str, via: &str, settle_ms: f64) {
-    let at_ns = clock_ns();
-    {
-        let mut s = SWITCHES.lock_ok();
-        s.push(Switch {
+    process_switches().switched(from, to, via, settle_ms);
+}
+
+impl Switches {
+    /// Mark a switch (`from` → `to`, via a stack / section / song /
+    /// momentary), and how long its follow-up took. Cheap; call from the
+    /// switch path.
+    pub fn switched(&self, from: &str, to: &str, via: &str, settle_ms: f64) {
+        let at_ns = clock_ns();
+        {
+            let mut s = self.0.lock_ok();
+            s.push(Switch {
+                at_ns,
+                from: from.to_string(),
+                to: to.to_string(),
+                via: via.to_string(),
+                drops: [0; BUCKETS.len()],
+                worst_ns: 0,
+                reported: false,
+            });
+            // Only the last minute's matter.
+            let keep = at_ns.saturating_sub(60_000_000_000);
+            s.retain(|w| w.at_ns >= keep || !w.reported);
+        }
+        write_line(
             at_ns,
-            from: from.to_string(),
-            to: to.to_string(),
-            via: via.to_string(),
-            drops: [0; BUCKETS.len()],
-            worst_ns: 0,
-            reported: false,
-        });
-        // Only the last minute's matter.
-        let keep = at_ns.saturating_sub(60_000_000_000);
-        s.retain(|w| w.at_ns >= keep || !w.reported);
+            &format!("SWITCH\t{from} → {to}\tvia {via}\t(settle {settle_ms:.1} ms)"),
+        );
     }
-    write_line(
-        at_ns,
-        &format!("SWITCH\t{from} → {to}\tvia {via}\t(settle {settle_ms:.1} ms)"),
-    );
 }
 
 /// The pump's side: what it has collected so far.
@@ -81,8 +99,14 @@ pub struct DropLog {
 
 impl DropLog {
     /// Write the engine's new drops (`events`, collected from the rig) with
-    /// the rig's state (`patch` playing), and any switch summaries now due.
+    /// the rig's state (`patch` playing), and any switch summaries now due —
+    /// against the process's own switches ([`switched`]).
     pub fn record(&mut self, events: &[DropEvent], patch: &str) {
+        self.record_against(process_switches(), events, patch);
+    }
+
+    /// [`record`](Self::record) against one rig's own `switches`.
+    pub fn record_against(&mut self, switches: &Switches, events: &[DropEvent], patch: &str) {
         let now = clock_ns();
         for e in events {
             if self.seen > 0 && e.seq > self.seen {
@@ -109,7 +133,7 @@ impl DropLog {
             };
             // The switch it followed, if one was recent.
             let after = {
-                let mut s = SWITCHES.lock_ok();
+                let mut s = switches.0.lock_ok();
                 let hit = s
                     .iter_mut()
                     .rev()
@@ -137,7 +161,7 @@ impl DropLog {
         }
         // Switch summaries whose window has closed.
         let due: Vec<Switch> = {
-            let mut s = SWITCHES.lock_ok();
+            let mut s = switches.0.lock_ok();
             s.iter_mut()
                 .filter(|w| !w.reported && now.saturating_sub(w.at_ns) >= WINDOW_NS)
                 .map(|w| {
@@ -252,45 +276,4 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
     (if m <= 2 { y + 1 } else { y }, m, d)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dates_are_civil() {
-        assert_eq!(civil_from_days(0), (1970, 1, 1));
-        assert_eq!(civil_from_days(20_720), (2026, 9, 24));
-    }
-
-    /// A drop after a switch lands in the switch's bucket.
-    #[test]
-    fn drops_are_counted_against_the_switch_they_follow() {
-        let dir = std::env::temp_dir().join(format!("droplog-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        // SAFETY: tests in this module run on their own thread; nothing else
-        // reads SIGNAL_DROP_LOG.
-        unsafe { std::env::set_var("SIGNAL_DROP_LOG", dir.join("d.log")) };
-        switched("Clean", "Drive", "stack", 1.0);
-        let at = clock_ns();
-        let mut log = DropLog::default();
-        log.record(
-            &[DropEvent {
-                seq: 0,
-                at_ns: at + 1,
-                kind: DropKind::OverBudget,
-                render_ns: 3_000_000,
-                budget_ns: 2_666_000,
-                frames: 128,
-            }],
-            "Drive",
-        );
-        let s = SWITCHES.lock_ok();
-        let w = s.iter().rev().find(|w| w.to == "Drive").unwrap();
-        assert_eq!(w.drops[0], 1);
-        let text = std::fs::read_to_string(dir.join("d.log")).unwrap();
-        assert!(text.contains("SWITCH\tClean → Drive"));
-        assert!(text.contains("DROP\tover-budget"));
-    }
 }

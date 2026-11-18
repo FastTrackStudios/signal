@@ -21,13 +21,13 @@
 
 use std::sync::Arc;
 
-use signal_guitar::compose::snapshot_patch;
-use signal_guitar::library::RigLibrary;
-use signal_guitar::measure::apply_chain_bypass;
-use signal_sampler::nam_calibrate::DiReference;
-use signal_sampler::rig::GuitarRig;
-use signal_sampler::rig_node::Param;
-use signal_sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
+use guitar::compose::snapshot_patch;
+use guitar::library::RigLibrary;
+use guitar::measure::apply_chain_bypass;
+use sampler::nam_calibrate::DiReference;
+use sampler::rig::GuitarRig;
+use sampler::rig_node::Param;
+use sampler::rig_profile::{ProfileRig, RigPatch, RigProfile};
 
 const SR: u32 = 48_000;
 
@@ -178,7 +178,7 @@ fn post_sources(name: &str) -> &'static [(&'static str, &'static str)] {
     }
 }
 
-fn set(b: &mut signal_sampler::RigBlock, name: &str, v: f64) {
+fn set(b: &mut sampler::RigBlock, name: &str, v: f64) {
     let v = format!("{v}");
     match b.params.iter_mut().find(|p| p.name == name) {
         Some(p) => p.value = v,
@@ -240,10 +240,7 @@ fn render(patch: &RigPatch, di: &[f32]) -> Option<f64> {
         .zip(&r)
         .map(|(a, b)| f64::from(a + b) * 0.5)
         .collect();
-    Some(signal_sampler::loudness::integrated_lufs(
-        &mono,
-        f64::from(SR),
-    ))
+    Some(sampler::loudness::integrated_lufs(&mono, f64::from(SR)))
 }
 
 fn main() {
@@ -252,7 +249,7 @@ fn main() {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
-    signal_guitar::levelling::apply_nam_calibration();
+    guitar::levelling::apply_nam_calibration();
     let lib = RigLibrary::load_or_bootstrap();
     let base = lib.profiles.first().expect("a profile").clone();
     let di: Vec<f32> = DiReference::load_or_synthetic(f64::from(SR))
@@ -263,7 +260,7 @@ fn main() {
     let build = |preset: &str, snap: &str| -> Option<RigPatch> {
         let mut def = base.clone();
         def.patches = vec![snapshot_patch(&base, preset, snap, "dial")?];
-        signal_guitar::nodes::profile_from_library(&def, &lib.drive_presets)
+        guitar::nodes::profile_from_library(&def, &lib.drive_presets)
             .patches
             .into_iter()
             .next()
@@ -276,7 +273,7 @@ fn main() {
 
     // One preset per core: each dial is a chain of dependent renders (a
     // bisection), but the presets are independent of each other.
-    let dialled = signal_guitar::levelling::par_map(SPECS, 0, |s| -> Option<(String, String)> {
+    let dialled = guitar::levelling::par_map(SPECS, 0, |s| -> Option<(String, String)> {
         let (comp, keep, sources): (&str, &[&str], Vec<RigPatch>) = match s.pos {
             Pos::Pre => (
                 "Pre Comp",

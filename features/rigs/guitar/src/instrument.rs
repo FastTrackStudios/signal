@@ -3,9 +3,13 @@
 //! directory, its own shipped defaults), the interface calibration it keeps,
 //! its MIDI learning, and how low its tuner listens.
 //!
-//! Process-wide: only one rig owns the audio interface at a time, so the
-//! rig switches instrument rather than two running side by side
-//! ([`crate::GuitarRigBackend::switch_instrument`]).
+//! The process has an instrument of its own ([`current`]): the standalone
+//! app's rig owns the audio interface, so it switches instrument rather
+//! than running two side by side
+//! ([`crate::GuitarRigBackend::switch_instrument`]). A host that runs
+//! several rigs at once — a guitar's and a bass's inside a DAW — gives each
+//! its own instrument in a [`crate::library::RigHome`] instead, and never
+//! touches this one.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -33,7 +37,11 @@ impl Instrument {
     /// From its wire name; anything else is the guitar.
     #[must_use]
     pub fn from_id(id: &str) -> Self {
-        if id.trim().eq_ignore_ascii_case("bass") { Self::Bass } else { Self::Guitar }
+        if id.trim().eq_ignore_ascii_case("bass") {
+            Self::Bass
+        } else {
+            Self::Guitar
+        }
     }
 
     /// The library's directory under the config root (`rig` stays the
@@ -68,10 +76,15 @@ impl Instrument {
     }
 }
 
-/// The instrument the rig is now.
+/// The instrument the process's own rig is now
+/// ([`crate::library::RigHome::process_default`]).
 #[must_use]
 pub fn current() -> Instrument {
-    if CURRENT.load(Ordering::Relaxed) == 1 { Instrument::Bass } else { Instrument::Guitar }
+    if CURRENT.load(Ordering::Relaxed) == 1 {
+        Instrument::Bass
+    } else {
+        Instrument::Guitar
+    }
 }
 
 /// Make the rig this instrument — before the library is read

@@ -9,8 +9,8 @@
 
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::RigClient;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::RigClient;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -29,7 +29,9 @@ async fn main() {
     backend.open_blocking();
     let server = LocalServer::serve(backend.router(), Scope::new());
     let rig: RigClient = server.establish().await.expect("rig client");
-    rig.presets_from_patches().await.expect("presets_from_patches");
+    rig.presets_from_patches()
+        .await
+        .expect("presets_from_patches");
     let comp = rig.compositions().await.expect("compositions");
     let made = comp.modules.iter().filter(|m| m.module == "Preset").count();
     tracing::info!(presets = made, "presets in the library");

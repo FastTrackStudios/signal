@@ -7,10 +7,10 @@
 //! cargo run -p signal-synth --release --example patch_hold_rms -- "<patch.prt_omn>" [note] [--no-filters]
 //! ```
 
+use sampler::node_render::RenderNode;
+use sampler::rig_node::{Container, RigNode};
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
-use signal_sampler::node_render::RenderNode;
-use signal_sampler::rig_node::{Container, RigNode};
-use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
+use synth::omni_import::{SoundsourceIndex, load_patch_file};
 
 /// Clone the tree, dropping any container named "Filters".
 fn strip_filters(c: &Container) -> Container {

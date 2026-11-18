@@ -2,7 +2,7 @@
 //! sampler engine.
 //!
 //! There is no separate orchestra DSP: the sampler engine
-//! ([`signal_sampler::SamplerRig`]) already implements the CSS articulation
+//! ([`sampler::SamplerRig`]) already implements the CSS articulation
 //! behaviour (legato / shorts / sustain, see `signal-sampler`'s `engine`
 //! module). This crate owns the orchestra-specific *definitions* (how to load
 //! and drive a strings library), its behaviour *spec* (`spec/`), and the A/B
@@ -13,9 +13,9 @@ pub mod timing;
 
 use std::path::Path;
 
-use keyflow_orchestra::{Config, PartOutput, ProfileKind, process_part, score};
-use signal_sampler::SamplerRig;
-use signal_sampler::document::{
+use keyflow_lang::orchestra::{Config, PartOutput, ProfileKind, process_part, score};
+use sampler::SamplerRig;
+use sampler::document::{
     DocCc, DocNote, DocumentRenderOptions, DocumentRenderResult, TempoPoint, TrackDocument,
 };
 
@@ -65,6 +65,117 @@ pub fn load_strings(
     // Attack/release blooms come from the spec (`performance { attack_ms,
     // release_ms }` in the config styx) — nothing engine-side to set here.
     Ok(())
+}
+
+/// Parse one instrument of `library` once, for many rigs: the patch carries a
+/// shared sample cache, so every rig [`install_patch`] puts it in reads the
+/// same decoded samples (an offline renderer running many takes).
+///
+/// # Errors
+///
+/// Returns an error if the spec or the instrument's zones cannot be loaded.
+pub fn load_patch(library: &Library, instrument: &str) -> Result<sampler::PlayerPatch, String> {
+    let root = Path::new(library.root);
+    let zones = root.join("_patches").join(instrument).join("library.styx");
+    let mut patch = sampler::PlayerPatch::load_merged(Path::new(library.config), &zones, root)
+        .map_err(|e| e.to_string())?;
+    patch.shared_cache = Some(sampler::engine::cache::SampleCache::with_prepared(
+        patch.prepared_cache_dir.as_deref(),
+    ));
+    Ok(patch)
+}
+
+/// Install a [`load_patch`] patch into `rig` under `id`, playing `mic` only —
+/// what [`load_instrument`] does, without parsing again.
+///
+/// # Errors
+///
+/// Returns an error if the rig's bank is poisoned.
+pub fn install_patch(
+    rig: &SamplerRig,
+    id: &str,
+    patch: sampler::PlayerPatch,
+    instrument: &str,
+    mic: &str,
+) -> Result<(), String> {
+    rig.load_patch(id, patch, "library", instrument, mic)
+        .map_err(|e| e.to_string())?;
+    rig.set_solo_mic(id, Some(mic.to_string()));
+    rig.set_midi_channel(id, 0);
+    Ok(())
+}
+
+/// A sampled orchestral library: where it is installed and which spec drives
+/// it. Everything about one of its instruments lives in those two places —
+/// the spec (`specs/<library>.styx`) and the instrument's patch folder
+/// (`<root>/_patches/<instrument>/`: `library.styx` zones, `section.styx`
+/// numbers) — so a new library is a row here, never engine code.
+#[derive(Debug, Clone, Copy)]
+pub struct Library {
+    /// Short name (`strings`, `woodwinds`, `brass`, `solo-strings`).
+    pub name: &'static str,
+    /// Install root (the folder holding `_patches/` and the mic folders).
+    pub root: &'static str,
+    /// The library spec.
+    pub config: &'static str,
+}
+
+/// The libraries this crate can load.
+pub const LIBRARIES: &[Library] = &[
+    Library {
+        name: "strings",
+        root: CSS_ROOT,
+        config: CSS_CONFIG,
+    },
+    Library {
+        name: "woodwinds",
+        root: "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Woodwinds",
+        config: concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/specs/cinematic-woodwinds.styx"
+        ),
+    },
+    Library {
+        name: "brass",
+        root: "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Brass",
+        config: concat!(env!("CARGO_MANIFEST_DIR"), "/specs/cinematic-brass.styx"),
+    },
+    Library {
+        name: "mojo",
+        root: "/run/media/AudioHaven/Sampled/Horns/MOJO 2 Horn Section",
+        config: concat!(env!("CARGO_MANIFEST_DIR"), "/specs/mojo2-horns.styx"),
+    },
+    Library {
+        name: "solo-strings",
+        root: "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Solo Strings",
+        config: concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/specs/cinematic-solo-strings.styx"
+        ),
+    },
+];
+
+/// The library called `name` (see [`LIBRARIES`]).
+#[must_use]
+pub fn library(name: &str) -> Option<&'static Library> {
+    LIBRARIES.iter().find(|l| l.name.eq_ignore_ascii_case(name))
+}
+
+/// Load one instrument of `library` (its patch folder name, e.g.
+/// `"1st Violins"`, `"Solo Flute"`, `"Saf"`) into `rig` under `id`, playing
+/// `mic` only.
+///
+/// # Errors
+///
+/// Returns an error if the instrument cannot be loaded.
+pub fn load_instrument(
+    rig: &SamplerRig,
+    id: &str,
+    library: &Library,
+    instrument: &str,
+    mic: &str,
+) -> Result<(), String> {
+    load_strings(rig, id, instrument, mic, library.root, library.config)
 }
 
 // ── Score → document bridge (keyflow-orchestra → signal-sampler) ─────────────

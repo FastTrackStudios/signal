@@ -21,8 +21,8 @@
 
 use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
-use signal_guitar::GuitarRigBackend;
-use signal_guitar::proto::rig::RigClient;
+use guitar::GuitarRigBackend;
+use guitar::proto::rig::RigClient;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {

@@ -5,13 +5,13 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
+use crate::proto::ekit::EkitRig;
+use crate::proto::{EkitEvent, EkitStatus, Pad};
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
 use architect::{HasDispatcher, Layer, PubSub, Services, layers};
-use signal_ekit_proto::ekit::EkitRig;
-use signal_ekit_proto::{EkitEvent, EkitStatus, Pad};
-use signal_sampler::{PreloadProfile, SamplerRig};
-use signal_space::{Space, knn};
+use sampler::{PreloadProfile, SamplerRig};
+use signal_space::engine::{Space, knn};
 
 pub const DEFAULT_ROWS: u32 = 4;
 pub const DEFAULT_COLS: u32 = 4;
@@ -51,6 +51,9 @@ struct State {
     cursors: Vec<i32>,
 }
 
+#[path = "perform.rs"]
+mod perform;
+
 struct Inner {
     rig: Mutex<Option<SamplerRig>>,
     space: Mutex<Option<Arc<LoadedSpace>>>,
@@ -59,6 +62,12 @@ struct Inner {
     pump_started: AtomicBool,
     /// Deterministic re-roll counter (no RNG — reproducible kits).
     roll: std::sync::atomic::AtomicU32,
+    /// The shared performance surface (`perform.rs`): the saved kits (read
+    /// on first use), the kit and variation on the pads, and the e-kit's
+    /// own profiles, songs and setlists.
+    kits: Mutex<Option<Vec<perform::KitDef>>>,
+    playing: Mutex<(String, String)>,
+    perform: std::sync::OnceLock<signal_rig_perform_store::PerformStore>,
 }
 
 /// The Electronic Kit backend handle. Cheap to clone; every clone shares
@@ -107,6 +116,9 @@ impl EkitBackend {
                 events: architect::rig::events_hub(),
                 pump_started: AtomicBool::new(false),
                 roll: std::sync::atomic::AtomicU32::new(0),
+                kits: Mutex::new(None),
+                playing: Mutex::new((String::new(), String::new())),
+                perform: std::sync::OnceLock::new(),
             }),
         };
         backend.spawn_meter_pump("ekit-meter-pump");
@@ -237,7 +249,7 @@ impl EkitBackend {
         {
             return Some(cur.clone());
         }
-        let (_, space, features) = signal_space::find_space(name)?;
+        let (_, space, features) = signal_space::engine::find_space(name)?;
         let loaded = Arc::new(LoadedSpace { space, features });
         *self
             .inner
@@ -472,12 +484,10 @@ zones (
 impl EkitRig for EkitBackend {
     fn start(&self) {
         let b = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("ekit-open".into())
-            .spawn(move || {
-                b.open_blocking();
-                b.publish();
-            });
+        let _ = signal_rig_host::thread::spawn("ekit-open", move || {
+            b.open_blocking();
+            b.publish();
+        });
     }
 
     fn stop(&self) {
@@ -788,7 +798,7 @@ impl EkitRig for EkitBackend {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(rig) = rig.as_ref() {
-            let _ = rig.attach_midi(midicore::selector_for(Some(&name)));
+            let _ = rig.attach_midi(midi::selector_for(Some(&name)));
         }
     }
 }
@@ -835,7 +845,7 @@ impl EkitBackend {
     }
 }
 
-impl signal_ekit_proto::ekit::EkitRigStreamSource for EkitBackend {
+impl crate::proto::ekit::EkitRigStreamSource for EkitBackend {
     fn events_hub(&self) -> &PubSub<EkitEvent> {
         &self.inner.events
     }
@@ -862,13 +872,18 @@ impl RigBackend for EkitBackend {
     }
     fn on_running_tick(&self) {
         // Meter pump: pull the per-pad peaks off the rig and publish.
-        let meters = {
+        // Every pad is an instrument in the rig's one bank track, so there is
+        // one meter — the bank's — and no per-pad peak: pad 0 shows the
+        // bank's output and the rest read silence, as when this read meter
+        // cells by pad index (only cell 0 existed). Per-pad metering needs
+        // the pads on tracks of their own.
+        let bank = {
             let rig = self
                 .inner
                 .rig
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            rig.as_ref().map(signal_sampler::SamplerRig::meters_bank)
+            rig.as_ref().map_or(0.0, sampler::SamplerRig::output_peak)
         }; // rig lock dropped before touching state
         let pads = {
             let mut s = self
@@ -877,10 +892,7 @@ impl RigBackend for EkitBackend {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             for (i, p) in s.pads.iter_mut().enumerate() {
-                p.peak = meters
-                    .as_ref()
-                    .and_then(|m| m.cell(i))
-                    .map_or(0.0, |c| c.peak(0).max(c.peak(1)));
+                p.peak = if i == 0 { bank } else { 0.0 };
             }
             s.pads.clone()
         };
@@ -916,8 +928,8 @@ impl signal_rigs_proto::rig_core::RigCore for EkitBackend {
 impl Services for EkitBackend {
     fn layers() -> impl Layer<Self> {
         layers![
-            signal_ekit_proto::ekit::Service,
-            signal_ekit_proto::ekit::StreamService
+            crate::proto::ekit::Service,
+            crate::proto::ekit::StreamService
         ]
     }
 }

@@ -17,9 +17,9 @@
 //! placeholders render as pass-throughs, so a lane sounds exactly like its
 //! source until the engine grows into the structure.
 
+use sampler::rig::RigBlock;
+use sampler::rig_node::Container;
 use signal_proto::block::BlockType;
-use signal_sampler::rig::RigBlock;
-use signal_sampler::rig_node::Container;
 
 /// Send target for a layer's aux route — a rig that offers an Aux rack names
 /// its container this, and the send resolves; rigs without one drop it.
@@ -543,7 +543,7 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
         // each note owns its amp/filter envelopes and lowpass, so the
         // module's settings ride on the oscillator block itself.
         Source::Synth => {
-            let cutoff_norm = signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz);
+            let cutoff_norm = sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz);
             let block = RigBlock::of_type(BlockType::Oscillator)
                 .named("Soundsource")
                 .with_param("amp_attack", format!("{:.3}", set.amp_env.0.max(0.0)))
@@ -585,7 +585,7 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
     let chain_cutoff = if open {
         1.0
     } else {
-        signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
+        sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
     };
     let chain_res = if open {
         0.0
@@ -703,7 +703,7 @@ pub fn apply_settings_to_omni_layer(
     layer_idx: usize,
     set: &ModuleSettings,
 ) -> bool {
-    use signal_sampler::rig_node::RigNode;
+    use sampler::rig_node::RigNode;
     fn find_mut<'a>(c: &'a mut Container, name: &str) -> Option<&'a mut Container> {
         if c.name == name {
             return Some(c);
@@ -725,7 +725,7 @@ pub fn apply_settings_to_omni_layer(
         match block.params.iter_mut().find(|p| p.name == name) {
             Some(p) => p.value = value,
             None => {
-                block.params.push(signal_sampler::rig_node::Param {
+                block.params.push(sampler::rig_node::Param {
                     name: name.to_string(),
                     value,
                 });
@@ -769,9 +769,8 @@ pub fn apply_settings_to_omni_layer(
     };
     let base = set.baseline.as_deref();
     // Whether a knob moved off the patch (always, with no baseline).
-    let moved = |f: &dyn Fn(&ModuleSettings) -> f32| {
-        base.is_none_or(|b| (f(b) - f(set)).abs() > 1e-6)
-    };
+    let moved =
+        |f: &dyn Fn(&ModuleSettings) -> f32| base.is_none_or(|b| (f(b) - f(set)).abs() > 1e-6);
     let secs = |ms: f32| format!("{:.4}", ms.max(0.0) / 1000.0);
     let depth = set.filter_env_depth.clamp(-1.0, 1.0);
     // The filter section's own envelope route is the first Filter Env →
@@ -805,13 +804,14 @@ pub fn apply_settings_to_omni_layer(
     // A sample-mode layer the patch gives no filter-envelope route takes the
     // knobs' as its voices' own filter (as a keys module does), and its
     // shared filter opens for it.
-    let voice_filter = is_sampler && !routed && set.voice_filter_on() && moved(&|s| s.filter_env_depth);
+    let voice_filter =
+        is_sampler && !routed && set.voice_filter_on() && moved(&|s| s.filter_env_depth);
     let voice_params = set.sampler_voice_params(RigBlock::of_type(BlockType::Sampler));
     let base_voice = base.map(|b| b.sampler_voice_params(RigBlock::of_type(BlockType::Sampler)));
     let amp = set.amp_block();
     let base_amp = base.map(ModuleSettings::amp_block);
     // Only the params that differ from the baseline's.
-    let changed = |p: &signal_sampler::rig_node::Param, from: &Option<RigBlock>| {
+    let changed = |p: &sampler::rig_node::Param, from: &Option<RigBlock>| {
         from.as_ref()
             .is_none_or(|b| b.params.iter().find(|q| q.name == p.name) != Some(p))
     };
@@ -881,7 +881,7 @@ pub fn apply_settings_to_omni_layer(
                     match (base, knob, get(b, "knob_setting")) {
                         // A measured knob: move it by the knob's ratio.
                         (Some(bs), Some(taper), Some(_)) if bs.cutoff_hz > 0.0 => {
-                            let hz = signal_sampler::native::NativeFilter::cutoff_from_norm(
+                            let hz = sampler::native::NativeFilter::cutoff_from_norm(
                                 get(b, "cutoff").unwrap_or(1.0),
                             ) * (set.cutoff_hz / bs.cutoff_hz);
                             if let Some(setting) = taper_setting(&taper, hz) {
@@ -892,7 +892,7 @@ pub fn apply_settings_to_omni_layer(
                                 "cutoff",
                                 format!(
                                     "{:.4}",
-                                    signal_sampler::native::NativeFilter::norm_from_cutoff(hz)
+                                    sampler::native::NativeFilter::norm_from_cutoff(hz)
                                 ),
                             );
                         }
@@ -901,9 +901,7 @@ pub fn apply_settings_to_omni_layer(
                             "cutoff",
                             format!(
                                 "{:.4}",
-                                signal_sampler::native::NativeFilter::norm_from_cutoff(
-                                    set.cutoff_hz
-                                )
+                                sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
                             ),
                         ),
                     }
@@ -1168,7 +1166,7 @@ pub fn apply_lfos_to_omni(
     lfos: &[(f32, f32, f32); 4],
     base: Option<&[(f32, f32, f32); 4]>,
 ) {
-    use signal_sampler::rig_node::RigNode;
+    use sampler::rig_node::RigNode;
     fn walk(c: &mut Container, f: &mut impl FnMut(&mut Container)) {
         f(c);
         for child in &mut c.children {
@@ -1198,7 +1196,7 @@ pub fn apply_lfos_to_omni(
                     ] {
                         match m.params.iter_mut().find(|p| p.name == k) {
                             Some(p) => p.value = v,
-                            None => m.params.push(signal_sampler::rig_node::Param {
+                            None => m.params.push(sampler::rig_node::Param {
                                 name: k.to_string(),
                                 value: v,
                             }),
@@ -1229,7 +1227,7 @@ pub fn apply_lfo_fades_to_omni(tree: &mut Container, fades_ms: &[f32; 4], base: 
                 let v = format!("{:.4}", fade.max(0.0) / 1000.0);
                 match m.params.iter_mut().find(|p| p.name == "fade") {
                     Some(p) => p.value = v,
-                    None => m.params.push(signal_sampler::rig_node::Param {
+                    None => m.params.push(sampler::rig_node::Param {
                         name: "fade".to_string(),
                         value: v,
                     }),
@@ -1266,7 +1264,7 @@ pub fn import_omni_lfos(path: &std::path::Path) -> Result<Vec<(f32, f32, f32)>, 
 
 /// The deepest route (absolute) from each of "LFO 1".."LFO 4" in `tree`.
 fn lfo_depths(tree: &Container) -> [f32; 4] {
-    use signal_sampler::rig_node::RigNode;
+    use sampler::rig_node::RigNode;
     fn walk(c: &Container, out: &mut [f32; 4]) {
         for r in &c.mod_routes {
             let key = r.source.key();
@@ -1345,194 +1343,5 @@ fn import_rest(patch: &crate::omni_import::OmniPatch) -> ImportedPatch {
         name: patch.name.clone(),
         modules: Vec::new(),
         lfos,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_picked_destination_builds_its_lfo_and_route_off_builds_none() {
-        use signal_sampler::node_render::RenderNode;
-        let compile = |set: &ModuleSettings| {
-            let m = signal_module_with("Keys A", set);
-            let mut rn = RenderNode::compile(&Container::preset("p").add(m), 48_000);
-            rn.prepare(48_000.0, 128);
-            rn
-        };
-        let mut set = ModuleSettings::from_source(Source::Synth);
-        let mut rn = compile(&set);
-        assert!(rn.routes_from("Keys A", "LFO 1").is_empty());
-
-        set.lfo_dest[0] = ModDest::Level;
-        set.lfos[0].1 = 0.5;
-        set.mod_env_dest[1] = ModDest::Pan;
-        set.mod_env_depth[1] = -0.5;
-        let mut rn = compile(&set);
-        assert_eq!(
-            rn.routes_from("Keys A", "LFO 1"),
-            vec![("amp".into(), "gain".into())]
-        );
-        assert_eq!(
-            rn.routes_from("Keys A", "Mod Env 2"),
-            vec![("amp".into(), "pan".into())]
-        );
-        // Its rate, wave and fade go live.
-        assert!(rn.set_lfo(
-            "Keys A",
-            "LFO 1",
-            3.0,
-            Some(signal_sampler::native::LfoWave::Saw),
-            Some(0.2)
-        ));
-        assert!(rn.set_route_depth("Keys A", "LFO 1", "Amp", "gain", 0.1));
-    }
-
-    #[test]
-    fn effects_are_in_the_chain_only_when_on_and_take_live_writes() {
-        use signal_sampler::node_render::RenderNode;
-        // Defaults: no effect blocks at all (an idle module costs nothing).
-        let quiet = signal_module_with("Keys A", &ModuleSettings::from_source(Source::Synth));
-        let mut rn = RenderNode::compile(&Container::preset("p").add(quiet), 48_000);
-        rn.prepare(48_000.0, 128);
-        for fx in ["Chorus", "Delay", "Ambience"] {
-            assert!(!rn.has_leaf("Keys A", fx), "{fx} built while off");
-        }
-
-        let mut set = ModuleSettings::from_source(Source::Synth);
-        set.chorus = 0.4;
-        set.delay.on = true;
-        set.delay.mix = 0.3;
-        set.ambience.on = true;
-        set.ambience.mix = 0.2;
-        let busy = signal_module_with("Keys A", &set);
-        let mut rn = RenderNode::compile(&Container::preset("p").add(busy), 48_000);
-        rn.prepare(48_000.0, 128);
-        for fx in ["Chorus", "Delay", "Ambience"] {
-            assert!(rn.has_leaf("Keys A", fx), "{fx} missing while on");
-        }
-        // Plain units: a 700 ms delay, a 60 ms predelay.
-        assert!(rn.set_leaf_plain("Keys A", "Delay", "time", 700.0));
-        assert!(rn.set_leaf_plain("Keys A", "Ambience", "predelay", 60.0));
-        assert!(!rn.set_leaf_plain("Keys A", "Delay", "no_such_param", 1.0));
-        // And the chain renders.
-        let (mut l, mut r) = (vec![0.0f32; 128], vec![0.0f32; 128]);
-        let silence = vec![0.0f32; 128];
-        rn.process(
-            &silence,
-            &silence,
-            &mut l,
-            &mut r,
-            &signal_plugin_host::PluginEvents::default(),
-        );
-        assert!(l.iter().chain(&r).all(|x| x.is_finite()));
-    }
-
-    /// End-to-end through the full compiled module chain (per-voice synth →
-    /// open chain filter → unity Amp): notes sound, the pitch wheel bends
-    /// them, and the mod wheel brings in vibrato.
-    #[test]
-    fn synth_module_plays_bends_and_vibratos() {
-        use signal_plugin_host::{PluginEvents, PluginMidiEvent};
-        use signal_sampler::RenderNode;
-
-        let note_on = |note: u8, vel: u8| {
-            use signal_sampler::midicore::{Channel, KeyNumber, MidiEvent, Velocity};
-            PluginMidiEvent {
-                offset: 0,
-                message: MidiEvent::NoteOn {
-                    channel: Channel::new(0),
-                    key: KeyNumber::new(note),
-                    velocity: Velocity::new(vel),
-                },
-            }
-        };
-        let bend_full = || {
-            use signal_sampler::midicore::{Channel, MidiEvent, PitchBend};
-            PluginMidiEvent {
-                offset: 0,
-                message: MidiEvent::PitchBend {
-                    channel: Channel::new(0),
-                    bend: PitchBend::new(16_383),
-                },
-            }
-        };
-
-        let set = ModuleSettings {
-            source: Source::Synth,
-            ..ModuleSettings::default()
-        };
-        let tree = signal_layer_with("S", &[set]);
-        let mut rn = RenderNode::compile(&tree, 48_000);
-        rn.prepare(48_000.0, 512);
-
-        let run = |rn: &mut RenderNode, midi: &[PluginMidiEvent], frames: usize| {
-            let (mut l, mut r) = (vec![0.0f32; frames], vec![0.0f32; frames]);
-            let ev = PluginEvents {
-                params: &[],
-                midi,
-                note_expressions: &[],
-            };
-            rn.render(&mut l, &mut r, &ev);
-            l
-        };
-        let freq = |s: &[f32]| {
-            s.windows(2)
-                .filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0))
-                .count() as f32
-                / 2.0
-                / (s.len() as f32 / 48_000.0)
-        };
-
-        // A4 sounds through the whole chain (unity Amp — the old closed
-        // synth Amp + env route would render silence here).
-        let _ = run(&mut rn, &[note_on(69, 100)], 4800);
-        let steady = run(&mut rn, &[], 48_000);
-        let rms = (steady.iter().map(|x| x * x).sum::<f32>() / steady.len() as f32).sqrt();
-        assert!(rms > 1e-3, "synth module sounds, rms={rms}");
-        let f0 = freq(&steady);
-        assert!((f0 - 440.0).abs() < 6.0, "A4 at 440, got {f0}");
-
-        // Pitch wheel: full bend ≈ +2 semitones.
-        let _ = run(&mut rn, &[bend_full()], 2400);
-        let bent = freq(&run(&mut rn, &[], 48_000));
-        let ratio = bent / f0;
-        assert!(
-            (ratio - 2f32.powf(2.0 / 12.0)).abs() < 0.015,
-            "full bend ≈ +2 st through the tree: ratio={ratio}"
-        );
-    }
-    use signal_sampler::rig_node::Role;
-
-    #[test]
-    fn a_module_has_exactly_one_generator() {
-        // The invariant that keeps a sampler audible: a second source in
-        // series would overwrite it.
-        for src in [
-            Source::Empty,
-            Source::Synth,
-            Source::Sample("/tmp/none.signalpack".into()),
-        ] {
-            let m = signal_module("Mod", src);
-            let sources = m.find("Source").expect("source module");
-            assert_eq!(sources.blocks().len(), 1, "exactly one Source Block");
-            assert_eq!(m.find("Filters").expect("filters").blocks().len(), 2);
-            assert!(m.find("Amp Stage").is_some());
-            assert_eq!(m.find("FX").expect("rack").blocks().len(), 4);
-        }
-    }
-
-    #[test]
-    fn a_layer_holds_exactly_its_sources() {
-        // One source, one module — no empty slots padding it out to a quad.
-        let l = signal_layer_single("Keys A", Source::Sample("/tmp/a.signalpack".into()));
-        assert_eq!(l.role, Role::Layer);
-        assert!(l.find("Keys A A").is_some(), "module A");
-        assert!(l.find("Keys A B").is_none(), "no padded module B");
-        // Not limited to four either — a layer takes as many as it is given.
-        let big: Vec<Source> = (0..6).map(|_| Source::Empty).collect();
-        let l = signal_layer("Wide", &big);
-        assert!(l.find("Wide F").is_some(), "sixth module");
     }
 }

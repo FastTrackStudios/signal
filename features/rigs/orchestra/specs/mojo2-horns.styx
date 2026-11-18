@@ -1,0 +1,249 @@
+// MOJO 2 Horn Section (Vir2) — library spec.
+//
+// One KSP engine (script_1.ksp, identical in all 17 full instruments) drives
+// every instrument; the instruments differ in their shipped values and zone
+// maps only. Those live per instrument in _patches/<instrument>/:
+// library.styx (zones, tests/mojo_zones.py) and section.styx (shipped knobs,
+// tests/mojo_instrument_spec.py). The decode notes are on AudioHaven:
+// Sampled/Horns/MOJO 2 Horn Section/_notes/ (model-notepath.md,
+// model-transitions.md, gap-analysis.md). Line numbers below are script_1.ksp.
+//
+// Modelled so far, at the shipped defaults (Mix mic, 1 player, era none,
+// velocity dynamics, linear velocity curve, random RR): the one-shot
+// articulations, sustain releases, the sustain legato (regular). Not yet:
+// release-type keys, keynoise, articulation cutoff, octave/natural legato,
+// stab and crescendo legato, Time Machine (swells, crescendos).
+
+name    "MOJO 2 Horn Section"
+vendor  "Vir2"
+version "2.0"
+
+// Lowest/highest = the instrument's widest shipped articulation range
+// (`%ArtRange`, persistent `%yqd5p`); each articulation's own range is its
+// `key_range` in the instrument's section.styx.
+sections (
+    { id asx, label "Alto Sax", lowest_note C3, highest_note A5 }
+    { id bsx, label "Baritone Sax", lowest_note C3, highest_note G#5 }
+    { id btb, label "Bass Trombone", lowest_note E2, highest_note B5 }
+    { id btbm, label "Bass Trombone Muted (Simulated)", lowest_note E2, highest_note B5 }
+    { id cl, label "Clarinet", lowest_note C3, highest_note G6 }
+    { id flg, label "Flugelhorn", lowest_note E3, highest_note F5 }
+    { id flgm, label "Flugelhorn Muted (Simulated)", lowest_note E3, highest_note F5 }
+    { id hn, label "French Horn", lowest_note C3, highest_note D#5 }
+    { id hnm, label "French Horn Muted (Simulated)", lowest_note C3, highest_note D#5 }
+    { id ptp, label "Piccolo Trumpet", lowest_note D4, highest_note E6 }
+    { id ptpm, label "Piccolo Trumpet Muted (Simulated)", lowest_note D4, highest_note E6 }
+    { id ssx, label "Soprano Sax", lowest_note G#3, highest_note E6 }
+    { id tsx, label "Tenor Sax", lowest_note G#2, highest_note F5 }
+    { id tb, label "Trombone", lowest_note E2, highest_note G#5 }
+    { id tbm, label "Trombone Muted", lowest_note F2, highest_note E5 }
+    { id tp, label "Trumpet", lowest_note D3, highest_note D#6 }
+    { id tpm, label "Trumpet Muted", lowest_note E3, highest_note B5 }
+)
+
+// Bus1..4 (group index mod 4). Only Mix loads at the shipped settings
+// (mic purge `%1iphk` = 1 0 0 0).
+mics (
+    {id Mix,   label "Full Mix", kind blended,  default true}
+    {id Close, label Close,      kind separate}
+    {id Near,  label Near,       kind separate}
+    {id Room,  label Room,       kind separate}
+)
+
+performance {
+    resample_transpose true   // keys between roots are resampled, as Kontakt does
+    strict_key_ranges  true   // a key with no zone plays nothing
+    max_repeat_strikes 0      // every strike rings on (one-shots ship Poly)
+    zone_pitch_tolerance 0    // every key has its own zone or range
+    loop_xfade_ms      0      // the sustain zones loop hard (no crossfade decoded)
+    release_delay_ms   0.0
+    pedal_ignored      true   // the script reads CC64 (octave legato); key-ups are not held
+    rr_random_global   true   // one RR for every articulation and key (UpdateRoundRobinIndex)
+    artic_change_fade_ms 100  // a note of another articulation cuts everything ($hrmlz ships on)
+    // _Speed_to_ep per speed percent 0..800 (tests/mojo_ksp_speed.py): the
+    // Time Machine speeds of legato transitions, swells and crescendos
+    stretch_speed_ep (500000 5040 9900 14597 19147 23564 27858 32042 36125 40113 44016 47839 51589 55271 58889 62449 65954 69409 72816 76179 79502 82786 86034 89249 92434 95590 98719 101824 104905 107966 111008 114032 117039 120032 123012 125980 128937 131886 134827 137761 140690 143615 146537 149458 152379 155300 158224 161151 164083 167020 169965 172918 175881 178855 181842 184843 187859 190892 193943 197015 200110 203227 206371 209542 212743 215977 219244 222550 225895 229283 232717 236201 239738 243333 246989 250713 254509 258384 262343 266396 270549 274814 279200 283721 288391 293228 298251 303485 308959 314709 320780 327231 334135 341595 349754 358824 369136 381276 396437 417921 500000 581845 602974 617710 629377 639174 647691 655266 662113 668377 674163 679545 684586 689328 693810 698062 702109 705971 709667 713210 716614 719892 723051 726102 729051 731907 734674 737359 739967 742501 744967 747368 749708 751989 754215 756388 758511 760587 762616 764602 766546 768450 770316 772144 773938 775697 777423 779118 780782 782417 784023 785603 787155 788682 790184 791662 793117 794549 795959 797348 798717 800065 801394 802704 803996 805269 806525 807765 808987 810194 811384 812560 813720 814866 815998 817116 818220 819311 820389 821454 822507 823548 824577 825594 826600 827595 828579 829552 830515 831468 832410 833343 834266 835180 836085 836980 837866 838744 839613 840474 841326 842170 843006 843835 844656 845469 846274 847073 847864 848648 849425 850195 850959 851716 852466 853210 853948 854680 855405 856125 856838 857546 858248 858944 859635 860320 860999 861674 862343 863007 863666 864320 864969 865613 866252 866886 867516 868141 868762 869378 869989 870597 871200 871798 872393 872983 873569 874151 874729 875304 875874 876440 877003 877562 878117 878668 879217 879761 880302 880839 881373 881903 882430 882954 883474 883991 884505 885016 885524 886028 886530 887028 887524 888016 888506 888992 889476 889957 890435 890910 891383 891853 892320 892784 893246 893706 894162 894616 895068 895517 895963 896408 896849 897288 897725 898160 898592 899022 899450 899875 900298 900719 901138 901554 901969 902381 902791 903199 903605 904009 904410 904810 905208 905604 905997 906389 906779 907167 907554 907938 908320 908701 909079 909456 909831 910205 910576 910946 911314 911681 912045 912408 912769 913129 913487 913843 914198 914551 914903 915253 915601 915948 916293 916637 916979 917320 917659 917997 918333 918668 919001 919333 919664 919993 920320 920647 920972 921295 921617 921938 922258 922576 922893 923208 923522 923836 924147 924457 924767 925075 925381 925687 925991 926294 926595 926896 927196 927494 927791 928087 928381 928675 928967 929259 929549 929838 930126 930413 930699 930983 931267 931549 931831 932111 932391 932669 932947 933223 933498 933773 934046 934318 934589 934860 935129 935397 935665 935931 936197 936461 936725 936987 937249 937510 937770 938029 938287 938544 938800 939056 939310 939564 939817 940069 940320 940570 940819 941068 941315 941562 941808 942054 942298 942541 942784 943026 943267 943508 943747 943986 944224 944461 944698 944933 945168 945402 945636 945868 946101 946332 946562 946792 947021 947249 947477 947703 947930 948155 948380 948604 948827 949050 949272 949493 949714 949934 950153 950371 950589 950807 951023 951239 951454 951669 951883 952097 952309 952522 952733 952944 953154 953364 953573 953781 953989 954196 954403 954609 954814 955019 955223 955427 955630 955832 956034 956236 956437 956637 956836 957035 957234 957432 957629 957826 958023 958218 958413 958608 958802 958996 959189 959382 959574 959765 959956 960147 960336 960526 960715 960903 961091 961279 961466 961652 961838 962023 962208 962393 962577 962760 962943 963126 963308 963489 963670 963851 964031 964211 964390 964569 964747 964925 965102 965279 965456 965632 965808 965983 966157 966332 966506 966679 966852 967025 967197 967369 967540 967710 967881 968051 968221 968390 968559 968727 968895 969062 969229 969396 969562 969728 969894 970059 970224 970388 970552 970715 970878 971041 971204 971366 971527 971688 971849 972010 972170 972330 972489 972648 972806 972965 973122 973280 973437 973594 973750 973906 974062 974217 974372 974527 974681 974835 974989 975142 975295 975447 975600 975752 975903 976054 976205 976356 976506 976656 976805 976954 977103 977252 977400 977548 977695 977843 977989 978136 978282 978428 978574 978719 978864 979009 979153 979297 979441 979585 979728 979870 980013 980155 980297 980439 980580 980721 980862 981002 981143 981282 981422 981561 981700 981839 981977 982115 982253 982391 982528 982665 982802 982938 983074 983210 983346 983481 983616 983751 983885 984020 984154 984287 984421 984554 984687 984819 984952 985084 985215 985347 985478 985609 985740 985871 986001 986131 986261 986390 986519 986648 986777 986906 987034 987162 987289 987417 987544 987671 987798 987925 988051 988177 988303 988428 988553 988678 988803 988928 989052 989176 989300 989424 989547 989670 989793 989916 990039 990161 990283 990405 990526 990648 990769 990890 991010 991131 991251 991371 991491 991610 991730 991849 991968 992086 992205 992323 992441 992559 992677 992794 992911 993028 993145 993262 993378 993494 993610 993726 993841 993957 994072 994187 994301 994416 994530 994644 994758 994872 994985 995099 995212 995325 995437 995550 995662 995774 995886 995998 996110 996221 996332 996443 996554 996664 996775 996885 996995 997105 997214 997324 997433 997542 997651 997760 997868 997977 998085 998193 998301 998408 998516 998623 998730 998837 998944 999050 999157 999263 999369 999474 999580 999686 999791 999896 1000001)
+    interpolation      kontakt_normal  // every group of all 17 NKIs ships Normal quality (KONTRA load)
+}
+
+dynamics {
+    short_note_controller  velocity
+    // Velocity dynamics (`%bskon` = 1): layer = curved velocity / 32
+    // (25186); the shipped curve is LINEAR (`$xhoj1` = 2), so the layer
+    // edges are velocity 32 / 64 / 96 (`vel_thresholds` below).
+    enable_velocity_layers true
+}
+
+articulations (
+    // ── Sustains, legato off (shipped on Trumpet) ─────────────────────────
+    // One velocity-picked layer that loops (no CC crossfade: the layer is
+    // fixed at note-on, 25183-25200), so it plays through the short path;
+    // the note-off is the script's release (`release_sample`, per
+    // instrument): the body fades and a SusRel zone starts in its layer.
+    // Not modelled yet: legato, release types other than normal, keynoise.
+    {
+        id       Sus
+        label    "Sustain"
+        kind     @Short
+        dynamics (v1 v2 v3 v4)
+        rr       3
+        dyn_ctrl velocity
+        notes    full
+        vel_thresholds (32 64 96)
+    }
+    {
+        id       SusRel
+        label    "Sustain release"
+        kind     @Release
+        dynamics (v1 v2 v3 v4)
+        rr       3
+        dyn_ctrl velocity
+        notes    full
+    }
+    // The sustain's other release types (`release_types` on Sus, per
+    // instrument): fall length and trill interval are their dynamics.
+    {
+        id       DoitRel
+        label    "Doit release"
+        kind     @Release
+        dynamics (v1)
+        rr       3
+        notes    full
+    }
+    {
+        id       FallRel
+        label    "Fall release"
+        kind     @Release
+        dynamics (L2 L3 L4)
+        rr       3
+        notes    full
+    }
+    {
+        id       TrillRel
+        label    "Trill release"
+        kind     @Release
+        dynamics (ht wt min3 maj3)
+        rr       3
+        notes    full
+    }
+    {
+        id       ShakeRel
+        label    "Shake release"
+        kind     @Release
+        dynamics (v1)
+        rr       3
+        notes    full
+    }
+    // The sustain legato's transitions (`script_legato` on Sus, per
+    // instrument): played by the script only, never selected. A zone per
+    // destination key and interval (its `interval`); dynamics by velocity.
+    {
+        id       LegUp
+        label    "Legato up"
+        kind     @Special
+        dynamics (v1 v2 v3 v4)
+        notes    full
+    }
+    {
+        id       LegDown
+        label    "Legato down"
+        kind     @Special
+        dynamics (v1 v2 v3 v4)
+        notes    full
+    }
+    // Octave legato (pedal) transitions: one layer; natural legato's
+    // unison tails (the Down unison band).
+    {
+        id       OctLegUp
+        label    "Octave legato up"
+        kind     @Special
+        dynamics (v1 v2 v3 v4)
+        notes    full
+    }
+    {
+        id       OctLegDown
+        label    "Octave legato down"
+        kind     @Special
+        dynamics (v1 v2 v3 v4)
+        notes    full
+    }
+    // Key noise (`keynoise` on Sus and Stabs): played at key 64 by a random
+    // velocity band, never selected.
+    {
+        id       Keyclick
+        label    "Key noise"
+        kind     @Special
+        notes    full
+    }
+    {
+        id       LegTail
+        label    "Legato unison tail"
+        kind     @Special
+        dynamics (v1 v2 v3 v4)
+        notes    full
+    }
+
+    // ── One-shots: four velocity layers ──────────────────────────────────
+    {
+        id       Stacc
+        label    "Staccato"
+        kind     @Short
+        dynamics (v1 v2 v3 v4)
+        rr       3
+        dyn_ctrl velocity
+        notes    full
+        vel_thresholds (32 64 96)
+    }
+    {
+        id       Stabs
+        label    "Stabs"
+        kind     @Short
+        dynamics (v1 v2 v3 v4)
+        rr       3
+        dyn_ctrl velocity
+        notes    full
+        vel_thresholds (32 64 96)
+    }
+
+    // ── One-shots: one layer (velocity sets the level and a lowpass
+    //    `v/127 + $SimDynMinLP`, the overlay's velocity route) ────────────
+    { id BendDown, label "Bend Down",       kind @Short, dynamics (v1), rr 3, dyn_ctrl velocity, notes full }
+    { id RunDown,  label "Octave Run Down", kind @Short, dynamics (v1), rr 3, dyn_ctrl velocity, notes full }
+    { id RunUp,    label "Octave Run Up",   kind @Short, dynamics (v1), rr 3, dyn_ctrl velocity, notes full }
+    { id Doits,    label "Doits",           kind @Short, dynamics (v1), rr 3, dyn_ctrl velocity, notes full }
+    { id Rise,     label "Rise To Hit",     kind @Short, dynamics (v1), rr 3, dyn_ctrl velocity, notes full }
+    { id Shakes,   label "Shakes",          kind @Short, dynamics (v1), rr 3, dyn_ctrl velocity, notes full }
+    // The interval knob picks the group (shipped whole tone: `wt`).
+    { id Trills,   label "Trills",          kind @Short, dynamics (wt), rr 3, dyn_ctrl velocity, notes full }
+    // The length menu picks the group (shipped short: Falls_Length_2 = `L2`).
+    { id Falls,    label "Falls",           kind @Short, dynamics (L2), rr 3, dyn_ctrl velocity, notes full }
+    // Tempo-synced (`timed_length`, per instrument): the take is the
+    // dynamic, stretched to the host tempo; crescendo legato on Alto.
+    { id Swells,   label "Swells",          kind @Short, dynamics (L1 L2 L3), rr 3, dyn_ctrl velocity, notes full }
+    { id Cresc,    label "Crescendos",      kind @Short, dynamics (L1 L2 L3), rr 3, dyn_ctrl velocity, notes full }
+)
+
+// Key mode (`%0ect5` = 0): the key sets the articulation (25056-25116),
+// shipped notes `%jqdqz` (identical across instruments); C0 = MIDI 12.
+// The release-type keys (C7..E7 = 96..100) and the >= 120 release override
+// are Sus's `release_types`; natural legato (C#2) its `script_legato`;
+// force-keynoise (D2) the articulations' `keynoise` `force_key`.
+keyswitch {
+    velocity_sensitive false
+    user_configurable  true
+    notes (
+        { note "C1",  label "Sustains",        vel_map { 0-127 "Sus" } }
+        { note "C#1", label "Staccato",        vel_map { 0-127 "Stacc" } }
+        { note "D1",  label "Stabs",           vel_map { 0-127 "Stabs" } }
+        { note "D#1", label "Bend Down",       vel_map { 0-127 "BendDown" } }
+        { note "E1",  label "Octave Run Down", vel_map { 0-127 "RunDown" } }
+        { note "F1",  label "Octave Run Up",   vel_map { 0-127 "RunUp" } }
+        { note "F#1", label "Rise To Hit",     vel_map { 0-127 "Rise" } }
+        { note "G1",  label "Swells",          vel_map { 0-127 "Swells" } }
+        { note "G#1", label "Crescendos",      vel_map { 0-127 "Cresc" } }
+        { note "A1",  label "Doits",           vel_map { 0-127 "Doits" } }
+        { note "A#1", label "Shakes",          vel_map { 0-127 "Shakes" } }
+        { note "B1",  label "Trills",          vel_map { 0-127 "Trills" } }
+        { note "C2",  label "Falls",           vel_map { 0-127 "Falls" } }
+    )
+}

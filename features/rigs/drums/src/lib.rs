@@ -2,26 +2,45 @@
 //! engine.
 //!
 //! Drums need no drum-specific DSP: a kit is plain multi-sampled zones (with
-//! round-robins + velocity layers) played by [`signal_sampler::SamplerRig`],
+//! round-robins + velocity layers) played by [`sampler::SamplerRig`],
 //! the same engine the strings and keys features use. This crate owns the
 //! drum-kit *definitions* (how to load and route a kit), the behaviour *spec*
 //! (`spec/`), and the kit-loading *tests* as they land.
 
+pub mod proto;
+#[cfg(feature = "ui")]
+pub mod ui;
+
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
-use signal_sampler::midicore::{self, DrumMap, DrumMapConverter};
-use signal_sampler::{InstrumentId, PreloadProfile, PresetSpec, SamplerRig};
+#[cfg(not(target_arch = "wasm32"))]
+use sampler::midicore::{DrumMap, DrumMapConverter};
+// The kit loaders below drive a native SamplerRig.
+#[cfg(not(target_arch = "wasm32"))]
+use sampler::{InstrumentId, PreloadProfile, PresetSpec, SamplerRig};
 
+// The rig engine (architect::rig, threads, audio) is native-only; the browser
+// remote reaches a network engine through `proto`.
+#[cfg(not(target_arch = "wasm32"))]
 mod backend;
 pub mod cradle;
 pub mod library;
+// The keyboard's Light Guide is a USB HID device: on a phone, a tablet or in
+// the browser there is none to drive, and no HID stack to drive it with — a
+// stand-in finds no keyboard there.
+#[cfg(not(any(target_os = "ios", target_os = "android", target_arch = "wasm32")))]
+mod lightguide;
+#[cfg(any(target_os = "ios", target_os = "android", target_arch = "wasm32"))]
+#[path = "lightguide_none.rs"]
 mod lightguide;
 pub mod mm2fx;
+// Built on signal-space's analysis engine (native-only), for the backend.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod piece_space;
+#[cfg(not(target_arch = "wasm32"))]
 pub use backend::DrumRigBackend;
 pub use lightguide::DrumLightGuide;
-pub use signal_drums_proto as proto;
-
 /// General-MIDI percussion channel (0-indexed 9 = MIDI channel 10).
 pub const GM_DRUM_CHANNEL: u8 = 9;
 
@@ -31,18 +50,19 @@ pub const GM_DRUM_CHANNEL: u8 = 9;
 /// (e.g. an Alesis Strata Prime e-kit, [`DrumMap::StrataPrime`]) drives the
 /// loaded sample library's note layout (e.g. [`DrumMap::Mm2`]).
 ///
-/// Returns the live [`MidiInput`](signal_sampler::MidiInputHandle) — hold it
+/// Returns the live [`MidiInput`](sampler::MidiInputHandle) — hold it
 /// alive for as long as the kit should play. Requires a live (non-offline) rig.
 ///
 /// # Errors
 ///
 /// Returns an error if MIDI attachment fails.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn attach_converted_kit(
     rig: &SamplerRig,
-    selection: midicore::PortSelector,
+    selection: midi::PortSelector,
     from: DrumMap,
     to: DrumMap,
-) -> Result<signal_sampler::MidiInputHandle, String> {
+) -> Result<sampler::MidiInputHandle, String> {
     let mut conv = DrumMapConverter::new(from, to);
     rig.attach_midi_transformed(selection, move |ev| conv.convert(ev))
         .map_err(|e| e.to_string())
@@ -51,9 +71,11 @@ pub fn attach_converted_kit(
 /// Load a full drum kit from a `.signalpreset` and route it to the GM percussion channel.
 ///
 /// This is the loader for native GGD-style kits (e.g. Modern & Massive 2), where
-/// the `.signalpreset` carries one engine per piece + GM `note_routing` +
-/// send-based multi-mic `DrumMixer`, with per-piece mic sets. Unlike [`load_kit`],
-/// which loads a single merged articulation/zone library.
+/// the `.signalpreset` carries one engine per piece + GM `note_routing` + its
+/// mic layout, with per-piece mic sets. Each mic loads as a track in the daw —
+/// close mics to master, overheads and rooms sent to shared bus tracks — so
+/// the kit is mixed on the daw's own faders. Unlike [`load_kit`], which loads
+/// a single merged articulation/zone library.
 ///
 /// Returns the per-engine instrument ids (`"<id>:<piece>"`).
 ///
@@ -68,6 +90,7 @@ pub fn attach_converted_kit(
 /// Returns an error if the preset file cannot be read or loaded.
 // r[impl drums.kit.gm-channel]
 // r[impl drums.kit.sample-zones]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_kit_tracks(
     rig: &SamplerRig,
     id: &str,
@@ -86,6 +109,7 @@ pub fn load_kit_tracks(
 /// # Errors
 ///
 /// Returns an error if kit loading fails.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_kit_tracks_spec(
     rig: &SamplerRig,
     id: &str,
@@ -100,6 +124,7 @@ pub fn load_kit_tracks_spec(
 /// # Errors
 ///
 /// Returns an error if the preset file cannot be loaded.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_preset_kit(
     rig: &SamplerRig,
     id: &str,
@@ -130,6 +155,7 @@ pub fn load_preset_kit(
 /// Returns an error if loading the instrument configuration fails.
 // r[impl drums.kit.gm-channel]
 // r[impl drums.kit.sample-zones]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_kit(
     rig: &SamplerRig,
     id: &str,

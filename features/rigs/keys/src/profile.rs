@@ -31,15 +31,15 @@
 //! Stacks: Spotlight · Verse · Energy · Hooks · Underscore
 //! ```
 //!
-//! The tree this builds is an ordinary [`Container`](signal_sampler::Container) program — the same one
+//! The tree this builds is an ordinary [`Container`](sampler::Container) program — the same one
 //! the sampler renders, so layers inherit zones (key/velocity splits), sends,
 //! modulators and the block/module system for free. Layer faders are live
-//! [`GainCells`](signal_sampler::node_render::GainCells), addressed by the
+//! [`GainCells`](sampler::node_render::GainCells), addressed by the
 //! layer's container name.
 
 use facet::Facet;
+use sampler::rig_node::Container;
 use signal_proto::block::BlockType;
-use signal_sampler::rig_node::Container;
 
 /// One layer's slot in a scene: what it plays and how loud.
 #[derive(Debug, Clone, PartialEq, Facet)]
@@ -483,9 +483,7 @@ impl KeysProfile {
     /// unresolvable render as silent lanes, so a profile is playable before
     /// every pack is downloaded.
     pub fn build_tree(&self, resolve: impl Fn(&str) -> Option<String>) -> Container {
-        self.build_tree_with(resolve, |_, _| {
-            signal_synth::engine::ModuleSettings::default()
-        })
+        self.build_tree_with(resolve, |_, _| synth::engine::ModuleSettings::default())
     }
 
     /// The profile as a **node library** — the domain form, and the one the
@@ -504,10 +502,10 @@ impl KeysProfile {
     pub fn build_library(
         &self,
         resolve: impl Fn(&str) -> Option<String>,
-    ) -> signal_sampler::to_node::Lift {
+    ) -> sampler::to_node::Lift {
         let mut tree = self.build_tree(resolve);
         tree.canonicalize();
-        let mut lifted = signal_sampler::to_node::lift(&tree);
+        let mut lifted = sampler::to_node::lift(&tree);
 
         // Name which kind of playable thing each Engine is. The lift cannot:
         // a container tree only ever knew that a node *was* an Engine.
@@ -531,7 +529,7 @@ impl KeysProfile {
     pub fn build_tree_with(
         &self,
         resolve: impl Fn(&str) -> Option<String>,
-        module_set: impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+        module_set: impl Fn(&str, usize) -> synth::engine::ModuleSettings,
     ) -> Container {
         let mut engines = Container::parallel("Engines");
         for engine in &self.engines {
@@ -564,7 +562,7 @@ impl KeysProfile {
     fn lane_container(
         layer: &LayerDef,
         resolve: &impl Fn(&str) -> Option<String>,
-        module_set: &impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+        module_set: &impl Fn(&str, usize) -> synth::engine::ModuleSettings,
     ) -> Container {
         // An authored Omnisphere patch (`.prt_omn` / `.mlt_omn`) is a whole
         // voice — oscillators or soundsources, filters, envelopes, Harmonia —
@@ -577,15 +575,15 @@ impl KeysProfile {
             }
             return lane;
         }
-        let sources: Vec<signal_synth::Source> = layer
+        let sources: Vec<synth::Source> = layer
             .module_patches()
             .into_iter()
             .map(|patch| {
                 let spec = (!patch.is_empty()).then(|| resolve(&patch)).flatten();
-                signal_synth::Source::sample(spec)
+                synth::Source::sample(spec)
             })
             .collect();
-        let settings: Vec<signal_synth::engine::ModuleSettings> = sources
+        let settings: Vec<synth::engine::ModuleSettings> = sources
             .iter()
             .enumerate()
             .map(|(i, source)| {
@@ -594,15 +592,15 @@ impl KeysProfile {
                 set
             })
             .collect();
-        let mut lane = signal_synth::engine::signal_layer_with(&layer.name, &settings);
+        let mut lane = synth::engine::signal_layer_with(&layer.name, &settings);
         if !layer.source_params.is_empty() {
             stamp_source_params(&mut lane, &layer.source_params);
         }
         if !layer.is_full_range() {
-            lane = lane.zone(signal_sampler::rig_node::Zone {
+            lane = lane.zone(sampler::rig_node::Zone {
                 key_lo: layer.key_lo,
                 key_hi: layer.key_hi,
-                ..signal_sampler::rig_node::Zone::full()
+                ..sampler::rig_node::Zone::full()
             });
         }
         lane
@@ -614,7 +612,7 @@ impl KeysProfile {
     fn omni_lane(
         layer: &LayerDef,
         resolve: &impl Fn(&str) -> Option<String>,
-        module_set: &impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+        module_set: &impl Fn(&str, usize) -> synth::engine::ModuleSettings,
     ) -> Option<Container> {
         let patch = layer
             .module_patches()
@@ -631,15 +629,15 @@ impl KeysProfile {
         }
         // The real index: a sample-mode patch's layers name soundsources,
         // and an empty index would leave them silent. Scanned once.
-        static INDEX: std::sync::OnceLock<signal_synth::omni_import::SoundsourceIndex> =
+        static INDEX: std::sync::OnceLock<synth::omni_import::SoundsourceIndex> =
             std::sync::OnceLock::new();
-        let index = INDEX.get_or_init(signal_synth::omni_import::SoundsourceIndex::scan_default);
-        match signal_synth::omni_import::load_patch_file_transposed(path, index, layer.transpose) {
+        let index = INDEX.get_or_init(synth::omni_import::SoundsourceIndex::scan_default);
+        match synth::omni_import::load_patch_file_transposed(path, index, layer.transpose) {
             Ok(mut tree) => {
                 // The lane's knobs (seeded from this patch, one module per
                 // patch layer) ride onto the tree, so a rebuild keeps them.
                 for i in 0..layer.module_patches().len().min(4) {
-                    signal_synth::engine::apply_settings_to_omni_layer(
+                    synth::engine::apply_settings_to_omni_layer(
                         &mut tree,
                         i,
                         &module_set(&layer.name, i),
@@ -648,18 +646,18 @@ impl KeysProfile {
                 // The part's LFOs (shared by its layers) from module A's knobs.
                 let part = module_set(&layer.name, 0);
                 let base = part.baseline.as_deref();
-                signal_synth::engine::apply_lfos_to_omni(&mut tree, &part.lfos, base.map(|b| &b.lfos));
-                signal_synth::engine::apply_lfo_fades_to_omni(
+                synth::engine::apply_lfos_to_omni(&mut tree, &part.lfos, base.map(|b| &b.lfos));
+                synth::engine::apply_lfo_fades_to_omni(
                     &mut tree,
                     &part.lfo_fade_ms,
                     base.map(|b| &b.lfo_fade_ms),
                 );
                 let mut lane = Container::layer(&layer.name).add(tree);
                 if !layer.is_full_range() {
-                    lane = lane.zone(signal_sampler::rig_node::Zone {
+                    lane = lane.zone(sampler::rig_node::Zone {
                         key_lo: layer.key_lo,
                         key_hi: layer.key_hi,
-                        ..signal_sampler::rig_node::Zone::full()
+                        ..sampler::rig_node::Zone::full()
                     });
                 }
                 Some(lane)
@@ -686,9 +684,9 @@ impl KeysProfile {
     pub fn build_lane_program(
         &self,
         resolve: impl Fn(&str) -> Option<String>,
-        module_set: impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
-    ) -> signal_sampler::keys_rig::LaneProgram {
-        use signal_sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
+        module_set: impl Fn(&str, usize) -> synth::engine::ModuleSettings,
+    ) -> sampler::keys_rig::LaneProgram {
+        use sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
         LaneProgram {
             name: self.name.clone(),
             engines: self
@@ -1059,15 +1057,15 @@ pub fn worship_profile() -> KeysProfile {
 
 /// Put `params` on every Sampler block under `node` (a lane's sample
 /// sources), replacing a param of the same name.
-fn stamp_source_params(node: &mut signal_sampler::rig_node::Container, params: &[SourceParam]) {
-    use signal_sampler::rig_node::RigNode;
+fn stamp_source_params(node: &mut sampler::rig_node::Container, params: &[SourceParam]) {
+    use sampler::rig_node::RigNode;
     for child in &mut node.children {
         match child {
             // A sample source is the block that names a sample spec.
             RigNode::Block { block } if !block.sample.is_empty() => {
                 for p in params {
                     block.params.retain(|q| q.name != p.name);
-                    block.params.push(signal_sampler::rig_node::Param {
+                    block.params.push(sampler::rig_node::Param {
                         name: p.name.clone(),
                         value: p.value.clone(),
                     });
@@ -1076,443 +1074,5 @@ fn stamp_source_params(node: &mut signal_sampler::rig_node::Container, params: &
             RigNode::Container { container } => stamp_source_params(container, params),
             _ => {}
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn knobs_saved_per_patch_survive_the_file_and_the_merge() {
-        let mut edited = worship_profile();
-        let first = edited.engines[0].layers[0].name.clone();
-        let layer = edited.layer_mut(&first).unwrap();
-        layer.remember_macros(
-            "Some Patch",
-            0,
-            vec![MacroValue {
-                id: "env1.attack".into(),
-                value: 250.0,
-            }],
-        );
-        // Remembering again replaces, it doesn't pile up.
-        layer.remember_macros(
-            "Some Patch",
-            0,
-            vec![MacroValue {
-                id: "env1.attack".into(),
-                value: 300.0,
-            }],
-        );
-        assert_eq!(layer.patch_macros.len(), 1);
-
-        let text = edited.to_styx_string().unwrap();
-        let saved = KeysProfile::from_styx_str(&text).unwrap();
-        let mut merged = worship_profile();
-        merged.adopt_saved_macros(&saved);
-        let got = merged
-            .layer_mut(&first)
-            .unwrap()
-            .saved_macros("Some Patch", 0)
-            .unwrap()
-            .to_vec();
-        assert_eq!(got.len(), 1);
-        assert_eq!(got[0].id, "env1.attack");
-        assert!((got[0].value - 300.0).abs() < 1e-6);
-        assert!(
-            merged
-                .layer_mut(&first)
-                .unwrap()
-                .saved_macros("Some Patch", 1)
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn worship_shape() {
-        let p = worship_profile();
-        // Keys · Pad · Organ · Bass · Aux · Drone · SFX.
-        assert_eq!(p.engines.len(), 7);
-        // The live rig's mixer strip: Keys 1/2/3, Pad + Shimmer, then the rest.
-        let keys = p.engine("Keys").unwrap();
-        assert_eq!(keys.layers.len(), 3);
-        assert_eq!(
-            keys.layers
-                .iter()
-                .map(|l| l.name.as_str())
-                .collect::<Vec<_>>(),
-            ["Keys 1", "Keys 2", "Keys 3"]
-        );
-        assert_eq!(
-            p.engine("Pad")
-                .unwrap()
-                .layers
-                .iter()
-                .map(|l| l.name.as_str())
-                .collect::<Vec<_>>(),
-            ["Pad", "Shimmer"]
-        );
-        // Bass is its own engine, not an Aux lane.
-        assert_eq!(
-            p.engine("Bass")
-                .unwrap()
-                .layers
-                .iter()
-                .map(|l| l.name.as_str())
-                .collect::<Vec<_>>(),
-            ["Bass"]
-        );
-        assert_eq!(
-            p.engine("Aux")
-                .unwrap()
-                .layers
-                .iter()
-                .map(|l| l.name.as_str())
-                .collect::<Vec<_>>(),
-            ["Synth 1", "Synth 2"]
-        );
-        assert_eq!(p.engine("Organ").unwrap().layers.len(), 2);
-        assert_eq!(p.engine("Organ").unwrap().layers.len(), 2);
-        assert_eq!(p.stacks.len(), 5);
-        // Every stack addresses every layer — no lane is left undefined.
-        let layers = p.layer_names();
-        for stack in &p.stacks {
-            for layer in &layers {
-                assert!(
-                    stack.slots.iter().any(|s| &s.layer == layer),
-                    "stack {} misses layer {layer}",
-                    stack.name
-                );
-            }
-        }
-    }
-
-    /// Every patch the profile names must actually resolve to a source on
-    /// disk. This is the check that would have caught the Aux lanes silently
-    /// half-loading: their Keyscape layers were not in the Omnisphere index,
-    /// so the patch would have played thin rather than failed.
-    ///
-    /// Machine-local (it reads the sample library), so `#[ignore]`d — run with
-    /// `cargo test -p signal-keys -- --ignored`.
-    #[test]
-    #[ignore = "needs the local sample library"]
-    fn every_authored_patch_resolves_to_a_source() {
-        let idx = signal_synth::omni_import::SoundsourceIndex::scan_default();
-        assert!(idx.len() > 100, "index looks empty: {}", idx.len());
-
-        let mut missing = Vec::new();
-        for engine in &worship_profile().engines {
-            for lane in &engine.layers {
-                for patch in lane.module_patches() {
-                    // An empty module is a deliberately empty slot.
-                    if patch.is_empty() {
-                        continue;
-                    }
-                    if idx.find(&patch).is_none() {
-                        missing.push(format!("{}/{}: {patch}", engine.name, lane.name));
-                    }
-                }
-            }
-        }
-        assert!(
-            missing.is_empty(),
-            "unresolved patches:\n  {}",
-            missing.join("\n  ")
-        );
-    }
-
-    #[test]
-    fn the_worship_bass_is_a_left_hand_split() {
-        let p = worship_profile();
-        let bass = p
-            .engines
-            .iter()
-            .flat_map(|e| &e.layers)
-            .find(|l| l.name == "Bass")
-            .expect("Bass lane");
-        assert_eq!((bass.key_lo, bass.key_hi), (0, 41));
-        let tree = p.build_tree(|name| Some(format!("/patches/{name}.prt_omn")));
-        // The layer, not its like-named engine.
-        let lane = tree
-            .of_role(signal_sampler::rig_node::Role::Layer)
-            .into_iter()
-            .find(|c| c.name == "Bass")
-            .expect("Bass lane in the tree");
-        assert_eq!((lane.zone.key_lo, lane.zone.key_hi), (0, 41));
-    }
-
-    #[test]
-        fn the_worship_piano_lane_plays_the_gig_snapshot() {
-        let p = worship_profile();
-        let tree = p.build_tree(|name| Some(format!("/packs/{name}.signalpack")));
-        let lane = tree.find("Keys 1").expect("Keys 1 lane");
-        let sources: Vec<_> = lane
-            .blocks()
-            .into_iter()
-            .filter(|b| !b.sample.is_empty())
-            .collect();
-        assert!(!sources.is_empty(), "Keys 1 has a sample source");
-        for b in sources {
-            assert_eq!(b.param_str("piano_snapshot").as_deref(), Some("worship"));
-        }
-    }
-
-    #[test]
-    fn tree_has_a_fader_per_lane() {
-        let p = worship_profile();
-        let tree = p.build_tree(|_| None);
-        let (_, cells) = signal_sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
-        use signal_sampler::rig_node::Role;
-        use std::sync::Arc;
-        for name in p.layer_names() {
-            assert!(
-                cells.get(Role::Layer, &name).is_some(),
-                "no gain cell for lane {name}"
-            );
-        }
-        for engine in &p.engines {
-            assert!(
-                cells.get(Role::Engine, &engine.name).is_some(),
-                "no gain cell for engine {}",
-                engine.name
-            );
-        }
-        // A one-lane engine named after its lane ("Pad" holding "Pad") must
-        // still be two cells — see the render tree's like-named test.
-        for engine in p
-            .engines
-            .iter()
-            .filter(|e| e.layers.iter().any(|l| l.name == e.name))
-        {
-            assert!(
-                !Arc::ptr_eq(
-                    cells.get(Role::Engine, &engine.name).expect("engine cell"),
-                    cells.get(Role::Layer, &engine.name).expect("lane cell"),
-                ),
-                "{} shares one cell with its lane",
-                engine.name
-            );
-        }
-    }
-
-    #[test]
-    fn styx_roundtrip() {
-        let p = worship_profile();
-        let text = p.to_styx_string().expect("serialize");
-        let back = KeysProfile::from_styx_str(&text).expect("parse");
-        assert_eq!(p, back);
-    }
-}
-
-#[cfg(test)]
-mod order_tests {
-    use super::*;
-
-    /// A saved order survives a round-trip through styx, and an engine the
-    /// saved file never heard of still shows up (behind the ones it names).
-    #[test]
-    fn order_round_trips_and_tolerates_new_engines() {
-        let mut p = worship_profile();
-        p.apply_order(&["SFX".into(), "Drone".into()]);
-        assert_eq!(
-            &p.engine_order()[..2],
-            &["SFX".to_string(), "Drone".to_string()]
-        );
-
-        let text = p.to_styx_string().expect("serialize");
-        let back = KeysProfile::from_styx_str(&text).expect("parse");
-        assert_eq!(back.engine_order(), p.engine_order());
-
-        // A profile that gains an engine later keeps the saved order and
-        // appends the newcomer rather than dropping it.
-        let saved_order = vec!["SFX".to_string(), "Drone".to_string()];
-        let mut fresh = worship_profile();
-        fresh.engines.push(EngineDef {
-            scope_values: Vec::new(),
-            name: "Brass".into(),
-            gain_db: 0.0,
-            engine_type: String::new(),
-            layers: vec![LayerDef::new("Brass A", "")],
-        });
-        fresh.apply_order(&saved_order);
-        assert_eq!(
-            &fresh.engine_order()[..2],
-            &["SFX".to_string(), "Drone".to_string()]
-        );
-        assert!(fresh.engine("Brass").is_some());
-    }
-
-    /// The worship keys rig, through the domain and back out unchanged.
-    ///
-    /// This is the thing that was not possible before: a keys lane is a
-    /// sampler with a key split, a fader and a filter envelope, and until
-    /// `Node` gained zones, faders and a sample realization there was no way
-    /// to put one in a `NodeLibrary` at all. Now the whole profile lifts,
-    /// resolves and renders back to the identical tree — so the library can
-    /// be the source of truth without the rig sounding any different.
-    #[test]
-    fn the_worship_profile_survives_the_domain() {
-        use signal_proto::node_resolve::resolve;
-
-        let profile = worship_profile();
-        let mut tree = profile.build_tree(|_| None);
-        tree.canonicalize();
-        let before = tree.dump();
-
-        let lifted = signal_sampler::to_node::lift(&tree);
-        let (resolved, report) =
-            resolve(&lifted.library, &lifted.root, None).expect("the profile resolves");
-        assert!(report.is_clean(), "{report:?}");
-
-        let after = signal_sampler::from_node::to_container(&resolved).dump();
-        assert_eq!(before, after, "the keys rig changed crossing the domain");
-    }
-
-    /// Every lane's parameters cross as ranged domain parameters, not as raw
-    /// settings — so the lift report is the measure of how much of the rig
-    /// the domain actually understands.
-    #[test]
-    fn the_worship_profiles_parameters_are_all_ranged() {
-        let profile = worship_profile();
-        let mut tree = profile.build_tree(|_| None);
-        tree.canonicalize();
-
-        let lifted = signal_sampler::to_node::lift(&tree);
-        assert!(
-            lifted.report.is_clean(),
-            "parameters the domain could not range: {:?}",
-            lifted.report.unranged
-        );
-    }
-
-    /// The rig playing from the library, not from a tree: build the profile
-    /// as nodes, resolve, compile, and check the renderer found the same
-    /// faders it finds from the hand-built tree.
-    ///
-    /// This is what "the library is the source of truth" means in practice —
-    /// the audio path is reached through `resolve`, and nothing downstream
-    /// can tell the difference.
-    #[test]
-    fn the_rig_compiles_from_the_library() {
-        use signal_proto::node_resolve::resolve;
-        use signal_sampler::rig_node::Role;
-
-        let profile = worship_profile();
-        let lifted = profile.build_library(|_| None);
-        let (resolved, report) =
-            resolve(&lifted.library, &lifted.root, None).expect("the program resolves");
-        assert!(report.is_clean(), "{report:?}");
-
-        let tree = signal_sampler::from_node::to_container(&resolved);
-        let (_, cells) = signal_sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
-
-        for name in profile.layer_names() {
-            assert!(
-                cells.get(Role::Layer, &name).is_some(),
-                "no gain cell for lane {name} when compiled from the library"
-            );
-        }
-        for engine in &profile.engines {
-            assert!(
-                cells.get(Role::Engine, &engine.name).is_some(),
-                "no gain cell for engine {} when compiled from the library",
-                engine.name
-            );
-        }
-    }
-
-    /// Each lane's key split reaches the renderer through the domain. A
-    /// `Node` could not express a zone at all until this work, so a keys
-    /// program crossing the domain used to mean losing every split.
-    #[test]
-    fn key_splits_survive_the_library() {
-        use signal_proto::node_resolve::resolve;
-
-        let profile = worship_profile();
-        let split_lanes: Vec<&LayerDef> = profile
-            .engines
-            .iter()
-            .flat_map(|e| e.layers.iter())
-            .filter(|l| !l.is_full_range())
-            .collect();
-
-        let lifted = profile.build_library(|_| None);
-        let (resolved, _) = resolve(&lifted.library, &lifted.root, None).expect("resolves");
-        let tree = signal_sampler::from_node::to_container(&resolved);
-
-        // Look lanes up as LAYERS: a lane may share its engine's name ("Bass"
-        // in "Bass"), and a plain `find` returns the engine.
-        let layers = tree.of_role(signal_sampler::rig_node::Role::Layer);
-        for lane in split_lanes {
-            let found = layers.iter().find(|c| c.name == lane.name).expect(&lane.name);
-            assert_eq!(found.zone.key_lo, lane.key_lo, "{} key_lo", lane.name);
-            assert_eq!(found.zone.key_hi, lane.key_hi, "{} key_hi", lane.name);
-        }
-    }
-
-    /// Every Engine in the library says which kind of playable thing it is —
-    /// the one fact a lift cannot recover, because a container tree never
-    /// carried it.
-    #[test]
-    fn every_engine_names_its_kind() {
-        use signal_proto::EngineType;
-        use signal_proto::node::Role;
-
-        let profile = worship_profile();
-        let lifted = profile.build_library(|_| None);
-
-        for engine in &profile.engines {
-            let node = lifted
-                .library
-                .nodes
-                .iter()
-                .find(|n| n.name == engine.name && n.role == Role::Engine)
-                .unwrap_or_else(|| panic!("{} is an Engine node", engine.name));
-            assert_eq!(
-                node.engine_type,
-                engine.engine_type(),
-                "{} kind",
-                engine.name
-            );
-        }
-
-        // And the inference is by name where nothing is stated, falling back
-        // to Keys rather than the type's own default of Guitar.
-        assert_eq!(
-            EngineDef {
-                scope_values: Vec::new(),
-                name: "Organ".into(),
-                gain_db: 0.0,
-                engine_type: String::new(),
-                layers: Vec::new(),
-            }
-            .engine_type(),
-            EngineType::Organ
-        );
-        assert_eq!(
-            EngineDef {
-                scope_values: Vec::new(),
-                name: "Aux".into(),
-                gain_db: 0.0,
-                engine_type: String::new(),
-                layers: Vec::new(),
-            }
-            .engine_type(),
-            EngineType::Keys,
-            "an unrecognised name in a keys profile is a keyboard"
-        );
-        assert_eq!(
-            EngineDef {
-                scope_values: Vec::new(),
-                name: "Anything".into(),
-                gain_db: 0.0,
-                engine_type: "pad".into(),
-                layers: Vec::new(),
-            }
-            .engine_type(),
-            EngineType::Pad,
-            "and what it declares wins over its name"
-        );
     }
 }

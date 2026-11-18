@@ -3,7 +3,7 @@
 //! level/pan/mute/solo/sends/fx.
 //!   cargo run -p signal-drums --example `cradle_dump` -- <path-to.preset>
 
-use signal_drums::cradle;
+use drums::cradle;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()

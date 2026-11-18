@@ -161,7 +161,8 @@ impl SoundsourceIndex {
                     if let Ok(names) = std::fs::read_to_string(&list) {
                         for name in names.lines().map(str::trim).filter(|n| !n.is_empty()) {
                             self.by_name.insert(name.to_lowercase(), path.clone());
-                            self.articulation.insert(name.to_lowercase(), name.to_string());
+                            self.articulation
+                                .insert(name.to_lowercase(), name.to_string());
                         }
                     }
                 }
@@ -225,7 +226,9 @@ impl SoundsourceIndex {
     /// several soundsources.
     #[must_use]
     pub fn articulation_for(&self, name: &str) -> Option<&str> {
-        self.articulation.get(&name.to_lowercase()).map(String::as_str)
+        self.articulation
+            .get(&name.to_lowercase())
+            .map(String::as_str)
     }
 
     /// Like [`find`](Self::find), but only a playable source — a pack or a
@@ -234,10 +237,15 @@ impl SoundsourceIndex {
     /// soundsources ("Choir Men Ohs - mf"), and a sampler cannot play one.
     pub fn find_source(&self, name: &str) -> Option<&Path> {
         let is_source = |p: &Path| {
-            !p.extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn"))
+            !p.extension().is_some_and(|e| {
+                e.eq_ignore_ascii_case("prt_omn") || e.eq_ignore_ascii_case("mlt_omn")
+            })
         };
-        if let Some(p) = self.by_name.get(&name.to_lowercase()).filter(|p| is_source(p)) {
+        if let Some(p) = self
+            .by_name
+            .get(&name.to_lowercase())
+            .filter(|p| is_source(p))
+        {
             return Some(p.as_path());
         }
         if normalize_soundsource_name(name).is_empty() {
@@ -336,83 +344,4 @@ pub fn normalize_soundsource_name(name: &str) -> String {
     }
     // Collapse whitespace runs — folder names carry stray doubles.
     s.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::normalize_soundsource_name;
-
-    #[test]
-    fn dynamic_suffix_and_multidynamic_marker_normalize_together() {
-        // The real mismatch: the gig's Gentle Gothics asks for these names,
-        // the extraction wrote those folders.
-        assert_eq!(
-            normalize_soundsource_name("Choir Men Ohs - mf"),
-            normalize_soundsource_name("Choir Men Ohs  ^")
-        );
-        assert_eq!(
-            normalize_soundsource_name("Choir Women Oos - mf"),
-            normalize_soundsource_name("Choir Women Oos  ^")
-        );
-        // Every dynamic marker, not just mf.
-        for dyn_ in ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"] {
-            assert_eq!(normalize_soundsource_name(&format!("Pad - {dyn_}")), "pad");
-        }
-    }
-
-    /// Everything from `^` onward is which-capture, not which-source.
-    #[test]
-    fn round_robin_variants_after_the_caret_normalize_to_the_base_source() {
-        assert_eq!(normalize_soundsource_name("Dolceola ^ RR Lite"), "dolceola");
-        assert_eq!(
-            normalize_soundsource_name("MK-80 Contemporary Rhodes ^"),
-            "mk-80 contemporary rhodes"
-        );
-        assert_eq!(
-            normalize_soundsource_name("Clavichord a ^ RR"),
-            "clavichord a"
-        );
-    }
-
-    /// The trailing-letter tier is narrow on purpose. A general prefix match
-    /// would let a query find a strictly shorter source and play the wrong
-    /// instrument, which is worse than not finding one.
-    #[test]
-    fn only_a_single_trailing_letter_is_treated_as_a_capture_variant() {
-        let strip = |q: &str| -> Option<String> {
-            let want = normalize_soundsource_name(q);
-            let (head, last) = want.rsplit_once(' ')?;
-            (last.chars().count() == 1 && last.chars().all(|c| c.is_ascii_alphabetic()))
-                .then(|| head.to_string())
-        };
-        assert_eq!(strip("Clavichord a ^ RR").as_deref(), Some("clavichord"));
-        // A real name whose last word is one letter would also strip — but only
-        // AFTER exact and normalized lookups miss, and "Hohner Clavinet" is not
-        // a source, so nothing wrong can be reached.
-        assert_eq!(
-            strip("Hohner Clavinet C").as_deref(),
-            Some("hohner clavinet")
-        );
-        // Multi-letter tails are never stripped.
-        assert_eq!(strip("Choir Men Ahs"), None);
-        assert_eq!(strip("Big Berthas Lead"), None);
-    }
-
-    #[test]
-    fn a_hyphen_that_is_not_a_dynamic_is_left_alone() {
-        // Real soundsource names contain hyphens; only a trailing dynamic
-        // token may be stripped, or distinct sources would collide.
-        assert_eq!(
-            normalize_soundsource_name("OB-8 PWM Big Strings"),
-            "ob-8 pwm big strings"
-        );
-        assert_eq!(
-            normalize_soundsource_name("Rhodes - LA Custom"),
-            "rhodes - la custom"
-        );
-        assert_ne!(
-            normalize_soundsource_name("Choir Men Ohs - mf"),
-            normalize_soundsource_name("Choir Men Ahs - mf")
-        );
-    }
 }

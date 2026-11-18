@@ -12,17 +12,25 @@
 //! ```
 //! Exit code 1 when a block misses the deadline or a sample is non-finite.
 
+use sampler::node_render::RenderNode;
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
-use signal_sampler::node_render::RenderNode;
 
 fn ev(on: bool, key: u8, vel: u8, offset: u32) -> PluginMidiEvent {
     use daw::service::{Channel, KeyNumber, MidiEvent, Velocity};
     PluginMidiEvent {
         offset,
         message: if on {
-            MidiEvent::NoteOn { channel: Channel::new(0), key: KeyNumber::new(key), velocity: Velocity::new(vel) }
+            MidiEvent::NoteOn {
+                channel: Channel::new(0),
+                key: KeyNumber::new(key),
+                velocity: Velocity::new(vel),
+            }
         } else {
-            MidiEvent::NoteOff { channel: Channel::new(0), key: KeyNumber::new(key), velocity: Velocity::new(0) }
+            MidiEvent::NoteOff {
+                channel: Channel::new(0),
+                key: KeyNumber::new(key),
+                velocity: Velocity::new(0),
+            }
         },
     }
 }
@@ -46,22 +54,29 @@ fn main() {
     let hits: usize = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(6);
     let block: usize = args.get(2).and_then(|v| v.parse().ok()).unwrap_or(128);
     let sr = 48_000u32;
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     let program = backend.debug_profile_program().expect("profile program");
     let tree = if which == "all" {
         program
     } else {
-        program.find(&which).unwrap_or_else(|| panic!("no lane {which}")).clone()
+        program
+            .find(&which)
+            .unwrap_or_else(|| panic!("no lane {which}"))
+            .clone()
     };
     let mut rn = RenderNode::compile(&tree, sr);
     rn.prepare(f64::from(sr), block as u32);
     rn.set_tempo(120.0);
     let t0 = std::time::Instant::now();
-    while signal_sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 180 {
+    while sampler::rig::preloads_pending() > 0 && t0.elapsed().as_secs() < 180 {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     let (mut l, mut r) = (vec![0.0f32; block], vec![0.0f32; block]);
-    let none = PluginEvents { params: &[], midi: &[], note_expressions: &[] };
+    let none = PluginEvents {
+        params: &[],
+        midi: &[],
+        note_expressions: &[],
+    };
     for _ in 0..200 {
         rn.render(&mut l, &mut r, &none);
     }
@@ -84,7 +99,15 @@ fn main() {
         r.fill(0.0);
         let f0 = faults();
         let t = std::time::Instant::now();
-        rn.render(&mut l, &mut r, &PluginEvents { params: &[], midi: &midi, note_expressions: &[] });
+        rn.render(
+            &mut l,
+            &mut r,
+            &PluginEvents {
+                params: &[],
+                midi: &midi,
+                note_expressions: &[],
+            },
+        );
         let dt = t.elapsed();
         let f1 = faults();
         times.push(dt);
@@ -97,7 +120,11 @@ fn main() {
                 phase * block * 1000 / sr as usize,
                 f1.0 - f0.0,
                 f1.1 - f0.1,
-                if midi.is_empty() { "" } else { " (MIDI in this block)" }
+                if midi.is_empty() {
+                    ""
+                } else {
+                    " (MIDI in this block)"
+                }
             );
         }
         for v in l.iter().chain(r.iter()) {
@@ -141,7 +168,14 @@ fn main() {
     let w: Vec<String> = worst
         .iter()
         .take(5)
-        .map(|(i, d)| format!("{:.2} ms @ hit {} +{} ms", d.as_secs_f64() * 1e3, i / per_hit, (i % per_hit) * block * 1000 / sr as usize))
+        .map(|(i, d)| {
+            format!(
+                "{:.2} ms @ hit {} +{} ms",
+                d.as_secs_f64() * 1e3,
+                i / per_hit,
+                (i % per_hit) * block * 1000 / sr as usize
+            )
+        })
         .collect();
     println!("  worst: {}", w.join(", "));
     if over > 0 || nonfinite > 0 {

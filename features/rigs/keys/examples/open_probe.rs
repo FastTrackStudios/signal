@@ -7,11 +7,11 @@
 //!     cargo run -p signal-keys --example open_probe
 //! ```
 
-use signal_keys_proto::keys::KeysRig as KeysRigSvc;
+use keys::proto::keys::KeysRig as KeysRigSvc;
 
 fn main() {
     tracing_subscriber::fmt().with_env_filter("info").init();
-    let backend = signal_keys::KeysRigBackend::new();
+    let backend = keys::KeysRigBackend::new();
     println!(
         "presets: {:?}",
         KeysRigSvc::presets(&backend)

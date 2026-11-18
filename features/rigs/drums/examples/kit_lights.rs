@@ -7,8 +7,8 @@
 use std::thread::sleep;
 use std::time::Duration;
 
-use signal_drums::DrumLightGuide;
-use signal_sampler::PresetSpec;
+use drums::DrumLightGuide;
+use sampler::PresetSpec;
 
 const PRESET: &str = "/run/media/AudioHaven/Signal/Libraries/Drum Kits/\
 GGD Modern and Massive 2/Presets/Metal Monster.signalpreset";

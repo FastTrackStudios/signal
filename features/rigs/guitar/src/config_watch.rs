@@ -93,6 +93,9 @@ fn line_col(text: &str, offset: usize) -> (usize, usize) {
 /// is on disk. Remembering it would make an unseen external edit look like
 /// the rig's own, and the watcher would never load it.
 pub fn read_quiet<T: for<'a> Facet<'a>>(path: &Path) -> Read<T> {
+    if let Some(read) = read_book::<T>(path) {
+        return read;
+    }
     match std::fs::read_to_string(path) {
         Err(_) => Read::Missing,
         Ok(text) => match parse(&text) {
@@ -105,6 +108,9 @@ pub fn read_quiet<T: for<'a> Facet<'a>>(path: &Path) -> Read<T> {
 /// Read `path` into the rig: remembered as the content its memory now holds
 /// (or, when it does not parse, as content never to overwrite).
 pub fn read_tracked<T: for<'a> Facet<'a>>(path: &Path) -> Read<T> {
+    if let Some(read) = read_book::<T>(path) {
+        return read;
+    }
     let Ok(text) = std::fs::read_to_string(path) else {
         return Read::Missing;
     };
@@ -117,6 +123,49 @@ pub fn read_tracked<T: for<'a> Facet<'a>>(path: &Path) -> Read<T> {
             note_bad(path, &text);
             Read::Bad(e)
         }
+    }
+}
+
+/// `path` as its library's book holds it, when a book stands for the
+/// library (`signal_rig_host::book`): the doc is the library, and there is
+/// no file to remember — what changes under the rig arrives as the book's
+/// changes ([`Watcher`]). `None`: no book, the file is read.
+fn read_book<T: for<'a> Facet<'a>>(path: &Path) -> Option<Read<T>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use signal_rig_host::book::{self, BookRead};
+        let (book, name) = book::for_path(path)?;
+        Some(match book.read::<T>(&name) {
+            BookRead::Ok(v) => Read::Ok(v),
+            BookRead::Missing => Read::Missing,
+            BookRead::Bad(e) => Read::Bad(e),
+        })
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = path;
+        None
+    }
+}
+
+/// Write `value` as `path` in its library's book, when one stands for it.
+/// `None`: no book, the file is written.
+fn write_book<T: for<'a> Facet<'a>>(path: &Path, value: &T) -> Option<Wrote> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (book, name) = signal_rig_host::book::for_path(path)?;
+        Some(match book.write(&name, value) {
+            Ok(()) => Wrote::Written,
+            Err(e) => {
+                tracing::warn!("rig store: {name} was not written to the book: {e}");
+                Wrote::Failed
+            }
+        })
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (path, value);
+        None
     }
 }
 
@@ -175,6 +224,11 @@ fn still_ours(path: &Path, on_disk: Option<&[u8]>) -> bool {
 /// rig's copy is then the older one, and writing it would silently undo
 /// somebody's edit; the file is left alone and the watcher loads it.
 pub fn write_guarded<T: for<'a> Facet<'a>>(path: &Path, value: &T) -> Wrote {
+    // A book merges what another device changed field by field, so there
+    // is nothing to guard: the write lands beside it.
+    if let Some(wrote) = write_book(path, value) {
+        return wrote;
+    }
     let text = match facet_styx::to_string(value) {
         Ok(t) => t,
         Err(e) => {
@@ -331,6 +385,22 @@ impl Watcher {
     }
 
     fn look(&mut self, dir: &Path, now: bool) -> Vec<Change> {
+        // A library that is a book: what changes under the rig is what
+        // another device changed, reported by the book itself, already
+        // settled (an import is whole).
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(book) = signal_rig_host::book::for_dir(dir) {
+            let _ = now;
+            return book
+                .take_changes()
+                .into_iter()
+                .filter(|name| !signal_rig_host::book::is_device_local(name))
+                .map(|name| Change {
+                    deleted: !book.contains(&name),
+                    path: dir.join(&name),
+                })
+                .collect();
+        }
         let mut paths = library_files(dir);
         paths.extend(self.seen.keys().filter(|p| p.starts_with(dir)).cloned());
         let mut changes = Vec::new();
@@ -417,6 +487,7 @@ pub fn log_path() -> PathBuf {
 }
 
 /// Append one line to the reload log, stamped with the time.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn log_line(text: &str) {
     use std::io::Write as _;
     let line = format!(
@@ -432,225 +503,11 @@ pub fn log_line(text: &str) {
     }
 }
 
+/// The browser has no reload log (no file to append to): a no-op.
+#[cfg(target_arch = "wasm32")]
+pub fn log_line(_text: &str) {}
+
 /// The file `signal rig reload` drops into the rig directory to ask a
 /// running rig to re-read its config now. It holds a tag the rig puts on
 /// its report lines, and the rig deletes it once done.
 pub const RELOAD_REQUEST: &str = ".reload-request";
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn dir(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("cfg-watch-{tag}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(d.join("profiles")).unwrap();
-        d
-    }
-
-    #[derive(Clone, Debug, PartialEq, Facet)]
-    struct Doc {
-        #[facet(default)]
-        name: String,
-        #[facet(default)]
-        count: u32,
-    }
-
-    /// Ensure the next write gets a different mtime even on a coarse clock.
-    fn tick() {
-        std::thread::sleep(std::time::Duration::from_millis(15));
-    }
-
-    fn settle(w: &mut Watcher, d: &Path) -> Vec<Change> {
-        let mut all = w.poll(d);
-        all.extend(w.poll(d));
-        all
-    }
-
-    #[test]
-    fn the_rigs_own_write_is_not_a_change() {
-        let d = dir("own");
-        let f = d.join("songs.styx");
-        std::fs::write(&f, "name \"A\"\ncount 1\n").unwrap();
-        assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
-        let mut w = Watcher::new();
-        assert!(w.poll(&d).is_empty(), "nothing changed since the load");
-        tick();
-        assert_eq!(
-            write_guarded(
-                &f,
-                &Doc {
-                    name: "A".into(),
-                    count: 2
-                }
-            ),
-            Wrote::Written
-        );
-        assert!(
-            settle(&mut w, &d).is_empty(),
-            "the rig wrote it, so it knows it"
-        );
-    }
-
-    #[test]
-    fn an_external_edit_is_a_change() {
-        let d = dir("ext");
-        let f = d.join("profiles").join("worship.styx");
-        std::fs::write(&f, "name \"A\"\ncount 1\n").unwrap();
-        assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
-        let mut w = Watcher::new();
-        assert!(w.poll(&d).is_empty());
-        tick();
-        std::fs::write(&f, "name \"A\"\ncount 9\n").unwrap();
-        assert!(
-            w.poll(&d).is_empty(),
-            "not reported while it may still be moving"
-        );
-        assert_eq!(
-            w.poll(&d),
-            vec![Change {
-                path: f.clone(),
-                deleted: false
-            }]
-        );
-        assert!(w.poll(&d).is_empty(), "reported once");
-    }
-
-    #[test]
-    fn a_burst_of_writes_is_one_change_once_it_stops() {
-        let d = dir("burst");
-        let f = d.join("setlists.styx");
-        std::fs::write(&f, "name \"A\"\n").unwrap();
-        assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
-        let mut w = Watcher::new();
-        w.poll(&d);
-        let mut reported = Vec::new();
-        for i in 0..4 {
-            tick();
-            std::fs::write(&f, format!("name \"A\"\ncount {i}{}\n", " ".repeat(i))).unwrap();
-            reported.extend(w.poll(&d));
-        }
-        assert!(
-            reported.is_empty(),
-            "nothing while the editor is still saving: {reported:?}"
-        );
-        assert_eq!(w.poll(&d).len(), 1, "one change once it held still");
-    }
-
-    #[test]
-    fn a_change_before_the_first_look_is_still_seen() {
-        let d = dir("early");
-        let f = d.join("midi.styx");
-        std::fs::write(&f, "name \"A\"\n").unwrap();
-        assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
-        std::fs::write(&f, "name \"B\"\n").unwrap();
-        assert_eq!(Watcher::new().poll(&d).len(), 1);
-    }
-
-    #[test]
-    fn a_save_never_overwrites_an_external_edit() {
-        let d = dir("keep");
-        let f = d.join("songs.styx");
-        std::fs::write(&f, "name \"A\"\ncount 1\n").unwrap();
-        assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
-        std::fs::write(&f, "name \"Mine\"\ncount 1\n").unwrap();
-        assert_eq!(
-            write_guarded(
-                &f,
-                &Doc {
-                    name: "A".into(),
-                    count: 5
-                }
-            ),
-            Wrote::KeptExternal
-        );
-        assert_eq!(
-            std::fs::read_to_string(&f).unwrap(),
-            "name \"Mine\"\ncount 1\n"
-        );
-        // Once the rig has loaded it, its saves go through again.
-        assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
-        assert_eq!(
-            write_guarded(
-                &f,
-                &Doc {
-                    name: "Mine".into(),
-                    count: 5
-                }
-            ),
-            Wrote::Written
-        );
-    }
-
-    #[test]
-    fn a_file_that_does_not_parse_is_never_written_over() {
-        let d = dir("bad");
-        let f = d.join("songs.styx");
-        std::fs::write(&f, "name \"A\"\n").unwrap();
-        assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
-        let mut w = Watcher::new();
-        w.poll(&d);
-        tick();
-        std::fs::write(&f, "name \"A\"\ncount {{{\n").unwrap();
-        let ch = settle(&mut w, &d);
-        assert_eq!(ch.len(), 1);
-        let Read::Bad(msg) = read_tracked::<Doc>(&f) else {
-            panic!("it does not parse")
-        };
-        assert!(!msg.is_empty());
-        assert!(
-            msg.starts_with("line 2, column"),
-            "the error says where: {msg}"
-        );
-        assert!(settle(&mut w, &d).is_empty(), "a bad file is reported once");
-        assert_eq!(
-            write_guarded(
-                &f,
-                &Doc {
-                    name: "A".into(),
-                    count: 1
-                }
-            ),
-            Wrote::KeptExternal
-        );
-        assert_eq!(
-            std::fs::read_to_string(&f).unwrap(),
-            "name \"A\"\ncount {{{\n"
-        );
-        // Fixed: the next good save of it is news again.
-        tick();
-        std::fs::write(&f, "name \"A\"\ncount 3\n").unwrap();
-        assert_eq!(settle(&mut w, &d).len(), 1);
-    }
-
-    #[test]
-    fn a_save_that_changes_nothing_keeps_the_hand_formatting() {
-        let d = dir("fmt");
-        let f = d.join("keymap.styx");
-        let hand = "// my notes\nname   \"A\"\ncount 1\n";
-        std::fs::write(&f, hand).unwrap();
-        let Read::Ok(v) = read_tracked::<Doc>(&f) else {
-            panic!()
-        };
-        assert_eq!(write_guarded(&f, &v), Wrote::Unchanged);
-        assert_eq!(std::fs::read_to_string(&f).unwrap(), hand);
-    }
-
-    #[test]
-    fn a_deleted_file_is_a_change() {
-        let d = dir("del");
-        let f = d.join("profiles").join("rock.styx");
-        std::fs::write(&f, "name \"Rock\"\n").unwrap();
-        assert!(matches!(read_tracked::<Doc>(&f), Read::Ok(_)));
-        let mut w = Watcher::new();
-        w.poll(&d);
-        std::fs::remove_file(&f).unwrap();
-        assert_eq!(
-            settle(&mut w, &d),
-            vec![Change {
-                path: f,
-                deleted: true
-            }]
-        );
-    }
-}

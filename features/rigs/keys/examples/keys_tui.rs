@@ -14,17 +14,15 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use daw_audio_io::AudioIoPrefs;
+use audio::io::AudioIoPrefs;
+use keys::KeysRig;
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Gauge, Paragraph};
-use signal_keys::KeysRig;
-use signal_sampler::{
-    Container, MidiEvent, MidiInputHandle, MidiSelection, PresetRegistry, RigNode,
-};
+use sampler::{Container, MidiEvent, MidiInputHandle, MidiSelection, PresetRegistry, RigNode};
 
 const NORD_RED: Color = Color::Rgb(206, 38, 38);
 /// Distinct colors for key-split bands / layers, reused on the keyboard + panels.
@@ -47,7 +45,7 @@ fn main() -> eyre::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     // Default to the sample-realized program when the machine has the piano
     // libraries; the placeholder program otherwise.
-    let default_preset = if signal_sampler::nord::nord_stage_piano_preset().is_some() {
+    let default_preset = if sampler::nord::nord_stage_piano_preset().is_some() {
         "Nord Stage (Piano)"
     } else {
         "Nord Stage"
@@ -66,10 +64,9 @@ fn main() -> eyre::Result<()> {
     // soundsources against the local extraction, and select it.
     let mut preset_name = preset_name;
     if let Some(patch_path) = arg(&args, "--omni") {
-        let index = signal_synth::omni_import::SoundsourceIndex::scan_default();
-        let tree =
-            signal_synth::omni_import::load_patch_file(std::path::Path::new(&patch_path), &index)
-                .map_err(|e| eyre::eyre!("omni import: {e}"))?;
+        let index = synth::omni_import::SoundsourceIndex::scan_default();
+        let tree = synth::omni_import::load_patch_file(std::path::Path::new(&patch_path), &index)
+            .map_err(|e| eyre::eyre!("omni import: {e}"))?;
         preset_name = tree.name.clone();
         registry.register_code(tree);
     }
@@ -241,7 +238,7 @@ fn run(
     rig: &mut KeysRig,
     registry: &PresetRegistry,
     tree: &Container,
-    monitor: &signal_sampler::MidiMonitor,
+    monitor: &sampler::MidiMonitor,
     preset_name: &str,
     midi_choices: &[MidiChoice],
     midi_idx: &mut usize,
@@ -354,7 +351,7 @@ fn note_for_key(c: char, octave: i32) -> Option<u8> {
 }
 
 /// Approximate currently-held hardware notes by folding the monitor's recent log.
-fn fold_monitor_held(monitor: &signal_sampler::MidiMonitor, held: &mut HashSet<u8>) {
+fn fold_monitor_held(monitor: &sampler::MidiMonitor, held: &mut HashSet<u8>) {
     for msg in monitor.recent() {
         match msg {
             MidiEvent::NoteOn { key, velocity, .. } if velocity.get() > 0 => {
@@ -377,7 +374,7 @@ fn ui(
     vels: &[VelLayer],
     held: &HashSet<u8>,
     peak: f32,
-    monitor: &signal_sampler::MidiMonitor,
+    monitor: &sampler::MidiMonitor,
     octave: i32,
     midi_label: &str,
     midi_open: bool,
@@ -487,7 +484,7 @@ fn render_sections(f: &mut Frame, area: Rect, bands: &[Band]) {
                 Style::new().fg(Color::White).bold(),
             ),
             Span::styled(
-                format!("keys {}–{}", note_name(b.lo), note_name(b.hi)),
+                format!("keys {}–{}", midi::note_name(b.lo), midi::note_name(b.hi)),
                 Style::new().fg(Color::Gray),
             ),
         ]));
@@ -576,13 +573,6 @@ fn render_keyboard(f: &mut Frame, area: Rect, bands: &[Band], held: &HashSet<u8>
         Paragraph::new(body).block(Block::bordered().title("KEYBOARD — split zones + held notes")),
         area,
     );
-}
-
-fn note_name(n: u8) -> String {
-    const NAMES: [&str; 12] = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
-    format!("{}{}", NAMES[(n % 12) as usize], i32::from(n) / 12 - 1)
 }
 
 /// Send stray stderr (engine logs) to a file so they can't corrupt the TUI. (fn below)

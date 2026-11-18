@@ -1,0 +1,51 @@
+[package]
+name = "signal-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# The live docs: Signal's model as Loro docs (`signal_proto::doc`), and the
+# `signal-doc-dump` tool.
+doc = ["dep:loro", "dep:serde_json"]
+
+[dependencies]
+base64.workspace = true
+architect = { workspace = true, features = ["action-list"] }
+signal-macromod.workspace = true
+utils.workspace = true
+serde.workspace = true
+facet.workspace = true
+vox.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+loro = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+# Browser builds: uuid needs a randomness source, and `getrandom`
+# needs to be told it's on the web. Same pattern as keyflow and
+# engraver-proto.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }
+getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+serde_json.workspace = true
+# The node model persists as styx — the rig library is hand-editable text,
+# so the round trip is a property worth testing, not an assumption.
+facet-styx.workspace = true
+proptest.workspace = true
+# Its own tests with the `doc` feature on: a plain `cargo test` of the
+# workspace builds them.
+signal-proto = { path = ".", features = ["doc"] }
+
+[[bin]]
+name = "signal-doc-dump"
+path = "src/bin/signal-doc-dump.rs"
+required-features = ["doc"]
+

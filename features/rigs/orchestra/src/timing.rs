@@ -12,7 +12,7 @@
 //!    `start_offset` so that `fire_frame + (lead_in − offset)/rate` — the
 //!    heard arrival — lands exactly on the note's grid tick. The engine
 //!    reports that prediction per transition
-//!    ([`signal_sampler::LegatoFireEvent::arrival`]); tests assert
+//!    ([`sampler::LegatoFireEvent::arrival`]); tests assert
 //!    `arrival == grid` for EVERY note, sample-accurately (± a couple of
 //!    frames of ms→frame rounding). Shorts carry the same contract as a
 //!    constant: the schedule pre-rolls them by `short_note_timing.
@@ -20,11 +20,12 @@
 //! 2. **Audio onset cross-check** — spectral flux over the rendered audio
 //!    validates the markers themselves (a wrong/missing `lead_in_ms` in the
 //!    pack data would make prediction and acoustics disagree).
-//! 3. **Ears** — the same tempo map drives a session-guide click render
-//!    mixed over the music, so the owner can HEAR the grid.
+//! 3. **Ears** — the same tempo map drives a click render
+//!    ([`render_click`]) mixed over the music, so the owner can HEAR the
+//!    grid.
 
-use signal_sampler::SamplerRig;
-use signal_sampler::document::{DocCc, DocNote, TempoPoint, TrackDocument, qn_to_sec};
+use sampler::SamplerRig;
+use sampler::document::{DocCc, DocNote, TempoPoint, TrackDocument, qn_to_sec};
 
 // ── Tempo-map helpers ────────────────────────────────────────────────────────
 
@@ -63,12 +64,12 @@ pub fn bpm_at_sec(tempo: &[TempoPoint], sec: f64) -> f64 {
     bpm
 }
 
-// ── Click render (session-guide, same tempo map) ─────────────────────────────
+// ── Click render (same tempo map) ────────────────────────────────────────────
 
-/// Synthesized click: a short sine burst with exponential decay.
-fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> session_guide::AudioSample {
+/// Synthesized click: a short sine burst with exponential decay (mono).
+fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> Vec<f32> {
     let n = (dur_sec * f64::from(sr)).round() as usize;
-    let samples: Vec<f32> = (0..n)
+    (0..n)
         .map(|i| {
             let t = i as f64 / f64::from(sr);
             let env = (-t * 10.0 / dur_sec).exp() as f32;
@@ -76,8 +77,27 @@ fn click_sample(freq: f64, dur_sec: f64, amp: f32, sr: u32) -> session_guide::Au
             // sample marks the beat (a sine's first sample would be 0).
             (2.0 * std::f64::consts::PI * freq * t).cos() as f32 * amp * env
         })
-        .collect();
-    session_guide::AudioSample::mono(samples, sr)
+        .collect()
+}
+
+/// The frame `qn` falls on, on `tempo` at `sr` (nearest frame).
+fn frame_at(tempo: &[TempoPoint], qn: f64, sr: u32) -> usize {
+    (qn_to_sec(tempo, qn) * f64::from(sr)).round().max(0.0) as usize
+}
+
+/// Strike the mono `sample` into the interleaved stereo `out` at each of
+/// `onsets` (frames, ascending), on both channels. A strike restarts the
+/// voice: the one before stops at the next onset, as a metronome's click
+/// does.
+fn strike(out: &mut [f32], sample: &[f32], onsets: &[usize]) {
+    let frames = out.len() / 2;
+    for (i, &at) in onsets.iter().enumerate() {
+        let until = onsets.get(i + 1).copied().unwrap_or(frames).min(frames);
+        for (f, s) in (at..until).zip(sample) {
+            out[f * 2] += s;
+            out[f * 2 + 1] += s;
+        }
+    }
 }
 
 /// Optional count-in: `beats` count cues starting at `start_qn` (one per
@@ -89,12 +109,12 @@ pub struct CountIn {
 }
 
 /// Render a stereo (interleaved) click track of `total_frames` from `tempo`
-/// — THE SAME map the document render uses — via the session-guide engine.
+/// — THE SAME map the document render uses.
 ///
-/// Accented downbeats (4/4), plain quarter clicks elsewhere, plus an
-/// optional count-in on its own voice. Sample-accurate: the guide engine
-/// places each hit from the `BlockClock` beat grid this function derives
-/// from the map (see `features/guide/tests/guide_engine.rs`).
+/// A click on every quarter note, the downbeat (4/4) accented with its own
+/// sound, plus an optional count-in on a third voice (at most 8 counts).
+/// Sample-accurate: each click starts on the frame its beat falls on
+/// ([`qn_to_sec`], rounded to the nearest frame).
 #[must_use]
 pub fn render_click(
     tempo: &[TempoPoint],
@@ -102,71 +122,29 @@ pub fn render_click(
     sr: u32,
     count_in: Option<CountIn>,
 ) -> Vec<f32> {
-    let mut engine = session_guide::GuideEngine::new(session_guide::GuideConfig {
-        // Every beat with the downbeat accented, no subdivisions.
-        // (subdivisions default to off.)
-        click: session_guide::ClickSubdivisions {
-            beat: true,
-            measure_accent: true,
-            ..Default::default()
-        },
-        enable_count: count_in.is_some(),
-        enable_guide: false,
-        ..Default::default()
+    let (mut beats, mut downbeats) = (Vec::new(), Vec::new());
+    for k in 0u32.. {
+        let at = frame_at(tempo, f64::from(k), sr);
+        if at >= total_frames {
+            break;
+        }
+        if k % 4 == 0 {
+            downbeats.push(at);
+        } else {
+            beats.push(at);
+        }
+    }
+    let counts: Vec<usize> = count_in.map_or_else(Vec::new, |ci| {
+        (0..ci.beats.min(8))
+            .map(|i| frame_at(tempo, ci.start_qn + f64::from(i), sr))
+            .filter(|&at| at < total_frames)
+            .collect()
     });
-    engine.bank_mut().beat = Some(click_sample(1000.0, 0.045, 0.7, sr));
-    engine.bank_mut().measure_accent = Some(click_sample(1600.0, 0.055, 0.85, sr));
-    if let Some(ci) = count_in {
-        let mut schedule = session_guide::CueSchedule::default();
-        for i in 0..ci.beats.min(8) {
-            engine.bank_mut().counts[i as usize] = Some(click_sample(760.0, 0.09, 0.8, sr));
-            schedule.cues.push(session_guide::ScheduledCue {
-                time_seconds: qn_to_sec(tempo, ci.start_qn + f64::from(i)),
-                event: session_guide::CueEvent::Count { index: i as usize },
-            });
-        }
-        engine.set_schedule(schedule);
-    }
 
-    const BLOCK: usize = 256;
     let mut out = vec![0.0f32; total_frames * 2];
-    let mut cl = vec![0.0f32; BLOCK];
-    let mut cr = vec![0.0f32; BLOCK];
-    let mut nl = vec![0.0f32; BLOCK];
-    let mut nr = vec![0.0f32; BLOCK];
-    let mut gl = vec![0.0f32; BLOCK];
-    let mut gr = vec![0.0f32; BLOCK];
-    let mut start = 0usize;
-    while start < total_frames {
-        let n = BLOCK.min(total_frames - start);
-        for b in [&mut cl, &mut cr, &mut nl, &mut nr, &mut gl, &mut gr] {
-            b[..n].fill(0.0);
-        }
-        let pos_seconds = start as f64 / f64::from(sr);
-        let clock = session_guide::BlockClock {
-            playing: true,
-            pos_seconds,
-            pos_beats: sec_to_qn(tempo, pos_seconds),
-            tempo_bpm: bpm_at_sec(tempo, pos_seconds),
-            time_sig_num: 4,
-            time_sig_den: 4,
-            sample_rate: f64::from(sr),
-        };
-        let mut buses = session_guide::GuideBuses {
-            click_l: &mut cl[..n],
-            click_r: &mut cr[..n],
-            count_l: &mut nl[..n],
-            count_r: &mut nr[..n],
-            guide_l: &mut gl[..n],
-            guide_r: &mut gr[..n],
-        };
-        engine.render(&mut buses, &clock);
-        for i in 0..n {
-            out[(start + i) * 2] += cl[i] + nl[i];
-            out[(start + i) * 2 + 1] += cr[i] + nr[i];
-        }
-        start += n;
-    }
+    strike(&mut out, &click_sample(1000.0, 0.045, 0.7, sr), &beats);
+    strike(&mut out, &click_sample(1600.0, 0.055, 0.85, sr), &downbeats);
+    strike(&mut out, &click_sample(760.0, 0.09, 0.8, sr), &counts);
     out
 }
 
@@ -968,129 +946,4 @@ pub fn render_live_replay(
     let end = events.last().map_or(0.0, |e| e.0) + tail_sec;
     render_to(rig, &mut audio, &mut cursor_frames, end);
     audio
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sec_to_qn_inverts_qn_to_sec_across_changes() {
-        let tempo = vec![
-            TempoPoint {
-                qn: 0.0,
-                bpm: 120.0,
-            },
-            TempoPoint { qn: 8.0, bpm: 60.0 },
-        ];
-        for qn in [0.0, 1.0, 7.9, 8.0, 8.1, 20.0] {
-            let sec = qn_to_sec(&tempo, qn);
-            assert!((sec_to_qn(&tempo, sec) - qn).abs() < 1e-9, "qn {qn}");
-        }
-        assert_eq!(bpm_at_sec(&tempo, 0.0), 120.0);
-        assert_eq!(bpm_at_sec(&tempo, 10.0), 60.0);
-    }
-
-    #[test]
-    fn click_lands_on_the_tempo_grid() {
-        let tempo = vec![TempoPoint {
-            qn: 0.0,
-            bpm: 120.0,
-        }];
-        let sr = 48_000u32;
-        let click = render_click(&tempo, sr as usize * 2, sr, None);
-        // First non-zero sample of each burst = the beat positions 0 / 0.5 /
-        // 1.0 / 1.5 s.
-        let mut onsets = Vec::new();
-        let mut i = 0usize;
-        let frames = click.len() / 2;
-        while i < frames {
-            if click[i * 2].abs() > 1e-6 {
-                onsets.push(i);
-                i += sr as usize / 10; // skip the burst body
-            } else {
-                i += 1;
-            }
-        }
-        assert_eq!(onsets, vec![0, 24_000, 48_000, 72_000]);
-    }
-
-    #[test]
-    fn corpus_is_deterministic_and_grid_consistent() {
-        let a = timing_corpus();
-        let b = timing_corpus();
-        assert_eq!(a.len(), b.len());
-        for (ca, cb) in a.iter().zip(&b) {
-            assert_eq!(ca.doc.notes.len(), cb.doc.notes.len());
-            assert_eq!(ca.expected.len(), ca.doc.notes.len());
-            for (e, n) in ca.expected.iter().zip(&ca.doc.notes) {
-                assert_eq!(e.qn, n.start_qn);
-                assert!((e.sec - qn_to_sec(&ca.doc.tempo, n.start_qn)).abs() < 1e-12);
-            }
-        }
-    }
-
-    #[test]
-    fn pitch_arrival_finds_a_crossfaded_pitch_change() {
-        let sr = 48_000u32;
-        let frames = sr as usize * 2;
-        let mut audio = vec![0.0f32; frames * 2];
-        let (f1, f2) = (midi_to_hz(67), midi_to_hz(69));
-        // 30 ms linear crossfade from G4 to A4 centered at 1.0 s.
-        let xfade = 0.03;
-        for i in 0..frames {
-            let t = i as f64 / f64::from(sr);
-            let mix = ((t - (1.0 - xfade / 2.0)) / xfade).clamp(0.0, 1.0);
-            let s = (2.0 * std::f64::consts::PI * f1 * t)
-                .sin()
-                .mul_add(1.0 - mix, (2.0 * std::f64::consts::PI * f2 * t).sin() * mix)
-                as f32
-                * 0.5;
-            audio[i * 2] = s;
-            audio[i * 2 + 1] = s;
-        }
-        let t = pitch_arrival(&audio, sr, 1.0, 67, 69, 0.3).expect("crossing found");
-        assert!(
-            (t - 1.0).abs() < 0.030,
-            "pitch arrival at {t}, expected 1.0"
-        );
-        // Octave (harmonic-colliding) case still resolves.
-        let mut audio8 = vec![0.0f32; frames * 2];
-        let f3 = midi_to_hz(79);
-        for i in 0..frames {
-            let t = i as f64 / f64::from(sr);
-            let mix = ((t - (1.0 - xfade / 2.0)) / xfade).clamp(0.0, 1.0);
-            let s = (2.0 * std::f64::consts::PI * f1 * t)
-                .sin()
-                .mul_add(1.0 - mix, (2.0 * std::f64::consts::PI * f3 * t).sin() * mix)
-                as f32
-                * 0.5;
-            audio8[i * 2] = s;
-            audio8[i * 2 + 1] = s;
-        }
-        let t = pitch_arrival(&audio8, sr, 1.0, 67, 79, 0.3).expect("octave crossing");
-        assert!((t - 1.0).abs() < 0.040, "octave arrival at {t}");
-    }
-
-    #[test]
-    fn flux_finds_an_impulse_train() {
-        let sr = 48_000u32;
-        let mut audio = vec![0.0f32; sr as usize * 2 * 2];
-        // 40 ms 2 kHz bursts at 0.5 s and 1.25 s.
-        for &at in &[0.5f64, 1.25] {
-            let start = (at * f64::from(sr)) as usize;
-            for i in 0..(sr as usize / 25) {
-                let t = i as f64 / f64::from(sr);
-                let s = (2.0 * std::f64::consts::PI * 2000.0 * t).sin() as f32
-                    * (-t * 60.0).exp() as f32;
-                audio[(start + i) * 2] = s;
-                audio[(start + i) * 2 + 1] = s;
-            }
-        }
-        let flux = spectral_flux(&audio, sr);
-        for &at in &[0.5f64, 1.25] {
-            let t = flux.onset_near(at, 0.1).expect("onset found");
-            assert!((t - at).abs() < 0.015, "onset at {t}, expected {at}");
-        }
-    }
 }

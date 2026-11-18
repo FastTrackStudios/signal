@@ -155,4 +155,28 @@ legato_engine {
     destination_fade_ms 500    // destination sustain crossfade-in
     release_overlap { fade_ms 1500 }   // legrel layer, $amble
     retrigger { trigger sustain_pedal_held, rr 3 }
+
+    // The transition shape where `kontakt_transition` does not apply (the
+    // document path and portamento). These are the CSS KSP values the engine
+    // used to apply to every library; NOT yet measured for this one.
+    shape {
+        swell_ms              225   // $a3zg3 XTime (flat over IOI)
+        swell_split_pct       50    // $igmiu, soft attack
+        swell_split_pct_hard  60    // $igmiu, hard table
+        swell_split_pct_leap  50    // interval > 12 (ignores the hard table)
+        swell_divisor { thresholds_ms (150 300), anchors_ms (90 60) }   // $x444h Node-Vol
+        low_latency_fade_ms   80    // $ocjln=0 single-stage fade
+        hard_ioi_ms           50    // velocity zone 3 is "hard" only above this IOI
+        transition_min_skip_ms (60 10 20 0)   // $1fvjk: soft<=12, soft>12, hard<=12, hard>12
+        portamento_glide_ms   60    // $1mwwo
+        portamento_bend_cents (     // $ruv02 by IOI: unison/semitone, whole tone, wider
+            { thresholds_ms (75 100 500), anchors_ms (40 10 10) }
+            { thresholds_ms (75 100 500), anchors_ms (30 10 0) }
+            { thresholds_ms (75 100 500), anchors_ms (20 0 0) }
+        )
+        ab_window_ms          250   // $xu41m
+        ab_dip_db             -3.0  // $4lqhx (-30 deci-dB)
+        ab_zone3_db           0.0   // $x0jlu
+        old_body_fade_ms      250   // $jvqtp "Old out"
+    }
 }

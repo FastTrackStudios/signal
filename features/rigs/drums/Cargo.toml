@@ -1,48 +1,49 @@
 [package]
-name = "signal-drums"
+name = "drums"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 authors.workspace = true
+license.workspace = true
+description = "The drum rig: kits, samples, triggers, and its editor"
 
 [lints]
 workspace = true
 
 [features]
-# PipeWire mode: route this rig's hardware MIDI through the pipewire-jack
-# backend (routable graph node, not an exclusive ALSA grab).
-# PipeWire (audio + MIDI) is DEFAULT on Linux — audio is target-gated in
-# daw-audio-io, MIDI via the linux target table below. Alias only.
+default = ["vox"]
 pipewire = []
+ui = ["dep:dioxus", "midi/ui", "dep:signal-widgets", "signal-widgets/piano", "architect/atom", "architect/platform"]
+vox = ["architect/vox", "dep:vox"]
 
 [dependencies]
-signal-rigs-proto.workspace = true
-# Drums are plain sample zones on the shared engine — no drum-specific DSP.
-signal-sampler.workspace = true
-# The similarity space over the library's swappable pieces (#77 M4).
-signal-space.workspace = true
-# Cross-rig utilities: shared mixer math (dB→linear).
-signal-rig-host.workspace = true
-# daw services — every strip fader/mute/solo/send is a daw track/route op.
-daw.workspace = true
-# The wire contract this crate's headless backend implements (DrumRig service).
-signal-drums-proto.workspace = true
-# Layer/Services composition + dispatchers + PubSub for mounting the services.
-architect = { workspace = true, features = ["vox", "rig"] }
-# Hardware MIDI ports + the drum-map converter for the live input path.
-midicore = { workspace = true, features = ["vox", "midir", "native"] }
-# NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs.
-kontrol.workspace = true
-# Built-in FX (NativeEq/NativeComp/NativeReverb) + the plugin-host wrapper, so
-# an imported MM2 (Cradle) mix can be reproduced with our own DSP per piece.
-fx-blocks.workspace = true
-signal-plugin-host.workspace = true
-tracing.workspace = true
+architect = { workspace = true, features = ["rig", "vox"] }
+daw = { workspace = true }
+dioxus = { workspace = true, optional = true }
+facet = { workspace = true }
+builtin = { workspace = true }
+midi = { workspace = true, features = ["midir", "native", "ui", "vox"] }
+signal-plugin-host = { workspace = true }
+signal-rig-host = { workspace = true }
+# The drums' own profiles, songs and setlists (apart from the guitar's).
+signal-rig-perform-store = { workspace = true }
+signal-rigs-proto = { workspace = true }
+sampler = { workspace = true }
+signal-space = { workspace = true, features = ["engine"] }
+signal-widgets = { workspace = true, optional = true }
+tracing = { workspace = true }
+vox = { workspace = true, optional = true }
 
 [dev-dependencies]
-tracing-subscriber.workspace = true
+tracing-subscriber = { workspace = true }
+# perform_rpc: the shared performance surface served in-process.
+architect = { workspace = true, features = ["vox", "local"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+# NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs. A
+# USB HID keyboard: desktop only (`lightguide_none.rs` on a phone, tablet or
+# in the browser).
+[target.'cfg(not(any(target_os = "ios", target_os = "android", target_arch = "wasm32")))'.dependencies]
+kontrol = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# Hardware MIDI as a routable PipeWire graph node (midir on the
-# pipewire-jack backend) — the Linux default, matching the audio host.
-midicore = { workspace = true, features = ["vox", "midir", "pipewire"] }
+midi = { workspace = true, features = ["midir", "pipewire", "vox"] }
