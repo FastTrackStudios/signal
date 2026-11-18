@@ -2,7 +2,6 @@
 //!
 //! Supports three nesting levels: Engine (outermost), Layer (middle), Module (innermost).
 
-use audio_controls::widgets::VSlider;
 use dioxus::prelude::*;
 
 use super::layout::{ContainerLevel, ENGINE_TITLE_H, GROUP_TITLE_H, LAYER_LEFT_PAD};
@@ -130,13 +129,7 @@ pub(super) fn ContainerBackground(props: ContainerBackgroundProps) -> Element {
                     // Volume fader to the right of the name
                     div {
                         style: "display: flex; align-items: center; justify-content: center; flex: 1;",
-                        VSlider {
-                            value: volume,
-                            height: fader_h,
-                            width: 16,
-                            min: 0.0,
-                            max: 1.0,
-                        }
+                        LayerFader { value: volume, height: fader_h }
                     }
                 }
             } else {
@@ -167,6 +160,51 @@ pub(super) fn ContainerBackground(props: ContainerBackgroundProps) -> Element {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer volume fader (visual prototype)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Width of the layer fader's track, px.
+const FADER_W: u32 = 16;
+/// Diameter of the layer fader's thumb, px.
+const FADER_THUMB: f32 = 16.0;
+
+/// The layer panel's vertical fader: a track filled from the bottom to
+/// `value` (0..=1), dragged up or down. Not yet wired to the domain model
+/// (the value is the panel's own).
+#[component]
+fn LayerFader(value: Signal<f32>, height: u32) -> Element {
+    let mut drag_from: Signal<Option<(f32, f32)>> = use_signal(|| None);
+    let fill = value().clamp(0.0, 1.0) * 100.0;
+    let half = FADER_THUMB / 2.0;
+    rsx! {
+        div {
+            style: "position: relative; width: {FADER_W}px; height: {height}px; \
+                    border-radius: 9999px; background: var(--color-secondary); cursor: pointer;",
+            onmousedown: move |evt: MouseEvent| {
+                drag_from.set(Some((evt.client_coordinates().y as f32, value())));
+            },
+            onmousemove: move |evt: MouseEvent| {
+                if let Some((y0, v0)) = drag_from() {
+                    let dy = y0 - evt.client_coordinates().y as f32;
+                    value.set((v0 + dy / height.max(1) as f32).clamp(0.0, 1.0));
+                }
+            },
+            onmouseup: move |_| drag_from.set(None),
+            onmouseleave: move |_| drag_from.set(None),
+            div {
+                style: "position: absolute; left: 0; bottom: 0; width: 100%; height: {fill}%; \
+                        border-radius: 9999px; background: var(--color-primary);",
+            }
+            div {
+                style: "position: absolute; left: 50%; bottom: calc({fill}% - {half}px); \
+                        width: {FADER_THUMB}px; height: {FADER_THUMB}px; margin-left: -{half}px; \
+                        border-radius: 9999px; background: var(--color-primary);",
             }
         }
     }

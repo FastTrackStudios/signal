@@ -20,7 +20,6 @@ signal-proto.workspace = true
 signal-grid.workspace = true
 architect-ui.workspace = true
 lumen-blocks.workspace = true
-audio-controls.workspace = true
 # Portable timing (`platform::sleep`): tokio native / browser timers on wasm.
 architect = { workspace = true, features = ["platform"] }
 tracing.workspace = true
