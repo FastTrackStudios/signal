@@ -1,0 +1,244 @@
+//! MIDI → action trigger mapping for signal navigation.
+//!
+//! Maps incoming MIDI messages to `ActionId`s so that foot controllers,
+//! expression pedals, and other MIDI devices can drive signal navigation
+//! without being hardwired to a specific device layout.
+//!
+//! # Default bindings
+//!
+//! | MIDI message              | Action              |
+//! |---------------------------|---------------------|
+//! | CC 101 ch1, value > 0     | Load Variant 1      |
+//! | CC 102 ch1, value > 0     | Load Variant 2      |
+//! | …                         | …                   |
+//! | CC 108 ch1, value > 0     | Load Variant 8      |
+//! | CC 109 ch1, value > 0     | Previous Song       |
+//! | CC 110 ch1, value > 0     | Next Song           |
+//!
+//! CC 101–110 are in the "undefined" range of the MIDI spec,
+//! chosen to avoid collisions with common controller assignments.
+//! All default bindings are channel 1.
+//!
+//! All bindings are user-replaceable via [`MidiActionMap::set`].
+//!
+//! A binding names an Action List id — the same `FTS_SIGNAL_*` id a key, a
+//! REAPER named command and a model over MCP run — so a pedal is dispatched
+//! by running that id on the host's list ([`crate::commands`]);
+//! [`MidiActionMap::command_for`] says which command a trigger means.
+
+use facet::Facet;
+use serde::{Deserialize, Serialize};
+
+use crate::actions::{NEXT_SONG, PREVIOUS_SONG, switch_to_variation_action};
+use crate::commands::SignalCommand;
+
+// ── Trigger types ─────────────────────────────────────────────────────────────
+
+/// A MIDI message pattern that can trigger an action.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Facet)]
+#[repr(C)]
+pub enum MidiActionTrigger {
+    /// A MIDI Note On message with any velocity > 0.
+    ///
+    /// `channel`: `None` = omni (match any channel).
+    NoteOn { channel: Option<u8>, note: u8 },
+
+    /// A MIDI Note Off (or Note On with velocity 0).
+    ///
+    /// `channel`: `None` = omni.
+    NoteOff { channel: Option<u8>, note: u8 },
+
+    /// A Control Change message.
+    ///
+    /// Fires when the CC value satisfies `threshold`:
+    /// - `ButtonHigh` — value >= 64 (sustain-pedal style, re-triggers on each high message)
+    /// - `ButtonAny` — any value > 0 (momentary press)
+    /// - `ButtonToggle` — alternates between on/off on each message > 0
+    ///
+    /// `channel`: `None` = omni.
+    ControlChange {
+        channel: Option<u8>,
+        cc: u8,
+        threshold: CcThreshold,
+    },
+
+    /// A Program Change message where the program number equals `program`.
+    ///
+    /// `channel`: `None` = omni.
+    ProgramChange { channel: Option<u8>, program: u8 },
+}
+
+impl MidiActionTrigger {
+    /// Convenience: omni CC trigger that fires on any value > 0.
+    #[must_use]
+    pub const fn cc_any(cc: u8) -> Self {
+        Self::ControlChange {
+            channel: None,
+            cc,
+            threshold: CcThreshold::ButtonAny,
+        }
+    }
+
+    /// Convenience: channel-specific CC trigger that fires on any value > 0.
+    /// `channel` is 0-based (0 = MIDI channel 1).
+    #[must_use]
+    pub const fn cc_ch(channel: u8, cc: u8) -> Self {
+        Self::ControlChange {
+            channel: Some(channel),
+            cc,
+            threshold: CcThreshold::ButtonAny,
+        }
+    }
+
+    /// Convenience: omni program change trigger.
+    #[must_use]
+    pub const fn program(program: u8) -> Self {
+        Self::ProgramChange {
+            channel: None,
+            program,
+        }
+    }
+
+    /// Convenience: omni note-on trigger.
+    #[must_use]
+    pub const fn note_on(note: u8) -> Self {
+        Self::NoteOn {
+            channel: None,
+            note,
+        }
+    }
+}
+
+/// When a CC trigger fires relative to its value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Facet)]
+#[repr(C)]
+pub enum CcThreshold {
+    /// Fire when value >= 64 (sustain-pedal convention).
+    ButtonHigh,
+    /// Fire on any value > 0.
+    ButtonAny,
+}
+
+// ── Mapping entry ─────────────────────────────────────────────────────────────
+
+/// One entry in the MIDI action map: a trigger bound to an action ID string.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
+pub struct MidiActionBinding {
+    /// The MIDI message pattern that fires the action.
+    pub trigger: MidiActionTrigger,
+    /// The action ID to fire (matches a `StaticActionId::id()` string).
+    pub action_id: String,
+}
+
+impl MidiActionBinding {
+    #[must_use]
+    pub fn new(trigger: MidiActionTrigger, action_id: &str) -> Self {
+        Self {
+            trigger,
+            action_id: action_id.to_string(),
+        }
+    }
+}
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+
+/// A collection of MIDI → action bindings.
+///
+/// Start with [`MidiActionMap::default()`] for the built-in bindings, then
+/// call `set` / `remove` to customise.
+#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
+pub struct MidiActionMap {
+    bindings: Vec<MidiActionBinding>,
+}
+
+impl Default for MidiActionMap {
+    fn default() -> Self {
+        Self::with_defaults()
+    }
+}
+
+impl MidiActionMap {
+    /// Create an empty map (no bindings).
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self {
+            bindings: Vec::new(),
+        }
+    }
+
+    /// Create a map pre-loaded with the default bindings (see module docs).
+    ///
+    /// Variants 1–8 on CH1 CC 101–108, navigation on CH1 CC 109–110.
+    #[must_use]
+    pub fn with_defaults() -> Self {
+        let mut map = Self::empty();
+
+        // Switch to Variation 1–8 via CH1 CC 101–108
+        for i in 0u8..8 {
+            if let Some(action) = switch_to_variation_action((i + 1) as usize) {
+                map.add(MidiActionTrigger::cc_ch(0, 101 + i), action.id);
+            }
+        }
+
+        // Navigation: CH1 CC 109 = Previous Song, CC 110 = Next Song
+        map.add(MidiActionTrigger::cc_ch(0, 109), PREVIOUS_SONG.id);
+        map.add(MidiActionTrigger::cc_ch(0, 110), NEXT_SONG.id);
+
+        map
+    }
+
+    /// Add a binding. If a binding for the same trigger already exists it is replaced.
+    pub fn add(&mut self, trigger: MidiActionTrigger, action_id: &str) {
+        if let Some(existing) = self.bindings.iter_mut().find(|b| b.trigger == trigger) {
+            existing.action_id = action_id.to_string();
+        } else {
+            self.bindings
+                .push(MidiActionBinding::new(trigger, action_id));
+        }
+    }
+
+    /// Bind a trigger to a different action, replacing any existing binding for that trigger.
+    pub fn set(&mut self, trigger: MidiActionTrigger, action_id: &str) {
+        self.add(trigger, action_id);
+    }
+
+    /// Remove all bindings for a given trigger.
+    pub fn remove(&mut self, trigger: &MidiActionTrigger) {
+        self.bindings.retain(|b| &b.trigger != trigger);
+    }
+
+    /// Find the action ID bound to a trigger, if any.
+    #[must_use]
+    pub fn find(&self, trigger: &MidiActionTrigger) -> Option<&str> {
+        self.bindings
+            .iter()
+            .find(|b| &b.trigger == trigger)
+            .map(|b| b.action_id.as_str())
+    }
+
+    /// The Signal command a trigger is bound to: `None` when it is unbound,
+    /// or bound to an id that is not one of Signal's commands.
+    #[must_use]
+    pub fn command_for(&self, trigger: &MidiActionTrigger) -> Option<SignalCommand> {
+        self.find(trigger).and_then(SignalCommand::from_id)
+    }
+
+    /// All bindings in this map.
+    #[must_use]
+    pub fn bindings(&self) -> &[MidiActionBinding] {
+        &self.bindings
+    }
+
+    /// Iterate over all bindings whose action matches `action_id`.
+    pub fn triggers_for<'a>(
+        &'a self,
+        action_id: &'a str,
+    ) -> impl Iterator<Item = &'a MidiActionTrigger> {
+        self.bindings
+            .iter()
+            .filter(move |b| b.action_id == action_id)
+            .map(|b| &b.trigger)
+    }
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────────────

@@ -1,0 +1,173 @@
+0	Input Gain	0.500000
+1	Gate Active	0.000000
+2	Gate Threshold	0.166667
+3	Transpose	0.500000
+4	Doubler Active	0.000000
+5	Doubler Spread	0.176471
+6	Output Gain	0.500000
+7	Preset Previous	0.000000
+8	Preset Next	0.000000
+9	Active Pre FX Section	1.000000
+10	Justa Boost Active	1.000000
+11	Justa Boost Output	0.450000
+12	Justa Boost Boost	0.000000
+13	Antelope Filter Active	0.000000
+14	Antelope Filter Gain	0.200000
+15	Antelope Filter Peak	0.150000
+16	Antelope Filter Sweep	1.000000
+17	Antelope Filter Response	1.000000
+18	Antelope Filter Range	0.000000
+19	Halfman OD Active	0.000000
+20	Halfman OD Gain	0.343922
+21	Halfman OD Treble	0.590000
+22	Halfman OD Level	0.250000
+23	Tealbreaker Active	0.000000
+24	Tealbreaker Gain	0.657000
+25	Tealbreaker Tone	0.640359
+26	Tealbreaker Level	0.652687
+27	Tealbreaker Mode	0.000000
+28	Millipede Delay Active	0.000000
+29	Millipede Delay Time	0.118203
+30	Millipede Delay Feedback	0.000000
+31	Millipede Delay Blend	0.083080
+32	Active Gravity Tank Section	1.000000
+33	Spring Reverb Active	1.000000
+34	Spring Reverb Decay	0.550335
+35	Spring Reverb Tone	0.667141
+36	Spring Reverb Mix	0.271832
+37	Harmonic Tremolo Active	0.000000
+38	Harmonic Tremolo Intensity	0.426881
+39	Harmonic Tremolo Speed	0.367905
+40	Harmonic Tremolo Sync Note	0.812500
+41	Harmonic Tremolo Sync	0.000000
+42	Active Amp Section	1.000000
+43	Amp/Cab Linked	0.000000
+44	Amp Type	1.000000
+45	Smooth Operator Volume	0.270000
+46	Smooth Operator Bright	0.000000
+47	Smooth Operator Bass	0.359000
+48	Smooth Operator Treble	0.404000
+49	Smooth Operator Output	0.671828
+50	Headroom Hero Input Jack	0.000000
+51	Headroom Hero Bright	0.000000
+52	Headroom Hero Mid Boost	0.000000
+53	Headroom Hero Gain	0.272000
+54	Headroom Hero Bass	0.626000
+55	Headroom Hero Middle	0.323000
+56	Headroom Hero Treble	0.588469
+57	Headroom Hero Master	0.515000
+58	Headroom Hero Output	0.521031
+59	Signature 83 Bright	0.000000
+60	Signature 83 EQ	0.000000
+61	Signature 83 Gain	0.750000
+62	Signature 83 Bass	0.509266
+63	Signature 83 Mid	0.731453
+64	Signature 83 Treble	0.645922
+65	Signature 83 Master	0.600000
+66	Signature 83 Presence	0.626469
+67	Signature 83 Output	0.559733
+68	Three-In-One Amp Gain	0.234000
+69	Three-In-One Amp Smooth Operator Output	0.500000
+70	Three-In-One Amp Headroom Hero Output	0.500000
+71	Three-In-One Amp Signature 83 Output	0.500000
+72	Three-In-One Amp Output	0.466875
+73	Three-In-One Amp Room Send	0.000000
+74	Active Cab Section	1.000000
+75	Cab Type (Unlinked)	0.000000
+76	Cab L Mic Active	1.000000
+77	Cab Smooth Operator L Mic Type	0.636364
+78	Cab Headroom Hero L Mic Type	0.818182
+79	Cab Signature 83 L Mic Type	0.727273
+80	Cab L Mic Position	0.300000
+81	Cab L Mic Distance	0.000000
+82	Cab L Mid Level	0.499999
+83	Cab L Mic Pan	0.500000
+84	Cab L Mic Phase	0.000000
+85	Room L Active	0.000000
+86	Room L Send	0.693669
+87	Cab R Mic Active	1.000000
+88	Cab Smooth Operator R Mic Type	0.000000
+89	Cab Headroom Hero R Mic Type	0.272727
+90	Cab Signature 83 R Mic Type	0.272727
+91	Cab R Mic Position	0.300000
+92	Cab R Mic Distance	0.000000
+93	Cab R Mic Level	0.499999
+94	Cab R Mic Pan	0.500000
+95	Cab R Mic Phase	0.000000
+96	Room R Active	0.000000
+97	Room R Send	0.693669
+98	Active EQ & Comp Section	1.000000
+99	Smooth Operator EQ Active	0.000000
+100	Smooth Operator EQ HPF	0.000000
+101	Smooth Operator EQ Lo Freq	0.500000
+102	Smooth Operator EQ Lo-Mid Freq	0.499223
+103	Smooth Operator EQ Hi-Mid Freq	0.500000
+104	Smooth Operator EQ Hi Freq	0.500000
+105	Smooth Operator EQ LPF	1.000000
+106	Smooth Operator EQ Lo Gain	0.500000
+107	Smooth Operator EQ Lo-Mid Gain	0.500000
+108	Smooth Operator EQ Hi-Mid Gain	0.500000
+109	Smooth Operator EQ Hi Gain	0.500000
+110	Smooth Operator Compressor Active	0.000000
+111	Smooth Operator Compressor Input	0.164250
+112	Smooth Operator Compressor Output	0.434906
+113	Headroom Hero EQ Active	1.000000
+114	Headroom Hero EQ HPF	0.187734
+115	Headroom Hero EQ Lo Freq	0.500000
+116	Headroom Hero EQ Lo-Mid Freq	0.500000
+117	Headroom Hero EQ Hi-Mid Freq	0.289672
+118	Headroom Hero EQ Hi Freq	0.500000
+119	Headroom Hero EQ LPF	1.000000
+120	Headroom Hero EQ Lo Gain	0.500000
+121	Headroom Hero EQ Lo-Mid Gain	0.500000
+122	Headroom Hero EQ Hi-Mid Gain	0.584016
+123	Headroom Hero EQ Hi Gain	0.500000
+124	Headroom Hero Compressor Active	1.000000
+125	Headroom Hero Compressor Input	0.131078
+126	Headroom Hero Compressor Output	0.500000
+127	Signature 83 EQ Active	1.000000
+128	Signature 83 EQ HPF	0.133375
+129	Signature 83 EQ Lo Freq	0.907016
+130	Signature 83 EQ Lo-Mid Freq	0.188578
+131	Signature 83 EQ Hi-Mid Freq	0.000000
+132	Signature 83 EQ Hi Freq	0.388125
+133	Signature 83 EQ LPF	1.000000
+134	Signature 83 EQ Lo Gain	0.500000
+135	Signature 83 EQ Lo-Mid Gain	0.521922
+136	Signature 83 EQ Hi-Mid Gain	0.465547
+137	Signature 83 EQ Hi Gain	0.543094
+138	Signature 83 Compressor Active	1.000000
+139	Signature 83 Compressor Input	0.161969
+140	Signature 83 Compressor Output	0.500000
+141	Three-In-One EQ Active	1.000000
+142	Three-In-One EQ HPF	0.156281
+143	Three-In-One EQ Lo Freq	0.862594
+144	Three-In-One EQ Lo-Mid Freq	0.772750
+145	Three-In-One EQ Hi-Mid Freq	0.788156
+146	Three-In-One EQ Hi Freq	0.414469
+147	Three-In-One EQ LPF	1.000000
+148	Three-In-One EQ Lo Gain	0.530891
+149	Three-In-One EQ Lo-Mid Gain	0.680110
+150	Three-In-One EQ Hi-Mid Gain	0.633156
+151	Three-In-One EQ Hi Gain	0.649703
+152	Three-In-One Compressor Active	1.000000
+153	Three-In-One Compressor Input	0.112859
+154	Three-In-One Compressor Output	0.366704
+155	Active Post FX Section	1.000000
+156	Dream Delay Active	0.000000
+157	Dream Delay Mix	0.134007
+158	Dream Delay Sync	1.000000
+159	Dream Delay Ping Pong	0.000000
+160	Dream Delay Feedback	0.601055
+161	Dream Delay Time	0.184962
+162	Dream Delay Note	0.650000
+163	Dream Delay Hardness	0.121344
+164	Dream Delay Tempo	0.499250
+165	Studio Verb Active	1.000000
+166	Studio Verb Mix	0.177547
+167	Studio Verb Pre-Delay	0.000000
+168	Studio Verb Low Cut	0.000000
+169	Studio Verb High Cut	0.590539
+170	Studio Verb Decay	0.379640
+171	Studio Verb Mode	1.000000
+172	Bypass	0.000000

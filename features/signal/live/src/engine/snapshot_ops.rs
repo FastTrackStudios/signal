@@ -1,0 +1,232 @@
+//! Snapshot operations — bridges live DAW capture with `SQLite` persistence.
+//!
+//! Coordinates [`DawBridge`] (live capture/apply) and [`DawSnapshotRepo`]
+//! (storage) to provide four high-level operations:
+//!
+//! - [`capture_and_save_snapshot`] — capture live params → serialize → `SQLite`
+//! - [`recall_snapshot`] — load from `SQLite` → deserialize → apply to DAW
+//! - [`capture_and_save_preset`] — capture params + state chunks → `SQLite`
+//! - [`recall_preset`] — load full preset → apply chunks + params to DAW
+
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use signal_storage::daw_snapshot_repo::{
+    DawSnapshotRepo, StoredChunkSnapshot, StoredParamSnapshot,
+};
+use uuid::Uuid;
+
+use super::daw_bridge::{DawBridge, DawSceneSnapshot, DawStateChunk};
+use super::morph::DawParameterSnapshot;
+
+// region: --- Error
+
+/// Errors from snapshot operations.
+#[derive(Debug)]
+pub enum SnapshotError {
+    /// JSON serialization/deserialization failure.
+    Serde(String),
+    /// Base64 encoding/decoding failure.
+    Base64(String),
+    /// Storage layer failure.
+    Storage(signal_storage::StorageError),
+    /// No snapshot found for the given owner.
+    NotFound(String),
+}
+
+impl std::fmt::Display for SnapshotError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Serde(msg) => write!(f, "serde error: {msg}"),
+            Self::Base64(msg) => write!(f, "base64 error: {msg}"),
+            Self::Storage(e) => write!(f, "storage error: {e}"),
+            Self::NotFound(id) => write!(f, "no snapshot for owner: {id}"),
+        }
+    }
+}
+
+impl std::error::Error for SnapshotError {}
+
+impl From<signal_storage::StorageError> for SnapshotError {
+    fn from(e: signal_storage::StorageError) -> Self {
+        Self::Storage(e)
+    }
+}
+
+// endregion: --- Error
+
+// region: --- Conversions
+
+fn params_to_json(params: &DawParameterSnapshot) -> Result<String, SnapshotError> {
+    serde_json::to_string(params).map_err(|e| SnapshotError::Serde(e.to_string()))
+}
+
+fn json_to_params(json: &str) -> Result<DawParameterSnapshot, SnapshotError> {
+    serde_json::from_str(json).map_err(|e| SnapshotError::Serde(e.to_string()))
+}
+
+fn chunk_to_stored(chunk: &DawStateChunk, owner_id: &str) -> StoredChunkSnapshot {
+    StoredChunkSnapshot {
+        id: Uuid::new_v4().to_string(),
+        owner_id: owner_id.to_string(),
+        fx_id: chunk.fx_id.clone(),
+        plugin_name: chunk.plugin_name.clone(),
+        chunk_data_b64: STANDARD.encode(&chunk.chunk_data),
+        created_at: epoch_timestamp(),
+    }
+}
+
+fn stored_to_chunk(stored: &StoredChunkSnapshot) -> Result<DawStateChunk, SnapshotError> {
+    let chunk_data = STANDARD
+        .decode(&stored.chunk_data_b64)
+        .map_err(|e| SnapshotError::Base64(e.to_string()))?;
+    Ok(DawStateChunk {
+        fx_id: stored.fx_id.clone(),
+        plugin_name: stored.plugin_name.clone(),
+        block_type: signal_proto::BlockType::Custom,
+        chunk_data,
+    })
+}
+
+/// Simple epoch-second timestamp. Callers needing human-readable ISO 8601
+/// can swap this for a chrono-based implementation later.
+fn epoch_timestamp() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .to_string()
+}
+
+// endregion: --- Conversions
+
+// region: --- Operations
+
+/// Capture live DAW parameters and save to `SQLite`.
+///
+/// Returns the captured snapshot for immediate use (e.g. morphing between scenes).
+///
+/// # Errors
+///
+/// Returns an error if parameter serialization or storage operations fail.
+pub async fn capture_and_save_snapshot(
+    bridge: &dyn DawBridge,
+    repo: &dyn DawSnapshotRepo,
+    track_id: &str,
+    owner_id: &str,
+    name: &str,
+) -> Result<DawSceneSnapshot, SnapshotError> {
+    let params = bridge.capture_parameters(track_id);
+    let params_json = params_to_json(&params)?;
+
+    let stored = StoredParamSnapshot {
+        id: Uuid::new_v4().to_string(),
+        owner_id: owner_id.to_string(),
+        name: name.to_string(),
+        params_json,
+        created_at: epoch_timestamp(),
+    };
+    repo.save_param_snapshot(&stored).await?;
+
+    Ok(DawSceneSnapshot::params_only(params))
+}
+
+/// Load the most recent stored snapshot for an owner and apply it to the DAW.
+///
+/// Returns the deserialized snapshot for follow-up operations.
+///
+/// # Errors
+///
+/// Returns an error if no snapshot is found, or if deserialization/storage operations fail.
+pub async fn recall_snapshot(
+    bridge: &dyn DawBridge,
+    repo: &dyn DawSnapshotRepo,
+    track_id: &str,
+    owner_id: &str,
+) -> Result<DawSceneSnapshot, SnapshotError> {
+    let snapshots = repo.list_param_snapshots(owner_id).await?;
+    let stored = snapshots
+        .last()
+        .ok_or_else(|| SnapshotError::NotFound(owner_id.to_string()))?;
+
+    let params = json_to_params(&stored.params_json)?;
+    bridge.apply_parameters(track_id, &params);
+
+    Ok(DawSceneSnapshot::params_only(params))
+}
+
+/// Capture full plugin state (params + binary chunks) and save to `SQLite`.
+///
+/// This is the heavyweight save: captures exact binary plugin state for
+/// complete preset recall. Previous chunks for this owner are replaced.
+///
+/// # Errors
+///
+/// Returns an error if parameter serialization, chunk encoding, or storage operations fail.
+pub async fn capture_and_save_preset(
+    bridge: &dyn DawBridge,
+    repo: &dyn DawSnapshotRepo,
+    track_id: &str,
+    owner_id: &str,
+    name: &str,
+) -> Result<DawSceneSnapshot, SnapshotError> {
+    let params = bridge.capture_parameters(track_id);
+    let chunks = bridge.capture_state_chunks(track_id);
+
+    // Save params
+    let params_json = params_to_json(&params)?;
+    let stored_params = StoredParamSnapshot {
+        id: Uuid::new_v4().to_string(),
+        owner_id: owner_id.to_string(),
+        name: name.to_string(),
+        params_json,
+        created_at: epoch_timestamp(),
+    };
+    repo.save_param_snapshot(&stored_params).await?;
+
+    // Replace previous chunks for this owner, then save new ones
+    repo.delete_chunk_snapshots_by_owner(owner_id).await?;
+    for chunk in &chunks {
+        let stored = chunk_to_stored(chunk, owner_id);
+        repo.save_chunk_snapshot(&stored).await?;
+    }
+
+    Ok(DawSceneSnapshot::new(params, chunks))
+}
+
+/// Load a full preset (params + binary chunks) and apply to the DAW.
+///
+/// Applies state chunks first (coarse binary state), then parameter values
+/// (fine-tuned on top) for the most accurate state restoration.
+///
+/// # Errors
+///
+/// Returns an error if no preset is found, or if deserialization/storage operations fail.
+pub async fn recall_preset(
+    bridge: &dyn DawBridge,
+    repo: &dyn DawSnapshotRepo,
+    track_id: &str,
+    owner_id: &str,
+) -> Result<DawSceneSnapshot, SnapshotError> {
+    let param_snapshots = repo.list_param_snapshots(owner_id).await?;
+    let stored_params = param_snapshots
+        .last()
+        .ok_or_else(|| SnapshotError::NotFound(owner_id.to_string()))?;
+    let params = json_to_params(&stored_params.params_json)?;
+
+    let stored_chunks = repo.list_chunk_snapshots(owner_id).await?;
+    let mut chunks = Vec::with_capacity(stored_chunks.len());
+    for sc in &stored_chunks {
+        chunks.push(stored_to_chunk(sc)?);
+    }
+
+    // Apply chunks first (full binary state), then params (fine-tune)
+    bridge.apply_state_chunks(track_id, &chunks);
+    bridge.apply_parameters(track_id, &params);
+
+    Ok(DawSceneSnapshot::new(params, chunks))
+}
+
+// endregion: --- Operations
+
+// region: --- Tests
+
+// endregion: --- Tests

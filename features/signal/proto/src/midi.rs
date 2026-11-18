@@ -1,0 +1,175 @@
+//! MIDI CC mapping and learn types for external controller integration.
+
+use facet::Facet;
+use serde::{Deserialize, Serialize};
+
+/// Response curve for a MIDI CC → parameter mapping.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[repr(C)]
+pub enum CcCurve {
+    /// Direct 1:1 mapping.
+    #[default]
+    Linear,
+    /// Slow start, fast end — finer control at low CC values.
+    Logarithmic,
+    /// Fast start, slow end — finer control at high CC values.
+    Exponential,
+    /// On/off toggle at midpoint (CC >= 64 = on).
+    Toggle,
+}
+
+impl CcCurve {
+    /// Apply the curve to a normalized CC value (0.0–1.0).
+    #[must_use]
+    pub fn apply(self, value: f64) -> f64 {
+        let v = value.clamp(0.0, 1.0);
+        match self {
+            Self::Linear => v,
+            Self::Logarithmic => {
+                // log curve: slower response at low values
+                let base = 10.0_f64;
+                (base.powf(v) - 1.0) / (base - 1.0)
+            }
+            Self::Exponential => {
+                // exp curve: faster response at low values
+                let base = 10.0_f64;
+                v.log(base).mul_add(base - 1.0, 1.0) // inverse of log
+            }
+            Self::Toggle => {
+                if v >= 0.5 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+        }
+    }
+
+    pub const ALL: &'static [Self] = &[
+        Self::Linear,
+        Self::Logarithmic,
+        Self::Exponential,
+        Self::Toggle,
+    ];
+
+    #[must_use]
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Linear => "Linear",
+            Self::Logarithmic => "Logarithmic",
+            Self::Exponential => "Exponential",
+            Self::Toggle => "Toggle",
+        }
+    }
+}
+
+/// What a MIDI CC controls.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[repr(C)]
+pub enum MidiTarget {
+    /// Controls the morph slider position (0.0–1.0).
+    MorphSlider,
+    /// Controls a specific block parameter.
+    Parameter {
+        /// Block ID within the module/rig.
+        block_id: String,
+        /// Parameter ID within the block.
+        parameter_id: String,
+    },
+    /// Triggers scene/snapshot switching (CC value selects scene index).
+    SceneSelect,
+}
+
+/// A single MIDI CC → target mapping.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+pub struct MidiCcMapping {
+    /// MIDI channel (0–15, None = omni).
+    pub channel: Option<u8>,
+    /// CC number (0–127).
+    pub cc_number: u8,
+    /// What this CC controls.
+    pub target: MidiTarget,
+    /// Response curve.
+    pub curve: CcCurve,
+    /// Minimum output value (default 0.0).
+    pub range_min: f32,
+    /// Maximum output value (default 1.0).
+    pub range_max: f32,
+    /// Whether this mapping is active.
+    pub enabled: bool,
+}
+
+impl MidiCcMapping {
+    #[must_use]
+    pub fn new(cc_number: u8, target: MidiTarget) -> Self {
+        Self {
+            channel: None,
+            cc_number,
+            target,
+            curve: CcCurve::default(),
+            range_min: 0.0,
+            range_max: 1.0,
+            enabled: true,
+        }
+    }
+
+    /// Apply curve and range to a raw CC value (0–127).
+    #[must_use]
+    pub fn map_value(&self, cc_value: u8) -> f32 {
+        let normalized = f64::from(cc_value) / 127.0;
+        let curved = self.curve.apply(normalized);
+        let range = self.range_max - self.range_min;
+        (curved as f32).mul_add(range, self.range_min)
+    }
+}
+
+/// State of the MIDI learn process.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[repr(C)]
+pub enum MidiLearnState {
+    /// Not learning — normal operation.
+    #[default]
+    Idle,
+    /// Waiting for a CC message to assign to the target.
+    Learning { target: MidiTarget },
+    /// A CC was received and assigned.
+    Assigned {
+        target: MidiTarget,
+        cc_number: u8,
+        channel: Option<u8>,
+    },
+}
+
+/// Collection of MIDI CC mappings for a rig.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
+pub struct MidiMappingSet {
+    pub mappings: Vec<MidiCcMapping>,
+}
+
+impl MidiMappingSet {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            mappings: Vec::new(),
+        }
+    }
+
+    /// Find mappings that match a given CC message.
+    #[must_use]
+    pub fn find_mappings(&self, channel: u8, cc_number: u8) -> Vec<&MidiCcMapping> {
+        self.mappings
+            .iter()
+            .filter(|m| {
+                m.enabled && m.cc_number == cc_number && m.channel.is_none_or(|ch| ch == channel)
+            })
+            .collect()
+    }
+
+    pub fn add(&mut self, mapping: MidiCcMapping) {
+        self.mappings.push(mapping);
+    }
+
+    pub fn remove_by_cc(&mut self, cc_number: u8) {
+        self.mappings.retain(|m| m.cc_number != cc_number);
+    }
+}
