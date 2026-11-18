@@ -58,7 +58,7 @@
 //! # Quick start
 //!
 //! ```rust,no_run
-//! use crate::SamplerRig;
+//! use sampler::SamplerRig;
 //! use std::path::Path;
 //!
 //! let rig = SamplerRig::new()?;

@@ -8,7 +8,7 @@
 //! a live [`ProfileRig`] in one call.
 //!
 //! ```no_run
-//! use crate::RigManager;
+//! use sampler::RigManager;
 //! let mgr = RigManager::load("Guitar Rig");      // remembered settings
 //! let mut rig = mgr.open()?;                      // opens audio + loads patches
 //! rig.activate_named("Lead");                     // switch while playing

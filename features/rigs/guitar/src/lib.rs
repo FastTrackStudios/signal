@@ -8,7 +8,7 @@
 //! the product.
 //!
 //! ```no_run
-//! use crate::AmpEngine;
+//! use guitar::AmpEngine;
 //! use sampler::RigAudioPrefs;
 //! let mut amp = AmpEngine::open(&RigAudioPrefs::default())?;
 //! amp.load_model("/path/to/amp.nam")?;
