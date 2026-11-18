@@ -88,7 +88,7 @@ blitz-dom = { workspace = true, features = ["custom-widget"] }
 blitz-traits = { workspace = true }
 bytemuck = { workspace = true, features = ["derive"] }
 dioxus-native-dom = { workspace = true }
-frame = { workspace = true, features = ["anyrender-blitz", "live"] }
+frame = { workspace = true, features = ["host-scene", "live"] }
 image = { workspace = true }
 parley = { workspace = true }
 # The workspace tokio is `full`; on wasm only sync/macros/io-util/rt/time
