@@ -115,6 +115,9 @@ door, which is why the tree was MIT OR Apache-2.0 until August 2026.
 
 ## Rules
 
+- **CI runs on ready PRs only.** On a draft PR `Build + test` is skipped
+  and the runner stays free. To get checks, mark the PR ready (`gh pr
+  ready`); it runs then and on every push after.
 - **Path deps within this repo; tagged git deps across repos.** If a
   `[patch]` block's URL is a repo that no longer exists, it is either dead
   (delete it) or load-bearing for a *transitive* git dep. Check the
