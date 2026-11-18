@@ -25,6 +25,12 @@ use sampler::rig_profile::RigPatch;
 use crate::compose::{Compositions, PresetSnapshotDef, flatten, snapshot_patch};
 use crate::profiles::{DrivePresetDef, OverrideDef, PresetDef, ProfileDef, UNFROZEN_CORE_BLOCKS};
 
+/// The NAM trainer script a freeze runs (`scripts/nam_freeze_train.py`),
+/// for a tool that writes it beside each freeze (Studio's `studio rig
+/// freeze`): the crate that owns the file exports its bytes, since a path
+/// into this crate is no path in another repository.
+pub const TRAIN_SCRIPT: &str = include_str!("../scripts/nam_freeze_train.py");
+
 /// The sample rate everything is rendered and trained at (NAM's standard).
 pub const RATE: u32 = 48_000;
 
