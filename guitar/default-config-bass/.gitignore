@@ -1,0 +1,5 @@
+# The captures and frozen Cores are private (the rig-models repo): an app
+# that builds this crate says where its copy is (`SIGNAL_RIG_LIBRARY`,
+# build.rs); a copy linked in here is never committed.
+/models
+/frozen
