@@ -1,8 +1,8 @@
 //! The rig UI, rendered to a picture — no window, no compositor, no device.
 //!
 //! ```sh
-//! nix develop -c cargo run -r -p signal-guitar-ui --example rig_shot -- /tmp/rig.png
-//! nix develop -c cargo run -r -p signal-guitar-ui --example rig_shot -- /tmp/rig.png 2560 1440
+//! RIG_SHOT_TAILWIND=…/tailwind-signal.css cargo run -r -p guitar --features ui --example rig_shot -- /tmp/rig.png
+//! RIG_SHOT_TAILWIND=…/tailwind-signal.css cargo run -r -p guitar --features ui --example rig_shot -- /tmp/rig.png 2560 1440
 //! ```
 //!
 //! # Why render rather than screenshot
@@ -42,12 +42,14 @@ use guitar::GuitarRigBackend;
 use guitar::proto::audio::AudioSettingsClient;
 use guitar::proto::rig::{RigClient, RigStreamClient};
 
-/// The app's compiled Tailwind — the same sheet `rig_view` mounts.
+/// The app's compiled Tailwind — the same sheet the window mounts — read
+/// from `RIG_SHOT_TAILWIND` (a path: Studio's is
+/// `apps/studio/desktop/assets/tailwind-signal.css`).
 ///
 /// Read from the app's assets rather than duplicated: a shot styled by a
-/// different stylesheet is a picture of a UI nobody runs.
-const SIGNAL_TAILWIND: &str =
-    include_str!("../../../../apps/studio/desktop/assets/tailwind-signal.css");
+/// different stylesheet is a picture of a UI nobody runs. The app is not in
+/// this repository, so its sheet is named at run time.
+static SIGNAL_TAILWIND: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// The clients the page needs, established against an in-process server.
 ///
@@ -77,6 +79,17 @@ fn main() {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .init();
+
+    let sheet = std::env::var_os("RIG_SHOT_TAILWIND").map_or_else(
+        || {
+            eprintln!(
+                "RIG_SHOT_TAILWIND is not set: the shot has no Tailwind sheet, so its layout is not the app's"
+            );
+            String::new()
+        },
+        |path| std::fs::read_to_string(&path).expect("RIG_SHOT_TAILWIND: a readable sheet"),
+    );
+    SIGNAL_TAILWIND.set(sheet).expect("set once, first thing");
 
     let mut args = std::env::args().skip(1);
     let out = args.next().unwrap_or_else(|| "rig.png".to_string());
@@ -288,7 +301,7 @@ fn Shot() -> Element {
         style {
             {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;overflow:hidden;}*{box-sizing:border-box;}"}
         }
-        style { {SIGNAL_TAILWIND} }
+        style { {SIGNAL_TAILWIND.get().map_or("", String::as_str)} }
         // Viewport units, not percentages: a percentage height needs a
         // definite height on every ancestor, and in a headless document the
         // chain above this is not one the app controls.
