@@ -198,7 +198,8 @@ pub fn mint_token() -> String {
     )
 }
 
-/// Serve `list` to a model over MCP's HTTP transport, on loopback only.
+/// Serve `list` to a model over MCP's HTTP transport, on loopback only,
+/// as the app at `version` (the running app's, which the binary knows).
 ///
 /// It listens on `127.0.0.1:port` (`0` for any free port), behind `token`
 /// (`Authorization: Bearer …`), on the runtime this is awaited on. Binds
@@ -208,15 +209,16 @@ pub fn mint_token() -> String {
 ///
 /// The port could not be bound.
 #[cfg(feature = "mcp")]
-pub async fn serve_mcp(list: ActionList, port: u16, token: String) -> io::Result<Serving> {
+pub async fn serve_mcp(
+    list: ActionList,
+    version: &'static str,
+    port: u16,
+    token: String,
+) -> io::Result<Serving> {
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).await?;
     let addr = listener.local_addr()?;
-    let server = architect_mcp::Server::new(
-        "FastTrackStudio Signal",
-        app_shell::version::current(),
-        list,
-    )
-    .with_instructions(INSTRUCTIONS);
+    let server = architect_mcp::Server::new("FastTrackStudio Signal", version, list)
+        .with_instructions(INSTRUCTIONS);
     let task = tokio::spawn(architect_mcp::http::serve(
         listener,
         server,

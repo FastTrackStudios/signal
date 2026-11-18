@@ -17,10 +17,13 @@
 //!
 //! Inline styles only: Blitz takes no stylesheet (AGENTS.md).
 
-//! The tokens are the studio shell's (`app_shell::tokens`): one set for the
-//! desktop frame (`app_shell::ui::ShellFrame`) and this iPad rig frame, so
-//! there is one shell look, not two. Re-exported here under its old path.
-pub use app_shell::tokens;
+//! The tokens ([`tokens`]) are one set for this iPad rig frame and the
+//! desktop frame (`app_shell::ui::ShellFrame`, which re-exports them as
+//! `app_shell::tokens`), so there is one shell look, not two. So is a text
+//! field's hold on the keyboard ([`keyboard`]).
+
+pub mod keyboard;
+pub mod tokens;
 
 use dioxus::prelude::*;
 

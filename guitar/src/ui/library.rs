@@ -504,7 +504,7 @@ fn activate(rig: &Option<RigClient>, row: &Row, model: &PerformanceModel) -> boo
 /// `position: relative` — the overlay covers that box, not the window.
 #[component]
 pub fn LibraryPicker(model: PerformanceModel, open: Signal<Option<Kind>>) -> Element {
-    let keys = app_shell::ui::use_text_focus();
+    let keys = signal_rig_shell::keyboard::use_text_focus();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut query = use_signal(String::new);
     // The focused row, by kind and name: names are stable across the
@@ -1155,7 +1155,7 @@ fn Detail(
 /// commits, Escape (or leaving the field) puts it back.
 #[component]
 fn NameLine(name: String, on_commit: Option<Callback<String>>) -> Element {
-    let keys = app_shell::ui::use_text_focus();
+    let keys = signal_rig_shell::keyboard::use_text_focus();
     let mut editing = use_signal(|| false);
     let mut text = use_signal(|| name.clone());
 
@@ -1316,7 +1316,7 @@ fn SetlistDetail(
     model: PerformanceModel,
     on_go: EventHandler<(Kind, String)>,
 ) -> Element {
-    let keys = app_shell::ui::use_text_focus();
+    let keys = signal_rig_shell::keyboard::use_text_focus();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut duplicating = use_signal(|| false);
     let mut adding = use_signal(|| false);
@@ -1484,7 +1484,7 @@ fn SongDetail(
     model: PerformanceModel,
     on_go: EventHandler<(Kind, String)>,
 ) -> Element {
-    let keys = app_shell::ui::use_text_focus();
+    let keys = signal_rig_shell::keyboard::use_text_focus();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut duplicating = use_signal(|| false);
     let mut name = use_signal(|| song.name.clone());
@@ -2309,7 +2309,7 @@ fn NewForm(
     model: PerformanceModel,
     on_done: EventHandler<Option<String>>,
 ) -> Element {
-    let field_keys = app_shell::ui::use_text_focus();
+    let field_keys = signal_rig_shell::keyboard::use_text_focus();
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut name = use_signal(String::new);
     let mut key = use_signal(|| "C".to_string());
