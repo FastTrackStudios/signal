@@ -24,7 +24,7 @@
 //! `SignalController`/`SignalLive` manage rigs/blocks/presets in a database
 //! and *apply* them to DAW-hosted FX via the daw-bridge
 //! (`DawPatchApplier`, morph engine, state chunks). Audio for FX-chain rigs
-//! is hosted by `features/plugin-host/signal-plugin-host` (a CLAP/VST3 host
+//! is hosted by `daw:features/plugin-host` (`signal-plugin-host`) (a CLAP/VST3 host
 //! over `daw`), which the facade does not re-export — there is no
 //! "give me a rig chain I can push audio blocks through" API yet. Until that
 //! exists, guitar/vocal FX-chain rigs cannot be hosted here and v0 mirrors
