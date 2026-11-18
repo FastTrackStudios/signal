@@ -1,0 +1,28 @@
+[package]
+name = "signal-nam"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+signal-proto.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# Header-only WAV probing for the IR scanner (no features: probe is always on).
+fts-sample.workspace = true
+sha2 = { workspace = true }
+walkdir = { workspace = true }
+# The similarity space + the model inference the prober drives (#77 M5).
+signal-space = { workspace = true, features = ["engine"] }
+neural-amp-modeler.workspace = true
+tracing.workspace = true
+base64 = { workspace = true }
+regex = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
