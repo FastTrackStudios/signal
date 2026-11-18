@@ -25,6 +25,4 @@ nice-plug-dioxus = { workspace = true, optional = true }
 piano = ["dep:plugin-core", "plugin-core?/gui", "dep:nice-plug-dioxus"]
 
 [dev-dependencies]
-# Headless Blitz: presses hit-tested and delivered as the app gets them.
-dioxus-test.workspace = true
 tokio.workspace = true
