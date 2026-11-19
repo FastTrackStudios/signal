@@ -298,16 +298,79 @@ pub fn Status() -> Element {
     }
 }
 
-/// The tuner, filling the panel.
+/// The tuner, filling the panel: the note, how far off it is in cents on
+/// a needle (green within five cents), and its frequency. It listens
+/// while it is shown.
 #[component]
 pub fn Tuner() -> Element {
-    if connected().is_none() {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut reading = use_signal(crate::proto::TunerReading::default);
+    // Smoothed, so the needle glides instead of jittering.
+    let mut smooth = use_signal(|| 0.0f32);
+    {
+        let rig = rig.clone();
+        use_future(move || {
+            let rig = rig.clone();
+            async move {
+                let Some(rig) = rig else { return };
+                loop {
+                    if let Ok(r) = rig.tuner().await {
+                        if r.active {
+                            let was = *smooth.peek();
+                            smooth.set((r.cents - was).mul_add(0.35, was));
+                        }
+                        if *reading.peek() != r {
+                            reading.set(r);
+                        }
+                    }
+                    architect::platform::sleep(std::time::Duration::from_millis(60)).await;
+                }
+            }
+        });
+    }
+    if rig.is_none() {
         return rsx! { Connecting {} };
     }
+    let r = reading();
+    let cents = if r.active { smooth() } else { 0.0 };
+    let needle = 50.0 + cents.clamp(-50.0, 50.0);
+    let in_tune = r.active && cents.abs() <= 5.0;
+    let colour = if in_tune { "#22c55e" } else { "#eab308" };
+    let note = if r.active {
+        r.note.clone()
+    } else {
+        "—".to_owned()
+    };
+    let detail = if r.active {
+        format!("{cents:+.0} cents · {:.1} Hz", r.freq_hz)
+    } else {
+        "Listening…".to_owned()
+    };
     rsx! {
-        div { style: "position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; \
-                      overflow: hidden; background: #0f0f12;",
-            crate::ui::perform::TunerOverlay { on_close: move |()| {} }
+        div {
+            style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; \
+                    align-items: center; justify-content: center; gap: 14px; padding: 16px; \
+                    box-sizing: border-box; overflow: hidden; background: #0f0f12; \
+                    font-family: Inter, -apple-system, sans-serif;",
+            div { style: "font-size: 64px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; \
+                          color: {colour};",
+                "{note}"
+            }
+            // The scale: flat to the left, sharp to the right, the note at
+            // the middle mark.
+            div { style: "position: relative; width: 80%; max-width: 520px; height: 28px;",
+                div { style: "position: absolute; left: 0; right: 0; top: 13px; height: 2px; \
+                              border-radius: 1px; background: #2e2e35;" }
+                div { style: "position: absolute; left: 45%; width: 10%; top: 10px; height: 8px; \
+                              border-radius: 4px; background: #14532d;" }
+                div { style: "position: absolute; left: 50%; top: 4px; width: 2px; height: 20px; \
+                              margin-left: -1px; background: #52525b;" }
+                if r.active {
+                    div { style: "position: absolute; left: {needle}%; top: 0; width: 4px; height: 28px; \
+                                  margin-left: -2px; border-radius: 2px; background: {colour};" }
+                }
+            }
+            div { style: "font-size: 13px; font-weight: 600; color: #8e8e98;", "{detail}" }
         }
     }
 }

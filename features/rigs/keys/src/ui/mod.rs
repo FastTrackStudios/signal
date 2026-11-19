@@ -35,10 +35,14 @@ mod zoom;
 
 pub use browser::Browser;
 pub use control::{ControlView, engine_color};
+// The wheels and pedals beside the keys, for a host that places them apart.
+pub use controllers::{ControllerStrip, Controllers};
 pub use engine_view::EngineView;
 pub use fader::{Fader, fmt_db};
 pub use graphs::{Adsr, EnvelopeGraph, FilterCurve};
 pub use knob::Knob;
+// A lane's macros page, for a host that places it apart.
+pub use layer_macros::LayerMacros;
 pub use layer_view::LayerView;
 pub use macro_panel::{MacroPanel, Shape, ShapeCard};
 pub use meter::{EdgeMeter, fmt_dbfs};
