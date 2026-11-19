@@ -34,7 +34,7 @@ mod time_fx;
 mod zoom;
 
 pub use browser::Browser;
-pub use control::{ControlView, engine_color};
+pub use control::{ControlView, KeyboardStrip, engine_color};
 // The wheels and pedals beside the keys, for a host that places them apart.
 pub use controllers::{ControllerStrip, Controllers};
 pub use engine_view::EngineView;
