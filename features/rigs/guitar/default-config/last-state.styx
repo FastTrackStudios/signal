@@ -1,9 +1,23 @@
-setlist_index 0
+setlist_index 1
 
 song_index 0
 
 part_index 0
 
-active_patch Clean
+active_patch ""
 
-tempo_bpm 149.4398651123047
+tempo_bpm 139
+
+profile Blues
+
+perform_mode 1
+
+master_trim_db -6
+
+phones_volume 0.75
+
+phones_guitar 0.75
+
+phones_mix 0.75
+
+main_mute false

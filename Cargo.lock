@@ -3417,6 +3417,7 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "facet",
+ "libc",
  "libspa",
  "objc2 0.6.4",
  "pipewire",
@@ -3547,6 +3548,7 @@ dependencies = [
  "gloo-timers",
  "js-sys",
  "libloading 0.8.9",
+ "pitch-dsp",
  "raw-window-handle 0.6.2",
  "rtrb",
  "thiserror 2.0.18",
@@ -4973,6 +4975,7 @@ dependencies = [
  "facet",
  "monarchy",
  "music-catalog 0.1.0 (git+https://github.com/FastTrackStudios/music-convention?tag=v0.1.3)",
+ "num-traits",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -13551,6 +13554,7 @@ name = "saturate-dsp"
 version = "0.1.0"
 dependencies = [
  "dsp-core",
+ "libm",
 ]
 
 [[package]]
