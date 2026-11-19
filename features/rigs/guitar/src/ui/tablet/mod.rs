@@ -699,12 +699,5 @@ fn TabletFoot(
 /// The browser's kind for a block type: a drive slot's pedals are the
 /// Drive module's presets; a module's its own; any other block its type's.
 fn browser_kind(block_type: &str) -> String {
-    let t = block_type.to_lowercase();
-    if t.starts_with("module:") {
-        block_type.to_string()
-    } else if t == "drive" || t == "boost" {
-        "module:Drive".to_string()
-    } else {
-        format!("block:{t}")
-    }
+    dock_panels::browser_kind(block_type)
 }
