@@ -13470,6 +13470,7 @@ dependencies = [
  "libm",
  "neural-amp-modeler",
  "plugin-processors",
+ "realfft",
  "serde",
  "serde_json",
  "signal-core",
