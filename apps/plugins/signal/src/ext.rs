@@ -802,7 +802,7 @@ pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<Str
             let at = if args.get("first").and_then(Value::as_bool) == Some(true) {
                 lane.blocks
                     .iter()
-                    .position(|b| b.phase.is_none_or(|p| p >= phase))
+                    .position(|b| b.phase.is_some_and(|p| p >= phase))
                     .unwrap_or(lane.blocks.len())
             } else {
                 insert_at(lane, phase, arg(args, "after"))
