@@ -287,6 +287,31 @@ fn phase_from(id: &str) -> Option<Phase> {
     Phase::ALL.into_iter().find(|p| p.slug() == id)
 }
 
+/// How a meter is drawn (`signal.chain/1` additions): its kind and range.
+fn meter_shape(m: &slots::MeterDef) -> (&'static str, f32, f32) {
+    match m.kind {
+        MeterKind::Phase(_) => ("level", -60.0, 0.0),
+        MeterKind::Source { .. } if m.id.ends_with("gain_reduction") => ("reduction", 0.0, 24.0),
+        // A gate's opening, 0 shut, 1 open.
+        MeterKind::Source { .. } if m.unit == "%" => ("state", 0.0, 1.0),
+        MeterKind::Source { .. } => ("level", -60.0, 0.0),
+    }
+}
+
+/// The algorithm a block runs, when its family has algorithms: the one it
+/// names, else the family's default.
+fn algorithm_of(spec: &BlockSpec) -> Option<String> {
+    let BlockKind::Signal(family) = &spec.kind else {
+        return None;
+    };
+    if plugin_processors::algorithms::family(family).is_empty() {
+        return None;
+    }
+    spec.algorithm
+        .clone()
+        .or_else(|| plugin_processors::algorithms::find(family, None).map(|a| a.id.to_owned()))
+}
+
 fn param_json(spec: &signal_core::param::ParamSpec, value: f32, clap_id: Option<String>) -> Value {
     let choices: Vec<&str> = match spec.unit {
         Unit::Choice(names) => names.to_vec(),
@@ -343,7 +368,10 @@ fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec
             .iter()
             .enumerate()
             .filter(|(_, m)| m.lane == l && matches!(m.kind, MeterKind::Source { block, .. } if block == b.block))
-            .map(|(i, m)| json!({ "id": m.id.rsplit('.').next().unwrap_or(&m.id), "name": m.name, "unit": m.unit, "index": i }))
+            .map(|(i, m)| {
+                let (kind, min, max) = meter_shape(m);
+                json!({ "id": m.id.rsplit('.').next().unwrap_or(&m.id), "name": m.name, "unit": m.unit, "index": i, "kind": kind, "min": min, "max": max })
+            })
             .collect();
         let (backend, status) = report
             .iter()
@@ -368,7 +396,13 @@ fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec
             "bypass": bspec.bypass,
             "backend": backend,
             "status": status,
-            "key": bspec.key.as_ref().map(|k| json!({ "from": k, "via": via })),
+            "algorithm": algorithm_of(bspec),
+            // What it was keyed to, what keys it now, and why, when it fell back.
+            "key": bspec.key.as_ref().map(|k| json!({
+                "from": k,
+                "via": via,
+                "fallback": (via == "self").then_some("no hits for 10 s"),
+            })),
             "params": params,
             "meters": meters,
         });
@@ -387,7 +421,7 @@ fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec
                 .iter()
                 .enumerate()
                 .filter(|(_, m)| m.lane == l && phase.is_some_and(|p| matches!(m.kind, MeterKind::Phase(q) if q == p)))
-                .map(|(i, m)| json!({ "id": "level", "name": m.name, "unit": m.unit, "index": i }))
+                .map(|(i, m)| json!({ "id": "level", "name": m.name, "unit": m.unit, "index": i, "kind": "level", "min": -60.0, "max": 0.0 }))
                 .collect();
             json!({
                 "id": id,
@@ -450,6 +484,7 @@ pub fn chain(shared: &Shared) -> Value {
     let mut out = json!({
         "schema": "signal.chain/1",
         "revision": shared.ext.revision.load(Ordering::Acquire),
+        "values_revision": shared.params.values_revision.load(Ordering::Acquire),
         "session": session_of(&state),
         "port": port,
         "mode": if per_track { "per-track" } else { "kit" },
@@ -532,36 +567,64 @@ fn arg<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
 
 /// The lane this instance runs, by index in the preset, and a block of it
 /// by its chain id (`tone.comp`, or just `comp`).
-fn find_block(state: &SignalState, id: &str) -> Option<(usize, usize)> {
+/// The lanes this instance runs (their preset indices), narrowed to the
+/// action's `"lane"` when it names one. In the kit mode (more than one
+/// lane) the action must name it: block ids are unique within a lane only.
+fn lanes_of(state: &SignalState, lane: Option<&str>) -> Result<Vec<usize>, ExtError> {
     let port = port_of(state).map(str::to_owned);
     let names: Vec<String> = graph::lanes_for(&state.preset, port.as_deref())
         .iter()
         .map(|l| l.name.clone())
         .collect();
-    for (li, lane) in state
+    let picked: Vec<&String> = match lane {
+        Some(want) => names.iter().filter(|n| n.as_str() == want).collect(),
+        None if names.len() > 1 => {
+            return Err(ExtError::Failed(
+                "the kit mode: name the lane (\"lane\": \"<path>\")".into(),
+            ));
+        }
+        None => names.iter().collect(),
+    };
+    if picked.is_empty() {
+        return Err(ExtError::NotFound(format!(
+            "lane {}",
+            lane.unwrap_or("(none)")
+        )));
+    }
+    Ok(state
         .preset
         .lanes
         .iter()
         .enumerate()
-        .filter(|(_, l)| names.contains(&l.name))
-    {
-        if let Some(bi) = lane
+        .filter(|(_, l)| picked.contains(&&l.name))
+        .map(|(i, _)| i)
+        .collect())
+}
+
+/// A block, by its chain id (`tone.comp`, or just `comp`), in the action's
+/// lane.
+fn find_block(
+    state: &SignalState,
+    id: &str,
+    lane: Option<&str>,
+) -> Result<(usize, usize), ExtError> {
+    for li in lanes_of(state, lane)? {
+        if let Some(bi) = state.preset.lanes[li]
             .blocks
             .iter()
             .position(|b| slots::chain_id(b.phase, &b.id) == id || b.id == id)
         {
-            return Some((li, bi));
+            return Ok((li, bi));
         }
     }
-    None
+    Err(ExtError::NotFound(format!("block {id}")))
 }
 
-fn first_lane(state: &SignalState) -> Option<usize> {
-    let port = port_of(state).map(str::to_owned);
-    let name = graph::lanes_for(&state.preset, port.as_deref())
+fn first_lane(state: &SignalState, lane: Option<&str>) -> Result<usize, ExtError> {
+    lanes_of(state, lane)?
         .first()
-        .map(|l| l.name.clone())?;
-    state.preset.lanes.iter().position(|l| l.name == name)
+        .copied()
+        .ok_or_else(|| ExtError::NotFound("a lane".into()))
 }
 
 /// Where a block of `phase` goes in `lane`: after `after`, else after the
@@ -612,8 +675,7 @@ pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<Str
         "SIGNAL_CHAIN" => Ok(chain(shared).to_string()),
         "SIGNAL_SET" => edit(shared, on_main, |state| {
             if let Some(block) = arg(args, "block") {
-                let (l, b) = find_block(state, block)
-                    .ok_or_else(|| ExtError::NotFound(format!("block {block}")))?;
+                let (l, b) = find_block(state, block, arg(args, "lane"))?;
                 let spec = &mut state.preset.lanes[l].blocks[b];
                 if let Some(bypass) = args.get("bypass").and_then(Value::as_bool) {
                     spec.bypass = bypass;
@@ -627,7 +689,7 @@ pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<Str
                 .ok_or_else(|| ExtError::Failed("SIGNAL_SET wants a block or a phase".into()))?;
             let phase = phase_from(phase_id)
                 .ok_or_else(|| ExtError::NotFound(format!("phase {phase_id}")))?;
-            let l = first_lane(state).ok_or_else(|| ExtError::NotFound("a lane".into()))?;
+            let l = first_lane(state, arg(args, "lane"))?;
             let lane = &mut state.preset.lanes[l];
             if let Some(bypass) = args.get("bypass").and_then(Value::as_bool) {
                 lane.bypass_phases.retain(|p| *p != phase);
@@ -655,7 +717,7 @@ pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<Str
             if !signal_core::blocks::exists(&name) {
                 return Err(ExtError::NotFound(format!("block kind {kind}")));
             }
-            let l = first_lane(state).ok_or_else(|| ExtError::NotFound("a lane".into()))?;
+            let l = first_lane(state, arg(args, "lane"))?;
             let lane = &mut state.preset.lanes[l];
             let at = insert_at(lane, phase, arg(args, "after"));
             let mut block = BlockSpec::signal(fresh_id(lane, kind), name).phase(phase);
@@ -667,15 +729,13 @@ pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<Str
         }),
         "SIGNAL_BLOCK_REMOVE" => edit(shared, on_main, |state| {
             let block = arg(args, "block").ok_or_else(|| ExtError::Failed("a block".into()))?;
-            let (l, b) = find_block(state, block)
-                .ok_or_else(|| ExtError::NotFound(format!("block {block}")))?;
+            let (l, b) = find_block(state, block, arg(args, "lane"))?;
             state.preset.lanes[l].blocks.remove(b);
             Ok(())
         }),
         "SIGNAL_BLOCK_MOVE" => edit(shared, on_main, |state| {
             let block = arg(args, "block").ok_or_else(|| ExtError::Failed("a block".into()))?;
-            let (l, b) = find_block(state, block)
-                .ok_or_else(|| ExtError::NotFound(format!("block {block}")))?;
+            let (l, b) = find_block(state, block, arg(args, "lane"))?;
             let lane = &mut state.preset.lanes[l];
             let mut spec = lane.blocks.remove(b);
             if let Some(p) = arg(args, "phase") {

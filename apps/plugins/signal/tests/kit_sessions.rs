@@ -511,6 +511,70 @@ fn signal_1_shows_the_chain_and_midi_plays_and_keys_the_kit() {
         gate_open > 0.5,
         "the gate's meter read it open: {gate_open}"
     );
+    // The additions: an algorithm on a block whose family has them, each
+    // meter's kind and range, the key's configured source and its fallback,
+    // and values_revision moving on a value, not revision.
+    let now: serde_json::Value =
+        serde_json::from_str(&signal.chain().expect("chain")).expect("JSON");
+    let eq = now["phases"][1]["blocks"]
+        .as_array()
+        .expect("tone")
+        .iter()
+        .find(|b| b["kind"] == "eq")
+        .expect("the tone EQ")
+        .clone();
+    assert_eq!(eq["algorithm"], "parametric", "{eq}");
+    let gate_m = now["phases"][0]["blocks"][0]["meters"][0].clone();
+    assert_eq!(
+        (
+            gate_m["kind"].as_str(),
+            gate_m["min"].as_f64(),
+            gate_m["max"].as_f64()
+        ),
+        (Some("state"), Some(0.0), Some(1.0)),
+        "{gate_m}"
+    );
+    let comp_m = now["phases"][1]["blocks"][0]["meters"][0].clone();
+    assert_eq!(comp_m["kind"], "reduction", "{comp_m}");
+    assert_eq!(now["phases"][1]["meters"][0]["kind"], "level");
+    assert!(
+        now["phases"][0]["blocks"][0]["key"]["fallback"].is_null(),
+        "keyed by notes, not fallen back"
+    );
+    let (rev, values) = (
+        now["revision"].as_u64(),
+        now["values_revision"].as_u64().expect("values_revision"),
+    );
+    let ratio = kick
+        .params()
+        .into_iter()
+        .find(|i| i.name == "Tone · Comp · Ratio")
+        .expect("ratio")
+        .id;
+    let to = kick.text_to_value(ratio, "8").expect("parses");
+    let mut out_l = vec![0.0_f32; BLOCK];
+    kick.process_block(
+        &silence,
+        &silence,
+        &mut out_l,
+        &mut scratch,
+        &PluginEvents {
+            params: &[(ratio, to)],
+            ..PluginEvents::EMPTY
+        },
+    )
+    .expect("processes");
+    let moved: serde_json::Value =
+        serde_json::from_str(&signal.chain().expect("chain")).expect("JSON");
+    assert!(
+        moved["values_revision"].as_u64() > Some(values),
+        "a value set moves values_revision"
+    );
+    assert_eq!(moved["revision"].as_u64(), rev, "and not revision");
+    println!(
+        "additions: eq algorithm {}, meters {} / {}, values_revision {values} → {}",
+        eq["algorithm"], gate_m["kind"], comp_m["kind"], moved["values_revision"]
+    );
     let via: serde_json::Value =
         serde_json::from_str(&signal.chain().expect("chain")).expect("JSON");
     assert_eq!(
@@ -520,4 +584,55 @@ fn signal_1_shows_the_chain_and_midi_plays_and_keys_the_kit() {
     if engine.is_some() {
         assert!(played > 0.05, "the note plays the kick's sample: {played}");
     }
+}
+
+/// The kit mode (one instance, every lane): block ids are unique per lane,
+/// so a structural action names its lane, and is refused without it.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn kit_mode_actions_name_their_lane() {
+    let mut p = load_plugin(&bundle().to_string_lossy())
+        .expect("loads")
+        .expect("a CLAP");
+    p.load_state(&clap_state(&SignalState::new(drum_kit(
+        &KitPieces::default(),
+    ))))
+    .expect("takes the kit");
+    p.prepare(SR, BLOCK as u32).expect("activates");
+    let signal = p.signal().expect("signal/1");
+    let chain: serde_json::Value =
+        serde_json::from_str(&signal.chain().expect("chain")).expect("JSON");
+    assert_eq!(chain["mode"], "kit");
+    let lanes = chain["lanes"].as_array().expect("lanes");
+    println!("kit mode: {} lanes", lanes.len());
+    assert!(
+        signal
+            .run_action("SIGNAL_SET", r#"{"block": "rescue.gate", "bypass": true}"#)
+            .is_err(),
+        "no lane: refused"
+    );
+    let after: serde_json::Value = serde_json::from_str(
+        &signal
+            .run_action(
+                "SIGNAL_SET",
+                r#"{"lane": "Drums/Snare", "block": "rescue.gate", "bypass": true}"#,
+            )
+            .expect("with its lane"),
+    )
+    .expect("JSON");
+    let gate = |lane: &str| {
+        after["lanes"]
+            .as_array()
+            .expect("lanes")
+            .iter()
+            .find(|l| l["lane"] == lane)
+            .expect(lane)["phases"][0]["blocks"][0]["bypass"]
+            .clone()
+    };
+    assert_eq!(gate("Drums/Snare"), true, "the snare's gate");
+    assert_eq!(
+        gate("Drums/Kick"),
+        false,
+        "and not the kick's, which has the same id"
+    );
 }

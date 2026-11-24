@@ -109,6 +109,9 @@ pub struct SignalParams {
     /// instance on its own input, as its host routes it); off, the
     /// make-ups stay, and are saved.
     pub calibrate: BoolParam,
+    /// Bumped whenever a parameter value changes (a set, automation, a
+    /// macro): `signal.chain/1`'s `values_revision`.
+    pub values_revision: Arc<AtomicU64>,
     /// Called when a state is loaded: builds it at once, so its slots are
     /// there before any process call.
     on_load: std::sync::OnceLock<Box<dyn Fn() + Send + Sync>>,
@@ -116,6 +119,14 @@ pub struct SignalParams {
 
 /// The state key: the field the state blob is persisted under.
 pub const STATE_KEY: &str = "signal-state";
+
+/// A callback that moves `values_revision`.
+fn bumps(counter: &Arc<AtomicU64>) -> Arc<dyn Fn(f32) + Send + Sync> {
+    let c = counter.clone();
+    Arc::new(move |_| {
+        c.fetch_add(1, Ordering::AcqRel);
+    })
+}
 
 fn slot_param(i: usize, shown: &Arc<Shown>) -> FloatParam {
     let (name, text, parse) = (shown.clone(), shown.clone(), shown.clone());
@@ -254,23 +265,26 @@ impl<'a> PersistentField<'a, String> for StateField {
 impl Default for SignalParams {
     fn default() -> Self {
         let shown = Arc::new(Shown::default());
+        let values = Arc::new(AtomicU64::new(0));
+        let tracked = |p: FloatParam| p.with_callback(bumps(&values));
         Self {
-            slots: (0..SLOTS).map(|i| slot_param(i, &shown)).collect(),
+            slots: (0..SLOTS).map(|i| tracked(slot_param(i, &shown))).collect(),
             shown,
             calibrate: BoolParam::new("Calibrate (gain neutral)", false),
             on_load: std::sync::OnceLock::new(),
-            input_gain: float_param(host::INPUT_GAIN),
-            output_gain: float_param(host::OUTPUT_GAIN),
+            input_gain: tracked(float_param(host::INPUT_GAIN)),
+            output_gain: tracked(float_param(host::OUTPUT_GAIN)),
             bypass: BoolParam::new(host::BYPASS.name, false).make_bypass(),
-            macro_1: float_param(host::macro_spec(0)),
-            macro_2: float_param(host::macro_spec(1)),
-            macro_3: float_param(host::macro_spec(2)),
-            macro_4: float_param(host::macro_spec(3)),
-            macro_5: float_param(host::macro_spec(4)),
-            macro_6: float_param(host::macro_spec(5)),
-            macro_7: float_param(host::macro_spec(6)),
-            macro_8: float_param(host::macro_spec(7)),
+            macro_1: tracked(float_param(host::macro_spec(0))),
+            macro_2: tracked(float_param(host::macro_spec(1))),
+            macro_3: tracked(float_param(host::macro_spec(2))),
+            macro_4: tracked(float_param(host::macro_spec(3))),
+            macro_5: tracked(float_param(host::macro_spec(4))),
+            macro_6: tracked(float_param(host::macro_spec(5))),
+            macro_7: tracked(float_param(host::macro_spec(6))),
+            macro_8: tracked(float_param(host::macro_spec(7))),
             state: StateField::default(),
+            values_revision: values.clone(),
         }
     }
 }
