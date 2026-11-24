@@ -429,21 +429,24 @@ impl Plugin for FtsSignal {
         while let Some(ev) = context.next_event() {
             let offset = ev.timing();
             let message = match ev {
+                // A wildcard key names no single note (CLAP allows it): skipped.
                 NoteEvent::NoteOn {
-                    note,
+                    key,
                     velocity,
                     channel,
                     ..
-                } => Some((
-                    channel,
-                    MidiMessage::NoteOn {
-                        note,
-                        velocity: ((velocity * 127.0).round() as u8).clamp(1, 127),
-                    },
-                )),
-                NoteEvent::NoteOff { note, channel, .. } => {
-                    Some((channel, MidiMessage::NoteOff { note }))
-                }
+                } => key.number().map(|note| {
+                    (
+                        channel.number().unwrap_or(0),
+                        MidiMessage::NoteOn {
+                            note,
+                            velocity: ((velocity * 127.0).round() as u8).clamp(1, 127),
+                        },
+                    )
+                }),
+                NoteEvent::NoteOff { key, channel, .. } => key
+                    .number()
+                    .map(|note| (channel.number().unwrap_or(0), MidiMessage::NoteOff { note })),
                 NoteEvent::MidiCC {
                     cc, value, channel, ..
                 } => Some((
