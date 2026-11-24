@@ -1138,6 +1138,29 @@ impl Graph {
             .frames_to_next(self.clock.saturating_sub(self.lookahead as u64))
     }
 
+    /// Block `(lane, block)` takes its parameters' new values now rather
+    /// than ramping to them over the next piece: what a host's automation
+    /// of an offline block's parameter means (its value lands at the start
+    /// of the host's block). Allocation-free.
+    pub fn settle(&mut self, lane: usize, block: usize) {
+        if let Some(b) = self
+            .lanes
+            .get_mut(lane)
+            .and_then(|l| l.blocks.get_mut(block))
+        {
+            b.process(&mut [], &mut []);
+        }
+    }
+
+    /// Whether block `(lane, block)` is an offline block.
+    #[must_use]
+    pub fn is_offline(&self, lane: usize, block: usize) -> bool {
+        self.block(lane, block).is_some_and(|b| match &b.kind {
+            BlockKind::Signal(n) => crate::offline::mode_of(n) == crate::offline::Mode::Offline,
+            BlockKind::Plugin(_) => false,
+        })
+    }
+
     /// How many lanes Signal plays itself.
     #[must_use]
     pub fn self_played_lanes(&self) -> usize {

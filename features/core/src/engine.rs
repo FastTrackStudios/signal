@@ -321,6 +321,14 @@ impl Processor {
         }
     }
 
+    /// Block `(lane, block)` takes its parameters' values now
+    /// ([`Graph::settle`]).
+    pub fn settle(&mut self, lane: usize, block: usize) {
+        if let Some(g) = self.graph.as_mut() {
+            g.settle(lane, block);
+        }
+    }
+
     /// Set one of the instance's parameters now.
     pub fn set_host_param(&mut self, param: HostParam, value: f32) {
         match param {

@@ -895,6 +895,17 @@ impl Plugin for FtsSignal {
                     slot.param,
                     ParamChange::Set(slot.spec.denormalize(n)),
                 );
+                // An offline block's lane, played by the host: its value is
+                // the one at this block's start, so it lands now (an apply
+                // stage otherwise ramps to a value over the next piece, which
+                // is what Signal's own playback asks of it).
+                if self
+                    .processor
+                    .graph()
+                    .is_some_and(|g| g.is_offline(slot.lane, slot.block))
+                {
+                    self.processor.settle(slot.lane, slot.block);
+                }
             }
         }
         let io = buffer.as_slice();
