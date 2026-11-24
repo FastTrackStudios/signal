@@ -43,6 +43,8 @@ struct Job {
     lane: String,
     block: String,
     range: Range,
+    /// Only `range` of the song: the rest of the lanes kept.
+    partial: bool,
     source_revision: Option<String>,
     keep_user: bool,
     began: std::time::Instant,
@@ -246,12 +248,6 @@ pub fn analyze(shared: &Shared, args: &Value, on_main: bool) -> Result<String, E
     if args.get("finish").and_then(Value::as_bool) == Some(true) {
         return finish_capture(shared, &lane, &spec.id);
     }
-    let range = Range::new(
-        args.get("from").and_then(Value::as_f64).unwrap_or(0.0),
-        args.get("to")
-            .and_then(Value::as_f64)
-            .unwrap_or(f64::INFINITY),
-    );
     let Some(audio) = args.get("audio") else {
         return start_capture(shared, &lane, &spec.id, knobs(args), on_main);
     };
@@ -273,11 +269,19 @@ pub fn analyze(shared: &Shared, args: &Value, on_main: bool) -> Result<String, E
     if arg(audio, "at") == Some("fx_input") && b > 0 {
         samples = upstream(&state, l, b, &samples, rate);
     }
+    // Part of the song (the rest kept) when `from`/`to` say so; the
+    // range is always finite, so the state it is kept in reads back.
+    let ranged = args.get("from").is_some() || args.get("to").is_some();
+    #[allow(clippy::cast_precision_loss)]
+    let end = start + samples.len() as f64 / rate;
+    let range = Range::new(
+        args.get("from").and_then(Value::as_f64).unwrap_or(start),
+        args.get("to").and_then(Value::as_f64).unwrap_or(end),
+    );
     let reference = args.get("reference").map(load).transpose()?;
     let previous = spec.analysis.clone();
     let k = knobs(args);
     let am = amounts(&spec);
-    let ranged = range.from > 0.0 || range.to.is_finite();
     let work = move || -> Result<Made, String> {
         match kind.as_str() {
             level::NAME => {
@@ -306,7 +310,13 @@ pub fn analyze(shared: &Shared, args: &Value, on_main: bool) -> Result<String, E
             other => Err(format!("{other}: no analysis")),
         }
     };
-    let id = start_job(shared, (lane.clone(), spec.id.clone()), range, args, work)?;
+    let id = start_job(
+        shared,
+        (lane.clone(), spec.id.clone()),
+        (range, ranged),
+        args,
+        work,
+    )?;
     Ok(json!({"job": id, "block": arg(args, "block"), "state": "running"}).to_string())
 }
 
@@ -319,7 +329,11 @@ fn upstream(state: &SignalState, l: usize, b: usize, input: &[f64], rate: f64) -
         return input.to_vec();
     };
     let mut part = signal_core::state::Preset::passthrough();
-    part.lanes[0].blocks = lane.blocks.get(..b).map(<[BlockSpec]>::to_vec).unwrap_or_default();
+    part.lanes[0].blocks = lane
+        .blocks
+        .get(..b)
+        .map(<[BlockSpec]>::to_vec)
+        .unwrap_or_default();
     part.lanes[0].trims = lane.trims.clone();
     part.lanes[0].bypass_phases = lane.bypass_phases.clone();
     // Keys and hits come from elsewhere in a kit: unkeyed here.
@@ -363,7 +377,7 @@ fn levels_kept(a: &Analysis) -> Option<level::Levels> {
 fn start_job(
     shared: &Shared,
     (lane, block): (String, String),
-    range: Range,
+    (range, partial): (Range, bool),
     args: &Value,
     work: impl FnOnce() -> Result<Made, String> + Send + 'static,
 ) -> Result<u64, ExtError> {
@@ -380,6 +394,7 @@ fn start_job(
         lane,
         block,
         range,
+        partial,
         source_revision: arg(args, "source_revision").map(str::to_owned),
         keep_user: args.get("replace_user_edits").and_then(Value::as_bool) != Some(true),
         began: std::time::Instant::now(),
@@ -438,7 +453,7 @@ pub fn poll(shared: &Shared, on_main: bool) -> Vec<Value> {
                 let a = spec.analysis.get_or_insert_with(Analysis::default);
                 let analysed = match made {
                     Made::Level(plan) => {
-                        let part = job.range.from > 0.0 || job.range.to.is_finite();
+                        let part = job.partial;
                         let mut lanes = Vec::new();
                         for (id, c) in plan.lanes.by_param() {
                             let new = if part {
@@ -488,12 +503,10 @@ pub fn poll(shared: &Shared, on_main: bool) -> Vec<Value> {
                 let a = spec.analysis.get_or_insert_with(Analysis::default);
                 a.state = State::Fresh;
                 a.at = Some(now_unix());
-                a.range = Some(
-                    match (job.range.from > 0.0 || job.range.to.is_finite(), a.range) {
-                        (true, Some(r)) => r.union(&job.range),
-                        _ => job.range,
-                    },
-                );
+                a.range = Some(match (job.partial, a.range) {
+                    (true, Some(r)) => r.union(&job.range),
+                    _ => job.range,
+                });
                 a.source_revision = job.source_revision.clone().or(a.source_revision.take());
                 a.stale.retain(|r| !r.overlaps(&job.range));
                 if a.stale.is_empty() && a.state == State::Stale {
@@ -759,7 +772,13 @@ fn finish_capture(shared: &Shared, lane: &str, block: &str) -> Result<String, Ex
         .map(Made::Level)
         .map_err(|e| format!("{e:?}"))
     };
-    let id = start_job(shared, (lane.into(), block.into()), range, &json!({}), work)?;
+    let id = start_job(
+        shared,
+        (lane.into(), block.into()),
+        (range, false),
+        &json!({}),
+        work,
+    )?;
     Ok(
         json!({"job": id, "block": block, "state": "running", "captured_s": range.to - range.from})
             .to_string(),
