@@ -883,3 +883,39 @@ fn phases_are_made_gain_neutral() {
         report.warnings
     );
 }
+
+/// A reset clears every tail: a reverb that has rung, reset, is silent.
+#[test]
+fn a_reset_clears_the_reverbs() {
+    use signal_core::state::Phase;
+    for algorithm in ["nonlinear", "plate", "room", "hall"] {
+        let preset = Preset {
+            name: "Verb".into(),
+            inputs: 1,
+            outputs: 2,
+            lanes: vec![LaneSpec {
+                input: vec![0],
+                blocks: vec![
+                    BlockSpec::signal("verb", "reverb")
+                        .algorithm(algorithm)
+                        .param("mix", 1.0)
+                        .phase(Phase::Depth),
+                ],
+                ..lane("Verb")
+            }],
+            macros: vec![],
+        };
+        let factories: [&dyn BlockFactory; 1] = [&BuiltinFactory];
+        let (g, _) = graph::build(&preset, &opts(&factories, &NoHost));
+        let mut proc = Processor::new();
+        let _ = proc.install(g);
+        let _ = play(&mut proc, &sine(24_000), 2, 1, 256);
+        proc.reset();
+        let after = play(&mut proc, &vec![0.0; 4096], 2, 1, 256);
+        assert!(
+            peak(&after[0]) < 1e-6 && peak(&after[1]) < 1e-6,
+            "{algorithm} rings on after a reset: {}",
+            peak(&after[0]).max(peak(&after[1]))
+        );
+    }
+}

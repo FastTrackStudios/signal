@@ -289,6 +289,20 @@ impl Processor {
         }
     }
 
+    /// Clear every block's state (reverb and delay tails, envelopes, the
+    /// detectors) and the graph's own delays: what a host's reset asks.
+    pub fn reset(&mut self) {
+        if let Some(g) = self.graph.as_mut() {
+            g.reset();
+        }
+    }
+
+    /// The running graph, to change on the audio thread (calibrating its
+    /// phases).
+    pub fn graph_mut(&mut self) -> Option<&mut Graph> {
+        self.graph.as_deref_mut()
+    }
+
     /// Change one block's parameter now (the audio thread's own: a
     /// plugin wrapper applying its host's parameter values). From another
     /// thread, send [`Command::Param`].

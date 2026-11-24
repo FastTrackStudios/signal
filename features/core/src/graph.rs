@@ -116,6 +116,81 @@ struct PhaseGroup {
     /// This piece's energy into the phase, counted once its output is
     /// known to be sounding.
     piece_in: f64,
+    /// The meters hear as loudness does (K-weighted, BS.1770), so a
+    /// gain-neutral phase reads 0 LU on a loudness meter.
+    k_in: KWeight,
+    k_out: KWeight,
+}
+
+/// BS.1770's K-weighting (a high shelf, then a high-pass), stereo, for a
+/// meter: what LUFS hears.
+#[derive(Clone, Copy, Debug, Default)]
+struct KWeight {
+    shelf: [f64; 5],
+    high_pass: [f64; 5],
+    /// Per channel, per stage: the two delay elements.
+    z: [[f64; 2]; 4],
+}
+
+impl KWeight {
+    fn new(sample_rate: f32) -> Self {
+        let fs = f64::from(sample_rate.max(1.0));
+        let pi = core::f64::consts::PI;
+        // The shelf.
+        let (f0, g, q) = (
+            1681.974_450_955_533,
+            3.999_843_853_973_347,
+            0.707_175_236_955_419_6,
+        );
+        let k = libm::tan(pi * f0 / fs);
+        let vh = libm::pow(10.0, g / 20.0);
+        let vb = libm::pow(vh, 0.499_666_774_154_541_6);
+        let a0 = 1.0 + k / q + k * k;
+        let shelf = [
+            (vh + vb * k / q + k * k) / a0,
+            2.0 * (k * k - vh) / a0,
+            (vh - vb * k / q + k * k) / a0,
+            2.0 * (k * k - 1.0) / a0,
+            (1.0 - k / q + k * k) / a0,
+        ];
+        // The high-pass.
+        let (f0, q) = (38.135_470_876_024_44, 0.500_327_037_323_877_3);
+        let k = libm::tan(pi * f0 / fs);
+        let a0 = 1.0 + k / q + k * k;
+        let high_pass = [
+            1.0,
+            -2.0,
+            1.0,
+            2.0 * (k * k - 1.0) / a0,
+            (1.0 - k / q + k * k) / a0,
+        ];
+        Self {
+            shelf,
+            high_pass,
+            z: [[0.0; 2]; 4],
+        }
+    }
+
+    fn stage(c: &[f64; 5], z: &mut [f64; 2], x: f64) -> f64 {
+        let y = c[0] * x + z[0];
+        z[0] = c[1] * x - c[3] * y + z[1];
+        z[1] = c[2] * x - c[4] * y;
+        y
+    }
+
+    /// The K-weighted energy of a stereo piece.
+    fn energy(&mut self, l: &[f32], r: &[f32]) -> f64 {
+        let (shelf, hp) = (self.shelf, self.high_pass);
+        let mut e = 0.0;
+        for (ch, x) in [l, r].into_iter().enumerate() {
+            for s in x {
+                let a = Self::stage(&shelf, &mut self.z[ch * 2], f64::from(*s));
+                let b = Self::stage(&hp, &mut self.z[ch * 2 + 1], a);
+                e += b * b;
+            }
+        }
+        e
+    }
 }
 
 /// Below this mean energy per sample (-80 dBFS) a phase's output is
@@ -148,7 +223,7 @@ impl PhaseLevel {
 /// A lane's blocks grouped by phase, in order. A phase that comes back
 /// after a later one (Tone, Rescue) is out of the method's order: reported,
 /// and run where it is.
-fn phase_groups(spec: &LaneSpec, warnings: &mut Vec<String>) -> Vec<PhaseGroup> {
+fn phase_groups(spec: &LaneSpec, sample_rate: f32, warnings: &mut Vec<String>) -> Vec<PhaseGroup> {
     let mut groups: Vec<PhaseGroup> = Vec::new();
     for (i, b) in spec.blocks.iter().enumerate() {
         let Some(phase) = b.phase else { continue };
@@ -177,6 +252,8 @@ fn phase_groups(spec: &LaneSpec, warnings: &mut Vec<String>) -> Vec<PhaseGroup> 
                     energy_in: 0.0,
                     energy_out: 0.0,
                     piece_in: 0.0,
+                    k_in: KWeight::new(sample_rate),
+                    k_out: KWeight::new(sample_rate),
                 });
             }
         }
@@ -211,10 +288,6 @@ pub fn apply_neutral_trims(preset: &mut Preset, levels: &[PhaseLevel]) {
             }),
         }
     }
-}
-
-fn energy(x: &[f32]) -> f64 {
-    x.iter().map(|s| f64::from(*s) * f64::from(*s)).sum()
 }
 
 /// A send to another lane.
@@ -456,7 +529,7 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
         }
         lanes.push(Lane {
             name: spec.name.clone(),
-            phases: phase_groups(spec, &mut report.warnings),
+            phases: phase_groups(spec, opts.sample_rate, &mut report.warnings),
             input,
             output,
             // In the per-track mode the track's own fader is the lane's
@@ -977,6 +1050,31 @@ impl Graph {
             .collect()
     }
 
+    /// Make every phase gain neutral on what it has measured: each phase
+    /// that has sounded gets the make-up that brings it back to its input's
+    /// level (at most ±[`MAX_TRIM_DB`]). On the audio thread, as the
+    /// song plays: an instance calibrating itself on its own input.
+    /// Allocates nothing.
+    pub fn calibrate_phases(&mut self) {
+        let db = |e: f64| 10.0 * libm::log10(e);
+        for g in self.lanes.iter_mut().flat_map(|l| l.phases.iter_mut()) {
+            if g.energy_in > 0.0 && g.energy_out > 0.0 {
+                let trim = signal_dsp_core::num::narrow(db(g.energy_in) - db(g.energy_out));
+                g.trim = crate::util::db_to_gain(trim.clamp(-MAX_TRIM_DB, MAX_TRIM_DB));
+            }
+        }
+    }
+
+    /// Each phase's make-up now: `each(lane, phase, gain_db)`. Allocates
+    /// nothing.
+    pub fn each_trim(&self, mut each: impl FnMut(usize, Phase, f32)) {
+        for (l, lane) in self.lanes.iter().enumerate() {
+            for g in &lane.phases {
+                each(l, g.phase, crate::util::gain_to_db(g.trim));
+            }
+        }
+    }
+
     /// Start the phase meters again.
     pub fn clear_phase_levels(&mut self) {
         for g in self.lanes.iter_mut().flat_map(|l| l.phases.iter_mut()) {
@@ -1370,11 +1468,11 @@ impl Graph {
                 let mut group = 0;
                 for (b, block) in lane.blocks.iter_mut().enumerate() {
                     if let Some(g) = lane.phases.get_mut(group).filter(|g| g.first == b) {
-                        g.piece_in = energy(l) + energy(r);
+                        g.piece_in = g.k_in.energy(l, r);
                     }
                     block.process(l, r);
                     if let Some(g) = lane.phases.get_mut(group).filter(|g| g.last == b) {
-                        let out = energy(l) + energy(r);
+                        let out = g.k_out.energy(l, r);
                         if out > SOUNDING * (l.len() + r.len()) as f64 {
                             g.energy_in += g.piece_in;
                             g.energy_out += out;
