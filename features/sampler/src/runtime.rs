@@ -392,6 +392,11 @@ impl EngineInstance {
         self.block.panic();
     }
 
+    /// As loaded (`SampleEngine::restart`).
+    pub fn restart(&mut self) {
+        self.block.restart();
+    }
+
     /// Live-mode: set Layer mute. Identifies the layer by its spec id.
     pub fn set_layer_bypass(&mut self, layer_id: &str, bypass: bool) -> bool {
         if let Some(layer) = self.layers.iter_mut().find(|l| l.spec.id == layer_id) {
@@ -924,6 +929,13 @@ impl PresetRuntime {
     pub fn panic(&mut self) {
         for engine in &mut self.engines {
             engine.panic();
+        }
+    }
+
+    /// Every engine as loaded (`SampleEngine::restart`).
+    pub fn restart(&mut self) {
+        for engine in &mut self.engines {
+            engine.restart();
         }
     }
 

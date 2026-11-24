@@ -89,8 +89,11 @@ impl BlockProcessor for Drum {
         }
     }
 
+    /// As built: its voices gone (a one-shot rings through a note-off),
+    /// its round robins and random draws at their first, so a host
+    /// reusing it hears the hits a fresh one would play.
     fn reset(&mut self) {
-        self.bank.all_notes_off(PIECE);
+        self.bank.restart(PIECE);
         self.pending_count = 0;
     }
 
@@ -218,6 +221,8 @@ impl BlockFactory for DrumFactory {
         let stats = bank.preload_instrument(PIECE).map_err(|e| failed(&e))?;
         let note = note_for_kind(&engine_spec.engine_type.to_ascii_lowercase());
         let peak = hardest_hit_peak(&mut bank, note, cx.sample_rate);
+        // Its first hit is the first round robin, as after a reset.
+        bank.restart(PIECE);
         // Up to +40 dB: a silent piece isn't made noise.
         let normalize = if peak > 0.01 { 1.0 / peak } else { 100.0 };
         tracing::info!(

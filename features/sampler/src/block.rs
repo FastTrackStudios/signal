@@ -480,6 +480,11 @@ impl SamplerBlock {
         self.engine.panic();
     }
 
+    /// As loaded: voices gone, round robins and random draws at their first.
+    pub fn restart(&mut self) {
+        self.engine.restart();
+    }
+
     pub fn cc(&mut self, controller: u8, value: u8) {
         self.engine.cc(controller, value);
     }
