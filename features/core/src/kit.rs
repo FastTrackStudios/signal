@@ -157,31 +157,32 @@ fn sample(path: &str, key: &str, engine: Option<&AssetRef>, to: &str) -> LaneSpe
     lane
 }
 
-/// A one-note track (Dan Worrall's parallel filters): the drum gated by
-/// its trigger, band-passed on its note, saturated, under the drum.
-/// `fundamental` is a starting guess until it's measured off the hits.
-fn one_note(path: &str, key: &str, mode: f32, fundamental: f32, to: &str) -> LaneSpec {
-    let band = |b: BlockSpec, n: u8, shape: f32, freq: f32| {
-        b.param(alloc::format!("band.{n}.used"), 1.0)
-            .param(alloc::format!("band.{n}.shape"), shape)
-            .param(alloc::format!("band.{n}.freq"), freq)
-    };
-    let filter = BlockSpec::signal("filter", "eq")
+/// A one-note track (Dan Worrall's parallel filters: his over-resonant
+/// band-pass, then a gate): one band-pass on the drum's note at 12 dB/oct
+/// (the EQ's slope 2), as tight as `q`, then gated by the trigger so every
+/// hit gets the same solid note, then saturated so it reads on small
+/// speakers. Blended under the drum on its fader. `fundamental` is a
+/// starting guess until it's measured off the hits.
+fn one_note(path: &str, key: &str, mode: f32, fundamental: f32, q: f32, to: &str) -> LaneSpec {
+    let band_pass = BlockSpec::signal("band_pass", "eq")
         .algorithm("parametric")
+        .param("band.1.used", 1.0)
+        .param("band.1.shape", 6.0) // Band Pass
+        .param("band.1.freq", fundamental)
+        .param("band.1.q", q)
+        .param("band.1.slope", 2.0)
         .phase(Phase::Tone);
-    let filter = band(filter, 1, 3.0, fundamental * 0.7); // low cut
-    let filter = band(filter, 2, 4.0, fundamental * 1.5); // high cut
     at(
         with(
             track(path, &[], to),
             vec![
+                band_pass,
                 BlockSpec::signal("gate", "gate")
                     .param("mode", mode)
                     .param("threshold", -40.0)
                     .param("length", 250.0)
                     .key(key)
                     .phase(Phase::Tone),
-                filter,
                 sat(6.0),
             ],
         ),
@@ -261,7 +262,7 @@ pub fn drum_kit(pieces: &KitPieces) -> Preset {
             ),
             2.2,
         ),
-        one_note("Kick/Sub", "Kick/SUM/Trig", 0.0, 55.0, "Kick"),
+        one_note("Kick/Sub", "Kick/SUM/Trig", 0.0, 55.0, 2.0, "Kick"),
         // Snare: gated, then its tone; three verbs stacked in its VERB.
         with(
             track("Snare", &[], "Drum Kit"),
@@ -311,7 +312,14 @@ pub fn drum_kit(pieces: &KitPieces) -> Preset {
             "Snare/SUM",
         ),
         trig("Snare/SUM/Trig", 5),
-        one_note("Snare/SUM/Fund", "Snare/SUM/Trig", 1.0, 200.0, "Snare/SUM"),
+        one_note(
+            "Snare/SUM/Fund",
+            "Snare/SUM/Trig",
+            1.0,
+            200.0,
+            8.0,
+            "Snare/SUM",
+        ),
         // Toms: each mic gated by its own trigger; the samples in Trig.
         at(track("Toms", &[], "Drum Kit"), 6.7),
         at(track("Toms/Trig", &[], "Toms"), -17.4),
@@ -345,6 +353,7 @@ pub fn drum_kit(pieces: &KitPieces) -> Preset {
             &trigger,
             3.0,
             *fundamental,
+            8.0,
             "Toms",
         ));
     }
