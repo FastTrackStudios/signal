@@ -451,7 +451,7 @@ fn the_all_passes_allocate_nothing_and_a_bypassed_align_is_no_block() {
     });
     assert_eq!(made, 0);
     let mut spec = BlockSpec::signal("align", "align")
-        .param("ap1_hz", 50.0)
+        .param("allpass.0.hz", 50.0)
         .param("delay_samples", 12.0);
     spec.bypass = true;
     let mut preset = Preset::passthrough();

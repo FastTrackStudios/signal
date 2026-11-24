@@ -640,9 +640,12 @@ fn flat_values(values: &serde_json::Map<String, Value>) -> Vec<(String, Value)> 
     for (k, v) in values {
         match (k.as_str(), v) {
             ("allpass", Value::Array(sections)) => {
-                for (i, (hz, q)) in [("ap1_hz", "ap1_q"), ("ap2_hz", "ap2_q")]
-                    .iter()
-                    .enumerate()
+                for (i, (hz, q)) in [
+                    ("allpass.0.hz", "allpass.0.q"),
+                    ("allpass.1.hz", "allpass.1.q"),
+                ]
+                .iter()
+                .enumerate()
                 {
                     let sec = sections.get(i);
                     flat.push((
@@ -654,9 +657,10 @@ fn flat_values(values: &serde_json::Map<String, Value>) -> Vec<(String, Value)> 
                     }
                 }
             }
-            ("first_order", v) => {
-                flat.push(("ap0_hz".into(), v.get("hz").cloned().unwrap_or(json!(0.0))))
-            }
+            ("first_order", v) => flat.push((
+                "allpass.first.hz".into(),
+                v.get("hz").cloned().unwrap_or(json!(0.0)),
+            )),
             _ => flat.push((k.clone(), v.clone())),
         }
     }

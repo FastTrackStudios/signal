@@ -10,8 +10,9 @@
 //!   no advance it is 0.
 //! - `invert`: the polarity, exactly (a negation).
 //! - the phase correction: up to two second-order all-pass sections
-//!   (`ap1_hz`/`ap1_q`, `ap2_hz`/`ap2_q`: RBJ all-pass biquads) and one
-//!   first-order section (`ap0_hz`), each off at 0 Hz. An all-pass moves
+//!   (`allpass.0.hz`/`allpass.0.q`, `allpass.1.hz`/`allpass.1.q`: RBJ
+//!   all-pass biquads) and one first-order section (`allpass.first.hz`),
+//!   each off at 0 Hz: the ids `LISTEN_ALIGN` sets. An all-pass moves
 //!   phase and nothing else: the magnitude is flat to numerical precision,
 //!   and it adds no latency, so it runs live. Studio's `LISTEN_ALIGN`
 //!   models and searches exactly these sections, so its predictions hold.
@@ -47,12 +48,26 @@ pub static PARAMS: [ParamSpec; 7] = [
         0.0,
     ),
     ParamSpec::new("invert", "Invert", Unit::Toggle, 0.0, 1.0, 0.0),
-    ParamSpec::new("ap1_hz", "All-Pass 1", Unit::Hz, 0.0, 20000.0, 0.0),
-    ParamSpec::new("ap1_q", "All-Pass 1 Q", Unit::Plain(2), 0.1, 10.0, 0.707),
-    ParamSpec::new("ap2_hz", "All-Pass 2", Unit::Hz, 0.0, 20000.0, 0.0),
-    ParamSpec::new("ap2_q", "All-Pass 2 Q", Unit::Plain(2), 0.1, 10.0, 0.707),
+    ParamSpec::new("allpass.0.hz", "All-Pass 1", Unit::Hz, 0.0, 20000.0, 0.0),
     ParamSpec::new(
-        "ap0_hz",
+        "allpass.0.q",
+        "All-Pass 1 Q",
+        Unit::Plain(2),
+        0.1,
+        10.0,
+        0.707,
+    ),
+    ParamSpec::new("allpass.1.hz", "All-Pass 2", Unit::Hz, 0.0, 20000.0, 0.0),
+    ParamSpec::new(
+        "allpass.1.q",
+        "All-Pass 2 Q",
+        Unit::Plain(2),
+        0.1,
+        10.0,
+        0.707,
+    ),
+    ParamSpec::new(
+        "allpass.first.hz",
         "All-Pass (1st order)",
         Unit::Hz,
         0.0,
