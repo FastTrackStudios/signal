@@ -10,7 +10,7 @@ use std::cell::Cell;
 use signal_core::block::{BlockProcessor, ParamChange};
 use signal_core::graph::{self, BuildOptions};
 use signal_core::host::NoHost;
-use signal_core::offline::align::{self, AlignApply, AllPass};
+use signal_core::offline::align::{self, AlignApply};
 use signal_core::offline::level::{self, Amounts, Knobs, Segment};
 use signal_core::offline::{Analysis, Curve, Playback, Range, State};
 use signal_core::state::{BlockSpec, Preset};
@@ -312,13 +312,13 @@ fn through(b: &mut AlignApply, x: &[f32]) -> Vec<f32> {
 
 #[test]
 fn align_delays_and_inverts_exactly() {
-    let mut b = AlignApply::new(48_000.0, 7.0);
+    let mut b = AlignApply::new(48_000.0, 7.0, 0.0);
     assert_eq!(b.latency(), 0);
     let y = through(&mut b, &impulse(64));
     assert_eq!(y.iter().position(|s| *s != 0.0), Some(7));
     assert_eq!(y[7], 0.75);
 
-    let mut b = AlignApply::new(48_000.0, 0.0);
+    let mut b = AlignApply::new(48_000.0, 0.0, 0.0);
     b.set_param(align::INVERT, 1.0);
     let x: Vec<f32> = (0..300)
         .map(|i| ((i * 7919) % 97) as f32 / 97.0 - 0.5)
@@ -332,7 +332,7 @@ fn align_delays_and_inverts_exactly() {
 
 #[test]
 fn an_advance_is_reported_as_latency_and_the_net_shift_is_the_delay() {
-    let mut b = AlignApply::new(48_000.0, -5.0);
+    let mut b = AlignApply::new(48_000.0, -5.0, 0.0);
     assert_eq!(b.latency(), 5, "the advance is the latency");
     let y = through(&mut b, &impulse(32));
     // Delayed by its latency less the advance: net of compensation, 5 early.
@@ -351,47 +351,128 @@ fn an_advance_is_reported_as_latency_and_the_net_shift_is_the_delay() {
     );
 }
 
-#[test]
-fn the_all_pass_is_flat_and_turns_the_phase_it_is_asked_to_where_it_is_asked() {
-    for (hz, deg, q) in [
-        (100.0, 90.0, 0.7),
-        (250.0, 45.0, 2.0),
-        (80.0, 270.0, 0.5),
-        (1200.0, 180.0, 1.0),
-    ] {
-        let ap = AllPass::design(SR, hz, deg, q);
-        for f in [20.0, 63.0, 200.0, 1000.0, 5000.0, 12_000.0, 20_000.0] {
-            let (mag, _) = ap.response(SR, f);
-            assert!((20.0 * mag.log10()).abs() < 0.01, "{hz}/{deg}: {f} Hz");
-        }
-        let (_, phase) = ap.response(SR, hz);
-        let err = (phase + deg).rem_euclid(360.0);
-        let err = err.min(360.0 - err);
-        assert!(err < 0.01, "{hz} Hz asked {deg}°, got {phase}°");
+/// `LISTEN_ALIGN`'s rotation, as Studio models it (`listen/align.rs`):
+/// the band (RBJ, 0 dB at its centre, run from rest) replaced by
+/// `cos θ·b + sin θ·H(b)`, `H` the Hilbert transform of the whole signal.
+fn listen_align_rotation(x: &[f64], (hz, q, deg): (f64, f64, f64)) -> Vec<f64> {
+    let mut band = align::Band::new(hz, q, SR);
+    let b: Vec<f64> = x.iter().map(|s| band.tick(*s)).collect();
+    let n = b.len().next_power_of_two();
+    let mut planner = realfft::RealFftPlanner::<f64>::new();
+    let (fwd, inv) = (planner.plan_fft_forward(n), planner.plan_fft_inverse(n));
+    let mut input = fwd.make_input_vec();
+    input[..b.len()].copy_from_slice(&b);
+    let mut spec = fwd.make_output_vec();
+    fwd.process(&mut input, &mut spec).unwrap();
+    let last = spec.len() - 1;
+    for (k, c) in spec.iter_mut().enumerate() {
+        *c = if k == 0 || k == last {
+            realfft::num_complex::Complex::new(0.0, 0.0)
+        } else {
+            realfft::num_complex::Complex::new(c.im, -c.re)
+        };
     }
-    // And as it plays: a sine at the frequency comes out `deg` late, as loud.
-    let (hz, deg) = (150.0_f64, 60.0_f64);
-    let mut b = AlignApply::new(48_000.0, 0.0);
+    let mut h = inv.make_output_vec();
+    inv.process(&mut spec, &mut h).unwrap();
+    let (c, s) = (deg.to_radians().cos(), deg.to_radians().sin());
+    x.iter()
+        .zip(&b)
+        .zip(&h)
+        .map(|((x, b), h)| x - b + c * b + s * h / n as f64)
+        .collect()
+}
+
+#[test]
+fn the_rotation_is_listen_aligns_and_turns_its_centre_by_its_angle() {
+    // A kick-like signal: thumps every 0.5 s.
+    let n = 48_000 * 6;
+    let x: Vec<f64> = (0..n)
+        .map(|i| {
+            let t = (i as f64 / SR) % 0.5;
+            (std::f64::consts::TAU * (50.0 + 60.0 * (-t * 25.0).exp()) * t).sin()
+                * (-t * 9.0).exp()
+                * 0.5
+        })
+        .collect();
+    for (hz, q, deg) in [(50.0, 1.0, 117.0), (80.0, 1.0, -60.0), (160.0, 2.0, 45.0)] {
+        let mut b = AlignApply::new(48_000.0, 0.0, deg as f32);
+        b.set_param(align::ROTATE_HZ, hz as f32);
+        b.set_param(align::ROTATE_Q, q as f32);
+        b.set_param(align::ROTATE_DEG, deg as f32);
+        assert!(b.rotates());
+        let lag = b.latency() as usize;
+        assert_eq!(
+            lag,
+            align::HILBERT_HALF + align::HILBERT_HOP,
+            "the Hilbert's latency is reported"
+        );
+        let mut padded: Vec<f32> = x.iter().map(|v| *v as f32).collect();
+        padded.extend(std::iter::repeat_n(0.0, lag));
+        let y = through(&mut b, &padded);
+        let want = listen_align_rotation(&x, (hz, q, deg));
+        // Away from the ends (the FIR's reach): the same signal.
+        let (from, to) = (48_000, n - 48_000);
+        let err: f64 = (from..to)
+            .map(|k| (f64::from(y[k + lag]) - want[k]).powi(2))
+            .sum();
+        let sig: f64 = (from..to).map(|k| want[k].powi(2)).sum();
+        let db = 10.0 * (err / sig).log10();
+        eprintln!("rotation {hz} Hz q {q} {deg}°: differs from LISTEN_ALIGN's model by {db:.1} dB");
+        assert!(db < -40.0, "{hz}/{deg}: {db:.1} dB");
+    }
+    // At its centre the band is the whole signal: a sine there comes out
+    // `deg` late and as loud.
+    let (hz, deg) = (63.0_f64, 117.0_f64);
+    let mut b = AlignApply::new(48_000.0, 0.0, deg as f32);
     b.set_param(align::ROTATE_HZ, hz as f32);
     b.set_param(align::ROTATE_DEG, deg as f32);
-    let n = 48_000 * 2;
-    let x: Vec<f32> = (0..n)
+    let lag = b.latency() as usize;
+    let len = 48_000 * 3 + lag;
+    let x: Vec<f32> = (0..len)
         .map(|i| (2.0 * std::f64::consts::PI * hz * i as f64 / SR).sin() as f32)
         .collect();
     let y = through(&mut b, &x);
-    let dft = |s: &[f32]| {
+    let dft = |s: &[f32], off: usize| {
         let (mut re, mut im) = (0.0, 0.0);
-        for (i, v) in s.iter().enumerate().skip(n / 2) {
-            let w = 2.0 * std::f64::consts::PI * hz * i as f64 / SR;
-            re += f64::from(*v) * w.cos();
-            im -= f64::from(*v) * w.sin();
+        for k in 48_000..48_000 * 2 {
+            let v = f64::from(s[k + off]);
+            let w = 2.0 * std::f64::consts::PI * hz * k as f64 / SR;
+            re += v * w.cos();
+            im -= v * w.sin();
         }
         (re.hypot(im), im.atan2(re).to_degrees())
     };
-    let ((mx, px), (my, py)) = (dft(&x), dft(&y));
-    assert!((20.0 * (my / mx).log10()).abs() < 0.01);
-    let lag = (px - py).rem_euclid(360.0);
-    assert!((lag - deg).abs() < 0.05, "{lag}");
+    let ((mx, px), (my, py)) = (dft(&x, 0), dft(&y, lag));
+    let lagged = (px - py).rem_euclid(360.0);
+    eprintln!(
+        "at its centre: {:.3} dB, turned {lagged:.2}°",
+        20.0 * (my / mx).log10()
+    );
+    // The model is exact there; the FIR Hilbert, truncated, is within
+    // 0.05 dB and 0.2° at 63 Hz (measured: -0.03 dB, +0.1°).
+    assert!((20.0 * (my / mx).log10()).abs() < 0.05);
+    assert!((lagged - deg).abs() < 0.2, "{lagged}");
+    // Off its centre it is not flat: the model's, measured.
+    let off = |f: f64| {
+        let mut b = AlignApply::new(48_000.0, 0.0, deg as f32);
+        b.set_param(align::ROTATE_HZ, hz as f32);
+        b.set_param(align::ROTATE_DEG, deg as f32);
+        let x: Vec<f32> = (0..len)
+            .map(|i| (2.0 * std::f64::consts::PI * f * i as f64 / SR).sin() as f32)
+            .collect();
+        let y = through(&mut b, &x);
+        let p = |s: &[f32], o: usize| {
+            (48_000..96_000)
+                .map(|k| f64::from(s[k + o]).powi(2))
+                .sum::<f64>()
+        };
+        10.0 * (p(&y, lag) / p(&x, 0)).log10()
+    };
+    let shape: Vec<(f64, f64)> = [20.0, 40.0, 100.0, 200.0, 1000.0]
+        .iter()
+        .map(|f| (*f, off(*f)))
+        .collect();
+    eprintln!("off its centre (dB): {shape:?}");
 }
 
 #[test]
