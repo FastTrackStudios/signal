@@ -21,6 +21,7 @@ members = [
     "apps/plugins/nam",
     "apps/plugins/sampler",
     "apps/plugins/signal",
+    "features/core",
     "features/dsp/nam",
     "features/rigs/drums",
     "features/rigs/ekit",
@@ -83,6 +84,18 @@ plugin-core = { git = "https://github.com/FastTrackStudios/fts-fx", rev = "5bae6
 # as a never-committed [patch] (docs/frame.md).
 frame = { git = "https://github.com/FastTrackStudios/frame", rev = "1f6311abc5eeef87c5226155a4838a6f58984410" }
 synth = { path = "features/rigs/synth" }
+# signal-core: the one processor every host runs (signal#26), compiled into
+# Studio's engine and wrapped as the Signal CLAP (apps/plugins/signal).
+signal-core = { path = "features/core", default-features = false }
+# The blocks signal-core is built from: the plugins' effects, headless
+# (FastTrackStudios/plugins `plugin-processors`), on FastTrackStudios/dsp
+# (studio#683, daw#50). dsp-core directly for its numeric helpers, at the
+# rev plugins pins. Renamed: the rest of the tree still takes crates of the
+# same names from fts-fx at the rev above.
+plugin-processors = { git = "https://github.com/FastTrackStudios/plugins", rev = "679cbfc2a181a93dd454ab48b865210de32a25b8", default-features = false }
+signal-dsp-core = { package = "dsp-core", git = "https://github.com/FastTrackStudios/dsp", rev = "75d475b01e96eed4a5ddad8ad6799396f220dd82", default-features = false }
+# Float maths without `std`, for signal-core's `no_std` code.
+libm = { version = "0.2", default-features = false }
 sampler = { path = "features/sampler" }
 guitar = { path = "features/rigs/guitar" }
 dsp-core = { git = "https://github.com/FastTrackStudios/fts-fx", rev = "5bae622f5d874ce58ab04916ab29a8100e883012" }

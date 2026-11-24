@@ -1,0 +1,284 @@
+//! Signal's state: one blob, the same in every host.
+//!
+//! A [`SignalState`] is what an instance saves (the CLAP's state chunk, a
+//! track's state in Studio's session): its [`Instance`] mode and the
+//! [`Preset`] it plays. The preset is the whole rig or kit; one preset
+//! serves both modes:
+//!
+//! - **multi-channel**: one instance runs every lane, each fed from its
+//!   own input channels and summed into its output channels;
+//! - **per-track**: the instance on a track is a port of a shared
+//!   [`session`](crate::session) and runs only the lanes of its port
+//!   (`Kick/In`), fed from the track's own channels. The kit's instances
+//!   share the preset, its macros and its hits through the session; the
+//!   host routes and sums the audio.
+
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt;
+
+use serde::{Deserialize, Serialize};
+
+use crate::block::BlockKind;
+use crate::host::AssetRef;
+use crate::platform::Platforms;
+use crate::session::SessionLink;
+
+/// The state format's version. A newer state than this build reads is
+/// refused, not guessed at.
+pub const STATE_VERSION: u32 = 1;
+
+/// What an instance saves and loads.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SignalState {
+    pub version: u32,
+    #[serde(default)]
+    pub instance: Instance,
+    pub preset: Preset,
+}
+
+/// How this instance runs the preset.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "kebab-case")]
+pub enum Instance {
+    /// One instance, every lane: the multi-channel mode.
+    #[default]
+    MultiChannel,
+    /// One port of a session shared by the instances on a kit's tracks.
+    Port(SessionLink),
+}
+
+/// A rig, a chain or a kit.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Preset {
+    pub name: String,
+    /// Input channels the multi-channel mode takes.
+    #[serde(default = "two")]
+    pub inputs: u16,
+    /// Output channels the multi-channel mode gives.
+    #[serde(default = "two")]
+    pub outputs: u16,
+    pub lanes: Vec<LaneSpec>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub macros: Vec<MacroSpec>,
+}
+
+const fn two() -> u16 {
+    2
+}
+
+/// A chain from some input channels to some output channels.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LaneSpec {
+    pub name: String,
+    /// The port this lane belongs to in the per-track mode (`Kick/In`):
+    /// the instance on that track runs it. `None`: every port's instance
+    /// that has no lane of its own runs it (a plain chain or rig).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<String>,
+    /// Input channels, 0-based (multi-channel mode). One is mono, fed to
+    /// both sides of the chain; two are a stereo pair; none, an instrument
+    /// lane that only plays from MIDI. In the per-track mode a lane takes
+    /// the track's first one or two channels instead.
+    #[serde(default)]
+    pub input: Vec<u16>,
+    /// First output channel (the pair `output`, `output + 1`).
+    #[serde(default)]
+    pub output: u16,
+    #[serde(default)]
+    pub gain_db: f32,
+    #[serde(default)]
+    pub mute: bool,
+    pub blocks: Vec<BlockSpec>,
+}
+
+/// One block in a lane.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BlockSpec {
+    /// Unique in its lane: what macros and actions address.
+    pub id: String,
+    pub kind: BlockKind,
+    /// Plain values by parameter id; a missing one is its default.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, f32>,
+    /// The file it needs (a NAM capture, a cab IR).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset: Option<AssetRef>,
+    /// State that isn't parameters, base64: a third-party plugin's own
+    /// blob. Signal's blocks keep all theirs in `params` (one schema for
+    /// the compiled-in block and its CLAP), so theirs is `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// Switched off by the player.
+    #[serde(default)]
+    pub bypass: bool,
+    /// Where the preset says this block needs to run, narrowing what its
+    /// kind can do ("Valhalla Supermassive 2.x, desktop"). `None`: wherever
+    /// its kind runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requires: Option<Platforms>,
+    /// Built instead where this block can't be: one of Signal's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<Box<BlockSpec>>,
+}
+
+impl BlockSpec {
+    /// One of Signal's own blocks, with its defaults.
+    #[must_use]
+    pub fn signal(id: impl Into<String>, block: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            kind: BlockKind::Signal(block.into()),
+            params: BTreeMap::new(),
+            asset: None,
+            state: None,
+            bypass: false,
+            requires: None,
+            fallback: None,
+        }
+    }
+
+    #[must_use]
+    pub fn param(mut self, id: impl Into<String>, value: f32) -> Self {
+        self.params.insert(id.into(), value);
+        self
+    }
+
+    #[must_use]
+    pub fn asset(mut self, asset: AssetRef) -> Self {
+        self.asset = Some(asset);
+        self
+    }
+
+    #[must_use]
+    pub fn fallback(mut self, fallback: Self) -> Self {
+        self.fallback = Some(Box::new(fallback));
+        self
+    }
+}
+
+/// A macro knob: one of the instance's macro parameters, driving block
+/// parameters by id (never a block's internals), so it works the same on
+/// a compiled-in block and on its CLAP.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MacroSpec {
+    pub name: String,
+    pub targets: Vec<MacroTarget>,
+}
+
+/// One parameter a macro moves.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MacroTarget {
+    /// The lane, by name.
+    pub lane: String,
+    /// The block, by id.
+    pub block: String,
+    /// The parameter, by id.
+    pub param: String,
+    #[serde(default)]
+    pub mode: MacroMode,
+    /// `Set`: the plain value at macro 0 and at macro 1 (either way
+    /// round). `Modulate`: the normalized offset at macro 0 and at 1.
+    pub min: f32,
+    pub max: f32,
+}
+
+/// How a macro drives its parameter.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MacroMode {
+    /// It sets the parameter's value.
+    #[default]
+    Set,
+    /// It offsets the parameter's own value, which is kept
+    /// (`CLAP_EVENT_PARAM_MOD` on a CLAP backend).
+    Modulate,
+}
+
+/// Why a state blob was refused.
+#[derive(Debug)]
+pub enum StateError {
+    /// Not a Signal state.
+    Parse(String),
+    /// Written by a newer Signal than this one.
+    TooNew { found: u32, supported: u32 },
+}
+
+impl fmt::Display for StateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Parse(why) => write!(f, "not a Signal state: {why}"),
+            Self::TooNew { found, supported } => {
+                write!(
+                    f,
+                    "state version {found} is newer than this Signal reads ({supported})"
+                )
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for StateError {}
+
+impl SignalState {
+    /// A multi-channel instance of `preset`.
+    #[must_use]
+    pub const fn new(preset: Preset) -> Self {
+        Self {
+            version: STATE_VERSION,
+            instance: Instance::MultiChannel,
+            preset,
+        }
+    }
+
+    /// The blob: JSON, so a preset is readable and diffable.
+    #[must_use]
+    pub fn to_blob(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap_or_default()
+    }
+
+    /// Read a blob [`to_blob`](Self::to_blob) wrote.
+    ///
+    /// # Errors
+    ///
+    /// [`StateError`] if it isn't one, or is newer than this build.
+    pub fn from_blob(blob: &[u8]) -> Result<Self, StateError> {
+        let state: Self = serde_json::from_slice(blob).map_err(|e| {
+            let mut why = String::new();
+            let _ = fmt::write(&mut why, format_args!("{e}"));
+            StateError::Parse(why)
+        })?;
+        if state.version > STATE_VERSION {
+            return Err(StateError::TooNew {
+                found: state.version,
+                supported: STATE_VERSION,
+            });
+        }
+        Ok(state)
+    }
+}
+
+impl Preset {
+    /// Stereo in, stereo out, nothing in between.
+    #[must_use]
+    pub fn passthrough() -> Self {
+        Self {
+            name: "Passthrough".into(),
+            inputs: 2,
+            outputs: 2,
+            lanes: alloc::vec![LaneSpec {
+                name: "Main".into(),
+                port: None,
+                input: alloc::vec![0, 1],
+                output: 0,
+                gain_db: 0.0,
+                mute: false,
+                blocks: Vec::new(),
+            }],
+            macros: Vec::new(),
+        }
+    }
+}

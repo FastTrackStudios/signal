@@ -2294,8 +2294,8 @@ dependencies = [
  "crossbeam-channel",
  "daw",
  "daw-proto",
- "dsp",
- "dsp-core",
+ "dsp 26.10.3",
+ "dsp-core 26.10.3",
  "fts-sample",
 ]
 
@@ -3665,7 +3665,7 @@ dependencies = [
  "cpal",
  "daw-proto",
  "daw-transport-sync",
- "dsp",
+ "dsp 26.10.3",
  "fts-sample",
  "futures",
  "gloo-timers 0.3.0",
@@ -4782,6 +4782,20 @@ dependencies = [
 
 [[package]]
 name = "dsp"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dsp?rev=75d475b01e96eed4a5ddad8ad6799396f220dd82#75d475b01e96eed4a5ddad8ad6799396f220dd82"
+dependencies = [
+ "crossbeam-channel",
+ "dsp-core 0.1.0",
+ "libm",
+ "realfft",
+ "serde",
+ "symphonium",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "dsp"
 version = "26.10.3"
 source = "git+https://github.com/FastTrackStudios/fts-fx?rev=5bae622f5d874ce58ab04916ab29a8100e883012#5bae622f5d874ce58ab04916ab29a8100e883012"
 dependencies = [
@@ -4795,7 +4809,7 @@ dependencies = [
  "dioxus",
  "dioxus-native",
  "dioxus-native-dom",
- "dsp-core",
+ "dsp-core 26.10.3",
  "fts-audio-ui",
  "futures-timer",
  "kurbo 0.13.1",
@@ -4811,6 +4825,17 @@ dependencies = [
  "thiserror 2.0.20",
  "vello",
  "web-time",
+]
+
+[[package]]
+name = "dsp-core"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dsp?rev=75d475b01e96eed4a5ddad8ad6799396f220dd82#75d475b01e96eed4a5ddad8ad6799396f220dd82"
+dependencies = [
+ "atomic_float",
+ "ebur128",
+ "parking_lot",
+ "realfft",
 ]
 
 [[package]]
@@ -5870,7 +5895,7 @@ dependencies = [
  "bytemuck",
  "dioxus",
  "dioxus-native-dom",
- "dsp-core",
+ "dsp-core 26.10.3",
  "gloo-timers 0.3.0",
  "kurbo 0.13.1",
  "peniko",
@@ -6632,7 +6657,7 @@ dependencies = [
  "dioxus-native",
  "dioxus-native-dom",
  "drums",
- "dsp",
+ "dsp 26.10.3",
  "facet",
  "facet-json",
  "facet-styx",
@@ -11196,6 +11221,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "plugin-processors"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=679cbfc2a181a93dd454ab48b865210de32a25b8#679cbfc2a181a93dd454ab48b865210de32a25b8"
+dependencies = [
+ "dsp 0.1.0",
+ "dsp-core 0.1.0",
+ "libm",
+]
+
+[[package]]
 name = "png"
 version = "0.17.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12659,7 +12694,7 @@ dependencies = [
  "clap",
  "cpal",
  "daw",
- "dsp-core",
+ "dsp-core 26.10.3",
  "eyre",
  "facet",
  "facet-json",
@@ -13422,6 +13457,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-core"
+version = "26.10.3"
+dependencies = [
+ "dsp-core 0.1.0",
+ "libm",
+ "neural-amp-modeler",
+ "plugin-processors",
+ "serde",
+ "serde_json",
+ "signal-core",
+ "tracing",
+]
+
+[[package]]
 name = "signal-daw-bridge"
 version = "26.10.3"
 dependencies = [
@@ -13515,7 +13564,7 @@ version = "26.10.3"
 dependencies = [
  "base64 0.22.1",
  "builtin",
- "dsp",
+ "dsp 26.10.3",
  "eyre",
  "hound",
  "realfft",
@@ -13553,7 +13602,7 @@ dependencies = [
 name = "signal-macromod"
 version = "26.10.3"
 dependencies = [
- "dsp-core",
+ "dsp-core 26.10.3",
  "facet",
  "serde",
  "serde_json",
