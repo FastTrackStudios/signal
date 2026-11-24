@@ -176,6 +176,11 @@ impl SharedState {
         Ok(())
     }
 
+    /// The loaded instrument's spec.
+    pub(crate) fn spec_copy(&self) -> Option<LibrarySpec> {
+        self.spec.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
     /// Swap `sched` in; free the retired schedules the audio thread no
     /// longer holds (here, never on the audio thread).
     fn publish(&self, sched: Option<Arc<Schedule>>) {

@@ -7,9 +7,14 @@
 //! - `reference-<version>.f32` — the full render, interleaved stereo, f32
 //!   little-endian: what the host must hear from any start, bit for bit;
 //! - `reference-<version>.json` — its frames, the schedule's counts, every
-//!   legato transition's engine-reported heard arrival (`arrival`, frames)
-//!   and every marker, so a test can hold each arrival to the grid tick
-//!   it computes itself.
+//!   legato transition the engine fired (`fire`, the frame its sample
+//!   started; `velocity`; `delay_ms`, the library's trigger → heard-pitch
+//!   latency for that velocity in the expressive mode — the recordings are
+//!   edited to speak a fixed latency per velocity zone, Cinematic Studio's
+//!   333/250/100 ms; `arrival`, the engine's own prediction where a zone
+//!   carries a measured lead-in, else the fire frame) and every marker, so
+//!   a test can hold each note's heard arrival to the grid tick it
+//!   computes itself.
 //!
 //! `<version>` is the document's (the host timeline's revision). Off when
 //! the variable is unset — the plugin's normal case.
@@ -41,6 +46,9 @@ pub fn write_if_asked(shared: &SharedState, doc: &TrackDocument, sched: &Schedul
     };
     let dir = std::path::PathBuf::from(dir);
     let mut bank = make();
+    let expressive = shared
+        .spec_copy()
+        .and_then(|s| s.legato_engine.and_then(|le| le.expressive));
     let res = render_schedule(
         &mut bank,
         INSTRUMENT_ID,
@@ -68,7 +76,8 @@ pub fn write_if_asked(shared: &SharedState, doc: &TrackDocument, sched: &Schedul
         "reactive_fallbacks": res.reactive_fallbacks,
         "transitions": res.transitions.iter().map(|t| json!({
             "line": t.line, "from": t.from_note, "to": t.to_note,
-            "fire": t.frame, "arrival": t.arrival,
+            "fire": t.frame, "arrival": t.arrival, "velocity": t.velocity,
+            "delay_ms": expressive.as_ref().and_then(|m| m.delay_for_velocity(t.velocity)),
         })).collect::<Vec<_>>(),
         "markers": sched.markers.iter().map(|m| json!({
             "frame": m.frame, "line": m.line, "note": m.note, "kind": kind(m.kind),
