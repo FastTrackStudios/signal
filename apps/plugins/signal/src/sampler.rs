@@ -155,6 +155,7 @@ pub fn preset_for(cfg: &RigConfig) -> Preset {
                 gain_db: 0.0,
                 mute: false,
                 blocks: vec![],
+                ..LaneSpec::default()
             },
             LaneSpec {
                 name: "Sampler".into(),
@@ -164,6 +165,7 @@ pub fn preset_for(cfg: &RigConfig) -> Preset {
                 gain_db: 0.0,
                 mute: false,
                 blocks: vec![block],
+                ..LaneSpec::default()
             },
         ],
         macros: vec![],

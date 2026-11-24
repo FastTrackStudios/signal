@@ -39,3 +39,5 @@ eyre.workspace = true
 # through daw's plugin host, as Studio's engine does.
 daw = { workspace = true, features = ["clap-host"] }
 serde_json = { workspace = true }
+# examples/render_kit.rs: the stems in, the mix out.
+hound = { workspace = true }

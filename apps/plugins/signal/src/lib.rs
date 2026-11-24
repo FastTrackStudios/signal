@@ -5,6 +5,7 @@
 //! [`plugin`] for the wrapper and [`sampler`] for the desktop sampler block.
 
 pub mod config;
+pub mod drum;
 pub mod plugin;
 pub mod sampler;
 

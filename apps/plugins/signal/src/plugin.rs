@@ -260,7 +260,11 @@ fn build_from(
         Instance::MultiChannel => None,
         Instance::Port(link) => Some(link.port.0.as_str()),
     };
-    let factories: [&dyn BlockFactory; 2] = [&BuiltinFactory, &crate::sampler::SamplerFactory];
+    let factories: [&dyn BlockFactory; 3] = [
+        &BuiltinFactory,
+        &crate::sampler::SamplerFactory,
+        &crate::drum::DrumFactory,
+    ];
     let opts = BuildOptions {
         sample_rate,
         max_block: max_block.clamp(1, signal_core::MAX_BLOCK),
@@ -268,7 +272,13 @@ fn build_from(
         factories: &factories,
         host: &DiskHost,
     };
-    let (graph, report) = graph::build(&state.preset, &opts);
+    let (mut graph, report) = graph::build(&state.preset, &opts);
+    // A port of a session: its hits go to, and come from, the session's
+    // other instances in this process (the kit's other tracks).
+    if let Instance::Port(link) = &state.instance {
+        graph.join(signal_core::session::Registry::join(&link.session));
+        tracing::info!(session = %link.session.0, port = %link.port.0, remote_keys = graph.remote_keys(), "joined the session");
+    }
     for b in &report.blocks {
         if let Some(reason) = b.status.reason() {
             tracing::warn!(block.lane = %b.lane, block.id = %b.block, block.reason = %reason, "block not as the preset has it");
@@ -470,6 +480,14 @@ impl Plugin for FtsSignal {
                         message,
                     });
                 }
+            }
+        }
+        // The session's clock: the song position, while the host plays
+        // (every port of a session is told the same).
+        let transport = context.transport();
+        if transport.playing {
+            if let Some(pos) = transport.pos_samples().and_then(|p| u64::try_from(p).ok()) {
+                self.processor.set_position(pos);
             }
         }
         let io = buffer.as_slice();
