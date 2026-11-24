@@ -116,6 +116,29 @@ impl HostedClap {
     pub const fn signal(&self) -> Option<SignalPluginClient> {
         self.signal
     }
+
+    /// Load `algorithm` in a family CLAP (`SIGNAL_ALGORITHM` over
+    /// `signal/1`), then run what it asked the host's main thread to (its
+    /// rescan).
+    ///
+    /// # Errors
+    ///
+    /// When the CLAP has no `signal/1`, or refuses the algorithm.
+    pub fn select_algorithm(&mut self, algorithm: &str) -> Result<(), String> {
+        let signal = self.signal.ok_or("no signal/1: not a family CLAP")?;
+        let args = format!("{{\"algorithm\":{}}}", json_string(algorithm));
+        signal
+            .run_action("SIGNAL_ALGORITHM", &args)
+            .map_err(|e| e.to_string())?;
+        self.plugin.pump_main_thread();
+        Ok(())
+    }
+
+    /// The plugin, for an embedder's own calls (its parameters' names after
+    /// a rescan, its main thread).
+    pub fn plugin_mut(&mut self) -> &mut dyn PluginInstance {
+        &mut *self.plugin
+    }
 }
 
 impl ClapInstance for HostedClap {
@@ -177,6 +200,10 @@ impl ClapInstance for HostedClap {
     }
 
     fn midi(&mut self, _event: Midi) {}
+
+    fn describe(&self) -> Option<String> {
+        self.signal?.chain().ok()
+    }
 }
 
 /// The CLAP backend's factory.
@@ -196,9 +223,18 @@ impl ClapFactory {
         path: &Path,
         specs: &'static [ParamSpec],
         sources: &'static [signal_core::block::ModSourceSpec],
+        algorithm: Option<&str>,
         cx: &BuildContext<'_>,
     ) -> Result<Built, Unavailable> {
         let mut clap = HostedClap::load(path, cx.sample_rate, cx.max_block, self.actions.clone())?;
+        // A family CLAP runs whichever algorithm it is told: the block's,
+        // before its parameters are mapped (their stable ids follow it).
+        if let Some(algorithm) = algorithm {
+            clap.select_algorithm(algorithm)
+                .map_err(|why| Unavailable::Failed {
+                    why: format!("{}: {why}", path.display()),
+                })?;
+        }
         let ids = clap.param_ids(specs);
         if let Some((spec, _)) = specs.iter().zip(&ids).find(|(_, id)| id.is_none()) {
             return Err(Unavailable::Failed {
@@ -241,7 +277,13 @@ impl BlockFactory for ClapFactory {
                     .ok_or_else(|| Unavailable::Missing {
                         what: format!("{name} algorithm {:?}", spec.algorithm),
                     })?;
-                self.build_from(path, algo.controls, plugin_processors::sources_of(name), cx)
+                self.build_from(
+                    path,
+                    algo.controls,
+                    plugin_processors::sources_of(name),
+                    Some(algo.id),
+                    cx,
+                )
             }
             BlockKind::Plugin(p) => {
                 let path = self
@@ -252,7 +294,7 @@ impl BlockFactory for ClapFactory {
                     })?;
                 // A third-party plugin's parameters aren't Signal's schema
                 // (yet): its state is what the preset keeps.
-                let mut built = self.build_from(path, &[], &[], cx)?;
+                let mut built = self.build_from(path, &[], &[], None, cx)?;
                 if let (Backend::Clap(hosted), Some(state)) =
                     (&mut built.backend, spec.state.as_deref())
                 {
@@ -267,6 +309,21 @@ impl BlockFactory for ClapFactory {
             }
         }
     }
+}
+
+/// `s` as a JSON string literal.
+fn json_string(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c if u32::from(c) < 0x20 => out.push_str(&format!("\\u{:04x}", u32::from(c))),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 fn decode_base64(s: &str) -> Option<Vec<u8>> {
@@ -351,24 +408,12 @@ impl BlockDev {
         cx: &BuildContext<'_>,
         actions: Option<Arc<dyn HostActions>>,
     ) -> Result<Vec<Command>, Unavailable> {
-        let kind = BlockKind::Signal(self.block.clone());
         let factory = ClapFactory {
             overrides: HashMap::from([(self.block.clone(), clap.to_path_buf())]),
             actions,
             ..ClapFactory::default()
         };
-        let spec = BlockSpec::signal(self.block.clone(), self.block.clone());
-        signal_core::graph::positions_of(preset, port, &kind)
-            .into_iter()
-            .map(|(lane, block)| {
-                let built = factory.build(&spec, cx)?;
-                Ok(Command::SwapBackend {
-                    lane,
-                    block,
-                    backend: Box::new(built.backend),
-                })
-            })
-            .collect()
+        self.each_block(preset, port, |spec| factory.build(spec, cx))
     }
 
     /// The swaps that end the override: the compiled-in block back.
@@ -382,18 +427,40 @@ impl BlockDev {
         port: Option<&str>,
         cx: &BuildContext<'_>,
     ) -> Result<Vec<Command>, Unavailable> {
+        self.each_block(preset, port, |spec| {
+            signal_core::BuiltinFactory.build(spec, cx)
+        })
+    }
+
+    /// A swap for every block of this kind, each built from its own spec
+    /// (its algorithm: the CLAP form runs the same one, with the same
+    /// schema, so the chain's parameters replay into it unchanged).
+    fn each_block(
+        &self,
+        preset: &Preset,
+        port: Option<&str>,
+        mut build: impl FnMut(&BlockSpec) -> Result<Built, Unavailable>,
+    ) -> Result<Vec<Command>, Unavailable> {
         let kind = BlockKind::Signal(self.block.clone());
-        let spec = BlockSpec::signal(self.block.clone(), self.block.clone());
-        signal_core::graph::positions_of(preset, port, &kind)
-            .into_iter()
-            .map(|(lane, block)| {
-                let built = signal_core::BuiltinFactory.build(&spec, cx)?;
-                Ok(Command::SwapBackend {
+        let mut out = Vec::new();
+        for (lane, spec) in signal_core::graph::lanes_for(preset, port)
+            .iter()
+            .enumerate()
+        {
+            for (block, b) in spec
+                .blocks
+                .iter()
+                .enumerate()
+                .filter(|(_, b)| b.kind == kind)
+            {
+                let built = build(b)?;
+                out.push(Command::SwapBackend {
                     lane,
                     block,
                     backend: Box::new(built.backend),
-                })
-            })
-            .collect()
+                });
+            }
+        }
+        Ok(out)
     }
 }

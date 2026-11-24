@@ -215,6 +215,11 @@ pub trait ClapInstance: Send {
     fn midi(&mut self, event: Midi) {
         let _ = event;
     }
+    /// The CLAP's own account of what it runs (its `signal/1` chain, as
+    /// JSON): its algorithm and each control's running value, for the views.
+    fn describe(&self) -> Option<String> {
+        None
+    }
 }
 
 /// A block's CLAP backend: the instance, and the CLAP parameter id of each
@@ -347,6 +352,15 @@ impl ChainBlock {
     #[must_use]
     pub const fn backend(&self) -> &Backend {
         &self.backend
+    }
+
+    /// What a CLAP backend says it runs (see [`ClapInstance::describe`]).
+    #[must_use]
+    pub fn describe_clap(&self) -> Option<String> {
+        match &self.backend {
+            Backend::Clap(h) => h.instance.describe(),
+            Backend::Linked(_) => None,
+        }
     }
 
     #[must_use]
