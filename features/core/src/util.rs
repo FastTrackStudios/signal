@@ -6,7 +6,8 @@ pub fn db_to_gain(db: f32) -> f32 {
     libm::powf(10.0, db / 20.0)
 }
 
-/// A count as `f32`.
+/// A count as `f32` (the null test's signal).
+#[cfg(feature = "std")]
 #[must_use]
 pub const fn count_f32(n: usize) -> f32 {
     signal_dsp_core::num::count_to_f32(n)
