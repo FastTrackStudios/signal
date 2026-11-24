@@ -15,7 +15,7 @@ default = ["std", "fx", "nam"]
 # instances on a kit's tracks) and `std::error::Error` impls.
 std = ["plugin-processors/std"]
 # The plugins' effects as blocks (plugin-processors). Gain is always there.
-fx = ["std", "plugin-processors/files", "plugin-processors/gate", "plugin-processors/saturate", "plugin-processors/eq", "plugin-processors/comp", "plugin-processors/delay", "plugin-processors/reverb"]
+fx = ["std", "plugin-processors/files", "plugin-processors/gate", "plugin-processors/saturate", "plugin-processors/eq", "plugin-processors/comp", "plugin-processors/delay", "plugin-processors/reverb", "plugin-processors/trigger"]
 # The NAM amp block (neural-amp-modeler, pure Rust).
 nam = ["std", "dep:neural-amp-modeler"]
 

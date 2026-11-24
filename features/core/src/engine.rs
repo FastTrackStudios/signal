@@ -278,6 +278,17 @@ impl Processor {
         self.graph.as_ref().map_or(0, |g| g.latency())
     }
 
+    /// The song position, in frames, of the block the next
+    /// [`process`](Self::process) gets: the host's transport while it
+    /// plays. Hits between a session's ports are stamped with it, so every
+    /// instance must be told the same; when the host doesn't say, the
+    /// graph counts on from the last.
+    pub fn set_position(&mut self, frame: u64) {
+        if let Some(g) = self.graph.as_mut() {
+            g.set_clock(frame);
+        }
+    }
+
     /// Set one of the instance's parameters now.
     pub fn set_host_param(&mut self, param: HostParam, value: f32) {
         match param {

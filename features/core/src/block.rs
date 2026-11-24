@@ -447,6 +447,23 @@ impl ChainBlock {
         }
     }
 
+    /// The key for the next piece (a gate's sidechain: the piece's Trig).
+    /// A CLAP backend doesn't take one yet (it would go to its sidechain
+    /// port).
+    pub fn set_key(&mut self, left: &[f32], right: &[f32]) {
+        if let Backend::Linked(p) = &mut self.backend {
+            p.set_key(left, right);
+        }
+    }
+
+    /// A drum hit in the next piece. A CLAP backend doesn't take one yet
+    /// (it would go as a note event).
+    pub fn hit(&mut self, offset: u32, velocity: f32) {
+        if let Backend::Linked(p) = &mut self.backend {
+            p.hit(offset, velocity);
+        }
+    }
+
     pub fn midi(&mut self, event: Midi) {
         match &mut self.backend {
             Backend::Linked(p) => p.midi(event),

@@ -16,6 +16,7 @@ use crate::block::{
 use crate::host::SignalHost;
 use crate::param::MACROS;
 use crate::platform::Platforms;
+use crate::session::{HitCursor, Session, SessionHit};
 use crate::state::{BlockSpec, LaneSpec, MacroMode, Preset};
 
 /// What a graph is built for.
@@ -68,6 +69,132 @@ struct Lane {
     blocks: Vec<ChainBlock>,
     l: Vec<f32>,
     r: Vec<f32>,
+    /// What other lanes routed here this piece (a bus's input).
+    in_l: Vec<f32>,
+    in_r: Vec<f32>,
+    /// This lane's input before its chain: a key, a pre send.
+    pre_l: Vec<f32>,
+    pre_r: Vec<f32>,
+    /// The lane it feeds instead of the outputs.
+    to: Option<usize>,
+    sends: Vec<Send>,
+    /// Delay compensation: the host input (a lane also fed by others),
+    /// the feed to `to`, the way to the outputs. Every path into a bus,
+    /// and every lane to the outputs, arrives as late as the latest.
+    in_delay: Delay,
+    to_delay: Delay,
+    out_delay: Delay,
+    /// `(block, key lane)`: blocks listening to another lane.
+    keys: Vec<(usize, usize)>,
+    #[cfg(feature = "fx")]
+    detector: Option<plugin_processors::trigger::HitDetector>,
+    /// A MIDI note that is also one of this lane's hits.
+    note: Option<u8>,
+    /// This lane's place in the preset: the piece its hits are, to the
+    /// session.
+    piece: u16,
+    hits: [Hit; MAX_HITS],
+    hit_count: usize,
+    /// Hits from MIDI, for the next piece.
+    midi_hits: [Hit; MAX_HITS],
+    midi_hit_count: usize,
+}
+
+/// A send to another lane.
+struct Send {
+    to: usize,
+    gain: f32,
+    /// Taken before the chain and the fader.
+    pre: bool,
+    delay: Delay,
+}
+
+/// A stereo delay of a fixed number of frames, for delay compensation.
+#[derive(Default)]
+struct Delay {
+    l: Vec<f32>,
+    r: Vec<f32>,
+    pos: usize,
+}
+
+impl Delay {
+    fn new(frames: usize) -> Self {
+        Self {
+            l: vec![0.0; frames],
+            r: vec![0.0; frames],
+            pos: 0,
+        }
+    }
+
+    /// Delay `l`/`r` in place.
+    fn run(&mut self, l: &mut [f32], r: &mut [f32]) {
+        let n = self.l.len();
+        if n == 0 {
+            return;
+        }
+        for (a, b) in l.iter_mut().zip(r.iter_mut()) {
+            if let (Some(dl), Some(dr)) = (self.l.get_mut(self.pos), self.r.get_mut(self.pos)) {
+                core::mem::swap(a, dl);
+                core::mem::swap(b, dr);
+            }
+            self.pos = (self.pos + 1) % n;
+        }
+    }
+
+    /// Add `src` delayed, times `gain`, into `dst`.
+    fn add(&mut self, src: (&[f32], &[f32]), dst: (&mut [f32], &mut [f32]), gain: f32) {
+        let n = self.l.len();
+        for (((s_l, s_r), d_l), d_r) in src
+            .0
+            .iter()
+            .zip(src.1)
+            .zip(dst.0.iter_mut())
+            .zip(dst.1.iter_mut())
+        {
+            let (x_l, x_r) = if n == 0 {
+                (*s_l, *s_r)
+            } else {
+                let (Some(bl), Some(br)) = (self.l.get_mut(self.pos), self.r.get_mut(self.pos))
+                else {
+                    continue;
+                };
+                let out = (*bl, *br);
+                *bl = *s_l;
+                *br = *s_r;
+                self.pos = (self.pos + 1) % n;
+                out
+            };
+            *d_l += x_l * gain;
+            *d_r += x_r * gain;
+        }
+    }
+
+    fn clear(&mut self) {
+        self.l.fill(0.0);
+        self.r.fill(0.0);
+    }
+}
+
+/// A drum hit in a piece.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Hit {
+    offset: u32,
+    velocity: f32,
+}
+
+/// The most hits a lane takes in one piece.
+const MAX_HITS: usize = 16;
+
+/// Two different lanes, both mutable.
+fn pair_mut(lanes: &mut [Lane], a: usize, b: usize) -> Option<(&mut Lane, &mut Lane)> {
+    if a == b {
+        return None;
+    }
+    let (lo, hi, swap) = if a < b { (a, b, false) } else { (b, a, true) };
+    let (left, right) = lanes.split_at_mut(hi);
+    let x = left.get_mut(lo)?;
+    let y = right.first_mut()?;
+    Some(if swap { (y, x) } else { (x, y) })
 }
 
 struct MacroBinding {
@@ -86,11 +213,36 @@ struct MacroBinding {
 pub struct Graph {
     max_block: usize,
     lanes: Vec<Lane>,
+    /// The order lanes run in: every lane after the lanes that feed it,
+    /// send to it or key it.
+    order: Vec<usize>,
     macros: [Vec<MacroBinding>; MACROS],
     /// The inputs, copied out before the in-place outputs are written.
     input_copy: Vec<Vec<f32>>,
+    /// How far the trigger lanes look ahead: the lanes hear the inputs
+    /// this many frames late, the detectors on time, so a hit lands on
+    /// its onset however near a piece's end it was (0 without triggers).
+    lookahead: usize,
+    /// Per input: the last `lookahead` frames, then this piece's.
+    delayed: Vec<Vec<f32>>,
     latency: u32,
+    /// `(lane, block, piece)`: blocks keyed to a lane another instance of
+    /// the session runs, played from the session's hits.
+    remote_keys: Vec<(usize, usize, u16)>,
+    /// The session this instance is a port of: where its trigger lanes'
+    /// hits go and its remote keys' come from.
+    session: Option<alloc::sync::Arc<Session>>,
+    cursor: Option<HitCursor>,
+    /// Remote hits taken from the session, not yet due: `(piece, frame,
+    /// velocity)`.
+    remote: [(u16, u64, f32); REMOTE_HITS],
+    remote_count: usize,
+    /// The song position of the next piece, in frames (the session's clock).
+    clock: u64,
 }
+
+/// Remote hits held for later pieces.
+const REMOTE_HITS: usize = 64;
 
 /// The lanes of `preset` an instance runs, in the order its graph holds
 /// them: every lane in the multi-channel mode; in the per-track mode the
@@ -149,8 +301,14 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
     let mut lanes = Vec::with_capacity(lanes_here.len());
     for spec in &lanes_here {
         let (input, output) = if opts.port.is_some() {
-            // The track's own channels.
+            // The track's own channels. A bus's are what the host summed
+            // into its folder track: the lanes routed to it.
+            let fed = preset.lanes.iter().any(|l| {
+                l.to.as_deref() == Some(spec.name.as_str())
+                    || l.sends.iter().any(|s| s.to == spec.name)
+            });
             let input = match spec.input.len() {
+                0 if fed => vec![0, 1],
                 0 => Vec::new(),
                 1 => vec![0],
                 _ => vec![0, 1],
@@ -187,8 +345,111 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
             blocks,
             l: vec![0.0; max_block],
             r: vec![0.0; max_block],
+            in_l: vec![0.0; max_block],
+            in_r: vec![0.0; max_block],
+            pre_l: vec![0.0; max_block],
+            pre_r: vec![0.0; max_block],
+            to: None,
+            sends: Vec::new(),
+            in_delay: Delay::default(),
+            to_delay: Delay::default(),
+            out_delay: Delay::default(),
+            keys: Vec::new(),
+            #[cfg(feature = "fx")]
+            detector: spec.trigger.as_ref().map(|t| {
+                plugin_processors::trigger::HitDetector::new(
+                    opts.sample_rate,
+                    max_block,
+                    t.threshold_db,
+                )
+            }),
+            note: spec.trigger.as_ref().and_then(|t| t.note),
+            piece: preset
+                .lanes
+                .iter()
+                .position(|l| core::ptr::eq(l, *spec))
+                .and_then(|p| u16::try_from(p).ok())
+                .unwrap_or(u16::MAX),
+            hits: [Hit::default(); MAX_HITS],
+            hit_count: 0,
+            midi_hits: [Hit::default(); MAX_HITS],
+            midi_hit_count: 0,
         });
     }
+
+    // Routing: where each lane goes, what it sends, what its blocks key on.
+    let index_of = |name: &str| lanes_here.iter().position(|l| l.name == name);
+    // A lane another instance runs: the host's routing reaches it.
+    let elsewhere = |name: &str| opts.port.is_some() && preset.lanes.iter().any(|l| l.name == name);
+    let mut remote_keys = Vec::new();
+    for (i, spec) in lanes_here.iter().enumerate() {
+        let to = spec.to.as_deref().and_then(|t| {
+            let found = index_of(t).filter(|j| *j != i);
+            if found.is_none() && !elsewhere(t) {
+                report.warnings.push(alloc::format!(
+                    "{}: no lane {t} to feed; to the outputs",
+                    spec.name
+                ));
+            }
+            found
+        });
+        let sends: Vec<Send> = spec
+            .sends
+            .iter()
+            .filter_map(|s| match index_of(&s.to).filter(|j| *j != i) {
+                Some(j) => Some(Send {
+                    to: j,
+                    gain: crate::util::db_to_gain(s.gain_db),
+                    pre: s.pre,
+                    delay: Delay::default(),
+                }),
+                None => {
+                    if !elsewhere(&s.to) {
+                        report.warnings.push(alloc::format!(
+                            "{}: no lane {} to send to",
+                            spec.name,
+                            s.to
+                        ));
+                    }
+                    None
+                }
+            })
+            .collect();
+        let keys: Vec<(usize, usize)> = spec
+            .blocks
+            .iter()
+            .enumerate()
+            .filter_map(|(b, block)| {
+                let k = block.key.as_deref()?;
+                match index_of(k) {
+                    Some(j) => Some((b, j)),
+                    None => {
+                        // Another port's lane: its hits, over the session.
+                        match preset
+                            .lanes
+                            .iter()
+                            .position(|l| l.name == k)
+                            .and_then(|p| u16::try_from(p).ok())
+                        {
+                            Some(piece) => remote_keys.push((i, b, piece)),
+                            None => report.warnings.push(alloc::format!(
+                                "{}/{}: no lane {k} to key on",
+                                spec.name,
+                                block.id
+                            )),
+                        }
+                        None
+                    }
+                }
+            })
+            .collect();
+        if let Some(lane) = lanes.get_mut(i) {
+            lane.to = to;
+            lane.sends = sends;
+            lane.keys = keys;
+        }
+    }
+    let order = run_order(&mut lanes, &lanes_here, &mut report.warnings);
 
     let mut macros: [Vec<MacroBinding>; MACROS] = core::array::from_fn(|_| Vec::new());
     for (m, spec) in preset.macros.iter().enumerate() {
@@ -237,25 +498,185 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
         .flat_map(|l| l.input.iter().copied())
         .max()
         .map_or(0, |m| m.saturating_add(1));
-    let latency = lanes
+    let latency = compensate(&mut lanes, &order);
+    #[cfg(feature = "fx")]
+    let lookahead = lanes
         .iter()
-        .map(|l| {
-            l.blocks
-                .iter()
-                .filter(|b| !b.bypass)
-                .map(ChainBlock::latency)
-                .fold(0_u32, u32::saturating_add)
-        })
+        .filter_map(|l| l.detector.as_ref())
+        .map(|d| usize::try_from(d.lag()).unwrap_or(0))
         .max()
         .unwrap_or(0);
+    #[cfg(not(feature = "fx"))]
+    let lookahead = 0;
+    // A remote hit is published by whichever instance the host runs, before
+    // or after this one in a cycle: hearing a host block (and the far
+    // detector's lag) late, every hit is in before it's due.
+    let lookahead = if remote_keys.is_empty() {
+        lookahead
+    } else {
+        lookahead.max(max_block.saturating_add(remote_lag(opts.sample_rate)))
+    };
     let graph = Graph {
         max_block,
         lanes,
+        order,
         macros,
         input_copy: vec![vec![0.0; max_block]; inputs],
-        latency,
+        lookahead,
+        delayed: if lookahead == 0 {
+            Vec::new()
+        } else {
+            vec![vec![0.0; max_block + lookahead]; inputs]
+        },
+        latency: latency.saturating_add(u32::try_from(lookahead).unwrap_or(0)),
+        remote_keys,
+        session: None,
+        cursor: None,
+        remote: [(0, 0, 0.0); REMOTE_HITS],
+        remote_count: 0,
+        clock: 0,
     };
     (graph, report)
+}
+
+/// Delay compensation: how late each lane's audio is (its feeds' latest,
+/// then its chain's latency), and the delays that line every path into a
+/// lane, and every lane to the outputs, up with the latest. Returns the
+/// outputs' latency.
+fn compensate(lanes: &mut [Lane], order: &[usize]) -> u32 {
+    let n = lanes.len();
+    let chain: Vec<usize> = lanes
+        .iter()
+        .map(|l| {
+            let frames = l
+                .blocks
+                .iter()
+                .filter(|b| !b.bypass)
+                .map(ChainBlock::latency)
+                .fold(0_u32, u32::saturating_add);
+            usize::try_from(frames).unwrap_or(0)
+        })
+        .collect();
+    // How late a lane's input is, and its output.
+    let mut input = vec![0_usize; n];
+    let mut output = vec![0_usize; n];
+    for &i in order {
+        let late = input.get(i).copied().unwrap_or(0);
+        output[i] = late + chain.get(i).copied().unwrap_or(0);
+        let lane = &lanes[i];
+        let mut feed = |to: usize, at: usize| {
+            if let Some(x) = input.get_mut(to) {
+                *x = (*x).max(at);
+            }
+        };
+        if let Some(t) = lane.to {
+            feed(t, output[i]);
+        }
+        for s in &lane.sends {
+            feed(s.to, if s.pre { late } else { output[i] });
+        }
+    }
+    let heard = |l: &Lane| l.to.is_none() && !l.mute;
+    let latest = lanes
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| heard(l))
+        .map(|(i, _)| output[i])
+        .max()
+        .unwrap_or(0);
+    for i in 0..n {
+        let (late, out) = (input[i], output[i]);
+        let to_late = lanes[i].to.map(|t| input[t]);
+        let sends: Vec<usize> = lanes[i]
+            .sends
+            .iter()
+            .map(|s| input[s.to] - if s.pre { late } else { out })
+            .collect();
+        let lane = &mut lanes[i];
+        if !lane.input.is_empty() && late > 0 {
+            lane.in_delay = Delay::new(late);
+        }
+        if let Some(t) = to_late {
+            lane.to_delay = Delay::new(t - out);
+        } else if heard(lane) {
+            lane.out_delay = Delay::new(latest - out);
+        }
+        for (s, d) in lane.sends.iter_mut().zip(sends) {
+            s.delay = Delay::new(d);
+        }
+    }
+    u32::try_from(latest).unwrap_or(u32::MAX)
+}
+
+/// How far a far trigger lane's detector looks back for a hit's onset:
+/// its default confirmation window (1 ms) twice, as `HitDetector` counts
+/// it.
+fn remote_lag(sample_rate: f32) -> usize {
+    signal_dsp_core::num::f64_to_index(f64::from(sample_rate) * 0.001).saturating_mul(2)
+}
+
+/// The order lanes run in (Kahn's): a lane after every lane that feeds
+/// it, sends to it or keys it. A loop can't run: its edges are dropped,
+/// with a warning, and its lanes go to the outputs.
+fn run_order(lanes: &mut [Lane], specs: &[&LaneSpec], warnings: &mut Vec<String>) -> Vec<usize> {
+    let n = lanes.len();
+    let edges = |lanes: &[Lane]| -> Vec<(usize, usize)> {
+        let mut e = Vec::new();
+        for (i, lane) in lanes.iter().enumerate() {
+            if let Some(t) = lane.to {
+                e.push((i, t));
+            }
+            e.extend(lane.sends.iter().map(|s| (i, s.to)));
+            e.extend(
+                lane.keys
+                    .iter()
+                    .filter(|(_, k)| *k != i)
+                    .map(|(_, k)| (*k, i)),
+            );
+        }
+        e
+    };
+    let mut order = Vec::with_capacity(n);
+    let mut done = vec![false; n];
+    loop {
+        let e = edges(lanes);
+        let mut progressed = false;
+        for i in 0..n {
+            if done.get(i).copied().unwrap_or(true) {
+                continue;
+            }
+            let blocked = e
+                .iter()
+                .any(|(from, to)| *to == i && !done.get(*from).copied().unwrap_or(true));
+            if !blocked {
+                if let Some(d) = done.get_mut(i) {
+                    *d = true;
+                }
+                order.push(i);
+                progressed = true;
+            }
+        }
+        if order.len() == n {
+            return order;
+        }
+        if !progressed {
+            // A loop: cut every edge into a lane still waiting.
+            let waiting: Vec<usize> = (0..n)
+                .filter(|i| !done.get(*i).copied().unwrap_or(true))
+                .collect();
+            for &i in &waiting {
+                let name = specs.get(i).map_or("?", |s| s.name.as_str());
+                warnings.push(alloc::format!(
+                    "{name}: in a routing loop; its routing is dropped"
+                ));
+                if let Some(lane) = lanes.get_mut(i) {
+                    lane.to = None;
+                    lane.sends.clear();
+                    lane.keys.clear();
+                }
+            }
+        }
+    }
 }
 
 fn log_usage(spec: &BlockSpec, status: &BlockStatus) {
@@ -364,7 +785,29 @@ fn build_block(
 }
 
 impl Graph {
-    /// Frames of latency, the longest lane's.
+    /// Make this graph a port of `session`: its trigger lanes' hits are
+    /// published there, and its blocks keyed to another port's lane play
+    /// that lane's hits from it. Control thread, before it is installed.
+    pub fn join(&mut self, session: alloc::sync::Arc<Session>) {
+        self.cursor = Some(session.hits.cursor());
+        self.session = Some(session);
+    }
+
+    /// Blocks keyed to another port's lane, which play only in a session.
+    #[must_use]
+    pub fn remote_keys(&self) -> usize {
+        self.remote_keys.len()
+    }
+
+    /// The song position of the next piece, in frames: the session's
+    /// clock, which every port's hits are stamped with. The processor
+    /// sets it from the host's transport; between, it counts.
+    pub const fn set_clock(&mut self, frame: u64) {
+        self.clock = frame;
+    }
+
+    /// Frames of latency: the longest lane's, and the trigger lanes'
+    /// lookahead.
     #[must_use]
     pub const fn latency(&self) -> u32 {
         self.latency
@@ -399,9 +842,28 @@ impl Graph {
             .collect()
     }
 
-    /// Hand a MIDI event to every block.
+    /// Hand a MIDI event to every block. A note-on of a lane's trigger
+    /// note is a hit of that lane, at the start of the next piece (the
+    /// processor splits a block at every MIDI event).
     pub fn midi(&mut self, event: Midi) {
         for lane in &mut self.lanes {
+            if let (
+                Some(note),
+                Midi::NoteOn {
+                    note: n, velocity, ..
+                },
+            ) = (lane.note, event)
+            {
+                if note == n {
+                    if let Some(slot) = lane.midi_hits.get_mut(lane.midi_hit_count) {
+                        *slot = Hit {
+                            offset: 0,
+                            velocity: f32::from(velocity) / 127.0,
+                        };
+                        lane.midi_hit_count += 1;
+                    }
+                }
+            }
             for block in &mut lane.blocks {
                 block.midi(event);
             }
@@ -465,7 +927,23 @@ impl Graph {
             for block in &mut lane.blocks {
                 block.reset();
             }
+            #[cfg(feature = "fx")]
+            if let Some(d) = lane.detector.as_mut() {
+                d.reset();
+            }
+            lane.hit_count = 0;
+            lane.midi_hit_count = 0;
+            lane.in_delay.clear();
+            lane.to_delay.clear();
+            lane.out_delay.clear();
+            for s in &mut lane.sends {
+                s.delay.clear();
+            }
         }
+        for d in &mut self.delayed {
+            d.fill(0.0);
+        }
+        self.remote_count = 0;
     }
 
     /// Process `start..start + len` of `io` in place (`len` ≤
@@ -494,41 +972,264 @@ impl Graph {
                 _ => {}
             }
         }
+        // The lanes' inputs, `lookahead` late: last piece's tail, then
+        // this piece, read from the front, the new tail kept.
+        let la = self.lookahead;
+        for (d, raw) in self.delayed.iter_mut().zip(&self.input_copy) {
+            if let (Some(dst), Some(src)) = (d.get_mut(la..la + len), raw.get(..len)) {
+                dst.copy_from_slice(src);
+            }
+        }
         for ch in io.iter_mut() {
             if let Some(s) = ch.get_mut(start..end) {
                 s.fill(0.0);
             }
         }
+        for lane in &mut self.lanes {
+            if let (Some(l), Some(r)) = (lane.in_l.get_mut(..len), lane.in_r.get_mut(..len)) {
+                l.fill(0.0);
+                r.fill(0.0);
+            }
+        }
+        self.take_remote_hits();
         let input_copy = &self.input_copy;
-        let channel = |c: Option<&usize>| {
+        let lanes_in = if la == 0 {
+            &self.input_copy
+        } else {
+            &self.delayed
+        };
+        let channel =
+            |c: Option<&usize>| c.and_then(|c| lanes_in.get(*c)).and_then(|b| b.get(..len));
+        // What a trigger lane's detector hears: the input on time.
+        let on_time = |c: Option<&usize>| {
             c.and_then(|c| input_copy.get(*c))
                 .and_then(|b| b.get(..len))
         };
-        for lane in &mut self.lanes {
-            let (Some(l), Some(r)) = (lane.l.get_mut(..len), lane.r.get_mut(..len)) else {
+        for oi in 0..self.order.len() {
+            let Some(&i) = self.order.get(oi) else {
                 continue;
             };
-            match (channel(lane.input.first()), channel(lane.input.get(1))) {
-                (Some(a), Some(b)) => {
-                    l.copy_from_slice(a);
-                    r.copy_from_slice(b);
+            let Some(lane) = self.lanes.get_mut(i) else {
+                continue;
+            };
+            {
+                let (Some(l), Some(r)) = (lane.l.get_mut(..len), lane.r.get_mut(..len)) else {
+                    continue;
+                };
+                match (channel(lane.input.first()), channel(lane.input.get(1))) {
+                    (Some(a), Some(b)) => {
+                        l.copy_from_slice(a);
+                        r.copy_from_slice(b);
+                    }
+                    (Some(a), None) => {
+                        l.copy_from_slice(a);
+                        r.copy_from_slice(a);
+                    }
+                    _ => {
+                        l.fill(0.0);
+                        r.fill(0.0);
+                    }
                 }
-                (Some(a), None) => {
-                    l.copy_from_slice(a);
-                    r.copy_from_slice(a);
+                // As late as what else feeds the lane.
+                lane.in_delay.run(l, r);
+                // What was routed here: a bus's sum.
+                for (d, s) in l.iter_mut().zip(&lane.in_l) {
+                    *d += s;
                 }
-                _ => {
-                    l.fill(0.0);
-                    r.fill(0.0);
+                for (d, s) in r.iter_mut().zip(&lane.in_r) {
+                    *d += s;
+                }
+                if let (Some(pl), Some(pr)) = (lane.pre_l.get_mut(..len), lane.pre_r.get_mut(..len))
+                {
+                    pl.copy_from_slice(l);
+                    pr.copy_from_slice(r);
                 }
             }
-            for block in &mut lane.blocks {
-                block.process(l, r);
+            // This lane's hits: from MIDI, then from its trigger.
+            lane.hit_count = 0;
+            let midi = core::mem::take(&mut lane.midi_hit_count);
+            for k in 0..midi {
+                if let (Some(h), Some(slot)) = (
+                    lane.midi_hits.get(k).copied(),
+                    lane.hits.get_mut(lane.hit_count),
+                ) {
+                    // A MIDI hit is on time: where the lanes hear it.
+                    let at = usize::try_from(h.offset)
+                        .unwrap_or(0)
+                        .saturating_add(la)
+                        .min(len.saturating_sub(1));
+                    *slot = Hit {
+                        offset: u32::try_from(at).unwrap_or(0),
+                        ..h
+                    };
+                    lane.hit_count += 1;
+                }
+            }
+            #[cfg(feature = "fx")]
+            if let Some(det) = lane.detector.as_mut() {
+                // The lane's host input on time (`lookahead` ahead of what
+                // the lanes hear); a lane fed only by others, its input.
+                let pre = (
+                    lane.pre_l.get(..len).unwrap_or(&[]),
+                    lane.pre_r.get(..len).unwrap_or(&[]),
+                );
+                let (dl, dr, ahead) =
+                    match (on_time(lane.input.first()), on_time(lane.input.get(1))) {
+                        (Some(a), Some(b)) => (a, b, true),
+                        (Some(a), None) => (a, a, true),
+                        _ => (pre.0, pre.1, false),
+                    };
+                // Detected `lag` after its onset, heard `lookahead` late:
+                // the onset is `lookahead - lag` after the detection. Without
+                // the lookahead, `lag` back, clamped to the piece.
+                let ahead = if ahead { la } else { 0 };
+                let last = len.saturating_sub(1);
+                for h in det.detect(dl, dr) {
+                    if let Some(slot) = lane.hits.get_mut(lane.hit_count) {
+                        let lag = usize::try_from(h.lag).unwrap_or(0);
+                        let at = usize::try_from(h.offset)
+                            .unwrap_or(0)
+                            .saturating_add(ahead)
+                            .saturating_sub(lag)
+                            .min(last);
+                        *slot = Hit {
+                            offset: u32::try_from(at).unwrap_or(0),
+                            velocity: h.velocity,
+                        };
+                        lane.hit_count += 1;
+                    }
+                }
+            }
+            // To the session, stamped with the onset's song position.
+            if let Some(session) = self.session.as_ref() {
+                let heard = self.clock.saturating_sub(la as u64);
+                for h in lane.hits.iter().take(lane.hit_count) {
+                    session.hits.publish(SessionHit {
+                        piece: lane.piece,
+                        velocity: h.velocity,
+                        frame: heard.saturating_add(u64::from(h.offset)),
+                    });
+                }
+            }
+            // Blocks keyed to a lane: its pre-chain audio, and its hits.
+            for ki in 0..self.lanes.get(i).map_or(0, |l| l.keys.len()) {
+                let Some(&(b, k)) = self.lanes.get(i).and_then(|l| l.keys.get(ki)) else {
+                    continue;
+                };
+                if k == i {
+                    let Some(lane) = self.lanes.get_mut(i) else {
+                        continue;
+                    };
+                    let (hits, count) = (lane.hits, lane.hit_count);
+                    let (pl, pr) = (
+                        core::mem::take(&mut lane.pre_l),
+                        core::mem::take(&mut lane.pre_r),
+                    );
+                    if let Some(block) = lane.blocks.get_mut(b) {
+                        block.set_key(pl.get(..len).unwrap_or(&[]), pr.get(..len).unwrap_or(&[]));
+                        for h in hits.iter().take(count) {
+                            block.hit(h.offset, h.velocity);
+                        }
+                    }
+                    lane.pre_l = pl;
+                    lane.pre_r = pr;
+                } else if let Some((lane, key)) = pair_mut(&mut self.lanes, i, k) {
+                    if let Some(block) = lane.blocks.get_mut(b) {
+                        block.set_key(
+                            key.pre_l.get(..len).unwrap_or(&[]),
+                            key.pre_r.get(..len).unwrap_or(&[]),
+                        );
+                        for h in key.hits.iter().take(key.hit_count) {
+                            block.hit(h.offset, h.velocity);
+                        }
+                    }
+                }
+            }
+            give_remote_hits(
+                &mut self.lanes,
+                &self.remote_keys,
+                self.remote.get(..self.remote_count).unwrap_or(&[]),
+                self.clock.saturating_sub(la as u64),
+                i,
+                len,
+            );
+            let Some(lane) = self.lanes.get_mut(i) else {
+                continue;
+            };
+            {
+                let (Some(l), Some(r)) = (lane.l.get_mut(..len), lane.r.get_mut(..len)) else {
+                    continue;
+                };
+                for block in &mut lane.blocks {
+                    block.process(l, r);
+                }
             }
             if lane.mute {
                 continue;
             }
             let g = lane.gain;
+            // Sends, then where the lane goes.
+            for si in 0..lane.sends.len() {
+                let Some(t) = self
+                    .lanes
+                    .get(i)
+                    .and_then(|l| l.sends.get(si))
+                    .map(|s| s.to)
+                else {
+                    continue;
+                };
+                if let Some((src, dst)) = pair_mut(&mut self.lanes, i, t) {
+                    let Lane {
+                        sends,
+                        pre_l,
+                        pre_r,
+                        l,
+                        r,
+                        ..
+                    } = src;
+                    let Some(send) = sends.get_mut(si) else {
+                        continue;
+                    };
+                    // Pre: before the chain and the lane's fader; post:
+                    // after both.
+                    let (sl, sr, k) = if send.pre {
+                        (pre_l, pre_r, send.gain)
+                    } else {
+                        (l, r, send.gain * g)
+                    };
+                    if let (Some(sl), Some(sr), Some(dl), Some(dr)) = (
+                        sl.get(..len),
+                        sr.get(..len),
+                        dst.in_l.get_mut(..len),
+                        dst.in_r.get_mut(..len),
+                    ) {
+                        send.delay.add((sl, sr), (dl, dr), k);
+                    }
+                }
+            }
+            let to = self.lanes.get(i).and_then(|l| l.to);
+            if let Some(t) = to {
+                if let Some((src, dst)) = pair_mut(&mut self.lanes, i, t) {
+                    if let (Some(sl), Some(sr), Some(dl), Some(dr)) = (
+                        src.l.get(..len),
+                        src.r.get(..len),
+                        dst.in_l.get_mut(..len),
+                        dst.in_r.get_mut(..len),
+                    ) {
+                        src.to_delay.add((sl, sr), (dl, dr), g);
+                    }
+                }
+                continue;
+            }
+            let Some(lane) = self.lanes.get_mut(i) else {
+                continue;
+            };
+            let (Some(l), Some(r)) = (lane.l.get_mut(..len), lane.r.get_mut(..len)) else {
+                continue;
+            };
+            // As late as the latest lane to the outputs.
+            lane.out_delay.run(l, r);
+            let (l, r) = (&*l, &*r);
             let right_out = lane.output.saturating_add(1);
             let has_right = io.get(right_out).is_some_and(|c| c.len() >= end);
             if let Some(out) = io.get_mut(lane.output).and_then(|c| c.get_mut(start..end)) {
@@ -545,6 +1246,67 @@ impl Graph {
                 if let Some(out) = io.get_mut(right_out).and_then(|c| c.get_mut(start..end)) {
                     out.iter_mut().zip(r.iter()).for_each(|(o, s)| *o += s * g);
                 }
+            }
+        }
+        // Keep the last `lookahead` frames for the next piece.
+        for d in &mut self.delayed {
+            d.copy_within(len..len + la, 0);
+        }
+        // Remote hits this piece played, or that came too late to.
+        let heard_end = self
+            .clock
+            .saturating_sub(la as u64)
+            .saturating_add(len as u64);
+        let mut kept = 0;
+        for k in 0..self.remote_count {
+            if let Some(h) = self.remote.get(k).copied() {
+                if h.1 >= heard_end {
+                    if let Some(slot) = self.remote.get_mut(kept) {
+                        *slot = h;
+                    }
+                    kept += 1;
+                }
+            }
+        }
+        self.remote_count = kept;
+        self.clock = self.clock.saturating_add(len as u64);
+    }
+
+    /// Take the hits the session's other ports published since the last
+    /// piece, for the pieces this graph's remote keys follow.
+    fn take_remote_hits(&mut self) {
+        let (Some(session), Some(cursor)) = (self.session.as_ref(), self.cursor.as_mut()) else {
+            return;
+        };
+        let (keys, remote, count) = (&self.remote_keys, &mut self.remote, &mut self.remote_count);
+        session.hits.drain(cursor, |h| {
+            if keys.iter().any(|(_, _, p)| *p == h.piece) {
+                if let Some(slot) = remote.get_mut(*count) {
+                    *slot = (h.piece, h.frame, h.velocity);
+                    *count += 1;
+                }
+            }
+        });
+    }
+}
+
+/// Hand lane `lane`'s remote-keyed blocks the hits due in this piece,
+/// which hears the song from `heard`.
+fn give_remote_hits(
+    lanes: &mut [Lane],
+    keys: &[(usize, usize, u16)],
+    remote: &[(u16, u64, f32)],
+    heard: u64,
+    lane: usize,
+    len: usize,
+) {
+    for (l, b, piece) in keys.iter().filter(|k| k.0 == lane) {
+        let Some(block) = lanes.get_mut(*l).and_then(|x| x.blocks.get_mut(*b)) else {
+            continue;
+        };
+        for (_, frame, velocity) in remote.iter().filter(|h| h.0 == *piece) {
+            if let Some(at) = frame.checked_sub(heard).filter(|at| *at < len as u64) {
+                block.hit(u32::try_from(at).unwrap_or(0), *velocity);
             }
         }
     }

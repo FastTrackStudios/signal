@@ -4799,6 +4799,7 @@ dependencies = [
  "dsp-core 0.1.0",
  "libm",
  "realfft",
+ "rustfft",
  "serde",
  "smallvec 1.16.4",
  "symphonium",
@@ -11225,7 +11226,7 @@ dependencies = [
 [[package]]
 name = "plugin-processors"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=bc8422451bed16a9c784daa57fc04d9143512ec6#bc8422451bed16a9c784daa57fc04d9143512ec6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=9d076cfaf6a339aa9019dd9affa7022e02e683fc#9d076cfaf6a339aa9019dd9affa7022e02e683fc"
 dependencies = [
  "dsp 0.1.0",
  "dsp-core 0.1.0",
@@ -13663,6 +13664,7 @@ dependencies = [
  "eyre",
  "facet",
  "facet-styx",
+ "hound",
  "nice-plug",
  "sampler",
  "serde_json",

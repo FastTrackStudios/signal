@@ -172,6 +172,7 @@ impl NullCase {
                 gain_db: 0.0,
                 mute: false,
                 blocks: vec![block],
+                ..LaneSpec::default()
             }],
             macros,
         };

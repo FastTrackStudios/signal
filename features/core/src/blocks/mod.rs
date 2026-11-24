@@ -14,6 +14,7 @@
 //! | `gain`, `gate`, `drive`, `eq`, `comp`, `delay`, `reverb` | `plugin_processors` | |
 //! | `nam`    | a NAM capture (`neural-amp-modeler`)    | feature `nam`, a file |
 //! | `cab`    | a cabinet IR (direct FIR)               | a file       |
+//! | `sample` | a one-shot WAV played by hits           | a file       |
 //!
 //! Every one runs everywhere the core builds.
 
@@ -25,12 +26,14 @@ use crate::state::BlockSpec;
 pub mod cab;
 #[cfg(feature = "nam")]
 pub mod nam;
+pub mod sample;
 
 /// Signal's rig blocks, beside the plugins' effects.
 const RIG_BLOCKS: &[&str] = &[
     #[cfg(feature = "nam")]
     "nam",
     "cab",
+    "sample",
 ];
 
 /// Whether this build makes block `name`.
@@ -62,6 +65,7 @@ pub fn build(
             cx.max_block,
         )?)),
         "cab" => Ok(Box::new(cab::Cab::from_wav(&cx.asset_bytes(spec)?)?)),
+        "sample" => Ok(Box::new(sample::Sample::from_wav(&cx.asset_bytes(spec)?)?)),
         // A family on the spec's algorithm. Families need the registry,
         // which needs `std`.
         #[cfg(not(feature = "std"))]

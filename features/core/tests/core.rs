@@ -9,7 +9,9 @@ use signal_core::graph::{self, BuildOptions};
 use signal_core::host::{AssetRef, MemoryHost, NoHost};
 use signal_core::null_test::{self, LoopbackClapFactory, NullCase};
 use signal_core::platform::{Platform, Platforms};
-use signal_core::state::{BlockSpec, Preset, SignalState, StateError};
+use signal_core::state::{
+    BlockSpec, LaneSpec, Preset, SendSpec, SignalState, StateError, TriggerSpec,
+};
 use signal_core::{BlockFactory, BuiltinFactory, Processor, processor_pair, rigs};
 
 const SR: f32 = 48_000.0;
@@ -334,4 +336,467 @@ fn a_blocks_algorithm_is_the_one_it_runs() {
         "{:?}",
         report.blocks[0].status
     );
+}
+
+/// A mono 16-bit WAV of `samples`.
+fn wav16(samples: &[f32]) -> Vec<u8> {
+    let data: Vec<u8> = samples
+        .iter()
+        .flat_map(|s| ((s.clamp(-1.0, 1.0) * 32_767.0) as i16).to_le_bytes())
+        .collect();
+    let mut w = Vec::new();
+    w.extend_from_slice(b"RIFF");
+    w.extend_from_slice(&(36 + data.len() as u32).to_le_bytes());
+    w.extend_from_slice(b"WAVEfmt ");
+    w.extend_from_slice(&16u32.to_le_bytes());
+    w.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    w.extend_from_slice(&1u16.to_le_bytes()); // mono
+    w.extend_from_slice(&48_000u32.to_le_bytes());
+    w.extend_from_slice(&96_000u32.to_le_bytes());
+    w.extend_from_slice(&2u16.to_le_bytes());
+    w.extend_from_slice(&16u16.to_le_bytes());
+    w.extend_from_slice(b"data");
+    w.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    w.extend_from_slice(&data);
+    w
+}
+
+fn lane(name: &str) -> LaneSpec {
+    LaneSpec {
+        name: name.into(),
+        ..LaneSpec::default()
+    }
+}
+
+/// A kick in two mics and a trigger, as the Crescendum session has it:
+/// the trigger mic plays the sample, the mics and the sample sum on the
+/// `Kick` bus, and the raw mics send pre-chain to a parallel `Sub`.
+#[test]
+fn a_kit_piece_triggers_its_sample_and_sums_on_its_bus() {
+    // The sample: a 0.5 step for 100 frames.
+    let host = MemoryHost::default().with("kick.wav", wav16(&[0.5; 100]));
+    let preset = Preset {
+        name: "Kick".into(),
+        inputs: 3,
+        outputs: 2,
+        lanes: vec![
+            LaneSpec {
+                input: vec![0],
+                to: Some("Kick".into()),
+                sends: vec![SendSpec::to("Sub", 0.0).pre()],
+                ..lane("In")
+            },
+            LaneSpec {
+                input: vec![1],
+                to: Some("Kick".into()),
+                ..lane("Out")
+            },
+            // The trigger mic: heard nowhere, it only fires the sample.
+            LaneSpec {
+                input: vec![2],
+                trigger: Some(TriggerSpec {
+                    threshold_db: -30.0,
+                    note: None,
+                }),
+                mute: true,
+                ..lane("Trig")
+            },
+            LaneSpec {
+                to: Some("Kick".into()),
+                blocks: vec![
+                    BlockSpec::signal("sample", "sample")
+                        .asset(AssetRef::path("kick.wav"))
+                        .param("dynamics", 0.0)
+                        .key("Trig"),
+                ],
+                ..lane("Sample")
+            },
+            // Listed before what feeds it: the graph orders the lanes.
+            lane("Sub"),
+            lane("Kick"),
+        ],
+        macros: vec![],
+    };
+    let factories: [&dyn BlockFactory; 1] = [&BuiltinFactory];
+    let (g, report) = graph::build(&preset, &opts(&factories, &host));
+    assert!(report.all_active(), "{report:?}");
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    let mut proc = Processor::new();
+    let _ = proc.install(g);
+
+    // In 0.1, Out 0.2 throughout; the trigger hits at frame 1000.
+    let frames = 2048;
+    let mut chans = vec![
+        vec![0.1_f32; frames],
+        vec![0.2_f32; frames],
+        vec![0.0_f32; frames],
+    ];
+    for (i, s) in chans[2].iter_mut().enumerate().skip(1000).take(300) {
+        *s = 0.9 * (-((i - 1000) as f32) / 60.0).exp() * if i % 2 == 0 { 1.0 } else { -1.0 };
+    }
+    let mut start = 0;
+    while start < frames {
+        let end = (start + 256).min(frames);
+        let mut io: Vec<&mut [f32]> = chans.iter_mut().map(|c| &mut c[start..end]).collect();
+        proc.process(&mut io, 3, end - start, &[], &[]);
+        start = end;
+    }
+    // The trigger lane looks ahead 2 ms (96 frames, for a hit's onset
+    // before its detection): the graph says so, and everything is heard
+    // that late.
+    let la = 96;
+    assert_eq!(proc.latency(), la as u32);
+    // The Kick bus (In + Out + Sample) and the Sub (In, pre) on 0/1.
+    let base = 0.1 + 0.2 + 0.1;
+    let out = &chans[0];
+    assert!(
+        (out[500] - base).abs() < 1e-4,
+        "before the hit: {}",
+        out[500]
+    );
+    let onset = 500
+        + out[500..]
+            .iter()
+            .position(|s| (s - base).abs() > 0.1)
+            .expect("the sample plays");
+    // On the hit's onset (1000, heard at 1096), though the detector only
+    // confirmed it in the next piece.
+    assert_eq!(onset, 1000 + la, "the sample lands on the hit");
+    assert!(
+        (out[onset + 10] - (base + 0.5)).abs() < 1e-3,
+        "{}",
+        out[onset + 10]
+    );
+    assert!(
+        (out[onset + 150] - base).abs() < 1e-4,
+        "and ends: {}",
+        out[onset + 150]
+    );
+}
+
+#[test]
+fn a_routing_loop_is_refused_not_run() {
+    let preset = Preset {
+        name: "Loop".into(),
+        inputs: 2,
+        outputs: 2,
+        lanes: vec![
+            LaneSpec {
+                input: vec![0, 1],
+                to: Some("B".into()),
+                ..lane("A")
+            },
+            LaneSpec {
+                to: Some("A".into()),
+                ..lane("B")
+            },
+            LaneSpec {
+                input: vec![0, 1],
+                to: Some("Nowhere".into()),
+                ..lane("C")
+            },
+        ],
+        macros: vec![],
+    };
+    let factories: [&dyn BlockFactory; 1] = [&BuiltinFactory];
+    let (g, report) = graph::build(&preset, &opts(&factories, &NoHost));
+    let w = report.warnings.join("\n");
+    assert!(w.contains("A: in a routing loop"), "{w}");
+    assert!(w.contains("B: in a routing loop"), "{w}");
+    assert!(w.contains("C: no lane Nowhere"), "{w}");
+    // Every lane still plays, to the outputs.
+    let mut proc = Processor::new();
+    let _ = proc.install(g);
+    let out = play(&mut proc, &[0.25; 512], 2, 2, 256);
+    assert!((out[0][100] - 0.5).abs() < 1e-5, "A and C: {}", out[0][100]);
+}
+
+/// The per-track mode: Signal on the kick's trigger track and on the kick
+/// track, one session. The trigger instance publishes its hits; the kick
+/// instance plays its sample from them, on the hit, though the host runs
+/// it first in every cycle (the worst order).
+#[test]
+fn a_hit_on_one_track_plays_the_sample_on_another() {
+    use signal_core::session::{HitBus, Session, SessionId};
+    let host = MemoryHost::default().with("kick.wav", wav16(&[0.5; 100]));
+    let preset = Preset {
+        name: "Kick".into(),
+        inputs: 2,
+        outputs: 2,
+        lanes: vec![
+            LaneSpec {
+                port: Some("Kick/Trig".into()),
+                input: vec![0],
+                mute: true,
+                trigger: Some(TriggerSpec {
+                    threshold_db: -30.0,
+                    note: None,
+                }),
+                ..lane("Trig")
+            },
+            LaneSpec {
+                port: Some("Kick".into()),
+                input: vec![0],
+                ..lane("In")
+            },
+            LaneSpec {
+                port: Some("Kick".into()),
+                blocks: vec![
+                    BlockSpec::signal("sample", "sample")
+                        .asset(AssetRef::path("kick.wav"))
+                        .param("dynamics", 0.0)
+                        .key("Trig"),
+                ],
+                ..lane("Sample")
+            },
+        ],
+        macros: vec![],
+    };
+    let session = std::sync::Arc::new(Session {
+        id: SessionId("kit".into()),
+        hits: HitBus::new(),
+    });
+    let factories: [&dyn BlockFactory; 1] = [&BuiltinFactory];
+    let block = 256;
+    let instance = |port: &'static str| {
+        let o = BuildOptions {
+            port: Some(port),
+            ..opts(&factories, &host)
+        };
+        let (mut g, report) = graph::build(&preset, &o);
+        assert!(report.all_active(), "{report:?}");
+        assert!(report.warnings.is_empty(), "{port}: {:?}", report.warnings);
+        g.join(session.clone());
+        let mut p = Processor::new();
+        let _ = p.install(g);
+        p
+    };
+    let mut trig = instance("Kick/Trig");
+    let mut kick = instance("Kick");
+    assert_eq!(trig.latency(), 96, "the trigger track looks ahead 2 ms");
+    assert_eq!(
+        kick.latency(),
+        (block + 96) as u32,
+        "the kick hears a host block and the far detector's lookback late"
+    );
+
+    let frames = 4096;
+    let mut trig_in = vec![0.0_f32; frames];
+    for (i, s) in trig_in.iter_mut().enumerate().skip(1000).take(300) {
+        *s = 0.9 * (-((i - 1000) as f32) / 60.0).exp() * if i % 2 == 0 { 1.0 } else { -1.0 };
+    }
+    let mut kick_out = vec![0.1_f32; frames];
+    let mut start = 0;
+    while start < frames {
+        let end = (start + block).min(frames);
+        let at = start as u64;
+        // The kick first: the hits it needs were published cycles ago.
+        kick.set_position(at);
+        let mut io: Vec<&mut [f32]> = vec![&mut kick_out[start..end]];
+        kick.process(&mut io, 1, end - start, &[], &[]);
+        trig.set_position(at);
+        let mut io: Vec<&mut [f32]> = vec![&mut trig_in[start..end]];
+        trig.process(&mut io, 1, end - start, &[], &[]);
+        start = end;
+    }
+    let la = block + 96;
+    let base = 0.1;
+    assert!(
+        (kick_out[la + 10] - base).abs() < 1e-4,
+        "{}",
+        kick_out[la + 10]
+    );
+    let onset = la
+        + kick_out[la..]
+            .iter()
+            .position(|s| (s - base).abs() > 0.1)
+            .expect("the sample plays");
+    assert_eq!(onset, 1000 + la, "on the hit, {la} late");
+    assert!((kick_out[onset + 10] - (base + 0.5)).abs() < 1e-3);
+}
+
+/// The Crescendum kit: every lane builds and is routed, in the
+/// multi-channel mode and on every track of the per-track mode, and the
+/// tracks that follow a trigger find it over the session.
+#[test]
+fn the_drum_kit_builds_in_both_modes() {
+    for preset in [
+        rigs::drum_kit(&rigs::KitPieces::default()),
+        rigs::drum_kit_modern(&rigs::KitPieces::default()),
+    ] {
+        kit_builds_in_both_modes(&preset);
+    }
+}
+
+fn kit_builds_in_both_modes(preset: &Preset) {
+    let preset = preset.clone();
+    // A kit's macros at rest leave the preset as it is: they work up from
+    // it (a `Set` macro at 0 would pin its targets to their minimum).
+    for m in &preset.macros {
+        for t in &m.targets {
+            assert!(
+                t.mode == signal_core::state::MacroMode::Modulate && t.min == 0.0,
+                "{}: macro {} moves {}/{} at rest",
+                preset.name,
+                m.name,
+                t.lane,
+                t.block
+            );
+        }
+    }
+    let factories: [&dyn BlockFactory; 1] = [&BuiltinFactory];
+    let (g, report) = graph::build(&preset, &opts(&factories, &NoHost));
+    assert!(report.all_active(), "{report:?}");
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(g.remote_keys(), 0, "one instance: every key is local");
+    // The triggers look ahead 2 ms; the kick's Sub, gated (the drum
+    // gate's 5 ms lookahead), is the latest path, and the kit waits for it.
+    assert!(g.latency() >= 96 + 240, "{}: {}", preset.name, g.latency());
+
+    // It plays: 20 mics of noise bursts in, two channels out.
+    let mut proc = Processor::new();
+    let _ = proc.install(g);
+    let frames = 4096;
+    let mut chans: Vec<Vec<f32>> = (0..20)
+        .map(|c| {
+            (0..frames)
+                .map(|i| if (i + c * 37) % 997 < 40 { 0.5 } else { 0.0 })
+                .collect()
+        })
+        .collect();
+    let mut io: Vec<&mut [f32]> = chans.iter_mut().map(|c| &mut c[..]).collect();
+    proc.process(&mut io, 20, 256, &[], &[]);
+    assert!(
+        chans[0][..256]
+            .iter()
+            .chain(&chans[1][..256])
+            .all(|s| s.is_finite())
+    );
+
+    for lane in &preset.lanes {
+        let port = lane.port.as_deref().expect("every kit lane is a track");
+        let o = BuildOptions {
+            port: Some(port),
+            ..opts(&factories, &NoHost)
+        };
+        let (g, report) = graph::build(&preset, &o);
+        assert!(report.all_active(), "{port}: {report:?}");
+        assert!(report.warnings.is_empty(), "{port}: {:?}", report.warnings);
+        let keyed = lane.blocks.iter().filter(|b| b.key.is_some()).count();
+        assert_eq!(g.remote_keys(), keyed, "{port}: its keys are other tracks'");
+    }
+}
+
+/// A block that is only latency: `frames` late, and says so.
+struct Late {
+    l: std::collections::VecDeque<f32>,
+    r: std::collections::VecDeque<f32>,
+}
+
+const LATE: &[signal_core::param::ParamSpec] = &[signal_core::param::ParamSpec::new(
+    "frames",
+    "Frames",
+    signal_core::param::Unit::Plain(0),
+    0.0,
+    4096.0,
+    0.0,
+)];
+
+impl signal_core::block::BlockProcessor for Late {
+    fn params(&self) -> &'static [signal_core::param::ParamSpec] {
+        LATE
+    }
+    fn set_param(&mut self, _: usize, _: f32) {}
+    fn reset(&mut self) {}
+    fn latency(&self) -> u32 {
+        self.l.len() as u32
+    }
+    fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        for s in left.iter_mut() {
+            self.l.push_back(*s);
+            *s = self.l.pop_front().unwrap_or(0.0);
+        }
+        for s in right.iter_mut() {
+            self.r.push_back(*s);
+            *s = self.r.pop_front().unwrap_or(0.0);
+        }
+    }
+}
+
+struct LateFactory;
+
+impl BlockFactory for LateFactory {
+    fn runs_on(&self, kind: &BlockKind) -> Option<Platforms> {
+        matches!(kind, BlockKind::Signal(n) if n == "late").then_some(Platforms::ALL)
+    }
+    fn build(
+        &self,
+        spec: &BlockSpec,
+        _: &signal_core::block::BuildContext<'_>,
+    ) -> Result<signal_core::block::Built, Unavailable> {
+        let n = spec.params.get("frames").copied().unwrap_or(0.0) as usize;
+        Ok(signal_core::block::Built {
+            backend: Backend::Linked(Box::new(Late {
+                l: std::iter::repeat_n(0.0, n).collect(),
+                r: std::iter::repeat_n(0.0, n).collect(),
+            })),
+            params: LATE,
+            sources: &[],
+        })
+    }
+}
+
+/// Parallel lanes of different latencies sum in line: a click through a
+/// 100-frame lane and a dry one into a bus is one click, 100 late, and so
+/// is a lane straight to the outputs beside it, and a pre send.
+#[test]
+fn parallel_lanes_sum_in_line() {
+    let late = |frames: f32| BlockSpec::signal("late", "late").param("frames", frames);
+    let preset = Preset {
+        name: "Parallel".into(),
+        inputs: 1,
+        outputs: 2,
+        lanes: vec![
+            LaneSpec {
+                input: vec![0],
+                to: Some("Bus".into()),
+                sends: vec![SendSpec::to("Pre", 0.0).pre()],
+                ..lane("Dry")
+            },
+            LaneSpec {
+                input: vec![0],
+                to: Some("Bus".into()),
+                blocks: vec![late(100.0)],
+                ..lane("Wet")
+            },
+            lane("Bus"),
+            LaneSpec {
+                blocks: vec![late(30.0)],
+                ..lane("Pre")
+            },
+            LaneSpec {
+                input: vec![0],
+                ..lane("Beside")
+            },
+        ],
+        macros: vec![],
+    };
+    let factories: [&dyn BlockFactory; 2] = [&LateFactory, &BuiltinFactory];
+    let (g, report) = graph::build(&preset, &opts(&factories, &NoHost));
+    assert!(report.all_active(), "{report:?}");
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(g.latency(), 100);
+    let mut proc = Processor::new();
+    let _ = proc.install(g);
+    let mut input = vec![0.0_f32; 1024];
+    input[10] = 1.0;
+    let out = play(&mut proc, &input, 2, 1, 64);
+    let clicks: Vec<(usize, f32)> = out[0]
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(_, s)| s.abs() > 1e-6)
+        .collect();
+    // Dry + Wet + Beside + Pre, all at 110.
+    assert_eq!(clicks, vec![(110, 4.0)], "one click, in line");
 }

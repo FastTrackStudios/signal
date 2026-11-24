@@ -69,8 +69,9 @@ const fn two() -> u16 {
     2
 }
 
-/// A chain from some input channels to some output channels.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// A chain from some input channels to some output channels, or into
+/// another lane (a bus).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LaneSpec {
     pub name: String,
     /// The port this lane belongs to in the per-track mode (`Kick/In`):
@@ -84,14 +85,74 @@ pub struct LaneSpec {
     /// the track's first one or two channels instead.
     #[serde(default)]
     pub input: Vec<u16>,
-    /// First output channel (the pair `output`, `output + 1`).
+    /// First output channel (the pair `output`, `output + 1`), when the
+    /// lane goes to the outputs rather than to another lane (`to`).
     #[serde(default)]
     pub output: u16,
+    /// The lane this one feeds instead of the outputs: a bus (`Kick`,
+    /// `Drums`). A lane fed by others sums them into its own input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// Copies of this lane into other lanes, beside where it goes: the
+    /// parallel compressors, the reverb returns, a Sub fed by the Sum.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sends: Vec<SendSpec>,
+    /// Detect drum hits on this lane's input (a `Trig` mic): blocks keyed
+    /// to this lane are played by them (a Sample) and keyed by its audio
+    /// (a Gate).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<TriggerSpec>,
     #[serde(default)]
     pub gain_db: f32,
     #[serde(default)]
     pub mute: bool,
     pub blocks: Vec<BlockSpec>,
+}
+
+/// A send from a lane to another.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SendSpec {
+    /// The lane it feeds.
+    pub to: String,
+    #[serde(default)]
+    pub gain_db: f32,
+    /// Taken before the lane's chain (the raw mics into a Sub), rather
+    /// than after it (the default: what the lane sounds like).
+    #[serde(default)]
+    pub pre: bool,
+}
+
+impl SendSpec {
+    #[must_use]
+    pub fn to(lane: impl Into<String>, gain_db: f32) -> Self {
+        Self {
+            to: lane.into(),
+            gain_db,
+            pre: false,
+        }
+    }
+
+    #[must_use]
+    pub fn pre(mut self) -> Self {
+        self.pre = true;
+        self
+    }
+}
+
+/// Hit detection on a lane.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TriggerSpec {
+    /// Above this (dBFS) a transient is a hit.
+    #[serde(default = "default_trigger_db")]
+    pub threshold_db: f32,
+    /// A MIDI note that is also a hit of this lane: the host's hit
+    /// markers placed as MIDI (Studio's `HITS_MIDI`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<u8>,
+}
+
+const fn default_trigger_db() -> f32 {
+    -30.0
 }
 
 /// One block in a lane.
@@ -108,6 +169,10 @@ pub struct BlockSpec {
     /// one is its default.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, f32>,
+    /// The lane this block listens to: a Gate's key (the piece's `Trig`),
+    /// a Sample's hits (the lane whose trigger plays it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
     /// The file it needs (a NAM capture, a cab IR).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asset: Option<AssetRef>,
@@ -138,12 +203,20 @@ impl BlockSpec {
             kind: BlockKind::Signal(block.into()),
             algorithm: None,
             params: BTreeMap::new(),
+            key: None,
             asset: None,
             state: None,
             bypass: false,
             requires: None,
             fallback: None,
         }
+    }
+
+    /// Listen to lane `lane` (a gate's key, a sample's hits).
+    #[must_use]
+    pub fn key(mut self, lane: impl Into<String>) -> Self {
+        self.key = Some(lane.into());
+        self
     }
 
     /// Run algorithm `id` of the block's family.
@@ -290,6 +363,7 @@ impl Preset {
                 gain_db: 0.0,
                 mute: false,
                 blocks: Vec::new(),
+                ..LaneSpec::default()
             }],
             macros: Vec::new(),
         }
