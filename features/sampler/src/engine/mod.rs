@@ -257,6 +257,9 @@ use cache::{EvictStats, PreloadStats, SampleCache, SampleData};
 pub use dispatch::KeyswitchState;
 use filter::BiquadFilter;
 use rr::RrCounters;
+
+/// Where an engine's random draws (tuning, random round robins) start.
+const TUNE_RNG_SEED: u64 = 0x9E37_79B9_7F4A_7C15;
 pub use trace::{MissReason, RenderTrace, TraceEvent, TraceKind, VoiceSpawn as TraceVoiceSpawn};
 pub use voice::ArticClass;
 use voice::{DynLayer, FlexEnv, Voice, VoiceKind, VoicePool, VoiceStealPolicy};
@@ -1375,7 +1378,7 @@ impl SampleEngine {
             forced_offsets: VecDeque::new(),
             forced_rrs: VecDeque::new(),
             short_rr_hist: [[u8::MAX; 4]; 128],
-            tune_rng: 0x9E37_79B9_7F4A_7C15,
+            tune_rng: TUNE_RNG_SEED,
             seq_rr_base: 0,
             release_gain_override: None,
             release_context: None,
@@ -1397,7 +1400,7 @@ impl SampleEngine {
             keys_down: [false; 128],
             release_sample_notes: vec![Vec::new(); 128],
             release_body_strike: vec![None; 128],
-            zone_rr_random_state: 0x9e37_79b9_7f4a_7c15,
+            zone_rr_random_state: TUNE_RNG_SEED,
             zone_rr_last_slots: HashMap::with_capacity(128),
             forced_rr: None,
             spawn_align_lead: None,

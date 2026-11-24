@@ -1047,6 +1047,27 @@ impl SampleEngine {
         self.voices.panic();
     }
 
+    /// As it was loaded: every voice gone ([`panic`](Self::panic)), and the
+    /// round robins and the random draws back at their first, so what it
+    /// plays next is what a fresh engine would. The maps are cleared as the
+    /// CC59 round-robin reset clears them.
+    pub fn restart(&mut self) {
+        self.panic();
+        self.rr.borrow_mut().reset();
+        self.zone_rr_counter = 0;
+        self.sustain_rr_counter = 0;
+        self.note_rr = [0; 128];
+        self.short_key_rr = [0; 128];
+        self.seq_rr_counter.clear();
+        self.seq_rr_last.clear();
+        self.short_rr_hist = [[u8::MAX; 4]; 128];
+        self.seq_rr_base = 0;
+        self.rr_global_last = 0;
+        self.tune_rng = super::TUNE_RNG_SEED;
+        self.zone_rr_random_state = super::TUNE_RNG_SEED;
+        self.zone_rr_last_slots.clear();
+    }
+
     /// Zone-mode trigger. Looks up every zone matching `(note, velocity)`
     /// and spawns one `Zoned` voice per **mic group** within the match
     /// set. RR-cycling happens within each mic group so a kick with 7

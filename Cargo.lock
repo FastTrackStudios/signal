@@ -11226,7 +11226,7 @@ dependencies = [
 [[package]]
 name = "plugin-processors"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=0f07b843abdce7e512b151af53b055efa503c44e#0f07b843abdce7e512b151af53b055efa503c44e"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=a016383e13aa97d0c049145f6abe7c08339ff243#a016383e13aa97d0c049145f6abe7c08339ff243"
 dependencies = [
  "dsp 0.1.0",
  "dsp-core 0.1.0",

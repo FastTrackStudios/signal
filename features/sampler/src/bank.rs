@@ -546,6 +546,27 @@ impl SamplerBank {
         }
     }
 
+    /// Instrument or preset `id` as loaded: every voice gone, its round
+    /// robins and random draws at their first (a host's reset: what plays
+    /// next is what a fresh load would play).
+    pub fn restart(&mut self, id: &str) {
+        if let Some(slot) = self.instruments.get_mut(id) {
+            slot.engine.restart();
+            return;
+        }
+        if let Some(preset) = self.presets.get_mut(id) {
+            preset.restart();
+            return;
+        }
+        if let Some((prefix, engine_id)) = self.instrument_to_preset.get(id).cloned() {
+            if let Some(preset) = self.presets.get_mut(&prefix) {
+                if let Some(&idx) = preset.engine_id_to_idx.get(&engine_id) {
+                    preset.engines[idx].restart();
+                }
+            }
+        }
+    }
+
     pub fn set_midi_channel(&mut self, id: impl Into<InstrumentId>, channel: u8) {
         self.midi_channels.insert(channel, id.into());
     }
