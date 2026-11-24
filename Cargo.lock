@@ -13641,11 +13641,14 @@ dependencies = [
 name = "signal-plugin"
 version = "26.10.3"
 dependencies = [
+ "daw",
  "eyre",
  "facet",
  "facet-styx",
  "nice-plug",
  "sampler",
+ "serde_json",
+ "signal-core",
  "tracing",
  "tracing-subscriber",
 ]

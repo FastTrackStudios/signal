@@ -1,4 +1,4 @@
-//! Rig configuration for the FTS Signal shell (v0).
+//! The v0 rig configuration: a sampler pack by environment or file.
 //!
 //! The plugin loads ONE rig at startup. Which rig is chosen:
 //!
@@ -7,8 +7,7 @@
 //! 2. otherwise `~/.config/signal/plugin/rig.styx` (the plugin's default
 //!    config location, sibling to the live engine's `~/.config/signal/rig/`)
 //!    if it exists;
-//! 3. otherwise no rig: the plugin runs as a gain-staged audio passthrough
-//!    and ignores MIDI.
+//! 3. otherwise no rig: the plugin starts as a passthrough.
 //!
 //! Example rig styx:
 //!
@@ -20,11 +19,10 @@
 //! cache_budget_mb 8192
 //! ```
 //!
-//! This is a per-machine setting, exactly like `signal-sampler-clap`'s
-//! `$SIGNAL_SAMPLER_CLAP_PATCH`: real rig browsing/management (and
-//! session-persisted rig state via the plugin state chunk) arrives with the
-//! GUI. Guitar/vocal FX-chain rig configs are not accepted yet — see the
-//! crate docs for the facade gap.
+//! It is read only by a fresh instance with no saved state: the plugin's
+//! state chunk (a `SignalState`) is what a session restores. The config
+//! becomes a preset with the pack in an instrument lane
+//! ([`crate::sampler::preset_for`]).
 
 use facet::Facet;
 use std::path::PathBuf;
