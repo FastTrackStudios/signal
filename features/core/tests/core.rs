@@ -620,12 +620,7 @@ fn a_hit_on_one_track_plays_the_sample_on_another() {
 /// tracks that follow a trigger find it over the session.
 #[test]
 fn the_drum_kit_builds_in_both_modes() {
-    for preset in [
-        rigs::drum_kit(&rigs::KitPieces::default()),
-        rigs::drum_kit_modern(&rigs::KitPieces::default()),
-    ] {
-        kit_builds_in_both_modes(&preset);
-    }
+    kit_builds_in_both_modes(&rigs::drum_kit(&rigs::KitPieces::default()));
 }
 
 fn kit_builds_in_both_modes(preset: &Preset) {
@@ -799,4 +794,92 @@ fn parallel_lanes_sum_in_line() {
         .collect();
     // Dry + Wet + Beside + Pre, all at 110.
     assert_eq!(clicks, vec![(110, 4.0)], "one click, in line");
+}
+
+/// Each mix phase of a lane is gain neutral once its make-up is measured:
+/// the lane as loud with its phases on as with them bypassed, and a phase
+/// out of the method's order reported.
+#[test]
+fn phases_are_made_gain_neutral() {
+    use signal_core::state::Phase;
+    let preset = |blocks: Vec<BlockSpec>| Preset {
+        name: "Phases".into(),
+        inputs: 1,
+        outputs: 2,
+        lanes: vec![LaneSpec {
+            input: vec![0],
+            blocks,
+            ..lane("Snare")
+        }],
+        macros: vec![],
+    };
+    let chain = vec![
+        BlockSpec::signal("rescue", "eq")
+            .algorithm("channel")
+            .param("low_cut", 80.0)
+            .phase(Phase::Rescue),
+        BlockSpec::signal("comp", "comp")
+            .param("threshold", -30.0)
+            .param("ratio", 4.0)
+            .phase(Phase::Tone),
+        BlockSpec::signal("sat", "drive")
+            .param("drive", 12.0)
+            .phase(Phase::Tone),
+        BlockSpec::signal("up", "gain")
+            .param("gain", 6.0)
+            .phase(Phase::Polish),
+    ];
+    let factories: [&dyn BlockFactory; 1] = [&BuiltinFactory];
+    let input = sine(48_000);
+    let render = |p: &Preset| {
+        let (g, report) = graph::build(p, &opts(&factories, &NoHost));
+        let mut proc = Processor::new();
+        let _ = proc.install(g);
+        let out = play(&mut proc, &input, 2, 1, 256);
+        (
+            out,
+            proc.graph()
+                .map(graph::Graph::phase_levels)
+                .unwrap_or_default(),
+            report,
+        )
+    };
+    let rms = |x: &[f32]| (x.iter().map(|s| s * s).sum::<f32>() / x.len() as f32).sqrt();
+    let mut p = preset(chain.clone());
+    let (_, levels, report) = render(&p);
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(
+        levels.iter().map(|l| l.phase).collect::<Vec<_>>(),
+        vec![Phase::Rescue, Phase::Tone, Phase::Polish]
+    );
+    assert!(
+        (levels[2].neutral_trim_db() + 6.0).abs() < 0.01,
+        "the +6 dB gain: {:?}",
+        levels[2]
+    );
+    for _ in 0..3 {
+        let (_, levels, _) = render(&p);
+        graph::apply_neutral_trims(&mut p, &levels);
+    }
+    let (on, ..) = render(&p);
+    // Over what the trims were measured on: the whole song.
+    let bypassed = rms(&input);
+    let active = rms(&on[0]);
+    assert!(
+        (20.0 * (active / bypassed).log10()).abs() < 0.5,
+        "on {active}, bypassed {bypassed}"
+    );
+
+    // Tone after Polish: out of order, said so.
+    let mut back = chain;
+    back.swap(1, 3);
+    let (_, _, report) = render(&preset(back));
+    assert!(
+        report
+            .warnings
+            .iter()
+            .any(|w| w.contains("out of the mix's phase order")),
+        "{:?}",
+        report.warnings
+    );
 }

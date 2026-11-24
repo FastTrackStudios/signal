@@ -17,7 +17,7 @@ use crate::host::SignalHost;
 use crate::param::MACROS;
 use crate::platform::Platforms;
 use crate::session::{HitCursor, Session, SessionHit};
-use crate::state::{BlockSpec, LaneSpec, MacroMode, Preset};
+use crate::state::{BlockSpec, LaneSpec, MacroMode, Phase, Preset};
 
 /// What a graph is built for.
 pub struct BuildOptions<'a> {
@@ -62,6 +62,9 @@ impl BuildReport {
 }
 
 struct Lane {
+    name: String,
+    /// Its blocks' mix phases, each a run of blocks with its make-up.
+    phases: Vec<PhaseGroup>,
     input: Vec<usize>,
     output: usize,
     gain: f32,
@@ -98,6 +101,120 @@ struct Lane {
     /// Hits from MIDI, for the next piece.
     midi_hits: [Hit; MAX_HITS],
     midi_hit_count: usize,
+}
+
+/// One mix phase's run of blocks in a lane: `first..=last`, its
+/// gain-neutral make-up after it, and its level meter (the energy into
+/// its first block and out of its last, before the make-up).
+struct PhaseGroup {
+    phase: Phase,
+    first: usize,
+    last: usize,
+    trim: f32,
+    energy_in: f64,
+    energy_out: f64,
+    /// This piece's energy into the phase, counted once its output is
+    /// known to be sounding.
+    piece_in: f64,
+}
+
+/// Below this mean energy per sample (-80 dBFS) a phase's output is
+/// silence: a gate shut, a drum not playing. Those pieces aren't counted,
+/// in or out, so a phase is measured on what it passes: a gate's job is
+/// to take the bleed away, not to be made up for.
+const SOUNDING: f64 = 1e-8;
+
+/// What a phase does to a lane's level, over what the graph has played
+/// since its meters were cleared.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PhaseLevel {
+    pub lane: String,
+    pub phase: Phase,
+    /// Level into the phase and out of it before its make-up, dB (RMS).
+    pub in_db: f32,
+    pub out_db: f32,
+    /// Its make-up now.
+    pub trim_db: f32,
+}
+
+impl PhaseLevel {
+    /// The make-up that makes the phase gain neutral.
+    #[must_use]
+    pub fn neutral_trim_db(&self) -> f32 {
+        self.in_db - self.out_db
+    }
+}
+
+/// A lane's blocks grouped by phase, in order. A phase that comes back
+/// after a later one (Tone, Rescue) is out of the method's order: reported,
+/// and run where it is.
+fn phase_groups(spec: &LaneSpec, warnings: &mut Vec<String>) -> Vec<PhaseGroup> {
+    let mut groups: Vec<PhaseGroup> = Vec::new();
+    for (i, b) in spec.blocks.iter().enumerate() {
+        let Some(phase) = b.phase else { continue };
+        match groups.last_mut() {
+            Some(g) if g.phase == phase && g.last + 1 == i => g.last = i,
+            last => {
+                if let Some(prev) = last.map(|g| g.phase).filter(|p| *p >= phase) {
+                    warnings.push(alloc::format!(
+                        "{}/{}: {} after {}: out of the mix's phase order",
+                        spec.name,
+                        b.id,
+                        phase.slug(),
+                        prev.slug()
+                    ));
+                }
+                let trim = spec
+                    .trims
+                    .iter()
+                    .find(|t| t.phase == phase)
+                    .map_or(0.0, |t| t.gain_db);
+                groups.push(PhaseGroup {
+                    phase,
+                    first: i,
+                    last: i,
+                    trim: crate::util::db_to_gain(trim),
+                    energy_in: 0.0,
+                    energy_out: 0.0,
+                    piece_in: 0.0,
+                });
+            }
+        }
+    }
+    groups
+}
+
+/// The most a phase's make-up moves its level, dB.
+pub const MAX_TRIM_DB: f32 = 24.0;
+
+/// Make every measured phase of `preset` gain neutral: each lane's
+/// [`PhaseTrim`](crate::state::PhaseTrim)s set from what its phases did
+/// to its level ([`Graph::phase_levels`] over a render of the song). A
+/// phase's make-up changes what the next phase and the lanes it feeds
+/// are given, so measure and apply again until the trims stop moving.
+pub fn apply_neutral_trims(preset: &mut Preset, levels: &[PhaseLevel]) {
+    for level in levels
+        .iter()
+        .filter(|l| l.in_db > -150.0 && l.out_db > -150.0)
+    {
+        let Some(lane) = preset.lanes.iter_mut().find(|l| l.name == level.lane) else {
+            continue;
+        };
+        // A phase that needs more than this is broken, not quiet: left
+        // at the cap, and the caller says so.
+        let gain_db = level.neutral_trim_db().clamp(-MAX_TRIM_DB, MAX_TRIM_DB);
+        match lane.trims.iter_mut().find(|t| t.phase == level.phase) {
+            Some(t) => t.gain_db = gain_db,
+            None => lane.trims.push(crate::state::PhaseTrim {
+                phase: level.phase,
+                gain_db,
+            }),
+        }
+    }
+}
+
+fn energy(x: &[f32]) -> f64 {
+    x.iter().map(|s| f64::from(*s) * f64::from(*s)).sum()
 }
 
 /// A send to another lane.
@@ -338,6 +455,8 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
             blocks.push(block);
         }
         lanes.push(Lane {
+            name: spec.name.clone(),
+            phases: phase_groups(spec, &mut report.warnings),
             input,
             output,
             gain: crate::util::db_to_gain(spec.gain_db),
@@ -806,6 +925,40 @@ impl Graph {
         self.clock = frame;
     }
 
+    /// What each lane's mix phases do to its level since the meters were
+    /// last cleared: the measure a phase's gain-neutral make-up is set
+    /// from ([`PhaseLevel::neutral_trim_db`]). Control side, or offline.
+    #[must_use]
+    pub fn phase_levels(&self) -> Vec<PhaseLevel> {
+        let db = |e: f64| -> f32 {
+            if e <= 0.0 {
+                -200.0
+            } else {
+                signal_dsp_core::num::narrow(10.0 * libm::log10(e))
+            }
+        };
+        self.lanes
+            .iter()
+            .flat_map(|lane| {
+                lane.phases.iter().map(move |g| PhaseLevel {
+                    lane: lane.name.clone(),
+                    phase: g.phase,
+                    in_db: db(g.energy_in),
+                    out_db: db(g.energy_out),
+                    trim_db: crate::util::gain_to_db(g.trim),
+                })
+            })
+            .collect()
+    }
+
+    /// Start the phase meters again.
+    pub fn clear_phase_levels(&mut self) {
+        for g in self.lanes.iter_mut().flat_map(|l| l.phases.iter_mut()) {
+            g.energy_in = 0.0;
+            g.energy_out = 0.0;
+        }
+    }
+
     /// Frames of latency: the longest lane's, and the trigger lanes'
     /// lookahead.
     #[must_use]
@@ -1160,8 +1313,25 @@ impl Graph {
                 let (Some(l), Some(r)) = (lane.l.get_mut(..len), lane.r.get_mut(..len)) else {
                     continue;
                 };
-                for block in &mut lane.blocks {
+                let mut group = 0;
+                for (b, block) in lane.blocks.iter_mut().enumerate() {
+                    if let Some(g) = lane.phases.get_mut(group).filter(|g| g.first == b) {
+                        g.piece_in = energy(l) + energy(r);
+                    }
                     block.process(l, r);
+                    if let Some(g) = lane.phases.get_mut(group).filter(|g| g.last == b) {
+                        let out = energy(l) + energy(r);
+                        if out > SOUNDING * (l.len() + r.len()) as f64 {
+                            g.energy_in += g.piece_in;
+                            g.energy_out += out;
+                        }
+                        // Gain neutral: the phase's make-up.
+                        if g.trim != 1.0 {
+                            let t = g.trim;
+                            l.iter_mut().chain(r.iter_mut()).for_each(|s| *s *= t);
+                        }
+                        group += 1;
+                    }
                 }
             }
             if lane.mute {

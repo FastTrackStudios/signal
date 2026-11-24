@@ -8,7 +8,10 @@
 //!     <stems dir> <take suffix> <library dir> <out.wav> [seconds] [solo]
 //! ```
 //!
-//! `solo` (`Kick Sample,Kick In`) hears only those tracks (the buses and
+//! `SIGNAL_KIT_CALIBRATE=3` first makes every phase gain neutral on the
+//! take (three measure-and-trim passes) and prints the make-ups.
+//!
+//! `solo` (`Kick/SUM/Sample,Kick/SUM/In`) hears only those tracks (the buses and
 //! the triggers still run): to check one against another.
 //!
 //! The stems are named as a REAPER session names them, `<n>-<track>-<take
@@ -143,11 +146,7 @@ fn main() -> Result<(), String> {
         snare: piece(SNARE),
         toms: TOMS.map(piece),
     };
-    // `SIGNAL_KIT_STYLE=modern`: the modern mix.
-    let mut preset = match std::env::var("SIGNAL_KIT_STYLE").as_deref() {
-        Ok("modern") => rigs::drum_kit_modern(&pieces),
-        _ => rigs::drum_kit(&pieces),
-    };
+    let mut preset = rigs::drum_kit(&pieces);
     // `SIGNAL_KIT_STRIP=Kick,Drums`: those lanes without their blocks (to
     // find which stage does what).
     if let Ok(strip) = std::env::var("SIGNAL_KIT_STRIP") {
@@ -175,7 +174,7 @@ fn main() -> Result<(), String> {
 
     // The stems, in the kit's input order: one channel each, OHs and
     // Rooms two.
-    let mut stems_open = Vec::new();
+    let mut paths = Vec::new();
     let mut seen: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     for track in TRACKS {
         let n = seen.entry(track).or_insert(0);
@@ -183,8 +182,76 @@ fn main() -> Result<(), String> {
             .ok_or_else(|| format!("no stem for {track} (#{n})"))?;
         *n += 1;
         println!("{track:>8}: {}", path.display());
-        stems_open.push(Stem::open(&path)?);
+        paths.push(path);
     }
+    let length = paths
+        .iter()
+        .map(|p| Stem::open(p).map(|s| s.reader.duration() as usize))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .max()
+        .unwrap_or(0);
+    let frames = seconds.map_or(length, |s| ((s * 48_000.0) as usize).min(length));
+
+    // `SIGNAL_KIT_CALIBRATE=<passes>`: make every phase gain neutral on
+    // this take first (each pass measures what the phases do and sets
+    // their make-up), then render.
+    let passes: usize = std::env::var("SIGNAL_KIT_CALIBRATE")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0);
+    for pass in 1..=passes {
+        let (levels, _) = render(&preset, &paths, frames, None)?;
+        let worst = levels
+            .iter()
+            .filter(|l| l.in_db > -150.0)
+            .map(|l| (l.neutral_trim_db() - l.trim_db).abs())
+            .fold(0.0_f32, f32::max);
+        signal_core::graph::apply_neutral_trims(&mut preset, &levels);
+        if pass == passes {
+            for l in levels.iter().filter(|l| {
+                l.in_db > -150.0 && l.neutral_trim_db().abs() > signal_core::graph::MAX_TRIM_DB
+            }) {
+                println!(
+                    "  warning: {} {} changes the level by {:+.0} dB: check it",
+                    l.lane,
+                    l.phase.slug(),
+                    -l.neutral_trim_db()
+                );
+            }
+        }
+        println!("calibration pass {pass}: the trims moved {worst:.2} dB at most");
+    }
+    if passes > 0 {
+        println!("phase make-ups (gain neutral):");
+        for lane in &preset.lanes {
+            for t in &lane.trims {
+                println!(
+                    "  {:<28} {:<10} {:+6.1} dB",
+                    lane.name,
+                    t.phase.slug(),
+                    t.gain_db
+                );
+            }
+        }
+    }
+    let (_, peak) = render(&preset, &paths, frames, Some(out))?;
+    println!("peak {:.1} dBFS", 20.0 * peak.max(1e-9).log10());
+    Ok(())
+}
+
+/// Render `frames` of the stems at `paths` through `preset`, to `out` when
+/// given. Returns what its phases did, and the peak.
+fn render(
+    preset: &signal_core::state::Preset,
+    paths: &[PathBuf],
+    frames: usize,
+    out: Option<&str>,
+) -> Result<(Vec<signal_core::graph::PhaseLevel>, f32), String> {
+    let mut stems_open = paths
+        .iter()
+        .map(|p| Stem::open(p))
+        .collect::<Result<Vec<_>, _>>()?;
     let inputs: usize = stems_open.iter().map(|s| s.channels.max(1)).sum();
     if inputs != usize::from(preset.inputs) {
         return Err(format!(
@@ -192,13 +259,6 @@ fn main() -> Result<(), String> {
             preset.inputs
         ));
     }
-    let length = stems_open
-        .iter()
-        .map(|s| s.reader.duration() as usize)
-        .max()
-        .unwrap_or(0);
-    let frames = seconds.map_or(length, |s| ((s * 48_000.0) as usize).min(length));
-
     let factories: [&dyn BlockFactory; 2] = [&BuiltinFactory, &DrumFactory];
     let opts = BuildOptions {
         sample_rate: 48_000.0,
@@ -208,7 +268,7 @@ fn main() -> Result<(), String> {
         host: &NoHost,
     };
     let started = std::time::Instant::now();
-    let (graph, report) = graph::build(&preset, &opts);
+    let (graph, report) = graph::build(preset, &opts);
     for b in &report.blocks {
         if let Some(why) = b.status.reason() {
             println!("  {}/{}: {why}", b.lane, b.block);
@@ -233,7 +293,10 @@ fn main() -> Result<(), String> {
         bits_per_sample: 32,
         sample_format: hound::SampleFormat::Float,
     };
-    let mut writer = hound::WavWriter::create(out, spec).map_err(|e| e.to_string())?;
+    let mut writer = match out {
+        Some(out) => Some(hound::WavWriter::create(out, spec).map_err(|e| e.to_string())?),
+        None => None,
+    };
     let mut bufs = vec![vec![0.0_f32; BLOCK]; inputs];
     let started = std::time::Instant::now();
     let mut peak = 0.0_f32;
@@ -256,19 +319,28 @@ fn main() -> Result<(), String> {
             if done + i >= latency {
                 let (l, r) = (bufs[0][i], bufs[1][i]);
                 peak = peak.max(l.abs()).max(r.abs());
-                writer.write_sample(l).map_err(|e| e.to_string())?;
-                writer.write_sample(r).map_err(|e| e.to_string())?;
+                if let Some(w) = writer.as_mut() {
+                    w.write_sample(l).map_err(|e| e.to_string())?;
+                    w.write_sample(r).map_err(|e| e.to_string())?;
+                }
             }
         }
         done += n;
     }
-    writer.finalize().map_err(|e| e.to_string())?;
+    if let Some(w) = writer {
+        w.finalize().map_err(|e| e.to_string())?;
+    }
     let took = started.elapsed();
-    println!(
-        "wrote {out}: {:.1} s in {took:.1?} ({:.1}x real time), peak {:.1} dBFS",
-        frames as f64 / 48_000.0,
-        frames as f64 / 48_000.0 / took.as_secs_f64(),
-        20.0 * peak.max(1e-9).log10()
-    );
-    Ok(())
+    if let Some(out) = out {
+        println!(
+            "wrote {out}: {:.1} s in {took:.1?} ({:.1}x real time)",
+            frames as f64 / 48_000.0,
+            frames as f64 / 48_000.0 / took.as_secs_f64(),
+        );
+    }
+    let levels = proc
+        .graph()
+        .map(signal_core::graph::Graph::phase_levels)
+        .unwrap_or_default();
+    Ok((levels, peak))
 }

@@ -42,6 +42,7 @@ pub mod blocks;
 pub mod engine;
 pub mod graph;
 pub mod host;
+pub mod kit;
 pub mod midi;
 #[cfg(feature = "std")]
 pub mod null_test;

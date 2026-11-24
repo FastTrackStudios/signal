@@ -107,6 +107,9 @@ pub struct LaneSpec {
     #[serde(default)]
     pub mute: bool,
     pub blocks: Vec<BlockSpec>,
+    /// Each phase's gain-neutral make-up (measured: `Graph::phase_levels`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trims: Vec<PhaseTrim>,
 }
 
 /// A send from a lane to another.
@@ -155,6 +158,70 @@ const fn default_trigger_db() -> f32 {
     -30.0
 }
 
+/// The mix phase a block belongs to: the pass of the mix it is part of,
+/// in the order a chain runs them (Studio's `session::mix_phases`, by the
+/// same slugs). Balance (gain staging and the faders) has no blocks, so
+/// it isn't one here.
+///
+/// A lane's blocks run phase by phase, each phase's blocks together, and
+/// each phase is gain neutral: its [`PhaseTrim`] brings it back to the
+/// level it was given, so the chain sounds as loud on as bypassed and the
+/// faders do the balance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Phase {
+    /// Make the signal usable: the live Rescue EQ, a trigger-keyed gate
+    /// (the offline work, phase, alignment, consistency compression, is
+    /// rendered before Signal sees it).
+    Rescue,
+    /// The sound of the track: stylized compression (groove, punch,
+    /// thickness), tonal EQ, saturation, parallel filters, parallel
+    /// compression.
+    Tone,
+    /// Take off what Tone exposed: de-essing, resonance suppression,
+    /// clipping.
+    Polish,
+    /// How tracks sit against each other: relational EQ, separation,
+    /// sidechain dynamics.
+    Relational,
+    /// Front to back: panning, reverb, delay, ambience.
+    Depth,
+    /// The choices: throws, creative filters, sound design.
+    Creative,
+}
+
+impl Phase {
+    /// Every phase with blocks, in the order a chain runs them.
+    pub const ALL: [Self; 6] = [
+        Self::Rescue,
+        Self::Tone,
+        Self::Polish,
+        Self::Relational,
+        Self::Depth,
+        Self::Creative,
+    ];
+
+    /// Studio's slug for it.
+    #[must_use]
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Self::Rescue => "rescue",
+            Self::Tone => "tone",
+            Self::Polish => "polish",
+            Self::Relational => "relational",
+            Self::Depth => "depth",
+            Self::Creative => "creative",
+        }
+    }
+}
+
+/// A phase's make-up: what brings it back to the level it was given.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PhaseTrim {
+    pub phase: Phase,
+    pub gain_db: f32,
+}
+
 /// One block in a lane.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BlockSpec {
@@ -192,6 +259,10 @@ pub struct BlockSpec {
     /// Built instead where this block can't be: one of Signal's own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback: Option<Box<BlockSpec>>,
+    /// The mix phase it belongs to. `None`: a lane outside the mix
+    /// method (a rig, an instrument), whose blocks run as they are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<Phase>,
 }
 
 impl BlockSpec {
@@ -209,7 +280,15 @@ impl BlockSpec {
             bypass: false,
             requires: None,
             fallback: None,
+            phase: None,
         }
+    }
+
+    /// In mix phase `phase`.
+    #[must_use]
+    pub const fn phase(mut self, phase: Phase) -> Self {
+        self.phase = Some(phase);
+        self
     }
 
     /// Listen to lane `lane` (a gate's key, a sample's hits).

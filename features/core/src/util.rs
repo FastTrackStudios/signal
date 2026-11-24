@@ -1,5 +1,15 @@
 //! Small numeric helpers: the one place a conversion happens.
 
+/// A linear gain in decibels (silence at -200).
+#[must_use]
+pub fn gain_to_db(gain: f32) -> f32 {
+    if gain <= 0.0 {
+        -200.0
+    } else {
+        20.0 * libm::log10f(gain)
+    }
+}
+
 /// Decibels to a linear gain.
 #[must_use]
 pub fn db_to_gain(db: f32) -> f32 {
