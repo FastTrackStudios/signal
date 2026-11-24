@@ -13,6 +13,11 @@ crate-type = ["cdylib", "lib"]
 [lints]
 workspace = true
 
+[features]
+# The development build: "Signal Dev" (com.fasttrackstudio.signal.dev), a
+# plugin of its own beside a released FTS Signal.
+dev = []
+
 [dependencies]
 # Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
 # `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
@@ -33,6 +38,8 @@ tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 
 eyre.workspace = true
+# The CLAP state stream's JSON (`plugin::clap_state`).
+serde_json = { workspace = true }
 
 [dev-dependencies]
 # The headless host test (tests/clap_host.rs): load the bundled .clap

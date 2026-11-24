@@ -8,6 +8,7 @@ pub mod config;
 pub mod drum;
 pub mod plugin;
 pub mod sampler;
+pub mod slots;
 
 pub use plugin::FtsSignal;
 

@@ -8,6 +8,11 @@
 //!     <stems dir> <take suffix> <library dir> <out.wav> [seconds] [solo]
 //! ```
 //!
+//! `SIGNAL_KIT_STATES=<dir>` also writes, for Studio, one Signal state per
+//! drum track (per-track mode, one session: `SIGNAL_KIT_SESSION`, by
+//! default `unbreakable-drums`) and a `manifest.json` (see
+//! [`write_states`]).
+//!
 //! `SIGNAL_KIT_CALIBRATE=3` first makes every phase gain neutral on the
 //! take (three measure-and-trim passes) and prints the make-ups.
 //!
@@ -235,6 +240,9 @@ fn main() -> Result<(), String> {
             }
         }
     }
+    if let Ok(dir) = std::env::var("SIGNAL_KIT_STATES") {
+        write_states(&preset, Path::new(&dir))?;
+    }
     let (_, peak) = render(&preset, &paths, frames, Some(out))?;
     println!("peak {:.1} dBFS", 20.0 * peak.max(1e-9).log10());
     Ok(())
@@ -343,4 +351,101 @@ fn render(
         .map(signal_core::graph::Graph::phase_levels)
         .unwrap_or_default();
     Ok((levels, peak))
+}
+
+/// What a track of the kit is, for the host: which Signal it runs.
+fn role(lane: &signal_core::state::LaneSpec) -> Option<&'static str> {
+    use signal_core::block::BlockKind;
+    let has = |kind: &str| {
+        lane.blocks
+            .iter()
+            .any(|b| b.kind == BlockKind::Signal(kind.into()))
+    };
+    let name = lane.name.as_str();
+    Some(if lane.trigger.is_some() {
+        "trigger"
+    } else if has("drum") {
+        "sample"
+    } else if name.ends_with("/Sub") || name.ends_with("/Fund") {
+        "one-note"
+    } else if name.starts_with("Drums/Process/Compress/") {
+        "parallel"
+    } else if has("reverb") {
+        "verb"
+    } else if !lane.input.is_empty() {
+        "mic"
+    } else if !lane.blocks.is_empty() {
+        "bus"
+    } else {
+        // Nothing to run (a Sum, a folder): no Signal on it.
+        return None;
+    })
+}
+
+/// For Studio's `SIGNAL_KIT`: one state per track that runs a Signal (the
+/// CLAP's own state stream, `plugin::clap_state`: the kit, the per-track
+/// mode, the session, the track's path as its port), and
+/// `manifest.json`: `{session, clap, tracks: [{path, role, state, to,
+/// sends}]}`. `to` and `sends` are the routing the kit assumes and the
+/// host provides (a folder's sum, the sends into a Sub, a verb, Process).
+fn write_states(preset: &signal_core::state::Preset, dir: &Path) -> Result<(), String> {
+    use signal_core::session::{PortName, SessionId, SessionLink};
+    use signal_core::state::{Instance, SignalState};
+    let session =
+        std::env::var("SIGNAL_KIT_SESSION").unwrap_or_else(|_| "unbreakable-drums".into());
+    let clap = std::env::var("HOME")
+        .map(|h| format!("{h}/.clap/Signal Dev.clap"))
+        .unwrap_or_default();
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let mut tracks = Vec::new();
+    for lane in &preset.lanes {
+        let (Some(role), Some(port)) = (role(lane), lane.port.as_deref()) else {
+            continue;
+        };
+        if port == "Drums/Kit" {
+            continue;
+        }
+        let state = SignalState {
+            instance: Instance::Port(SessionLink {
+                session: SessionId(session.clone()),
+                port: PortName(port.to_owned()),
+            }),
+            ..SignalState::new(preset.clone())
+        };
+        let file = format!("{}.state", port.replace('/', "__").replace(' ', "_"));
+        std::fs::write(dir.join(&file), signal_plugin::plugin::clap_state(&state))
+            .map_err(|e| e.to_string())?;
+        tracks.push(serde_json::json!({
+            "path": port,
+            "role": role,
+            "state": file,
+            "muted": lane.mute && lane.trigger.is_none(),
+        }));
+    }
+    // The routing the kit assumes and the host provides: every send, by
+    // Studio's track paths (`Drums/Kit`, Signal's own sum of the kit, is
+    // the pieces' parent: in Studio, the kit's tracks before Process).
+    let routing: Vec<_> = preset
+        .lanes
+        .iter()
+        .flat_map(|l| {
+            l.sends.iter().map(move |s| {
+                serde_json::json!({
+                    "from": if l.name == "Drums/Kit" { "Drums (the kit, before Process)" } else { l.name.as_str() },
+                    "to": s.to,
+                    "gain_db": s.gain_db,
+                    "pre": s.pre,
+                })
+            })
+        })
+        .collect();
+    let manifest = serde_json::json!({ "session": session, "clap": clap, "tracks": tracks, "routing": routing });
+    let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("manifest.json"), text).map_err(|e| e.to_string())?;
+    println!(
+        "wrote {} track states and the manifest to {}",
+        tracks.len(),
+        dir.display()
+    );
+    Ok(())
 }

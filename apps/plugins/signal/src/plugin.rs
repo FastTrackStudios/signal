@@ -25,12 +25,15 @@
 //! - **Files** (NAM captures, IRs, packs) are read from disk by
 //!   [`DiskHost`]: this build has no host-actions extension to ask yet.
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use nice_plug::params::internals::ParamPtr;
 use nice_plug::params::persist::PersistentField;
 use nice_plug::prelude::*;
+use signal_core::block::ParamChange;
 use signal_core::engine::{HostParam, HostParamEvent};
 use signal_core::graph::{self, BuildOptions, BuildReport, Graph};
 use signal_core::host::{AssetRef, HostError, SignalHost};
@@ -41,7 +44,22 @@ use signal_core::{BlockFactory, BuiltinFactory, Controller, Processor, processor
 
 use crate::config::RigConfig;
 
+use crate::slots::{self, Mailbox, SLOTS, Shown, Table};
+
+/// The development build (`--features dev`) is its own plugin, beside a
+/// released FTS Signal: Studio loads it from a worktree.
+#[cfg(feature = "dev")]
+const PLUGIN_NAME: &str = "Signal Dev";
+#[cfg(not(feature = "dev"))]
 const PLUGIN_NAME: &str = "FTS Signal";
+#[cfg(feature = "dev")]
+const CLAP_ID: &str = "com.fasttrackstudio.signal.dev";
+#[cfg(not(feature = "dev"))]
+const CLAP_ID: &str = "com.fasttrackstudio.signal";
+#[cfg(feature = "dev")]
+const VST3_ID: [u8; 16] = *b"FtsSignalDev0001";
+#[cfg(not(feature = "dev"))]
+const VST3_ID: [u8; 16] = *b"FtsSignalPlug001";
 
 /// The most MIDI events taken per block; more are dropped.
 const MIDI_CAPACITY: usize = 1024;
@@ -63,34 +81,115 @@ fn float_param(spec: ParamSpec) -> FloatParam {
     .with_string_to_value(Arc::new(move |s| spec.parse(s)))
 }
 
-/// The instance's parameters, and its state.
-#[derive(Params)]
+/// The instance's parameters, its blocks' parameters ([`slots`]), and its
+/// state.
 pub struct SignalParams {
-    #[id = "in_gain"]
     pub input_gain: FloatParam,
-    #[id = "out_gain"]
     pub output_gain: FloatParam,
-    #[id = "bypass"]
     pub bypass: BoolParam,
-    #[id = "macro_1"]
     pub macro_1: FloatParam,
-    #[id = "macro_2"]
     pub macro_2: FloatParam,
-    #[id = "macro_3"]
     pub macro_3: FloatParam,
-    #[id = "macro_4"]
     pub macro_4: FloatParam,
-    #[id = "macro_5"]
     pub macro_5: FloatParam,
-    #[id = "macro_6"]
     pub macro_6: FloatParam,
-    #[id = "macro_7"]
     pub macro_7: FloatParam,
-    #[id = "macro_8"]
     pub macro_8: FloatParam,
-    /// The `SignalState`, as JSON. Empty: nothing saved yet.
-    #[persist = "signal-state"]
+    /// The running state's block parameters, `b001`…: named, printed and
+    /// parsed by [`Shown`]'s table.
+    pub slots: Vec<FloatParam>,
+    /// The `SignalState`, as JSON, persisted as `signal-state`. Empty:
+    /// nothing saved yet.
     pub state: StateField,
+    pub shown: Arc<Shown>,
+}
+
+/// The state key: the field the state blob is persisted under.
+pub const STATE_KEY: &str = "signal-state";
+
+fn slot_param(i: usize, shown: &Arc<Shown>) -> FloatParam {
+    let (name, text, parse) = (shown.clone(), shown.clone(), shown.clone());
+    FloatParam::new(
+        format!("Block {}", i + 1),
+        0.0,
+        FloatRange::Linear { min: 0.0, max: 1.0 },
+    )
+    .with_dynamic_name(Arc::new(move || {
+        name.get()
+            .slots
+            .get(i)
+            .map_or_else(|| format!("(unused {})", i + 1), |s| s.name.clone())
+    }))
+    .with_value_to_string(Arc::new(move |n| {
+        text.get().slots.get(i).map_or_else(String::new, |s| {
+            ValueText::of(&s.spec, s.spec.denormalize(n))
+                .as_str()
+                .to_owned()
+        })
+    }))
+    .with_string_to_value(Arc::new(move |t| {
+        let table = parse.get();
+        let s = table.slots.get(i)?;
+        s.spec.parse(t).map(|v| s.spec.normalize(v))
+    }))
+}
+
+// SAFETY: every pointer is to a field of `self` (the slots' `Vec` is never
+// resized after construction), alive as long as nice-plug's
+// `Arc<SignalParams>`.
+unsafe impl Params for SignalParams {
+    fn param_map(&self) -> Vec<(String, ParamPtr, String)> {
+        let mut map = vec![
+            (
+                "in_gain".to_owned(),
+                self.input_gain.as_ptr(),
+                String::new(),
+            ),
+            (
+                "out_gain".to_owned(),
+                self.output_gain.as_ptr(),
+                String::new(),
+            ),
+            ("bypass".to_owned(), self.bypass.as_ptr(), String::new()),
+        ];
+        let macros = [
+            &self.macro_1,
+            &self.macro_2,
+            &self.macro_3,
+            &self.macro_4,
+            &self.macro_5,
+            &self.macro_6,
+            &self.macro_7,
+            &self.macro_8,
+        ];
+        for (i, m) in macros.into_iter().enumerate() {
+            map.push((format!("macro_{}", i + 1), m.as_ptr(), String::new()));
+        }
+        for (i, p) in self.slots.iter().enumerate() {
+            map.push((slots::slot_id(i), p.as_ptr(), String::new()));
+        }
+        map
+    }
+
+    fn serialize_fields(&self) -> BTreeMap<String, String> {
+        // What was dialled in on the slots goes into the state: a restored
+        // state rebuilds its graph from it, and the slots follow.
+        self.write_back();
+        let mut out = BTreeMap::new();
+        if let Ok(data) = self.state.map(nice_plug::params::persist::serialize_field) {
+            out.insert(STATE_KEY.to_owned(), data);
+        }
+        out
+    }
+
+    fn deserialize_fields(&self, serialized: &BTreeMap<String, String>) {
+        if let Some(text) = serialized
+            .get(STATE_KEY)
+            .and_then(|d| nice_plug::params::persist::deserialize_field::<String>(d).ok())
+        {
+            self.state.set(text);
+        }
+    }
 }
 
 /// The `signal-state` field: the JSON, and how many times a host has set
@@ -136,7 +235,10 @@ impl<'a> PersistentField<'a, String> for StateField {
 
 impl Default for SignalParams {
     fn default() -> Self {
+        let shown = Arc::new(Shown::default());
         Self {
+            slots: (0..SLOTS).map(|i| slot_param(i, &shown)).collect(),
+            shown,
             input_gain: float_param(host::INPUT_GAIN),
             output_gain: float_param(host::OUTPUT_GAIN),
             bypass: BoolParam::new(host::BYPASS.name, false).make_bypass(),
@@ -153,7 +255,67 @@ impl Default for SignalParams {
     }
 }
 
+/// The CLAP state the Signal plugin loads (nice-plug's stream: an 8-byte
+/// little-endian length, then the JSON) holding `state`, its parameters
+/// left as they are: what a host restores to put a preset in an instance.
+#[must_use]
+pub fn clap_state(state: &SignalState) -> Vec<u8> {
+    let blob = String::from_utf8(state.to_blob()).unwrap_or_default();
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        STATE_KEY.to_owned(),
+        nice_plug::params::persist::serialize_field(&blob).unwrap_or_default(),
+    );
+    let json = serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "params": {},
+        "fields": fields,
+    });
+    let body = serde_json::to_vec(&json).unwrap_or_default();
+    let mut stream = (body.len() as u64).to_le_bytes().to_vec();
+    stream.extend_from_slice(&body);
+    stream
+}
+
 impl SignalParams {
+    /// Write the slots' values into the state's preset (its block
+    /// parameters, by lane, block and parameter id).
+    fn write_back(&self) {
+        let table = self.shown.get();
+        if table.slots.is_empty() {
+            return;
+        }
+        let text = self.state.text();
+        let Ok(mut state) = SignalState::from_blob(text.as_bytes()) else {
+            return;
+        };
+        for (slot, p) in table.slots.iter().zip(&self.slots) {
+            let value = slot.spec.denormalize(p.unmodulated_normalized_value());
+            let block = state
+                .preset
+                .lanes
+                .iter_mut()
+                .find(|l| l.name == slot.lane_name)
+                .and_then(|l| l.blocks.iter_mut().find(|b| b.id == slot.block_id));
+            if let Some(b) = block {
+                b.params.insert(slot.spec.id.to_owned(), value);
+            }
+        }
+        self.state
+            .store_running(String::from_utf8(state.to_blob()).unwrap_or_default());
+    }
+
+    /// Show `table`, the slots at `values` (normalized): what the graph
+    /// just built has. Main or background thread.
+    fn show(&self, table: Arc<Table>, values: &[f32]) {
+        for (i, slot) in self.slots.iter().enumerate() {
+            let v = values.get(i).copied().unwrap_or(0.0);
+            // SAFETY: the slot lives as long as `self`.
+            unsafe { slot.as_ptr()._internal_set_normalized_value(v) };
+        }
+        self.shown.set(table);
+    }
+
     fn macros(&self) -> [f32; MACROS] {
         [
             self.macro_1.value(),
@@ -189,6 +351,8 @@ struct Shared {
     controller: Mutex<Controller>,
     /// Sample rate and max block of the current activation; `None` before.
     config: Mutex<Option<(f32, usize)>>,
+    /// A rebuilt state's slots, for the audio thread.
+    tables: Mailbox,
 }
 
 /// Background work: rebuild the graph from the state field.
@@ -205,6 +369,12 @@ pub struct FtsSignal {
     /// What the processor last had, so a block hands over only changes.
     last: [f32; 3 + MACROS],
     in_channels: usize,
+    /// The running graph's slots, and what each was last applied at (the
+    /// host value's bits).
+    table: Arc<Table>,
+    applied: Vec<u32>,
+    /// The latency the host was told.
+    latency: u32,
 }
 
 impl Default for FtsSignal {
@@ -215,6 +385,7 @@ impl Default for FtsSignal {
             params: params.clone(),
             controller: Mutex::new(controller),
             config: Mutex::new(None),
+            tables: Mailbox::default(),
         });
         Self {
             params,
@@ -225,6 +396,9 @@ impl Default for FtsSignal {
             host_events: Vec::with_capacity(3 + MACROS),
             last: [f32::NAN; 3 + MACROS],
             in_channels: 2,
+            table: Arc::new(Table::default()),
+            applied: vec![0; SLOTS],
+            latency: 0,
         }
     }
 }
@@ -335,6 +509,9 @@ impl Plugin for FtsSignal {
                 return;
             };
             let (state, graph, report) = build_from(&shared.params.state.text(), sr, max_block);
+            let table = Arc::new(Table::of(&graph));
+            shared.params.show(table.clone(), &table.values(&graph));
+            shared.tables.post(table);
             let mut controller = shared
                 .controller
                 .lock()
@@ -369,10 +546,18 @@ impl Plugin for FtsSignal {
             buffer_config.sample_rate,
             max_block,
         );
+        let table = Arc::new(Table::of(&graph));
+        let values = table.values(&graph);
+        self.params.show(table.clone(), &values);
+        self.applied = (0..SLOTS)
+            .map(|i| values.get(i).copied().unwrap_or(0.0).to_bits())
+            .collect();
+        self.table = table;
         drop(self.processor.install(graph));
         self.built_generation = generation;
         self.last = [f32::NAN; 3 + MACROS];
-        context.set_latency_samples(self.processor.latency());
+        self.latency = self.processor.latency();
+        context.set_latency_samples(self.latency);
         // Keep what's running as the state (a fresh instance saves its
         // starting preset).
         self.params
@@ -490,9 +675,43 @@ impl Plugin for FtsSignal {
                 self.processor.set_position(pos);
             }
         }
+        // A rebuilt state's slots: what the host shows now is what the new
+        // graph has, so nothing is applied until it moves.
+        if let Some(mut new) = self.shared.tables.take() {
+            // The old table goes back in the box the new one came in: no
+            // allocation, and the main thread drops it.
+            std::mem::swap(&mut self.table, &mut *new);
+            self.shared.tables.retire(new);
+            for (a, p) in self.applied.iter_mut().zip(&self.params.slots) {
+                *a = p.modulated_normalized_value().to_bits();
+            }
+        }
+        // The blocks' parameters the host moved.
+        for (i, slot) in self.table.slots.iter().enumerate() {
+            let (Some(p), Some(a)) = (self.params.slots.get(i), self.applied.get_mut(i)) else {
+                break;
+            };
+            let n = p.modulated_normalized_value();
+            if n.to_bits() != *a {
+                *a = n.to_bits();
+                self.processor.apply_param(
+                    slot.lane,
+                    slot.block,
+                    slot.param,
+                    ParamChange::Set(slot.spec.denormalize(n)),
+                );
+            }
+        }
         let io = buffer.as_slice();
         self.processor
             .process(io, self.in_channels, frames, &self.midi, &self.host_events);
+        // A state restored while active builds a new graph: its latency
+        // (a trigger's lookahead, a session's) to the host.
+        let latency = self.processor.latency();
+        if latency != self.latency {
+            self.latency = latency;
+            context.set_latency_samples(latency);
+        }
         ProcessStatus::Normal
     }
 }
@@ -522,7 +741,7 @@ fn init_logging() {
 }
 
 impl ClapPlugin for FtsSignal {
-    const CLAP_ID: &'static str = "com.fasttrackstudio.signal";
+    const CLAP_ID: &'static str = CLAP_ID;
     const CLAP_DESCRIPTION: Option<&'static str> = Some(
         "FTS Signal: guitar and keys rigs, DSP chains and (next) the drum submixer, the same core Studio runs",
     );
@@ -537,7 +756,7 @@ impl ClapPlugin for FtsSignal {
 }
 
 impl Vst3Plugin for FtsSignal {
-    const VST3_CLASS_ID: [u8; 16] = *b"FtsSignalPlug001";
+    const VST3_CLASS_ID: [u8; 16] = VST3_ID;
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
         &[Vst3SubCategory::Instrument, Vst3SubCategory::Fx];
 }
