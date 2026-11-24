@@ -92,18 +92,12 @@ pub struct Graph {
     latency: u32,
 }
 
-/// Build `preset`.
+/// The lanes of `preset` an instance runs, in the order its graph holds
+/// them: every lane in the multi-channel mode; in the per-track mode the
+/// lanes of `port`, or the lanes with no port when it has none.
 #[must_use]
-pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
-    let max_block = opts.max_block.clamp(1, crate::MAX_BLOCK);
-    let cx = BuildContext {
-        sample_rate: opts.sample_rate,
-        max_block,
-        host: opts.host,
-    };
-    let mut report = BuildReport::default();
-
-    let lanes_here: Vec<&LaneSpec> = match opts.port {
+pub fn lanes_for<'p>(preset: &'p Preset, port: Option<&str>) -> Vec<&'p LaneSpec> {
+    match port {
         None => preset.lanes.iter().collect(),
         Some(port) => {
             let own: Vec<_> = preset
@@ -117,7 +111,40 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
                 own
             }
         }
+    }
+}
+
+/// Where every block of `kind` is in the graph [`build`] makes of `preset`
+/// for `port`, as `(lane, block)`: what the control side sends
+/// [`Command::SwapBackend`](crate::engine::Command::SwapBackend) to when a
+/// block is overridden by its CLAP ("every instance of that block").
+#[must_use]
+pub fn positions_of(preset: &Preset, port: Option<&str>, kind: &BlockKind) -> Vec<(usize, usize)> {
+    lanes_for(preset, port)
+        .iter()
+        .enumerate()
+        .flat_map(|(l, lane)| {
+            lane.blocks
+                .iter()
+                .enumerate()
+                .filter(|(_, b)| &b.kind == kind)
+                .map(move |(b, _)| (l, b))
+        })
+        .collect()
+}
+
+/// Build `preset`.
+#[must_use]
+pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
+    let max_block = opts.max_block.clamp(1, crate::MAX_BLOCK);
+    let cx = BuildContext {
+        sample_rate: opts.sample_rate,
+        max_block,
+        host: opts.host,
     };
+    let mut report = BuildReport::default();
+
+    let lanes_here = lanes_for(preset, opts.port);
 
     let mut lanes = Vec::with_capacity(lanes_here.len());
     for spec in &lanes_here {

@@ -22,6 +22,7 @@ members = [
     "apps/plugins/sampler",
     "apps/plugins/signal",
     "features/core",
+    "features/core-clap",
     "features/dsp/nam",
     "features/rigs/drums",
     "features/rigs/ekit",
@@ -137,25 +138,30 @@ neural-amp-modeler = { git = "https://github.com/FastTrackStudios/neural-amp-mod
 # root manifest declares the same versions, git pins and patches as this
 # one: bump a pin there and here together, or Cargo.lock grows a second
 # copy. Working on both at once: AGENTS.md, "Co-developing across repos".
-daw-proto = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-utils = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-midi = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-audio = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
+daw-proto = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+utils = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+midi = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+audio = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
 # Defaults OFF at the root so lean consumers (probe-only scanners, the
 # iOS-clean session-guide) don't drag the pack engine in; each consumer
 # names the features it needs ("load" / "write" / "engine").
-fts-sample = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e", default-features = false }
+fts-sample = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80", default-features = false }
 # The engine: `daw` is the facade (its engine is opt-in, `standalone`),
 # `daw-standalone` the engine, `session-format` the session document,
 # `dawfile-reaper` the `.rpp` reader the engine loads and saves with,
 # `signal-plugin-host` CLAP/VST3 hosting, `builtin` the effects as engine
 # blocks, `daw-sync` DAWs kept in step (network, Ableton Link). The engine
 # takes the effects from fts-fx at the rev above.
-daw = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-daw-standalone = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-session-format = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-signal-plugin-host = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e", default-features = false }
-builtin = { git = "https://github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
+daw = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+daw-standalone = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+session-format = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+signal-plugin-host = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80", default-features = false }
+builtin = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+# FastTrackStudio's CLAP extensions (host-actions/1, signal/1; signal#26),
+# at the daw revision above.
+daw-clap-ext = { git = "https://github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+# Signal's CLAP backend and block overrides (desktop).
+signal-core-clap = { path = "features/core-clap" }
 
 keyflow-lang = { git = "https://github.com/FastTrackStudios/keyflow", tag = "v0.5.4", default-features = false }
 keyflow-annotate = { git = "https://github.com/FastTrackStudios/keyflow", tag = "v0.5.4" }
@@ -766,19 +772,20 @@ dioxus-vdom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.
 # [workspace.dependencies] above. Goes when keyflow pins the daw repo at
 # the revision Studio does.
 [patch."https://github.com/FastTrackStudios/daw"]
-daw                = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-daw-standalone     = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-session-format     = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-signal-plugin-host = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-builtin            = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-daw-proto          = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-daw-control        = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-daw-module         = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-daw-transport-sync = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-utils              = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-midi               = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-audio              = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
-fts-sample         = { git = "https://www.github.com/FastTrackStudios/daw", rev = "86263731dfd07e3ef69cfdce923901ce9894905e" }
+daw                = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+daw-standalone     = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+session-format     = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+signal-plugin-host = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+builtin            = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+daw-clap-ext       = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+daw-proto          = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+daw-control        = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+daw-module         = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+daw-transport-sync = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+utils              = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+midi               = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+audio              = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
+fts-sample         = { git = "https://www.github.com/FastTrackStudios/daw", rev = "4c96623f43836a1c1c5087236b82233602787c80" }
 
 # from processor
 [profile.dev.package.builtin]
