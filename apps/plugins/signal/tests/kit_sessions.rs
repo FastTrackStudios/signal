@@ -287,11 +287,13 @@ fn a_state_loaded_while_active_shows_its_slots_at_once() {
 struct TestHost {
     runs: std::sync::Mutex<Vec<(String, String)>>,
     topics: std::sync::Mutex<Vec<String>>,
+    sinks: std::sync::Mutex<Vec<(String, daw_clap_ext::host::EventSink)>>,
 }
 
 impl daw_clap_ext::host::HostActions for TestHost {
     fn list(&self) -> Result<String, daw_clap_ext::ExtError> {
-        Ok("[]".into())
+        // A host that takes the chain event (Studio polls instead).
+        Ok(r#"[{"id": "SIGNAL_CHAIN_CHANGED", "description": "a chain changed"}]"#.into())
     }
     fn describe(&self, id: &str) -> Result<String, daw_clap_ext::ExtError> {
         Err(daw_clap_ext::ExtError::NotFound(id.into()))
@@ -303,9 +305,10 @@ impl daw_clap_ext::host::HostActions for TestHost {
             .push((id.into(), args_json.into()));
         Ok("{}".into())
     }
-    fn subscribe(&self, topic: &str, _sink: daw_clap_ext::host::EventSink) -> Option<u64> {
+    fn subscribe(&self, topic: &str, sink: daw_clap_ext::host::EventSink) -> Option<u64> {
         let mut t = self.topics.lock().unwrap();
         t.push(topic.into());
+        self.sinks.lock().unwrap().push((topic.into(), sink));
         Some(t.len() as u64)
     }
 }
@@ -380,10 +383,16 @@ fn signal_1_shows_the_chain_and_midi_plays_and_keys_the_kit() {
         .iter()
         .find(|p| p["id"] == "threshold")
         .expect("threshold");
-    assert!(
-        threshold["clap_id"]
-            .as_str()
-            .is_some_and(|c| c.starts_with('b')),
+    // The CLAP parameter id, as the host's params extension reports it.
+    let reported = kick
+        .params()
+        .into_iter()
+        .find(|i| i.name == "Rescue · Gate · Threshold")
+        .expect("the slot")
+        .id;
+    assert_eq!(
+        threshold["clap_id"].as_str(),
+        Some(reported.to_string().as_str()),
         "{threshold}"
     );
     assert_eq!(threshold["text"], "-40.0 dB");
@@ -634,5 +643,76 @@ fn kit_mode_actions_name_their_lane() {
         gate("Drums/Kick"),
         false,
         "and not the kick's, which has the same id"
+    );
+}
+
+/// Studio's placed hits: Signal subscribes to its pieces' `hits:` topics
+/// after init, and a `hits:Drums/Kick` event (the piece's every hit) keys
+/// the kick's gate on those frames, with no trigger audio and no notes.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn the_hosts_placed_hits_key_the_gate() {
+    let preset = drum_kit(&KitPieces::default());
+    let host = std::sync::Arc::new(TestHost::default());
+    let options = daw::plugin::LoadOptions {
+        actions: Some(host.clone()),
+    };
+    let mut kick = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+        .expect("loads")
+        .expect("a CLAP");
+    let state = SignalState {
+        instance: Instance::Port(SessionLink {
+            session: SessionId(format!("placed-{}", std::process::id())),
+            port: PortName("Drums/Kick".into()),
+        }),
+        ..SignalState::new(preset)
+    };
+    kick.load_state(&clap_state(&state))
+        .expect("takes the state");
+    kick.prepare(SR, BLOCK as u32).expect("activates");
+    kick.pump_main_thread();
+    let topics = host.topics.lock().unwrap().clone();
+    println!("subscribed: {topics:?}");
+    if topics.is_empty() {
+        // daw's standalone host delivers subscriptions from daw-dev's
+        // 12c7193d on; one before it refuses them all.
+        println!("this daw host offers no subscriptions: nothing to deliver");
+        return;
+    }
+    assert!(topics.iter().any(|t| t == "hits:Drums/Kick"), "{topics:?}");
+    let sinks = host.sinks.lock().unwrap().clone();
+    let (sub, (_, sink)) = sinks
+        .iter()
+        .enumerate()
+        .find(|(_, (t, _))| t == "hits:Drums/Kick")
+        .expect("its sink");
+    sink.send(
+        (sub + 1) as u64,
+        "hits:Drums/Kick",
+        r#"{"piece": "Drums/Kick", "track": "Drums/Kick/Sum/Trig", "note": 36, "count": 1, "hits": [{"time": 1.0, "velocity": 100}]}"#,
+    );
+    let frames = 48_000 * 2;
+    let bleed = noise(frames, 0.3, 11);
+    let mut out = vec![0.0_f32; frames];
+    let mut scratch = vec![0.0_f32; BLOCK];
+    for start in (0..frames).step_by(BLOCK) {
+        let end = (start + BLOCK).min(frames);
+        let n = end - start;
+        kick.process_block(
+            &bleed[start..end],
+            &bleed[start..end],
+            &mut out[start..end],
+            &mut scratch[..n],
+            &PluginEvents::EMPTY,
+        )
+        .expect("processes");
+    }
+    let latency = kick.latency() as usize;
+    let shut = peak(&out[latency + 4_000..48_000]);
+    let open = peak(&out[48_000 + latency..48_000 + latency + 6_000]);
+    println!("kick out before the placed hit {shut:.4}, on it {open:.4}");
+    assert!(
+        open > 0.05 && shut < open * 0.1,
+        "the placed hit opens the gate: {shut} → {open}"
     );
 }

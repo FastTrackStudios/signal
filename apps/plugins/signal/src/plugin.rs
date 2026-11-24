@@ -414,6 +414,27 @@ impl Shared {
         state_to_build(&self.params.state.text())
     }
 
+    /// The rate the instance runs at (48 kHz before it's activated).
+    pub(crate) fn sample_rate(&self) -> f32 {
+        self.config
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .map_or(48_000.0, |c| c.0)
+    }
+
+    /// Hand piece `piece`'s placed hits to the audio side.
+    pub(crate) fn send_planned(&self, piece: u16, hits: Vec<(u64, f32)>) {
+        let mut controller = self
+            .controller
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        controller.collect();
+        let _ = controller.send(signal_core::engine::Command::PlannedHits {
+            piece,
+            hits: hits.into_boxed_slice(),
+        });
+    }
+
     /// Put `text` in as the state and build it here (the main thread: an
     /// action, a host's call).
     pub(crate) fn load_state_text(&self, text: String, on_main: bool) {
@@ -465,6 +486,17 @@ fn rebuild(shared: &Shared, on_main: bool) {
     if controller.install(graph).is_err() {
         tracing::error!("restored state not installed: the processor's queue is full");
         return;
+    }
+    drop(controller);
+    // The new graph starts without the host's placed hits: hand them again.
+    let planned = shared
+        .ext
+        .planned
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    for (piece, hits) in planned {
+        shared.send_planned(piece, hits);
     }
     tracing::info!(preset = %state.preset.name, blocks = report.blocks.len(), all_active = report.all_active(), "{PLUGIN_NAME}: state restored while active");
 }
@@ -689,6 +721,18 @@ impl Plugin for FtsSignal {
             .collect();
         self.table = table;
         drop(self.processor.install(graph));
+        // The host's placed hits, for the new graph (applied on its first
+        // block).
+        let planned = self
+            .shared
+            .ext
+            .planned
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        for (piece, hits) in planned {
+            self.shared.send_planned(piece, hits);
+        }
         self.built_generation = generation;
         self.shared.built.store(generation, Ordering::Release);
         self.last = [f32::NAN; 3 + MACROS];

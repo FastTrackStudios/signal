@@ -127,11 +127,18 @@ pub enum Command {
         param: usize,
         change: ParamChange,
     },
+    /// A piece's hits as the host has placed them (its hit markers, the
+    /// whole song): `(song frame, velocity)`, sorted. They key the piece's
+    /// blocks as notes do, on time, with nothing to detect.
+    PlannedHits { piece: u16, hits: Box<[(u64, f32)]> },
 }
 
 impl Command {
     const fn retires(&self) -> bool {
-        matches!(self, Self::Install(_) | Self::SwapBackend { .. })
+        matches!(
+            self,
+            Self::Install(_) | Self::SwapBackend { .. } | Self::PlannedHits { .. }
+        )
     }
 }
 
@@ -139,6 +146,7 @@ impl Command {
 pub enum Retired {
     Graph(Box<Graph>),
     Backend(Box<Backend>),
+    Hits(Box<[(u64, f32)]>),
 }
 
 struct Link {
@@ -383,6 +391,13 @@ impl Processor {
                     if let Some(g) = self.graph.as_mut() {
                         g.apply(lane, block, param, change);
                     }
+                }
+                Command::PlannedHits { piece, hits } => {
+                    let old = match self.graph.as_mut() {
+                        Some(g) => g.set_planned_hits(piece, hits),
+                        None => hits,
+                    };
+                    let _ = link.retired.push(Retired::Hits(old));
                 }
             }
         }

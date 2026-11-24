@@ -50,6 +50,12 @@ pub struct Ext {
     /// The host's transport, from its `transport` events: where it plays.
     pub transport_frame: AtomicU64,
     pub transport_playing: AtomicBool,
+    /// Whether the host has `SIGNAL_CHAIN_CHANGED` (asked once): a host
+    /// that polls `revision()` has none to run.
+    pub chain_changed: std::sync::OnceLock<bool>,
+    /// Each piece's hits as the host placed them (its `hits:<piece>`
+    /// events), kept to hand every new graph.
+    pub planned: Mutex<Vec<(u16, Vec<(u64, f32)>)>>,
 }
 
 impl Default for Ext {
@@ -65,6 +71,8 @@ impl Default for Ext {
             via: (0..MAX_BLOCKS).map(|_| AtomicU8::new(0)).collect(),
             transport_frame: AtomicU64::new(0),
             transport_playing: AtomicBool::new(false),
+            chain_changed: std::sync::OnceLock::new(),
+            planned: Mutex::new(Vec::new()),
         }
     }
 }
@@ -154,11 +162,18 @@ pub fn after_build(shared: &Shared, report: &graph::BuildReport, on_main: bool) 
     if let Some(client) = client {
         let state = shared.state();
         let port = port_of(&state);
-        // A host without the action just says so.
-        let _ = client.run(
-            "SIGNAL_CHAIN_CHANGED",
-            &json!({ "port": port, "revision": revision }).to_string(),
-        );
+        // Only where the host has the action (Studio polls revision()).
+        let has = *shared.ext.chain_changed.get_or_init(|| {
+            client
+                .list()
+                .is_ok_and(|list| list.contains("\"SIGNAL_CHAIN_CHANGED\""))
+        });
+        if has {
+            let _ = client.run(
+                "SIGNAL_CHAIN_CHANGED",
+                &json!({ "port": port, "revision": revision }).to_string(),
+            );
+        }
         subscribe(shared, &client, &state);
     }
 }
@@ -312,6 +327,13 @@ fn algorithm_of(spec: &BlockSpec) -> Option<String> {
         .or_else(|| plugin_processors::algorithms::find(family, None).map(|a| a.id.to_owned()))
 }
 
+/// A parameter's CLAP id (`clap_param_info.id`), as `signal.chain/1` writes
+/// it: the decimal `uint32` the host's params extension reports, for the
+/// parameter nice-plug knows as `id`.
+fn clap_id(id: &str) -> String {
+    nice_plug::wrapper::clap::param_clap_id(id).to_string()
+}
+
 fn param_json(spec: &signal_core::param::ParamSpec, value: f32, clap_id: Option<String>) -> Value {
     let choices: Vec<&str> = match spec.unit {
         Unit::Choice(names) => names.to_vec(),
@@ -360,7 +382,7 @@ fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec
                     .map(|p| ps.denormalize(p.unmodulated_normalized_value()))
                     .or_else(|| bspec.params.get(ps.id).copied())
                     .unwrap_or(ps.default);
-                param_json(ps, value, slot.map(slots::slot_id))
+                param_json(ps, value, slot.map(|i| clap_id(&slots::slot_id(i))))
             })
             .collect();
         let meters: Vec<Value> = table
@@ -478,7 +500,7 @@ pub fn chain(shared: &Shared) -> Value {
                     format!("{}.{}", slots::chain_id(phase, &t.block), t.param)
                 })
                 .collect();
-            json!({ "id": format!("macro_{}", i + 1), "name": m.name, "clap_id": format!("macro_{}", i + 1), "targets": targets })
+            json!({ "id": format!("macro_{}", i + 1), "name": m.name, "clap_id": clap_id(&format!("macro_{}", i + 1)), "targets": targets })
         })
         .collect();
     let mut out = json!({
@@ -925,32 +947,58 @@ pub unsafe extern "C" fn on_event(
     let Some(piece) = topic.strip_prefix("hits:") else {
         return;
     };
-    let state = shared.state();
-    let (Some(frame), Some(link)) = (
-        event.get("frame").and_then(Value::as_u64),
-        match &state.instance {
-            Instance::Port(l) => Some(l.clone()),
-            Instance::MultiChannel => None,
-        },
-    ) else {
+    // Studio's: the piece's every hit, after each edit step:
+    // `{piece, track, note, count, hits: [{time, velocity}]}`, time in
+    // seconds of the song.
+    let Some(list) = event.get("hits").and_then(Value::as_array) else {
         return;
     };
-    let velocity = event.get("velocity").and_then(Value::as_f64).unwrap_or(1.0) as f32;
-    let index = state
+    let rate = f64::from(shared.sample_rate());
+    let raw: Vec<(f64, f64)> = list
+        .iter()
+        .filter_map(|h| {
+            Some((
+                h.get("time")?.as_f64()?,
+                h.get("velocity").and_then(Value::as_f64).unwrap_or(1.0),
+            ))
+        })
+        .collect();
+    let scale = if raw.iter().any(|(_, v)| *v > 1.0) {
+        127.0
+    } else {
+        1.0
+    };
+    let mut hits: Vec<(u64, f32)> = raw
+        .iter()
+        .filter(|(t, _)| *t >= 0.0)
+        .map(|(t, v)| {
+            (
+                (t * rate).round() as u64,
+                ((v / scale) as f32).clamp(0.0, 1.0),
+            )
+        })
+        .collect();
+    hits.sort_by_key(|h| h.0);
+    let state = shared.state();
+    let pieces: Vec<u16> = state
         .preset
         .lanes
         .iter()
-        .position(|l| l.trigger.is_some() && piece_of(&l.name) == piece)
-        .and_then(|i| u16::try_from(i).ok());
-    if let Some(index) = index {
-        signal_core::session::Registry::join(&link.session)
-            .hits
-            .publish(SessionHit {
-                piece: index,
-                velocity,
-                frame,
-                midi: true,
-            });
+        .enumerate()
+        .filter(|(_, l)| l.trigger.is_some() && piece_of(&l.name) == piece)
+        .filter_map(|(i, _)| u16::try_from(i).ok())
+        .collect();
+    for index in pieces {
+        {
+            let mut planned = shared
+                .ext
+                .planned
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            planned.retain(|(p, _)| *p != index);
+            planned.push((index, hits.clone()));
+        }
+        shared.send_planned(index, hits.clone());
     }
 }
 

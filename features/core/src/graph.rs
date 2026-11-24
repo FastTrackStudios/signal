@@ -465,6 +465,9 @@ pub struct Graph {
     /// notes ignores its trigger's detected hits for [`Graph::ten_seconds`].
     piece_midi: Vec<(u16, u64)>,
     ten_seconds: u64,
+    /// Per piece a remote key follows: its hits as the host placed them,
+    /// `(song frame, velocity)`, sorted (empty until the host sends them).
+    planned: Vec<(u16, Box<[(u64, f32)]>)>,
     remote_count: usize,
     /// The song position of the next piece, in frames (the session's clock).
     clock: u64,
@@ -805,6 +808,7 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
         remote: [(0, 0, 0.0, false); REMOTE_HITS],
         key_last: vec![(0, false); remote_key_count],
         piece_midi: remote_pieces.iter().map(|p| (*p, 0)).collect(),
+        planned: remote_pieces.iter().map(|p| (*p, Box::default())).collect(),
         ten_seconds: (f64::from(opts.sample_rate) * 10.0) as u64,
         remote_count: 0,
         clock: 0,
@@ -1433,6 +1437,7 @@ impl Graph {
             }
         }
         self.take_remote_hits();
+        self.take_planned_hits(self.clock.saturating_sub(self.lookahead as u64), len);
         let input_copy = &self.input_copy;
         let lanes_in = if la == 0 {
             &self.input_copy
@@ -1740,6 +1745,34 @@ impl Graph {
         self.clock = self.clock.saturating_add(len as u64);
     }
 
+    /// Piece `piece`'s planned hits: `hits` in, the ones they replace back
+    /// (to drop off the audio thread). A piece no key here follows hands
+    /// `hits` back.
+    pub fn set_planned_hits(&mut self, piece: u16, hits: Box<[(u64, f32)]>) -> Box<[(u64, f32)]> {
+        match self.planned.iter_mut().find(|(p, _)| *p == piece) {
+            Some((_, slot)) => core::mem::replace(slot, hits),
+            None => hits,
+        }
+    }
+
+    /// The planned hits this piece hears (`heard..heard + len` of the
+    /// song), as notes: with the session's, for the remote keys.
+    fn take_planned_hits(&mut self, heard: u64, len: usize) {
+        let end = heard.saturating_add(len as u64);
+        for (piece, hits) in &self.planned {
+            let from = hits.partition_point(|h| h.0 < heard);
+            for &(frame, velocity) in hits.iter().skip(from).take_while(|h| h.0 < end) {
+                if let Some(slot) = self.remote.get_mut(self.remote_count) {
+                    *slot = (*piece, frame, velocity, true);
+                    self.remote_count += 1;
+                }
+                if let Some(m) = self.piece_midi.iter_mut().find(|(p, _)| p == piece) {
+                    m.1 = frame.max(1);
+                }
+            }
+        }
+    }
+
     /// Take the hits the session's other ports published since the last
     /// piece, for the pieces this graph's remote keys follow.
     fn take_remote_hits(&mut self) {
@@ -1747,9 +1780,17 @@ impl Graph {
             return;
         };
         let (keys, remote, count) = (&self.remote_keys, &mut self.remote, &mut self.remote_count);
-        let (piece_midi, ten) = (&mut self.piece_midi, self.ten_seconds);
+        let (piece_midi, ten, planned) = (&mut self.piece_midi, self.ten_seconds, &self.planned);
         session.hits.drain(cursor, |h| {
             if !keys.iter().any(|(_, _, p)| *p == h.piece) {
+                return;
+            }
+            // A piece whose hits the host has placed plays those: the same
+            // hits as its notes, which would play it twice.
+            if planned
+                .iter()
+                .any(|(p, list)| *p == h.piece && !list.is_empty())
+            {
                 return;
             }
             // A piece with notes is keyed by them: its trigger's detected

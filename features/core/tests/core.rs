@@ -919,3 +919,73 @@ fn a_reset_clears_the_reverbs() {
         );
     }
 }
+
+/// The host's placed hits (Studio's `hits:<piece>`): a piece's whole list,
+/// handed to the processor, plays its sample on each hit's frame, with no
+/// trigger and nothing detected.
+#[test]
+fn placed_hits_play_on_their_frames() {
+    use signal_core::session::{HitBus, Session, SessionId};
+    let host = MemoryHost::default().with("kick.wav", wav16(&[0.5; 100]));
+    let preset = Preset {
+        name: "Kick".into(),
+        inputs: 1,
+        outputs: 2,
+        lanes: vec![
+            LaneSpec {
+                port: Some("Kick/Trig".into()),
+                input: vec![0],
+                mute: true,
+                trigger: Some(TriggerSpec {
+                    threshold_db: -30.0,
+                    note: None,
+                }),
+                ..lane("Trig")
+            },
+            LaneSpec {
+                port: Some("Kick".into()),
+                blocks: vec![
+                    BlockSpec::signal("sample", "sample")
+                        .asset(AssetRef::path("kick.wav"))
+                        .param("dynamics", 0.0)
+                        .key("Trig"),
+                ],
+                ..lane("Sample")
+            },
+        ],
+        macros: vec![],
+    };
+    let factories: [&dyn BlockFactory; 1] = [&BuiltinFactory];
+    let (mut g, _) = graph::build(
+        &preset,
+        &BuildOptions {
+            port: Some("Kick"),
+            ..opts(&factories, &host)
+        },
+    );
+    g.join(std::sync::Arc::new(Session {
+        id: SessionId("placed".into()),
+        hits: HitBus::new(),
+    }));
+    let (mut controller, mut proc) = processor_pair();
+    let _ = proc.install(g);
+    // The Trig lane is the preset's lane 0: its hits at 0.5 s and 1 s.
+    let _ = controller.send(Command::PlannedHits {
+        piece: 0,
+        hits: vec![(24_000, 1.0), (48_000, 1.0)].into_boxed_slice(),
+    });
+    let latency = proc.latency() as usize;
+    let out = play(&mut proc, &vec![0.0; 72_000], 2, 0, 256);
+    let onsets: Vec<usize> = out[0]
+        .windows(2)
+        .enumerate()
+        .filter(|(_, w)| w[0] < 0.25 && w[1] >= 0.25)
+        .map(|(i, _)| i + 1)
+        .collect();
+    assert_eq!(
+        onsets,
+        vec![24_000 + latency, 48_000 + latency],
+        "on the placed frames, {latency} late"
+    );
+    controller.collect();
+}
