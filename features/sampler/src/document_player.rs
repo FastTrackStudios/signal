@@ -176,6 +176,16 @@ impl Drop for Worker {
     }
 }
 
+/// What a deferred reconstruction is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Why {
+    /// A seek: the document is silent until it comes in.
+    Seek,
+    /// A new schedule (an edit) while playing: the old one plays on until
+    /// the new one comes in at the same frame.
+    Edit,
+}
+
 /// A deferred reconstruction in flight.
 #[derive(Debug, Clone, Copy)]
 struct Pending {
@@ -183,6 +193,7 @@ struct Pending {
     at: i64,
     /// Where the next block must start for the transport to be playing on.
     next: i64,
+    why: Why,
 }
 
 /// Document playback, live input and seeks for one bank instrument. See
@@ -197,6 +208,9 @@ pub struct DocumentPlayer {
     /// A bank back from the worker or swapped out, waiting to go back.
     spare: Option<Box<SamplerBank>>,
     pending: Option<Pending>,
+    /// A schedule published while playing, built on the worker before it
+    /// takes over ([`Why::Edit`]).
+    incoming: Option<Arc<Schedule>>,
     policy: SeekPolicy,
     /// Frames of fade-in left, and its length.
     fade: (u32, u32),
@@ -224,6 +238,7 @@ impl DocumentPlayer {
             worker: None,
             spare: None,
             pending: None,
+            incoming: None,
             policy: SeekPolicy::EXACT,
             fade: (0, 0),
             live_scratch: vec![0.0; max_block.max(1) * 2],
@@ -280,11 +295,14 @@ impl DocumentPlayer {
         out: &mut [f32],
     ) -> Played {
         let frames = out.len() / 2;
-        self.adopt_schedule(published);
         self.return_spare();
+        self.adopt_schedule(published, t);
         let want = t.playing && self.adopted.is_some();
         if !want {
             self.pending = None;
+        }
+        if want {
+            self.take_edit(t);
         }
         let played = if want && self.deferring(t, frames) {
             out.fill(0.0);
@@ -305,16 +323,97 @@ impl DocumentPlayer {
         played
     }
 
-    fn adopt_schedule(&mut self, published: Option<&Arc<Schedule>>) {
-        let same = match (&self.adopted, published) {
+    /// A newly published schedule: adopted at once, or — while the
+    /// document plays on and its replay would be long — built on the
+    /// worker for a frame ahead, the old schedule playing until then.
+    fn adopt_schedule(&mut self, published: Option<&Arc<Schedule>>, t: &BlockTransport) {
+        let is = |a: Option<&Arc<Schedule>>| match (a, published) {
             (Some(a), Some(b)) => Arc::ptr_eq(a, b),
             (None, None) => true,
             _ => false,
         };
-        if !same {
-            self.adopted = published.cloned();
-            self.scheduler.set_schedule(self.adopted.clone());
+        if is(self.adopted.as_ref()) {
+            if self.incoming.take().is_some() {
+                self.pending = None;
+            }
+            return;
+        }
+        if self.incoming.is_some() && is(self.incoming.as_ref()) {
+            return; // being built
+        }
+        let playing_on = t.playing
+            && self.pending.is_none()
+            && self.scheduler.document_active()
+            && self.scheduler.expected_frame() == Some(t.pos_frame);
+        if let (true, Some(new), Some(_)) = (playing_on, published, &self.worker) {
+            let pos = t.pos_frame.max(0) as u64;
+            if pos - new.reconstruction_start(pos) > self.policy.inline_max_frames {
+                self.incoming = Some(Arc::clone(new));
+                self.request(Arc::clone(new), t.pos_frame, Why::Edit);
+                return;
+            }
+        }
+        self.incoming = None;
+        self.adopted = published.cloned();
+        self.scheduler.set_schedule(self.adopted.clone());
+        self.pending = None;
+    }
+
+    /// The edit's bank, if it came in for this block: the new schedule
+    /// takes over here. A jump of the transport meanwhile adopts it as a
+    /// seek instead.
+    fn take_edit(&mut self, t: &BlockTransport) {
+        let Some(p) = self.pending.filter(|p| p.why == Why::Edit) else {
+            return;
+        };
+        let Some(new) = self.incoming.clone() else {
+            return;
+        };
+        if self.scheduler.expected_frame() != Some(t.pos_frame) {
+            self.incoming = None;
             self.pending = None;
+            self.adopted = Some(Arc::clone(&new));
+            self.scheduler.set_schedule(Some(new));
+            return;
+        }
+        if t.pos_frame < p.at {
+            return;
+        }
+        if let Some((bank, sched, done)) = self.take_done(&new, p.at) {
+            if t.pos_frame.saturating_sub(p.at) as u64 > self.policy.catch_up_max {
+                self.spare = Some(bank);
+                self.request(new, t.pos_frame, Why::Edit);
+                return;
+            }
+            let mut bank = bank;
+            std::mem::swap(&mut self.doc, &mut bank);
+            self.scheduler.set_schedule(Some(Arc::clone(&sched)));
+            if self
+                .scheduler
+                .adopt(&mut self.doc, &done, &sched, t.pos_frame)
+            {
+                self.adopted = Some(sched);
+                self.incoming = None;
+                self.pending = None;
+            } else {
+                // Not ours after all: back to the old schedule, seeking.
+                std::mem::swap(&mut self.doc, &mut bank);
+                self.scheduler.set_schedule(self.adopted.clone());
+            }
+            self.spare = Some(bank);
+        }
+    }
+
+    /// The worker's bank if it was built for `sched` at `at` (any other
+    /// goes back as a spare).
+    fn take_done(&mut self, sched: &Arc<Schedule>, at: i64) -> Option<Done> {
+        let worker = self.worker.as_ref()?;
+        let done = worker.exchange.done.try_lock().ok()?.take()?;
+        if done.2.at == at && Arc::ptr_eq(&done.1, sched) {
+            Some(done)
+        } else {
+            self.spare = Some(done.0);
+            None
         }
     }
 
@@ -323,6 +422,9 @@ impl DocumentPlayer {
     fn deferring(&mut self, t: &BlockTransport, frames: usize) -> bool {
         if self.worker.is_none() {
             return false;
+        }
+        if self.pending.is_some_and(|p| p.why == Why::Edit) {
+            return false; // the old schedule plays on
         }
         let jumped = self.pending.is_some_and(|p| p.next != t.pos_frame);
         if self.pending.is_none() || jumped {
@@ -333,7 +435,9 @@ impl DocumentPlayer {
                 return false;
             }
             self.scheduler.hold(&mut self.doc);
-            self.request(t.pos_frame);
+            if let Some(sched) = self.adopted.clone() {
+                self.request(sched, t.pos_frame, Why::Seek);
+            }
         }
         if self.try_adopt(t.pos_frame) {
             return false;
@@ -344,57 +448,34 @@ impl DocumentPlayer {
         true
     }
 
-    /// Ask the worker for the bank at `pos + lead`.
-    fn request(&mut self, pos: i64) {
-        let (Some(worker), Some(sched)) = (&self.worker, &self.adopted) else {
+    /// Ask the worker for `sched`'s bank at `pos + lead`.
+    fn request(&mut self, sched: Arc<Schedule>, pos: i64, why: Why) {
+        let Some(worker) = &self.worker else {
             return;
         };
         let at = pos + i64::try_from(self.policy.lead_frames).unwrap_or(i64::MAX / 2);
         if let Ok(mut slot) = worker.exchange.request.try_lock() {
-            *slot = Some((Arc::clone(sched), at));
+            *slot = Some((sched, at));
         }
         worker.thread.unpark();
-        self.pending = Some(Pending { at, next: pos });
+        self.pending = Some(Pending { at, next: pos, why });
     }
 
     /// Swap in the worker's bank if it is the one this playhead needs.
     fn try_adopt(&mut self, now: i64) -> bool {
-        let Some(p) = self.pending else { return false };
-        let Some(worker) = &self.worker else {
+        let (Some(p), Some(sched)) = (self.pending, self.adopted.clone()) else {
             return false;
         };
-        let Some((bank, sched, done)) = worker
-            .exchange
-            .done
-            .try_lock()
-            .ok()
-            .and_then(|mut d| d.take())
-        else {
-            return false;
-        };
-        let ours = done.at == p.at
-            && self
-                .adopted
-                .as_ref()
-                .is_some_and(|a| Arc::ptr_eq(a, &sched));
-        if !ours {
-            self.spare = Some(bank);
-            return false;
-        }
         if now < p.at {
-            // Built for a frame still ahead: keep it until the playhead
-            // gets there.
-            if let Ok(mut d) = worker.exchange.done.try_lock() {
-                *d = Some((bank, sched, done));
-            } else {
-                self.spare = Some(bank);
-            }
-            return false;
+            return false; // built for a frame still ahead
         }
+        let Some((bank, sched, done)) = self.take_done(&sched, p.at) else {
+            return false;
+        };
         if now.saturating_sub(p.at) as u64 > self.policy.catch_up_max {
             // Came back too late to catch up: build it further on.
             self.spare = Some(bank);
-            self.request(now);
+            self.request(sched, now, Why::Seek);
             return false;
         }
         let mut bank = bank;

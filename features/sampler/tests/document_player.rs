@@ -454,3 +454,56 @@ fn an_edit_swapped_in_mid_playback_plays_on_without_a_dropout() {
         "from the swap on: the edited song's full render"
     );
 }
+
+#[test]
+fn an_edit_built_on_the_worker_takes_over_ahead_without_a_gap() {
+    let fx = Fixture::new("edit-worker");
+    let before = fx.schedule(&song());
+    let mut edited = song();
+    edited.notes[2].pitch = 67;
+    edited.notes[2].vel = 40;
+    let after = fx.schedule(&edited);
+    let (full_before, full_after) = (fx.full(&before), fx.full(&after));
+    let policy = SeekPolicy {
+        inline_max_frames: 0, // every replay goes to the worker
+        lead_frames: 4_800,
+        catch_up_max: 48_000,
+        fade_frames: 240,
+    };
+    let mut player = DocumentPlayer::new(ID, fx.bank(), None, 256)
+        .with_worker(fx.bank(), policy)
+        .expect("worker");
+    let mut host = Host {
+        player: &mut player,
+        sched: Some(before),
+        pos: 0,
+        block: 256,
+        input: Input::Track,
+    };
+    // From the top: no replay, so no worker.
+    let (head, _) = host.play(256 * 200, &[]);
+    assert_eq!(bits(&head), bits(&full_before[..head.len()]));
+    let edit_at = host.pos as usize;
+    host.sched = Some(after);
+    let mut out = Vec::new();
+    for _ in 0..400 {
+        let (block, played) = host.play(256, &[]);
+        assert_eq!(played[0], Played::Document, "never silent across an edit");
+        out.extend_from_slice(&block);
+        std::thread::sleep(std::time::Duration::from_micros(100));
+    }
+    // The old schedule up to a block boundary at least `lead` on, the new
+    // one from there, bit for bit.
+    let at = |f: usize| (f - edit_at) * 2;
+    let boundary = (edit_at + 4_800..edit_at + out.len() / 2)
+        .step_by(256)
+        .map(|b| b - (b - edit_at) % 256)
+        .find(|b| {
+            out[at(*b)..] == full_after[*b * 2..*b * 2 + out.len() - at(*b)]
+                && out[..at(*b)] == full_before[edit_at * 2..*b * 2]
+        });
+    assert!(
+        boundary.is_some(),
+        "the old schedule, then the edited one from a frame ahead"
+    );
+}

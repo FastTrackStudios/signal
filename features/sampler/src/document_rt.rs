@@ -144,6 +144,12 @@ impl RealtimeScheduler {
         self.tempo_warned = false;
     }
 
+    /// Where the next block must start to play on without a relocate.
+    #[must_use]
+    pub fn expected_frame(&self) -> Option<i64> {
+        self.expect_frame
+    }
+
     /// Whether document mode owned the engine after the last block.
     #[must_use]
     pub fn document_active(&self) -> bool {
