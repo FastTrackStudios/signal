@@ -378,12 +378,17 @@ impl Plugin for SignalSamplerClap {
                     off = at;
                 }
                 match ev {
-                    NoteEvent::NoteOn { note, velocity, .. } => {
-                        let vel = (velocity * 127.0).round().clamp(0.0, 127.0) as u8;
-                        bank.note_on(INSTRUMENT_ID, note, vel.max(1));
+                    // A wildcard key names no single note (CLAP allows it): skipped.
+                    NoteEvent::NoteOn { key, velocity, .. } => {
+                        if let Some(note) = key.number() {
+                            let vel = (velocity * 127.0).round().clamp(0.0, 127.0) as u8;
+                            bank.note_on(INSTRUMENT_ID, note, vel.max(1));
+                        }
                     }
-                    NoteEvent::NoteOff { note, .. } => {
-                        bank.note_off(INSTRUMENT_ID, note);
+                    NoteEvent::NoteOff { key, .. } => {
+                        if let Some(note) = key.number() {
+                            bank.note_off(INSTRUMENT_ID, note);
+                        }
                     }
                     NoteEvent::MidiCC { cc, value, .. } => {
                         let val = (value * 127.0).round().clamp(0.0, 127.0) as u8;

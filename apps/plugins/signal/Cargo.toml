@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "FTS Signal — all-in-one rig-platform CLAP/VST3 plugin (v0: .signalpack sampler rigs over signal-sampler; FX-chain rig hosting arrives when the signal facade grows a headless rig-host API)"
+description = "FTS Signal as a CLAP/VST3: signal-core (rigs, DSP chains, the sampler) wrapped for any DAW, and Studio's hot-reloadable development copy"
 
 [lib]
 # cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
@@ -19,8 +19,9 @@ workspace = true
 # paths, so the crate has to be nameable here. `vst3` is on by default.
 nice-plug.workspace = true
 
-# The sampler engine — the one rig backend the signal facade exposes headlessly
-# today (see crate docs for the facade gaps blocking full rig hosting).
+# The one processor (signal#26): rigs, chains, the session.
+signal-core = { workspace = true, features = ["std", "fx", "nam"] }
+# The sampler engine, as the desktop `sampler` block.
 sampler = { workspace = true }
 
 # Rig config (.styx) parsing — same stack as signal-sampler-clap's PatchConfig
@@ -32,3 +33,9 @@ tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 
 eyre.workspace = true
+
+[dev-dependencies]
+# The headless host test (tests/clap_host.rs): load the bundled .clap
+# through daw's plugin host, as Studio's engine does.
+daw = { workspace = true, features = ["clap-host"] }
+serde_json = { workspace = true }

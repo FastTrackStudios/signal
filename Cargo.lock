@@ -61,8 +61,8 @@ dependencies = [
  "accesskit_consumer",
  "hashbrown 0.17.1",
  "static_assertions",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows",
+ "windows-core",
 ]
 
 [[package]]
@@ -1595,7 +1595,7 @@ checksum = "21e4227379beff4205943696e6c3e0cd809bacdf3f0edd6e3dd153e2269571a4"
 [[package]]
 name = "audio"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "anyhow",
  "atomic_float",
@@ -1839,8 +1839,8 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "percent-encoding",
  "raw-window-handle 0.6.2",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows",
+ "windows-core",
  "windows-sys 0.61.2",
  "x11-dl",
  "x11rb 0.13.2",
@@ -1883,7 +1883,7 @@ dependencies = [
  "bitflags 2.13.2",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
  "log",
@@ -2289,13 +2289,13 @@ checksum = "56ed6191a7e78c36abdb16ab65341eefd73d64d303fffccdbb00d51e4205967b"
 [[package]]
 name = "builtin"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "crossbeam-channel",
  "daw",
  "daw-proto",
- "dsp",
- "dsp-core",
+ "dsp 26.10.3",
+ "dsp-core 26.10.3",
  "fts-sample",
 ]
 
@@ -2757,7 +2757,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -3168,8 +3168,8 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows",
+ "windows-core",
 ]
 
 [[package]]
@@ -3596,7 +3596,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 [[package]]
 name = "daw"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "architect",
  "daw-control",
@@ -3609,9 +3609,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "daw-clap-ext"
+version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
+dependencies = [
+ "clap-sys",
+]
+
+[[package]]
 name = "daw-control"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "architect",
  "daw-proto",
@@ -3630,7 +3638,7 @@ dependencies = [
 [[package]]
 name = "daw-module"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "tokio",
  "tracing",
@@ -3639,7 +3647,7 @@ dependencies = [
 [[package]]
 name = "daw-proto"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "architect",
  "daw-transport-sync",
@@ -3654,7 +3662,7 @@ dependencies = [
 [[package]]
 name = "daw-standalone"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "arc-swap",
  "architect",
@@ -3662,10 +3670,12 @@ dependencies = [
  "base64 0.22.1",
  "clack-extensions",
  "clack-host",
+ "clap-sys",
  "cpal",
+ "daw-clap-ext",
  "daw-proto",
  "daw-transport-sync",
- "dsp",
+ "dsp 26.10.3",
  "fts-sample",
  "futures",
  "gloo-timers 0.3.0",
@@ -3684,7 +3694,7 @@ dependencies = [
 [[package]]
 name = "daw-transport-sync"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "web-time",
 ]
@@ -4623,7 +4633,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4672,7 +4682,7 @@ checksum = "ad5208a115eaba24916f7456929832e310a81518c641f93fee4f89aa93aa3675"
 dependencies = [
  "cfg-if",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4782,6 +4792,21 @@ dependencies = [
 
 [[package]]
 name = "dsp"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dsp?rev=75d475b01e96eed4a5ddad8ad6799396f220dd82#75d475b01e96eed4a5ddad8ad6799396f220dd82"
+dependencies = [
+ "crossbeam-channel",
+ "dsp-core 0.1.0",
+ "libm",
+ "realfft",
+ "serde",
+ "smallvec 1.16.4",
+ "symphonium",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "dsp"
 version = "26.10.3"
 source = "git+https://github.com/FastTrackStudios/fts-fx?rev=5bae622f5d874ce58ab04916ab29a8100e883012#5bae622f5d874ce58ab04916ab29a8100e883012"
 dependencies = [
@@ -4795,7 +4820,7 @@ dependencies = [
  "dioxus",
  "dioxus-native",
  "dioxus-native-dom",
- "dsp-core",
+ "dsp-core 26.10.3",
  "fts-audio-ui",
  "futures-timer",
  "kurbo 0.13.1",
@@ -4811,6 +4836,17 @@ dependencies = [
  "thiserror 2.0.20",
  "vello",
  "web-time",
+]
+
+[[package]]
+name = "dsp-core"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dsp?rev=75d475b01e96eed4a5ddad8ad6799396f220dd82#75d475b01e96eed4a5ddad8ad6799396f220dd82"
+dependencies = [
+ "atomic_float",
+ "ebur128",
+ "parking_lot",
+ "realfft",
 ]
 
 [[package]]
@@ -5149,7 +5185,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5755,8 +5791,8 @@ dependencies = [
  "read-fonts 0.41.0",
  "roxmltree 0.21.1",
  "smallvec 1.16.4",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows",
+ "windows-core",
  "yeslogic-fontconfig-sys",
 ]
 
@@ -5870,7 +5906,7 @@ dependencies = [
  "bytemuck",
  "dioxus",
  "dioxus-native-dom",
- "dsp-core",
+ "dsp-core 26.10.3",
  "gloo-timers 0.3.0",
  "kurbo 0.13.1",
  "peniko",
@@ -5893,7 +5929,7 @@ dependencies = [
 [[package]]
 name = "fts-sample"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "arc-swap",
  "claxon",
@@ -6174,7 +6210,7 @@ dependencies = [
  "log",
  "rustversion",
  "windows-link",
- "windows-result 0.4.1",
+ "windows-result",
 ]
 
 [[package]]
@@ -6519,7 +6555,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.20",
- "windows 0.58.0",
+ "windows",
 ]
 
 [[package]]
@@ -6632,7 +6668,7 @@ dependencies = [
  "dioxus-native",
  "dioxus-native-dom",
  "drums",
- "dsp",
+ "dsp 26.10.3",
  "facet",
  "facet-json",
  "facet-styx",
@@ -7127,7 +7163,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2",
  "system-configuration",
  "tokio",
  "tower-layer",
@@ -7148,7 +7184,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.58.0",
+ "windows-core",
 ]
 
 [[package]]
@@ -7734,7 +7770,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8388,16 +8424,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libloading"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60"
-dependencies = [
- "cfg-if",
- "windows-link",
-]
-
-[[package]]
 name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9030,7 +9056,7 @@ dependencies = [
 [[package]]
 name = "midi"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "architect",
  "core-foundation 0.10.1",
@@ -9076,7 +9102,7 @@ dependencies = [
  "parking_lot",
  "wasm-bindgen",
  "web-sys",
- "windows 0.62.2",
+ "windows",
 ]
 
 [[package]]
@@ -9441,16 +9467,16 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 [[package]]
 name = "nice-log"
 version = "0.3.1"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#9fb4741c4453ac6c7e80ba0a3b71655aa7777b49"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#311b22d4388f61f6c46b1f242c91d631caf311ca"
 dependencies = [
  "tracing-appender",
- "windows 0.62.2",
+ "windows",
 ]
 
 [[package]]
 name = "nice-plug"
-version = "0.3.0"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#9fb4741c4453ac6c7e80ba0a3b71655aa7777b49"
+version = "0.4.2"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#311b22d4388f61f6c46b1f242c91d631caf311ca"
 dependencies = [
  "anyhow",
  "anymap3",
@@ -9475,13 +9501,13 @@ dependencies = [
  "try-lock",
  "vst3",
  "widestring",
- "windows 0.62.2",
+ "windows",
 ]
 
 [[package]]
 name = "nice-plug-core"
-version = "0.3.0"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#9fb4741c4453ac6c7e80ba0a3b71655aa7777b49"
+version = "0.4.2"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#311b22d4388f61f6c46b1f242c91d631caf311ca"
 dependencies = [
  "atomic_float",
  "atomic_refcell",
@@ -9494,13 +9520,14 @@ dependencies = [
  "raw-window-handle 0.6.2",
  "serde",
  "serde_json",
+ "thiserror 2.0.20",
  "tracing",
 ]
 
 [[package]]
 name = "nice-plug-derive"
 version = "0.1.2"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#9fb4741c4453ac6c7e80ba0a3b71655aa7777b49"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#311b22d4388f61f6c46b1f242c91d631caf311ca"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9510,7 +9537,7 @@ dependencies = [
 [[package]]
 name = "nice-plug-dioxus"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#9fb4741c4453ac6c7e80ba0a3b71655aa7777b49"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#311b22d4388f61f6c46b1f242c91d631caf311ca"
 dependencies = [
  "anyrender",
  "anyrender_vello",
@@ -9543,7 +9570,7 @@ dependencies = [
 [[package]]
 name = "nice-plug-xtask"
 version = "0.1.1"
-source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#9fb4741c4453ac6c7e80ba0a3b71655aa7777b49"
+source = "git+https://github.com/FastTrackStudios/nice-plug.git?branch=fts-baseview-03#311b22d4388f61f6c46b1f242c91d631caf311ca"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -9615,7 +9642,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9782,7 +9809,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -11196,6 +11223,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "plugin-processors"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=bc8422451bed16a9c784daa57fc04d9143512ec6#bc8422451bed16a9c784daa57fc04d9143512ec6"
+dependencies = [
+ "dsp 0.1.0",
+ "dsp-core 0.1.0",
+ "facet",
+ "facet-styx",
+ "libm",
+]
+
+[[package]]
 name = "png"
 version = "0.17.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11544,7 +11583,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -11645,7 +11684,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.3",
  "rustls",
- "socket2 0.5.10",
+ "socket2",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -11684,9 +11723,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -12133,7 +12172,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "rustix 1.1.6",
- "windows 0.62.2",
+ "windows",
 ]
 
 [[package]]
@@ -12507,7 +12546,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -12575,7 +12614,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -12659,7 +12698,7 @@ dependencies = [
  "clap",
  "cpal",
  "daw",
- "dsp-core",
+ "dsp-core 26.10.3",
  "eyre",
  "facet",
  "facet-json",
@@ -13223,7 +13262,7 @@ dependencies = [
 [[package]]
 name = "session-format"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "daw-proto",
  "facet",
@@ -13422,6 +13461,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-core"
+version = "26.10.3"
+dependencies = [
+ "dsp-core 0.1.0",
+ "libm",
+ "neural-amp-modeler",
+ "plugin-processors",
+ "serde",
+ "serde_json",
+ "signal-core",
+ "tracing",
+]
+
+[[package]]
+name = "signal-core-clap"
+version = "26.10.3"
+dependencies = [
+ "base64 0.22.1",
+ "daw",
+ "daw-clap-ext",
+ "plugin-processors",
+ "serde_json",
+ "signal-core",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "signal-daw-bridge"
 version = "26.10.3"
 dependencies = [
@@ -13515,7 +13582,7 @@ version = "26.10.3"
 dependencies = [
  "base64 0.22.1",
  "builtin",
- "dsp",
+ "dsp 26.10.3",
  "eyre",
  "hound",
  "realfft",
@@ -13553,7 +13620,7 @@ dependencies = [
 name = "signal-macromod"
 version = "26.10.3"
 dependencies = [
- "dsp-core",
+ "dsp-core 26.10.3",
  "facet",
  "serde",
  "serde_json",
@@ -13592,11 +13659,14 @@ dependencies = [
 name = "signal-plugin"
 version = "26.10.3"
 dependencies = [
+ "daw",
  "eyre",
  "facet",
  "facet-styx",
  "nice-plug",
  "sampler",
+ "serde_json",
+ "signal-core",
  "tracing",
  "tracing-subscriber",
 ]
@@ -13604,7 +13674,7 @@ dependencies = [
 [[package]]
 name = "signal-plugin-host"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "daw",
 ]
@@ -14043,16 +14113,6 @@ checksum = "9676b89cd56310a87b93dec47b11af744f34d5fc9f367b829474eec0a891350d"
 dependencies = [
  "borsh",
  "serde",
-]
-
-[[package]]
-name = "socket2"
-version = "0.5.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678"
-dependencies = [
- "libc",
- "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -15192,8 +15252,8 @@ dependencies = [
  "tao-macros",
  "unicode-segmentation",
  "url",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows",
+ "windows-core",
  "windows-version",
  "x11-dl",
 ]
@@ -15246,7 +15306,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.6",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -15264,7 +15324,7 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8c27177b12a6399ffc08b98f76f7c9a1f4fe9fc967c784c5a071fa8d93cf7e1"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -15575,7 +15635,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2 0.6.5",
+ "socket2",
  "tokio-macros",
  "tracing",
  "windows-sys 0.61.2",
@@ -16486,7 +16546,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=86263731dfd07e3ef69cfdce923901ce9894905e#86263731dfd07e3ef69cfdce923901ce9894905e"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=acd3f395e06fd6090593e5bbc7dd8af630ac3fd3#acd3f395e06fd6090593e5bbc7dd8af630ac3fd3"
 dependencies = [
  "facet",
  "facet-styx",
@@ -17416,8 +17476,8 @@ checksum = "3f89fca7a704cee10dcb3654c1dbb8941d1783132f1917358af75bec37a7d7e6"
 dependencies = [
  "webview2-com-macros",
  "webview2-com-sys",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows",
+ "windows-core",
 ]
 
 [[package]]
@@ -17438,8 +17498,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3a07132775117d6065853d9d1178157b8c90e228de47129d6bce2c7edebedfb"
 dependencies = [
  "thiserror 2.0.20",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows",
+ "windows-core",
 ]
 
 [[package]]
@@ -17789,9 +17849,9 @@ dependencies = [
  "web-sys",
  "wgpu-naga-bridge 29.0.4",
  "wgpu-types 29.0.4",
- "windows 0.62.2",
- "windows-core 0.62.2",
- "windows-result 0.4.1",
+ "windows",
+ "windows-core",
+ "windows-result",
 ]
 
 [[package]]
@@ -17844,9 +17904,9 @@ dependencies = [
  "web-sys",
  "wgpu-naga-bridge 30.0.1",
  "wgpu-types 30.0.1",
- "windows 0.62.2",
- "windows-core 0.62.2",
- "windows-result 0.4.1",
+ "windows",
+ "windows-core",
+ "windows-result",
 ]
 
 [[package]]
@@ -17997,7 +18057,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -18008,22 +18068,12 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "windows"
-version = "0.58.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd04d41d93c4992d421894c18c8b43496aa748dd4c081bac0dc93eb0489272b6"
-dependencies = [
- "windows-core 0.58.0",
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows"
 version = "0.62.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "527fadee13e0c05939a6a05d5bd6eec6cd2e3dbd648b9f8e447c6518133d8580"
 dependencies = [
  "windows-collections",
- "windows-core 0.62.2",
+ "windows-core",
  "windows-future",
  "windows-numerics",
 ]
@@ -18034,20 +18084,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b2d95af1a8a14a3c7367e1ed4fc9c20e0a26e79551b1454d72583c97cc6610"
 dependencies = [
- "windows-core 0.62.2",
-]
-
-[[package]]
-name = "windows-core"
-version = "0.58.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ba6d44ec8c2591c134257ce647b7ea6b20335bf6379a27dac5f1641fcf59f99"
-dependencies = [
- "windows-implement 0.58.0",
- "windows-interface 0.58.0",
- "windows-result 0.2.0",
- "windows-strings 0.1.0",
- "windows-targets 0.52.6",
+ "windows-core",
 ]
 
 [[package]]
@@ -18056,11 +18093,11 @@ version = "0.62.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8e83a14d34d0623b51dce9581199302a221863196a1dde71a7663a4c2be9deb"
 dependencies = [
- "windows-implement 0.60.2",
- "windows-interface 0.59.3",
+ "windows-implement",
+ "windows-interface",
  "windows-link",
- "windows-result 0.4.1",
- "windows-strings 0.5.1",
+ "windows-result",
+ "windows-strings",
 ]
 
 [[package]]
@@ -18069,20 +18106,9 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1d6f90251fe18a279739e78025bd6ddc52a7e22f921070ccdc67dde84c605cb"
 dependencies = [
- "windows-core 0.62.2",
+ "windows-core",
  "windows-link",
  "windows-threading",
-]
-
-[[package]]
-name = "windows-implement"
-version = "0.58.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bbd5b46c938e506ecbce286b6628a02171d56153ba733b6c741fc627ec9579b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -18090,17 +18116,6 @@ name = "windows-implement"
 version = "0.60.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "windows-interface"
-version = "0.58.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "053c4c462dc91d3b1504c6fe5a726dd15e216ba718e84a0e46a88fbe5ded3515"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -18130,7 +18145,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e2e40844ac143cdb44aead537bbf727de9b044e107a0f1220392177d15b0f26"
 dependencies = [
- "windows-core 0.62.2",
+ "windows-core",
  "windows-link",
 ]
 
@@ -18141,17 +18156,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
 dependencies = [
  "windows-link",
- "windows-result 0.4.1",
- "windows-strings 0.5.1",
-]
-
-[[package]]
-name = "windows-result"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d1043d8214f791817bab27572aaa8af63732e11bf84aa21a45a78d6c317ae0e"
-dependencies = [
- "windows-targets 0.52.6",
+ "windows-result",
+ "windows-strings",
 ]
 
 [[package]]
@@ -18161,16 +18167,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
 dependencies = [
  "windows-link",
-]
-
-[[package]]
-name = "windows-strings"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cd9b125c486025df0eabcb585e62173c6c9eddcec5d117d3b6e8c30e2ee4d10"
-dependencies = [
- "windows-result 0.2.0",
- "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -18816,8 +18812,8 @@ dependencies = [
  "webkit2gtk",
  "webkit2gtk-sys",
  "webview2-com",
- "windows 0.62.2",
- "windows-core 0.62.2",
+ "windows",
+ "windows-core",
  "windows-version",
 ]
 
@@ -18887,7 +18883,7 @@ dependencies = [
  "as-raw-xcb-connection",
  "gethostname",
  "libc",
- "libloading 0.9.0",
+ "libloading 0.8.9",
  "once_cell",
  "rustix 1.1.6",
  "x11rb-protocol 0.14.0",

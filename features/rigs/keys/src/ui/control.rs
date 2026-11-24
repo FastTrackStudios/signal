@@ -70,6 +70,11 @@ pub fn ControlView(
     /// value the band starts from.
     #[props(default)]
     macro_seed: Vec<KeysMacro>,
+    /// The keyboard at the base. Off for a host that places it apart
+    /// ([`KeyboardStrip`] in a panel of its own): the engines and the
+    /// macro band then have the whole height.
+    #[props(default = true)]
+    keyboard: bool,
 ) -> Element {
     let mut selection = crate::ui::selection::use_selection();
     // Escape clears the selection from wherever the pointer happens to be —
@@ -137,7 +142,9 @@ pub fn ControlView(
                 }
             }
             MacroBand { seed: macro_seed.clone() }
-            KeyboardStrip { mixer: mixer.clone(), held, controllers }
+            if keyboard {
+                KeyboardStrip { mixer: mixer.clone(), held, controllers }
+            }
         }
     }
 }
@@ -455,7 +462,7 @@ fn MacroBand(#[props(default)] seed: Vec<KeysMacro>) -> Element {
 /// The mixer says how loud each lane is; this says *where* it is. Splits and
 /// zones land here as the mapping surface grows.
 #[component]
-fn KeyboardStrip(
+pub fn KeyboardStrip(
     mixer: KeysMixer,
     held: Vec<u8>,
     #[props(default)] controllers: crate::ui::controllers::Controllers,
