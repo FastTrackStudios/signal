@@ -224,7 +224,7 @@ impl StateField {
         self.generation.load(Ordering::Acquire)
     }
 
-    fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         self.text
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -232,7 +232,7 @@ impl StateField {
     }
 
     /// What's running, without counting as a restore.
-    fn store_running(&self, text: String) {
+    pub(crate) fn store_running(&self, text: String) {
         *self.text.lock().unwrap_or_else(PoisonError::into_inner) = text;
     }
 }
@@ -300,7 +300,7 @@ pub fn clap_state(state: &SignalState) -> Vec<u8> {
 impl SignalParams {
     /// Write the slots' values into the state's preset (its block
     /// parameters, by lane, block and parameter id).
-    fn write_back(&self) {
+    pub(crate) fn write_back(&self) {
         let table = self.shown.get();
         if table.slots.is_empty() {
             return;
@@ -380,8 +380,8 @@ impl SignalHost for DiskHost {
 
 /// What the background rebuild needs: the controller of the processor,
 /// and what the graph is built for.
-struct Shared {
-    params: Arc<SignalParams>,
+pub struct Shared {
+    pub(crate) params: Arc<SignalParams>,
     controller: Mutex<Controller>,
     /// Sample rate and max block of the current activation; `None` before.
     config: Mutex<Option<(f32, usize)>>,
@@ -389,20 +389,57 @@ struct Shared {
     tables: Mailbox,
     /// The state generation the newest build covers.
     built: AtomicU64,
+    /// FastTrackStudio's extensions' side of it.
+    pub(crate) ext: crate::ext::Ext,
+}
+
+impl Shared {
+    /// The running state, with what was dialled in on the slots.
+    pub(crate) fn state(&self) -> SignalState {
+        self.params.write_back();
+        state_to_build(&self.params.state.text())
+    }
+
+    /// Put `text` in as the state and build it here (the main thread: an
+    /// action, a host's call).
+    pub(crate) fn load_state_text(&self, text: String, on_main: bool) {
+        self.params.state.set(text);
+        rebuild(self, on_main);
+    }
 }
 
 /// Build the state in the field now (main or background thread): show
 /// its slots, hand them and the graph to the audio side. Inactive, a
 /// graph is built only to show the slots (activation builds the one that
 /// runs).
-fn rebuild(shared: &Shared) {
+fn rebuild(shared: &Shared, on_main: bool) {
     let generation = shared.params.state.generation();
     let config = *shared.config.lock().unwrap_or_else(PoisonError::into_inner);
     let (sr, max_block) = config.unwrap_or((48_000.0, 1024));
-    let (state, graph, report) = build_from(&shared.params.state.text(), sr, max_block);
+    // Files through the host when it offers them (its extension is the
+    // main thread's), else from disk.
+    let client = if on_main {
+        *shared
+            .ext
+            .actions
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    } else {
+        None
+    };
+    let (state, graph, report) = match client {
+        Some(c) => build_from(
+            &shared.params.state.text(),
+            sr,
+            max_block,
+            &crate::ext::HostFiles(c),
+        ),
+        None => build_from(&shared.params.state.text(), sr, max_block, &DiskHost),
+    };
     let table = Arc::new(Table::of(&graph));
     shared.params.show(table.clone(), &table.values(&graph));
     shared.built.store(generation, Ordering::Release);
+    crate::ext::after_build(shared, &report, on_main);
     if config.is_none() {
         return;
     }
@@ -438,6 +475,8 @@ pub struct FtsSignal {
     applied: Vec<u32>,
     /// The latency the host was told.
     latency: u32,
+    /// The editor window's size and whether it's open.
+    editor_state: Arc<plugin_core::prelude::DioxusState>,
     /// Calibrating: since when (frames), and when it last stepped.
     calibrating: bool,
     calibrate_frames: usize,
@@ -453,11 +492,13 @@ impl Default for FtsSignal {
             config: Mutex::new(None),
             tables: Mailbox::default(),
             built: AtomicU64::new(0),
+            ext: crate::ext::Ext::default(),
         });
+        crate::ext::register(&shared);
         let weak = Arc::downgrade(&shared);
         let _ = params.on_load.set(Box::new(move || {
             if let Some(shared) = weak.upgrade() {
-                rebuild(&shared);
+                rebuild(&shared, true);
             }
         }));
         Self {
@@ -472,6 +513,7 @@ impl Default for FtsSignal {
             table: Arc::new(Table::default()),
             applied: vec![0; SLOTS],
             latency: 0,
+            editor_state: plugin_core::prelude::DioxusState::new(|| crate::editor::SIZE),
             calibrating: false,
             calibrate_frames: 0,
         }
@@ -503,6 +545,7 @@ fn build_from(
     saved: &str,
     sample_rate: f32,
     max_block: usize,
+    host: &dyn SignalHost,
 ) -> (SignalState, Graph, BuildReport) {
     let state = state_to_build(saved);
     let port = match &state.instance {
@@ -519,7 +562,7 @@ fn build_from(
         max_block: max_block.clamp(1, signal_core::MAX_BLOCK),
         port,
         factories: &factories,
-        host: &DiskHost,
+        host,
     };
     let (mut graph, report) = graph::build(&state.preset, &opts);
     // A port of a session: its hits go to, and come from, the session's
@@ -566,8 +609,8 @@ impl Plugin for FtsSignal {
     ];
     const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
 
-    // No editor yet: the host's generic parameter UI.
-    type Editor = ();
+    // The kit's mixer (crate::editor); the host's own view sets parameters.
+    type Editor = plugin_core::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = Rebuild;
 
@@ -575,9 +618,19 @@ impl Plugin for FtsSignal {
         self.params.clone()
     }
 
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
+        plugin_core::prelude::create_dioxus_editor_with_state(
+            self.editor_state.clone(),
+            Arc::new(crate::editor::EditorState {
+                shared: self.shared.clone(),
+            }),
+            crate::editor::App,
+        )
+    }
+
     fn task_executor(&mut self) -> TaskExecutor<Self> {
         let shared = self.shared.clone();
-        Box::new(move |Rebuild| rebuild(&shared))
+        Box::new(move |Rebuild| rebuild(&shared, false))
     }
 
     fn activate(
@@ -597,14 +650,26 @@ impl Plugin for FtsSignal {
             .config
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = Some((buffer_config.sample_rate, max_block));
-        let (state, graph, report) = build_from(
-            &self.params.state.text(),
-            buffer_config.sample_rate,
-            max_block,
-        );
+        let client = *self
+            .shared
+            .ext
+            .actions
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let text = self.params.state.text();
+        let (state, graph, report) = match client {
+            Some(c) => build_from(
+                &text,
+                buffer_config.sample_rate,
+                max_block,
+                &crate::ext::HostFiles(c),
+            ),
+            None => build_from(&text, buffer_config.sample_rate, max_block, &DiskHost),
+        };
         let table = Arc::new(Table::of(&graph));
         let values = table.values(&graph);
         self.params.show(table.clone(), &values);
+        crate::ext::after_build(&self.shared, &report, true);
         self.applied = (0..SLOTS)
             .map(|i| values.get(i).copied().unwrap_or(0.0).to_bits())
             .collect();
@@ -740,6 +805,10 @@ impl Plugin for FtsSignal {
             if let Some(pos) = transport.pos_samples().and_then(|p| u64::try_from(p).ok()) {
                 self.processor.set_position(pos);
             }
+        } else if self.shared.ext.transport_playing.load(Ordering::Acquire) {
+            // The host's transport events, where the plugin API gives none.
+            self.processor
+                .set_position(self.shared.ext.transport_frame.load(Ordering::Acquire));
         }
         // A rebuilt state's slots: what the host shows now is what the new
         // graph has, so nothing is applied until it moves.
@@ -773,6 +842,10 @@ impl Plugin for FtsSignal {
             .process(io, self.in_channels, frames, &self.midi, &self.host_events);
         // A state restored while active builds a new graph: its latency
         // (a trigger's lookahead, a session's) to the host.
+        // The meters and keys, for the host (atomics only).
+        if let Some(g) = self.processor.graph() {
+            crate::ext::store_meters(&self.shared.ext, &self.table, g);
+        }
         // Calibrating: every phase made gain neutral on what it has heard
         // since the switch went on, every half second.
         let calibrate = self.params.calibrate.value();
@@ -828,6 +901,31 @@ fn init_logging() {
 
 impl ClapPlugin for FtsSignal {
     const CLAP_ID: &'static str = CLAP_ID;
+
+    fn clap_extension(id: &std::ffi::CStr) -> Option<*const std::ffi::c_void> {
+        if id == daw_clap_ext::sys::FTS_EXT_SIGNAL {
+            return Some(daw_clap_ext::plugin::SignalVtable::<crate::ext::Lookup>::as_ptr());
+        }
+        if id == daw_clap_ext::sys::FTS_EXT_HOST_EVENTS {
+            let v: &'static daw_clap_ext::sys::fts_plugin_host_events = &crate::ext::HOST_EVENTS;
+            return Some(std::ptr::from_ref(v).cast());
+        }
+        None
+    }
+
+    fn extension_state(&self) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
+        Some(self.shared.clone())
+    }
+
+    fn clap_init(
+        state: &Arc<dyn std::any::Any + Send + Sync>,
+        plugin: *const nice_plug::wrapper::clap::clap_plugin,
+        host: *const nice_plug::wrapper::clap::clap_host,
+    ) {
+        if let Ok(shared) = state.clone().downcast::<Shared>() {
+            crate::ext::init(&shared, plugin, host);
+        }
+    }
     const CLAP_DESCRIPTION: Option<&'static str> = Some(
         "FTS Signal: guitar and keys rigs, DSP chains and (next) the drum submixer, the same core Studio runs",
     );

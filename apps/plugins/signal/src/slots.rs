@@ -35,10 +35,49 @@ pub struct SlotDef {
     pub name: String,
 }
 
+/// One block of the running graph: where it is, its parameters.
+#[derive(Clone, Debug)]
+pub struct BlockDef {
+    pub lane: usize,
+    pub block: usize,
+    pub id: String,
+    pub phase: Option<Phase>,
+    pub specs: &'static [ParamSpec],
+    /// Keyed by another lane (its `via` is live).
+    pub keyed: bool,
+}
+
+/// A live value the host reads (`signal/1` `mod_source_value`): a block's
+/// own source (a compressor's gain reduction, a gate's opening), or a
+/// phase's output level.
+#[derive(Clone, Debug)]
+pub struct MeterDef {
+    pub id: String,
+    pub name: String,
+    pub unit: &'static str,
+    pub lane: usize,
+    pub kind: MeterKind,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum MeterKind {
+    /// Source `index` of block `block`.
+    Source { block: usize, index: usize },
+    /// Phase `phase`'s output, dB (K-weighted, over the last piece).
+    Phase(Phase),
+}
+
+/// The most meters, and blocks, an instance shows: the shared atomics are
+/// this many, made once.
+pub const MAX_METERS: usize = 512;
+pub const MAX_BLOCKS: usize = 256;
+
 /// The running state's slots, and its lanes' phase make-ups.
 #[derive(Debug, Default)]
 pub struct Table {
     pub slots: Vec<SlotDef>,
+    pub blocks: Vec<BlockDef>,
+    pub meters: Vec<MeterDef>,
     /// Each lane's name, and per lane and phase (`Phase::ALL` order) its
     /// make-up in dB as f32 bits (NaN: the lane has no such phase). The
     /// audio thread writes them as it calibrates; a save reads them.
@@ -56,7 +95,28 @@ pub fn slot_id(i: usize) -> String {
     format!("b{:03}", i + 1)
 }
 
-fn phase_name(phase: Phase) -> &'static str {
+/// A block's id in `signal.chain/1`: `<phase>.<block>` (`tone.comp`),
+/// `source.<block>` for one outside the phases (a sampler).
+#[must_use]
+pub fn chain_id(phase: Option<Phase>, block: &str) -> String {
+    format!("{}.{block}", phase.map_or("source", Phase::slug))
+}
+
+/// A unit as `signal.chain/1` writes it.
+#[must_use]
+pub fn unit_name(unit: signal_core::param::Unit) -> &'static str {
+    use signal_core::param::Unit;
+    match unit {
+        Unit::Db => "dB",
+        Unit::Hz => "Hz",
+        Unit::Ms => "ms",
+        Unit::Percent => "%",
+        Unit::Plain(_) | Unit::Choice(_) | Unit::Toggle => "",
+    }
+}
+
+#[must_use]
+pub fn phase_name(phase: Phase) -> &'static str {
     match phase {
         Phase::Rescue => "Rescue",
         Phase::Tone => "Tone",
@@ -69,7 +129,8 @@ fn phase_name(phase: Phase) -> &'static str {
 
 /// A block id as a label: `rescue_eq` → `EQ` (under Rescue), `band_pass`
 /// → `Band Pass`, `comp` → `Comp`.
-fn block_label(id: &str, phase: Option<Phase>) -> String {
+#[must_use]
+pub fn block_label(id: &str, phase: Option<Phase>) -> String {
     let id = match phase {
         Some(Phase::Rescue) => id.strip_prefix("rescue_").unwrap_or(id),
         _ => id,
@@ -158,8 +219,53 @@ impl Table {
         let trims: Vec<AtomicU32> = (0..lanes.len() * Phase::ALL.len())
             .map(|_| AtomicU32::new(f32::NAN.to_bits()))
             .collect();
+        let mut blocks = Vec::new();
+        let mut meters = Vec::new();
+        for lane in 0..graph.lane_count() {
+            let mut phases: Vec<Phase> = Vec::new();
+            for block in 0..graph.block_count(lane) {
+                let Some(b) = graph.block(lane, block) else {
+                    continue;
+                };
+                let phase = graph.block_phase(lane, block);
+                let id = chain_id(phase, &b.id);
+                blocks.push(BlockDef {
+                    lane,
+                    block,
+                    id: id.clone(),
+                    phase,
+                    specs: b.params().specs(),
+                    keyed: graph.key_via(lane, block).is_some(),
+                });
+                for (index, src) in b.mod_sources().iter().enumerate() {
+                    meters.push(MeterDef {
+                        id: format!("{id}.{}", src.id),
+                        name: format!("{} {}", block_label(&b.id, phase), src.name),
+                        unit: unit_name(src.unit),
+                        lane,
+                        kind: MeterKind::Source { block, index },
+                    });
+                }
+                if let Some(p) = phase.filter(|p| !phases.contains(p)) {
+                    phases.push(p);
+                }
+            }
+            for p in phases {
+                meters.push(MeterDef {
+                    id: format!("{}.level", p.slug()),
+                    name: format!("{} level", phase_name(p)),
+                    unit: "dB",
+                    lane,
+                    kind: MeterKind::Phase(p),
+                });
+            }
+        }
+        meters.truncate(MAX_METERS);
+        blocks.truncate(MAX_BLOCKS);
         let table = Self {
             slots,
+            blocks,
+            meters,
             lanes,
             trims,
         };

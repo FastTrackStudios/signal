@@ -1,0 +1,908 @@
+//! FastTrackStudio's CLAP extensions, Signal's side.
+//!
+//! - **`com.fasttrackstudio.signal/1`** (the host drives Signal): the chain
+//!   as `signal.chain/1` (daw-clap-ext `docs/signal-chain.md`), its
+//!   revision, the structural actions, the session's every port, and the
+//!   live meters through `mod_source_*`.
+//! - **`com.fasttrackstudio.host-events/1`** (where the host's events
+//!   arrive): the transport, and each piece's hits.
+//! - **`com.fasttrackstudio.host-actions/1`** (Signal calls the host), when
+//!   the host offers it: files by reference, the subscriptions, and a
+//!   `SIGNAL_CHAIN_CHANGED` after every change. Without it Signal reads
+//!   files from disk and behaves exactly as before.
+
+use std::ffi::{CStr, c_char};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
+
+use daw_clap_ext::plugin::{HostActionsClient, SignalPlugin, SignalPluginLookup};
+use daw_clap_ext::{ExtError, ModSourceInfo};
+use nice_plug::prelude::Param as _;
+use nice_plug::wrapper::clap::{clap_extension_state, clap_host, clap_plugin};
+use serde_json::{Value, json};
+use signal_core::block::BlockKind;
+use signal_core::graph::{self, KeyVia};
+use signal_core::host::{AssetRef, HostError, SignalHost};
+use signal_core::param::{Unit, ValueText};
+use signal_core::session::{PortName, SessionHit, SessionId, SessionLink};
+use signal_core::state::{BlockSpec, Instance, LaneSpec, Phase, PhaseTrim, SignalState};
+
+use crate::plugin::{FtsSignal, Shared};
+use crate::slots::{self, MAX_BLOCKS, MAX_METERS, MeterKind, Table};
+
+/// What the extensions keep, beside the plugin's own shared state.
+pub struct Ext {
+    /// Increases on every change to what `chain` returns.
+    pub revision: AtomicU64,
+    /// The instance's own `clap_plugin` and its host (`clap_init`).
+    pub plugin: AtomicPtr<clap_plugin>,
+    pub host: AtomicPtr<clap_host>,
+    /// The host's `host-actions/1`, when it offers it. Main thread.
+    pub actions: Mutex<Option<HostActionsClient>>,
+    /// Subscriptions to the host's topics, by topic.
+    pub subscriptions: Mutex<Vec<(String, u64)>>,
+    /// The last build's blocks: `(lane, block, backend, status)`.
+    pub report: Mutex<Vec<(String, String, String, &'static str)>>,
+    /// Live values, by the running table's meter index (f32 bits).
+    pub meters: Box<[AtomicU32]>,
+    /// Per table block: what keys it (0 none, 1 hits, 2 midi, 3 self).
+    pub via: Box<[AtomicU8]>,
+    /// The host's transport, from its `transport` events: where it plays.
+    pub transport_frame: AtomicU64,
+    pub transport_playing: AtomicBool,
+}
+
+impl Default for Ext {
+    fn default() -> Self {
+        Self {
+            revision: AtomicU64::new(1),
+            plugin: AtomicPtr::new(std::ptr::null_mut()),
+            host: AtomicPtr::new(std::ptr::null_mut()),
+            actions: Mutex::new(None),
+            subscriptions: Mutex::new(Vec::new()),
+            report: Mutex::new(Vec::new()),
+            meters: (0..MAX_METERS).map(|_| AtomicU32::new(0)).collect(),
+            via: (0..MAX_BLOCKS).map(|_| AtomicU8::new(0)).collect(),
+            transport_frame: AtomicU64::new(0),
+            transport_playing: AtomicBool::new(false),
+        }
+    }
+}
+
+// ── Every instance in the process, for SIGNAL_SESSION ──────────────────
+
+static INSTANCES: Mutex<Vec<Weak<Shared>>> = Mutex::new(Vec::new());
+
+pub fn register(shared: &Arc<Shared>) {
+    let mut all = INSTANCES.lock().unwrap_or_else(PoisonError::into_inner);
+    all.retain(|w| w.strong_count() > 0);
+    all.push(Arc::downgrade(shared));
+}
+
+/// Every instance in `shared`'s session (itself alone when it's in none).
+pub fn session_of_instance(shared: &Arc<Shared>) -> Vec<Arc<Shared>> {
+    let state = shared.state();
+    match session_of(&state).map(str::to_owned) {
+        None => vec![shared.clone()],
+        Some(s) => instances()
+            .into_iter()
+            .filter(|o| session_of(&o.state()) == Some(s.as_str()))
+            .collect(),
+    }
+}
+
+fn instances() -> Vec<Arc<Shared>> {
+    INSTANCES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .filter_map(Weak::upgrade)
+        .collect()
+}
+
+// ── The host's files ────────────────────────────────────────────────────
+
+/// Files through the host's `host-actions/1` (`load_file`), the disk when
+/// the host doesn't resolve one. Main thread only, as the extension is.
+pub struct HostFiles(pub HostActionsClient);
+
+impl SignalHost for HostFiles {
+    fn load_file(&self, asset: &AssetRef) -> Result<Vec<u8>, HostError> {
+        match self.0.load_file(&asset.path, asset.blake3.as_deref()) {
+            Ok(bytes) => Ok(bytes),
+            Err(_) => crate::plugin::DiskHost.load_file(asset),
+        }
+    }
+}
+
+// ── After a build ───────────────────────────────────────────────────────
+
+/// What follows a build or a structural change: the revision, the host's
+/// rescan of the parameters' info and text, and (on the main thread) the
+/// host told, and subscribed to the pieces this instance listens to.
+pub fn after_build(shared: &Shared, report: &graph::BuildReport, on_main: bool) {
+    *shared
+        .ext
+        .report
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = report
+        .blocks
+        .iter()
+        .map(|b| {
+            let status = match &b.status {
+                signal_core::block::BlockStatus::Active => "ok",
+                signal_core::block::BlockStatus::Fallback { .. } => "fallback",
+                signal_core::block::BlockStatus::Bypassed { .. } => "unavailable",
+            };
+            (b.lane.clone(), b.block.clone(), b.backend.clone(), status)
+        })
+        .collect();
+    let revision = shared.ext.revision.fetch_add(1, Ordering::AcqRel) + 1;
+    let plugin = shared.ext.plugin.load(Ordering::Acquire);
+    if !plugin.is_null() {
+        // SAFETY: the instance's own pointer, alive as long as it is.
+        unsafe { nice_plug::wrapper::clap::clap_request_rescan::<FtsSignal>(plugin, true, false) };
+    }
+    if !on_main {
+        return;
+    }
+    let client = *shared
+        .ext
+        .actions
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if let Some(client) = client {
+        let state = shared.state();
+        let port = port_of(&state);
+        // A host without the action just says so.
+        let _ = client.run(
+            "SIGNAL_CHAIN_CHANGED",
+            &json!({ "port": port, "revision": revision }).to_string(),
+        );
+        subscribe(shared, &client, &state);
+    }
+}
+
+/// Subscribe to the transport, and to the hits of each piece a block here
+/// is keyed to.
+fn subscribe(shared: &Shared, client: &HostActionsClient, state: &SignalState) {
+    let mut subs = shared
+        .ext
+        .subscriptions
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let mut topics = vec!["transport".to_owned()];
+    for lane in graph::lanes_for(&state.preset, port_of(state)) {
+        for key in lane.blocks.iter().filter_map(|b| b.key.as_deref()) {
+            topics.push(format!("hits:{}", piece_of(key)));
+        }
+    }
+    topics.sort();
+    topics.dedup();
+    for topic in topics {
+        if !subs.iter().any(|(t, _)| *t == topic) {
+            if let Some(id) = client.subscribe(&topic) {
+                subs.push((topic, id));
+            }
+        }
+    }
+}
+
+/// A trigger lane's piece as the host names it: `Drums/Kick/Sum/Trig` →
+/// `Drums/Kick`, `Drums/Toms/Tom 1/T1 Trig` → `Drums/Toms/Tom 1`.
+#[must_use]
+pub fn piece_of(trigger: &str) -> String {
+    trigger
+        .strip_suffix("/Sum/Trig")
+        .map(str::to_owned)
+        .or_else(|| {
+            trigger
+                .rsplit_once('/')
+                .filter(|(_, last)| last.ends_with("Trig"))
+                .map(|(p, _)| p.to_owned())
+        })
+        .unwrap_or_else(|| trigger.to_owned())
+}
+
+fn port_of(state: &SignalState) -> Option<&str> {
+    match &state.instance {
+        Instance::MultiChannel => None,
+        Instance::Port(link) => Some(link.port.0.as_str()),
+    }
+}
+
+fn session_of(state: &SignalState) -> Option<&str> {
+    match &state.instance {
+        Instance::MultiChannel => None,
+        Instance::Port(link) => Some(link.session.0.as_str()),
+    }
+}
+
+// ── The audio side's meters ─────────────────────────────────────────────
+
+/// Keep the running graph's meters and keys for the host. Audio thread:
+/// atomics only.
+pub fn store_meters(ext: &Ext, table: &Table, graph: &graph::Graph) {
+    for (i, m) in table.meters.iter().enumerate() {
+        let v = match m.kind {
+            MeterKind::Source { block, index } => graph
+                .block(m.lane, block)
+                .and_then(|b| b.mod_source(index))
+                .unwrap_or(0.0),
+            MeterKind::Phase(_) => f32::NAN,
+        };
+        if let (Some(slot), false) = (ext.meters.get(i), v.is_nan()) {
+            slot.store(v.to_bits(), Ordering::Relaxed);
+        }
+    }
+    graph.each_phase_level(|lane, phase, db| {
+        for (i, m) in table.meters.iter().enumerate() {
+            if m.lane == lane && matches!(m.kind, MeterKind::Phase(p) if p == phase) {
+                if let Some(slot) = ext.meters.get(i) {
+                    slot.store(db.to_bits(), Ordering::Relaxed);
+                }
+            }
+        }
+    });
+    for (i, b) in table.blocks.iter().enumerate().filter(|(_, b)| b.keyed) {
+        let code = match graph.key_via(b.lane, b.block) {
+            None => 0,
+            Some(KeyVia::Hits) => 1,
+            Some(KeyVia::Midi) => 2,
+            Some(KeyVia::Own) => 3,
+        };
+        if let Some(slot) = ext.via.get(i) {
+            slot.store(code, Ordering::Relaxed);
+        }
+    }
+}
+
+// ── signal.chain/1 ──────────────────────────────────────────────────────
+
+/// `signal.chain/1`'s kind for a block.
+fn kind_name(kind: &BlockKind) -> String {
+    match kind {
+        BlockKind::Signal(name) => match name.as_str() {
+            "drive" => "saturate".into(),
+            "drum" | "sample" | "sampler" => "sampler".into(),
+            other => other.into(),
+        },
+        BlockKind::Plugin(_) => "clap".into(),
+    }
+}
+
+/// The block kind a `kind` in an action names.
+fn kind_from(name: &str) -> BlockKind {
+    BlockKind::Signal(
+        match name {
+            "saturate" => "drive",
+            "sampler" => "drum",
+            other => other,
+        }
+        .into(),
+    )
+}
+
+fn phase_from(id: &str) -> Option<Phase> {
+    Phase::ALL.into_iter().find(|p| p.slug() == id)
+}
+
+fn param_json(spec: &signal_core::param::ParamSpec, value: f32, clap_id: Option<String>) -> Value {
+    let choices: Vec<&str> = match spec.unit {
+        Unit::Choice(names) => names.to_vec(),
+        Unit::Toggle => vec!["Off", "On"],
+        _ => Vec::new(),
+    };
+    json!({
+        "id": spec.id,
+        "clap_id": clap_id,
+        "name": spec.name,
+        "value": value,
+        "normalized": spec.normalize(value),
+        "text": ValueText::of(spec, value).as_str(),
+        "unit": slots::unit_name(spec.unit),
+        "min": spec.min,
+        "max": spec.max,
+        "default": spec.default,
+        "choices": choices,
+    })
+}
+
+/// One lane's phases, as `signal.chain/1` has them.
+fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec<Value> {
+    let report = shared
+        .ext
+        .report
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    let mut phases: Vec<(String, Vec<Value>)> = Vec::new();
+    for (bi, b) in table.blocks.iter().enumerate().filter(|(_, b)| b.lane == l) {
+        let Some(bspec) = spec.blocks.get(b.block) else {
+            continue;
+        };
+        let params: Vec<Value> = b
+            .specs
+            .iter()
+            .enumerate()
+            .map(|(pi, ps)| {
+                let slot = table
+                    .slots
+                    .iter()
+                    .position(|s| s.lane == l && s.block == b.block && s.param == pi);
+                let value = slot
+                    .and_then(|i| shared.params.slots.get(i))
+                    .map(|p| ps.denormalize(p.unmodulated_normalized_value()))
+                    .or_else(|| bspec.params.get(ps.id).copied())
+                    .unwrap_or(ps.default);
+                param_json(ps, value, slot.map(slots::slot_id))
+            })
+            .collect();
+        let meters: Vec<Value> = table
+            .meters
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.lane == l && matches!(m.kind, MeterKind::Source { block, .. } if block == b.block))
+            .map(|(i, m)| json!({ "id": m.id.rsplit('.').next().unwrap_or(&m.id), "name": m.name, "unit": m.unit, "index": i }))
+            .collect();
+        let (backend, status) = report
+            .iter()
+            .find(|(lane, block, ..)| *lane == spec.name && *block == bspec.id)
+            .map_or(("linked".to_owned(), "ok"), |(_, _, be, st)| {
+                (be.clone(), *st)
+            });
+        let via = match shared
+            .ext
+            .via
+            .get(bi)
+            .map_or(0, |v| v.load(Ordering::Relaxed))
+        {
+            2 => "midi",
+            3 => "self",
+            _ => "hits",
+        };
+        let block = json!({
+            "id": b.id,
+            "kind": kind_name(&bspec.kind),
+            "name": slots::block_label(&bspec.id, b.phase),
+            "bypass": bspec.bypass,
+            "backend": backend,
+            "status": status,
+            "key": bspec.key.as_ref().map(|k| json!({ "from": k, "via": via })),
+            "params": params,
+            "meters": meters,
+        });
+        let phase = b.phase.map_or("source", Phase::slug).to_owned();
+        match phases.iter_mut().find(|(p, _)| *p == phase) {
+            Some((_, blocks)) => blocks.push(block),
+            None => phases.push((phase, vec![block])),
+        }
+    }
+    phases
+        .into_iter()
+        .map(|(id, blocks)| {
+            let phase = phase_from(&id);
+            let meters: Vec<Value> = table
+                .meters
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| m.lane == l && phase.is_some_and(|p| matches!(m.kind, MeterKind::Phase(q) if q == p)))
+                .map(|(i, m)| json!({ "id": "level", "name": m.name, "unit": m.unit, "index": i }))
+                .collect();
+            json!({
+                "id": id,
+                "name": phase.map_or("Source", slots::phase_name),
+                "bypass": phase.is_some_and(|p| spec.bypass_phases.contains(&p)),
+                "makeup_db": phase.and_then(|p| spec.trims.iter().find(|t| t.phase == p)).map_or(0.0, |t| t.gain_db),
+                "blocks": blocks,
+                "meters": meters,
+            })
+        })
+        .collect()
+}
+
+/// This instance's chain, `signal.chain/1`.
+pub fn chain(shared: &Shared) -> Value {
+    let state = shared.state();
+    let table = shared.params.shown.get();
+    let port = port_of(&state);
+    let lanes = graph::lanes_for(&state.preset, port);
+    let per_track = port.is_some();
+    let block_of = |lane: &LaneSpec, piece: &str| -> Option<String> {
+        let _ = piece;
+        lane.blocks
+            .iter()
+            .find(|b| b.kind == BlockKind::Signal("drum".into()))
+            .map(|b| slots::chain_id(b.phase, &b.id))
+    };
+    let midi_plays: Vec<Value> = lanes
+        .iter()
+        .flat_map(|lane| {
+            lane.midi_hits.iter().map(move |m| {
+                json!({ "note": m.note, "piece": piece_of(&m.piece), "block": block_of(lane, &m.piece) })
+            })
+        })
+        .collect();
+    let any_midi = lanes.iter().any(|l| !l.midi_hits.is_empty());
+    let macros: Vec<Value> = state
+        .preset
+        .macros
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let targets: Vec<String> = m
+                .targets
+                .iter()
+                .map(|t| {
+                    let phase = state
+                        .preset
+                        .lanes
+                        .iter()
+                        .find(|l| l.name == t.lane)
+                        .and_then(|l| l.blocks.iter().find(|b| b.id == t.block))
+                        .and_then(|b| b.phase);
+                    format!("{}.{}", slots::chain_id(phase, &t.block), t.param)
+                })
+                .collect();
+            json!({ "id": format!("macro_{}", i + 1), "name": m.name, "clap_id": format!("macro_{}", i + 1), "targets": targets })
+        })
+        .collect();
+    let mut out = json!({
+        "schema": "signal.chain/1",
+        "revision": shared.ext.revision.load(Ordering::Acquire),
+        "session": session_of(&state),
+        "port": port,
+        "mode": if per_track { "per-track" } else { "kit" },
+        "midi": if any_midi { json!({ "plays": midi_plays, "publishes_hits": true }) } else { Value::Null },
+        "phases": [],
+        "macros": macros,
+    });
+    if per_track || lanes.len() == 1 {
+        if let Some(spec) = lanes.first() {
+            out["phases"] = Value::Array(lane_phases(shared, &table, 0, spec));
+        }
+    } else {
+        // The kit mode: one instance, every lane, each its own strip.
+        out["lanes"] = Value::Array(
+            lanes
+                .iter()
+                .enumerate()
+                .map(|(l, spec)| json!({ "lane": spec.name, "phases": lane_phases(shared, &table, l, spec) }))
+                .collect(),
+        );
+    }
+    out
+}
+
+// ── The actions ─────────────────────────────────────────────────────────
+
+const ACTIONS: &[(&str, &str, &str)] = &[
+    (
+        "SIGNAL_CHAIN",
+        "This instance's chain, signal.chain/1.",
+        "{}",
+    ),
+    (
+        "SIGNAL_SET",
+        "Bypass a block or a phase, set a phase's make-up, or a block's algorithm: {\"block\"|\"phase\", \"bypass\"?, \"makeup_db\"?, \"algorithm\"?}. Answers the new chain.",
+        r#"{"type":"object","properties":{"block":{"type":"string"},"phase":{"type":"string"},"bypass":{"type":"boolean"},"makeup_db":{"type":"number"},"algorithm":{"type":"string"}}}"#,
+    ),
+    (
+        "SIGNAL_BLOCK_ADD",
+        "Add a block of `kind` to `phase`, after the block `after` (else at the phase's end). Answers the new chain.",
+        r#"{"type":"object","required":["phase","kind"],"properties":{"phase":{"type":"string"},"kind":{"type":"string"},"after":{"type":"string"},"algorithm":{"type":"string"}}}"#,
+    ),
+    (
+        "SIGNAL_BLOCK_REMOVE",
+        "Remove the block `block`. Answers the new chain.",
+        r#"{"type":"object","required":["block"],"properties":{"block":{"type":"string"}}}"#,
+    ),
+    (
+        "SIGNAL_BLOCK_MOVE",
+        "Move the block `block` to `phase` (else its own), after the block `after` (else at the phase's end). Answers the new chain.",
+        r#"{"type":"object","required":["block"],"properties":{"block":{"type":"string"},"phase":{"type":"string"},"after":{"type":"string"}}}"#,
+    ),
+    (
+        "SIGNAL_SESSION",
+        "Every port of this instance's session in this process: {\"session\", \"ports\": [signal.chain/1]}.",
+        "{}",
+    ),
+    (
+        "SIGNAL_ALGORITHMS",
+        "A family's algorithms: {\"kind\"} → [{\"id\", \"name\"}].",
+        r#"{"type":"object","required":["kind"],"properties":{"kind":{"type":"string"}}}"#,
+    ),
+];
+
+fn actions_json() -> String {
+    Value::Array(
+        ACTIONS
+            .iter()
+            .map(|(id, description, schema)| {
+                json!({ "id": id, "description": description, "args_schema": serde_json::from_str::<Value>(schema).unwrap_or(Value::Null) })
+            })
+            .collect(),
+    )
+    .to_string()
+}
+
+fn arg<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
+    args.get(key).and_then(Value::as_str)
+}
+
+/// The lane this instance runs, by index in the preset, and a block of it
+/// by its chain id (`tone.comp`, or just `comp`).
+fn find_block(state: &SignalState, id: &str) -> Option<(usize, usize)> {
+    let port = port_of(state).map(str::to_owned);
+    let names: Vec<String> = graph::lanes_for(&state.preset, port.as_deref())
+        .iter()
+        .map(|l| l.name.clone())
+        .collect();
+    for (li, lane) in state
+        .preset
+        .lanes
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| names.contains(&l.name))
+    {
+        if let Some(bi) = lane
+            .blocks
+            .iter()
+            .position(|b| slots::chain_id(b.phase, &b.id) == id || b.id == id)
+        {
+            return Some((li, bi));
+        }
+    }
+    None
+}
+
+fn first_lane(state: &SignalState) -> Option<usize> {
+    let port = port_of(state).map(str::to_owned);
+    let name = graph::lanes_for(&state.preset, port.as_deref())
+        .first()
+        .map(|l| l.name.clone())?;
+    state.preset.lanes.iter().position(|l| l.name == name)
+}
+
+/// Where a block of `phase` goes in `lane`: after `after`, else after the
+/// last block of its phase or an earlier one (phase order kept).
+fn insert_at(lane: &LaneSpec, phase: Phase, after: Option<&str>) -> usize {
+    if let Some(i) = after.and_then(|a| {
+        lane.blocks
+            .iter()
+            .position(|b| slots::chain_id(b.phase, &b.id) == a || b.id == a)
+    }) {
+        return i + 1;
+    }
+    lane.blocks
+        .iter()
+        .rposition(|b| b.phase.is_some_and(|p| p <= phase))
+        .map_or(0, |i| i + 1)
+}
+
+/// An id no block in `lane` has: `kind`, `kind_2`, …
+fn fresh_id(lane: &LaneSpec, kind: &str) -> String {
+    let taken = |id: &str| lane.blocks.iter().any(|b| b.id == id);
+    if !taken(kind) {
+        return kind.to_owned();
+    }
+    (2..)
+        .map(|n| format!("{kind}_{n}"))
+        .find(|id| !taken(id))
+        .unwrap_or_else(|| kind.to_owned())
+}
+
+/// Change the state, build it, and answer the new chain.
+fn edit(
+    shared: &Shared,
+    on_main: bool,
+    f: impl FnOnce(&mut SignalState) -> Result<(), ExtError>,
+) -> Result<String, ExtError> {
+    let mut state = shared.state();
+    f(&mut state)?;
+    let text = String::from_utf8(state.to_blob()).map_err(|e| ExtError::Failed(e.to_string()))?;
+    shared.load_state_text(text, on_main);
+    Ok(chain(shared).to_string())
+}
+
+/// Run action `id`. `on_main`: called on the host's main thread (signal/1),
+/// so the host may be called back; an editor's call is not.
+pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<String, ExtError> {
+    match id {
+        "SIGNAL_CHAIN" => Ok(chain(shared).to_string()),
+        "SIGNAL_SET" => edit(shared, on_main, |state| {
+            if let Some(block) = arg(args, "block") {
+                let (l, b) = find_block(state, block)
+                    .ok_or_else(|| ExtError::NotFound(format!("block {block}")))?;
+                let spec = &mut state.preset.lanes[l].blocks[b];
+                if let Some(bypass) = args.get("bypass").and_then(Value::as_bool) {
+                    spec.bypass = bypass;
+                }
+                if let Some(a) = arg(args, "algorithm") {
+                    spec.algorithm = Some(a.to_owned());
+                }
+                return Ok(());
+            }
+            let phase_id = arg(args, "phase")
+                .ok_or_else(|| ExtError::Failed("SIGNAL_SET wants a block or a phase".into()))?;
+            let phase = phase_from(phase_id)
+                .ok_or_else(|| ExtError::NotFound(format!("phase {phase_id}")))?;
+            let l = first_lane(state).ok_or_else(|| ExtError::NotFound("a lane".into()))?;
+            let lane = &mut state.preset.lanes[l];
+            if let Some(bypass) = args.get("bypass").and_then(Value::as_bool) {
+                lane.bypass_phases.retain(|p| *p != phase);
+                if bypass {
+                    lane.bypass_phases.push(phase);
+                }
+            }
+            if let Some(db) = args.get("makeup_db").and_then(Value::as_f64) {
+                let gain_db = db as f32;
+                match lane.trims.iter_mut().find(|t| t.phase == phase) {
+                    Some(t) => t.gain_db = gain_db,
+                    None => lane.trims.push(PhaseTrim { phase, gain_db }),
+                }
+            }
+            Ok(())
+        }),
+        "SIGNAL_BLOCK_ADD" => edit(shared, on_main, |state| {
+            let phase_id = arg(args, "phase").ok_or_else(|| ExtError::Failed("a phase".into()))?;
+            let phase = phase_from(phase_id)
+                .ok_or_else(|| ExtError::NotFound(format!("phase {phase_id}")))?;
+            let kind = arg(args, "kind").ok_or_else(|| ExtError::Failed("a kind".into()))?;
+            let BlockKind::Signal(name) = kind_from(kind) else {
+                return Err(ExtError::Unsupported);
+            };
+            if !signal_core::blocks::exists(&name) {
+                return Err(ExtError::NotFound(format!("block kind {kind}")));
+            }
+            let l = first_lane(state).ok_or_else(|| ExtError::NotFound("a lane".into()))?;
+            let lane = &mut state.preset.lanes[l];
+            let at = insert_at(lane, phase, arg(args, "after"));
+            let mut block = BlockSpec::signal(fresh_id(lane, kind), name).phase(phase);
+            if let Some(a) = arg(args, "algorithm") {
+                block = block.algorithm(a);
+            }
+            lane.blocks.insert(at, block);
+            Ok(())
+        }),
+        "SIGNAL_BLOCK_REMOVE" => edit(shared, on_main, |state| {
+            let block = arg(args, "block").ok_or_else(|| ExtError::Failed("a block".into()))?;
+            let (l, b) = find_block(state, block)
+                .ok_or_else(|| ExtError::NotFound(format!("block {block}")))?;
+            state.preset.lanes[l].blocks.remove(b);
+            Ok(())
+        }),
+        "SIGNAL_BLOCK_MOVE" => edit(shared, on_main, |state| {
+            let block = arg(args, "block").ok_or_else(|| ExtError::Failed("a block".into()))?;
+            let (l, b) = find_block(state, block)
+                .ok_or_else(|| ExtError::NotFound(format!("block {block}")))?;
+            let lane = &mut state.preset.lanes[l];
+            let mut spec = lane.blocks.remove(b);
+            if let Some(p) = arg(args, "phase") {
+                spec.phase =
+                    Some(phase_from(p).ok_or_else(|| ExtError::NotFound(format!("phase {p}")))?);
+            }
+            let at = insert_at(lane, spec.phase.unwrap_or(Phase::Tone), arg(args, "after"))
+                .min(lane.blocks.len());
+            lane.blocks.insert(at, spec);
+            Ok(())
+        }),
+        "SIGNAL_SESSION" => {
+            let state = shared.state();
+            let session = session_of(&state).map(str::to_owned);
+            let ports: Vec<Value> = match &session {
+                None => vec![chain(shared)],
+                Some(s) => instances()
+                    .iter()
+                    .filter(|other| session_of(&other.state()) == Some(s.as_str()))
+                    .map(|other| chain(other))
+                    .collect(),
+            };
+            Ok(json!({ "session": session, "ports": ports }).to_string())
+        }
+        "SIGNAL_ALGORITHMS" => {
+            let kind = arg(args, "kind").ok_or_else(|| ExtError::Failed("a kind".into()))?;
+            let BlockKind::Signal(family) = kind_from(kind) else {
+                return Err(ExtError::Unsupported);
+            };
+            let algos: Vec<Value> = plugin_processors::algorithms::family(&family)
+                .iter()
+                .map(|a| json!({ "id": a.id, "name": a.name }))
+                .collect();
+            Ok(Value::Array(algos).to_string())
+        }
+        other => Err(ExtError::NotFound(other.into())),
+    }
+}
+
+// ── signal/1 ────────────────────────────────────────────────────────────
+
+impl SignalPlugin for Shared {
+    fn list_actions(&self) -> String {
+        actions_json()
+    }
+
+    fn run_action(&self, id: &str, args_json: &str) -> Result<String, ExtError> {
+        let args: Value = serde_json::from_str(args_json).unwrap_or(Value::Null);
+        run(self, id, &args, true)
+    }
+
+    fn chain(&self) -> String {
+        chain(self).to_string()
+    }
+
+    fn revision(&self) -> u64 {
+        self.ext.revision.load(Ordering::Acquire)
+    }
+
+    fn param_stable_id(&self, param_id: u32) -> Option<String> {
+        let table = self.params.shown.get();
+        let i = (0..slots::SLOTS)
+            .find(|i| nice_plug::wrapper::clap::param_clap_id(&slots::slot_id(*i)) == param_id)?;
+        let s = table.slots.get(i)?;
+        let phase = table
+            .blocks
+            .iter()
+            .find(|b| b.lane == s.lane && b.block == s.block)
+            .and_then(|b| b.phase);
+        Some(format!(
+            "{}.{}",
+            slots::chain_id(phase, &s.block_id),
+            s.spec.id
+        ))
+    }
+
+    fn mod_sources(&self) -> Vec<ModSourceInfo> {
+        self.params
+            .shown
+            .get()
+            .meters
+            .iter()
+            .map(|m| ModSourceInfo {
+                id: m.id.clone(),
+                name: m.name.clone(),
+                unit: m.unit.to_owned(),
+            })
+            .collect()
+    }
+
+    fn mod_source_value(&self, index: usize) -> f64 {
+        // Audio thread: one atomic load.
+        self.ext.meters.get(index).map_or(0.0, |v| {
+            f64::from(f32::from_bits(v.load(Ordering::Relaxed)))
+        })
+    }
+
+    fn set_session(&self, session: Option<(&str, &str)>) -> bool {
+        edit(self, true, |state| {
+            state.instance = match session {
+                Some((s, p)) => Instance::Port(SessionLink {
+                    session: SessionId(s.to_owned()),
+                    port: PortName(p.to_owned()),
+                }),
+                None => Instance::MultiChannel,
+            };
+            Ok(())
+        })
+        .is_ok()
+    }
+}
+
+/// How the extension finds an instance's [`Shared`] from the host's
+/// pointer, and keeps the pointer for the instance's own calls.
+pub struct Lookup;
+
+impl SignalPluginLookup for Lookup {
+    unsafe fn lookup(plugin: *const clap_plugin) -> Option<Arc<dyn SignalPlugin>> {
+        let shared = unsafe { shared_of(plugin) }?;
+        Some(shared as Arc<dyn SignalPlugin>)
+    }
+}
+
+/// # Safety
+///
+/// `plugin` is nice-plug's `clap_plugin` for [`FtsSignal`].
+pub unsafe fn shared_of(plugin: *const clap_plugin) -> Option<Arc<Shared>> {
+    let state = unsafe { clap_extension_state::<FtsSignal>(plugin) }?;
+    let shared = state.downcast::<Shared>().ok()?;
+    shared
+        .ext
+        .plugin
+        .store(plugin.cast_mut(), Ordering::Release);
+    Some(shared)
+}
+
+/// `init()`: the instance's pointers, and the host's `host-actions/1`.
+pub fn init(shared: &Shared, plugin: *const clap_plugin, host: *const clap_host) {
+    shared
+        .ext
+        .plugin
+        .store(plugin.cast_mut(), Ordering::Release);
+    shared.ext.host.store(host.cast_mut(), Ordering::Release);
+    // SAFETY: the host's own pointer, on its main thread (init).
+    let client = unsafe { HostActionsClient::query(host) };
+    *shared
+        .ext
+        .actions
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = client;
+}
+
+// ── host-events/1 ───────────────────────────────────────────────────────
+
+/// The host's events: the transport (`{"playing", "frame"}`) and a piece's
+/// hits (`{"frame", "velocity"}`, the host's hit markers: published to the
+/// session as notes, so gates key on them).
+pub unsafe extern "C" fn on_event(
+    plugin: *const clap_plugin,
+    _subscription: u64,
+    topic: *const c_char,
+    event_json: *const c_char,
+) {
+    let Some(shared) = (unsafe { shared_of(plugin) }) else {
+        return;
+    };
+    let (Some(topic), Some(body)) = (cstr(topic), cstr(event_json)) else {
+        return;
+    };
+    let Ok(event) = serde_json::from_str::<Value>(body) else {
+        return;
+    };
+    if topic == "transport" {
+        if let Some(frame) = event.get("frame").and_then(Value::as_u64) {
+            shared.ext.transport_frame.store(frame, Ordering::Release);
+        }
+        let playing = event
+            .get("playing")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        shared
+            .ext
+            .transport_playing
+            .store(playing, Ordering::Release);
+        return;
+    }
+    let Some(piece) = topic.strip_prefix("hits:") else {
+        return;
+    };
+    let state = shared.state();
+    let (Some(frame), Some(link)) = (
+        event.get("frame").and_then(Value::as_u64),
+        match &state.instance {
+            Instance::Port(l) => Some(l.clone()),
+            Instance::MultiChannel => None,
+        },
+    ) else {
+        return;
+    };
+    let velocity = event.get("velocity").and_then(Value::as_f64).unwrap_or(1.0) as f32;
+    let index = state
+        .preset
+        .lanes
+        .iter()
+        .position(|l| l.trigger.is_some() && piece_of(&l.name) == piece)
+        .and_then(|i| u16::try_from(i).ok());
+    if let Some(index) = index {
+        signal_core::session::Registry::join(&link.session)
+            .hits
+            .publish(SessionHit {
+                piece: index,
+                velocity,
+                frame,
+                midi: true,
+            });
+    }
+}
+
+fn cstr<'a>(p: *const c_char) -> Option<&'a str> {
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: the host's NUL-terminated string.
+    unsafe { CStr::from_ptr(p) }.to_str().ok()
+}
+
+pub const HOST_EVENTS: daw_clap_ext::sys::fts_plugin_host_events =
+    daw_clap_ext::sys::fts_plugin_host_events {
+        on_event: Some(on_event),
+    };

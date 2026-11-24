@@ -6,9 +6,12 @@
 
 pub mod config;
 pub mod drum;
+pub mod editor;
+pub mod ext;
 pub mod plugin;
 pub mod sampler;
 pub mod slots;
+pub mod strip;
 
 pub use plugin::FtsSignal;
 

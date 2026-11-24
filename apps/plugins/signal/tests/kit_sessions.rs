@@ -281,3 +281,243 @@ fn a_state_loaded_while_active_shows_its_slots_at_once() {
         "{names:?}"
     );
 }
+
+/// A host offering `host-actions/1`, recording what Signal asks of it.
+#[derive(Default)]
+struct TestHost {
+    runs: std::sync::Mutex<Vec<(String, String)>>,
+    topics: std::sync::Mutex<Vec<String>>,
+}
+
+impl daw_clap_ext::host::HostActions for TestHost {
+    fn list(&self) -> Result<String, daw_clap_ext::ExtError> {
+        Ok("[]".into())
+    }
+    fn describe(&self, id: &str) -> Result<String, daw_clap_ext::ExtError> {
+        Err(daw_clap_ext::ExtError::NotFound(id.into()))
+    }
+    fn run(&self, id: &str, args_json: &str) -> Result<String, daw_clap_ext::ExtError> {
+        self.runs
+            .lock()
+            .unwrap()
+            .push((id.into(), args_json.into()));
+        Ok("{}".into())
+    }
+    fn subscribe(&self, topic: &str, _sink: daw_clap_ext::host::EventSink) -> Option<u64> {
+        let mut t = self.topics.lock().unwrap();
+        t.push(topic.into());
+        Some(t.len() as u64)
+    }
+}
+
+fn note_on(offset: u32, note: u8, velocity: u8) -> daw::plugin::PluginMidiEvent {
+    daw::plugin::PluginMidiEvent {
+        offset,
+        message: daw_proto::MidiEvent::decode(&[0x90, note, velocity])
+            .expect("a note-on")
+            .0,
+    }
+}
+
+/// signal/1 through daw's host, two instances of one session: the chain
+/// as `signal.chain/1` has it, a SIGNAL_SET moving its revision and the
+/// host's rescan (and telling the host), meters that read while it
+/// plays, and a note-on on the Sample track playing the kick and opening
+/// the kick's gate on its other track, keyed by MIDI.
+#[test]
+#[ignore = "needs the bundled .clap (and SIGNAL_TEST_DRUMS, an MM2 kick, for the sample)"]
+fn signal_1_shows_the_chain_and_midi_plays_and_keys_the_kit() {
+    let engine = std::env::var("SIGNAL_TEST_DRUMS").ok();
+    let preset = drum_kit(&KitPieces {
+        kick: engine.as_deref().map(signal_core::host::AssetRef::path),
+        ..KitPieces::default()
+    });
+    let session = format!("chain-{}", std::process::id());
+    let host = std::sync::Arc::new(TestHost::default());
+    let load = |port: &str| {
+        let options = daw::plugin::LoadOptions {
+            actions: Some(host.clone()),
+        };
+        let mut p = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+            .expect("loads")
+            .expect("a CLAP");
+        let state = SignalState {
+            instance: Instance::Port(SessionLink {
+                session: SessionId(session.clone()),
+                port: PortName(port.into()),
+            }),
+            ..SignalState::new(preset.clone())
+        };
+        p.load_state(&clap_state(&state)).expect("takes the state");
+        p.prepare(SR, BLOCK as u32).expect("activates");
+        p
+    };
+    let mut kick = load("Drums/Kick");
+    let mut sample = load("Drums/Kick/Sum/Sample");
+    let signal = kick.signal().expect("signal/1");
+
+    // The chain, as the contract has it.
+    let chain: serde_json::Value =
+        serde_json::from_str(&signal.chain().expect("a chain")).expect("JSON");
+    assert_eq!(chain["schema"], "signal.chain/1");
+    assert_eq!(chain["port"], "Drums/Kick");
+    assert_eq!(chain["session"], session.as_str());
+    assert_eq!(chain["mode"], "per-track");
+    let phases: Vec<&str> = chain["phases"]
+        .as_array()
+        .expect("phases")
+        .iter()
+        .map(|p| p["id"].as_str().unwrap_or(""))
+        .collect();
+    assert_eq!(phases, vec!["rescue", "tone"], "{chain}");
+    let gate = &chain["phases"][0]["blocks"][0];
+    assert_eq!(gate["id"], "rescue.gate");
+    assert_eq!(gate["kind"], "gate");
+    assert_eq!(gate["key"]["from"], "Drums/Kick/Sum/Trig");
+    let threshold = gate["params"]
+        .as_array()
+        .expect("params")
+        .iter()
+        .find(|p| p["id"] == "threshold")
+        .expect("threshold");
+    assert!(
+        threshold["clap_id"]
+            .as_str()
+            .is_some_and(|c| c.starts_with('b')),
+        "{threshold}"
+    );
+    assert_eq!(threshold["text"], "-40.0 dB");
+    let gate_meter = gate["meters"][0]["index"]
+        .as_u64()
+        .expect("the gate's meter") as u32;
+    let comp = &chain["phases"][1]["blocks"][0];
+    assert_eq!(comp["id"], "tone.comp");
+    let gr_meter = comp["meters"][0]["index"].as_u64().expect("the comp's GR") as u32;
+    println!(
+        "chain: {} phases, gate key {}, meters gate #{gate_meter} comp GR #{gr_meter}",
+        phases.len(),
+        gate["key"]
+    );
+    let sample_chain: serde_json::Value =
+        serde_json::from_str(&sample.signal().expect("signal/1").chain().expect("chain"))
+            .expect("JSON");
+    println!("sample's midi: {}", sample_chain["midi"]);
+    assert_eq!(sample_chain["midi"]["plays"][0]["note"], 36);
+    assert_eq!(sample_chain["midi"]["publishes_hits"], true);
+
+    // A structural change: the revision moves, the host rescans and hears.
+    let (r0, rescans0) = (signal.revision(), kick.param_info_revision());
+    let after: serde_json::Value = serde_json::from_str(
+        &signal
+            .run_action("SIGNAL_SET", r#"{"block": "rescue.gate", "bypass": true}"#)
+            .expect("SIGNAL_SET"),
+    )
+    .expect("JSON");
+    assert_eq!(after["phases"][0]["blocks"][0]["bypass"], true);
+    assert!(signal.revision() > r0, "the revision moves");
+    kick.pump_main_thread();
+    assert!(
+        kick.param_info_revision() > rescans0,
+        "the host was asked to rescan"
+    );
+    assert!(
+        host.runs
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(id, _)| id == "SIGNAL_CHAIN_CHANGED"),
+        "the host was told"
+    );
+    signal
+        .run_action("SIGNAL_SET", r#"{"block": "rescue.gate", "bypass": false}"#)
+        .expect("back on");
+    println!(
+        "revision {r0} → {}; host topics {:?}",
+        signal.revision(),
+        host.topics.lock().unwrap()
+    );
+
+    // The session: both ports.
+    let s: serde_json::Value = serde_json::from_str(
+        &signal
+            .run_action("SIGNAL_SESSION", "{}")
+            .expect("SIGNAL_SESSION"),
+    )
+    .expect("JSON");
+    let ports: Vec<&str> = s["ports"]
+        .as_array()
+        .expect("ports")
+        .iter()
+        .map(|p| p["port"].as_str().unwrap_or(""))
+        .collect();
+    assert!(
+        ports.contains(&"Drums/Kick") && ports.contains(&"Drums/Kick/Sum/Sample"),
+        "{ports:?}"
+    );
+
+    // Bleed on the kick's track; a note-on (kick, 36) on the Sample track
+    // at 1 s. The kick's instance runs first.
+    let frames = 48_000 * 2;
+    let bleed = noise(frames, 0.3, 7);
+    let silence = vec![0.0_f32; BLOCK];
+    let (mut kick_out, mut sample_out) = (vec![0.0_f32; frames], vec![0.0_f32; frames]);
+    let mut scratch = vec![0.0_f32; BLOCK];
+    let mut gate_open = 0.0_f64;
+    let mut gr = 0.0_f64;
+    for start in (0..frames).step_by(BLOCK) {
+        let end = (start + BLOCK).min(frames);
+        let n = end - start;
+        kick.process_block(
+            &bleed[start..end],
+            &bleed[start..end],
+            &mut kick_out[start..end],
+            &mut scratch[..n],
+            &PluginEvents::EMPTY,
+        )
+        .expect("kick processes");
+        gate_open = gate_open.max(signal.mod_source_value(gate_meter).unwrap_or(0.0));
+        gr = gr.max(signal.mod_source_value(gr_meter).unwrap_or(0.0).abs());
+        let notes = if start == 48_000 / BLOCK * BLOCK {
+            vec![note_on(100, 36, 110)]
+        } else {
+            vec![]
+        };
+        sample
+            .process_block(
+                &silence[..n],
+                &silence[..n],
+                &mut sample_out[start..end],
+                &mut scratch[..n],
+                &PluginEvents {
+                    midi: &notes,
+                    ..PluginEvents::EMPTY
+                },
+            )
+            .expect("sample processes");
+    }
+    let latency = kick.latency() as usize;
+    let note_at = 48_000 / BLOCK * BLOCK + 100;
+    let shut = peak(&kick_out[latency + 4_000..note_at]);
+    let open = peak(&kick_out[note_at + latency..note_at + latency + 6_000]);
+    let played = peak(&sample_out[note_at..]);
+    println!(
+        "kick out before the note {shut:.4}, after {open:.4}; sample out {played:.4}; meters: gate {gate_open:.2}, GR {gr:.2} dB"
+    );
+    assert!(
+        open > 0.05 && shut < open * 0.1,
+        "the note opens the kick's gate on its other track: {shut} → {open}"
+    );
+    assert!(
+        gate_open > 0.5,
+        "the gate's meter read it open: {gate_open}"
+    );
+    let via: serde_json::Value =
+        serde_json::from_str(&signal.chain().expect("chain")).expect("JSON");
+    assert_eq!(
+        via["phases"][0]["blocks"][0]["key"]["via"], "midi",
+        "keyed by the note"
+    );
+    if engine.is_some() {
+        assert!(played > 0.05, "the note plays the kick's sample: {played}");
+    }
+}

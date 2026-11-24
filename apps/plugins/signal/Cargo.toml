@@ -40,6 +40,15 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 eyre.workspace = true
 # The CLAP state stream's JSON (`plugin::clap_state`).
 serde_json = { workspace = true }
+# FastTrackStudio's CLAP extensions: signal/1 (Studio drives Signal),
+# host-actions/1 and host-events/1 (Signal calls the host).
+daw-clap-ext = { workspace = true }
+# The editor: the FTS plugin UI kit (nice-plug-dioxus + Blitz), and the
+# strip model's JSON.
+plugin-core = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+# The families' algorithms (SIGNAL_ALGORITHMS).
+plugin-processors = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 # The headless host test (tests/clap_host.rs): load the bundled .clap
@@ -48,3 +57,5 @@ daw = { workspace = true, features = ["clap-host"] }
 serde_json = { workspace = true }
 # examples/render_kit.rs: the stems in, the mix out.
 hound = { workspace = true }
+# tests/kit_sessions.rs: a note-on into the plugin.
+daw-proto = { workspace = true }

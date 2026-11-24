@@ -51,6 +51,8 @@ pub struct Drum {
     velocity: f32,
     pending: [(u32, f32); PENDING],
     pending_count: usize,
+    /// Keyed by its piece\'s lane: played by its hits, not its own MIDI.
+    keyed: bool,
 }
 
 impl Drum {
@@ -99,10 +101,16 @@ impl BlockProcessor for Drum {
         }
     }
 
+    fn keyed(&mut self) {
+        // Its hits come through the key, notes included (the lane publishes
+        // its notes as the piece's hits): not its own MIDI as well.
+        self.keyed = true;
+    }
+
     fn midi(&mut self, event: Midi) {
-        // A hit note on the lane's own MIDI (an instrument lane), at the
-        // piece's start.
-        if let Midi::NoteOn { velocity, .. } = event {
+        // A hit note on the lane's own MIDI (an instrument lane, unkeyed),
+        // at the piece's start.
+        if let (Midi::NoteOn { velocity, .. }, false) = (event, self.keyed) {
             self.hit(0, f32::from(velocity) / 127.0);
         }
     }
@@ -233,6 +241,7 @@ impl BlockFactory for DrumFactory {
             velocity: 100.0,
             pending: [(0, 0.0); PENDING],
             pending_count: 0,
+            keyed: false,
         };
         Ok(Built {
             backend: Backend::Linked(Box::new(block)),
