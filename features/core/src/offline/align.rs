@@ -6,46 +6,38 @@
 //!   built with as latency and delays by that much more: the host's delay
 //!   compensation takes the latency away and leaves the shift. The advance
 //!   is fixed when the block is built (an analysis sets the value, then
-//!   the chain is rebuilt), so the latency never moves while it plays.
+//!   the chain is rebuilt), so the latency never moves while it plays; with
+//!   no advance it is 0.
 //! - `invert`: the polarity, exactly (a negation).
-//! - `rotate_deg` of the band around `rotate_hz` (width `rotate_q`): the
-//!   band `b` (an RBJ band-pass, 0 dB at its centre) replaced by
-//!   `cos θ·b + sin θ·H(b)`, `H` its Hilbert transform — exactly how
-//!   Studio's `LISTEN_ALIGN` models a rotation (`listen/align.rs`), so its
-//!   predictions hold. A Hilbert transform needs the future: it is an FIR
-//!   ([`HILBERT_HALF`] each side, Blackman), run by FFT, and the block
-//!   reports that much more latency, the dry path delayed to line up. The
-//!   rotation is there when the block is built with an angle (feature
-//!   `std`); 0° leaves it out, and its latency.
+//! - the phase correction: up to two second-order all-pass sections
+//!   (`ap1_hz`/`ap1_q`, `ap2_hz`/`ap2_q`: RBJ all-pass biquads) and one
+//!   first-order section (`ap0_hz`), each off at 0 Hz. An all-pass moves
+//!   phase and nothing else: the magnitude is flat to numerical precision,
+//!   and it adds no latency, so it runs live. Studio's `LISTEN_ALIGN`
+//!   models and searches exactly these sections, so its predictions hold.
 //!
-//! Studio's `LISTEN_ALIGN` searches for the alignment and sets these;
-//! [`find`] (feature `offline`) is the plain search for a host without it.
-
-use alloc::vec::Vec;
+//! [`find`] (feature `offline`) is the plain delay-and-polarity search for
+//! a host without `LISTEN_ALIGN`.
 
 use crate::block::BlockProcessor;
 use crate::param::{ParamSpec, Unit};
+use alloc::vec::Vec;
 
 /// The block's name.
 pub const NAME: &str = "align";
 
 pub const DELAY: usize = 0;
 pub const INVERT: usize = 1;
-pub const ROTATE_HZ: usize = 2;
-pub const ROTATE_DEG: usize = 3;
-pub const ROTATE_Q: usize = 4;
+pub const AP1_HZ: usize = 2;
+pub const AP1_Q: usize = 3;
+pub const AP2_HZ: usize = 4;
+pub const AP2_Q: usize = 5;
+pub const AP0_HZ: usize = 6;
 
 /// The longest shift either way, frames: 100 ms at 48 kHz.
 pub const MAX_SHIFT: usize = 4800;
 
-/// The Hilbert FIR's taps each side of its centre: its group delay.
-pub const HILBERT_HALF: usize = 8191;
-/// Frames per FFT hop of the Hilbert's convolution: latency it adds.
-pub const HILBERT_HOP: usize = 8192;
-/// The FFT size (>= taps + hop - 1).
-pub const HILBERT_FFT: usize = 32_768;
-
-pub static PARAMS: [ParamSpec; 5] = [
+pub static PARAMS: [ParamSpec; 7] = [
     ParamSpec::new(
         "delay_samples",
         "Delay",
@@ -55,206 +47,126 @@ pub static PARAMS: [ParamSpec; 5] = [
         0.0,
     ),
     ParamSpec::new("invert", "Invert", Unit::Toggle, 0.0, 1.0, 0.0),
-    ParamSpec::new("rotate_hz", "Rotate At", Unit::Hz, 20.0, 2000.0, 100.0),
-    ParamSpec::new("rotate_deg", "Rotate", Unit::Plain(1), -180.0, 180.0, 0.0),
-    ParamSpec::new("rotate_q", "Rotate Q", Unit::Plain(2), 0.1, 4.0, 1.0),
+    ParamSpec::new("ap1_hz", "All-Pass 1", Unit::Hz, 0.0, 20000.0, 0.0),
+    ParamSpec::new("ap1_q", "All-Pass 1 Q", Unit::Plain(2), 0.1, 10.0, 0.707),
+    ParamSpec::new("ap2_hz", "All-Pass 2", Unit::Hz, 0.0, 20000.0, 0.0),
+    ParamSpec::new("ap2_q", "All-Pass 2 Q", Unit::Plain(2), 0.1, 10.0, 0.707),
+    ParamSpec::new(
+        "ap0_hz",
+        "All-Pass (1st order)",
+        Unit::Hz,
+        0.0,
+        20000.0,
+        0.0,
+    ),
 ];
 
-/// An RBJ band-pass (0 dB at its centre), as `LISTEN_ALIGN`'s.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Band {
-    b0: f64,
-    b2: f64,
-    a1: f64,
-    a2: f64,
-    x: [f64; 2],
-    y: [f64; 2],
+/// One all-pass section: second order (an RBJ all-pass biquad) or first
+/// order; transposed direct form II, f64.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct AllPass {
+    pub b0: f64,
+    pub b1: f64,
+    pub b2: f64,
+    pub a1: f64,
+    pub a2: f64,
+    s: [[f64; 2]; 2],
 }
 
-impl Band {
+impl AllPass {
+    /// The RBJ all-pass biquad at `hz` (−180° there), of width `q`.
     #[must_use]
-    pub fn new(hz: f64, q: f64, rate: f64) -> Self {
-        let w = 2.0 * core::f64::consts::PI * hz / rate;
+    pub fn second(hz: f64, q: f64, rate: f64) -> Self {
+        let w = 2.0 * core::f64::consts::PI * (hz / rate).clamp(1e-6, 0.4999);
         let alpha = libm::sin(w) / (2.0 * q.max(1e-3));
         let a0 = 1.0 + alpha;
+        let c = libm::cos(w);
         Self {
-            b0: alpha / a0,
-            b2: -alpha / a0,
-            a1: -2.0 * libm::cos(w) / a0,
+            b0: (1.0 - alpha) / a0,
+            b1: -2.0 * c / a0,
+            b2: 1.0,
+            a1: -2.0 * c / a0,
             a2: (1.0 - alpha) / a0,
-            x: [0.0; 2],
-            y: [0.0; 2],
+            s: [[0.0; 2]; 2],
         }
     }
 
-    /// Direct form I, as `LISTEN_ALIGN` runs it.
+    /// The first-order all-pass at `hz` (−90° there).
+    #[must_use]
+    pub fn first(hz: f64, rate: f64) -> Self {
+        let t = libm::tan(core::f64::consts::PI * (hz / rate).clamp(1e-6, 0.4999));
+        let a = (t - 1.0) / (t + 1.0);
+        Self {
+            b0: a,
+            b1: 1.0,
+            b2: 0.0,
+            a1: a,
+            a2: 0.0,
+            s: [[0.0; 2]; 2],
+        }
+    }
+
+    /// Its response at `hz`: (magnitude, phase in radians), from its
+    /// coefficients.
+    #[must_use]
+    pub fn response(&self, hz: f64, rate: f64) -> (f64, f64) {
+        let w = 2.0 * core::f64::consts::PI * hz / rate;
+        let (c1, s1, c2, s2) = (
+            libm::cos(w),
+            libm::sin(w),
+            libm::cos(2.0 * w),
+            libm::sin(2.0 * w),
+        );
+        let (nr, ni) = (
+            self.b0 + self.b1 * c1 + self.b2 * c2,
+            -(self.b1 * s1) - self.b2 * s2,
+        );
+        let (dr, di) = (
+            1.0 + self.a1 * c1 + self.a2 * c2,
+            -(self.a1 * s1) - self.a2 * s2,
+        );
+        (
+            libm::sqrt((nr * nr + ni * ni) / (dr * dr + di * di)),
+            libm::atan2(ni, nr) - libm::atan2(di, dr),
+        )
+    }
+
     #[inline]
-    pub fn tick(&mut self, s: f64) -> f64 {
-        let y = self.b0 * s + self.b2 * self.x[1] - self.a1 * self.y[0] - self.a2 * self.y[1];
-        self.x = [s, self.x[0]];
-        self.y = [y, self.y[0]];
+    fn tick(&mut self, ch: usize, x: f64) -> f64 {
+        let Some(s) = self.s.get_mut(ch) else {
+            return x;
+        };
+        let y = self.b0.mul_add(x, s[0]);
+        s[0] = self.b1.mul_add(x, self.a1.mul_add(-y, s[1]));
+        s[1] = self.b2.mul_add(x, -self.a2 * y);
         y
     }
-}
 
-#[cfg(feature = "std")]
-mod hilbert {
-    //! The Hilbert FIR, by overlap-save FFT: preallocated, no allocation
-    //! in `tick`.
-
-    use alloc::sync::Arc;
-    use alloc::vec::Vec;
-
-    use realfft::num_complex::Complex;
-    use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
-
-    use super::{HILBERT_FFT, HILBERT_HALF, HILBERT_HOP};
-
-    /// One channel's convolution with the Hilbert FIR: an output `latency`
-    /// frames after its input (the FIR's half plus a hop).
-    pub struct Hilbert {
-        fwd: Arc<dyn RealToComplex<f64>>,
-        inv: Arc<dyn ComplexToReal<f64>>,
-        taps: Arc<[Complex<f64>]>,
-        history: Vec<f64>,
-        frame: Vec<f64>,
-        spec: Vec<Complex<f64>>,
-        scratch_f: Vec<Complex<f64>>,
-        scratch_i: Vec<Complex<f64>>,
-        out: Vec<f64>,
-        at: usize,
+    fn clear(&mut self) {
+        self.s = [[0.0; 2]; 2];
     }
-
-    /// The FIR's spectrum: `2/(πm)` at odd `m`, Blackman-windowed.
-    pub fn taps(fwd: &Arc<dyn RealToComplex<f64>>) -> Arc<[Complex<f64>]> {
-        let n = 2 * HILBERT_HALF + 1;
-        let mut h = fwd.make_input_vec();
-        for (k, v) in h.iter_mut().enumerate().take(n) {
-            let m = k as i64 - HILBERT_HALF as i64;
-            if m % 2 != 0 {
-                let x = k as f64 / (n - 1) as f64;
-                let w = 0.42 - 0.5 * libm::cos(2.0 * core::f64::consts::PI * x)
-                    + 0.08 * libm::cos(4.0 * core::f64::consts::PI * x);
-                *v = 2.0 / (core::f64::consts::PI * m as f64) * w;
-            }
-        }
-        let mut spec = fwd.make_output_vec();
-        let _ = fwd.process(&mut h, &mut spec);
-        let scale = 1.0 / HILBERT_FFT as f64;
-        spec.iter().map(|c| c * scale).collect()
-    }
-
-    impl Hilbert {
-        pub fn new(planner: &mut RealFftPlanner<f64>, taps: Arc<[Complex<f64>]>) -> Self {
-            let fwd = planner.plan_fft_forward(HILBERT_FFT);
-            let inv = planner.plan_fft_inverse(HILBERT_FFT);
-            Self {
-                scratch_f: fwd.make_scratch_vec(),
-                scratch_i: inv.make_scratch_vec(),
-                spec: fwd.make_output_vec(),
-                frame: fwd.make_input_vec(),
-                history: alloc::vec![0.0; HILBERT_FFT],
-                out: alloc::vec![0.0; HILBERT_HOP],
-                at: 0,
-                fwd,
-                inv,
-                taps,
-            }
-        }
-
-        /// Frames from an input to its output.
-        pub const fn latency() -> usize {
-            HILBERT_HALF + HILBERT_HOP
-        }
-
-        /// One frame in, the Hilbert transform of the frame `latency()`
-        /// before out.
-        #[inline]
-        pub fn tick(&mut self, x: f64) -> f64 {
-            let y = self.out.get(self.at).copied().unwrap_or(0.0);
-            if let Some(slot) = self.history.get_mut(HILBERT_FFT - HILBERT_HOP + self.at) {
-                *slot = x;
-            }
-            self.at += 1;
-            if self.at == HILBERT_HOP {
-                self.at = 0;
-                self.hop();
-            }
-            y
-        }
-
-        fn hop(&mut self) {
-            self.frame.copy_from_slice(&self.history);
-            if self
-                .fwd
-                .process_with_scratch(&mut self.frame, &mut self.spec, &mut self.scratch_f)
-                .is_err()
-            {
-                return;
-            }
-            for (c, t) in self.spec.iter_mut().zip(self.taps.iter()) {
-                *c *= t;
-            }
-            if let Some(dc) = self.spec.first_mut() {
-                dc.im = 0.0;
-            }
-            if let Some(ny) = self.spec.last_mut() {
-                ny.im = 0.0;
-            }
-            if self
-                .inv
-                .process_with_scratch(&mut self.spec, &mut self.frame, &mut self.scratch_i)
-                .is_err()
-            {
-                return;
-            }
-            if let Some(valid) = self.frame.get(HILBERT_FFT - HILBERT_HOP..) {
-                self.out.copy_from_slice(valid);
-            }
-            self.history.copy_within(HILBERT_HOP.., 0);
-        }
-
-        pub fn reset(&mut self) {
-            self.history.fill(0.0);
-            self.out.fill(0.0);
-            self.at = 0;
-        }
-    }
-}
-
-/// The band rotation of one channel.
-#[cfg(feature = "std")]
-struct Rotation {
-    band: Band,
-    hilbert: hilbert::Hilbert,
-    /// The input and its band, delayed to meet the Hilbert's output.
-    dry: Vec<f64>,
-    band_dry: Vec<f64>,
-    at: usize,
 }
 
 /// The apply stage.
 pub struct AlignApply {
     sample_rate: f64,
-    values: [f32; 5],
-    /// The advance it was built with, frames.
+    values: [f32; 7],
+    /// The advance it was built with: its latency, frames.
     advance: usize,
     /// The delay it runs: `advance + delay_samples`, frames, >= 0.
     delay: usize,
     sign: f32,
     line: [Vec<f32>; 2],
     write: usize,
-    #[cfg(feature = "std")]
-    rotation: Option<[Rotation; 2]>,
-    cos: f64,
-    sin: f64,
+    /// The sections on (preallocated: at most three).
+    sections: [Option<AllPass>; 3],
 }
 
 impl AlignApply {
-    /// Built with `delay_samples` and `rotate_deg` as its spec has them: an
-    /// advance (a negative delay) and a rotation are its latency.
+    /// Built with `delay_samples` as its spec has it: an advance (a
+    /// negative delay) becomes its latency.
     #[must_use]
-    pub fn new(sample_rate: f32, delay_samples: f32, rotate_deg: f32) -> Self {
+    pub fn new(sample_rate: f32, delay_samples: f32) -> Self {
         let d = PARAMS[DELAY].clamp(delay_samples);
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let advance = if d < 0.0 { (-d) as usize } else { 0 };
@@ -267,61 +179,43 @@ impl AlignApply {
             sign: 1.0,
             line: [alloc::vec![0.0; len], alloc::vec![0.0; len]],
             write: 0,
-            #[cfg(feature = "std")]
-            rotation: None,
-            cos: 1.0,
-            sin: 0.0,
+            sections: [None; 3],
         };
-        #[cfg(feature = "std")]
-        if libm::fabsf(rotate_deg) > 1e-6 {
-            let mut planner = realfft::RealFftPlanner::<f64>::new();
-            let fwd = planner.plan_fft_forward(HILBERT_FFT);
-            let taps = hilbert::taps(&fwd);
-            let lag = hilbert::Hilbert::latency();
-            let one = |planner: &mut realfft::RealFftPlanner<f64>| Rotation {
-                band: Band::default(),
-                hilbert: hilbert::Hilbert::new(planner, taps.clone()),
-                dry: alloc::vec![0.0; lag + 1],
-                band_dry: alloc::vec![0.0; lag + 1],
-                at: 0,
-            };
-            s.rotation = Some([one(&mut planner), one(&mut planner)]);
-        }
-        #[cfg(not(feature = "std"))]
-        let _ = rotate_deg;
         s.set_param(DELAY, d);
-        s.set_param(ROTATE_DEG, rotate_deg);
         s
     }
 
     fn redesign(&mut self) {
-        let deg = f64::from(self.values[ROTATE_DEG]).to_radians();
-        (self.cos, self.sin) = (libm::cos(deg), libm::sin(deg));
-        #[cfg(feature = "std")]
-        if let Some(rot) = &mut self.rotation {
-            for r in rot.iter_mut() {
-                let (x, y) = (r.band.x, r.band.y);
-                r.band = Band::new(
-                    f64::from(self.values[ROTATE_HZ]),
-                    f64::from(self.values[ROTATE_Q]),
-                    self.sample_rate,
-                );
-                (r.band.x, r.band.y) = (x, y);
+        let v = |i: usize| f64::from(self.values[i]);
+        let rate = self.sample_rate;
+        let keep = |old: Option<AllPass>, new: Option<AllPass>| match (old, new) {
+            // A section re-tuned keeps its state: no click on a change.
+            (Some(o), Some(mut n)) => {
+                n.s = o.s;
+                Some(n)
             }
-        }
+            (_, n) => n,
+        };
+        let on = |hz: f64| hz > 0.0;
+        self.sections = [
+            keep(
+                self.sections[0],
+                on(v(AP1_HZ)).then(|| AllPass::second(v(AP1_HZ), v(AP1_Q), rate)),
+            ),
+            keep(
+                self.sections[1],
+                on(v(AP2_HZ)).then(|| AllPass::second(v(AP2_HZ), v(AP2_Q), rate)),
+            ),
+            keep(
+                self.sections[2],
+                on(v(AP0_HZ)).then(|| AllPass::first(v(AP0_HZ), rate)),
+            ),
+        ];
     }
 
-    /// Whether it rotates (built with an angle).
-    #[must_use]
-    pub const fn rotates(&self) -> bool {
-        #[cfg(feature = "std")]
-        {
-            self.rotation.is_some()
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            false
-        }
+    /// The sections it runs.
+    pub fn sections(&self) -> impl Iterator<Item = &AllPass> {
+        self.sections.iter().flatten()
     }
 }
 
@@ -352,29 +246,13 @@ impl BlockProcessor for AlignApply {
         for l in &mut self.line {
             l.fill(0.0);
         }
-        #[cfg(feature = "std")]
-        if let Some(rot) = &mut self.rotation {
-            for r in rot.iter_mut() {
-                r.band.x = [0.0; 2];
-                r.band.y = [0.0; 2];
-                r.hilbert.reset();
-                r.dry.fill(0.0);
-                r.band_dry.fill(0.0);
-                r.at = 0;
-            }
+        for s in self.sections.iter_mut().flatten() {
+            s.clear();
         }
     }
 
     fn latency(&self) -> u32 {
-        #[cfg(feature = "std")]
-        let rot = if self.rotation.is_some() {
-            hilbert::Hilbert::latency()
-        } else {
-            0
-        };
-        #[cfg(not(feature = "std"))]
-        let rot = 0;
-        u32::try_from(self.advance + rot).unwrap_or(u32::MAX)
+        u32::try_from(self.advance).unwrap_or(u32::MAX)
     }
 
     fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
@@ -384,43 +262,23 @@ impl BlockProcessor for AlignApply {
             return;
         }
         let back = n - self.delay.min(n - 1);
-        let (c, s) = (self.cos, self.sin);
         for (ch, buf) in [left, right].into_iter().enumerate() {
             let Some(line) = self.line.get_mut(ch) else {
                 continue;
             };
-            #[cfg(feature = "std")]
-            let mut rot = self.rotation.as_mut().and_then(|r| r.get_mut(ch));
             let mut w = self.write;
             for v in buf.iter_mut().take(frames) {
                 if let Some(slot) = line.get_mut(w) {
                     *slot = *v;
                 }
-                let y = line.get((w + back) % n).copied().unwrap_or(0.0) * self.sign;
-                #[cfg(feature = "std")]
-                let y = match rot.as_mut() {
-                    None => y,
-                    Some(r) => {
-                        let x = f64::from(y);
-                        let b = r.band.tick(x);
-                        let h = r.hilbert.tick(b);
-                        let len = r.dry.len();
-                        let (dx, db) = (
-                            r.dry.get(r.at).copied().unwrap_or(0.0),
-                            r.band_dry.get(r.at).copied().unwrap_or(0.0),
-                        );
-                        if let (Some(a), Some(bb)) = (r.dry.get_mut(r.at), r.band_dry.get_mut(r.at))
-                        {
-                            *a = x;
-                            *bb = b;
-                        }
-                        r.at = (r.at + 1) % len;
-                        #[allow(clippy::cast_possible_truncation)]
-                        let out = (dx - db + c * db + s * h) as f32;
-                        out
-                    }
-                };
-                *v = y;
+                let mut y = f64::from(line.get((w + back) % n).copied().unwrap_or(0.0) * self.sign);
+                for s in self.sections.iter_mut().flatten() {
+                    y = s.tick(ch, y);
+                }
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    *v = y as f32;
+                }
                 w = (w + 1) % n;
             }
         }

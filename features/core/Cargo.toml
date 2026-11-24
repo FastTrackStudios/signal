@@ -13,7 +13,7 @@ workspace = true
 default = ["std", "fx", "nam", "offline"]
 # The in-process session registry (one Signal session shared by the
 # instances on a kit's tracks) and `std::error::Error` impls.
-std = ["plugin-processors/std", "dep:realfft"]
+std = ["plugin-processors/std"]
 # The plugins' effects as blocks (plugin-processors). Gain is always there.
 fx = ["std", "plugin-processors/files", "plugin-processors/gate", "plugin-processors/saturate", "plugin-processors/eq", "plugin-processors/comp", "plugin-processors/delay", "plugin-processors/reverb", "plugin-processors/trigger"]
 # Offline blocks' analyses (the vocal leveler's, the aligner's search):
@@ -28,12 +28,10 @@ plugin-processors = { workspace = true }
 signal-dsp-core = { workspace = true }
 signal-dsp = { workspace = true, optional = true, features = ["level"] }
 libm = { workspace = true }
-realfft = { workspace = true, optional = true }
 neural-amp-modeler = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-realfft = { workspace = true }
 signal-core = { path = ".", features = ["std", "fx", "nam", "offline"] }

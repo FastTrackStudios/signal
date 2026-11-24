@@ -312,13 +312,13 @@ fn through(b: &mut AlignApply, x: &[f32]) -> Vec<f32> {
 
 #[test]
 fn align_delays_and_inverts_exactly() {
-    let mut b = AlignApply::new(48_000.0, 7.0, 0.0);
+    let mut b = AlignApply::new(48_000.0, 7.0);
     assert_eq!(b.latency(), 0);
     let y = through(&mut b, &impulse(64));
     assert_eq!(y.iter().position(|s| *s != 0.0), Some(7));
     assert_eq!(y[7], 0.75);
 
-    let mut b = AlignApply::new(48_000.0, 0.0, 0.0);
+    let mut b = AlignApply::new(48_000.0, 0.0);
     b.set_param(align::INVERT, 1.0);
     let x: Vec<f32> = (0..300)
         .map(|i| ((i * 7919) % 97) as f32 / 97.0 - 0.5)
@@ -332,7 +332,7 @@ fn align_delays_and_inverts_exactly() {
 
 #[test]
 fn an_advance_is_reported_as_latency_and_the_net_shift_is_the_delay() {
-    let mut b = AlignApply::new(48_000.0, -5.0, 0.0);
+    let mut b = AlignApply::new(48_000.0, -5.0);
     assert_eq!(b.latency(), 5, "the advance is the latency");
     let y = through(&mut b, &impulse(32));
     // Delayed by its latency less the advance: net of compensation, 5 early.
@@ -351,128 +351,113 @@ fn an_advance_is_reported_as_latency_and_the_net_shift_is_the_delay() {
     );
 }
 
-/// `LISTEN_ALIGN`'s rotation, as Studio models it (`listen/align.rs`):
-/// the band (RBJ, 0 dB at its centre, run from rest) replaced by
-/// `cos θ·b + sin θ·H(b)`, `H` the Hilbert transform of the whole signal.
-fn listen_align_rotation(x: &[f64], (hz, q, deg): (f64, f64, f64)) -> Vec<f64> {
-    let mut band = align::Band::new(hz, q, SR);
-    let b: Vec<f64> = x.iter().map(|s| band.tick(*s)).collect();
-    let n = b.len().next_power_of_two();
-    let mut planner = realfft::RealFftPlanner::<f64>::new();
-    let (fwd, inv) = (planner.plan_fft_forward(n), planner.plan_fft_inverse(n));
-    let mut input = fwd.make_input_vec();
-    input[..b.len()].copy_from_slice(&b);
-    let mut spec = fwd.make_output_vec();
-    fwd.process(&mut input, &mut spec).unwrap();
-    let last = spec.len() - 1;
-    for (k, c) in spec.iter_mut().enumerate() {
-        *c = if k == 0 || k == last {
-            realfft::num_complex::Complex::new(0.0, 0.0)
+/// An align block with sections at `(hz, q)` (second order) and `first`.
+fn sections(ap: &[(f64, f64)], first: Option<f64>) -> AlignApply {
+    let mut b = AlignApply::new(48_000.0, 0.0);
+    for (k, (hz, q)) in ap.iter().enumerate() {
+        let (ih, iq) = if k == 0 {
+            (align::AP1_HZ, align::AP1_Q)
         } else {
-            realfft::num_complex::Complex::new(c.im, -c.re)
+            (align::AP2_HZ, align::AP2_Q)
         };
+        b.set_param(ih, *hz as f32);
+        b.set_param(iq, *q as f32);
     }
-    let mut h = inv.make_output_vec();
-    inv.process(&mut spec, &mut h).unwrap();
-    let (c, s) = (deg.to_radians().cos(), deg.to_radians().sin());
-    x.iter()
-        .zip(&b)
-        .zip(&h)
-        .map(|((x, b), h)| x - b + c * b + s * h / n as f64)
-        .collect()
+    if let Some(hz) = first {
+        b.set_param(align::AP0_HZ, hz as f32);
+    }
+    b
+}
+
+/// `b`'s impulse response, `n` frames.
+fn impulse_response(b: &mut AlignApply, n: usize) -> Vec<f64> {
+    let mut x = vec![0.0_f32; n];
+    x[0] = 1.0;
+    through(b, &x).into_iter().map(f64::from).collect()
+}
+
+/// The DFT of `h` at `hz`: (magnitude, phase in radians).
+fn dft_at(h: &[f64], hz: f64) -> (f64, f64) {
+    let (mut re, mut im) = (0.0, 0.0);
+    for (k, v) in h.iter().enumerate() {
+        let w = 2.0 * std::f64::consts::PI * hz * k as f64 / SR;
+        re += v * w.cos();
+        im -= v * w.sin();
+    }
+    (re.hypot(im), im.atan2(re))
+}
+
+fn wrap(r: f64) -> f64 {
+    (r + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU) - std::f64::consts::PI
 }
 
 #[test]
-fn the_rotation_is_listen_aligns_and_turns_its_centre_by_its_angle() {
-    // A kick-like signal: thumps every 0.5 s.
-    let n = 48_000 * 6;
-    let x: Vec<f64> = (0..n)
-        .map(|i| {
-            let t = (i as f64 / SR) % 0.5;
-            (std::f64::consts::TAU * (50.0 + 60.0 * (-t * 25.0).exp()) * t).sin()
-                * (-t * 9.0).exp()
-                * 0.5
-        })
+fn the_all_passes_are_flat_turn_the_phase_they_should_and_add_no_latency() {
+    let cases: [(&[(f64, f64)], Option<f64>); 4] = [
+        (&[(50.0, 0.7)], None),
+        (&[(80.0, 1.0), (160.0, 2.0)], None),
+        (&[(63.0, 0.5)], Some(120.0)),
+        (&[], Some(40.0)),
+    ];
+    let freqs: Vec<f64> = (0..=60)
+        .map(|k| 20.0 * 1000f64.powf(f64::from(k) / 60.0))
         .collect();
-    for (hz, q, deg) in [(50.0, 1.0, 117.0), (80.0, 1.0, -60.0), (160.0, 2.0, 45.0)] {
-        let mut b = AlignApply::new(48_000.0, 0.0, deg as f32);
-        b.set_param(align::ROTATE_HZ, hz as f32);
-        b.set_param(align::ROTATE_Q, q as f32);
-        b.set_param(align::ROTATE_DEG, deg as f32);
-        assert!(b.rotates());
-        let lag = b.latency() as usize;
-        assert_eq!(
-            lag,
-            align::HILBERT_HALF + align::HILBERT_HOP,
-            "the Hilbert's latency is reported"
-        );
-        let mut padded: Vec<f32> = x.iter().map(|v| *v as f32).collect();
-        padded.extend(std::iter::repeat_n(0.0, lag));
-        let y = through(&mut b, &padded);
-        let want = listen_align_rotation(&x, (hz, q, deg));
-        // Away from the ends (the FIR's reach): the same signal.
-        let (from, to) = (48_000, n - 48_000);
-        let err: f64 = (from..to)
-            .map(|k| (f64::from(y[k + lag]) - want[k]).powi(2))
-            .sum();
-        let sig: f64 = (from..to).map(|k| want[k].powi(2)).sum();
-        let db = 10.0 * (err / sig).log10();
-        eprintln!("rotation {hz} Hz q {q} {deg}°: differs from LISTEN_ALIGN's model by {db:.1} dB");
-        assert!(db < -40.0, "{hz}/{deg}: {db:.1} dB");
-    }
-    // At its centre the band is the whole signal: a sine there comes out
-    // `deg` late and as loud.
-    let (hz, deg) = (63.0_f64, 117.0_f64);
-    let mut b = AlignApply::new(48_000.0, 0.0, deg as f32);
-    b.set_param(align::ROTATE_HZ, hz as f32);
-    b.set_param(align::ROTATE_DEG, deg as f32);
-    let lag = b.latency() as usize;
-    let len = 48_000 * 3 + lag;
-    let x: Vec<f32> = (0..len)
-        .map(|i| (2.0 * std::f64::consts::PI * hz * i as f64 / SR).sin() as f32)
-        .collect();
-    let y = through(&mut b, &x);
-    let dft = |s: &[f32], off: usize| {
-        let (mut re, mut im) = (0.0, 0.0);
-        for k in 48_000..48_000 * 2 {
-            let v = f64::from(s[k + off]);
-            let w = 2.0 * std::f64::consts::PI * hz * k as f64 / SR;
-            re += v * w.cos();
-            im -= v * w.sin();
+    for (ap, first) in cases {
+        let mut b = sections(ap, first);
+        assert_eq!(b.latency(), 0, "no latency without an advance");
+        let analytic: Vec<_> = b.sections().copied().collect();
+        // Long enough for a 20 Hz section to ring out.
+        let h = impulse_response(&mut b, 1 << 18);
+        let (mut worst_db, mut worst_phase) = (0.0_f64, 0.0_f64);
+        for &f in &freqs {
+            let (mag, phase) = dft_at(&h, f);
+            worst_db = worst_db.max((20.0 * mag.log10()).abs());
+            let want: f64 = analytic.iter().map(|s| s.response(f, SR).1).sum();
+            worst_phase = worst_phase.max(wrap(phase - want).abs().to_degrees());
+            for s in &analytic {
+                assert!(
+                    (s.response(f, SR).0 - 1.0).abs() < 1e-12,
+                    "|H| from the coefficients"
+                );
+            }
         }
-        (re.hypot(im), im.atan2(re).to_degrees())
-    };
-    let ((mx, px), (my, py)) = (dft(&x, 0), dft(&y, lag));
-    let lagged = (px - py).rem_euclid(360.0);
-    eprintln!(
-        "at its centre: {:.3} dB, turned {lagged:.2}°",
-        20.0 * (my / mx).log10()
-    );
-    // The model is exact there; the FIR Hilbert, truncated, is within
-    // 0.05 dB and 0.2° at 63 Hz (measured: -0.03 dB, +0.1°).
-    assert!((20.0 * (my / mx).log10()).abs() < 0.05);
-    assert!((lagged - deg).abs() < 0.2, "{lagged}");
-    // Off its centre it is not flat: the model's, measured.
-    let off = |f: f64| {
-        let mut b = AlignApply::new(48_000.0, 0.0, deg as f32);
-        b.set_param(align::ROTATE_HZ, hz as f32);
-        b.set_param(align::ROTATE_DEG, deg as f32);
-        let x: Vec<f32> = (0..len)
-            .map(|i| (2.0 * std::f64::consts::PI * f * i as f64 / SR).sin() as f32)
-            .collect();
-        let y = through(&mut b, &x);
-        let p = |s: &[f32], o: usize| {
-            (48_000..96_000)
-                .map(|k| f64::from(s[k + o]).powi(2))
-                .sum::<f64>()
-        };
-        10.0 * (p(&y, lag) / p(&x, 0)).log10()
-    };
-    let shape: Vec<(f64, f64)> = [20.0, 40.0, 100.0, 200.0, 1000.0]
-        .iter()
-        .map(|f| (*f, off(*f)))
+        eprintln!(
+            "sections {ap:?} first {first:?}: flat within {worst_db:.2e} dB, phase within {worst_phase:.2e}° of the analytic all-pass, 20 Hz–20 kHz"
+        );
+        assert!(worst_db < 0.001, "{worst_db} dB");
+        assert!(worst_phase < 0.01, "{worst_phase}°");
+    }
+    // The analytic phase is the all-pass's: −180° at a second-order
+    // section's centre, −90° at a first-order one's.
+    let s2 = align::AllPass::second(100.0, 0.7, SR);
+    assert!((s2.response(100.0, SR).1.abs().to_degrees() - 180.0).abs() < 1e-6);
+    let s1 = align::AllPass::first(100.0, SR);
+    assert!((s1.response(100.0, SR).1.to_degrees() + 90.0).abs() < 1e-6);
+}
+
+#[test]
+fn the_all_passes_allocate_nothing_and_a_bypassed_align_is_no_block() {
+    let mut b = sections(&[(50.0, 0.7), (120.0, 1.5)], Some(200.0));
+    b.set_param(align::INVERT, 1.0);
+    let x: Vec<f32> = (0..4096)
+        .map(|i| ((i * 7919) % 97) as f32 / 97.0 - 0.5)
         .collect();
-    eprintln!("off its centre (dB): {shape:?}");
+    let (mut l, mut r) = (x.clone(), x.clone());
+    let made = allocations(|| {
+        for (cl, cr) in l.chunks_mut(64).zip(r.chunks_mut(64)) {
+            b.process(cl, cr);
+            b.set_param(align::AP1_HZ, 55.0);
+        }
+    });
+    assert_eq!(made, 0);
+    let mut spec = BlockSpec::signal("align", "align")
+        .param("ap1_hz", 50.0)
+        .param("delay_samples", 12.0);
+    spec.bypass = true;
+    let mut preset = Preset::passthrough();
+    preset.lanes[0].blocks = vec![spec];
+    let mut proc = processor(&preset);
+    assert_eq!(render(&mut proc, &x, 128), x, "bypass is exact");
 }
 
 #[test]

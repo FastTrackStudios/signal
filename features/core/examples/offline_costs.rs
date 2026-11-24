@@ -73,14 +73,16 @@ fn main() {
     time_block("level, ramping, de-ess on", &mut moving, &input);
     time_block(
         "align, delay 37",
-        &mut AlignApply::new(48_000.0, 37.0, 0.0),
+        &mut AlignApply::new(48_000.0, 37.0),
         &input,
     );
-    let mut rotating = AlignApply::new(48_000.0, -12.0, 90.0);
+    let mut rotating = AlignApply::new(48_000.0, -12.0);
     rotating.set_param(align::INVERT, 1.0);
-    rotating.set_param(align::ROTATE_DEG, 90.0);
+    rotating.set_param(align::AP1_HZ, 50.0);
+    rotating.set_param(align::AP2_HZ, 120.0);
+    rotating.set_param(align::AP0_HZ, 200.0);
     time_block(
-        "align, advance 12, inverted, rotated",
+        "align, advance 12, inverted, 3 all-passes",
         &mut rotating,
         &input,
     );

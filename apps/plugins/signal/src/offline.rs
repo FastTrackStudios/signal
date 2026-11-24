@@ -631,6 +631,38 @@ fn write_lane(
     client.write(id, TimeRange::new(range.from, range.to), &points, flags)
 }
 
+/// `values` with an all-pass correction as LISTEN_ALIGN says it —
+/// `allpass: [{hz, q}]` (up to two second-order sections) and
+/// `first_order: {hz}` — as the block's parameters, a section not named
+/// switched off.
+fn flat_values(values: &serde_json::Map<String, Value>) -> Vec<(String, Value)> {
+    let mut flat: Vec<(String, Value)> = Vec::new();
+    for (k, v) in values {
+        match (k.as_str(), v) {
+            ("allpass", Value::Array(sections)) => {
+                for (i, (hz, q)) in [("ap1_hz", "ap1_q"), ("ap2_hz", "ap2_q")]
+                    .iter()
+                    .enumerate()
+                {
+                    let sec = sections.get(i);
+                    flat.push((
+                        (*hz).into(),
+                        sec.and_then(|s| s.get("hz")).cloned().unwrap_or(json!(0.0)),
+                    ));
+                    if let Some(qv) = sec.and_then(|s| s.get("q")) {
+                        flat.push(((*q).into(), qv.clone()));
+                    }
+                }
+            }
+            ("first_order", v) => {
+                flat.push(("ap0_hz".into(), v.get("hz").cloned().unwrap_or(json!(0.0))))
+            }
+            _ => flat.push((k.clone(), v.clone())),
+        }
+    }
+    flat
+}
+
 /// Values found elsewhere set as an analysis (`align` from Studio's
 /// `LISTEN_ALIGN`): the block's parameters, kept as fresh.
 fn set_values(
@@ -643,7 +675,7 @@ fn set_values(
     let mut state = shared.state();
     let spec = &mut state.preset.lanes[l].blocks[b];
     let a = spec.analysis.get_or_insert_with(Analysis::default);
-    for (k, v) in values {
+    for (k, v) in &flat_values(values) {
         let Some(x) = v
             .as_f64()
             .or_else(|| v.as_bool().map(|b| if b { 1.0 } else { 0.0 }))

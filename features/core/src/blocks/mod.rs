@@ -79,10 +79,6 @@ pub fn build(
                 .get(crate::offline::align::PARAMS[crate::offline::align::DELAY].id)
                 .copied()
                 .unwrap_or(0.0),
-            spec.params
-                .get(crate::offline::align::PARAMS[crate::offline::align::ROTATE_DEG].id)
-                .copied()
-                .unwrap_or(0.0),
         ))),
         // A family on the spec's algorithm. Families need the registry,
         // which needs `std`.
