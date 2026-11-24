@@ -8,6 +8,7 @@ pub mod config;
 pub mod drum;
 pub mod editor;
 pub mod ext;
+pub mod offline;
 pub mod plugin;
 pub mod sampler;
 pub mod slots;
