@@ -404,6 +404,10 @@ fn role(lane: &signal_core::state::LaneSpec) -> Option<&'static str> {
     let name = lane.name.as_str();
     Some(if lane.trigger.is_some() {
         "trigger"
+    } else if lane.blocks.is_empty() && !lane.midi_hits.is_empty() {
+        // Every piece's notes (the Drum Hits track): it plays nothing,
+        // and keys the kit.
+        "hits"
     } else if has("drum") {
         "sample"
     } else if name.ends_with("/Sub") || name.ends_with("/Fund") {
