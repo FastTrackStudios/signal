@@ -4800,6 +4800,7 @@ dependencies = [
  "libm",
  "realfft",
  "serde",
+ "smallvec 1.16.4",
  "symphonium",
  "thiserror 2.0.20",
 ]
@@ -11224,10 +11225,12 @@ dependencies = [
 [[package]]
 name = "plugin-processors"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=679cbfc2a181a93dd454ab48b865210de32a25b8#679cbfc2a181a93dd454ab48b865210de32a25b8"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=55874b1916e1c7b92b14910cb0447217b249eb42#55874b1916e1c7b92b14910cb0447217b249eb42"
 dependencies = [
  "dsp 0.1.0",
  "dsp-core 0.1.0",
+ "facet",
+ "facet-styx",
  "libm",
 ]
 

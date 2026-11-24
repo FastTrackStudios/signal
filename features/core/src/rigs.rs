@@ -42,6 +42,7 @@ pub fn dsp_chain() -> Preset {
             mute: false,
             blocks: vec![
                 BlockSpec::signal("eq", "eq")
+                    .algorithm("channel")
                     .param("low_cut", 60.0)
                     .param("mid_freq", 400.0)
                     .param("mid_gain", -2.0),
@@ -50,10 +51,11 @@ pub fn dsp_chain() -> Preset {
                     .param("ratio", 3.0)
                     .param("makeup", 3.0),
                 BlockSpec::signal("delay", "delay")
+                    .algorithm("clean")
                     .param("time", 375.0)
                     .param("mix", 0.1),
                 BlockSpec::signal("reverb", "reverb")
-                    .param("algorithm", 2.0)
+                    .algorithm("plate")
                     .param("mix", 0.15),
             ],
         }],
@@ -92,13 +94,15 @@ pub fn guitar_rig(amp: AssetRef, cab: AssetRef) -> Preset {
         BlockSpec::signal("amp", "nam").asset(amp),
         BlockSpec::signal("cab", "cab").asset(cab),
         BlockSpec::signal("eq", "eq")
+            .algorithm("channel")
             .param("low_cut", 80.0)
             .param("high_cut", 9000.0),
         BlockSpec::signal("delay", "delay")
+            .algorithm("tape")
             .param("time", 420.0)
             .param("mix", 0.12),
         BlockSpec::signal("reverb", "reverb")
-            .param("algorithm", 0.0)
+            .algorithm("room")
             .param("mix", 0.12),
     ];
     Preset {

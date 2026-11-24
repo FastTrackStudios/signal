@@ -111,6 +111,19 @@ impl NullCase {
         offset: usize,
         asset: Option<crate::host::AssetRef>,
     ) -> Option<Self> {
+        Self::for_algorithm(name, None, params, offset, asset)
+    }
+
+    /// [`for_block`](Self::for_block) on algorithm `algorithm` of family
+    /// `name`, whose controls are `params`.
+    #[must_use]
+    pub fn for_algorithm(
+        name: &str,
+        algorithm: Option<&str>,
+        params: &'static [ParamSpec],
+        offset: usize,
+        asset: Option<crate::host::AssetRef>,
+    ) -> Option<Self> {
         let sample_rate = 48_000.0;
         let driven: Vec<(usize, &ParamSpec)> = params
             .iter()
@@ -146,6 +159,7 @@ impl NullCase {
             .collect();
         let mut block = BlockSpec::signal("b", name);
         block.asset = asset;
+        block.algorithm = algorithm.map(Into::into);
         let preset = Preset {
             name: alloc::format!("null: {name}"),
             inputs: 2,
@@ -282,14 +296,17 @@ pub fn null_every_block(clap: &dyn BlockFactory) -> Vec<(String, NullResult)> {
     let builtin = crate::block::BuiltinFactory;
     let mut results = Vec::new();
     for name in plugin_processors::NAMES {
-        let Some(params) = plugin_processors::params_of(name) else {
-            continue;
-        };
-        let mut offset = 0;
-        while let Some(case) = NullCase::for_block(name, params, offset, None) {
-            let r = null(&case, &[&builtin], &[clap], &NoHost);
-            results.push((alloc::format!("{name}[{offset}..]"), r));
-            offset = offset.saturating_add(MACROS);
+        // Every algorithm of the family: a face over an engine, or an
+        // engine's own DSP, each null-tested on its own controls.
+        for algo in plugin_processors::algorithms::family(name) {
+            let mut offset = 0;
+            while let Some(case) =
+                NullCase::for_algorithm(name, Some(algo.id), algo.controls, offset, None)
+            {
+                let r = null(&case, &[&builtin], &[clap], &NoHost);
+                results.push((alloc::format!("{name}/{}[{offset}..]", algo.id), r));
+                offset = offset.saturating_add(MACROS);
+            }
         }
     }
     results
@@ -324,29 +341,35 @@ impl LoopbackClap {
         }
     }
 
-    fn apply(&mut self, e: &ClapParamEvent) {
+    /// Take one event into the stored values (nice-plug: the parameter's
+    /// normalized value, or its modulation offset, which replaces the last).
+    fn take(&mut self, e: &ClapParamEvent) {
         let Ok(i) = usize::try_from(e.param_id) else {
             return;
         };
-        match e.kind {
-            ClapParamKind::Value(v) => {
-                if let Some(x) = self.value.get_mut(i) {
-                    *x = v;
-                }
-            }
-            ClapParamKind::Mod(m) => {
-                if let Some(x) = self.modulation.get_mut(i) {
-                    *x = m;
-                }
-            }
-        }
-        let (Some(spec), Some(v), Some(m)) =
-            (self.specs.get(i), self.value.get(i), self.modulation.get(i))
-        else {
-            return;
+        let slot = match e.kind {
+            ClapParamKind::Value(v) => self.value.get_mut(i).map(|x| (x, v)),
+            ClapParamKind::Mod(m) => self.modulation.get_mut(i).map(|x| (x, m)),
         };
-        let norm = signal_dsp_core::num::narrow((v + m).clamp(0.0, 1.0));
-        self.inner.set_param(i, spec.denormalize(norm));
+        if let Some((x, v)) = slot {
+            *x = v;
+        }
+    }
+
+    /// Set the processor to what the stored values now mean: nice-plug's
+    /// `process()` reads each parameter's final value at a change point,
+    /// so an intermediate (a value before its modulation) is never set.
+    fn apply_all(&mut self) {
+        for (i, ((spec, v), m)) in self
+            .specs
+            .iter()
+            .zip(&self.value)
+            .zip(&self.modulation)
+            .enumerate()
+        {
+            let norm = signal_dsp_core::num::narrow((v + m).clamp(0.0, 1.0));
+            self.inner.set_param(i, spec.denormalize(norm));
+        }
     }
 }
 
@@ -357,8 +380,13 @@ impl ClapInstance for LoopbackClap {
         let mut events = events.iter().peekable();
         while pos < n {
             let at = u32::try_from(pos).unwrap_or(u32::MAX);
+            let mut any = false;
             while let Some(e) = events.next_if(|e| e.offset <= at) {
-                self.apply(e);
+                self.take(e);
+                any = true;
+            }
+            if any {
+                self.apply_all();
             }
             let next = events
                 .peek()

@@ -236,8 +236,12 @@ impl BlockFactory for ClapFactory {
         match &spec.kind {
             BlockKind::Signal(name) => {
                 let path = self.overrides.get(name).ok_or(Unavailable::UnknownKind)?;
-                let specs = plugin_processors::params_of(name).ok_or(Unavailable::UnknownKind)?;
-                self.build_from(path, specs, plugin_processors::sources_of(name), cx)
+                // The algorithm's controls are the schema, whichever backend.
+                let algo = plugin_processors::algorithms::find(name, spec.algorithm.as_deref())
+                    .ok_or_else(|| Unavailable::Missing {
+                        what: format!("{name} algorithm {:?}", spec.algorithm),
+                    })?;
+                self.build_from(path, algo.controls, plugin_processors::sources_of(name), cx)
             }
             BlockKind::Plugin(p) => {
                 let path = self

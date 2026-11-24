@@ -293,3 +293,45 @@ fn the_nam_block_nulls_against_its_clap_form() {
     println!("nam: peak {:.3}, diff {:.1} dBFS", r.peak, r.peak_diff_dbfs);
     assert!(r.nulls(), "{r:?}");
 }
+
+/// A family's algorithms are different DSP or a different face: the
+/// block runs the one its spec names. (What keeps the null test from
+/// passing on two copies of a default.)
+#[test]
+fn a_blocks_algorithm_is_the_one_it_runs() {
+    let render = |algorithm: &str| {
+        let mut preset = Preset::passthrough();
+        preset.lanes[0].blocks = vec![
+            BlockSpec::signal("verb", "reverb")
+                .algorithm(algorithm)
+                .param("mix", 1.0),
+        ];
+        let factories: [&dyn BlockFactory; 1] = [&BuiltinFactory];
+        let (g, report) = graph::build(&preset, &opts(&factories, &NoHost));
+        assert!(report.all_active(), "{algorithm}: {report:?}");
+        assert!(
+            report.warnings.is_empty(),
+            "{algorithm}: {:?}",
+            report.warnings
+        );
+        let mut proc = Processor::new();
+        let _ = proc.install(g);
+        play(&mut proc, &sine(24_000), 2, 2, 256)
+    };
+    let (plate, hall, spring) = (render("plate"), render("hall"), render("spring"));
+    let differ =
+        |a: &[Vec<f32>], b: &[Vec<f32>]| a[0].iter().zip(&b[0]).any(|(x, y)| (x - y).abs() > 1e-3);
+    assert!(differ(&plate, &hall), "plate and hall sound the same");
+    assert!(differ(&hall, &spring), "hall and spring sound the same");
+
+    // An algorithm this machine doesn't have is reported, not guessed at.
+    let mut preset = Preset::passthrough();
+    preset.lanes[0].blocks = vec![BlockSpec::signal("verb", "reverb").algorithm("not-downloaded")];
+    let factories: [&dyn BlockFactory; 1] = [&BuiltinFactory];
+    let (_, report) = graph::build(&preset, &opts(&factories, &NoHost));
+    assert!(
+        matches!(&report.blocks[0].status, BlockStatus::Bypassed { reason: Unavailable::Missing { what } } if what.contains("not-downloaded")),
+        "{:?}",
+        report.blocks[0].status
+    );
+}

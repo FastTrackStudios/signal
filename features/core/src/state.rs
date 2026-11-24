@@ -100,7 +100,12 @@ pub struct BlockSpec {
     /// Unique in its lane: what macros and actions address.
     pub id: String,
     pub kind: BlockKind,
-    /// Plain values by parameter id; a missing one is its default.
+    /// Which of its family's algorithms the block runs (`ssl-e`, `plate`,
+    /// `tape`): what its parameters are. `None`: the family's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub algorithm: Option<String>,
+    /// Plain values by parameter id (the algorithm's controls); a missing
+    /// one is its default.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, f32>,
     /// The file it needs (a NAM capture, a cab IR).
@@ -131,6 +136,7 @@ impl BlockSpec {
         Self {
             id: id.into(),
             kind: BlockKind::Signal(block.into()),
+            algorithm: None,
             params: BTreeMap::new(),
             asset: None,
             state: None,
@@ -138,6 +144,13 @@ impl BlockSpec {
             requires: None,
             fallback: None,
         }
+    }
+
+    /// Run algorithm `id` of the block's family.
+    #[must_use]
+    pub fn algorithm(mut self, id: impl Into<String>) -> Self {
+        self.algorithm = Some(id.into());
+        self
     }
 
     #[must_use]
