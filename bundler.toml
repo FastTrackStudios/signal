@@ -7,3 +7,6 @@ name = "FTS NAM"
 
 [signal-plugin]
 name = "FTS Signal"
+
+[signal-sampler-clap]
+name = "Signal Sampler"
