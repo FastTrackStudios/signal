@@ -15,6 +15,8 @@
 //! | `nam`    | a NAM capture (`neural-amp-modeler`)    | feature `nam`, a file |
 //! | `cab`    | a cabinet IR (direct FIR)               | a file       |
 //! | `sample` | a one-shot WAV played by hits           | a file       |
+//! | `level`  | offline: the vocal leveler's four lanes ([`crate::offline::level`]) | an analysis |
+//! | `align`  | offline: delay, polarity, phase rotation ([`crate::offline::align`]) | an analysis |
 //!
 //! Every one runs everywhere the core builds.
 
@@ -34,6 +36,8 @@ const RIG_BLOCKS: &[&str] = &[
     "nam",
     "cab",
     "sample",
+    crate::offline::level::NAME,
+    crate::offline::align::NAME,
 ];
 
 /// Whether this build makes block `name`.
@@ -66,6 +70,16 @@ pub fn build(
         )?)),
         "cab" => Ok(Box::new(cab::Cab::from_wav(&cx.asset_bytes(spec)?)?)),
         "sample" => Ok(Box::new(sample::Sample::from_wav(&cx.asset_bytes(spec)?)?)),
+        crate::offline::level::NAME => Ok(Box::new(crate::offline::level::LevelApply::new(
+            cx.sample_rate,
+        ))),
+        crate::offline::align::NAME => Ok(Box::new(crate::offline::align::AlignApply::new(
+            cx.sample_rate,
+            spec.params
+                .get(crate::offline::align::PARAMS[crate::offline::align::DELAY].id)
+                .copied()
+                .unwrap_or(0.0),
+        ))),
         // A family on the spec's algorithm. Families need the registry,
         // which needs `std`.
         #[cfg(not(feature = "std"))]

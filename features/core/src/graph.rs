@@ -471,6 +471,16 @@ pub struct Graph {
     remote_count: usize,
     /// The song position of the next piece, in frames (the session's clock).
     clock: u64,
+    /// Offline blocks' lanes Signal plays itself (a host without
+    /// host-automation/1): set as host automation would set them.
+    self_play: crate::offline::SelfPlay,
+    /// `(lane, block, ring)`: offline blocks whose arriving audio is being
+    /// captured for an analysis (a host that cannot render offline).
+    taps: Vec<(
+        usize,
+        usize,
+        alloc::sync::Arc<crate::offline::capture::CaptureRing>,
+    )>,
 }
 
 /// Remote hits held for later pieces.
@@ -789,6 +799,7 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
     let mut remote_pieces: Vec<u16> = remote_keys.iter().map(|k| k.2).collect();
     remote_pieces.sort_unstable();
     remote_pieces.dedup();
+    let self_play = self_played(&lanes_here, &lanes, opts.sample_rate);
     let graph = Graph {
         max_block,
         lanes,
@@ -812,8 +823,43 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
         ten_seconds: (f64::from(opts.sample_rate) * 10.0) as u64,
         remote_count: 0,
         clock: 0,
+        self_play,
+        taps: Vec::new(),
     };
     (graph, report)
+}
+
+/// The lanes of offline blocks that Signal plays itself: analysed, played
+/// by Signal ([`Playback::Signal`](crate::offline::Playback)), and not
+/// bypassed. Their curves are copied once, here, off the audio thread.
+fn self_played(specs: &[&LaneSpec], lanes: &[Lane], sample_rate: f32) -> crate::offline::SelfPlay {
+    let mut played = Vec::new();
+    for (li, (spec, lane)) in specs.iter().zip(lanes).enumerate() {
+        for (bi, (b, block)) in spec.blocks.iter().zip(&lane.blocks).enumerate() {
+            let Some(a) = b.analysis.as_ref().filter(|a| {
+                a.playback == crate::offline::Playback::Signal
+                    && a.state != crate::offline::State::None
+            }) else {
+                continue;
+            };
+            for (param, curve) in &a.lanes {
+                if let Some(pi) = block.params().index(param).filter(|_| !curve.is_empty()) {
+                    played.push(crate::offline::PlayedLane {
+                        lane: li,
+                        block: bi,
+                        param: pi,
+                        curve: curve.clone(),
+                        cursor: crate::offline::Cursor::default(),
+                    });
+                }
+            }
+        }
+    }
+    crate::offline::SelfPlay {
+        lanes: played,
+        expected: None,
+        sample_rate: f64::from(sample_rate),
+    }
 }
 
 /// Delay compensation: how late each lane's audio is (its feeds' latest,
@@ -1081,6 +1127,69 @@ impl Graph {
     /// sets it from the host's transport; between, it counts.
     pub const fn set_clock(&mut self, frame: u64) {
         self.clock = frame;
+    }
+
+    /// Frames from the next piece's start to the next breakpoint of a lane
+    /// Signal plays itself: where the processor ends a piece, so each of
+    /// the apply stage's ramps is one of the lane's segments, exactly.
+    #[must_use]
+    pub fn frames_to_next_offline(&self) -> Option<usize> {
+        self.self_play
+            .frames_to_next(self.clock.saturating_sub(self.lookahead as u64))
+    }
+
+    /// How many lanes Signal plays itself.
+    #[must_use]
+    pub fn self_played_lanes(&self) -> usize {
+        self.self_play.lanes.len()
+    }
+
+    /// Capture the audio arriving at block `block` of lane `lane` into
+    /// `ring` from now on (control side, before the graph is installed).
+    pub fn tap(
+        &mut self,
+        lane: usize,
+        block: usize,
+        ring: alloc::sync::Arc<crate::offline::capture::CaptureRing>,
+    ) {
+        self.taps.retain(|(l, b, _)| (*l, *b) != (lane, block));
+        self.taps.push((lane, block, ring));
+    }
+
+    /// Set the self-played lanes' parameters for the piece from song frame
+    /// `clock` (the lanes' clock) of `len` frames: each ramps to its
+    /// value at the piece's end. After a seek (or at the start) each first
+    /// jumps to its value at the piece's start. Allocation-free.
+    fn play_offline(&mut self, clock: u64, len: usize) {
+        let sp = &mut self.self_play;
+        if sp.lanes.is_empty() || sp.sample_rate <= 0.0 {
+            return;
+        }
+        let jumped = sp.expected != Some(clock);
+        sp.expected = Some(clock.saturating_add(len as u64));
+        #[allow(clippy::cast_precision_loss)]
+        let (t0, t1) = (
+            clock as f64 / sp.sample_rate,
+            clock.saturating_add(len as u64) as f64 / sp.sample_rate,
+        );
+        for pl in &mut sp.lanes {
+            let Some(block) = self
+                .lanes
+                .get_mut(pl.lane)
+                .and_then(|l| l.blocks.get_mut(pl.block))
+            else {
+                continue;
+            };
+            if jumped {
+                if let Some(v) = pl.cursor.value(&pl.curve, t0) {
+                    block.apply(pl.param, ParamChange::Set(v));
+                    block.process(&mut [], &mut []);
+                }
+            }
+            if let Some(v) = pl.cursor.value(&pl.curve, t1) {
+                block.apply(pl.param, ParamChange::Set(v));
+            }
+        }
     }
 
     /// What each lane's mix phases do to its level since the meters were
@@ -1438,6 +1547,7 @@ impl Graph {
         }
         self.take_remote_hits();
         self.take_planned_hits(self.clock.saturating_sub(self.lookahead as u64), len);
+        self.play_offline(self.clock.saturating_sub(self.lookahead as u64), len);
         let input_copy = &self.input_copy;
         let lanes_in = if la == 0 {
             &self.input_copy
@@ -1617,6 +1727,11 @@ impl Graph {
                         .is_some_and(|g| g.bypass && (g.first..=g.last).contains(&b));
                     if let Some(g) = lane.phases.get_mut(group).filter(|g| g.first == b) {
                         g.piece_in = g.k_in.energy(l, r);
+                    }
+                    if let Some((_, _, ring)) =
+                        self.taps.iter().find(|(tl, tb, _)| *tl == i && *tb == b)
+                    {
+                        ring.push(self.clock.saturating_sub(la as u64), l, r);
                     }
                     if !off {
                         block.process(l, r);
