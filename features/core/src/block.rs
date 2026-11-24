@@ -464,6 +464,13 @@ impl ChainBlock {
         }
     }
 
+    /// Another lane keys this block, from now on: its audio or its hits.
+    pub fn keyed(&mut self) {
+        if let Backend::Linked(p) = &mut self.backend {
+            p.keyed();
+        }
+    }
+
     pub fn midi(&mut self, event: Midi) {
         match &mut self.backend {
             Backend::Linked(p) => p.midi(event),

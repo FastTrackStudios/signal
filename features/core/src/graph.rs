@@ -459,8 +459,20 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
             phases: phase_groups(spec, &mut report.warnings),
             input,
             output,
-            gain: crate::util::db_to_gain(spec.gain_db),
-            mute: spec.mute,
+            // In the per-track mode the track's own fader is the lane's
+            // level: the host's, not the preset's.
+            gain: if opts.port.is_some() {
+                1.0
+            } else {
+                crate::util::db_to_gain(spec.gain_db)
+            },
+            // In the per-track mode the track's mute is the host's; a
+            // trigger stays unheard (its hits are its job).
+            mute: if opts.port.is_some() {
+                spec.mute && spec.trigger.is_some()
+            } else {
+                spec.mute
+            },
             blocks,
             l: vec![0.0; max_block],
             r: vec![0.0; max_block],
@@ -569,6 +581,20 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
         }
     }
     let order = run_order(&mut lanes, &lanes_here, &mut report.warnings);
+    // Keyed blocks know it from the start: a gate keyed by another track's
+    // trigger is shut until that trigger's first hit, not open on its
+    // own bleed.
+    let keyed: Vec<(usize, usize)> = lanes
+        .iter()
+        .enumerate()
+        .flat_map(|(l, lane)| lane.keys.iter().map(move |(b, _)| (l, *b)))
+        .chain(remote_keys.iter().map(|(l, b, _)| (*l, *b)))
+        .collect();
+    for (l, b) in keyed {
+        if let Some(block) = lanes.get_mut(l).and_then(|lane| lane.blocks.get_mut(b)) {
+            block.keyed();
+        }
+    }
 
     let mut macros: [Vec<MacroBinding>; MACROS] = core::array::from_fn(|_| Vec::new());
     for (m, spec) in preset.macros.iter().enumerate() {
@@ -976,6 +1002,34 @@ impl Graph {
     #[must_use]
     pub fn block(&self, lane: usize, block: usize) -> Option<&ChainBlock> {
         self.lanes.get(lane)?.blocks.get(block)
+    }
+
+    /// How many lanes, and how many blocks lane `lane` has.
+    #[must_use]
+    pub fn lane_count(&self) -> usize {
+        self.lanes.len()
+    }
+
+    #[must_use]
+    pub fn block_count(&self, lane: usize) -> usize {
+        self.lanes.get(lane).map_or(0, |l| l.blocks.len())
+    }
+
+    /// Lane `lane`'s name (its path in the kit's tree).
+    #[must_use]
+    pub fn lane_name(&self, lane: usize) -> Option<&str> {
+        self.lanes.get(lane).map(|l| l.name.as_str())
+    }
+
+    /// The mix phase of block `block` of lane `lane`.
+    #[must_use]
+    pub fn block_phase(&self, lane: usize, block: usize) -> Option<Phase> {
+        self.lanes
+            .get(lane)?
+            .phases
+            .iter()
+            .find(|g| (g.first..=g.last).contains(&block))
+            .map(|g| g.phase)
     }
 
     /// Where every block of `kind` is: what an override ("every instance of

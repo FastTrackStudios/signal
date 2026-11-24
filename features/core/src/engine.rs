@@ -289,6 +289,15 @@ impl Processor {
         }
     }
 
+    /// Change one block's parameter now (the audio thread's own: a
+    /// plugin wrapper applying its host's parameter values). From another
+    /// thread, send [`Command::Param`].
+    pub fn apply_param(&mut self, lane: usize, block: usize, param: usize, change: ParamChange) {
+        if let Some(g) = self.graph.as_mut() {
+            g.apply(lane, block, param, change);
+        }
+    }
+
     /// Set one of the instance's parameters now.
     pub fn set_host_param(&mut self, param: HostParam, value: f32) {
         match param {

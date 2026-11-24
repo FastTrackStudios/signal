@@ -1,11 +1,12 @@
 //! The drum kit: the mix method's structure for a kit, as a preset.
 //!
-//! **The tree** is the Crescendum "Unbreakable" session's, track for track
-//! (its folders, faders and sends), with the golden session's one-note
-//! tracks added where it puts them (a `Sub` beside the kick's `SUM`, a
-//! `Fund` in the snare's and beside each tom). Lanes are named by their
-//! path in that tree (`Kick/SUM/In`), and each is a track of its own in
-//! the per-track mode.
+//! **The tree** is Studio's golden session, track for track, as the
+//! Crescendum "Unbreakable" session has it (its Sum folders, trigger-keyed
+//! gates, stacked verbs, muted Process folder) and Studio names it: each
+//! lane is named by its Studio track path (`Drums/Kick/Sum/In`), and in
+//! the per-track mode the Signal on that track runs it. One lane is
+//! Signal's alone: `Drums/Kit`, the sum the Process folder is fed from (in
+//! Studio, the host's sends do that).
 //!
 //! **Every block has its mix phase** ([`Phase`]) and runs in phase order;
 //! each phase is made gain neutral by measuring it
@@ -13,14 +14,14 @@
 //! kit is as loud with its processing on as bypassed and the faders do
 //! the balance. What a track gets follows the method:
 //!
-//! - **A mic or a sample** (`Kick/SUM/In`, `Toms/T1`): Rescue and Tone
+//! - **A mic or a sample** (`Drums/Kick/Sum/In`, `Drums/Toms/Tom 1/T1`): Rescue and Tone
 //!   only.
-//! - **A piece's folder** (`Kick`, `Snare`): the trigger-keyed gate
+//! - **A piece's folder** (`Drums/Kick`, `Drums/Toms/Tom 1`): the trigger-keyed gate
 //!   (Rescue), then its Tone: compression, EQ, saturation.
 //! - **The one-note tracks** (`Sub`, `Fund`): the parallel filters (Tone):
 //!   gated by the trigger, band-passed on the drum's note, saturated.
 //! - **The verbs** (Depth): each piece's own, in a folder so several are
-//!   stacked (the snare's NonLin, Plate and Hall).
+//!   stacked (the snare's Plate, Hall and Nonlin).
 //! - **Process**: the parallel compressors (Tone) and the kit's FX
 //!   (Depth), fed by the kit and muted: each a mute away.
 //!
@@ -122,6 +123,27 @@ fn sat(drive: f32) -> BlockSpec {
         .phase(Phase::Tone)
 }
 
+/// A mic's chain: Rescue EQ, then Tone (compression, EQ, saturation),
+/// mild until it's dialled in.
+fn mic_chain(low_cut: f32) -> Vec<BlockSpec> {
+    vec![
+        rescue_eq(low_cut),
+        comp(-18.0, 3.0, 15.0, 80.0),
+        tone_eq(),
+        sat(0.0),
+    ]
+}
+
+/// A piece's folder chain: its trigger-keyed gate (Rescue), then Tone.
+fn piece_chain(key: &str, mode: f32, length_ms: f32) -> Vec<BlockSpec> {
+    vec![
+        gate(key, mode, length_ms),
+        comp(-18.0, 4.0, 20.0, 80.0),
+        tone_eq(),
+        sat(3.0),
+    ]
+}
+
 fn verb(algorithm: &str) -> BlockSpec {
     BlockSpec::signal("verb", "reverb")
         .algorithm(algorithm)
@@ -190,237 +212,248 @@ fn one_note(path: &str, key: &str, mode: f32, fundamental: f32, q: f32, to: &str
     )
 }
 
-/// The Crescendum kit, on the mix method's structure.
+/// The Unbreakable kit on the mix method's structure, by Studio's track
+/// paths.
 ///
 /// | inputs (multi-channel) | tracks |
 /// |---|---|
-/// | 0, 1, 2 | `Kick/SUM/In`, `Kick/SUM/Out`, `Kick/SUM/Trig` |
-/// | 3, 4, 5 | `Snare/SUM/Top`, `Snare/SUM/Bottom`, `Snare/SUM/Trig` |
-/// | 6–9 | `Toms/T1`–`Toms/T4` |
-/// | 10–13 | `Toms/Trig/T1 Trig`–`T4 Trig` |
-/// | 14/15, 16, 17 | `Cymbals/OHs`, `Cymbals/Hi Hat`, `Cymbals/Ride` |
-/// | 18/19 | `Rooms` |
+/// | 0, 1, 2 | `Drums/Kick/Sum/In`, `Out`, `Trig` |
+/// | 3, 4, 5 | `Drums/Snare/Sum/Top`, `Bottom`, `Trig` |
+/// | 6–9 | `Drums/Toms/Tom 1/T1` … `Tom 4/T4` |
+/// | 10–13 | `Drums/Toms/Tom 1/T1 Trig` … `Tom 4/T4 Trig` |
+/// | 14/15, 16, 17 | `Drums/Cymbals/OHs`, `Hi Hat`, `Ride` |
+/// | 18/19 | `Drums/Rooms` |
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn drum_kit(pieces: &KitPieces) -> Preset {
+    let process_sends = || -> Vec<SendSpec> {
+        COMPRESS
+            .iter()
+            .map(|c| SendSpec::to(alloc::format!("Drums/Process/Compress/{c}"), 0.0))
+            .chain(core::iter::once(SendSpec::to(
+                "Drums/Process/FX/Room Sim",
+                0.0,
+            )))
+            .chain(
+                KIT_VERBS
+                    .iter()
+                    .map(|(v, _)| SendSpec::to(alloc::format!("Drums/Process/FX/Verb/{v}"), 0.0)),
+            )
+            .collect()
+    };
     let mut lanes = vec![
-        // The session's fader: -9 dB into the DRUM BUS.
         at(
             with(track("Drums", &[], ""), vec![comp(-12.0, 2.0, 30.0, 150.0)]),
-            -9.0,
+            -1.3,
         ),
-        // The kit, and what the Process folder is fed.
+        // Signal's own: what Process is fed from (Studio's sends).
         LaneSpec {
-            sends: COMPRESS
-                .iter()
-                .map(|c| SendSpec::to(alloc::format!("Process/Compress/{c}"), 0.0))
-                .chain(core::iter::once(SendSpec::to("Process/FX/Room Sim", 0.0)))
-                .chain(
-                    KIT_VERBS
-                        .iter()
-                        .map(|(v, _)| SendSpec::to(alloc::format!("Process/FX/Verb/{v}"), 0.0)),
-                )
-                .collect(),
-            ..track("Drum Kit", &[], "Drums")
+            sends: process_sends(),
+            ..track("Drums/Kit", &[], "Drums")
         },
-        // Kick: gated by its trigger, then its tone.
+        // Kick.
         with(
-            track("Kick", &[], "Drum Kit"),
-            vec![
-                gate("Kick/SUM/Trig", 0.0, 300.0),
-                comp(-18.0, 4.0, 20.0, 80.0),
-                tone_eq(),
-                sat(3.0),
-            ],
-        ),
-        at(
-            with(track("Kick/Verb", &[], "Kick"), vec![verb("room")]),
-            -22.8,
+            track("Drums/Kick", &[], "Drums/Kit"),
+            piece_chain("Drums/Kick/Sum/Trig", 0.0, 300.0),
         ),
         LaneSpec {
             sends: vec![
-                SendSpec::to("Kick/Verb", 0.0),
-                SendSpec::to("Kick/Sub", 0.0),
+                SendSpec::to("Drums/Kick/Verb/Room", 0.0),
+                SendSpec::to("Drums/Kick/Sub", 0.0),
             ],
-            ..track("Kick/SUM", &[], "Kick")
+            ..track("Drums/Kick/Sum", &[], "Drums/Kick")
         },
         with(
-            track("Kick/SUM/In", &[0], "Kick/SUM"),
-            vec![rescue_eq(30.0), comp(-18.0, 3.0, 15.0, 80.0)],
+            track("Drums/Kick/Sum/In", &[0], "Drums/Kick/Sum"),
+            mic_chain(30.0),
         ),
         with(
-            track("Kick/SUM/Out", &[1], "Kick/SUM"),
-            vec![rescue_eq(30.0), comp(-18.0, 3.0, 15.0, 80.0)],
+            track("Drums/Kick/Sum/Out", &[1], "Drums/Kick/Sum"),
+            mic_chain(30.0),
         ),
-        trig("Kick/SUM/Trig", 2),
+        trig("Drums/Kick/Sum/Trig", 2),
+        sample(
+            "Drums/Kick/Sum/Sample",
+            "Drums/Kick/Sum/Trig",
+            pieces.kick.as_ref(),
+            "Drums/Kick/Sum",
+        ),
+        one_note(
+            "Drums/Kick/Sub",
+            "Drums/Kick/Sum/Trig",
+            0.0,
+            55.0,
+            2.0,
+            "Drums/Kick",
+        ),
+        track("Drums/Kick/Verb", &[], "Drums/Kick"),
         at(
-            sample(
-                "Kick/SUM/Sample",
-                "Kick/SUM/Trig",
-                pieces.kick.as_ref(),
-                "Kick/SUM",
+            with(
+                track("Drums/Kick/Verb/Room", &[], "Drums/Kick/Verb"),
+                vec![verb("room")],
             ),
-            2.2,
+            -23.0,
         ),
-        one_note("Kick/Sub", "Kick/SUM/Trig", 0.0, 55.0, 2.0, "Kick"),
-        // Snare: gated, then its tone; three verbs stacked in its VERB.
+        // Snare: three verbs stacked.
         with(
-            track("Snare", &[], "Drum Kit"),
-            vec![gate("Snare/SUM/Trig", 1.0, 400.0), tone_eq(), sat(3.0)],
+            track("Drums/Snare", &[], "Drums/Kit"),
+            piece_chain("Drums/Snare/Sum/Trig", 1.0, 400.0),
         ),
-        at(track("Snare/VERB", &[], "Snare"), -19.9),
-        with(
-            track("Snare/VERB/NonLin", &[], "Snare/VERB"),
-            vec![verb("nonlinear")],
-        ),
-        muted(with(
-            track("Snare/VERB/Plate", &[], "Snare/VERB"),
-            vec![verb("plate")],
-        )),
-        muted(with(
-            track("Snare/VERB/Hall", &[], "Snare/VERB"),
-            vec![verb("hall")],
-        )),
         LaneSpec {
-            sends: ["Snare/VERB/NonLin", "Snare/VERB/Plate", "Snare/VERB/Hall"]
+            sends: ["Plate", "Hall", "Nonlin"]
                 .into_iter()
-                .map(|v| SendSpec::to(v, 0.0))
+                .map(|v| SendSpec::to(alloc::format!("Drums/Snare/Verb/{v}"), 0.0))
                 .collect(),
-            ..track("Snare/SUM", &[], "Snare")
+            ..track("Drums/Snare/Sum", &[], "Drums/Snare")
         },
         LaneSpec {
-            sends: vec![SendSpec::to("Snare/SUM/Fund", 0.0).pre()],
+            sends: vec![SendSpec::to("Drums/Snare/Sum/Fund", 0.0).pre()],
             ..with(
-                track("Snare/SUM/Top", &[3], "Snare/SUM"),
-                vec![rescue_eq(60.0), comp(-20.0, 3.0, 10.0, 80.0)],
+                track("Drums/Snare/Sum/Top", &[3], "Drums/Snare/Sum"),
+                mic_chain(60.0),
             )
         },
-        at(
-            LaneSpec {
-                sends: vec![SendSpec::to("Snare/SUM/Fund", 0.0).pre()],
-                ..with(
-                    track("Snare/SUM/Bottom", &[4], "Snare/SUM"),
-                    vec![rescue_eq(100.0), comp(-20.0, 3.0, 10.0, 80.0)],
-                )
-            },
-            2.7,
-        ),
+        LaneSpec {
+            sends: vec![SendSpec::to("Drums/Snare/Sum/Fund", 0.0).pre()],
+            ..with(
+                track("Drums/Snare/Sum/Bottom", &[4], "Drums/Snare/Sum"),
+                mic_chain(100.0),
+            )
+        },
+        trig("Drums/Snare/Sum/Trig", 5),
         sample(
-            "Snare/SUM/Sample",
-            "Snare/SUM/Trig",
+            "Drums/Snare/Sum/Sample",
+            "Drums/Snare/Sum/Trig",
             pieces.snare.as_ref(),
-            "Snare/SUM",
+            "Drums/Snare/Sum",
         ),
-        trig("Snare/SUM/Trig", 5),
         one_note(
-            "Snare/SUM/Fund",
-            "Snare/SUM/Trig",
+            "Drums/Snare/Sum/Fund",
+            "Drums/Snare/Sum/Trig",
             1.0,
             200.0,
             8.0,
-            "Snare/SUM",
+            "Drums/Snare/Sum",
         ),
-        // Toms: each mic gated by its own trigger; the samples in Trig.
-        at(track("Toms", &[], "Drum Kit"), 6.7),
-        at(track("Toms/Trig", &[], "Toms"), -17.4),
+        track("Drums/Snare/Verb", &[], "Drums/Snare"),
+        at(
+            with(
+                track("Drums/Snare/Verb/Plate", &[], "Drums/Snare/Verb"),
+                vec![verb("plate")],
+            ),
+            -20.0,
+        ),
+        muted(at(
+            with(
+                track("Drums/Snare/Verb/Hall", &[], "Drums/Snare/Verb"),
+                vec![verb("hall")],
+            ),
+            -20.0,
+        )),
+        muted(at(
+            with(
+                track("Drums/Snare/Verb/Nonlin", &[], "Drums/Snare/Verb"),
+                vec![verb("nonlinear")],
+            ),
+            -20.0,
+        )),
+        // Toms: each a folder of its mic, trigger, sample and fundamental,
+        // each sending to the toms' verbs.
+        track("Drums/Toms", &[], "Drums/Kit"),
+        track("Drums/Toms/Verb", &[], "Drums/Toms"),
+        at(
+            with(
+                track("Drums/Toms/Verb/Room", &[], "Drums/Toms/Verb"),
+                vec![verb("room")],
+            ),
+            -26.0,
+        ),
+        muted(at(
+            with(
+                track("Drums/Toms/Verb/Nonlin", &[], "Drums/Toms/Verb"),
+                vec![verb("nonlinear")],
+            ),
+            -26.0,
+        )),
     ];
     let fundamentals = [140.0, 110.0, 85.0, 70.0];
     for (t, fundamental) in fundamentals.iter().enumerate() {
         let n = t + 1;
-        let tom = alloc::format!("Toms/T{n}");
-        let trigger = alloc::format!("Toms/Trig/T{n} Trig");
-        let channel = u16::try_from(6 + t).unwrap_or(0);
+        let tom = alloc::format!("Drums/Toms/Tom {n}");
+        let mic = alloc::format!("{tom}/T{n}");
+        let trigger = alloc::format!("{tom}/T{n} Trig");
+        let fund = alloc::format!("{tom}/Fund");
         lanes.push(LaneSpec {
-            sends: vec![SendSpec::to(alloc::format!("Toms/T{n} Fund"), 0.0).pre()],
+            sends: vec![
+                SendSpec::to("Drums/Toms/Verb/Room", 0.0),
+                SendSpec::to("Drums/Toms/Verb/Nonlin", 0.0),
+            ],
             ..with(
-                track(&tom, &[channel], "Toms"),
-                vec![
-                    gate(&trigger, 3.0, 500.0),
-                    rescue_eq(fundamental * 0.5),
-                    comp(-20.0, 3.0, 15.0, 120.0),
-                ],
+                track(&tom, &[], "Drums/Toms"),
+                piece_chain(&trigger, 3.0, 500.0),
+            )
+        });
+        lanes.push(LaneSpec {
+            sends: vec![SendSpec::to(fund.clone(), 0.0).pre()],
+            ..with(
+                track(&mic, &[u16::try_from(6 + t).unwrap_or(0)], &tom),
+                mic_chain(fundamental * 0.5),
             )
         });
         lanes.push(trig(&trigger, u16::try_from(10 + t).unwrap_or(0)));
         lanes.push(sample(
-            &alloc::format!("Toms/Trig/T{n} Sample"),
+            &alloc::format!("{tom}/T{n} Sample"),
             &trigger,
             pieces.toms.get(t).and_then(Option::as_ref),
-            "Toms/Trig",
+            &tom,
         ));
-        lanes.push(one_note(
-            &alloc::format!("Toms/T{n} Fund"),
-            &trigger,
-            3.0,
-            *fundamental,
-            8.0,
-            "Toms",
-        ));
+        lanes.push(one_note(&fund, &trigger, 3.0, *fundamental, 8.0, &tom));
     }
     lanes.extend([
-        track("Cymbals", &[], "Drum Kit"),
-        at(
-            with(
-                track("Cymbals/OHs", &[14, 15], "Cymbals"),
-                vec![rescue_eq(150.0)],
-            ),
-            6.8,
+        track("Drums/Cymbals", &[], "Drums/Kit"),
+        with(
+            track("Drums/Cymbals/OHs", &[14, 15], "Drums/Cymbals"),
+            mic_chain(150.0),
         ),
-        at(
-            with(
-                track("Cymbals/Hi Hat", &[16], "Cymbals"),
-                vec![rescue_eq(250.0)],
-            ),
-            12.0,
+        with(
+            track("Drums/Cymbals/Hi Hat", &[16], "Drums/Cymbals"),
+            mic_chain(250.0),
         ),
-        at(
-            with(
-                track("Cymbals/Ride", &[17], "Cymbals"),
-                vec![rescue_eq(200.0)],
-            ),
-            9.5,
+        with(
+            track("Drums/Cymbals/Ride", &[17], "Drums/Cymbals"),
+            mic_chain(200.0),
         ),
-        // The session's rooms: a crusher, its compressor switched off.
-        at(
-            with(
-                track("Rooms", &[18, 19], "Drum Kit"),
-                vec![
-                    sat(9.0),
-                    BlockSpec {
-                        bypass: true,
-                        ..comp(-24.0, 6.0, 10.0, 100.0)
-                    },
-                ],
-            ),
-            -7.5,
+        with(
+            track("Drums/Rooms", &[18, 19], "Drums/Kit"),
+            mic_chain(60.0),
         ),
         // Process: a mute away.
-        track("Process", &[], "Drums"),
-        track("Process/Compress", &[], "Process"),
-        track("Process/FX", &[], "Process"),
+        track("Drums/Process", &[], "Drums"),
+        track("Drums/Process/Compress", &[], "Drums/Process"),
+        track("Drums/Process/FX", &[], "Drums/Process"),
         muted(with(
-            track("Process/FX/Room Sim", &[], "Process/FX"),
+            track("Drums/Process/FX/Room Sim", &[], "Drums/Process/FX"),
             vec![verb("room").param("decay", 0.2)],
         )),
-        track("Process/FX/Verb", &[], "Process/FX"),
+        track("Drums/Process/FX/Verb", &[], "Drums/Process/FX"),
     ]);
     let parallel = |name: &str| -> Vec<BlockSpec> {
-        let c = |t, r, a, rel| comp(t, r, a, rel);
         match name {
-            "Tight" => vec![c(-24.0, 4.0, 30.0, 100.0)],
-            "Punch" => vec![c(-30.0, 20.0, 15.0, 40.0).param("sc_hpf", 120.0)],
-            "Smash" => vec![c(-36.0, 20.0, 0.1, 60.0).param("makeup", 6.0)],
-            "Crunch" => vec![c(-30.0, 10.0, 1.0, 50.0), sat(18.0)],
-            // Dry: the kit as it is, to blend against.
-            _ => vec![],
+            "Tight" => vec![comp(-24.0, 4.0, 30.0, 100.0)],
+            "Punch" => vec![comp(-30.0, 20.0, 15.0, 40.0).param("sc_hpf", 120.0)],
+            "Smash" => vec![comp(-36.0, 20.0, 0.1, 60.0).param("makeup", 6.0)],
+            "Crunch" => vec![comp(-30.0, 10.0, 1.0, 50.0), sat(18.0)],
+            // Dry: the kit as it is, to blend against (a compressor at 1:1,
+            // to dial in).
+            _ => vec![comp(0.0, 1.0, 10.0, 100.0)],
         }
     };
     for c in COMPRESS {
         lanes.push(muted(with(
             track(
-                &alloc::format!("Process/Compress/{c}"),
+                &alloc::format!("Drums/Process/Compress/{c}"),
                 &[],
-                "Process/Compress",
+                "Drums/Process/Compress",
             ),
             parallel(c),
         )));
@@ -428,9 +461,9 @@ pub fn drum_kit(pieces: &KitPieces) -> Preset {
     for (v, algorithm) in KIT_VERBS {
         lanes.push(muted(with(
             track(
-                &alloc::format!("Process/FX/Verb/{v}"),
+                &alloc::format!("Drums/Process/FX/Verb/{v}"),
                 &[],
-                "Process/FX/Verb",
+                "Drums/Process/FX/Verb",
             ),
             vec![verb(algorithm)],
         )));
