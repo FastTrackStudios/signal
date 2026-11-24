@@ -1595,7 +1595,7 @@ checksum = "21e4227379beff4205943696e6c3e0cd809bacdf3f0edd6e3dd153e2269571a4"
 [[package]]
 name = "audio"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "anyhow",
  "atomic_float",
@@ -2289,7 +2289,7 @@ checksum = "56ed6191a7e78c36abdb16ab65341eefd73d64d303fffccdbb00d51e4205967b"
 [[package]]
 name = "builtin"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "crossbeam-channel",
  "daw",
@@ -3596,7 +3596,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 [[package]]
 name = "daw"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "architect",
  "daw-control",
@@ -3611,7 +3611,7 @@ dependencies = [
 [[package]]
 name = "daw-clap-ext"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "clap-sys",
 ]
@@ -3619,7 +3619,7 @@ dependencies = [
 [[package]]
 name = "daw-control"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "architect",
  "daw-proto",
@@ -3638,7 +3638,7 @@ dependencies = [
 [[package]]
 name = "daw-module"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "tokio",
  "tracing",
@@ -3647,7 +3647,7 @@ dependencies = [
 [[package]]
 name = "daw-proto"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "architect",
  "daw-transport-sync",
@@ -3662,7 +3662,7 @@ dependencies = [
 [[package]]
 name = "daw-standalone"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "arc-swap",
  "architect",
@@ -3694,7 +3694,7 @@ dependencies = [
 [[package]]
 name = "daw-transport-sync"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "web-time",
 ]
@@ -5930,7 +5930,7 @@ dependencies = [
 [[package]]
 name = "fts-sample"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "arc-swap",
  "claxon",
@@ -9057,7 +9057,7 @@ dependencies = [
 [[package]]
 name = "midi"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "architect",
  "core-foundation 0.10.1",
@@ -12699,6 +12699,7 @@ dependencies = [
  "clap",
  "cpal",
  "daw",
+ "daw-clap-ext",
  "dsp-core 26.10.3",
  "eyre",
  "facet",
@@ -13263,7 +13264,7 @@ dependencies = [
 [[package]]
 name = "session-format"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "daw-proto",
  "facet",
@@ -13681,7 +13682,7 @@ dependencies = [
 [[package]]
 name = "signal-plugin-host"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "daw",
 ]
@@ -16553,7 +16554,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=22c5244018da5f48dc687f795f040bad23344394#22c5244018da5f48dc687f795f040bad23344394"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=959f65307874fc2170eb44169ee08f650d5a0ab5#959f65307874fc2170eb44169ee08f650d5a0ab5"
 dependencies = [
  "facet",
  "facet-styx",

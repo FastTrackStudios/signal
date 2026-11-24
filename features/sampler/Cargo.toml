@@ -11,6 +11,9 @@ workspace = true
 
 [features]
 default = ["vox"]
+# Documents from a host's `com.fasttrackstudio.host-timeline/1`
+# (document_timeline): the track's timeline as a TrackDocument.
+host-timeline = ["dep:daw-clap-ext"]
 jack = ["audio/io", "audio/jack", "cpal/jack", "signal-rig-host/jack"]
 library = ["dep:architect-telemetry", "dep:facet-json", "dep:tokio", "dep:vox", "dep:walkdir", "architect/vox"]
 pipewire = []
@@ -26,6 +29,7 @@ architect-telemetry = { workspace = true, optional = true }
 base64 = { workspace = true }
 builtin = { workspace = true }
 daw = { workspace = true, features = ["standalone-decode"] }
+daw-clap-ext = { workspace = true, optional = true }
 eyre = { workspace = true }
 facet = { workspace = true }
 facet-json = { workspace = true, optional = true }
