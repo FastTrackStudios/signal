@@ -54,7 +54,14 @@ pub struct SessionHit {
     pub velocity: f32,
     /// The song position in frames at which it happened.
     pub frame: u64,
+    /// Played as a note (MIDI: the host's hit notes, a drum track's), not
+    /// detected on a trigger mic. A piece with notes is keyed by them; its
+    /// trigger's detection is the fallback.
+    pub midi: bool,
 }
+
+/// The piece's top bit, in a slot: the hit came from MIDI.
+const MIDI_BIT: u32 = 1 << 31;
 
 /// How many hits the bus holds before the oldest is overwritten. At a
 /// 64-frame block and 48 kHz that is more than a second of a blast beat on
@@ -131,8 +138,11 @@ impl HitBus {
         let vel =
             signal_dsp_core::num::f64_to_u32(f64::from(hit.velocity.clamp(0.0, 1.0)) * 65535.0)
                 .min(65535);
-        slot.data
-            .store((u32::from(hit.piece) << 16) | vel, Ordering::Relaxed);
+        let midi = if hit.midi { MIDI_BIT } else { 0 };
+        slot.data.store(
+            midi | (u32::from(hit.piece & 0x7fff) << 16) | vel,
+            Ordering::Relaxed,
+        );
         slot.seq.store(index.wrapping_mul(2), Ordering::Release);
     }
 
@@ -174,12 +184,13 @@ impl HitBus {
                 cursor.missed = cursor.missed.saturating_add(1);
                 continue;
             }
-            let piece = u16::try_from(data >> 16).unwrap_or(0);
+            let piece = u16::try_from((data >> 16) & 0x7fff).unwrap_or(0);
             let vel = f32::from(u16::try_from(data & 0xffff).unwrap_or(0)) / 65535.0;
             each(SessionHit {
                 piece,
                 velocity: vel,
                 frame,
+                midi: data & MIDI_BIT != 0,
             });
         }
     }
@@ -257,11 +268,13 @@ mod tests {
             piece: 3,
             velocity: 0.5,
             frame: 4800,
+            midi: false,
         });
         bus.publish(SessionHit {
             piece: 1,
             velocity: 1.0,
             frame: 4810,
+            midi: false,
         });
         let mut got = alloc::vec::Vec::new();
         bus.drain(&mut reader, |h| got.push(h));
@@ -281,6 +294,7 @@ mod tests {
                 piece: 0,
                 velocity: 1.0,
                 frame: i,
+                midi: false,
             });
         }
         let mut first = None;
@@ -305,6 +319,7 @@ mod tests {
             piece: 0,
             velocity: 1.0,
             frame: 1,
+            midi: false,
         });
         let mut n = 0;
         b.hits.drain(&mut from_b, |_| n += 1);

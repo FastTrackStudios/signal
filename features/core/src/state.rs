@@ -110,6 +110,23 @@ pub struct LaneSpec {
     /// Each phase's gain-neutral make-up (measured: `Graph::phase_levels`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trims: Vec<PhaseTrim>,
+    /// Phases switched off, all their blocks at once (and their make-up).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bypass_phases: Vec<Phase>,
+    /// Notes that are a piece's hits: a note-on of `note` on this lane's
+    /// MIDI is a hit of the lane `piece` (its trigger's), at its velocity,
+    /// published to the session. A Sample track's own note, a drum-hits
+    /// track's every piece.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub midi_hits: Vec<MidiHitSpec>,
+}
+
+/// A note that is a piece's hit.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MidiHitSpec {
+    pub note: u8,
+    /// The piece's lane (its trigger: what gates and samples key on).
+    pub piece: String,
 }
 
 /// A send from a lane to another.

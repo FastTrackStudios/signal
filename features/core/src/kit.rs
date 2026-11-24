@@ -33,7 +33,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::host::AssetRef;
-use crate::state::{BlockSpec, LaneSpec, Phase, Preset, SendSpec, TriggerSpec};
+use crate::state::{BlockSpec, LaneSpec, MidiHitSpec, Phase, Preset, SendSpec, TriggerSpec};
 
 /// The library pieces a kit's reinforcement plays: each a `.signalengine`
 /// (a Modern and Massive 2 kick, say). A piece left out has an empty
@@ -163,9 +163,24 @@ fn trig(path: &str, channel: u16) -> LaneSpec {
     })
 }
 
-/// The piece's sample, played by its trigger.
-fn sample(path: &str, key: &str, engine: Option<&AssetRef>, to: &str) -> LaneSpec {
+/// The kit's hit notes, as Studio writes them (`DRUMS_HITS_MIDI`): General
+/// MIDI's kick and snare, the toms high to low.
+pub const KICK_NOTE: u8 = 36;
+pub const SNARE_NOTE: u8 = 38;
+pub const TOM_NOTES: [u8; 4] = [45, 47, 41, 43];
+
+/// The track that holds every piece's hit notes, just above the kit.
+pub const DRUM_HITS: &str = "Drum Hits";
+
+/// The piece's sample, played by its hits: its trigger's, or its own note
+/// on this track's MIDI (`note`), which is also published as the piece's
+/// hits so its gates key on the notes.
+fn sample(path: &str, key: &str, note: u8, engine: Option<&AssetRef>, to: &str) -> LaneSpec {
     let mut lane = track(path, &[], to);
+    lane.midi_hits.push(MidiHitSpec {
+        note,
+        piece: key.into(),
+    });
     if let Some(engine) = engine {
         lane.blocks.push(
             BlockSpec::signal("drum", "drum")
@@ -275,6 +290,7 @@ pub fn drum_kit(pieces: &KitPieces) -> Preset {
         sample(
             "Drums/Kick/Sum/Sample",
             "Drums/Kick/Sum/Trig",
+            KICK_NOTE,
             pieces.kick.as_ref(),
             "Drums/Kick/Sum",
         ),
@@ -324,6 +340,7 @@ pub fn drum_kit(pieces: &KitPieces) -> Preset {
         sample(
             "Drums/Snare/Sum/Sample",
             "Drums/Snare/Sum/Trig",
+            SNARE_NOTE,
             pieces.snare.as_ref(),
             "Drums/Snare/Sum",
         ),
@@ -404,6 +421,7 @@ pub fn drum_kit(pieces: &KitPieces) -> Preset {
         lanes.push(sample(
             &alloc::format!("{tom}/T{n} Sample"),
             &trigger,
+            TOM_NOTES[t],
             pieces.toms.get(t).and_then(Option::as_ref),
             &tom,
         ));
@@ -468,6 +486,24 @@ pub fn drum_kit(pieces: &KitPieces) -> Preset {
             vec![verb(algorithm)],
         )));
     }
+    // Every piece's hit notes, on the track above the kit: heard nowhere,
+    // they key the whole kit.
+    let mut hits = muted(track(DRUM_HITS, &[], ""));
+    hits.midi_hits = [
+        ("Drums/Kick/Sum/Trig", KICK_NOTE),
+        ("Drums/Snare/Sum/Trig", SNARE_NOTE),
+    ]
+    .into_iter()
+    .map(|(p, n)| MidiHitSpec {
+        note: n,
+        piece: p.into(),
+    })
+    .chain((1..=4).map(|n| MidiHitSpec {
+        note: TOM_NOTES[n - 1],
+        piece: alloc::format!("Drums/Toms/Tom {n}/T{n} Trig"),
+    }))
+    .collect();
+    lanes.push(hits);
     Preset {
         name: String::from("Drum Kit"),
         inputs: 20,

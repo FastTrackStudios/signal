@@ -174,6 +174,15 @@ impl EngineInstance {
         // change-of-size event, NOT a hot path. In normal operation
         // block_frames is stable between callbacks.
         if block_frames != self.block_frames {
+            // Within what was allocated (a piece shorter than the host's
+            // block: a sampler split at a hit) this is a length change, not
+            // an allocation; only growing past it allocates, and says so.
+            let grows = self
+                .mic_scratches
+                .iter()
+                .map(Vec::capacity)
+                .chain(self.layers.iter().map(|l| l.out_buffer.capacity()))
+                .any(|c| c < block_frames * 2);
             for buf in &mut self.mic_scratches {
                 buf.resize(block_frames * 2, 0.0);
             }
@@ -181,6 +190,9 @@ impl EngineInstance {
                 layer.out_buffer.resize(block_frames * 2, 0.0);
             }
             self.block_frames = block_frames;
+            if !grows {
+                return self.render_now();
+            }
             self.resize_events = self.resize_events.saturating_add(1);
             tracing::warn!(
                 engine = %self.spec.name,
@@ -188,7 +200,11 @@ impl EngineInstance {
                 "EngineInstance: resized render buffers"
             );
         }
+        self.render_now();
+    }
 
+    /// The render itself, at the scratches' current length.
+    fn render_now(&mut self) {
         // Zero per-mic scratches and Layer outputs.
         for buf in &mut self.mic_scratches {
             for s in buf.iter_mut() {

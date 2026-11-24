@@ -63,6 +63,8 @@ impl BuildReport {
 
 struct Lane {
     name: String,
+    /// `(note, piece, the piece's lane here)`: notes that are hits.
+    midi_map: Vec<(u8, u16, Option<usize>)>,
     /// Its blocks' mix phases, each a run of blocks with its make-up.
     phases: Vec<PhaseGroup>,
     input: Vec<usize>,
@@ -120,6 +122,33 @@ struct PhaseGroup {
     /// gain-neutral phase reads 0 LU on a loudness meter.
     k_in: KWeight,
     k_out: KWeight,
+    /// Switched off: its blocks and its make-up skipped.
+    bypass: bool,
+    /// Its output's K-weighted mean energy over the last piece: a meter.
+    level: f64,
+}
+
+/// What keys a keyed block now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyVia {
+    /// A trigger's detected hits (its audio).
+    Hits,
+    /// Hit notes (MIDI).
+    Midi,
+    /// No hit for ten seconds: a gate keys from its own input.
+    Own,
+}
+
+impl KeyVia {
+    /// `signal.chain/1`'s word for it.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hits => "hits",
+            Self::Midi => "midi",
+            Self::Own => "self",
+        }
+    }
 }
 
 /// BS.1770's K-weighting (a high shelf, then a high-pass), stereo, for a
@@ -254,6 +283,8 @@ fn phase_groups(spec: &LaneSpec, sample_rate: f32, warnings: &mut Vec<String>) -
                     piece_in: 0.0,
                     k_in: KWeight::new(sample_rate),
                     k_out: KWeight::new(sample_rate),
+                    bypass: spec.bypass_phases.contains(&phase),
+                    level: 0.0,
                 });
             }
         }
@@ -370,6 +401,8 @@ impl Delay {
 struct Hit {
     offset: u32,
     velocity: f32,
+    /// A note, not a detection.
+    midi: bool,
 }
 
 /// The most hits a lane takes in one piece.
@@ -425,7 +458,13 @@ pub struct Graph {
     cursor: Option<HitCursor>,
     /// Remote hits taken from the session, not yet due: `(piece, frame,
     /// velocity)`.
-    remote: [(u16, u64, f32); REMOTE_HITS],
+    remote: [(u16, u64, f32, bool); REMOTE_HITS],
+    /// Per remote key: its last hit's frame and whether it was a note.
+    key_last: Vec<(u64, bool)>,
+    /// Per piece a remote key follows: its last note's frame. A piece with
+    /// notes ignores its trigger's detected hits for [`Graph::ten_seconds`].
+    piece_midi: Vec<(u16, u64)>,
+    ten_seconds: u64,
     remote_count: usize,
     /// The song position of the next piece, in frames (the session's clock).
     clock: u64,
@@ -529,6 +568,15 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
         }
         lanes.push(Lane {
             name: spec.name.clone(),
+            midi_map: spec
+                .midi_hits
+                .iter()
+                .filter_map(|m| {
+                    let piece = preset.lanes.iter().position(|l| l.name == m.piece)?;
+                    let local = lanes_here.iter().position(|l| l.name == m.piece);
+                    Some((m.note, u16::try_from(piece).ok()?, local))
+                })
+                .collect(),
             phases: phase_groups(spec, opts.sample_rate, &mut report.warnings),
             input,
             output,
@@ -734,6 +782,10 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
     } else {
         lookahead.max(max_block.saturating_add(remote_lag(opts.sample_rate)))
     };
+    let remote_key_count = remote_keys.len();
+    let mut remote_pieces: Vec<u16> = remote_keys.iter().map(|k| k.2).collect();
+    remote_pieces.sort_unstable();
+    remote_pieces.dedup();
     let graph = Graph {
         max_block,
         lanes,
@@ -750,7 +802,10 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
         remote_keys,
         session: None,
         cursor: None,
-        remote: [(0, 0, 0.0); REMOTE_HITS],
+        remote: [(0, 0, 0.0, false); REMOTE_HITS],
+        key_last: vec![(0, false); remote_key_count],
+        piece_midi: remote_pieces.iter().map(|p| (*p, 0)).collect(),
+        ten_seconds: (f64::from(opts.sample_rate) * 10.0) as u64,
         remote_count: 0,
         clock: 0,
     };
@@ -1065,6 +1120,49 @@ impl Graph {
         }
     }
 
+    /// What keys block `block` of lane `lane` now, when another lane keys
+    /// it.
+    #[must_use]
+    pub fn key_via(&self, lane: usize, block: usize) -> Option<KeyVia> {
+        if let Some(i) = self
+            .remote_keys
+            .iter()
+            .position(|k| k.0 == lane && k.1 == block)
+        {
+            let (frame, midi) = self.key_last.get(i).copied().unwrap_or((0, false));
+            return Some(
+                if frame == 0 || self.clock.saturating_sub(frame) > self.ten_seconds {
+                    KeyVia::Own
+                } else if midi {
+                    KeyVia::Midi
+                } else {
+                    KeyVia::Hits
+                },
+            );
+        }
+        self.lanes
+            .get(lane)?
+            .keys
+            .iter()
+            .any(|(b, _)| *b == block)
+            .then_some(KeyVia::Hits)
+    }
+
+    /// Each phase's output over the last piece: `each(lane, phase,
+    /// level_db)`, K-weighted (loudness-like). Allocates nothing.
+    pub fn each_phase_level(&self, mut each: impl FnMut(usize, Phase, f32)) {
+        for (l, lane) in self.lanes.iter().enumerate() {
+            for g in &lane.phases {
+                let db = if g.level > 0.0 {
+                    10.0 * libm::log10(g.level)
+                } else {
+                    -200.0
+                };
+                each(l, g.phase, signal_dsp_core::num::narrow(db));
+            }
+        }
+    }
+
     /// Each phase's make-up now: `each(lane, phase, gain_db)`. Allocates
     /// nothing.
     pub fn each_trim(&self, mut each: impl FnMut(usize, Phase, f32)) {
@@ -1151,6 +1249,43 @@ impl Graph {
     /// note is a hit of that lane, at the start of the next piece (the
     /// processor splits a block at every MIDI event).
     pub fn midi(&mut self, event: Midi) {
+        // Notes that are a piece's hits: to the session, stamped now, and to
+        // the piece's lane when it's here.
+        if let Midi::NoteOn { note, velocity, .. } = event {
+            let v = f32::from(velocity) / 127.0;
+            let mut local: [Option<usize>; 8] = [None; 8];
+            let mut n = 0;
+            for lane in &self.lanes {
+                for (_, piece, here) in lane.midi_map.iter().filter(|m| m.0 == note) {
+                    // A piece here is published by its own lane, with its
+                    // other hits.
+                    if let (Some(session), None) = (self.session.as_ref(), here) {
+                        session.hits.publish(SessionHit {
+                            piece: *piece,
+                            velocity: v,
+                            frame: self.clock,
+                            midi: true,
+                        });
+                    }
+                    if let (Some(j), Some(slot)) = (here, local.get_mut(n)) {
+                        *slot = Some(*j);
+                        n += 1;
+                    }
+                }
+            }
+            for j in local.iter().take(n).flatten() {
+                if let Some(lane) = self.lanes.get_mut(*j) {
+                    if let Some(slot) = lane.midi_hits.get_mut(lane.midi_hit_count) {
+                        *slot = Hit {
+                            offset: 0,
+                            velocity: v,
+                            midi: true,
+                        };
+                        lane.midi_hit_count += 1;
+                    }
+                }
+            }
+        }
         for lane in &mut self.lanes {
             if let (
                 Some(note),
@@ -1164,6 +1299,7 @@ impl Graph {
                         *slot = Hit {
                             offset: 0,
                             velocity: f32::from(velocity) / 127.0,
+                            midi: true,
                         };
                         lane.midi_hit_count += 1;
                     }
@@ -1400,6 +1536,7 @@ impl Graph {
                         *slot = Hit {
                             offset: u32::try_from(at).unwrap_or(0),
                             velocity: h.velocity,
+                            midi: false,
                         };
                         lane.hit_count += 1;
                     }
@@ -1413,6 +1550,7 @@ impl Graph {
                         piece: lane.piece,
                         velocity: h.velocity,
                         frame: heard.saturating_add(u64::from(h.offset)),
+                        midi: h.midi,
                     });
                 }
             }
@@ -1453,6 +1591,7 @@ impl Graph {
             give_remote_hits(
                 &mut self.lanes,
                 &self.remote_keys,
+                &mut self.key_last,
                 self.remote.get(..self.remote_count).unwrap_or(&[]),
                 self.clock.saturating_sub(la as u64),
                 i,
@@ -1467,18 +1606,25 @@ impl Graph {
                 };
                 let mut group = 0;
                 for (b, block) in lane.blocks.iter_mut().enumerate() {
+                    let off = lane
+                        .phases
+                        .get(group)
+                        .is_some_and(|g| g.bypass && (g.first..=g.last).contains(&b));
                     if let Some(g) = lane.phases.get_mut(group).filter(|g| g.first == b) {
                         g.piece_in = g.k_in.energy(l, r);
                     }
-                    block.process(l, r);
+                    if !off {
+                        block.process(l, r);
+                    }
                     if let Some(g) = lane.phases.get_mut(group).filter(|g| g.last == b) {
                         let out = g.k_out.energy(l, r);
-                        if out > SOUNDING * (l.len() + r.len()) as f64 {
+                        g.level = out / (l.len() + r.len()).max(1) as f64;
+                        if out > SOUNDING * (l.len() + r.len()) as f64 && !off {
                             g.energy_in += g.piece_in;
                             g.energy_out += out;
                         }
                         // Gain neutral: the phase's make-up.
-                        if g.trim != 1.0 {
+                        if g.trim != 1.0 && !off {
                             let t = g.trim;
                             l.iter_mut().chain(r.iter_mut()).for_each(|s| *s *= t);
                         }
@@ -1601,12 +1747,23 @@ impl Graph {
             return;
         };
         let (keys, remote, count) = (&self.remote_keys, &mut self.remote, &mut self.remote_count);
+        let (piece_midi, ten) = (&mut self.piece_midi, self.ten_seconds);
         session.hits.drain(cursor, |h| {
-            if keys.iter().any(|(_, _, p)| *p == h.piece) {
-                if let Some(slot) = remote.get_mut(*count) {
-                    *slot = (h.piece, h.frame, h.velocity);
-                    *count += 1;
+            if !keys.iter().any(|(_, _, p)| *p == h.piece) {
+                return;
+            }
+            // A piece with notes is keyed by them: its trigger's detected
+            // hits are the fallback, for when the notes stop.
+            if let Some(m) = piece_midi.iter_mut().find(|(p, _)| *p == h.piece) {
+                if h.midi {
+                    m.1 = h.frame.max(1);
+                } else if m.1 > 0 && h.frame < m.1.saturating_add(ten) {
+                    return;
                 }
+            }
+            if let Some(slot) = remote.get_mut(*count) {
+                *slot = (h.piece, h.frame, h.velocity, h.midi);
+                *count += 1;
             }
         });
     }
@@ -1617,18 +1774,24 @@ impl Graph {
 fn give_remote_hits(
     lanes: &mut [Lane],
     keys: &[(usize, usize, u16)],
-    remote: &[(u16, u64, f32)],
+    key_last: &mut [(u64, bool)],
+    remote: &[(u16, u64, f32, bool)],
     heard: u64,
     lane: usize,
     len: usize,
 ) {
-    for (l, b, piece) in keys.iter().filter(|k| k.0 == lane) {
+    for ((l, b, piece), last) in keys
+        .iter()
+        .zip(key_last.iter_mut())
+        .filter(|(k, _)| k.0 == lane)
+    {
         let Some(block) = lanes.get_mut(*l).and_then(|x| x.blocks.get_mut(*b)) else {
             continue;
         };
-        for (_, frame, velocity) in remote.iter().filter(|h| h.0 == *piece) {
+        for (_, frame, velocity, midi) in remote.iter().filter(|h| h.0 == *piece) {
             if let Some(at) = frame.checked_sub(heard).filter(|at| *at < len as u64) {
                 block.hit(u32::try_from(at).unwrap_or(0), *velocity);
+                *last = ((*frame).max(1), *midi);
             }
         }
     }
