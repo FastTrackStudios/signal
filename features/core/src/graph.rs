@@ -103,6 +103,11 @@ struct Lane {
     /// Hits from MIDI, for the next piece.
     midi_hits: [Hit; MAX_HITS],
     midi_hit_count: usize,
+    /// Hits placed past the end of the piece they were found in (a
+    /// detection's lag back, the lookahead on): `(song frame, velocity,
+    /// midi)`, for the piece that hears them.
+    later: [(u64, f32, bool); MAX_HITS],
+    later_count: usize,
 }
 
 /// One mix phase's run of blocks in a lane: `first..=last`, its
@@ -629,6 +634,8 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
             hit_count: 0,
             midi_hits: [Hit::default(); MAX_HITS],
             midi_hit_count: 0,
+            later: [(0, 0.0, false); MAX_HITS],
+            later_count: 0,
         });
     }
 
@@ -1378,6 +1385,7 @@ impl Graph {
             }
             lane.hit_count = 0;
             lane.midi_hit_count = 0;
+            lane.later_count = 0;
             lane.in_delay.clear();
             lane.to_delay.clear();
             lane.out_delay.clear();
@@ -1388,7 +1396,17 @@ impl Graph {
         for d in &mut self.delayed {
             d.fill(0.0);
         }
+        // As built: no hit from before the reset is heard after it (those
+        // the session's ports published and this one hadn't read yet are
+        // skipped), and nothing remembers when the last ones came.
         self.remote_count = 0;
+        if let (Some(session), Some(cursor)) = (self.session.as_ref(), self.cursor.as_mut()) {
+            *cursor = session.hits.cursor();
+        }
+        self.key_last.fill((0, false));
+        for m in &mut self.piece_midi {
+            m.1 = 0;
+        }
     }
 
     /// Process `start..start + len` of `io` in place (`len` ≤
@@ -1491,28 +1509,32 @@ impl Graph {
                     pr.copy_from_slice(r);
                 }
             }
-            // This lane's hits: from MIDI, then from its trigger.
+            // This lane's hits: those an earlier piece placed in this one,
+            // then from MIDI, then from its trigger. Each is published to
+            // the session at its song frame as it's found, and heard in the
+            // piece it falls in: where a hit lands is the song's, not where
+            // a host's block happens to end.
+            let heard = self.clock.saturating_sub(la as u64);
             lane.hit_count = 0;
+            take_later(lane, heard, len);
             let midi = core::mem::take(&mut lane.midi_hit_count);
             for k in 0..midi {
-                if let (Some(h), Some(slot)) = (
-                    lane.midi_hits.get(k).copied(),
-                    lane.hits.get_mut(lane.hit_count),
-                ) {
+                if let Some(h) = lane.midi_hits.get(k).copied() {
                     // A MIDI hit is on time: where the lanes hear it.
-                    let at = usize::try_from(h.offset)
-                        .unwrap_or(0)
-                        .saturating_add(la)
-                        .min(len.saturating_sub(1));
-                    *slot = Hit {
-                        offset: u32::try_from(at).unwrap_or(0),
-                        ..h
-                    };
-                    lane.hit_count += 1;
+                    let at = u64::from(h.offset).saturating_add(la as u64);
+                    place(
+                        lane,
+                        self.session.as_deref(),
+                        heard,
+                        len,
+                        at,
+                        h.velocity,
+                        true,
+                    );
                 }
             }
             #[cfg(feature = "fx")]
-            if let Some(det) = lane.detector.as_mut() {
+            if lane.detector.is_some() {
                 // The lane's host input on time (`lookahead` ahead of what
                 // the lanes hear); a lane fed only by others, its input.
                 let pre = (
@@ -1529,34 +1551,30 @@ impl Graph {
                 // the onset is `lookahead - lag` after the detection. Without
                 // the lookahead, `lag` back, clamped to the piece.
                 let ahead = if ahead { la } else { 0 };
-                let last = len.saturating_sub(1);
-                for h in det.detect(dl, dr) {
-                    if let Some(slot) = lane.hits.get_mut(lane.hit_count) {
-                        let lag = usize::try_from(h.lag).unwrap_or(0);
-                        let at = usize::try_from(h.offset)
-                            .unwrap_or(0)
-                            .saturating_add(ahead)
-                            .saturating_sub(lag)
-                            .min(last);
-                        *slot = Hit {
-                            offset: u32::try_from(at).unwrap_or(0),
-                            velocity: h.velocity,
-                            midi: false,
-                        };
-                        lane.hit_count += 1;
+                let mut found = [(0_u64, 0.0_f32); MAX_HITS];
+                let mut n = 0;
+                if let Some(det) = lane.detector.as_mut() {
+                    for h in det.detect(dl, dr) {
+                        if let Some(slot) = found.get_mut(n) {
+                            let lag = u64::from(h.lag);
+                            *slot = (
+                                (u64::from(h.offset) + ahead as u64).saturating_sub(lag),
+                                h.velocity,
+                            );
+                            n += 1;
+                        }
                     }
                 }
-            }
-            // To the session, stamped with the onset's song position.
-            if let Some(session) = self.session.as_ref() {
-                let heard = self.clock.saturating_sub(la as u64);
-                for h in lane.hits.iter().take(lane.hit_count) {
-                    session.hits.publish(SessionHit {
-                        piece: lane.piece,
-                        velocity: h.velocity,
-                        frame: heard.saturating_add(u64::from(h.offset)),
-                        midi: h.midi,
-                    });
+                for &(at, velocity) in found.iter().take(n) {
+                    place(
+                        lane,
+                        self.session.as_deref(),
+                        heard,
+                        len,
+                        at,
+                        velocity,
+                        false,
+                    );
                 }
             }
             // Blocks keyed to a lane: its pre-chain audio, and its hits.
@@ -1808,6 +1826,70 @@ impl Graph {
             }
         });
     }
+}
+
+/// A hit found in the piece that hears `heard..heard + len`, `at` frames
+/// in (past its end when it is placed later): published to the session at
+/// its song frame, and heard in the piece it falls in.
+fn place(
+    lane: &mut Lane,
+    session: Option<&Session>,
+    heard: u64,
+    len: usize,
+    at: u64,
+    velocity: f32,
+    midi: bool,
+) {
+    let frame = heard.saturating_add(at);
+    if let Some(session) = session {
+        session.hits.publish(SessionHit {
+            piece: lane.piece,
+            velocity,
+            frame,
+            midi,
+        });
+    }
+    if at < len as u64 {
+        if let Some(slot) = lane.hits.get_mut(lane.hit_count) {
+            *slot = Hit {
+                offset: u32::try_from(at).unwrap_or(0),
+                velocity,
+                midi,
+            };
+            lane.hit_count += 1;
+        }
+    } else if let Some(slot) = lane.later.get_mut(lane.later_count) {
+        *slot = (frame, velocity, midi);
+        lane.later_count += 1;
+    }
+}
+
+/// The hits an earlier piece placed in this one (`heard..heard + len`),
+/// to the lane's hits; the later ones kept.
+fn take_later(lane: &mut Lane, heard: u64, len: usize) {
+    let end = heard.saturating_add(len as u64);
+    let mut kept = 0;
+    for k in 0..lane.later_count {
+        let Some((frame, velocity, midi)) = lane.later.get(k).copied() else {
+            continue;
+        };
+        if frame >= end {
+            if let Some(slot) = lane.later.get_mut(kept) {
+                *slot = (frame, velocity, midi);
+            }
+            kept += 1;
+        } else if let (Some(at), Some(slot)) =
+            (frame.checked_sub(heard), lane.hits.get_mut(lane.hit_count))
+        {
+            *slot = Hit {
+                offset: u32::try_from(at).unwrap_or(0),
+                velocity,
+                midi,
+            };
+            lane.hit_count += 1;
+        }
+    }
+    lane.later_count = kept;
 }
 
 /// Hand lane `lane`'s remote-keyed blocks the hits due in this piece,

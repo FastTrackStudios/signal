@@ -93,7 +93,7 @@ signal-core = { path = "features/core", default-features = false }
 # (studio#683, daw#50). dsp-core directly for its numeric helpers, at the
 # rev plugins pins. Renamed: the rest of the tree still takes crates of the
 # same names from fts-fx at the rev above.
-plugin-processors = { git = "https://github.com/FastTrackStudios/plugins", rev = "0f07b843abdce7e512b151af53b055efa503c44e", default-features = false }
+plugin-processors = { git = "https://github.com/FastTrackStudios/plugins", rev = "a016383e13aa97d0c049145f6abe7c08339ff243", default-features = false }
 signal-dsp-core = { package = "dsp-core", git = "https://github.com/FastTrackStudios/dsp", rev = "75d475b01e96eed4a5ddad8ad6799396f220dd82", default-features = false }
 # Float maths without `std`, for signal-core's `no_std` code.
 libm = { version = "0.2", default-features = false }
