@@ -706,10 +706,15 @@ fn insert_at(lane: &LaneSpec, phase: Phase, after: Option<&str>) -> usize {
     }) {
         return i + 1;
     }
+    // After the sources (a sampler, phase-less) at least: a block before
+    // the sampler would process silence.
     lane.blocks
         .iter()
         .rposition(|b| b.phase.is_some_and(|p| p <= phase))
-        .map_or(0, |i| i + 1)
+        .map_or_else(
+            || lane.blocks.iter().take_while(|b| b.phase.is_none()).count(),
+            |i| i + 1,
+        )
 }
 
 /// An id no block in `lane` has: `kind`, `kind_2`, …
@@ -1095,3 +1100,26 @@ pub const HOST_EVENTS: daw_clap_ext::sys::fts_plugin_host_events =
     daw_clap_ext::sys::fts_plugin_host_events {
         on_event: Some(on_event),
     };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_block_added_to_a_sampler_port_goes_after_the_sampler() {
+        let lane = LaneSpec {
+            blocks: vec![BlockSpec::signal("drum", "drum")],
+            ..LaneSpec::default()
+        };
+        assert_eq!(insert_at(&lane, Phase::Rescue, None), 1);
+        let lane = LaneSpec {
+            blocks: vec![
+                BlockSpec::signal("drum", "drum"),
+                BlockSpec::signal("eq", "eq").phase(Phase::Tone),
+            ],
+            ..LaneSpec::default()
+        };
+        assert_eq!(insert_at(&lane, Phase::Rescue, None), 1);
+        assert_eq!(insert_at(&lane, Phase::Polish, None), 2);
+    }
+}
