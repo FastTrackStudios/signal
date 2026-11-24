@@ -8,7 +8,7 @@
 //! preset; a different state renames them, and a host that caches
 //! parameter info re-reads it after loading one.
 
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use std::sync::{Arc, PoisonError, RwLock};
 
 use signal_core::graph::Graph;
@@ -35,10 +35,19 @@ pub struct SlotDef {
     pub name: String,
 }
 
-/// The running state's slots.
-#[derive(Clone, Debug, Default)]
+/// The running state's slots, and its lanes' phase make-ups.
+#[derive(Debug, Default)]
 pub struct Table {
     pub slots: Vec<SlotDef>,
+    /// Each lane's name, and per lane and phase (`Phase::ALL` order) its
+    /// make-up in dB as f32 bits (NaN: the lane has no such phase). The
+    /// audio thread writes them as it calibrates; a save reads them.
+    pub lanes: Vec<String>,
+    pub trims: Vec<AtomicU32>,
+}
+
+fn phase_index(phase: Phase) -> usize {
+    Phase::ALL.iter().position(|p| *p == phase).unwrap_or(0)
 }
 
 /// The slot id `b001`…, for slot `i`.
@@ -134,12 +143,55 @@ impl Table {
                             slots = SLOTS,
                             "more block parameters than slots: the rest aren't shown"
                         );
-                        return Self { slots };
+                        return Self::with_trims(slots, graph);
                     }
                 }
             }
         }
-        Self { slots }
+        Self::with_trims(slots, graph)
+    }
+
+    fn with_trims(slots: Vec<SlotDef>, graph: &Graph) -> Self {
+        let lanes: Vec<String> = (0..graph.lane_count())
+            .map(|l| graph.lane_name(l).unwrap_or("").to_owned())
+            .collect();
+        let trims: Vec<AtomicU32> = (0..lanes.len() * Phase::ALL.len())
+            .map(|_| AtomicU32::new(f32::NAN.to_bits()))
+            .collect();
+        let table = Self {
+            slots,
+            lanes,
+            trims,
+        };
+        table.store_trims(graph);
+        table
+    }
+
+    /// Keep `graph`'s phase make-ups. Allocates nothing: the audio thread
+    /// calls it as it calibrates.
+    pub fn store_trims(&self, graph: &Graph) {
+        graph.each_trim(|lane, phase, db| {
+            if let Some(t) = self.trims.get(lane * Phase::ALL.len() + phase_index(phase)) {
+                t.store(db.to_bits(), Ordering::Release);
+            }
+        });
+    }
+
+    /// Lane `lane`'s make-ups: `(phase, dB)`.
+    #[must_use]
+    pub fn trims_of(&self, lane: usize) -> Vec<(Phase, f32)> {
+        Phase::ALL
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                let v = f32::from_bits(
+                    self.trims
+                        .get(lane * Phase::ALL.len() + i)?
+                        .load(Ordering::Acquire),
+                );
+                (!v.is_nan()).then_some((*p, v))
+            })
+            .collect()
     }
 
     /// The normalized value of each slot in `graph` now.

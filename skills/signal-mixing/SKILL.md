@@ -26,7 +26,9 @@ by the same slugs), so a chain built here reads the same there.
 3. **Make every phase gain neutral.** Render the song, read what each
    phase did (`Graph::phase_levels`), apply the make-ups
    (`graph::apply_neutral_trims`), and repeat until the trims stop moving
-   (three passes; `SIGNAL_KIT_CALIBRATE=3` in `examples/render_kit.rs`).
+   (three passes; `SIGNAL_KIT_CALIBRATE=3` in `examples/render_kit.rs`,
+   or each instance's `Calibrate` switch live). The meters are K-weighted,
+   so neutral means 0 LU on a loudness meter.
    Done when the last pass moves no trim more than 0.25 dB and nothing
    hit the ±24 dB cap (a capped phase is a broken block: fix it).
 4. **Gain stage, then balance on the faders** (`LaneSpec::gain_db`). Take
@@ -98,6 +100,16 @@ sounding, so a gate's job (taking the bleed away) is not made up for.
   does it: trigger hits, the close mics summed at their polarity).
 - The `nonlinear` reverb gates its tail on its input level: a quiet
   send never opens it.
+- Calibrate at the level the host plays each track. A comped session's
+  clip gain can sit 10–25 dB over the raw stems, and a compressor's,
+  gate's or saturator's make-up only holds at the level it was measured
+  at: give the render tool each track's offset (`SIGNAL_KIT_INPUT_GAINS`,
+  from Studio's raw LUFS), or switch on each instance's `Calibrate` while
+  the song plays.
+- A dead trigger (a tom's at the noise floor) can't key anything. Its
+  gate opens on its own input after 10 s without a hit; a drum that is
+  played but whose trigger is dead is keyed from its own mic, low-passed
+  (`HitDetector::with_low_pass`).
 
 ## References
 

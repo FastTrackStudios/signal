@@ -45,6 +45,29 @@ const TRACKS: &[&str] = &[
     "T3 Trig", "T4 Trig", "OHs", "Hi Hat", "Ride", "Rooms",
 ];
 
+/// Studio's track for each of [`TRACKS`], in order: what a gain in
+/// `SIGNAL_KIT_INPUT_GAINS` is named by.
+const STUDIO_TRACKS: &[&str] = &[
+    "Drums/Kick/Sum/In",
+    "Drums/Kick/Sum/Out",
+    "Drums/Kick/Sum/Trig",
+    "Drums/Snare/Sum/Top",
+    "Drums/Snare/Sum/Bottom",
+    "Drums/Snare/Sum/Trig",
+    "Drums/Toms/Tom 1/T1",
+    "Drums/Toms/Tom 2/T2",
+    "Drums/Toms/Tom 3/T3",
+    "Drums/Toms/Tom 4/T4",
+    "Drums/Toms/Tom 1/T1 Trig",
+    "Drums/Toms/Tom 2/T2 Trig",
+    "Drums/Toms/Tom 3/T3 Trig",
+    "Drums/Toms/Tom 4/T4 Trig",
+    "Drums/Cymbals/OHs",
+    "Drums/Cymbals/Hi Hat",
+    "Drums/Cymbals/Ride",
+    "Drums/Rooms",
+];
+
 /// The library's pieces this kit uses: a matched Tama Starclassic Bubinga
 /// kit, and a Tama snare.
 const KICK: &str = "MM2 22x18-Tama-Starclassic-Bubinga-Kick";
@@ -60,6 +83,8 @@ struct Stem {
     reader: hound::WavReader<std::io::BufReader<std::fs::File>>,
     channels: usize,
     scale: f32,
+    /// The level the host plays it at (its clip gain), linear.
+    gain: f32,
 }
 
 impl Stem {
@@ -82,6 +107,7 @@ impl Stem {
             channels: usize::from(spec.channels),
             scale,
             reader,
+            gain: 1.0,
         })
     }
 
@@ -105,7 +131,7 @@ impl Stem {
                         .map_or(0.0, |s| s as f32 * self.scale)
                 };
                 if let Some(buf) = out.get_mut(c) {
-                    buf[frame] = v;
+                    buf[frame] = v * self.gain;
                 }
             }
         }
@@ -260,6 +286,20 @@ fn render(
         .iter()
         .map(|p| Stem::open(p))
         .collect::<Result<Vec<_>, _>>()?;
+    // `SIGNAL_KIT_INPUT_GAINS=<json>`: `{"<Studio track>": dB}`, each stem
+    // at the level the host plays it (a comped session's clip gain), so the
+    // level-dependent blocks are calibrated where they will run.
+    if let Ok(file) = std::env::var("SIGNAL_KIT_INPUT_GAINS") {
+        let gains: std::collections::HashMap<String, Option<f32>> = serde_json::from_str(
+            &std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?,
+        )
+        .map_err(|e| format!("{file}: {e}"))?;
+        for (stem, track) in stems_open.iter_mut().zip(STUDIO_TRACKS) {
+            if let Some(Some(db)) = gains.get(*track) {
+                stem.gain = 10f32.powf(db / 20.0);
+            }
+        }
+    }
     let inputs: usize = stems_open.iter().map(|s| s.channels.max(1)).sum();
     if inputs != usize::from(preset.inputs) {
         return Err(format!(

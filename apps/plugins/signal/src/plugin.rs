@@ -61,6 +61,9 @@ const VST3_ID: [u8; 16] = *b"FtsSignalDev0001";
 #[cfg(not(feature = "dev"))]
 const VST3_ID: [u8; 16] = *b"FtsSignalPlug001";
 
+/// How often a calibrating instance sets its make-ups, frames.
+const CALIBRATE_STEP: usize = 24_000;
+
 /// The most MIDI events taken per block; more are dropped.
 const MIDI_CAPACITY: usize = 1024;
 
@@ -102,6 +105,13 @@ pub struct SignalParams {
     /// nothing saved yet.
     pub state: StateField,
     pub shown: Arc<Shown>,
+    /// On: every phase is made gain neutral as the song plays (each
+    /// instance on its own input, as its host routes it); off, the
+    /// make-ups stay, and are saved.
+    pub calibrate: BoolParam,
+    /// Called when a state is loaded: builds it at once, so its slots are
+    /// there before any process call.
+    on_load: std::sync::OnceLock<Box<dyn Fn() + Send + Sync>>,
 }
 
 /// The state key: the field the state blob is persisted under.
@@ -151,6 +161,11 @@ unsafe impl Params for SignalParams {
                 String::new(),
             ),
             ("bypass".to_owned(), self.bypass.as_ptr(), String::new()),
+            (
+                "calibrate".to_owned(),
+                self.calibrate.as_ptr(),
+                String::new(),
+            ),
         ];
         let macros = [
             &self.macro_1,
@@ -188,6 +203,9 @@ unsafe impl Params for SignalParams {
             .and_then(|d| nice_plug::params::persist::deserialize_field::<String>(d).ok())
         {
             self.state.set(text);
+            if let Some(load) = self.on_load.get() {
+                load();
+            }
         }
     }
 }
@@ -239,6 +257,8 @@ impl Default for SignalParams {
         Self {
             slots: (0..SLOTS).map(|i| slot_param(i, &shown)).collect(),
             shown,
+            calibrate: BoolParam::new("Calibrate (gain neutral)", false),
+            on_load: std::sync::OnceLock::new(),
             input_gain: float_param(host::INPUT_GAIN),
             output_gain: float_param(host::OUTPUT_GAIN),
             bypass: BoolParam::new(host::BYPASS.name, false).make_bypass(),
@@ -301,6 +321,20 @@ impl SignalParams {
                 b.params.insert(slot.spec.id.to_owned(), value);
             }
         }
+        // The phase make-ups, as calibrated.
+        for (l, name) in table.lanes.iter().enumerate() {
+            let Some(lane) = state.preset.lanes.iter_mut().find(|x| &x.name == name) else {
+                continue;
+            };
+            for (phase, gain_db) in table.trims_of(l) {
+                match lane.trims.iter_mut().find(|t| t.phase == phase) {
+                    Some(t) => t.gain_db = gain_db,
+                    None => lane
+                        .trims
+                        .push(signal_core::state::PhaseTrim { phase, gain_db }),
+                }
+            }
+        }
         self.state
             .store_running(String::from_utf8(state.to_blob()).unwrap_or_default());
     }
@@ -353,6 +387,35 @@ struct Shared {
     config: Mutex<Option<(f32, usize)>>,
     /// A rebuilt state's slots, for the audio thread.
     tables: Mailbox,
+    /// The state generation the newest build covers.
+    built: AtomicU64,
+}
+
+/// Build the state in the field now (main or background thread): show
+/// its slots, hand them and the graph to the audio side. Inactive, a
+/// graph is built only to show the slots (activation builds the one that
+/// runs).
+fn rebuild(shared: &Shared) {
+    let generation = shared.params.state.generation();
+    let config = *shared.config.lock().unwrap_or_else(PoisonError::into_inner);
+    let (sr, max_block) = config.unwrap_or((48_000.0, 1024));
+    let (state, graph, report) = build_from(&shared.params.state.text(), sr, max_block);
+    let table = Arc::new(Table::of(&graph));
+    shared.params.show(table.clone(), &table.values(&graph));
+    shared.built.store(generation, Ordering::Release);
+    if config.is_none() {
+        return;
+    }
+    shared.tables.post(table);
+    let mut controller = shared
+        .controller
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if controller.install(graph).is_err() {
+        tracing::error!("restored state not installed: the processor's queue is full");
+        return;
+    }
+    tracing::info!(preset = %state.preset.name, blocks = report.blocks.len(), all_active = report.all_active(), "{PLUGIN_NAME}: state restored while active");
 }
 
 /// Background work: rebuild the graph from the state field.
@@ -375,6 +438,9 @@ pub struct FtsSignal {
     applied: Vec<u32>,
     /// The latency the host was told.
     latency: u32,
+    /// Calibrating: since when (frames), and when it last stepped.
+    calibrating: bool,
+    calibrate_frames: usize,
 }
 
 impl Default for FtsSignal {
@@ -386,7 +452,14 @@ impl Default for FtsSignal {
             controller: Mutex::new(controller),
             config: Mutex::new(None),
             tables: Mailbox::default(),
+            built: AtomicU64::new(0),
         });
+        let weak = Arc::downgrade(&shared);
+        let _ = params.on_load.set(Box::new(move || {
+            if let Some(shared) = weak.upgrade() {
+                rebuild(&shared);
+            }
+        }));
         Self {
             params,
             shared,
@@ -399,6 +472,8 @@ impl Default for FtsSignal {
             table: Arc::new(Table::default()),
             applied: vec![0; SLOTS],
             latency: 0,
+            calibrating: false,
+            calibrate_frames: 0,
         }
     }
 }
@@ -502,26 +577,7 @@ impl Plugin for FtsSignal {
 
     fn task_executor(&mut self) -> TaskExecutor<Self> {
         let shared = self.shared.clone();
-        Box::new(move |Rebuild| {
-            let Some((sr, max_block)) =
-                *shared.config.lock().unwrap_or_else(PoisonError::into_inner)
-            else {
-                return;
-            };
-            let (state, graph, report) = build_from(&shared.params.state.text(), sr, max_block);
-            let table = Arc::new(Table::of(&graph));
-            shared.params.show(table.clone(), &table.values(&graph));
-            shared.tables.post(table);
-            let mut controller = shared
-                .controller
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            if controller.install(graph).is_err() {
-                tracing::error!("restored state not installed: the processor's queue is full");
-                return;
-            }
-            tracing::info!(preset = %state.preset.name, blocks = report.blocks.len(), all_active = report.all_active(), "{PLUGIN_NAME}: state restored while active");
-        })
+        Box::new(move |Rebuild| rebuild(&shared))
     }
 
     fn activate(
@@ -555,6 +611,7 @@ impl Plugin for FtsSignal {
         self.table = table;
         drop(self.processor.install(graph));
         self.built_generation = generation;
+        self.shared.built.store(generation, Ordering::Release);
         self.last = [f32::NAN; 3 + MACROS];
         self.latency = self.processor.latency();
         context.set_latency_samples(self.latency);
@@ -578,6 +635,12 @@ impl Plugin for FtsSignal {
         true
     }
 
+    /// The host's reset (a transport jump, a render primed again): every
+    /// block's tails and envelopes cleared, the graph's delays too.
+    fn reset(&mut self) {
+        self.processor.reset();
+    }
+
     fn process(
         &mut self,
         buffer: &mut Buffer,
@@ -585,11 +648,14 @@ impl Plugin for FtsSignal {
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         let frames = buffer.samples();
-        // A state restored while active: rebuild off this thread.
+        // A state restored while active and not built where it was loaded:
+        // rebuild off this thread.
         let generation = self.params.state.generation();
         if generation != self.built_generation {
             self.built_generation = generation;
-            context.execute_background(Rebuild);
+            if self.shared.built.load(Ordering::Acquire) != generation {
+                context.execute_background(Rebuild);
+            }
         }
         // The instance's parameters, as events where they changed.
         self.host_events.clear();
@@ -707,6 +773,26 @@ impl Plugin for FtsSignal {
             .process(io, self.in_channels, frames, &self.midi, &self.host_events);
         // A state restored while active builds a new graph: its latency
         // (a trigger's lookahead, a session's) to the host.
+        // Calibrating: every phase made gain neutral on what it has heard
+        // since the switch went on, every half second.
+        let calibrate = self.params.calibrate.value();
+        if calibrate && !self.calibrating {
+            if let Some(g) = self.processor.graph_mut() {
+                g.clear_phase_levels();
+            }
+            self.calibrate_frames = 0;
+        }
+        self.calibrating = calibrate;
+        if calibrate {
+            self.calibrate_frames += frames;
+            if self.calibrate_frames >= CALIBRATE_STEP {
+                self.calibrate_frames = 0;
+                if let Some(g) = self.processor.graph_mut() {
+                    g.calibrate_phases();
+                    self.table.store_trims(g);
+                }
+            }
+        }
         let latency = self.processor.latency();
         if latency != self.latency {
             self.latency = latency;

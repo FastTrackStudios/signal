@@ -181,3 +181,103 @@ fn a_trigger_on_one_track_keys_the_gate_on_another() {
     assert!(shut_again < open * 0.1, "and after: {shut_again}");
     assert!(peak(&trig_out) < 1e-6, "the trigger track is heard nowhere");
 }
+
+/// What a host does with a state (Studio's FX_STATE_SET): into an instance
+/// that's already running, then its parameter info read at once, before
+/// any process call, the transport stopped. The block slots are there by
+/// name, value and text; a slot set takes, and is in the state it saves.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn a_state_loaded_while_active_shows_its_slots_at_once() {
+    let preset = drum_kit(&KitPieces::default());
+    let path = bundle();
+    let state = |port: &str| {
+        clap_state(&SignalState {
+            instance: Instance::Port(SessionLink {
+                session: SessionId(format!("slots-{}", std::process::id())),
+                port: PortName(port.into()),
+            }),
+            ..SignalState::new(preset.clone())
+        })
+    };
+    // Active first, a fresh instance; then the state.
+    let mut p = load_plugin(&path.to_string_lossy())
+        .expect("loads")
+        .expect("a CLAP");
+    p.prepare(SR, BLOCK as u32).expect("activates");
+    p.load_state(&state("Drums/Kick/Sum/In"))
+        .expect("takes the state");
+    let params = p.params();
+    let named: Vec<&str> = params
+        .iter()
+        .map(|i| i.name.as_str())
+        .filter(|n| n.contains(" · "))
+        .collect();
+    println!(
+        "Drums/Kick/Sum/In, loaded while active: {} block params, {:?}…",
+        named.len(),
+        &named[..named.len().min(6)]
+    );
+    assert!(named.contains(&"Rescue · EQ · Low Cut"), "{named:?}");
+    assert!(named.contains(&"Tone · Comp · Ratio"), "{named:?}");
+    let ratio = params
+        .iter()
+        .find(|i| i.name == "Tone · Comp · Ratio")
+        .expect("ratio")
+        .id;
+    let now = p.param_value(ratio).expect("a value");
+    assert_eq!(
+        p.value_to_text(ratio, now).as_deref(),
+        Some("3.0"),
+        "the state's ratio"
+    );
+
+    // Set it, as FX_SET does: it takes, and the saved state has it.
+    let to = p.text_to_value(ratio, "6").expect("parses");
+    p.process_block(
+        &[0.0; BLOCK],
+        &[0.0; BLOCK],
+        &mut [0.0; BLOCK],
+        &mut [0.0; BLOCK],
+        &PluginEvents {
+            params: &[(ratio, to)],
+            ..PluginEvents::EMPTY
+        },
+    )
+    .expect("processes");
+    let set = p.param_value(ratio).unwrap_or(0.0);
+    assert_eq!(p.value_to_text(ratio, set).as_deref(), Some("6.0"));
+    let saved = p.save_state().expect("saves");
+    let len = u64::from_le_bytes(saved[..8].try_into().expect("8")) as usize;
+    let json: serde_json::Value = serde_json::from_slice(&saved[8..8 + len]).expect("json");
+    let inner: SignalState = SignalState::from_blob(
+        serde_json::from_str::<String>(json["fields"]["signal-state"].as_str().expect("field"))
+            .expect("string")
+            .as_bytes(),
+    )
+    .expect("a Signal state");
+    let comp = inner
+        .preset
+        .lanes
+        .iter()
+        .find(|l| l.name == "Drums/Kick/Sum/In")
+        .and_then(|l| l.blocks.iter().find(|b| b.id == "comp"))
+        .expect("the comp");
+    assert!(
+        (comp.params["ratio"] - 6.0).abs() < 1e-3,
+        "{:?}",
+        comp.params
+    );
+
+    // Before activation: the same, from a provisional build.
+    let mut q = load_plugin(&path.to_string_lossy())
+        .expect("loads")
+        .expect("a CLAP");
+    q.load_state(&state("Drums/Toms/Tom 1"))
+        .expect("takes the state");
+    let names: Vec<String> = q.params().into_iter().map(|i| i.name).collect();
+    assert!(
+        names.iter().any(|n| n == "Rescue · Gate · Threshold"),
+        "{names:?}"
+    );
+}
