@@ -462,7 +462,7 @@ fn rebuild(shared: &Shared, on_main: bool) {
     } else {
         None
     };
-    let (state, graph, report) = match client {
+    let (state, mut graph, report) = match client {
         Some(c) => build_from(
             &shared.params.state.text(),
             sr,
@@ -471,6 +471,7 @@ fn rebuild(shared: &Shared, on_main: bool) {
         ),
         None => build_from(&shared.params.state.text(), sr, max_block, &DiskHost),
     };
+    crate::offline::arm(shared, &state, &mut graph);
     let table = Arc::new(Table::of(&graph));
     shared.params.show(table.clone(), &table.values(&graph));
     shared.built.store(generation, Ordering::Release);
@@ -703,7 +704,7 @@ impl Plugin for FtsSignal {
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
         let text = self.params.state.text();
-        let (state, graph, report) = match client {
+        let (state, mut graph, report) = match client {
             Some(c) => build_from(
                 &text,
                 buffer_config.sample_rate,
@@ -712,6 +713,7 @@ impl Plugin for FtsSignal {
             ),
             None => build_from(&text, buffer_config.sample_rate, max_block, &DiskHost),
         };
+        crate::offline::arm(&self.shared, &state, &mut graph);
         let table = Arc::new(Table::of(&graph));
         let values = table.values(&graph);
         self.params.show(table.clone(), &values);
@@ -893,6 +895,17 @@ impl Plugin for FtsSignal {
                     slot.param,
                     ParamChange::Set(slot.spec.denormalize(n)),
                 );
+                // An offline block's lane, played by the host: its value is
+                // the one at this block's start, so it lands now (an apply
+                // stage otherwise ramps to a value over the next piece, which
+                // is what Signal's own playback asks of it).
+                if self
+                    .processor
+                    .graph()
+                    .is_some_and(|g| g.is_offline(slot.lane, slot.block))
+                {
+                    self.processor.settle(slot.lane, slot.block);
+                }
             }
         }
         let io = buffer.as_slice();

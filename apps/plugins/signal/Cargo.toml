@@ -25,7 +25,7 @@ dev = []
 nice-plug.workspace = true
 
 # The one processor (signal#26): rigs, chains, the session.
-signal-core = { workspace = true, features = ["std", "fx", "nam"] }
+signal-core = { workspace = true, features = ["std", "fx", "nam", "offline"] }
 # The sampler engine, as the desktop `sampler` block.
 sampler = { workspace = true }
 

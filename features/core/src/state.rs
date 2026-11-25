@@ -280,6 +280,11 @@ pub struct BlockSpec {
     /// method (a rig, an instrument), whose blocks run as they are.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<Phase>,
+    /// An offline block's result and what it was made from
+    /// ([`crate::offline`]). `None` on a realtime block, and on an offline
+    /// one never analysed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analysis: Option<crate::offline::Analysis>,
 }
 
 impl BlockSpec {
@@ -298,6 +303,7 @@ impl BlockSpec {
             requires: None,
             fallback: None,
             phase: None,
+            analysis: None,
         }
     }
 

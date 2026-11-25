@@ -340,6 +340,7 @@ fn signal_1_shows_the_chain_and_midi_plays_and_keys_the_kit() {
     let load = |port: &str| {
         let options = daw::plugin::LoadOptions {
             actions: Some(host.clone()),
+            ..daw::plugin::LoadOptions::default()
         };
         let mut p = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
             .expect("loads")
@@ -656,6 +657,7 @@ fn the_hosts_placed_hits_key_the_gate() {
     let host = std::sync::Arc::new(TestHost::default());
     let options = daw::plugin::LoadOptions {
         actions: Some(host.clone()),
+        ..daw::plugin::LoadOptions::default()
     };
     let mut kick = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
         .expect("loads")
