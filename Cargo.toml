@@ -119,6 +119,10 @@ signal-core = { path = "features/core", default-features = false }
 # same names from fts-fx at the rev above.
 plugin-processors = { git = "https://github.com/FastTrackStudios/plugins", rev = "8a3abfe4639b4db9f64a452bf90b64ec96f5c577", default-features = false }
 signal-dsp-core = { package = "dsp-core", git = "https://github.com/FastTrackStudios/dsp", rev = "75d475b01e96eed4a5ddad8ad6799396f220dd82", default-features = false }
+# The dsp crate itself, at the same rev, for the offline blocks' analyses
+# (`level::envelope`: the vocal leveler's curves, as Studio's VOCAL_LEVEL
+# makes them).
+signal-dsp = { package = "dsp", git = "https://github.com/FastTrackStudios/dsp", rev = "75d475b01e96eed4a5ddad8ad6799396f220dd82", default-features = false }
 # Float maths without `std`, for signal-core's `no_std` code.
 libm = { version = "0.2", default-features = false }
 sampler = { path = "features/sampler" }

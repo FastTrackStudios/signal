@@ -9,7 +9,8 @@
 //! frees memory either.
 //!
 //! The processor splits each host block at every change point (a host
-//! parameter or macro change, a MIDI event) and at [`crate::MAX_BLOCK`], so
+//! parameter or macro change, a MIDI event, a breakpoint of an offline
+//! block's lane it plays itself) and at [`crate::MAX_BLOCK`], so
 //! changes are sample-accurate and land at the same frame whichever
 //! backend a block runs on.
 
@@ -320,6 +321,14 @@ impl Processor {
         }
     }
 
+    /// Block `(lane, block)` takes its parameters' values now
+    /// ([`Graph::settle`]).
+    pub fn settle(&mut self, lane: usize, block: usize) {
+        if let Some(g) = self.graph.as_mut() {
+            g.settle(lane, block);
+        }
+    }
+
     /// Set one of the instance's parameters now.
     pub fn set_host_param(&mut self, param: HostParam, value: f32) {
         match param {
@@ -441,7 +450,14 @@ impl Processor {
             .min()
             .and_then(|o| usize::try_from(o).ok())
             .unwrap_or(frames);
+            // And at the next breakpoint of a lane Signal plays itself.
+            let next_break = self
+                .graph
+                .as_ref()
+                .and_then(|g| g.frames_to_next_offline())
+                .map_or(frames, |f| pos.saturating_add(f));
             let end = next_event
+                .min(next_break)
                 .min(frames)
                 .min(pos.saturating_add(max))
                 .max(pos.saturating_add(1));

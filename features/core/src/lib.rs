@@ -27,6 +27,9 @@
 //!   tracks (the per-track mode), beside the single multi-channel mode.
 //! - [`host`]: [`SignalHost`](host::SignalHost), what the core asks of
 //!   whoever runs it.
+//! - [`offline`]: offline blocks — analysed once over the track's whole
+//!   audio, their result raw automation (or values) that a cheap apply
+//!   stage plays (`level`, `align`).
 //!
 //! The crate is `no_std` + `alloc`: allocation happens when a graph is
 //! built, never in [`engine::Processor::process`].
@@ -46,6 +49,7 @@ pub mod kit;
 pub mod midi;
 #[cfg(feature = "std")]
 pub mod null_test;
+pub mod offline;
 pub mod param;
 pub mod platform;
 pub mod rigs;

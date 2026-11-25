@@ -56,6 +56,9 @@ pub struct Ext {
     /// Each piece's hits as the host placed them (its `hits:<piece>`
     /// events), kept to hand every new graph.
     pub planned: Mutex<Vec<(u16, Vec<(u64, f32)>)>>,
+    /// Offline blocks: their running analyses and captures, and the host's
+    /// `host-automation/1`.
+    pub offline: Mutex<crate::offline::Offline>,
 }
 
 impl Default for Ext {
@@ -73,6 +76,7 @@ impl Default for Ext {
             transport_playing: AtomicBool::new(false),
             chain_changed: std::sync::OnceLock::new(),
             planned: Mutex::new(Vec::new()),
+            offline: Mutex::new(crate::offline::Offline::default()),
         }
     }
 }
@@ -187,6 +191,17 @@ fn subscribe(shared: &Shared, client: &HostActionsClient, state: &SignalState) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     let mut topics = vec!["transport".to_owned()];
+    // A user's edit of this FX's lanes, when the host writes them for us.
+    if shared
+        .ext
+        .offline
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .automation
+        .is_some()
+    {
+        topics.push(daw_clap_ext::sys::FTS_AUTOMATION_TOPIC.to_owned());
+    }
     for lane in graph::lanes_for(&state.preset, port_of(state)) {
         for key in lane.blocks.iter().filter_map(|b| b.key.as_deref()) {
             topics.push(format!("hits:{}", piece_of(key)));
@@ -411,9 +426,21 @@ fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec
             3 => "self",
             _ => "hits",
         };
+        let ids = |param: &str| {
+            b.specs.iter().position(|ps| ps.id == param).and_then(|pi| {
+                table
+                    .slots
+                    .iter()
+                    .position(|s| s.lane == l && s.block == b.block && s.param == pi)
+                    .map(|i| clap_id(&slots::slot_id(i)))
+            })
+        };
+        let (mode, analysis) = crate::offline::chain_fields(shared, &spec.name, bspec, &ids);
         let block = json!({
             "id": b.id,
             "kind": kind_name(&bspec.kind),
+            "mode": mode,
+            "analysis": analysis,
             "name": slots::block_label(&bspec.id, b.phase),
             "bypass": bspec.bypass,
             "backend": backend,
@@ -565,6 +592,26 @@ const ACTIONS: &[(&str, &str, &str)] = &[
         "{}",
     ),
     (
+        "SIGNAL_ANALYZE",
+        "Analyse an offline block (level, align) over the audio arriving at it: `block` its chain id; `audio` {path (a WAV of that audio), sample_rate, start_s} as the host renders it offline (no playback), or none to capture it while the song plays through once (analysed when it stops, or on `finish`: true); `reference` {path, sample_rate} for an align search, or `values` to set an alignment found elsewhere; `from`/`to` for part of the song; `consistency`, `range_db`, `target_db` for level; `source_revision`; `replace_user_edits`. Answers a job: the lanes land on the next main-thread call (SIGNAL_ANALYSIS), written as the host's automation of this FX's parameters through host-automation/1 in one undo step, or played by Signal where the host has no such extension.",
+        r#"{"type":"object","properties":{"block":{"type":"string"},"lane":{"type":"string"},"audio":{"type":"object"},"reference":{"type":"object"},"values":{"type":"object"},"from":{"type":"number"},"to":{"type":"number"},"finish":{"type":"boolean"},"source_revision":{"type":"string"},"replace_user_edits":{"type":"boolean"},"consistency":{"type":"number"},"range_db":{"type":"number"},"target_db":{"type":"number"}},"required":["block"]}"#,
+    ),
+    (
+        "SIGNAL_ANALYSIS",
+        "Every offline block's analysis (or `block`'s), its lanes with their points, after landing whatever finished: {blocks: [{block, lane, kind, job, analysis}], finished: [what each finished job made and wrote]}.",
+        r#"{"type":"object","properties":{"block":{"type":"string"},"lane":{"type":"string"}}}"#,
+    ),
+    (
+        "SIGNAL_ANALYSIS_CLEAR",
+        "Forget `block`'s analysis: its lanes cleared in the host, its parameters its own again.",
+        r#"{"type":"object","properties":{"block":{"type":"string"},"lane":{"type":"string"}},"required":["block"]}"#,
+    ),
+    (
+        "SIGNAL_ANALYSIS_STALE",
+        "The audio arriving changed (an edit upstream): every offline block (or `block`) stale over `from`..`to` (its whole range when not given), unless `source_revision` is what it was made from.",
+        r#"{"type":"object","properties":{"block":{"type":"string"},"from":{"type":"number"},"to":{"type":"number"},"source_revision":{"type":"string"}}}"#,
+    ),
+    (
         "SIGNAL_ALGORITHMS",
         "A family's algorithms: {\"kind\"} → [{\"id\", \"name\"}].",
         r#"{"type":"object","required":["kind"],"properties":{"kind":{"type":"string"}}}"#,
@@ -625,7 +672,7 @@ fn lanes_of(state: &SignalState, lane: Option<&str>) -> Result<Vec<usize>, ExtEr
 
 /// A block, by its chain id (`tone.comp`, or just `comp`), in the action's
 /// lane.
-fn find_block(
+pub(crate) fn find_block(
     state: &SignalState,
     id: &str,
     lane: Option<&str>,
@@ -700,6 +747,10 @@ fn edit(
 pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<String, ExtError> {
     match id {
         "SIGNAL_CHAIN" => Ok(chain(shared).to_string()),
+        "SIGNAL_ANALYZE" => crate::offline::analyze(shared, args, on_main),
+        "SIGNAL_ANALYSIS" => crate::offline::analysis(shared, args, on_main),
+        "SIGNAL_ANALYSIS_CLEAR" => crate::offline::clear(shared, args, on_main),
+        "SIGNAL_ANALYSIS_STALE" => crate::offline::stale(shared, args, on_main),
         "SIGNAL_SET" => edit(shared, on_main, |state| {
             if let Some(block) = arg(args, "block") {
                 let (l, b) = find_block(state, block, arg(args, "lane"))?;
@@ -746,7 +797,16 @@ pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<Str
             }
             let l = first_lane(state, arg(args, "lane"))?;
             let lane = &mut state.preset.lanes[l];
-            let at = insert_at(lane, phase, arg(args, "after"));
+            // `first`: at the head of its phase (an offline block reading the
+            // raw track: the vocal leveler).
+            let at = if args.get("first").and_then(Value::as_bool) == Some(true) {
+                lane.blocks
+                    .iter()
+                    .position(|b| b.phase.is_some_and(|p| p >= phase))
+                    .unwrap_or(lane.blocks.len())
+            } else {
+                insert_at(lane, phase, arg(args, "after"))
+            };
             let mut block = BlockSpec::signal(fresh_id(lane, kind), name).phase(phase);
             if let Some(a) = arg(args, "algorithm") {
                 block = block.algorithm(a);
@@ -811,10 +871,17 @@ impl SignalPlugin for Shared {
 
     fn run_action(&self, id: &str, args_json: &str) -> Result<String, ExtError> {
         let args: Value = serde_json::from_str(args_json).unwrap_or(Value::Null);
+        // A finished analysis lands on the main thread, before anything else.
+        if id != "SIGNAL_ANALYSIS" {
+            crate::offline::drain(self);
+            let _ = crate::offline::poll(self, true);
+        }
         run(self, id, &args, true)
     }
 
     fn chain(&self) -> String {
+        crate::offline::drain(self);
+        let _ = crate::offline::poll(self, true);
         chain(self).to_string()
     }
 
@@ -908,6 +975,13 @@ pub fn init(shared: &Shared, plugin: *const clap_plugin, host: *const clap_host)
     shared.ext.host.store(host.cast_mut(), Ordering::Release);
     // SAFETY: the host's own pointer, on its main thread (init).
     let client = unsafe { HostActionsClient::query(host) };
+    // SAFETY: as above.
+    shared
+        .ext
+        .offline
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .automation = unsafe { daw_clap_ext::automation::HostAutomationClient::query(host) };
     *shared
         .ext
         .actions
@@ -935,6 +1009,10 @@ pub unsafe extern "C" fn on_event(
     let Ok(event) = serde_json::from_str::<Value>(body) else {
         return;
     };
+    if topic == daw_clap_ext::sys::FTS_AUTOMATION_TOPIC {
+        crate::offline::user_edited(&shared, &event);
+        return;
+    }
     if topic == "transport" {
         if let Some(frame) = event.get("frame").and_then(Value::as_u64) {
             shared.ext.transport_frame.store(frame, Ordering::Release);
@@ -947,6 +1025,9 @@ pub unsafe extern "C" fn on_event(
             .ext
             .transport_playing
             .store(playing, Ordering::Release);
+        // A capture finishes when the song stops; a finished analysis lands.
+        crate::offline::drain(&shared);
+        let _ = crate::offline::poll(&shared, true);
         return;
     }
     let Some(piece) = topic.strip_prefix("hits:") else {
