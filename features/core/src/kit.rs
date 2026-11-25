@@ -370,7 +370,9 @@ pub fn drum_kit(pieces: &KitPieces) -> Preset {
         muted(at(
             with(
                 track("Drums/Snare/Verb/Nonlin", &[], "Drums/Snare/Verb"),
-                vec![verb("nonlinear")],
+                // Its window opens on the snare's hits: on the snare's sum,
+                // bleed and all, its own onset detector never fires.
+                vec![verb("nonlinear").key("Drums/Snare/Sum/Trig")],
             ),
             -20.0,
         )),

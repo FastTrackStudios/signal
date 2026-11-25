@@ -1229,3 +1229,92 @@ fn the_snares_placed_hits_cut_the_overheads() {
         "−4 dB on the snare's hit: {cut:.2} dB"
     );
 }
+
+/// The snare's Non-Linear through the CLAP, on its own track: fed the
+/// snare's sum with bleed (its own detector never fires on it) and keyed by
+/// the snare's placed hits (`hits:Drums/Snare`), it bursts on the hit.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn the_snares_nonlinear_bursts_on_its_placed_hit() {
+    let mut preset = drum_kit(&KitPieces::default());
+    let lane = preset
+        .lanes
+        .iter_mut()
+        .find(|l| l.name == "Drums/Snare/Verb/Nonlin")
+        .expect("the snare's Non-Linear");
+    lane.mute = false;
+    lane.gain_db = 0.0;
+    let verb = lane
+        .blocks
+        .iter_mut()
+        .find(|b| b.id == "verb")
+        .expect("its verb");
+    *verb = verb.clone().param("decay", 0.08).param("extra_a", 0.3);
+    let host = std::sync::Arc::new(TestHost::default());
+    let options = daw::plugin::LoadOptions {
+        actions: Some(host.clone()),
+        ..daw::plugin::LoadOptions::default()
+    };
+    let mut nonlin = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+        .expect("loads")
+        .expect("a CLAP");
+    let state = SignalState {
+        instance: Instance::Port(SessionLink {
+            session: SessionId(format!("nonlin-{}", std::process::id())),
+            port: PortName("Drums/Snare/Verb/Nonlin".into()),
+        }),
+        ..SignalState::new(preset)
+    };
+    nonlin
+        .load_state(&clap_state(&state))
+        .expect("takes the state");
+    nonlin.prepare(SR, BLOCK as u32).expect("activates");
+    nonlin.pump_main_thread();
+    let sinks = host.sinks.lock().unwrap().clone();
+    let Some((sub, (topic, sink))) = sinks
+        .iter()
+        .enumerate()
+        .find(|(_, (t, _))| t == "hits:Drums/Snare")
+    else {
+        println!(
+            "no hits:Drums/Snare subscription: {:?}",
+            host.topics.lock().unwrap()
+        );
+        return;
+    };
+    sink.send(
+        (sub + 1) as u64,
+        topic,
+        r#"{"piece": "Drums/Snare", "track": "Drums/Snare/Sum/Trig", "note": 38, "count": 1, "hits": [{"time": 1.0, "velocity": 100}]}"#,
+    );
+    let frames = 48_000 * 2;
+    let mut sum = noise(frames, 0.3, 41);
+    for (i, s) in sum.iter_mut().enumerate().skip(48_000).take(4_800) {
+        let t = (i - 48_000) as f32;
+        *s += 0.6 * (-t / 1_200.0).exp() * (t * 200.0 * std::f32::consts::TAU / SR as f32).sin();
+    }
+    let mut out = vec![0.0_f32; frames];
+    let mut scratch = vec![0.0_f32; BLOCK];
+    for start in (0..frames).step_by(BLOCK) {
+        let end = (start + BLOCK).min(frames);
+        let n = end - start;
+        nonlin
+            .process_block(
+                &sum[start..end],
+                &sum[start..end],
+                &mut out[start..end],
+                &mut scratch[..n],
+                &PluginEvents::EMPTY,
+            )
+            .expect("processes");
+    }
+    let at = 48_000 + nonlin.latency() as usize;
+    let before = peak(&out[at - 20_000..at]);
+    let burst = peak(&out[at..at + 12_000]);
+    let after = peak(&out[at + 12_500..at + 30_000]);
+    println!("snare Non-Linear: {before:.5} before, {burst:.4} on the hit, {after:.5} after");
+    assert!(
+        burst > 0.05 && before < 1e-5 && after < 1e-5,
+        "a gated burst on the hit"
+    );
+}
