@@ -4,6 +4,7 @@
 //! Studio's hot-reloadable development copy on the desktop. See
 //! [`plugin`] for the wrapper and [`sampler`] for the desktop sampler block.
 
+pub mod block_set;
 pub mod config;
 pub mod drum;
 pub mod editor;

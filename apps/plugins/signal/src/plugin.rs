@@ -435,6 +435,41 @@ impl Shared {
         });
     }
 
+    /// Set parameter `param` of block `block` on lane `lane` (the running
+    /// graph's) to `value` (plain) where it runs. Inactive, nothing runs:
+    /// activation builds from the state.
+    pub(crate) fn send_param(&self, lane: usize, block: usize, param: usize, value: f32) {
+        if self
+            .config
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_none()
+        {
+            return;
+        }
+        let mut controller = self
+            .controller
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        controller.collect();
+        if controller
+            .send(signal_core::engine::Command::Param {
+                lane,
+                block,
+                param,
+                change: ParamChange::Set(value),
+            })
+            .is_err()
+        {
+            tracing::warn!(
+                lane,
+                block,
+                param,
+                "block parameter not sent: the processor's queue is full"
+            );
+        }
+    }
+
     /// Put `text` in as the state and build it here (the main thread: an
     /// action, a host's call).
     pub(crate) fn load_state_text(&self, text: String, on_main: bool) {
@@ -564,6 +599,14 @@ impl Default for FtsSignal {
             calibrating: false,
             calibrate_frames: 0,
         }
+    }
+}
+
+impl FtsSignal {
+    /// What the instance shares with its extensions and editor.
+    #[must_use]
+    pub(crate) fn shared(&self) -> Arc<Shared> {
+        self.shared.clone()
     }
 }
 

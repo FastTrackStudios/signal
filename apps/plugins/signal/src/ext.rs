@@ -605,6 +605,11 @@ const ACTIONS: &[(&str, &str, &str)] = &[
         r#"{"type":"object","properties":{"block":{"type":"string"},"phase":{"type":"string"},"bypass":{"type":"boolean"},"makeup_db":{"type":"number"},"algorithm":{"type":"string"},"key":{"type":["string","null"]}}}"#,
     ),
     (
+        "SIGNAL_BLOCK_SET",
+        "Set a block's parameters by their ids (signal.chain/1's `params[].id`: `band.7.freq`, `makeup`), whether or not a host slot shows them: `block` its chain id (`tone.eq`) or the preset's (`eq`), `lane` in the kit mode (a per-track instance: its own port's lane), `params` {\"<id>\": value} each in its own units — a number (Hz, dB, ms, a choice's index; a percentage 0..1), a boolean for a switch, or its text (`450 Hz`, `-6 dB`, `Bell`, `50%`, `On`), clamped to its range — and `bypass`? Into the state and the running graph at once (a bypass rebuilds). Answers the new chain.",
+        r#"{"type":"object","required":["block"],"properties":{"block":{"type":"string"},"lane":{"type":"string"},"params":{"type":"object"},"bypass":{"type":"boolean"}}}"#,
+    ),
+    (
         "SIGNAL_BLOCK_ADD",
         "Add a block of `kind` to `phase`, after the block `after` (else at the phase's end), keyed by the lane `key` when given (a trigger lane: `Drums/Snare/Sum/Trig`). Answers the new chain.",
         r#"{"type":"object","required":["phase","kind"],"properties":{"phase":{"type":"string"},"kind":{"type":"string"},"after":{"type":"string"},"algorithm":{"type":"string"},"key":{"type":"string"}}}"#,
@@ -821,6 +826,7 @@ pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<Str
             }
             Ok(())
         }),
+        "SIGNAL_BLOCK_SET" => crate::block_set::run(shared, args, on_main),
         "SIGNAL_BLOCK_ADD" => edit(shared, on_main, |state| {
             let phase_id = arg(args, "phase").ok_or_else(|| ExtError::Failed("a phase".into()))?;
             let phase = phase_from(phase_id)
