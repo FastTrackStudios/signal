@@ -4118,7 +4118,7 @@ dependencies = [
 [[package]]
 name = "fts-audio-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "anyrender",
  "anyrender_vello",
@@ -5955,7 +5955,7 @@ checksum = "c83bff1d572d6b9aeef67ddfc8448e4a3737909cb28e81f97c791b9018703e52"
 [[package]]
 name = "level-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "dsp 0.1.0",
  "nice-plug",
@@ -6123,7 +6123,7 @@ dependencies = [
 [[package]]
 name = "limiter-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "dsp 0.1.0",
  "nice-plug",
@@ -6624,7 +6624,7 @@ dependencies = [
 [[package]]
 name = "meter-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "dioxus",
  "dsp-core 0.1.0",
@@ -6637,7 +6637,7 @@ dependencies = [
 [[package]]
 name = "mic-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "crossbeam-channel",
  "dsp 0.1.0",
@@ -6797,7 +6797,7 @@ dependencies = [
 [[package]]
 name = "modulation-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "atomic_float",
  "dsp 0.1.0",
@@ -8513,7 +8513,7 @@ dependencies = [
 [[package]]
 name = "pitch-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "dsp 0.1.0",
  "dsp-core 0.1.0",
@@ -8581,7 +8581,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "plugin-core"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "architect-ui",
  "atomic_float",
@@ -8596,7 +8596,7 @@ dependencies = [
 [[package]]
 name = "plugin-processors"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "dsp 0.1.0",
  "dsp-core 0.1.0",
@@ -8608,7 +8608,7 @@ dependencies = [
 [[package]]
 name = "plugin-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "anyrender",
  "architect-ui",
@@ -8765,7 +8765,7 @@ checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 [[package]]
 name = "preset-browser"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "dioxus",
  "fts-audio-ui",
@@ -12731,7 +12731,7 @@ checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 [[package]]
 name = "tune-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "dsp 0.1.0",
  "dsp-core 0.1.0",
@@ -13104,7 +13104,7 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 [[package]]
 name = "unison-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=9e3ea439153e0d030d3bc220ce5d69c41cc11bf6#9e3ea439153e0d030d3bc220ce5d69c41cc11bf6"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "dsp 0.1.0",
  "dsp-core 0.1.0",

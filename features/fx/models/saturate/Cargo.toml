@@ -22,7 +22,7 @@ plugin-core = { workspace = true }
 # The DSP facade (re-exports saturate-dsp). Never depend on saturate-dsp directly.
 # The effect and its parameters' faces: plugins' `plugin-ui`, which re-exports
 # `dsp` with each module's `ui` at the paths fts-fx had.
-dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "9e3ea439153e0d030d3bc220ce5d69c41cc11bf6", features = ["saturate", "saturate-native", "saturate-profiles", "saturate-ui", "saturate-viz"] }
+dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "8a3abfe4639b4db9f64a452bf90b64ec96f5c577", features = ["saturate", "saturate-native", "saturate-profiles", "saturate-ui", "saturate-viz"] }
 # What each circuit IS, and the only place that knows how a knob reaches the
 # DSP — the shell deliberately carries no voicing table of its own.
 # The Blitz/nice-plug editor: the five circuits and their panels. `native`

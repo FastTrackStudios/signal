@@ -16,7 +16,7 @@ workspace = true
 plugin-core = { workspace = true }
 # The effect and its parameters' faces: plugins' `plugin-ui`, which re-exports
 # `dsp` with each module's `ui` at the paths fts-fx had.
-dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "9e3ea439153e0d030d3bc220ce5d69c41cc11bf6", features = ["eq", "eq-native", "eq-profiles", "eq-ui"] }
+dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "8a3abfe4639b4db9f64a452bf90b64ec96f5c577", features = ["eq", "eq-native", "eq-profiles", "eq-ui"] }
 # The full Dioxus plugin editor (control view, EQ graph, spectrum) —
 # `native` pulls nice-plug-dioxus/Blitz.
 dsp-core = { workspace = true, features = ["audio"] }
