@@ -718,6 +718,15 @@ fn meters_over_span(shared: &Shared, args: &Value) -> Value {
     })
 }
 
+/// This instance's chain `revision` and `values_revision`, as [`chain`]
+/// has them, read from their counters alone.
+pub fn revisions(shared: &Shared) -> Value {
+    json!({
+        "revision": shared.ext.revision.load(Ordering::Acquire),
+        "values_revision": shared.params.values_revision.load(Ordering::Acquire),
+    })
+}
+
 /// This instance's chain, `signal.chain/1`.
 pub fn chain(shared: &Shared) -> Value {
     let state = shared.state();
@@ -798,6 +807,11 @@ const ACTIONS: &[(&str, &str, &str)] = &[
     (
         "SIGNAL_CHAIN",
         "This instance's chain, signal.chain/1.",
+        "{}",
+    ),
+    (
+        "SIGNAL_REVISIONS",
+        "This instance's chain `revision` and `values_revision` as SIGNAL_CHAIN would give them, without building the chain: {\"revision\", \"values_revision\"}. What a host polls to know when to read the chain (or its values) again.",
         "{}",
     ),
     (
@@ -991,6 +1005,7 @@ fn edit(
 pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<String, ExtError> {
     match id {
         "SIGNAL_CHAIN" => Ok(chain(shared).to_string()),
+        "SIGNAL_REVISIONS" => Ok(revisions(shared).to_string()),
         "SIGNAL_METERS" => Ok(meters_over_span(shared, args).to_string()),
         "SIGNAL_ANALYZE" => crate::offline::analyze(shared, args, on_main),
         "SIGNAL_ANALYSIS" => crate::offline::analysis(shared, args, on_main),
@@ -1376,6 +1391,63 @@ pub const HOST_EVENTS: daw_clap_ext::sys::fts_plugin_host_events =
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SIGNAL_REVISIONS is SIGNAL_CHAIN's two revisions, as they move,
+    /// and costs a fraction of the chain.
+    #[test]
+    fn signal_revisions_are_the_chains_without_the_chain() {
+        let mut preset = signal_core::state::Preset::passthrough();
+        preset.lanes[0].blocks = vec![
+            signal_core::state::BlockSpec::signal("eq", "eq").phase(Phase::Tone),
+            signal_core::state::BlockSpec::signal("comp", "comp").phase(Phase::Tone),
+        ];
+        let shared = crate::plugin::FtsSignal::default().shared();
+        let text = String::from_utf8(SignalState::new(preset).to_blob()).expect("utf-8");
+        shared.load_state_text(text, false);
+        let both = |shared: &Shared| {
+            let chain = chain(shared);
+            let cheap: Value =
+                serde_json::from_str(&run(shared, "SIGNAL_REVISIONS", &json!({}), false).unwrap())
+                    .unwrap();
+            assert_eq!(cheap["revision"], chain["revision"]);
+            assert_eq!(cheap["values_revision"], chain["values_revision"]);
+            (
+                cheap["revision"].as_u64(),
+                cheap["values_revision"].as_u64(),
+            )
+        };
+        let (rev, values) = both(&shared);
+        // A value set moves values_revision (and the block set, revision).
+        crate::block_set::run(
+            &shared,
+            &json!({ "block": "comp", "params": { "makeup": 3.0 } }),
+            false,
+        )
+        .expect("the set");
+        let (rev2, values2) = both(&shared);
+        assert!(values2 > values && rev2 > rev, "{values:?} → {values2:?}");
+        assert!(
+            actions_json().contains("\"SIGNAL_REVISIONS\""),
+            "listed among the actions"
+        );
+
+        let n = 200u32;
+        let at = std::time::Instant::now();
+        for _ in 0..n {
+            std::hint::black_box(chain(&shared).to_string());
+        }
+        let chain_cost = at.elapsed() / n;
+        let at = std::time::Instant::now();
+        for _ in 0..n {
+            std::hint::black_box(run(&shared, "SIGNAL_REVISIONS", &json!({}), false).unwrap());
+        }
+        let cheap_cost = at.elapsed() / n;
+        assert!(
+            cheap_cost * 10 < chain_cost,
+            "{cheap_cost:?} against {chain_cost:?}"
+        );
+        eprintln!("a chain {chain_cost:?}, its revisions {cheap_cost:?}");
+    }
 
     #[test]
     fn placed_hits_reach_a_key_on_a_lane_without_a_detector() {
