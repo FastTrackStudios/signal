@@ -1,0 +1,22 @@
+[package]
+name = "valverig-nam"
+version = "0.0.2"
+edition = "2024"
+rust-version = "1.89"
+description = "Pure-Rust Neural Amp Modeler (.nam) inference, allocation-free in the audio callback"
+license = "MIT"
+repository = "https://github.com/ValveRig/valverig-nam"
+autotests = false
+autoexamples = false
+autobenches = false
+
+# The unit tests read assets/ (models and reference vectors), which are not
+# vendored; they run in the fork's own checkout (FTS-PATCH.md).
+[lib]
+test = false
+doctest = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+thiserror = "2"
