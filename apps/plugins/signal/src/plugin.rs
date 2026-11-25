@@ -562,6 +562,8 @@ pub struct FtsSignal {
     /// Calibrating: since when (frames), and when it last stepped.
     calibrating: bool,
     calibrate_frames: usize,
+    /// Whether it tells the host it may sleep ([`crate::sleep`]).
+    sleep: crate::sleep::Sleep,
 }
 
 impl Default for FtsSignal {
@@ -598,6 +600,7 @@ impl Default for FtsSignal {
             editor_state: plugin_core::prelude::DioxusState::new(|| crate::editor::SIZE),
             calibrating: false,
             calibrate_frames: 0,
+            sleep: crate::sleep::Sleep::default(),
         }
     }
 }
@@ -786,6 +789,7 @@ impl Plugin for FtsSignal {
         self.last = [f32::NAN; 3 + MACROS];
         self.latency = self.processor.latency();
         context.set_latency_samples(self.latency);
+        self.sleep = crate::sleep::Sleep::new(buffer_config.sample_rate);
         // Keep what's running as the state (a fresh instance saves its
         // starting preset).
         self.params
@@ -959,8 +963,11 @@ impl Plugin for FtsSignal {
             }
         }
         let io = buffer.as_slice();
+        let input_quiet = crate::sleep::quiet(io.iter().take(self.in_channels).map(|c| &**c));
         self.processor
             .process(io, self.in_channels, frames, &self.midi, &self.host_events);
+        let output_quiet = crate::sleep::quiet(io.iter().map(|c| &**c));
+        let events = !self.midi.is_empty() || !self.host_events.is_empty();
         // A state restored while active builds a new graph: its latency
         // (a trigger's lookahead, a session's) to the host.
         // The meters and keys, for the host (atomics only).
@@ -992,7 +999,14 @@ impl Plugin for FtsSignal {
             self.latency = latency;
             context.set_latency_samples(latency);
         }
-        ProcessStatus::Normal
+        self.sleep.status(
+            self.processor.graph(),
+            input_quiet,
+            output_quiet,
+            events,
+            frames,
+            calibrate,
+        )
     }
 }
 
@@ -1024,6 +1038,9 @@ impl ClapPlugin for FtsSignal {
     const CLAP_ID: &'static str = CLAP_ID;
 
     fn clap_extension(id: &std::ffi::CStr) -> Option<*const std::ffi::c_void> {
+        if id == crate::sleep::EXT_SLEEP {
+            return Some(std::ptr::from_ref(&crate::sleep::EXT_SLEEP_VERSION).cast());
+        }
         if id == daw_clap_ext::sys::FTS_EXT_SIGNAL {
             return Some(daw_clap_ext::plugin::SignalVtable::<crate::ext::Lookup>::as_ptr());
         }

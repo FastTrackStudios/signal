@@ -12,6 +12,7 @@ pub mod ext;
 pub mod offline;
 pub mod plugin;
 pub mod sampler;
+pub mod sleep;
 pub mod slots;
 pub mod strip;
 
