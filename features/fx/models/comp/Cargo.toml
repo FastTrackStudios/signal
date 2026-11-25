@@ -23,7 +23,7 @@ nice-plug = { workspace = true, features = ["vst3"] }
 # The DSP facade (re-exports comp-dsp). Never depend on comp-dsp directly.
 # The effect and its parameters' faces: plugins' `plugin-ui`, which re-exports
 # `dsp` with each module's `ui` at the paths fts-fx had.
-dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "8a3abfe4639b4db9f64a452bf90b64ec96f5c577", features = ["comp", "comp-native", "comp-ui", "stack"] }
+dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743", features = ["comp", "comp-native", "comp-ui", "stack"] }
 # The stack core (docs/spec/fx/stack.md): lanes of serial stages, sum laws,
 # lane latency compensation.
 # The full Dioxus plugin editor (control view, params, GR meter) —

@@ -469,6 +469,10 @@ pub struct Graph {
     /// Per piece a remote key follows: its last note's frame. A piece with
     /// notes ignores its trigger's detected hits for [`Graph::ten_seconds`].
     piece_midi: Vec<(u16, u64)>,
+    /// Per piece a remote key follows: the song frame of the last hit
+    /// taken. A piece's hits come in song order, so one at or before it is
+    /// a copy (two ports publishing one strike) and is dropped.
+    piece_taken: Vec<(u16, Option<u64>)>,
     ten_seconds: u64,
     /// Per piece a remote key follows: its hits as the host placed them,
     /// `(song frame, velocity)`, sorted (empty until the host sends them).
@@ -826,6 +830,7 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
         remote: [(0, 0, 0.0, false); REMOTE_HITS],
         key_last: vec![(0, false); remote_key_count],
         piece_midi: remote_pieces.iter().map(|p| (*p, 0)).collect(),
+        piece_taken: remote_pieces.iter().map(|p| (*p, None)).collect(),
         planned: remote_pieces.iter().map(|p| (*p, Box::default())).collect(),
         ten_seconds: (f64::from(opts.sample_rate) * 10.0) as u64,
         remote_count: 0,
@@ -1398,17 +1403,25 @@ impl Graph {
             let v = f32::from(velocity) / 127.0;
             let mut local: [Option<usize>; 8] = [None; 8];
             let mut n = 0;
+            // Each piece once, however many lanes map the note to it.
+            let mut published: [u16; 8] = [0; 8];
+            let mut np = 0;
             for lane in &self.lanes {
                 for (_, piece, here) in lane.midi_map.iter().filter(|m| m.0 == note) {
                     // A piece here is published by its own lane, with its
                     // other hits.
-                    if let (Some(session), None) = (self.session.as_ref(), here) {
+                    let again = published.iter().take(np).any(|p| p == piece);
+                    if let (Some(session), None, false) = (self.session.as_ref(), here, again) {
                         session.hits.publish(SessionHit {
                             piece: *piece,
                             velocity: v,
                             frame: self.clock,
                             midi: true,
                         });
+                        if let Some(slot) = published.get_mut(np) {
+                            *slot = *piece;
+                            np += 1;
+                        }
                     }
                     if let (Some(j), Some(slot)) = (here, local.get_mut(n)) {
                         *slot = Some(*j);
@@ -1538,6 +1551,9 @@ impl Graph {
         self.key_last.fill((0, false));
         for m in &mut self.piece_midi {
             m.1 = 0;
+        }
+        for t in &mut self.piece_taken {
+            t.1 = None;
         }
     }
 
@@ -1904,11 +1920,21 @@ impl Graph {
     /// Piece `piece`'s planned hits: `hits` in, the ones they replace back
     /// (to drop off the audio thread). A piece no key here follows hands
     /// `hits` back.
+    ///
+    /// The blocks the piece keys are told whether its hits are all placed
+    /// now, so a gate doesn't fail open in a gap the song has.
     pub fn set_planned_hits(&mut self, piece: u16, hits: Box<[(u64, f32)]>) -> Box<[(u64, f32)]> {
-        match self.planned.iter_mut().find(|(p, _)| *p == piece) {
-            Some((_, slot)) => core::mem::replace(slot, hits),
-            None => hits,
+        let Some((_, slot)) = self.planned.iter_mut().find(|(p, _)| *p == piece) else {
+            return hits;
+        };
+        let known = !hits.is_empty();
+        let old = core::mem::replace(slot, hits);
+        for (l, b, _) in self.remote_keys.iter().filter(|k| k.2 == piece) {
+            if let Some(block) = self.lanes.get_mut(*l).and_then(|x| x.blocks.get_mut(*b)) {
+                block.hits_known(known);
+            }
         }
+        old
     }
 
     /// The planned hits this piece hears (`heard..heard + len` of the
@@ -1937,6 +1963,7 @@ impl Graph {
         };
         let (keys, remote, count) = (&self.remote_keys, &mut self.remote, &mut self.remote_count);
         let (piece_midi, ten, planned) = (&mut self.piece_midi, self.ten_seconds, &self.planned);
+        let taken = &mut self.piece_taken;
         session.hits.drain(cursor, |h| {
             if !keys.iter().any(|(_, _, p)| *p == h.piece) {
                 return;
@@ -1957,6 +1984,14 @@ impl Graph {
                 } else if m.1 > 0 && h.frame < m.1.saturating_add(ten) {
                     return;
                 }
+            }
+            // One strike, published twice (two ports with the piece's
+            // notes): the first copy plays.
+            if let Some(t) = taken.iter_mut().find(|(p, _)| *p == h.piece) {
+                if t.1.is_some_and(|last| h.frame <= last) {
+                    return;
+                }
+                t.1 = Some(h.frame);
             }
             if let Some(slot) = remote.get_mut(*count) {
                 *slot = (h.piece, h.frame, h.velocity, h.midi);

@@ -464,6 +464,14 @@ impl ChainBlock {
         }
     }
 
+    /// Whether the host placed every hit of the piece that keys it
+    /// ([`BlockProcessor::hits_known`]).
+    pub fn hits_known(&mut self, known: bool) {
+        if let Backend::Linked(p) = &mut self.backend {
+            p.hits_known(known);
+        }
+    }
+
     /// Another lane keys this block, from now on: its audio or its hits.
     pub fn keyed(&mut self) {
         if let Backend::Linked(p) = &mut self.backend {

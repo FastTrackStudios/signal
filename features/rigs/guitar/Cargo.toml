@@ -29,7 +29,7 @@ builtin = { workspace = true }
 chrono = { workspace = true }
 # The effects and their faces: FastTrackStudios/plugins `plugin-ui` re-exports
 # each `dsp` module with its `ui` (the paths fts-fx had), so `dsp::comp::ui::…` still names them.
-dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "8a3abfe4639b4db9f64a452bf90b64ec96f5c577", features = ["reverb"] }
+dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743", features = ["reverb"] }
 dioxus = { workspace = true, optional = true }
 # The drum rig's wire contract, for its iPad surface (ui/tablet/drums.rs).
 drums = { workspace = true, optional = true }
