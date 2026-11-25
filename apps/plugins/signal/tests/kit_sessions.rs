@@ -1318,3 +1318,70 @@ fn the_snares_nonlinear_bursts_on_its_placed_hit() {
         "a gated burst on the hit"
     );
 }
+
+/// A transient shaper added to the rooms over signal/1, keyed by the snare:
+/// the chain shows it keyed, its controls and its gain meter.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn a_transient_shaper_added_over_signal_1_is_keyed() {
+    let host = std::sync::Arc::new(TestHost::default());
+    let options = daw::plugin::LoadOptions {
+        actions: Some(host.clone()),
+        ..daw::plugin::LoadOptions::default()
+    };
+    let mut rooms = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+        .expect("loads")
+        .expect("a CLAP");
+    let state = SignalState {
+        instance: Instance::Port(SessionLink {
+            session: SessionId(format!("shape-{}", std::process::id())),
+            port: PortName("Drums/Rooms".into()),
+        }),
+        ..SignalState::new(drum_kit(&KitPieces::default()))
+    };
+    rooms
+        .load_state(&clap_state(&state))
+        .expect("takes the state");
+    rooms.prepare(SR, BLOCK as u32).expect("activates");
+    let signal = rooms.signal().expect("signal/1");
+    let chain: serde_json::Value = serde_json::from_str(
+        &signal
+            .run_action(
+                "SIGNAL_BLOCK_ADD",
+                r#"{"phase": "tone", "kind": "transient", "key": "Drums/Snare/Sum/Trig"}"#,
+            )
+            .expect("SIGNAL_BLOCK_ADD"),
+    )
+    .expect("JSON");
+    let block = chain["phases"]
+        .as_array()
+        .expect("phases")
+        .iter()
+        .flat_map(|p| p["blocks"].as_array().cloned().unwrap_or_default())
+        .find(|b| b["kind"] == "transient")
+        .unwrap_or_else(|| panic!("a transient in {chain}"));
+    println!(
+        "transient: {} key {} meters {}",
+        block["id"], block["key"], block["meters"]
+    );
+    assert_eq!(block["key"]["from"], "Drums/Snare/Sum/Trig");
+    let ids: Vec<&str> = block["params"]
+        .as_array()
+        .expect("params")
+        .iter()
+        .filter_map(|p| p["id"].as_str())
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            "attack",
+            "sustain",
+            "attack_time",
+            "sustain_time",
+            "key_window",
+            "output"
+        ]
+    );
+    assert_eq!(block["meters"][0]["id"], "applied_gain");
+    assert_eq!(block["meters"][0]["kind"], "gain");
+}
