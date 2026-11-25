@@ -57,8 +57,12 @@ fn main() -> eyre::Result<()> {
         .filter(|a| !a.starts_with("--"))
         .cloned()
         .unwrap_or_else(|| "violin".into());
-    let every: f64 = flag(&all, "--every").and_then(|v| v.parse().ok()).unwrap_or(5.0);
-    let block: usize = flag(&all, "--block").and_then(|v| v.parse().ok()).unwrap_or(256);
+    let every: f64 = flag(&all, "--every")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5.0);
+    let block: usize = flag(&all, "--block")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(256);
     let lib = flag(&all, "--library").unwrap_or_else(|| "strings".into());
     let section = flag(&all, "--section").unwrap_or_else(|| "1st Violins".into());
 
