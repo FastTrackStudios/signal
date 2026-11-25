@@ -202,3 +202,75 @@ fn a_state_loaded_over_another_sounds_as_a_fresh_instance() {
         "a state loaded over another doesn't null a fresh one"
     );
 }
+
+/// A state Studio saved (`FX_STATE`) from `SIGNAL_TEST_STATES`, its
+/// session made a private one (`<session>~<tag>`, as Studio's listen
+/// copies do): the length prefix kept right.
+fn live_state(file: &str, tag: &str) -> Option<Vec<u8>> {
+    let dir = std::env::var_os("SIGNAL_TEST_STATES")?;
+    let bytes = std::fs::read(PathBuf::from(dir).join(file)).ok()?;
+    let body = String::from_utf8(bytes.get(8..)?.to_vec()).ok()?;
+    let body = body.replace("unbreakable-drums", &format!("unbreakable-drums~{tag}"));
+    let mut out = (body.len() as u64).to_le_bytes().to_vec();
+    out.extend_from_slice(body.as_bytes());
+    Some(out)
+}
+
+fn instance_of(state: &[u8]) -> Box<dyn PluginInstance> {
+    let mut p = load_plugin(&bundle().to_string_lossy())
+        .expect("loads")
+        .expect("a CLAP");
+    p.load_state(state).expect("takes the state");
+    p.prepare(SR, BLOCK as u32).expect("activates");
+    p
+}
+
+/// What Studio's listen does with a copy it keeps (`listen::render`): one
+/// that held the snare's state, played, is given the kick's (Studio's own
+/// saved states), restarted if it asks and reset. It nulls a fresh copy of
+/// the kick.
+///
+/// ```sh
+/// SIGNAL_TEST_STATES=<dir of FX_STATE files> cargo test -p signal-plugin \
+///   --test port_isolation -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "needs the bundled .clap and SIGNAL_TEST_STATES (Studio's saved states)"]
+fn studios_states_loaded_over_another_null_a_fresh_copy() {
+    let i = inputs();
+    let pid = std::process::id();
+    let Some(snare) = live_state("Drums__Snare.state", &format!("a{pid}")) else {
+        println!("no SIGNAL_TEST_STATES: skipped");
+        return;
+    };
+    let state = |file: &str, tag: &str| live_state(file, tag).expect("the state");
+
+    let mut snare_trig = instance_of(&state("Drums__Snare__Sum__Trig.state", &format!("a{pid}")));
+    let mut warm = instance_of(&snare);
+    let _ = run(&mut [(&mut snare_trig, &i.trig), (&mut warm, &i.kick)]);
+
+    let warm_tag = format!("b{pid}");
+    warm.load_state(&state("Drums__Kick.state", &warm_tag))
+        .expect("takes the kick");
+    warm.pump_main_thread();
+    let restarted = warm.restart_if_requested();
+    let reset = warm.reset();
+    let mut trig1 = instance_of(&state("Drums__Kick__Sum__Trig.state", &warm_tag));
+    let a = run(&mut [(&mut trig1, &i.trig), (&mut warm, &i.kick)]);
+
+    let fresh_tag = format!("c{pid}");
+    let mut trig2 = instance_of(&state("Drums__Kick__Sum__Trig.state", &fresh_tag));
+    let mut fresh = instance_of(&state("Drums__Kick.state", &fresh_tag));
+    let b = run(&mut [(&mut trig2, &i.trig), (&mut fresh, &i.kick)]);
+
+    println!(
+        "Studio's kick: peak {:.3}; loaded over the snare (restarted {restarted}, reset {reset}) vs fresh: worst {:.1} dBFS",
+        peak(&b[1]),
+        worst_db(&a[1], &b[1])
+    );
+    assert!(peak(&b[1]) > 0.01);
+    assert_eq!(
+        a[1], b[1],
+        "Studio's state loaded over another doesn't null a fresh copy"
+    );
+}
