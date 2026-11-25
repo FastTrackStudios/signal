@@ -810,6 +810,8 @@ impl Plugin for FtsSignal {
     /// block's tails and envelopes cleared, the graph's delays too.
     fn reset(&mut self) {
         self.processor.reset();
+        // A render primed again: its meters' summaries start over.
+        self.shared.ext.stats_clear.store(true, Ordering::Release);
     }
 
     fn process(
@@ -907,14 +909,16 @@ impl Plugin for FtsSignal {
         // The session's clock: the song position, while the host plays
         // (every port of a session is told the same).
         let transport = context.transport();
-        if transport.playing {
-            if let Some(pos) = transport.pos_samples().and_then(|p| u64::try_from(p).ok()) {
-                self.processor.set_position(pos);
-            }
+        let song_pos = if transport.playing {
+            transport.pos_samples().and_then(|p| u64::try_from(p).ok())
         } else if self.shared.ext.transport_playing.load(Ordering::Acquire) {
             // The host's transport events, where the plugin API gives none.
-            self.processor
-                .set_position(self.shared.ext.transport_frame.load(Ordering::Acquire));
+            Some(self.shared.ext.transport_frame.load(Ordering::Acquire))
+        } else {
+            None
+        };
+        if let Some(pos) = song_pos {
+            self.processor.set_position(pos);
         }
         // A rebuilt state's slots: what the host shows now is what the new
         // graph has, so nothing is applied until it moves.
@@ -961,7 +965,7 @@ impl Plugin for FtsSignal {
         // (a trigger's lookahead, a session's) to the host.
         // The meters and keys, for the host (atomics only).
         if let Some(g) = self.processor.graph() {
-            crate::ext::store_meters(&self.shared.ext, &self.table, g);
+            crate::ext::store_meters(&self.shared.ext, &self.table, g, song_pos, frames);
         }
         // Calibrating: every phase made gain neutral on what it has heard
         // since the switch went on, every half second.

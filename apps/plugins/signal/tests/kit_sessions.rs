@@ -1385,3 +1385,145 @@ fn a_transient_shaper_added_over_signal_1_is_keyed() {
     assert_eq!(block["meters"][0]["id"], "applied_gain");
     assert_eq!(block["meters"][0]["kind"], "gain");
 }
+
+/// Each block's gain reduction over a span, with no playback: the kick
+/// rendered as an offline render does (the host's song position every
+/// block), SIGNAL_METERS summarises each block's meters over the span it
+/// names and nothing outside it: the compressor's reduction where the kick
+/// plays, none over the silence after.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn signal_meters_summarise_each_blocks_reduction_over_a_span() {
+    let host = std::sync::Arc::new(TestHost::default());
+    let options = daw::plugin::LoadOptions {
+        actions: Some(host.clone()),
+        ..daw::plugin::LoadOptions::default()
+    };
+    let mut kick = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+        .expect("loads")
+        .expect("a CLAP");
+    let state = SignalState {
+        instance: Instance::Port(SessionLink {
+            session: SessionId(format!("meters-{}", std::process::id())),
+            port: PortName("Drums/Kick".into()),
+        }),
+        ..SignalState::new(drum_kit(&KitPieces::default()))
+    };
+    kick.load_state(&clap_state(&state))
+        .expect("takes the state");
+    kick.prepare(SR, BLOCK as u32).expect("activates");
+    kick.pump_main_thread();
+    let sinks = host.sinks.lock().unwrap().clone();
+    let find = |topic: &str| {
+        sinks
+            .iter()
+            .enumerate()
+            .find(|(_, (t, _))| t == topic)
+            .map(|(i, (t, s))| ((i + 1) as u64, t.clone(), s.clone()))
+    };
+    let (Some(transport), Some(hits)) = (find("transport"), find("hits:Drums/Kick")) else {
+        println!("this daw host offers no subscriptions");
+        return;
+    };
+    // The kick on every half second for the first two seconds, then nothing.
+    let placed: Vec<String> = (0..4)
+        .map(|i| {
+            format!(
+                r#"{{"time": {}, "velocity": 100}}"#,
+                f64::from(i) * 0.5 + 0.25
+            )
+        })
+        .collect();
+    hits.2.send(
+        hits.0,
+        &hits.1,
+        &format!(
+            r#"{{"piece": "Drums/Kick", "track": "Drums/Kick/Sum/Trig", "note": 36, "count": 4, "hits": [{}]}}"#,
+            placed.join(",")
+        ),
+    );
+    let signal = kick.signal().expect("signal/1");
+    let meters = |args: &str| -> serde_json::Value {
+        serde_json::from_str(
+            &signal
+                .run_action("SIGNAL_METERS", args)
+                .expect("SIGNAL_METERS"),
+        )
+        .expect("JSON")
+    };
+    let render = |kick: &mut Box<dyn PluginInstance>| {
+        let frames = 48_000 * 3;
+        let mut input = vec![0.0_f32; frames];
+        for h in 0..4 {
+            let at = 12_000 + h * 24_000;
+            for (i, s) in input.iter_mut().enumerate().skip(at).take(6_000) {
+                let t = (i - at) as f32;
+                *s = 0.9
+                    * (-t / 1_500.0).exp()
+                    * (t * 55.0 * std::f32::consts::TAU / SR as f32).sin();
+            }
+        }
+        let mut out = vec![0.0_f32; BLOCK];
+        let mut scratch = vec![0.0_f32; BLOCK];
+        for start in (0..frames).step_by(BLOCK) {
+            let end = (start + BLOCK).min(frames);
+            let n = end - start;
+            transport.2.send(
+                transport.0,
+                &transport.1,
+                &format!(r#"{{"playing": true, "frame": {start}}}"#),
+            );
+            kick.process_block(
+                &input[start..end],
+                &input[start..end],
+                &mut out[..n],
+                &mut scratch[..n],
+                &PluginEvents::EMPTY,
+            )
+            .expect("processes");
+        }
+    };
+    let comp_of = |m: &serde_json::Value| -> serde_json::Value {
+        m["blocks"]
+            .as_array()
+            .expect("blocks")
+            .iter()
+            .find(|b| b["block"] == "tone.comp")
+            .cloned()
+            .unwrap_or_else(|| panic!("tone.comp in {m}"))
+    };
+    // Where the kick plays.
+    let _ = meters(r#"{"from": 0.2, "to": 2.0}"#);
+    render(&mut kick);
+    let playing = meters("{}");
+    let comp = comp_of(&playing);
+    println!("over the kicks: {}", comp);
+    let gr = &comp["gr_db"];
+    assert!(
+        gr["max"].as_f64().expect("a max") < -1.0,
+        "it reduces: {gr}"
+    );
+    assert!(gr["mean"].as_f64().expect("a mean") < 0.0, "{gr}");
+    let seconds = comp["meters"][0]["seconds"].as_f64().expect("seconds");
+    assert!((seconds - 1.8).abs() < 0.05, "the span alone: {seconds} s");
+    let gate = playing["blocks"]
+        .as_array()
+        .expect("blocks")
+        .iter()
+        .find(|b| b["block"] == "rescue.gate")
+        .expect("the gate");
+    assert!(
+        gate["meters"][0]["max"].as_f64().expect("its opening") > 0.5,
+        "{gate}"
+    );
+    // Over the silence after them: no reduction.
+    kick.reset();
+    let _ = meters(r#"{"from": 2.5, "to": 3.0}"#);
+    render(&mut kick);
+    let quiet = comp_of(&meters("{}"));
+    println!("over the silence: {}", quiet);
+    assert!(
+        quiet["gr_db"]["max"].as_f64().expect("a max") > -0.1,
+        "{quiet}"
+    );
+}

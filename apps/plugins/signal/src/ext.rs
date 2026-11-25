@@ -60,6 +60,66 @@ pub struct Ext {
     /// Offline blocks: their running analyses and captures, and the host's
     /// `host-automation/1`.
     pub offline: Mutex<crate::offline::Offline>,
+    /// Each meter's summary over the host's span (`SIGNAL_METERS`), by the
+    /// running table's meter index. Written on the audio thread only.
+    pub meter_stats: Box<[MeterStat]>,
+    /// The span summarised, song frames (`from..to`; `0..u64::MAX` for
+    /// everything played).
+    pub stats_from: AtomicU64,
+    pub stats_to: AtomicU64,
+    /// Start the summaries over at the next block (a new span, a reset).
+    pub stats_clear: AtomicBool,
+}
+
+/// One meter's summary over a span: min, max, and its frame-weighted mean
+/// (sum and frames). Atomics, written by the audio thread alone.
+#[derive(Default)]
+pub struct MeterStat {
+    min: AtomicU32,
+    max: AtomicU32,
+    sum: AtomicU64,
+    frames: AtomicU64,
+}
+
+impl MeterStat {
+    fn clear(&self) {
+        self.frames.store(0, Ordering::Relaxed);
+        self.sum.store(0.0_f64.to_bits(), Ordering::Relaxed);
+    }
+
+    /// `v` held for `n` frames. Audio thread.
+    fn add(&self, v: f32, n: u64) {
+        if n == 0 || !v.is_finite() {
+            return;
+        }
+        let frames = self.frames.load(Ordering::Relaxed);
+        let (min, max) = if frames == 0 {
+            (v, v)
+        } else {
+            (
+                f32::from_bits(self.min.load(Ordering::Relaxed)).min(v),
+                f32::from_bits(self.max.load(Ordering::Relaxed)).max(v),
+            )
+        };
+        self.min.store(min.to_bits(), Ordering::Relaxed);
+        self.max.store(max.to_bits(), Ordering::Relaxed);
+        let sum = f64::from_bits(self.sum.load(Ordering::Relaxed)) + f64::from(v) * n as f64;
+        self.sum.store(sum.to_bits(), Ordering::Relaxed);
+        self.frames.store(frames + n, Ordering::Relaxed);
+    }
+
+    /// `(min, max, mean, frames)`, `None` when nothing was summarised.
+    fn read(&self) -> Option<(f32, f32, f64, u64)> {
+        let frames = self.frames.load(Ordering::Acquire);
+        (frames > 0).then(|| {
+            (
+                f32::from_bits(self.min.load(Ordering::Relaxed)),
+                f32::from_bits(self.max.load(Ordering::Relaxed)),
+                f64::from_bits(self.sum.load(Ordering::Relaxed)) / frames as f64,
+                frames,
+            )
+        })
+    }
 }
 
 impl Default for Ext {
@@ -78,6 +138,10 @@ impl Default for Ext {
             chain_changed: std::sync::OnceLock::new(),
             planned: Mutex::new(Vec::new()),
             offline: Mutex::new(crate::offline::Offline::default()),
+            meter_stats: (0..MAX_METERS).map(|_| MeterStat::default()).collect(),
+            stats_from: AtomicU64::new(0),
+            stats_to: AtomicU64::new(u64::MAX),
+            stats_clear: AtomicBool::new(false),
         }
     }
 }
@@ -279,9 +343,36 @@ fn session_of(state: &SignalState) -> Option<&str> {
 
 // ── The audio side's meters ─────────────────────────────────────────────
 
-/// Keep the running graph's meters and keys for the host. Audio thread:
-/// atomics only.
-pub fn store_meters(ext: &Ext, table: &Table, graph: &graph::Graph) {
+/// Keep the running graph's meters and keys for the host, and each meter's
+/// summary over the host's span (`SIGNAL_METERS`): the block of `frames`
+/// just processed began at song frame `pos` (`None`: the host gave none,
+/// counted only when no span is set). Audio thread: atomics only.
+pub fn store_meters(
+    ext: &Ext,
+    table: &Table,
+    graph: &graph::Graph,
+    pos: Option<u64>,
+    frames: usize,
+) {
+    if ext.stats_clear.swap(false, Ordering::AcqRel) {
+        for s in ext.meter_stats.iter() {
+            s.clear();
+        }
+    }
+    let (from, to) = (
+        ext.stats_from.load(Ordering::Relaxed),
+        ext.stats_to.load(Ordering::Relaxed),
+    );
+    let frames = frames as u64;
+    // The frames of this block inside the span.
+    let counted = match pos {
+        Some(at) => at
+            .saturating_add(frames)
+            .min(to)
+            .saturating_sub(at.max(from)),
+        None if from == 0 && to == u64::MAX => frames,
+        None => 0,
+    };
     for (i, m) in table.meters.iter().enumerate() {
         let v = match m.kind {
             MeterKind::Source { block, index } => graph
@@ -292,6 +383,9 @@ pub fn store_meters(ext: &Ext, table: &Table, graph: &graph::Graph) {
         };
         if let (Some(slot), false) = (ext.meters.get(i), v.is_nan()) {
             slot.store(v.to_bits(), Ordering::Relaxed);
+            if let Some(stat) = ext.meter_stats.get(i) {
+                stat.add(v, counted);
+            }
         }
     }
     graph.each_phase_level(|lane, phase, db| {
@@ -299,6 +393,9 @@ pub fn store_meters(ext: &Ext, table: &Table, graph: &graph::Graph) {
             if m.lane == lane && matches!(m.kind, MeterKind::Phase(p) if p == phase) {
                 if let Some(slot) = ext.meters.get(i) {
                     slot.store(db.to_bits(), Ordering::Relaxed);
+                }
+                if let Some(stat) = ext.meter_stats.get(i) {
+                    stat.add(db, counted);
                 }
             }
         }
@@ -517,6 +614,100 @@ fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec
         .collect()
 }
 
+/// `SIGNAL_METERS`: set the span (and start afresh) as `args` asks, then
+/// every meter's summary over it.
+fn meters_over_span(shared: &Shared, args: &Value) -> Value {
+    let ext = &shared.ext;
+    let rate = f64::from(shared.sample_rate());
+    let frame = |s: f64| (s.max(0.0) * rate).round() as u64;
+    let from = args.get("from").and_then(Value::as_f64);
+    let to = args.get("to").and_then(Value::as_f64);
+    if from.is_some() || to.is_some() {
+        ext.stats_from
+            .store(from.map_or(0, frame), Ordering::Release);
+        ext.stats_to
+            .store(to.map_or(u64::MAX, frame), Ordering::Release);
+        ext.stats_clear.store(true, Ordering::Release);
+    } else if args.get("clear").and_then(Value::as_bool) == Some(true) {
+        ext.stats_clear.store(true, Ordering::Release);
+    }
+    let state = shared.state();
+    let table = shared.params.shown.get();
+    let lanes = graph::lanes_for(&state.preset, port_of(&state));
+    // A clear asked for here lands at the next block: until then the
+    // summary is empty, not the old one.
+    let pending = ext.stats_clear.load(Ordering::Acquire);
+    let summary = |i: usize, m: &slots::MeterDef| -> Value {
+        let (kind, _, _) = meter_shape(m);
+        let read = if pending {
+            None
+        } else {
+            ext.meter_stats.get(i).and_then(MeterStat::read)
+        };
+        let id = m.id.rsplit('.').next().unwrap_or(&m.id);
+        match read {
+            Some((min, max, mean, frames)) => json!({
+                "id": id, "name": m.name, "kind": kind, "unit": m.unit,
+                "min": min, "max": max, "mean": mean, "seconds": frames as f64 / rate,
+            }),
+            None => json!({
+                "id": id, "name": m.name, "kind": kind, "unit": m.unit,
+                "min": Value::Null, "max": Value::Null, "mean": Value::Null, "seconds": 0.0,
+            }),
+        }
+    };
+    let mut blocks = Vec::new();
+    let mut phases = Vec::new();
+    for (l, spec) in lanes.iter().enumerate() {
+        for b in table.blocks.iter().filter(|b| b.lane == l) {
+            let meters: Vec<Value> = table
+                .meters
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| {
+                    m.lane == l
+                        && matches!(m.kind, MeterKind::Source { block, .. } if block == b.block)
+                })
+                .map(|(i, m)| summary(i, m))
+                .collect();
+            if meters.is_empty() {
+                continue;
+            }
+            // A reduction meter, as LISTEN's dynamics read: dB ≤ 0.
+            let gr = meters.iter().find(|m| m["kind"] == "reduction").map(|m| {
+                json!({
+                    "max": m["max"].as_f64().map(|v| -v.abs()),
+                    "mean": m["mean"].as_f64().map(|v| -v.abs()),
+                })
+            });
+            let mut block = json!({ "block": b.id, "lane": spec.name, "meters": meters });
+            if let Some(gr) = gr {
+                block["gr_db"] = gr;
+            }
+            blocks.push(block);
+        }
+        for (i, m) in table.meters.iter().enumerate().filter(|(_, m)| m.lane == l) {
+            if let MeterKind::Phase(p) = m.kind {
+                let s = summary(i, m);
+                phases.push(json!({
+                    "lane": spec.name,
+                    "phase": p.slug(),
+                    "level": { "min": s["min"], "max": s["max"], "mean": s["mean"] },
+                }));
+            }
+        }
+    }
+    let span_s = |a: &AtomicU64| {
+        let f = a.load(Ordering::Acquire);
+        (f != u64::MAX).then(|| f as f64 / rate)
+    };
+    json!({
+        "span": { "from": span_s(&ext.stats_from), "to": span_s(&ext.stats_to) },
+        "blocks": blocks,
+        "phases": phases,
+    })
+}
+
 /// This instance's chain, `signal.chain/1`.
 pub fn chain(shared: &Shared) -> Value {
     let state = shared.state();
@@ -648,6 +839,11 @@ const ACTIONS: &[(&str, &str, &str)] = &[
         "SIGNAL_ANALYSIS_STALE",
         "The audio arriving changed (an edit upstream): every offline block (or `block`) stale over `from`..`to` (its whole range when not given), unless `source_revision` is what it was made from.",
         r#"{"type":"object","properties":{"block":{"type":"string"},"from":{"type":"number"},"to":{"type":"number"},"source_revision":{"type":"string"}}}"#,
+    ),
+    (
+        "SIGNAL_METERS",
+        "Each block's meters (a compressor's gain reduction, a gate's opening, a dynamic EQ band's gain, a transient shaper's) and each phase's level, summarised over a span of the song as the host played it — an offline render too, no playback needed: `from`/`to` (seconds of the song) set the span and start the summary afresh; `clear` starts it afresh over the same span; neither answers the summary so far. A reset (a render primed again) starts it afresh too, and only frames inside the span count, so a render copy primed from before `from` reports the span alone. Answers {span: {from, to}, blocks: [{block, lane, meters: [{id, name, kind, unit, min, max, mean, seconds}], gr_db?: {max, mean} — a reduction meter in LISTEN's convention, dB ≤ 0}], phases: [{lane, phase, level: {min, max, mean}}]}; a meter with nothing summarised reads null.",
+        r#"{"type":"object","properties":{"from":{"type":"number"},"to":{"type":"number"},"clear":{"type":"boolean"}}}"#,
     ),
     (
         "SIGNAL_ALGORITHMS",
@@ -785,6 +981,7 @@ fn edit(
 pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<String, ExtError> {
     match id {
         "SIGNAL_CHAIN" => Ok(chain(shared).to_string()),
+        "SIGNAL_METERS" => Ok(meters_over_span(shared, args).to_string()),
         "SIGNAL_ANALYZE" => crate::offline::analyze(shared, args, on_main),
         "SIGNAL_ANALYSIS" => crate::offline::analysis(shared, args, on_main),
         "SIGNAL_ANALYSIS_CLEAR" => crate::offline::clear(shared, args, on_main),
