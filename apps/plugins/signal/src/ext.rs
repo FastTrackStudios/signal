@@ -45,7 +45,8 @@ pub struct Ext {
     pub report: Mutex<Vec<(String, String, String, &'static str)>>,
     /// Live values, by the running table's meter index (f32 bits).
     pub meters: Box<[AtomicU32]>,
-    /// Per table block: what keys it (0 none, 1 hits, 2 midi, 3 self).
+    /// Per table block: what keys it (0 none, 1 hits, 2 midi, 3 self,
+    /// 4 placed).
     pub via: Box<[AtomicU8]>,
     /// The host's transport, from its `transport` events: where it plays.
     pub transport_frame: AtomicU64,
@@ -280,6 +281,7 @@ pub fn store_meters(ext: &Ext, table: &Table, graph: &graph::Graph) {
             Some(KeyVia::Hits) => 1,
             Some(KeyVia::Midi) => 2,
             Some(KeyVia::Own) => 3,
+            Some(KeyVia::Placed) => 4,
         };
         if let Some(slot) = ext.via.get(i) {
             slot.store(code, Ordering::Relaxed);
@@ -424,6 +426,7 @@ fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec
         {
             2 => "midi",
             3 => "self",
+            4 => "placed",
             _ => "hits",
         };
         let ids = |param: &str| {
@@ -1066,15 +1069,7 @@ pub unsafe extern "C" fn on_event(
         .collect();
     hits.sort_by_key(|h| h.0);
     let state = shared.state();
-    let pieces: Vec<u16> = state
-        .preset
-        .lanes
-        .iter()
-        .enumerate()
-        .filter(|(_, l)| l.trigger.is_some() && piece_of(&l.name) == piece)
-        .filter_map(|(i, _)| u16::try_from(i).ok())
-        .collect();
-    for index in pieces {
+    for index in planned_pieces(&state.preset, piece) {
         {
             let mut planned = shared
                 .ext
@@ -1086,6 +1081,27 @@ pub unsafe extern "C" fn on_event(
         }
         shared.send_planned(index, hits.clone());
     }
+}
+
+/// The lanes of `preset` a `hits:<piece>` event places hits for, by
+/// index (the graph's id of a remote key's piece): the piece's trigger
+/// lanes, and any lane of the piece a block keys on (a trigger track
+/// played by notes, with no detector of its own).
+#[must_use]
+pub fn planned_pieces(preset: &signal_core::state::Preset, piece: &str) -> Vec<u16> {
+    let keyed = |name: &str| {
+        preset
+            .lanes
+            .iter()
+            .any(|l| l.blocks.iter().any(|b| b.key.as_deref() == Some(name)))
+    };
+    preset
+        .lanes
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| piece_of(&l.name) == piece && (l.trigger.is_some() || keyed(&l.name)))
+        .filter_map(|(i, _)| u16::try_from(i).ok())
+        .collect()
 }
 
 fn cstr<'a>(p: *const c_char) -> Option<&'a str> {
@@ -1104,6 +1120,23 @@ pub const HOST_EVENTS: daw_clap_ext::sys::fts_plugin_host_events =
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn placed_hits_reach_a_key_on_a_lane_without_a_detector() {
+        let mut preset = signal_core::kit::drum_kit(&signal_core::kit::KitPieces::default());
+        let trig = "Drums/Toms/Tom 4/T4 Trig";
+        let at = preset
+            .lanes
+            .iter()
+            .position(|l| l.name == trig)
+            .expect("the tom's trigger");
+        let want = vec![u16::try_from(at).expect("an id")];
+        assert_eq!(planned_pieces(&preset, "Drums/Toms/Tom 4"), want);
+        // Played by notes, no detector: the tom's gate still keys on it.
+        preset.lanes[at].trigger = None;
+        assert_eq!(planned_pieces(&preset, "Drums/Toms/Tom 4"), want);
+        assert!(planned_pieces(&preset, "Drums/Toms/Tom 9").is_empty());
+    }
 
     #[test]
     fn a_block_added_to_a_sampler_port_goes_after_the_sampler() {

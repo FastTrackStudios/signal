@@ -718,3 +718,174 @@ fn the_hosts_placed_hits_key_the_gate() {
         "the placed hit opens the gate: {shut} → {open}"
     );
 }
+
+/// The tom's peak through `(from, to)` seconds of `out`, `latency` late.
+fn peak_s(out: &[f32], latency: usize, (from, to): (f64, f64)) -> f32 {
+    let at = |s: f64| ((s * SR) as usize + latency).min(out.len());
+    peak(&out[at(from)..at(to)])
+}
+
+/// A tom keyed by its trigger on another track, played by `tom` (and the
+/// trigger's instance, `trig`, silent: no trigger audio, no notes) over
+/// 17 s of loud bleed; the piece's every hit placed at 1 s and 16 s. The
+/// tom's output.
+fn tom_through_a_gap(
+    tom: &mut Box<dyn PluginInstance>,
+    trig: &mut Box<dyn PluginInstance>,
+) -> Vec<f32> {
+    let frames = 48_000 * 17;
+    let bleed = noise(frames, 0.3, 23);
+    let silence = vec![0.0_f32; BLOCK];
+    let mut out = vec![0.0_f32; frames];
+    let mut trig_out = vec![0.0_f32; BLOCK];
+    let mut scratch = vec![0.0_f32; BLOCK];
+    for start in (0..frames).step_by(BLOCK) {
+        let end = (start + BLOCK).min(frames);
+        let n = end - start;
+        tom.process_block(
+            &bleed[start..end],
+            &bleed[start..end],
+            &mut out[start..end],
+            &mut scratch[..n],
+            &PluginEvents::EMPTY,
+        )
+        .expect("processes");
+        trig.process_block(
+            &silence[..n],
+            &silence[..n],
+            &mut trig_out[..n],
+            &mut scratch[..n],
+            &PluginEvents::EMPTY,
+        )
+        .expect("processes");
+    }
+    out
+}
+
+/// Studio's `hits:` event for Tom 4: hits at 1 s and 16 s.
+const TOM_4_HITS: &str = r#"{"piece": "Tom 4", "track": "Drums/Toms/Tom 4", "note": 50, "count": 2, "hits": [{"time": 1.0, "velocity": 100}, {"time": 16.0, "velocity": 100}]}"#;
+
+/// Two instances of one session, as Studio runs a kit per track: the tom
+/// folder's gate keyed by the tom's trigger on its own track, and Studio's
+/// `hits:` event for the piece (its every hit). Through a 15 s gap between
+/// the placed hits the gate stays shut: the song's hits are all known, so
+/// it never falls back to its own input and opens on the bleed. It opens
+/// on each placed hit. The key says it is keyed by placed hits, not by
+/// itself.
+///
+/// A copy of the tom's instance (its state saved and loaded into a fresh
+/// one, as Studio's offline renders copy every plugin) is subscribed to
+/// nothing: handed the same event by its host, it plays the same.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn a_gate_keyed_from_another_track_waits_through_a_gap_of_placed_hits() {
+    let preset = drum_kit(&KitPieces::default());
+    let host = std::sync::Arc::new(TestHost::default());
+    let session = format!("tom-gap-{}", std::process::id());
+    let load = |port: &str, session: &str, state: Option<&[u8]>| {
+        let options = daw::plugin::LoadOptions {
+            actions: Some(host.clone()),
+            ..daw::plugin::LoadOptions::default()
+        };
+        let mut p = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+            .expect("loads")
+            .expect("a CLAP");
+        let fresh = clap_state(&SignalState {
+            instance: Instance::Port(SessionLink {
+                session: SessionId(session.into()),
+                port: PortName(port.into()),
+            }),
+            ..SignalState::new(preset.clone())
+        });
+        p.load_state(state.unwrap_or(&fresh))
+            .expect("takes the state");
+        p.prepare(SR, BLOCK as u32).expect("activates");
+        p.pump_main_thread();
+        p
+    };
+    let mut tom = load("Drums/Toms/Tom 4", &session, None);
+    let mut trig = load("Drums/Toms/Tom 4/T4 Trig", &session, None);
+    let topics = host.topics.lock().unwrap().clone();
+    if topics.is_empty() {
+        println!("this daw host offers no subscriptions: nothing to deliver");
+        return;
+    }
+    assert!(
+        topics.iter().any(|t| t == "hits:Drums/Toms/Tom 4"),
+        "the tom follows its piece's hits: {topics:?}"
+    );
+    let sinks = host.sinks.lock().unwrap().clone();
+    for (sub, (topic, sink)) in sinks.iter().enumerate() {
+        if topic == "hits:Drums/Toms/Tom 4" {
+            sink.send((sub + 1) as u64, topic, TOM_4_HITS);
+        }
+    }
+    let out = tom_through_a_gap(&mut tom, &mut trig);
+    let latency = tom.latency() as usize;
+    let first = peak_s(&out, latency, (1.0, 1.1));
+    let gap = peak_s(&out, latency, (12.0, 15.9));
+    let second = peak_s(&out, latency, (16.0, 16.1));
+    println!("tom 4: first hit {first:.4}, the gap's 12–15.9 s {gap:.5}, second hit {second:.4}");
+    assert!(first > 0.05, "the first placed hit opens the gate: {first}");
+    assert!(second > 0.05, "the second placed hit opens it: {second}");
+    assert!(
+        gap < first * 0.05,
+        "the gate stays shut through the gap ({gap}), not open on the bleed"
+    );
+    let chain: serde_json::Value =
+        serde_json::from_str(&tom.signal().expect("signal/1").chain().expect("chain"))
+            .expect("JSON");
+    let key = &chain["phases"][0]["blocks"][0]["key"];
+    println!("the tom's key in the gap: {key}");
+    assert_eq!(key["via"], "placed", "keyed by the placed hits: {key}");
+
+    // A render's copies: the tom's state in fresh instances of a session of
+    // their own, subscribed to nothing; the host hands the copy what it
+    // handed the instance.
+    let copies = format!("{session}~render");
+    let fresh = |port| {
+        let options = daw::plugin::LoadOptions::default();
+        let mut p = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+            .expect("loads")
+            .expect("a CLAP");
+        p.load_state(&clap_state(&SignalState {
+            instance: Instance::Port(SessionLink {
+                session: SessionId(copies.clone()),
+                port: PortName(port),
+            }),
+            ..SignalState::new(preset.clone())
+        }))
+        .expect("takes the state");
+        p
+    };
+    let mut tom_copy = fresh("Drums/Toms/Tom 4".into());
+    let mut trig_copy = fresh("Drums/Toms/Tom 4/T4 Trig".into());
+    tom_copy
+        .event_sink()
+        .expect("host-events/1")
+        .send(0, "hits:Drums/Toms/Tom 4", TOM_4_HITS);
+    tom_copy.prepare(SR, BLOCK as u32).expect("activates");
+    trig_copy.prepare(SR, BLOCK as u32).expect("activates");
+    let copied = tom_through_a_gap(&mut tom_copy, &mut trig_copy);
+    let gap = peak_s(&copied, latency, (12.0, 15.9));
+    let second = peak_s(&copied, latency, (16.0, 16.1));
+    println!("tom 4's copy: the gap {gap:.5}, second hit {second:.4}");
+    assert!(
+        second > 0.05 && gap < second * 0.05,
+        "the copy plays as the instance: gap {gap}, hit {second}"
+    );
+    // Handed nothing (Studio's renders before they replayed the event), a
+    // copy knows no hit and falls back to its own input: open on the
+    // bleed. What a whole-song render heard while playback stayed shut.
+    let mut bare = fresh("Drums/Toms/Tom 4".into());
+    let mut bare_trig = fresh("Drums/Toms/Tom 4/T4 Trig".into());
+    bare.prepare(SR, BLOCK as u32).expect("activates");
+    bare_trig.prepare(SR, BLOCK as u32).expect("activates");
+    let open = peak_s(
+        &tom_through_a_gap(&mut bare, &mut bare_trig),
+        latency,
+        (12.0, 15.9),
+    );
+    println!("tom 4's copy handed nothing: the gap {open:.4}");
+    assert!(open > 0.05, "a copy with no placed hits fails open: {open}");
+}

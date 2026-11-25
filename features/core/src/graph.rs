@@ -140,6 +140,10 @@ pub enum KeyVia {
     Hits,
     /// Hit notes (MIDI).
     Midi,
+    /// The host placed the piece's every hit (`set_planned_hits`): those
+    /// key it, and a gap between them is the song's, so a gate waits
+    /// through it rather than falling back to its own input.
+    Placed,
     /// No hit for ten seconds: a gate keys from its own input.
     Own,
 }
@@ -151,6 +155,7 @@ impl KeyVia {
         match self {
             Self::Hits => "hits",
             Self::Midi => "midi",
+            Self::Placed => "placed",
             Self::Own => "self",
         }
     }
@@ -1277,6 +1282,14 @@ impl Graph {
             .iter()
             .position(|k| k.0 == lane && k.1 == block)
         {
+            let piece = self.remote_keys[i].2;
+            if self
+                .planned
+                .iter()
+                .any(|(p, hits)| *p == piece && !hits.is_empty())
+            {
+                return Some(KeyVia::Placed);
+            }
             let (frame, midi) = self.key_last.get(i).copied().unwrap_or((0, false));
             return Some(
                 if frame == 0 || self.clock.saturating_sub(frame) > self.ten_seconds {
