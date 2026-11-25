@@ -354,6 +354,8 @@ fn meter_shape(m: &slots::MeterDef) -> (&'static str, f32, f32) {
         MeterKind::Source { .. } if m.id.ends_with("gain_reduction") => ("reduction", 0.0, 24.0),
         // A gate's opening, 0 shut, 1 open.
         MeterKind::Source { .. } if m.unit == "%" => ("state", 0.0, 1.0),
+        // A dynamic band's applied gain, cut or boost (dyn_eq).
+        MeterKind::Source { .. } if m.id.ends_with("_gain") => ("gain", -24.0, 24.0),
         MeterKind::Source { .. } => ("level", -60.0, 0.0),
     }
 }
@@ -599,13 +601,13 @@ const ACTIONS: &[(&str, &str, &str)] = &[
     ),
     (
         "SIGNAL_SET",
-        "Bypass a block or a phase, set a phase's make-up, or a block's algorithm: {\"block\"|\"phase\", \"bypass\"?, \"makeup_db\"?, \"algorithm\"?}. Answers the new chain.",
-        r#"{"type":"object","properties":{"block":{"type":"string"},"phase":{"type":"string"},"bypass":{"type":"boolean"},"makeup_db":{"type":"number"},"algorithm":{"type":"string"}}}"#,
+        "Bypass a block or a phase, set a phase's make-up, or a block's algorithm or key: {\"block\"|\"phase\", \"bypass\"?, \"makeup_db\"?, \"algorithm\"?, \"key\"?}. `key` is the lane the block listens to (a trigger lane, `Drums/Snare/Sum/Trig`: its hits, placed or detected, and its audio when it runs in this instance), null to unkey it. Answers the new chain.",
+        r#"{"type":"object","properties":{"block":{"type":"string"},"phase":{"type":"string"},"bypass":{"type":"boolean"},"makeup_db":{"type":"number"},"algorithm":{"type":"string"},"key":{"type":["string","null"]}}}"#,
     ),
     (
         "SIGNAL_BLOCK_ADD",
-        "Add a block of `kind` to `phase`, after the block `after` (else at the phase's end). Answers the new chain.",
-        r#"{"type":"object","required":["phase","kind"],"properties":{"phase":{"type":"string"},"kind":{"type":"string"},"after":{"type":"string"},"algorithm":{"type":"string"}}}"#,
+        "Add a block of `kind` to `phase`, after the block `after` (else at the phase's end), keyed by the lane `key` when given (a trigger lane: `Drums/Snare/Sum/Trig`). Answers the new chain.",
+        r#"{"type":"object","required":["phase","kind"],"properties":{"phase":{"type":"string"},"kind":{"type":"string"},"after":{"type":"string"},"algorithm":{"type":"string"},"key":{"type":"string"}}}"#,
     ),
     (
         "SIGNAL_BLOCK_REMOVE",
@@ -792,6 +794,10 @@ pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<Str
                 if let Some(a) = arg(args, "algorithm") {
                     spec.algorithm = Some(a.to_owned());
                 }
+                // A string keys it, null unkeys it.
+                if let Some(k) = args.get("key") {
+                    spec.key = k.as_str().map(str::to_owned);
+                }
                 return Ok(());
             }
             let phase_id = arg(args, "phase")
@@ -841,6 +847,9 @@ pub fn run(shared: &Shared, id: &str, args: &Value, on_main: bool) -> Result<Str
             let mut block = BlockSpec::signal(fresh_id(lane, kind), name).phase(phase);
             if let Some(a) = arg(args, "algorithm") {
                 block = block.algorithm(a);
+            }
+            if let Some(k) = arg(args, "key") {
+                block = block.key(k);
             }
             lane.blocks.insert(at, block);
             Ok(())

@@ -3279,7 +3279,25 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/dsp?rev=c75c0d864e50d2ca553d792d953dca33fda5bdb6#c75c0d864e50d2ca553d792d953dca33fda5bdb6"
 dependencies = [
  "crossbeam-channel",
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=c75c0d864e50d2ca553d792d953dca33fda5bdb6)",
+ "libm",
+ "once_cell",
+ "parking_lot",
+ "realfft",
+ "rtrb",
+ "serde",
+ "smallvec 1.16.4",
+ "symphonium",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "dsp"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44#e4c98107a5bfae459cb14dc3425ba6f013c53d44"
+dependencies = [
+ "crossbeam-channel",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "libm",
  "once_cell",
  "parking_lot",
@@ -3296,6 +3314,17 @@ dependencies = [
 name = "dsp-core"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/dsp?rev=c75c0d864e50d2ca553d792d953dca33fda5bdb6#c75c0d864e50d2ca553d792d953dca33fda5bdb6"
+dependencies = [
+ "atomic_float",
+ "ebur128",
+ "parking_lot",
+ "realfft",
+]
+
+[[package]]
+name = "dsp-core"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44#e4c98107a5bfae459cb14dc3425ba6f013c53d44"
 dependencies = [
  "atomic_float",
  "ebur128",
@@ -4110,7 +4139,33 @@ dependencies = [
  "bytemuck",
  "dioxus",
  "dioxus-native-dom",
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=c75c0d864e50d2ca553d792d953dca33fda5bdb6)",
+ "gloo-timers 0.3.0",
+ "kurbo",
+ "peniko",
+ "tracing",
+ "vello",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wgpu 30.0.1",
+ "wgpu_context",
+]
+
+[[package]]
+name = "fts-audio-ui"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
+dependencies = [
+ "anyrender",
+ "anyrender_vello",
+ "architect-ui",
+ "blitz-dom",
+ "blitz-traits",
+ "bytemuck",
+ "dioxus",
+ "dioxus-native-dom",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "gloo-timers 0.3.0",
  "kurbo",
  "peniko",
@@ -4128,35 +4183,35 @@ name = "fts-model-comp"
 version = "26.10.3"
 dependencies = [
  "nice-plug",
- "plugin-core",
- "plugin-ui",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
+ "plugin-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
 ]
 
 [[package]]
 name = "fts-model-delay"
 version = "26.10.3"
 dependencies = [
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
- "plugin-core",
- "plugin-ui",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
+ "plugin-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
 ]
 
 [[package]]
 name = "fts-model-eq"
 version = "26.10.3"
 dependencies = [
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
- "plugin-core",
- "plugin-ui",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
+ "plugin-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
 ]
 
 [[package]]
 name = "fts-model-gate"
 version = "26.10.3"
 dependencies = [
- "dsp",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
 ]
 
@@ -4165,10 +4220,10 @@ name = "fts-model-reverb"
 version = "26.10.3"
 dependencies = [
  "crossbeam-channel",
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
- "plugin-core",
- "plugin-ui",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
+ "plugin-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
 ]
 
 [[package]]
@@ -4177,8 +4232,8 @@ version = "26.10.3"
 dependencies = [
  "atomic_float",
  "nice-plug",
- "plugin-core",
- "plugin-ui",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
+ "plugin-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
 ]
 
 [[package]]
@@ -4626,7 +4681,7 @@ dependencies = [
  "facet-json",
  "facet-styx",
  "frame",
- "fts-audio-ui",
+ "fts-audio-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "futures",
  "guitar",
  "hound",
@@ -4640,7 +4695,7 @@ dependencies = [
  "naga 30.0.1",
  "neural-amp-modeler",
  "parley",
- "plugin-ui",
+ "plugin-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
  "rustc-hash 2.1.3",
  "sampler",
  "serde_json",
@@ -5789,7 +5844,7 @@ dependencies = [
  "facet",
  "facet-json",
  "facet-styx",
- "fts-audio-ui",
+ "fts-audio-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "fts-sample",
  "libc",
  "midi",
@@ -5937,9 +5992,9 @@ checksum = "c83bff1d572d6b9aeef67ddfc8448e4a3737909cb28e81f97c791b9018703e52"
 [[package]]
 name = "level-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
 dependencies = [
- "dsp",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
 ]
 
@@ -6105,12 +6160,12 @@ dependencies = [
 [[package]]
 name = "limiter-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
 dependencies = [
- "dsp",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
  "nice-plug-dioxus",
- "plugin-ui",
+ "plugin-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
 ]
 
 [[package]]
@@ -6606,27 +6661,27 @@ dependencies = [
 [[package]]
 name = "meter-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
 dependencies = [
  "dioxus",
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
- "plugin-core",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
 ]
 
 [[package]]
 name = "mic-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
 dependencies = [
  "crossbeam-channel",
- "dsp",
- "dsp-core",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
  "nice-plug-dioxus",
- "plugin-ui",
+ "plugin-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
 ]
 
 [[package]]
@@ -6779,14 +6834,14 @@ dependencies = [
 [[package]]
 name = "modulation-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
 dependencies = [
  "atomic_float",
- "dsp",
- "dsp-core",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
- "plugin-core",
- "plugin-ui",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
+ "plugin-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
 ]
 
 [[package]]
@@ -6904,7 +6959,7 @@ dependencies = [
  "architect",
  "neural-amp-modeler",
  "nice-plug",
- "plugin-core",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "sampler",
  "signal-nam",
  "signal-tone3000",
@@ -8495,10 +8550,10 @@ dependencies = [
 [[package]]
 name = "pitch-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
 dependencies = [
- "dsp",
- "dsp-core",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
 ]
 
@@ -8568,8 +8623,23 @@ dependencies = [
  "architect-ui",
  "atomic_float",
  "dioxus",
- "dsp-core",
- "fts-audio-ui",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=c75c0d864e50d2ca553d792d953dca33fda5bdb6)",
+ "fts-audio-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
+ "nice-plug",
+ "nice-plug-dioxus",
+ "parking_lot",
+]
+
+[[package]]
+name = "plugin-core"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
+dependencies = [
+ "architect-ui",
+ "atomic_float",
+ "dioxus",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "fts-audio-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
@@ -8578,10 +8648,10 @@ dependencies = [
 [[package]]
 name = "plugin-processors"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
 dependencies = [
- "dsp",
- "dsp-core",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "facet",
  "facet-styx",
  "libm",
@@ -8602,17 +8672,46 @@ dependencies = [
  "dioxus",
  "dioxus-native",
  "dioxus-native-dom",
- "dsp",
- "dsp-core",
- "fts-audio-ui",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=c75c0d864e50d2ca553d792d953dca33fda5bdb6)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=c75c0d864e50d2ca553d792d953dca33fda5bdb6)",
+ "fts-audio-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
  "futures-timer",
  "kurbo",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
  "peniko",
- "plugin-core",
- "preset-browser",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
+ "preset-browser 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
+ "vello",
+ "web-time",
+]
+
+[[package]]
+name = "plugin-ui"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
+dependencies = [
+ "anyrender",
+ "architect-ui",
+ "atomic_float",
+ "blitz-dom",
+ "blitz-traits",
+ "bytemuck",
+ "dioxus",
+ "dioxus-native",
+ "dioxus-native-dom",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "fts-audio-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
+ "futures-timer",
+ "kurbo",
+ "nice-plug",
+ "nice-plug-dioxus",
+ "parking_lot",
+ "peniko",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
+ "preset-browser 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "vello",
  "web-time",
 ]
@@ -8750,7 +8849,18 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
 dependencies = [
  "dioxus",
- "fts-audio-ui",
+ "fts-audio-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743)",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "preset-browser"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
+dependencies = [
+ "dioxus",
+ "fts-audio-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "serde",
  "serde_json",
 ]
@@ -9774,7 +9884,7 @@ dependencies = [
  "cpal",
  "daw",
  "daw-clap-ext",
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "eyre",
  "facet",
  "facet-json",
@@ -10457,8 +10567,8 @@ dependencies = [
 name = "signal-core"
 version = "26.10.3"
 dependencies = [
- "dsp",
- "dsp-core",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "libm",
  "neural-amp-modeler",
  "plugin-processors",
@@ -10500,8 +10610,8 @@ dependencies = [
  "daw",
  "daw-proto",
  "daw-standalone",
- "dsp",
- "dsp-core",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "fts-model-comp",
  "fts-model-delay",
  "fts-model-eq",
@@ -10608,7 +10718,7 @@ name = "signal-import"
 version = "26.10.3"
 dependencies = [
  "base64 0.22.1",
- "dsp",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "eyre",
  "hound",
  "realfft",
@@ -10647,7 +10757,7 @@ dependencies = [
 name = "signal-macromod"
 version = "26.10.3"
 dependencies = [
- "dsp-core",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "facet",
  "serde",
  "serde_json",
@@ -10694,7 +10804,7 @@ dependencies = [
  "facet-styx",
  "hound",
  "nice-plug",
- "plugin-core",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "plugin-processors",
  "sampler",
  "serde",
@@ -10810,7 +10920,7 @@ dependencies = [
  "hound",
  "midly",
  "nice-plug",
- "plugin-core",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "sampler",
  "serde",
  "serde_json",
@@ -10905,7 +11015,7 @@ dependencies = [
  "architect",
  "dioxus",
  "nice-plug-dioxus",
- "plugin-core",
+ "plugin-core 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "signal-proto",
  "tokio",
 ]
@@ -12046,7 +12156,7 @@ dependencies = [
  "facet",
  "facet-styx",
  "flate2",
- "fts-audio-ui",
+ "fts-audio-ui 0.1.0 (git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9)",
  "midi",
  "sampler",
  "signal-plugin-host",
@@ -12731,10 +12841,10 @@ checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 [[package]]
 name = "tune-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
 dependencies = [
- "dsp",
- "dsp-core",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
  "pitch-core",
 ]
@@ -13104,10 +13214,10 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 [[package]]
 name = "unison-plugin"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/plugins?rev=08e58c1280f28e646e957cf083156085032b7743#08e58c1280f28e646e957cf083156085032b7743"
+source = "git+https://github.com/FastTrackStudios/plugins?rev=36d22cbebc31293b9bc6719959c2e67e55a83fb9#36d22cbebc31293b9bc6719959c2e67e55a83fb9"
 dependencies = [
- "dsp",
- "dsp-core",
+ "dsp 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
+ "dsp-core 0.1.0 (git+https://github.com/FastTrackStudios/dsp?rev=e4c98107a5bfae459cb14dc3425ba6f013c53d44)",
  "nice-plug",
 ]
 

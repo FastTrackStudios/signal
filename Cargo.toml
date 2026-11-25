@@ -78,20 +78,20 @@ repository = "https://github.com/FastTrackStudios/signal"
 
 [workspace.dependencies]
 # The FTS effects, run in-process by signal-fx (features/fx): FastTrackStudios/plugins.
-comp-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-delay-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-eq-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-gate-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-level-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-limiter-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-meter-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-mic-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-modulation-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-pitch-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-reverb-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-saturate-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-tune-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-unison-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
+comp-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+delay-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+eq-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+gate-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+level-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+limiter-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+meter-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+mic-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+modulation-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+pitch-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+reverb-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+saturate-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+tune-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+unison-plugin = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
 # The YIN detector and the scales (fts-fx's `dsp::tune`).
 pitch-core = { git = "https://github.com/FastTrackStudios/pitch", rev = "94f8ecba5c83fff581df65707d9adf984f2cd137" }
 signal-space = { path = "features/signal/space" }
@@ -101,8 +101,8 @@ signal-tone3000 = { path = "features/signal/tone3000" }
 # crates `builtin` runs in-process, all at ONE rev (move every line
 # together). Working on both at once: a local [patch], never committed
 # (docs/fts-fx.md has the table).
-fts-audio-ui = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
-plugin-core = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743" }
+fts-audio-ui = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
+plugin-core = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9" }
 # Frame, the design and control-surface engine, from its own repo
 # (FastTrackStudios/frame), pinned by rev: the core crate, which has no
 # architect, vox or Dioxus dependency. A local checkout goes under the build
@@ -117,23 +117,23 @@ signal-core = { path = "features/core", default-features = false }
 # (studio#683, daw#50). dsp-core directly for its numeric helpers, at the
 # rev plugins pins. Renamed: the rest of the tree still takes crates of the
 # same names from fts-fx at the rev above.
-plugin-processors = { git = "https://github.com/FastTrackStudios/plugins", rev = "08e58c1280f28e646e957cf083156085032b7743", default-features = false }
-signal-dsp-core = { package = "dsp-core", git = "https://github.com/FastTrackStudios/dsp", rev = "c75c0d864e50d2ca553d792d953dca33fda5bdb6", default-features = false }
+plugin-processors = { git = "https://github.com/FastTrackStudios/plugins", rev = "36d22cbebc31293b9bc6719959c2e67e55a83fb9", default-features = false }
+signal-dsp-core = { package = "dsp-core", git = "https://github.com/FastTrackStudios/dsp", rev = "e4c98107a5bfae459cb14dc3425ba6f013c53d44", default-features = false }
 # The dsp crate itself, at the same rev, for the offline blocks' analyses
 # (`level::envelope`: the vocal leveler's curves, as Studio's VOCAL_LEVEL
 # makes them).
-signal-dsp = { package = "dsp", git = "https://github.com/FastTrackStudios/dsp", rev = "c75c0d864e50d2ca553d792d953dca33fda5bdb6", default-features = false }
+signal-dsp = { package = "dsp", git = "https://github.com/FastTrackStudios/dsp", rev = "e4c98107a5bfae459cb14dc3425ba6f013c53d44", default-features = false }
 # Float maths without `std`, for signal-core's `no_std` code.
 libm = { version = "0.2", default-features = false }
 sampler = { path = "features/sampler" }
 guitar = { path = "features/rigs/guitar" }
-dsp-core = { git = "https://github.com/FastTrackStudios/dsp", rev = "c75c0d864e50d2ca553d792d953dca33fda5bdb6" }
+dsp-core = { git = "https://github.com/FastTrackStudios/dsp", rev = "e4c98107a5bfae459cb14dc3425ba6f013c53d44" }
 keys = { path = "features/rigs/keys" }
 drums = { path = "features/rigs/drums" }
 # NI Komplete Kontrol keyboard driver (Light Guide / per-key RGB LEDs): the
 # drum rig mirrors its kit onto the keybed.
 kontrol = { path = "features/rigs/kontrol" }
-dsp = { git = "https://github.com/FastTrackStudios/dsp", rev = "c75c0d864e50d2ca553d792d953dca33fda5bdb6" }
+dsp = { git = "https://github.com/FastTrackStudios/dsp", rev = "e4c98107a5bfae459cb14dc3425ba6f013c53d44" }
 # Razor edit areas: a rectangle of time by row, and the set algebra over
 # it. Dependency-free and shared by the expression editor and the
 # arrangement, so the two cannot disagree about what an area is.

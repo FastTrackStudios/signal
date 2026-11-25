@@ -1066,3 +1066,166 @@ fn an_instance_the_host_forgot_subscribes_again_when_activated() {
         "shut through the gap, open on the hit: {gap} / {second}"
     );
 }
+
+/// An OHs instance with `preset`, on a host offering `host-actions/1`.
+fn overheads(
+    preset: Preset,
+    host: &std::sync::Arc<TestHost>,
+    tag: &str,
+) -> Box<dyn PluginInstance> {
+    let options = daw::plugin::LoadOptions {
+        actions: Some(host.clone()),
+        ..daw::plugin::LoadOptions::default()
+    };
+    let mut ohs = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+        .expect("loads")
+        .expect("a CLAP");
+    let state = SignalState {
+        instance: Instance::Port(SessionLink {
+            session: SessionId(format!("{tag}-{}", std::process::id())),
+            port: PortName("Drums/Cymbals/OHs".into()),
+        }),
+        ..SignalState::new(preset)
+    };
+    ohs.load_state(&clap_state(&state))
+        .expect("takes the state");
+    ohs.prepare(SR, BLOCK as u32).expect("activates");
+    ohs.pump_main_thread();
+    ohs
+}
+
+/// A keyed dynamic EQ added over signal/1: SIGNAL_BLOCK_ADD with a `key`
+/// puts a `dyn_eq` on the overheads keyed by the snare's trigger, the chain
+/// shows it keyed with its bands and their meters, and the instance follows
+/// the snare's placed hits (`hits:Drums/Snare`).
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn a_dyn_eq_added_over_signal_1_follows_the_snares_hits() {
+    let host = std::sync::Arc::new(TestHost::default());
+    let mut ohs = overheads(drum_kit(&KitPieces::default()), &host, "dyn-eq-add");
+    let signal = ohs.signal().expect("signal/1");
+    let chain: serde_json::Value = serde_json::from_str(
+        &signal
+            .run_action(
+                "SIGNAL_BLOCK_ADD",
+                r#"{"phase": "tone", "kind": "dyn_eq", "key": "Drums/Snare/Sum/Trig"}"#,
+            )
+            .expect("SIGNAL_BLOCK_ADD"),
+    )
+    .expect("JSON");
+    let block = chain["phases"]
+        .as_array()
+        .expect("phases")
+        .iter()
+        .flat_map(|p| p["blocks"].as_array().cloned().unwrap_or_default())
+        .find(|b| b["kind"] == "dyn_eq")
+        .unwrap_or_else(|| panic!("a dyn_eq in {chain}"));
+    println!(
+        "dyn_eq: id {}, key {}, meters {}",
+        block["id"], block["key"], block["meters"]
+    );
+    assert_eq!(block["key"]["from"], "Drums/Snare/Sum/Trig");
+    assert_eq!(block["algorithm"], "dynamic");
+    let ids: Vec<&str> = block["params"]
+        .as_array()
+        .expect("params")
+        .iter()
+        .filter_map(|p| p["id"].as_str())
+        .collect();
+    for id in ["band.1.range", "band.1.source", "band.1.hold", "velocity"] {
+        assert!(ids.contains(&id), "{id} in {ids:?}");
+    }
+    let meters: Vec<&str> = block["meters"]
+        .as_array()
+        .expect("meters")
+        .iter()
+        .filter_map(|m| m["id"].as_str())
+        .collect();
+    assert_eq!(
+        meters,
+        ["band1_gain", "band2_gain", "band3_gain", "band4_gain"],
+        "its bands' meters"
+    );
+    assert_eq!(block["meters"][0]["kind"], "gain");
+    ohs.pump_main_thread();
+    let topics = host.topics.lock().unwrap().clone();
+    if topics.is_empty() {
+        println!("this daw host offers no subscriptions");
+        return;
+    }
+    assert!(
+        topics.iter().any(|t| t == "hits:Drums/Snare"),
+        "subscribed to the snare's hits: {topics:?}"
+    );
+}
+
+/// Colt's overhead trick through the CLAP: a `dyn_eq` on the overheads,
+/// keyed by the snare's trigger on another track, cuts 450 Hz by 4 dB on
+/// the snare's placed hit and only there.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn the_snares_placed_hits_cut_the_overheads() {
+    let mut preset = drum_kit(&KitPieces::default());
+    let lane = preset
+        .lanes
+        .iter_mut()
+        .find(|l| l.name == "Drums/Cymbals/OHs")
+        .expect("the overheads");
+    lane.blocks.push(
+        signal_core::state::BlockSpec::signal("snare_eq", "dyn_eq")
+            .key("Drums/Snare/Sum/Trig")
+            .param("band.1.used", 1.0)
+            .param("band.1.freq", 450.0)
+            .param("band.1.range", -4.0)
+            .param("band.1.source", 2.0)
+            .param("band.1.hold", 80.0)
+            .param("band.1.release", 60.0)
+            .phase(signal_core::state::Phase::Tone),
+    );
+    let host = std::sync::Arc::new(TestHost::default());
+    let mut ohs = overheads(preset, &host, "dyn-eq-hits");
+    let sinks = host.sinks.lock().unwrap().clone();
+    let Some((sub, (topic, sink))) = sinks
+        .iter()
+        .enumerate()
+        .find(|(_, (t, _))| t == "hits:Drums/Snare")
+    else {
+        println!(
+            "this daw host offers no subscriptions: {sinks:?}",
+            sinks = host.topics.lock().unwrap()
+        );
+        return;
+    };
+    sink.send(
+        (sub + 1) as u64,
+        topic,
+        r#"{"piece": "Drums/Snare", "track": "Drums/Snare/Sum/Trig", "note": 38, "count": 1, "hits": [{"time": 1.0, "velocity": 100}]}"#,
+    );
+    let frames = 48_000 * 2;
+    let tone: Vec<f32> = (0..frames)
+        .map(|i| (i as f32 * 450.0 * std::f32::consts::TAU / SR as f32).sin() * 0.25)
+        .collect();
+    let mut out = vec![0.0_f32; frames];
+    let mut scratch = vec![0.0_f32; BLOCK];
+    for start in (0..frames).step_by(BLOCK) {
+        let end = (start + BLOCK).min(frames);
+        let n = end - start;
+        ohs.process_block(
+            &tone[start..end],
+            &tone[start..end],
+            &mut out[start..end],
+            &mut scratch[..n],
+            &PluginEvents::EMPTY,
+        )
+        .expect("processes");
+    }
+    let at = 48_000 + ohs.latency() as usize;
+    let before = peak(&out[at - 12_000..at - 500]);
+    let on = peak(&out[at + 960..at + 2_880]);
+    let cut = 20.0 * (on / before).log10();
+    println!("overheads at 450 Hz: {before:.4} before the snare, {on:.4} on it ({cut:.2} dB)");
+    assert!(
+        (cut + 4.0).abs() < 0.6,
+        "−4 dB on the snare's hit: {cut:.2} dB"
+    );
+}
