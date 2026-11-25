@@ -1038,7 +1038,13 @@ pub unsafe extern "C" fn on_event(
     };
     // Studio's: the piece's every hit, after each edit step:
     // `{piece, track, note, count, hits: [{time, velocity}]}`, time in
-    // seconds of the song.
+    // seconds of the song. An empty list is a piece with no hit to play,
+    // known: its gates stay shut. One with `error` names no piece of the
+    // song's kit, and says nothing of its hits.
+    if event.get("error").is_some_and(|e| !e.is_null()) {
+        tracing::warn!(topic, "signal: the host names no piece for these hits");
+        return;
+    }
     let Some(list) = event.get("hits").and_then(Value::as_array) else {
         return;
     };

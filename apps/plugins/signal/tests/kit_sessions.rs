@@ -733,9 +733,17 @@ fn tom_through_a_gap(
     tom: &mut Box<dyn PluginInstance>,
     trig: &mut Box<dyn PluginInstance>,
 ) -> Vec<f32> {
+    tom_and_trigger(tom, trig, &vec![0.0; 48_000 * 17])
+}
+
+/// [`tom_through_a_gap`], the trigger's track playing `trigger` (17 s).
+fn tom_and_trigger(
+    tom: &mut Box<dyn PluginInstance>,
+    trig: &mut Box<dyn PluginInstance>,
+    trigger: &[f32],
+) -> Vec<f32> {
     let frames = 48_000 * 17;
     let bleed = noise(frames, 0.3, 23);
-    let silence = vec![0.0_f32; BLOCK];
     let mut out = vec![0.0_f32; frames];
     let mut trig_out = vec![0.0_f32; BLOCK];
     let mut scratch = vec![0.0_f32; BLOCK];
@@ -751,8 +759,8 @@ fn tom_through_a_gap(
         )
         .expect("processes");
         trig.process_block(
-            &silence[..n],
-            &silence[..n],
+            &trigger[start..end],
+            &trigger[start..end],
             &mut trig_out[..n],
             &mut scratch[..n],
             &PluginEvents::EMPTY,
@@ -888,4 +896,74 @@ fn a_gate_keyed_from_another_track_waits_through_a_gap_of_placed_hits() {
     );
     println!("tom 4's copy handed nothing: the gap {open:.4}");
     assert!(open > 0.05, "a copy with no placed hits fails open: {open}");
+}
+
+/// Studio's event for a piece whose every hit it holds for bleed (Tom 4 on
+/// Unbreakable: two auto-detected hits flagged `bleed`, so no note): a
+/// piece of the kit, `count: 0`, no hits. Its hits are known — there are
+/// none — so the tom's gate stays shut through the whole song's bleed and
+/// never falls back to its own input; the key says `placed`. A hit its
+/// trigger's audio detects still opens it.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn a_piece_with_no_placed_hit_keeps_its_gate_shut() {
+    const NONE: &str =
+        r#"{"piece": "Tom 4", "track": "Drums/Toms/Tom 4", "note": 50, "count": 0, "hits": []}"#;
+    let preset = drum_kit(&KitPieces::default());
+    let host = std::sync::Arc::new(TestHost::default());
+    let run = |tag: &str, trigger: &[f32]| {
+        let session = format!("tom-none-{tag}-{}", std::process::id());
+        let load = |port: &str| {
+            let options = daw::plugin::LoadOptions {
+                actions: Some(host.clone()),
+                ..daw::plugin::LoadOptions::default()
+            };
+            let mut p = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+                .expect("loads")
+                .expect("a CLAP");
+            p.load_state(&clap_state(&SignalState {
+                instance: Instance::Port(SessionLink {
+                    session: SessionId(session.clone()),
+                    port: PortName(port.into()),
+                }),
+                ..SignalState::new(preset.clone())
+            }))
+            .expect("takes the state");
+            p.prepare(SR, BLOCK as u32).expect("activates");
+            p.pump_main_thread();
+            p
+        };
+        let mut tom = load("Drums/Toms/Tom 4");
+        let mut trig = load("Drums/Toms/Tom 4/T4 Trig");
+        tom.event_sink()
+            .expect("host-events/1")
+            .send(1, "hits:Drums/Toms/Tom 4", NONE);
+        let out = tom_and_trigger(&mut tom, &mut trig, trigger);
+        let chain: serde_json::Value =
+            serde_json::from_str(&tom.signal().expect("signal/1").chain().expect("chain"))
+                .expect("JSON");
+        let key = chain["phases"][0]["blocks"][0]["key"].clone();
+        (out, tom.latency() as usize, key)
+    };
+    let (out, latency, key) = run("quiet", &vec![0.0; 48_000 * 17]);
+    let song = peak_s(&out, latency, (0.5, 16.9));
+    println!("tom 4 with no placed hit: peak {song:.5} over 17 s of bleed; key {key}");
+    assert!(song < 0.003, "shut through the bleed: {song}");
+    assert_eq!(key["via"], "placed", "{key}");
+    assert!(key["fallback"].is_null(), "{key}");
+
+    // The trigger's track hits at 5 s: its audio keys the gate.
+    let mut hit = vec![0.0_f32; 48_000 * 17];
+    for (i, s) in hit.iter_mut().enumerate().skip(48_000 * 5).take(400) {
+        let t = (i - 48_000 * 5) as f32;
+        *s = 0.9 * (-t / 60.0).exp() * if i % 2 == 0 { 1.0 } else { -1.0 };
+    }
+    let (out, latency, _) = run("struck", &hit);
+    let open = peak_s(&out, latency, (5.0, 5.3));
+    let before = peak_s(&out, latency, (0.5, 4.9));
+    println!("tom 4 struck at 5 s: before {before:.5}, on it {open:.4}");
+    assert!(
+        open > 0.05 && before < 0.003,
+        "the trigger opens it: {before} → {open}"
+    );
 }

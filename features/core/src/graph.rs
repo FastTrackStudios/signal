@@ -482,6 +482,10 @@ pub struct Graph {
     /// Per piece a remote key follows: its hits as the host placed them,
     /// `(song frame, velocity)`, sorted (empty until the host sends them).
     planned: Vec<(u16, Box<[(u64, f32)]>)>,
+    /// Per piece a remote key follows: whether the host has placed its
+    /// hits (any `set_planned_hits`, an empty list too: a piece the song
+    /// never plays). Allocated at build, set on the audio thread.
+    placed: Vec<(u16, bool)>,
     remote_count: usize,
     /// The song position of the next piece, in frames (the session's clock).
     clock: u64,
@@ -837,6 +841,7 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
         piece_midi: remote_pieces.iter().map(|p| (*p, 0)).collect(),
         piece_taken: remote_pieces.iter().map(|p| (*p, None)).collect(),
         planned: remote_pieces.iter().map(|p| (*p, Box::default())).collect(),
+        placed: remote_pieces.iter().map(|p| (*p, false)).collect(),
         ten_seconds: (f64::from(opts.sample_rate) * 10.0) as u64,
         remote_count: 0,
         clock: 0,
@@ -1283,11 +1288,7 @@ impl Graph {
             .position(|k| k.0 == lane && k.1 == block)
         {
             let piece = self.remote_keys[i].2;
-            if self
-                .planned
-                .iter()
-                .any(|(p, hits)| *p == piece && !hits.is_empty())
-            {
+            if self.placed.iter().any(|(p, known)| *p == piece && *known) {
                 return Some(KeyVia::Placed);
             }
             let (frame, midi) = self.key_last.get(i).copied().unwrap_or((0, false));
@@ -1934,17 +1935,23 @@ impl Graph {
     /// (to drop off the audio thread). A piece no key here follows hands
     /// `hits` back.
     ///
-    /// The blocks the piece keys are told whether its hits are all placed
-    /// now, so a gate doesn't fail open in a gap the song has.
+    /// The host placed every hit the piece has, `hits` empty too (a piece
+    /// the song never plays, or whose every hit the host holds for bleed):
+    /// the blocks the piece keys are told its hits are known, so a gate
+    /// waits through a gap the song has — however long, the whole song —
+    /// rather than falling back to its own input and opening on the bleed.
+    /// A trigger's detected hits still key it while the list is empty.
     pub fn set_planned_hits(&mut self, piece: u16, hits: Box<[(u64, f32)]>) -> Box<[(u64, f32)]> {
         let Some((_, slot)) = self.planned.iter_mut().find(|(p, _)| *p == piece) else {
             return hits;
         };
-        let known = !hits.is_empty();
         let old = core::mem::replace(slot, hits);
+        if let Some((_, known)) = self.placed.iter_mut().find(|(p, _)| *p == piece) {
+            *known = true;
+        }
         for (l, b, _) in self.remote_keys.iter().filter(|k| k.2 == piece) {
             if let Some(block) = self.lanes.get_mut(*l).and_then(|x| x.blocks.get_mut(*b)) {
-                block.hits_known(known);
+                block.hits_known(true);
             }
         }
         old
