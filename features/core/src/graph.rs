@@ -222,17 +222,38 @@ impl KWeight {
     }
 
     /// The K-weighted energy of a stereo piece.
+    ///
+    /// The two channels run side by side, each in its own registers: each
+    /// channel's filters are a chain of dependent multiply-adds, so one
+    /// channel at a time left the core waiting on every one of them. Each
+    /// channel's filtering is what it was, bit for bit; the energy is the
+    /// two channels' sums added, where it was one running sum, so it can
+    /// differ in its last bit (1e-16, far under a meter's f32 dB).
     fn energy(&mut self, l: &[f32], r: &[f32]) -> f64 {
         let (shelf, hp) = (self.shelf, self.high_pass);
-        let mut e = 0.0;
-        for (ch, x) in [l, r].into_iter().enumerate() {
-            for s in x {
-                let a = Self::stage(&shelf, &mut self.z[ch * 2], f64::from(*s));
-                let b = Self::stage(&hp, &mut self.z[ch * 2 + 1], a);
-                e += b * b;
-            }
+        let [mut zl1, mut zl2, mut zr1, mut zr2] = self.z;
+        let (mut el, mut er) = (0.0, 0.0);
+        for (sl, sr) in l.iter().zip(r) {
+            let a = Self::stage(&shelf, &mut zl1, f64::from(*sl));
+            let b = Self::stage(&hp, &mut zl2, a);
+            el += b * b;
+            let a = Self::stage(&shelf, &mut zr1, f64::from(*sr));
+            let b = Self::stage(&hp, &mut zr2, a);
+            er += b * b;
         }
-        e
+        // A piece is two equal channels; a longer one's tail, alone.
+        for s in l.get(r.len()..).unwrap_or(&[]) {
+            let a = Self::stage(&shelf, &mut zl1, f64::from(*s));
+            let b = Self::stage(&hp, &mut zl2, a);
+            el += b * b;
+        }
+        for s in r.get(l.len()..).unwrap_or(&[]) {
+            let a = Self::stage(&shelf, &mut zr1, f64::from(*s));
+            let b = Self::stage(&hp, &mut zr2, a);
+            er += b * b;
+        }
+        self.z = [zl1, zl2, zr1, zr2];
+        el + er
     }
 }
 
@@ -2204,6 +2225,48 @@ fn give_remote_hits(
                 block.hit(u32::try_from(at).unwrap_or(0), *velocity);
                 *last = ((*frame).max(1), *midi);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::KWeight;
+
+    /// The K-weighted energy as it was measured, one channel after the
+    /// other into one sum.
+    fn energy_one_channel_at_a_time(k: &mut KWeight, l: &[f32], r: &[f32]) -> f64 {
+        let (shelf, hp) = (k.shelf, k.high_pass);
+        let mut e = 0.0;
+        for (ch, x) in [l, r].into_iter().enumerate() {
+            for s in x {
+                let a = KWeight::stage(&shelf, &mut k.z[ch * 2], f64::from(*s));
+                let b = KWeight::stage(&hp, &mut k.z[ch * 2 + 1], a);
+                e += b * b;
+            }
+        }
+        e
+    }
+
+    /// Both channels at once measure what one at a time did: the filters'
+    /// state bit for bit, the energy to its last bits, piece after piece.
+    #[test]
+    fn stereo_k_weighting_measures_what_it_did() {
+        let mut seed = 0x1234_5678_u32;
+        let mut noise = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            (seed as f32 / u32::MAX as f32) * 2.0 - 1.0
+        };
+        let (mut ours, mut theirs) = (KWeight::new(48_000.0), KWeight::new(48_000.0));
+        for len in [512_usize, 1, 0, 300, 512, 64] {
+            let l: alloc::vec::Vec<f32> = (0..len).map(|_| noise()).collect();
+            let r: alloc::vec::Vec<f32> = (0..len).map(|_| 0.3 * noise()).collect();
+            let a = ours.energy(&l, &r);
+            let b = energy_one_channel_at_a_time(&mut theirs, &l, &r);
+            assert!((a - b).abs() <= 1e-12 * b.abs(), "{len}: {a} vs {b}");
+            assert_eq!(ours.z, theirs.z, "{len}: the filters' state");
         }
     }
 }
