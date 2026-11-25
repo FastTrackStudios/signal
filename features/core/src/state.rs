@@ -140,6 +140,21 @@ pub struct SendSpec {
     /// than after it (the default: what the lane sounds like).
     #[serde(default)]
     pub pre: bool,
+    /// A send by port: one named output of one of the lane's blocks (a
+    /// multi-mic sampler's `room`, its `oh`) rather than the lane's own
+    /// audio. Taken where that block puts it out, before the lane's fader;
+    /// `pre` is then beside the point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<BlockPort>,
+}
+
+/// One named output of a block: what a send by port takes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockPort {
+    /// The block's id in its lane.
+    pub block: String,
+    /// The output's name (an engine port: `room`).
+    pub port: String,
 }
 
 impl SendSpec {
@@ -149,7 +164,18 @@ impl SendSpec {
             to: lane.into(),
             gain_db,
             pre: false,
+            port: None,
         }
+    }
+
+    /// This send by port: output `port` of block `block` of its lane.
+    #[must_use]
+    pub fn port(mut self, block: impl Into<String>, port: impl Into<String>) -> Self {
+        self.port = Some(BlockPort {
+            block: block.into(),
+            port: port.into(),
+        });
+        self
     }
 
     #[must_use]

@@ -1646,6 +1646,50 @@ impl SamplerBank {
         }
     }
 
+    /// Instrument `id`'s engine ports, by name, in order: its first is what
+    /// [`render`](Self::render) mixes. Empty for an id that is not an
+    /// instrument. Control side (allocates).
+    #[must_use]
+    pub fn port_names(&self, id: &str) -> Vec<String> {
+        self.instruments
+            .get(id)
+            .map(|slot| {
+                slot.engine
+                    .ports
+                    .iter()
+                    .map(|p| p.spec.id.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// [`render`](Self::render), then each of instrument `id`'s engine ports
+    /// as it just rendered, handed to `each` (its index and its interleaved
+    /// stereo, as long as `output`): a multi-mic piece's `oh` and `room`
+    /// beside the close mic it mixes. Audio thread: no allocation.
+    pub fn render_with_ports(
+        &mut self,
+        output: &mut [f32],
+        id: &str,
+        mut each: impl FnMut(usize, &[f32]),
+    ) {
+        self.render(output);
+        let Some(slot) = self.instruments.get(id) else {
+            return;
+        };
+        let n = output.len();
+        for (i, port) in slot.engine.ports.iter().enumerate() {
+            if let Some(buf) = slot
+                .engine
+                .layers
+                .get(port.layer_index)
+                .and_then(|l| l.out_buffer.get(..n))
+            {
+                each(i, buf);
+            }
+        }
+    }
+
     /// Mix all un-muted instruments + presets into `output` (interleaved
     /// stereo, +=).
     pub fn render(&mut self, output: &mut [f32]) {

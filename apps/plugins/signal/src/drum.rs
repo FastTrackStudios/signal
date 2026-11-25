@@ -53,6 +53,15 @@ pub struct Drum {
     pending_count: usize,
     /// Keyed by its piece\'s lane: played by its hits, not its own MIDI.
     keyed: bool,
+    /// Its engine's ports, by name, when it has more than one (a multi-mic
+    /// piece: `in`, `oh`, `room`): the block's named outputs (signal#28),
+    /// the first what it plays in place. Empty for a one-port engine.
+    port_names: Vec<String>,
+    /// Each port's interleaved render of the piece being rendered, then
+    /// each one at the block's level, over the last piece (`last_n`).
+    ports: Vec<Vec<f32>>,
+    port_out: Vec<(Vec<f32>, Vec<f32>)>,
+    last_n: usize,
 }
 
 impl Drum {
@@ -63,11 +72,30 @@ impl Drum {
         v.round().clamp(1.0, 127.0) as u8
     }
 
-    /// Render frames `from..to` of the piece into `scratch`.
+    /// Render frames `from..to` of the piece into `scratch`, and each of
+    /// its ports into `ports` when it has several.
     fn render(&mut self, from: usize, to: usize) {
-        if let Some(out) = self.scratch.get_mut(from * 2..to * 2) {
-            self.bank.render(out);
+        let Self {
+            bank,
+            scratch,
+            ports,
+            port_names,
+            ..
+        } = self;
+        let Some(out) = scratch.get_mut(from * 2..to * 2) else {
+            return;
+        };
+        if port_names.is_empty() {
+            bank.render(out);
+            return;
         }
+        bank.render_with_ports(out, PIECE, |i, buf| {
+            if let Some(dst) = ports.get_mut(i).and_then(|p| p.get_mut(from * 2..to * 2)) {
+                for (d, s) in dst.iter_mut().zip(buf) {
+                    *d += *s;
+                }
+            }
+        });
     }
 }
 
@@ -123,6 +151,11 @@ impl BlockProcessor for Drum {
         if let Some(s) = self.scratch.get_mut(..n * 2) {
             s.fill(0.0);
         }
+        for p in &mut self.ports {
+            if let Some(p) = p.get_mut(..n * 2) {
+                p.fill(0.0);
+            }
+        }
         // Hits in frame order; the graph hands them in order already, the
         // host's MIDI and the detector's may interleave.
         let count = core::mem::take(&mut self.pending_count);
@@ -157,6 +190,33 @@ impl BlockProcessor for Drum {
             *l += frame[0] * self.level;
             *r += frame[1] * self.level;
         }
+        // Each port at the block's level, for a send by port.
+        let level = self.level;
+        for (src, (pl, pr)) in self.ports.iter().zip(self.port_out.iter_mut()) {
+            for ((frame, l), r) in src
+                .chunks_exact(2)
+                .take(n)
+                .zip(pl.iter_mut())
+                .zip(pr.iter_mut())
+            {
+                *l = frame[0] * level;
+                *r = frame[1] * level;
+            }
+        }
+        self.last_n = n;
+    }
+
+    fn output_count(&self) -> usize {
+        self.port_names.len()
+    }
+
+    fn output_name(&self, index: usize) -> Option<&str> {
+        self.port_names.get(index).map(String::as_str)
+    }
+
+    fn output(&self, index: usize) -> Option<(&[f32], &[f32])> {
+        let (l, r) = self.port_out.get(index)?;
+        Some((l.get(..self.last_n)?, r.get(..self.last_n)?))
     }
 }
 
@@ -247,7 +307,22 @@ impl BlockFactory for DrumFactory {
             pending: [(0, 0.0); PENDING],
             pending_count: 0,
             keyed: false,
+            port_names: Vec::new(),
+            ports: Vec::new(),
+            port_out: Vec::new(),
+            last_n: 0,
         };
+        let mut block = block;
+        // A multi-mic piece: each engine port a named output.
+        let names = block.bank.port_names(PIECE);
+        if names.len() > 1 {
+            block.ports = names.iter().map(|_| vec![0.0; cx.max_block * 2]).collect();
+            block.port_out = names
+                .iter()
+                .map(|_| (vec![0.0; cx.max_block], vec![0.0; cx.max_block]))
+                .collect();
+            block.port_names = names;
+        }
         Ok(Built {
             backend: Backend::Linked(Box::new(block)),
             params: PARAMS,

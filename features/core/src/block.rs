@@ -312,6 +312,9 @@ pub struct ChainBlock {
     backend: Backend,
     pub bypass: bool,
     status: BlockStatus,
+    /// Whether the last piece ran through it (not bypassed, its phase on):
+    /// its named outputs hold that piece only then.
+    ran: bool,
 }
 
 impl ChainBlock {
@@ -334,6 +337,7 @@ impl ChainBlock {
             backend,
             bypass: false,
             status,
+            ran: false,
         };
         block.replay_params();
         block
@@ -486,8 +490,47 @@ impl ChainBlock {
         }
     }
 
+    /// How many named outputs it has (a multi-mic sampler's ports); a
+    /// CLAP backend has none here.
+    #[must_use]
+    pub fn output_count(&self) -> usize {
+        match &self.backend {
+            Backend::Linked(p) => p.output_count(),
+            Backend::Clap(_) => 0,
+        }
+    }
+
+    /// Output `index`'s name.
+    #[must_use]
+    pub fn output_name(&self, index: usize) -> Option<&str> {
+        match &self.backend {
+            Backend::Linked(p) => p.output_name(index),
+            Backend::Clap(_) => None,
+        }
+    }
+
+    /// Output `index`'s audio over the last piece, `None` when that piece
+    /// did not run through the block (bypassed, its phase off): a send by
+    /// port is then silent.
+    #[must_use]
+    pub fn output(&self, index: usize) -> Option<(&[f32], &[f32])> {
+        if !self.ran {
+            return None;
+        }
+        match &self.backend {
+            Backend::Linked(p) => p.output(index),
+            Backend::Clap(_) => None,
+        }
+    }
+
+    /// The piece passed it by (its phase off).
+    pub const fn skip(&mut self) {
+        self.ran = false;
+    }
+
     /// Process one piece in place.
     pub fn process(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.ran = !self.bypass;
         if self.bypass {
             return;
         }

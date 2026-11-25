@@ -42,6 +42,10 @@ pub struct BlockReport {
     pub backend: String,
     #[serde(flatten)]
     pub status: BlockStatus,
+    /// Its named outputs (a multi-mic sampler's ports), what a send by
+    /// port names; none for an effect.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
 }
 
 /// What building a preset came to.
@@ -337,6 +341,9 @@ struct Send {
     gain: f32,
     /// Taken before the chain and the fader.
     pre: bool,
+    /// A send by port: output `.1` of block `.0` of the lane, before its
+    /// fader.
+    port: Option<(usize, usize)>,
     delay: Delay,
 }
 
@@ -397,6 +404,25 @@ impl Delay {
             };
             *d_l += x_l * gain;
             *d_r += x_r * gain;
+        }
+    }
+
+    /// [`add`](Self::add) of `len` frames of silence: what was in the line
+    /// still comes out, times `gain`, and silence goes in.
+    fn add_silence(&mut self, len: usize, dst: (&mut [f32], &mut [f32]), gain: f32) {
+        let n = self.l.len();
+        if n == 0 {
+            return;
+        }
+        for (d_l, d_r) in dst.0.iter_mut().zip(dst.1.iter_mut()).take(len) {
+            let (Some(bl), Some(br)) = (self.l.get_mut(self.pos), self.r.get_mut(self.pos)) else {
+                continue;
+            };
+            *d_l += *bl * gain;
+            *d_r += *br * gain;
+            *bl = 0.0;
+            *br = 0.0;
+            self.pos = self.pos.saturating_add(1).checked_rem(n).unwrap_or(0);
         }
     }
 
@@ -594,6 +620,9 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
                     "clap".into()
                 },
                 status: block.status().clone(),
+                outputs: (0..block.output_count())
+                    .filter_map(|o| block.output_name(o).map(alloc::string::ToString::to_string))
+                    .collect(),
             });
             blocks.push(block);
         }
@@ -682,12 +711,39 @@ pub fn build(preset: &Preset, opts: &BuildOptions<'_>) -> (Graph, BuildReport) {
             .sends
             .iter()
             .filter_map(|s| match index_of(&s.to).filter(|j| *j != i) {
-                Some(j) => Some(Send {
-                    to: j,
-                    gain: crate::util::db_to_gain(s.gain_db),
-                    pre: s.pre,
-                    delay: Delay::default(),
-                }),
+                Some(j) => {
+                    // A send by port: the block, and its output by name.
+                    let port = match &s.port {
+                        None => None,
+                        Some(bp) => {
+                            let found = lanes.get(i).and_then(|l: &Lane| {
+                                let b = l.blocks.iter().position(|b| b.id == bp.block)?;
+                                let block = l.blocks.get(b)?;
+                                let o = (0..block.output_count())
+                                    .find(|&o| block.output_name(o) == Some(bp.port.as_str()))?;
+                                Some((b, o))
+                            });
+                            if found.is_none() {
+                                report.warnings.push(alloc::format!(
+                                    "{}: no output {} of block {} to send to {}",
+                                    spec.name,
+                                    bp.port,
+                                    bp.block,
+                                    s.to
+                                ));
+                                return None;
+                            }
+                            found
+                        }
+                    };
+                    Some(Send {
+                        to: j,
+                        gain: crate::util::db_to_gain(s.gain_db),
+                        pre: s.pre,
+                        port,
+                        delay: Delay::default(),
+                    })
+                }
                 None => {
                     if !elsewhere(&s.to) {
                         report.warnings.push(alloc::format!(
@@ -902,6 +958,26 @@ fn compensate(lanes: &mut [Lane], order: &[usize]) -> u32 {
             usize::try_from(frames).unwrap_or(0)
         })
         .collect();
+    // A block's output port's lateness within its lane: its chain up to and
+    // including that block.
+    let through = |l: &Lane, b: usize| -> usize {
+        let frames = l
+            .blocks
+            .iter()
+            .take(b.saturating_add(1))
+            .filter(|b| !b.bypass)
+            .map(ChainBlock::latency)
+            .fold(0_u32, u32::saturating_add);
+        usize::try_from(frames).unwrap_or(0)
+    };
+    // When each send's audio leaves its lane.
+    let send_at = |l: &Lane, s: &Send, late: usize, out: usize| -> usize {
+        match s.port {
+            Some((b, _)) => late.saturating_add(through(l, b)),
+            None if s.pre => late,
+            None => out,
+        }
+    };
     // How late a lane's input is, and its output.
     let mut input = vec![0_usize; n];
     let mut output = vec![0_usize; n];
@@ -918,7 +994,7 @@ fn compensate(lanes: &mut [Lane], order: &[usize]) -> u32 {
             feed(t, output[i]);
         }
         for s in &lane.sends {
-            feed(s.to, if s.pre { late } else { output[i] });
+            feed(s.to, send_at(lane, s, late, output[i]));
         }
     }
     let heard = |l: &Lane| l.to.is_none() && !l.mute;
@@ -935,7 +1011,7 @@ fn compensate(lanes: &mut [Lane], order: &[usize]) -> u32 {
         let sends: Vec<usize> = lanes[i]
             .sends
             .iter()
-            .map(|s| input[s.to] - if s.pre { late } else { out })
+            .map(|s| input[s.to] - send_at(&lanes[i], s, late, out))
             .collect();
         let lane = &mut lanes[i];
         if !lane.input.is_empty() && late > 0 {
@@ -1804,7 +1880,9 @@ impl Graph {
                     {
                         ring.push(self.clock.saturating_sub(la as u64), l, r);
                     }
-                    if !off {
+                    if off {
+                        block.skip();
+                    } else {
                         block.process(l, r);
                     }
                     if let Some(g) = lane.phases.get_mut(group).filter(|g| g.last == b) {
@@ -1844,11 +1922,28 @@ impl Graph {
                         pre_r,
                         l,
                         r,
+                        blocks,
                         ..
                     } = src;
                     let Some(send) = sends.get_mut(si) else {
                         continue;
                     };
+                    // By port: that block's output, before the lane's
+                    // fader; silent (its delay still run) when the piece
+                    // passed the block by.
+                    if let Some((b, o)) = send.port {
+                        let audio = blocks.get(b).and_then(|blk| blk.output(o));
+                        let (Some(dl), Some(dr)) =
+                            (dst.in_l.get_mut(..len), dst.in_r.get_mut(..len))
+                        else {
+                            continue;
+                        };
+                        match audio.and_then(|(pl, pr)| Some((pl.get(..len)?, pr.get(..len)?))) {
+                            Some((pl, pr)) => send.delay.add((pl, pr), (dl, dr), send.gain),
+                            None => send.delay.add_silence(len, (dl, dr), send.gain),
+                        }
+                        continue;
+                    }
                     // Pre: before the chain and the lane's fader; post:
                     // after both.
                     let (sl, sr, k) = if send.pre {

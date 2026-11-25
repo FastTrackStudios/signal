@@ -41,8 +41,8 @@ pub struct Ext {
     pub actions: Mutex<Option<HostActionsClient>>,
     /// Subscriptions to the host's topics, by topic.
     pub subscriptions: Mutex<Vec<(String, u64)>>,
-    /// The last build's blocks: `(lane, block, backend, status)`.
-    pub report: Mutex<Vec<(String, String, String, &'static str)>>,
+    /// The last build's blocks: `(lane, block, backend, status, outputs)`.
+    pub report: Mutex<Vec<(String, String, String, &'static str, Vec<String>)>>,
     /// Live values, by the running table's meter index (f32 bits).
     pub meters: Box<[AtomicU32]>,
     /// Per table block: what keys it (0 none, 1 hits, 2 midi, 3 self,
@@ -211,7 +211,13 @@ pub fn after_build(shared: &Shared, report: &graph::BuildReport, on_main: bool) 
                 signal_core::block::BlockStatus::Fallback { .. } => "fallback",
                 signal_core::block::BlockStatus::Bypassed { .. } => "unavailable",
             };
-            (b.lane.clone(), b.block.clone(), b.backend.clone(), status)
+            (
+                b.lane.clone(),
+                b.block.clone(),
+                b.backend.clone(),
+                status,
+                b.outputs.clone(),
+            )
         })
         .collect();
     let revision = shared.ext.revision.fetch_add(1, Ordering::AcqRel) + 1;
@@ -539,12 +545,13 @@ fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec
                 json!({ "id": m.id.rsplit('.').next().unwrap_or(&m.id), "name": m.name, "unit": m.unit, "index": i, "kind": kind, "min": min, "max": max })
             })
             .collect();
-        let (backend, status) = report
+        let (backend, status, outputs) = report
             .iter()
             .find(|(lane, block, ..)| *lane == spec.name && *block == bspec.id)
-            .map_or(("linked".to_owned(), "ok"), |(_, _, be, st)| {
-                (be.clone(), *st)
-            });
+            .map_or(
+                ("linked".to_owned(), "ok", Vec::new()),
+                |(_, _, be, st, o)| (be.clone(), *st, o.clone()),
+            );
         let via = match shared
             .ext
             .via
@@ -584,6 +591,9 @@ fn lane_phases(shared: &Shared, table: &Table, l: usize, spec: &LaneSpec) -> Vec
             })),
             "params": params,
             "meters": meters,
+            // Its named outputs (a multi-mic sampler's ports): a send by
+            // port names one (`{"to", "port": {"block", "port"}}`).
+            "outputs": outputs,
         });
         let phase = b.phase.map_or("source", Phase::slug).to_owned();
         match phases.iter_mut().find(|(p, _)| *p == phase) {
