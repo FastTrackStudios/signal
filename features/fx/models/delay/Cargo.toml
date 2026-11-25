@@ -21,7 +21,7 @@ nice-plug = { workspace = true, features = ["vst3"] }
 # The Blitz/nice-plug editor: the six families and their panels.
 # The effect and its parameters' faces: plugins' `plugin-ui`, which re-exports
 # `dsp` with each module's `ui` at the paths fts-fx had.
-dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "86edc7a2b79968dc3edf828a70cc1d802a37b502", features = ["delay", "delay-native", "delay-profiles", "delay-ui", "delay-viz"] }
+dsp = { package = "plugin-ui", git = "https://github.com/FastTrackStudios/plugins", rev = "9e3ea439153e0d030d3bc220ce5d69c41cc11bf6", features = ["delay", "delay-native", "delay-profiles", "delay-ui", "delay-viz"] }
 plugin-core = { workspace = true }
 
 # The DSP facade (re-exports delay-dsp). Never depend on delay-dsp directly.
