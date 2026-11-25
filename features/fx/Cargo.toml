@@ -1,0 +1,44 @@
+[package]
+name = "signal-effects"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The FTS effects (EQ, Comp, Saturate, Reverb, Delay, Gate, Level, Limiter, Meter, Mic, Modulation, Pitch, Tune, Unison) run in-process for a host's engine: what Studio loads its effects from (daw has none of its own)"
+
+[lints]
+workspace = true
+
+[features]
+# The effects as a daw engine's FX (`FxFactory`), each a nice-plug plugin
+# from FastTrackStudios/plugins run in-process.
+engine = ["dep:comp-plugin", "dep:daw-standalone", "dep:delay-plugin", "dep:eq-plugin", "dep:gate-plugin", "dep:level-plugin", "dep:limiter-plugin", "dep:meter-plugin", "dep:mic-plugin", "dep:modulation-plugin", "dep:nice-plug", "dep:num-traits", "dep:pitch-plugin", "dep:reverb-plugin", "dep:saturate-plugin", "dep:serde", "dep:serde_json", "dep:tracing", "dep:tune-plugin", "dep:unison-plugin"]
+
+[dependencies]
+dsp = { workspace = true, features = ["comp", "delay", "eq", "level", "modulation", "pitch", "reverb", "saturate", "saturate-analysis", "stack"] }
+dsp-core = { workspace = true, features = ["audio"] }
+# The YIN detector and the scales (fts-fx's `dsp::tune`).
+pitch-core = { workspace = true }
+crossbeam-channel = { workspace = true }
+daw = { workspace = true, features = ["standalone"] }
+daw-proto = { workspace = true }
+daw-standalone = { workspace = true, optional = true }
+fts-sample = { workspace = true, features = ["load"] }
+nice-plug = { workspace = true, optional = true }
+num-traits = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+comp-plugin = { package = "fts-model-comp", path = "models/comp", optional = true }
+delay-plugin = { package = "fts-model-delay", path = "models/delay", optional = true }
+eq-plugin = { package = "fts-model-eq", path = "models/eq", optional = true }
+gate-plugin = { package = "fts-model-gate", path = "models/gate", optional = true }
+level-plugin = { workspace = true, optional = true }
+limiter-plugin = { workspace = true, optional = true }
+meter-plugin = { workspace = true, optional = true }
+mic-plugin = { workspace = true, optional = true }
+modulation-plugin = { workspace = true, optional = true }
+pitch-plugin = { workspace = true, optional = true }
+reverb-plugin = { package = "fts-model-reverb", path = "models/reverb", optional = true }
+saturate-plugin = { package = "fts-model-saturate", path = "models/saturate", optional = true }
+tune-plugin = { workspace = true, optional = true }
+unison-plugin = { workspace = true, optional = true }
