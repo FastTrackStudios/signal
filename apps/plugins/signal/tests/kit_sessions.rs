@@ -967,3 +967,102 @@ fn a_piece_with_no_placed_hit_keeps_its_gate_shut() {
         "the trigger opens it: {before} → {open}"
     );
 }
+
+/// A host that forgets every subscription made before `forget` (as
+/// Studio's pump drops those of a plugin it does not run yet: FX_RELOAD
+/// loads and restores the new instance before putting it on the chain).
+#[derive(Default)]
+struct ForgetfulHost {
+    live: std::sync::Mutex<Vec<(u64, String, daw_clap_ext::host::EventSink)>>,
+    next: std::sync::atomic::AtomicU64,
+}
+
+impl ForgetfulHost {
+    fn forget(&self) {
+        self.live.lock().unwrap().clear();
+    }
+    fn send(&self, topic: &str, event: &str) -> usize {
+        let live = self.live.lock().unwrap().clone();
+        let mut sent = 0;
+        for (id, t, sink) in live.iter().filter(|(_, t, _)| t == topic) {
+            sink.send(*id, t, event);
+            sent += 1;
+        }
+        sent
+    }
+}
+
+impl daw_clap_ext::host::HostActions for ForgetfulHost {
+    fn list(&self) -> Result<String, daw_clap_ext::ExtError> {
+        Ok("[]".into())
+    }
+    fn describe(&self, id: &str) -> Result<String, daw_clap_ext::ExtError> {
+        Err(daw_clap_ext::ExtError::NotFound(id.into()))
+    }
+    fn run(&self, id: &str, _: &str) -> Result<String, daw_clap_ext::ExtError> {
+        Err(daw_clap_ext::ExtError::NotFound(id.into()))
+    }
+    fn subscribe(&self, topic: &str, sink: daw_clap_ext::host::EventSink) -> Option<u64> {
+        let id = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        self.live.lock().unwrap().push((id, topic.into(), sink));
+        Some(id)
+    }
+    fn unsubscribe(&self, subscription: u64) {
+        self.live
+            .lock()
+            .unwrap()
+            .retain(|(id, _, _)| *id != subscription);
+    }
+}
+
+/// FX_RELOAD's race: the new instance subscribes while its state loads,
+/// before the host runs it, and the host forgets those subscriptions.
+/// Activated, it subscribes again, so the piece's placed hits reach it:
+/// Tom 4's gate shut through a 15 s gap, open on each placed hit.
+#[test]
+#[ignore = "needs the bundled .clap"]
+fn an_instance_the_host_forgot_subscribes_again_when_activated() {
+    let preset = drum_kit(&KitPieces::default());
+    let host = std::sync::Arc::new(ForgetfulHost::default());
+    let session = format!("tom-forgot-{}", std::process::id());
+    let load = |port: &str| {
+        let options = daw::plugin::LoadOptions {
+            actions: Some(host.clone()),
+            ..daw::plugin::LoadOptions::default()
+        };
+        let mut p = daw::plugin::load_plugin_with(&bundle().to_string_lossy(), &options)
+            .expect("loads")
+            .expect("a CLAP");
+        p.load_state(&clap_state(&SignalState {
+            instance: Instance::Port(SessionLink {
+                session: SessionId(session.clone()),
+                port: PortName(port.into()),
+            }),
+            ..SignalState::new(preset.clone())
+        }))
+        .expect("takes the state");
+        p
+    };
+    let mut tom = load("Drums/Toms/Tom 4");
+    let mut trig = load("Drums/Toms/Tom 4/T4 Trig");
+    // Not yet the host's: what it subscribed to is forgotten.
+    host.forget();
+    tom.prepare(SR, BLOCK as u32).expect("activates");
+    trig.prepare(SR, BLOCK as u32).expect("activates");
+    tom.pump_main_thread();
+    let sent = host.send("hits:Drums/Toms/Tom 4", TOM_4_HITS);
+    println!("subscribed after activation: {sent} to hits:Drums/Toms/Tom 4");
+    assert!(
+        sent > 0,
+        "activated, the tom subscribes to its piece's hits again"
+    );
+    let out = tom_through_a_gap(&mut tom, &mut trig);
+    let latency = tom.latency() as usize;
+    let gap = peak_s(&out, latency, (12.0, 15.9));
+    let second = peak_s(&out, latency, (16.0, 16.1));
+    println!("tom 4 after the host forgot: gap {gap:.5}, second hit {second:.4}");
+    assert!(
+        second > 0.05 && gap < second * 0.05,
+        "shut through the gap, open on the hit: {gap} / {second}"
+    );
+}

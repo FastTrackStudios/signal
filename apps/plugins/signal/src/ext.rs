@@ -183,6 +183,34 @@ pub fn after_build(shared: &Shared, report: &graph::BuildReport, on_main: bool) 
     }
 }
 
+/// Drop this instance's subscriptions (each given back to the host), so
+/// the next [`after_build`] makes them again. Activation calls it: a host
+/// may forget a subscription made while it loaded the instance, before
+/// the instance was one of its own (Studio's FX_RELOAD loads and restores
+/// a new instance, then puts it on the chain, and its pump drops the
+/// subscriptions of a plugin it does not run) — and a subscription the
+/// host forgot is a piece's placed hits never sent: its gate falls back
+/// to its own input. Main thread.
+pub fn renew_subscriptions(shared: &Shared) {
+    let client = *shared
+        .ext
+        .actions
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let held: Vec<(String, u64)> = core::mem::take(
+        &mut *shared
+            .ext
+            .subscriptions
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner),
+    );
+    if let Some(client) = client {
+        for (_, id) in held {
+            client.unsubscribe(id);
+        }
+    }
+}
+
 /// Subscribe to the transport, and to the hits of each piece a block here
 /// is keyed to.
 fn subscribe(shared: &Shared, client: &HostActionsClient, state: &SignalState) {

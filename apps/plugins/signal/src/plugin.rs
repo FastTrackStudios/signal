@@ -717,6 +717,9 @@ impl Plugin for FtsSignal {
         let table = Arc::new(Table::of(&graph));
         let values = table.values(&graph);
         self.params.show(table.clone(), &values);
+        // Active now, so the host runs it: its subscriptions made again
+        // (one made while it was loaded may be forgotten).
+        crate::ext::renew_subscriptions(&self.shared);
         crate::ext::after_build(&self.shared, &report, true);
         self.applied = (0..SLOTS)
             .map(|i| values.get(i).copied().unwrap_or(0.0).to_bits())
