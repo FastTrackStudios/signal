@@ -62,7 +62,10 @@ impl HostedClap {
         max_block: usize,
         actions: Option<Arc<dyn HostActions>>,
     ) -> Result<Self, Unavailable> {
-        let options = LoadOptions { actions };
+        let options = LoadOptions {
+            actions,
+            ..LoadOptions::default()
+        };
         let mut plugin = load_plugin_with(&path.to_string_lossy(), &options)
             .map_err(|e| Unavailable::Failed {
                 why: format!("{}: {e}", path.display()),

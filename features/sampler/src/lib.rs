@@ -101,7 +101,10 @@ pub mod block_profile;
 pub mod built_lanes;
 pub mod convolver;
 pub mod document;
+pub mod document_player;
 pub mod document_rt;
+#[cfg(feature = "host-timeline")]
+pub mod document_timeline;
 /// The audio path.
 ///
 /// `disallowed_methods` is DENIED here and allowed workspace-wide:
@@ -184,7 +187,8 @@ pub use document::{
     DocCc, DocEvent, DocNote, DocumentBusRenderResult, DocumentRenderOptions, DocumentRenderResult,
     Schedule, ScheduledEvent, TempoPoint, TrackDocument, annotate, line_for_chan,
 };
-pub use document_rt::{BlockTransport, RealtimeScheduler};
+pub use document_player::{DocumentPlayer, Input, LiveEvent, Played, SeekPolicy};
+pub use document_rt::{BlockTransport, RealtimeScheduler, Reconstructed, reconstruct_at};
 pub use engine::cache::SignalPcmPack;
 pub use engine::trace::{RenderTrace, TraceEvent, TraceKind, VoiceSpawn};
 pub use engine::{ArticClass, EmittedMarker, LegatoFireEvent, LineId, PlayMode, SampleEngine};

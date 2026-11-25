@@ -850,7 +850,7 @@ checksum = "21e4227379beff4205943696e6c3e0cd809bacdf3f0edd6e3dd153e2269571a4"
 [[package]]
 name = "audio"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "anyhow",
  "atomic_float",
@@ -2436,7 +2436,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 [[package]]
 name = "daw"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "architect",
  "daw-control",
@@ -2451,15 +2451,17 @@ dependencies = [
 [[package]]
 name = "daw-clap-ext"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "clap-sys",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "daw-control"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "architect",
  "daw-proto",
@@ -2478,7 +2480,7 @@ dependencies = [
 [[package]]
 name = "daw-module"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "tokio",
  "tracing",
@@ -2487,7 +2489,7 @@ dependencies = [
 [[package]]
 name = "daw-proto"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "architect",
  "daw-transport-sync",
@@ -2502,7 +2504,7 @@ dependencies = [
 [[package]]
 name = "daw-standalone"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "arc-swap",
  "architect",
@@ -2515,13 +2517,13 @@ dependencies = [
  "daw-clap-ext",
  "daw-proto",
  "daw-transport-sync",
- "dsp 26.10.3",
  "fts-sample",
  "futures",
  "gloo-timers 0.3.0",
  "libloading 0.8.9",
  "raw-window-handle",
  "rtrb",
+ "stretch-pv",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -2534,7 +2536,7 @@ dependencies = [
 [[package]]
 name = "daw-transport-sync"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "web-time",
 ]
@@ -3277,7 +3279,7 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/dsp?rev=75d475b01e96eed4a5ddad8ad6799396f220dd82#75d475b01e96eed4a5ddad8ad6799396f220dd82"
 dependencies = [
  "crossbeam-channel",
- "dsp-core 0.1.0",
+ "dsp-core",
  "libm",
  "once_cell",
  "parking_lot",
@@ -3291,29 +3293,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "dsp"
-version = "26.10.3"
-source = "git+https://github.com/FastTrackStudios/fts-fx?rev=5bae622f5d874ce58ab04916ab29a8100e883012#5bae622f5d874ce58ab04916ab29a8100e883012"
-dependencies = [
- "dsp-core 26.10.3",
- "realfft",
-]
-
-[[package]]
 name = "dsp-core"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/dsp?rev=75d475b01e96eed4a5ddad8ad6799396f220dd82#75d475b01e96eed4a5ddad8ad6799396f220dd82"
-dependencies = [
- "atomic_float",
- "ebur128",
- "parking_lot",
- "realfft",
-]
-
-[[package]]
-name = "dsp-core"
-version = "26.10.3"
-source = "git+https://github.com/FastTrackStudios/fts-fx?rev=5bae622f5d874ce58ab04916ab29a8100e883012#5bae622f5d874ce58ab04916ab29a8100e883012"
 dependencies = [
  "atomic_float",
  "ebur128",
@@ -4128,7 +4110,7 @@ dependencies = [
  "bytemuck",
  "dioxus",
  "dioxus-native-dom",
- "dsp-core 0.1.0",
+ "dsp-core",
  "gloo-timers 0.3.0",
  "kurbo",
  "peniko",
@@ -4154,7 +4136,7 @@ dependencies = [
 name = "fts-model-delay"
 version = "26.10.3"
 dependencies = [
- "dsp-core 0.1.0",
+ "dsp-core",
  "nice-plug",
  "plugin-core",
  "plugin-ui",
@@ -4164,7 +4146,7 @@ dependencies = [
 name = "fts-model-eq"
 version = "26.10.3"
 dependencies = [
- "dsp-core 0.1.0",
+ "dsp-core",
  "nice-plug",
  "plugin-core",
  "plugin-ui",
@@ -4174,7 +4156,7 @@ dependencies = [
 name = "fts-model-gate"
 version = "26.10.3"
 dependencies = [
- "dsp 0.1.0",
+ "dsp",
  "nice-plug",
 ]
 
@@ -4183,7 +4165,7 @@ name = "fts-model-reverb"
 version = "26.10.3"
 dependencies = [
  "crossbeam-channel",
- "dsp-core 0.1.0",
+ "dsp-core",
  "nice-plug",
  "plugin-core",
  "plugin-ui",
@@ -4209,7 +4191,7 @@ dependencies = [
 [[package]]
 name = "fts-sample"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "arc-swap",
  "claxon",
@@ -5957,7 +5939,7 @@ name = "level-plugin"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
- "dsp 0.1.0",
+ "dsp",
  "nice-plug",
 ]
 
@@ -6125,7 +6107,7 @@ name = "limiter-plugin"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
- "dsp 0.1.0",
+ "dsp",
  "nice-plug",
  "nice-plug-dioxus",
  "plugin-ui",
@@ -6627,7 +6609,7 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "dioxus",
- "dsp-core 0.1.0",
+ "dsp-core",
  "nice-plug",
  "nice-plug-dioxus",
  "parking_lot",
@@ -6640,8 +6622,8 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "crossbeam-channel",
- "dsp 0.1.0",
- "dsp-core 0.1.0",
+ "dsp",
+ "dsp-core",
  "nice-plug",
  "nice-plug-dioxus",
  "plugin-ui",
@@ -6650,7 +6632,7 @@ dependencies = [
 [[package]]
 name = "midi"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "architect",
  "core-foundation 0.10.1",
@@ -6800,8 +6782,8 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
  "atomic_float",
- "dsp 0.1.0",
- "dsp-core 0.1.0",
+ "dsp",
+ "dsp-core",
  "nice-plug",
  "plugin-core",
  "plugin-ui",
@@ -8515,8 +8497,8 @@ name = "pitch-plugin"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
- "dsp 0.1.0",
- "dsp-core 0.1.0",
+ "dsp",
+ "dsp-core",
  "nice-plug",
 ]
 
@@ -8586,7 +8568,7 @@ dependencies = [
  "architect-ui",
  "atomic_float",
  "dioxus",
- "dsp-core 0.1.0",
+ "dsp-core",
  "fts-audio-ui",
  "nice-plug",
  "nice-plug-dioxus",
@@ -8598,8 +8580,8 @@ name = "plugin-processors"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
- "dsp 0.1.0",
- "dsp-core 0.1.0",
+ "dsp",
+ "dsp-core",
  "facet",
  "facet-styx",
  "libm",
@@ -8620,8 +8602,8 @@ dependencies = [
  "dioxus",
  "dioxus-native",
  "dioxus-native-dom",
- "dsp 0.1.0",
- "dsp-core 0.1.0",
+ "dsp",
+ "dsp-core",
  "fts-audio-ui",
  "futures-timer",
  "kurbo",
@@ -9791,7 +9773,8 @@ dependencies = [
  "clap",
  "cpal",
  "daw",
- "dsp-core 0.1.0",
+ "daw-clap-ext",
+ "dsp-core",
  "eyre",
  "facet",
  "facet-json",
@@ -10272,7 +10255,7 @@ dependencies = [
 [[package]]
 name = "session-format"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "daw-proto",
  "facet",
@@ -10474,8 +10457,8 @@ dependencies = [
 name = "signal-core"
 version = "26.10.3"
 dependencies = [
- "dsp 0.1.0",
- "dsp-core 0.1.0",
+ "dsp",
+ "dsp-core",
  "libm",
  "neural-amp-modeler",
  "plugin-processors",
@@ -10517,8 +10500,8 @@ dependencies = [
  "daw",
  "daw-proto",
  "daw-standalone",
- "dsp 0.1.0",
- "dsp-core 0.1.0",
+ "dsp",
+ "dsp-core",
  "fts-model-comp",
  "fts-model-delay",
  "fts-model-eq",
@@ -10625,7 +10608,7 @@ name = "signal-import"
 version = "26.10.3"
 dependencies = [
  "base64 0.22.1",
- "dsp 0.1.0",
+ "dsp",
  "eyre",
  "hound",
  "realfft",
@@ -10664,7 +10647,7 @@ dependencies = [
 name = "signal-macromod"
 version = "26.10.3"
 dependencies = [
- "dsp-core 0.1.0",
+ "dsp-core",
  "facet",
  "serde",
  "serde_json",
@@ -10724,7 +10707,7 @@ dependencies = [
 [[package]]
 name = "signal-plugin-host"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "daw",
 ]
@@ -10820,10 +10803,12 @@ name = "signal-sampler-clap"
 version = "26.10.3"
 dependencies = [
  "arc-swap",
+ "daw-clap-ext",
  "eyre",
  "facet",
  "facet-styx",
  "hound",
+ "midly",
  "nice-plug",
  "plugin-core",
  "sampler",
@@ -11416,6 +11401,20 @@ name = "strength_reduce"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82"
+
+[[package]]
+name = "stretch-abi"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/stretch?rev=0ac3f269e53daa8cdde3ba30e3055d15c393bfaf#0ac3f269e53daa8cdde3ba30e3055d15c393bfaf"
+
+[[package]]
+name = "stretch-pv"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/stretch?rev=0ac3f269e53daa8cdde3ba30e3055d15c393bfaf#0ac3f269e53daa8cdde3ba30e3055d15c393bfaf"
+dependencies = [
+ "realfft",
+ "stretch-abi",
+]
 
 [[package]]
 name = "strict-num"
@@ -12734,8 +12733,8 @@ name = "tune-plugin"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
- "dsp 0.1.0",
- "dsp-core 0.1.0",
+ "dsp",
+ "dsp-core",
  "nice-plug",
  "pitch-core",
 ]
@@ -13107,8 +13106,8 @@ name = "unison-plugin"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/plugins?rev=8a3abfe4639b4db9f64a452bf90b64ec96f5c577#8a3abfe4639b4db9f64a452bf90b64ec96f5c577"
 dependencies = [
- "dsp 0.1.0",
- "dsp-core 0.1.0",
+ "dsp",
+ "dsp-core",
  "nice-plug",
 ]
 
@@ -13235,7 +13234,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
+source = "git+https://www.github.com/FastTrackStudios/daw?rev=a7149580c8d19fbecd910b62b4653473cb13a344#a7149580c8d19fbecd910b62b4653473cb13a344"
 dependencies = [
  "facet",
  "facet-styx",
@@ -15582,11 +15581,6 @@ checksum = "29ce2c8a9384ad323cf564b67da86e21d3cfdff87908bc1223ed5c99bc792713"
 dependencies = [
  "zune-core",
 ]
-
-[[patch.unused]]
-name = "builtin"
-version = "26.10.3"
-source = "git+https://www.github.com/FastTrackStudios/daw?rev=d7262bea41d40b8c5c38a44266ecdc57a9f92ca0#d7262bea41d40b8c5c38a44266ecdc57a9f92ca0"
 
 [[patch.unused]]
 name = "editor-ext"

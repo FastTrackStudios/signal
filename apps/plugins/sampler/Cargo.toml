@@ -19,8 +19,15 @@ workspace = true
 nice-plug.workspace = true
 plugin-core = { workspace = true }
 
-# The sampler engine + document scheduler
-sampler = { workspace = true }
+# The sampler engine + document scheduler, and documents from a host's
+# timeline (host-timeline/1).
+sampler = { workspace = true, features = ["host-timeline"] }
+# FastTrackStudio's CLAP extensions: host-timeline/1 (the track's MIDI
+# ahead of the playhead), host-actions/1 and host-events/1 (its events).
+daw-clap-ext = { workspace = true }
+# A Standard MIDI File as a document (doc_watch), for hosts without a
+# timeline.
+midly = { workspace = true }
 
 # Lock-free Arc<Schedule> swap at block boundaries
 arc-swap = { workspace = true }

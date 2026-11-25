@@ -92,7 +92,7 @@ pub struct BlockTransport {
 /// Reconstruction replay chunk size (frames). Chunking is deterministic
 /// (engine output is chunk-size invariant), so this is purely a scratch
 /// sizing choice.
-const WARM_CHUNK: usize = 512;
+pub const WARM_CHUNK: usize = 512;
 
 /// Realtime schedule walker for ONE bank instrument. See the module docs.
 pub struct RealtimeScheduler {
@@ -142,6 +142,12 @@ impl RealtimeScheduler {
         self.schedule = schedule;
         self.expect_frame = None; // force relocate (or clean exit) next block
         self.tempo_warned = false;
+    }
+
+    /// Where the next block must start to play on without a relocate.
+    #[must_use]
+    pub fn expected_frame(&self) -> Option<i64> {
+        self.expect_frame
     }
 
     /// Whether document mode owned the engine after the last block.
@@ -232,48 +238,83 @@ impl RealtimeScheduler {
     /// (audio discarded) so every voice the full render would have alive
     /// here exists with bit-exact state.
     fn relocate(&mut self, bank: &mut SamplerBank, sched: &Schedule, pos_frame: i64) {
-        bank.panic(&self.id);
-        // Document playback always runs the full expressive legato — that is
-        // the whole point of lookahead. This also flips the engine into
-        // PlayMode::Lookahead.
-        bank.set_legato_mode(&self.id, true, true);
+        let done = reconstruct_at(bank, &self.id, sched, pos_frame, &mut self.warm);
+        self.cursor = done.cursor;
+        self.reconstructed_voices += done.triggers;
+    }
 
+    /// Where the schedule's playback at `pos_frame` must replay from, and
+    /// how many frames that replay renders: the cost of a relocate there
+    /// (0 without a schedule, or where the engine is quiescent).
+    #[must_use]
+    pub fn replay_frames(&self, pos_frame: i64) -> u64 {
+        let Some(sched) = &self.schedule else {
+            return 0;
+        };
         let pos = pos_frame.max(0) as u64;
-        let recon_from = sched.reconstruction_start(pos);
-        let mut warm_cursor = recon_from;
-        self.cursor = sched.events.len();
-        for (i, ev) in sched.events.iter().enumerate() {
-            if ev.frame >= pos {
-                self.cursor = i;
+        pos - sched.reconstruction_start(pos)
+    }
+
+    /// Whether this block would relocate (a discontinuity in document
+    /// mode: first play, a seek, a loop wrap, a new schedule).
+    #[must_use]
+    pub fn would_relocate(&self, t: &BlockTransport) -> bool {
+        t.playing && self.schedule.is_some() && self.expect_frame != Some(t.pos_frame)
+    }
+
+    /// The schedule playing (or about to).
+    #[must_use]
+    pub fn schedule(&self) -> Option<&Arc<Schedule>> {
+        self.schedule.as_ref()
+    }
+
+    /// Enter document mode SILENT, the reconstruction deferred to another
+    /// bank ([`reconstruct_at`] on a worker): every voice of `bank` is
+    /// killed and it renders nothing scheduled until
+    /// [`adopt`](Self::adopt). Block boundary.
+    pub fn hold(&mut self, bank: &mut SamplerBank) {
+        bank.panic(&self.id);
+        bank.set_legato_mode(&self.id, true, true);
+        self.active = true;
+        self.expect_frame = None;
+    }
+
+    /// Adopt a bank reconstructed at `done.at` (by [`reconstruct_at`],
+    /// elsewhere) as the playing one at `now` (≥ `done.at`): the events
+    /// between are dispatched against discarded renders — the same walk
+    /// as a relocate, over `now − done.at` frames only — and the walk goes
+    /// on contiguously from `now`. Returns `false` (nothing changed) when
+    /// `done` is for another schedule or lies ahead of `now`.
+    pub fn adopt(
+        &mut self,
+        bank: &mut SamplerBank,
+        done: &Reconstructed,
+        schedule: &Arc<Schedule>,
+        now: i64,
+    ) -> bool {
+        let Some(sched) = self.schedule.clone() else {
+            return false;
+        };
+        if !Arc::ptr_eq(&sched, schedule) || done.at > now {
+            return false;
+        }
+        let now_u = now.max(0) as u64;
+        let mut warm_cursor = done.at.max(0) as u64;
+        let mut cursor = done.cursor;
+        while let Some(ev) = sched.events.get(cursor) {
+            if ev.frame >= now_u {
                 break;
             }
-            if ev.frame < recon_from {
-                // Provably-quiescent past: controller state only (voices
-                // from before the span are dead by construction).
-                if matches!(ev.kind, DocEvent::Cc { .. }) {
-                    dispatch_event(bank, &self.id, ev);
-                }
-                continue;
-            }
-            // Reconstruction replay — identical walk to the offline warm-up.
-            while warm_cursor < ev.frame {
-                let n = ((ev.frame - warm_cursor) as usize).min(WARM_CHUNK);
-                self.warm[..n * 2].fill(0.0);
-                bank.render(&mut self.warm[..n * 2]);
-                warm_cursor += n as u64;
-            }
-            if is_trigger(ev) {
-                self.reconstructed_voices += 1;
-            }
+            warm(bank, &mut self.warm, &mut warm_cursor, ev.frame);
             dispatch_event(bank, &self.id, ev);
+            cursor += 1;
         }
-        // Advance the remainder of the span up to the playhead itself.
-        while warm_cursor < pos {
-            let n = ((pos - warm_cursor) as usize).min(WARM_CHUNK);
-            self.warm[..n * 2].fill(0.0);
-            bank.render(&mut self.warm[..n * 2]);
-            warm_cursor += n as u64;
-        }
+        warm(bank, &mut self.warm, &mut warm_cursor, now_u);
+        self.reconstructed_voices += done.triggers;
+        self.cursor = cursor;
+        self.active = true;
+        self.expect_frame = Some(now);
+        true
     }
 
     /// Leave document mode: release scheduled notes and hand the engine back
@@ -307,6 +348,84 @@ impl RealtimeScheduler {
                  document from the host tempo map to realign scheduled frames"
             );
         }
+    }
+}
+
+/// A bank reconstructed for playback at frame `at` ([`reconstruct_at`]):
+/// the schedule cursor to walk on from, and the triggers replayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reconstructed {
+    pub at: i64,
+    pub cursor: usize,
+    pub triggers: u64,
+}
+
+/// Put `bank` exactly where the full render of `sched` is at `pos_frame`:
+/// kill everything, pre-roll controller state from the provably quiescent
+/// past, replay the activity span containing `pos_frame` through the real
+/// render path (audio into `scratch`, discarded). Deterministic: any bank
+/// of the same patch ends in the same state, which is what lets this run
+/// on a worker's bank and that bank be swapped in
+/// ([`RealtimeScheduler::adopt`]). `scratch` is at least
+/// [`WARM_CHUNK`] × 2 samples.
+pub fn reconstruct_at(
+    bank: &mut SamplerBank,
+    id: &str,
+    sched: &Schedule,
+    pos_frame: i64,
+    scratch: &mut [f32],
+) -> Reconstructed {
+    bank.panic(id);
+    // Document playback always runs the full expressive legato — that is
+    // the whole point of lookahead. This also flips the engine into
+    // PlayMode::Lookahead.
+    bank.set_legato_mode(id, true, true);
+
+    let pos = pos_frame.max(0) as u64;
+    let recon_from = sched.reconstruction_start(pos);
+    let mut warm_cursor = recon_from;
+    let mut cursor = sched.events.len();
+    let mut triggers = 0u64;
+    for (i, ev) in sched.events.iter().enumerate() {
+        if ev.frame >= pos {
+            cursor = i;
+            break;
+        }
+        if ev.frame < recon_from {
+            // Provably-quiescent past: controller state only (voices
+            // from before the span are dead by construction).
+            if matches!(ev.kind, DocEvent::Cc { .. }) {
+                dispatch_event(bank, id, ev);
+            }
+            continue;
+        }
+        // Reconstruction replay — identical walk to the offline warm-up.
+        warm(bank, scratch, &mut warm_cursor, ev.frame);
+        if is_trigger(ev) {
+            triggers += 1;
+        }
+        dispatch_event(bank, id, ev);
+    }
+    // Advance the remainder of the span up to the playhead itself.
+    warm(bank, scratch, &mut warm_cursor, pos);
+    Reconstructed {
+        at: pos_frame,
+        cursor,
+        triggers,
+    }
+}
+
+/// Render `bank` (audio discarded) from `*from` to `to`, in
+/// [`WARM_CHUNK`]s.
+fn warm(bank: &mut SamplerBank, scratch: &mut [f32], from: &mut u64, to: u64) {
+    while *from < to {
+        let n = ((to - *from) as usize).min(WARM_CHUNK);
+        let Some(buf) = scratch.get_mut(..n * 2) else {
+            return;
+        };
+        buf.fill(0.0);
+        bank.render(buf);
+        *from += n as u64;
     }
 }
 
