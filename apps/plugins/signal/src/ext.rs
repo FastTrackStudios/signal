@@ -10,6 +10,12 @@
 //!   the host offers it: files by reference, the subscriptions, and a
 //!   `SIGNAL_CHAIN_CHANGED` after every change. Without it Signal reads
 //!   files from disk and behaves exactly as before.
+//! - **`com.fasttrackstudio.signal-revisions/1`** (the host reads, from any
+//!   thread): the chain's `revision` and `values_revision`, so a host's
+//!   live feed calls no plugin's main thread ([`REVISIONS`]).
+//! - CLAP's **`clap.state`** (the host's): `mark_dirty` once the chain or a
+//!   value moved, from a main-thread call ([`tell_if_changed`]), so a host
+//!   saves only the instances that changed.
 
 use std::ffi::{CStr, c_char};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU32, AtomicU64, Ordering};
@@ -69,6 +75,78 @@ pub struct Ext {
     pub stats_to: AtomicU64,
     /// Start the summaries over at the next block (a new span, a reset).
     pub stats_clear: AtomicBool,
+    /// The host's `clap.state`, when it has one (`init`).
+    pub host_state: AtomicPtr<ClapHostState>,
+    /// The chain's revisions as last told to the host (`mark_dirty`).
+    pub told: Mutex<(u64, u64)>,
+}
+
+/// CLAP's `clap_host_state_t`: the host's `mark_dirty`.
+#[repr(C)]
+pub struct ClapHostState {
+    pub mark_dirty: Option<unsafe extern "C" fn(host: *const clap_host)>,
+}
+
+/// CLAP's `CLAP_EXT_STATE`.
+const CLAP_EXT_STATE: &CStr = c"clap.state";
+
+/// `com.fasttrackstudio.signal-revisions/1` (daw-clap-ext's
+/// `include/fts/clap-ext.h`, `fts_plugin_signal_revisions_t`).
+pub const FTS_EXT_SIGNAL_REVISIONS: &CStr = c"com.fasttrackstudio.signal-revisions/1";
+
+/// `fts_plugin_signal_revisions_t`: both [thread-safe].
+#[repr(C)]
+pub struct SignalRevisions {
+    pub revision: Option<unsafe extern "C" fn(plugin: *const clap_plugin) -> u64>,
+    pub values_revision: Option<unsafe extern "C" fn(plugin: *const clap_plugin) -> u64>,
+}
+
+/// What `get_extension` answers for [`FTS_EXT_SIGNAL_REVISIONS`].
+pub static REVISIONS: SignalRevisions = SignalRevisions {
+    revision: Some(revisions_revision),
+    values_revision: Some(revisions_values),
+};
+
+unsafe extern "C" fn revisions_revision(plugin: *const clap_plugin) -> u64 {
+    // SAFETY: the host's call, with the plugin it queried.
+    unsafe { shared_of(plugin) }.map_or(0, |s| s.ext.revision.load(Ordering::Acquire))
+}
+
+unsafe extern "C" fn revisions_values(plugin: *const clap_plugin) -> u64 {
+    // SAFETY: as above.
+    unsafe { shared_of(plugin) }.map_or(0, |s| s.params.values_revision.load(Ordering::Acquire))
+}
+
+/// Tell the host its saved copy of this instance's state is stale
+/// (`clap_host_state.mark_dirty`) when the chain or a value moved since it
+/// was last told. Main thread: called at the end of the host's main-thread
+/// calls into the plugin.
+pub fn tell_if_changed(shared: &Shared) {
+    let now = (
+        shared.ext.revision.load(Ordering::Acquire),
+        shared.params.values_revision.load(Ordering::Acquire),
+    );
+    {
+        let mut told = shared
+            .ext
+            .told
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if *told == now {
+            return;
+        }
+        *told = now;
+    }
+    let state = shared.ext.host_state.load(Ordering::Acquire);
+    let host = shared.ext.host.load(Ordering::Acquire);
+    if state.is_null() || host.is_null() {
+        return;
+    }
+    // SAFETY: the host's extension and host, valid for the instance's life
+    // (`init`); a main-thread call, as `mark_dirty` is.
+    if let Some(mark) = unsafe { (*state).mark_dirty } {
+        unsafe { mark(host) };
+    }
 }
 
 /// One meter's summary over a span: min, max, and its frame-weighted mean
@@ -138,6 +216,8 @@ impl Default for Ext {
             chain_changed: std::sync::OnceLock::new(),
             planned: Mutex::new(Vec::new()),
             offline: Mutex::new(crate::offline::Offline::default()),
+            host_state: AtomicPtr::new(std::ptr::null_mut()),
+            told: Mutex::new((0, 0)),
             meter_stats: (0..MAX_METERS).map(|_| MeterStat::default()).collect(),
             stats_from: AtomicU64::new(0),
             stats_to: AtomicU64::new(u64::MAX),
@@ -229,6 +309,9 @@ pub fn after_build(shared: &Shared, report: &graph::BuildReport, on_main: bool) 
     if !on_main {
         return;
     }
+    // A build on the main thread (an editor's change, a state loaded):
+    // the host's saved copy is stale.
+    tell_if_changed(shared);
     let client = *shared
         .ext
         .actions
@@ -1144,13 +1227,17 @@ impl SignalPlugin for Shared {
             crate::offline::drain(self);
             let _ = crate::offline::poll(self, true);
         }
-        run(self, id, &args, true)
+        let ran = run(self, id, &args, true);
+        tell_if_changed(self);
+        ran
     }
 
     fn chain(&self) -> String {
         crate::offline::drain(self);
         let _ = crate::offline::poll(self, true);
-        chain(self).to_string()
+        let chain = chain(self).to_string();
+        tell_if_changed(self);
+        chain
     }
 
     fn revision(&self) -> u64 {
@@ -1243,6 +1330,27 @@ pub fn init(shared: &Shared, plugin: *const clap_plugin, host: *const clap_host)
     shared.ext.host.store(host.cast_mut(), Ordering::Release);
     // SAFETY: the host's own pointer, on its main thread (init).
     let client = unsafe { HostActionsClient::query(host) };
+    // CLAP's `clap.state`: told when the chain or a value moved. The
+    // revisions now are what a state the host loads or saves next holds.
+    // SAFETY: as above.
+    if let Some(get) = (!host.is_null())
+        .then(|| unsafe { (*host).get_extension })
+        .flatten()
+    {
+        let ext = unsafe { get(host, CLAP_EXT_STATE.as_ptr()) };
+        shared
+            .ext
+            .host_state
+            .store(ext.cast::<ClapHostState>().cast_mut(), Ordering::Release);
+    }
+    *shared
+        .ext
+        .told
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = (
+        shared.ext.revision.load(Ordering::Acquire),
+        shared.params.values_revision.load(Ordering::Acquire),
+    );
     // SAFETY: as above.
     shared
         .ext

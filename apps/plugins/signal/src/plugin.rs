@@ -1027,6 +1027,10 @@ impl ClapPlugin for FtsSignal {
         if id == daw_clap_ext::sys::FTS_EXT_SIGNAL {
             return Some(daw_clap_ext::plugin::SignalVtable::<crate::ext::Lookup>::as_ptr());
         }
+        if id == crate::ext::FTS_EXT_SIGNAL_REVISIONS {
+            let v: &'static crate::ext::SignalRevisions = &crate::ext::REVISIONS;
+            return Some(std::ptr::from_ref(v).cast());
+        }
         if id == daw_clap_ext::sys::FTS_EXT_HOST_EVENTS {
             let v: &'static daw_clap_ext::sys::fts_plugin_host_events = &crate::ext::HOST_EVENTS;
             return Some(std::ptr::from_ref(v).cast());
