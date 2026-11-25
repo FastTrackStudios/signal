@@ -4,7 +4,7 @@
 //! editor yet, so that list is the whole UI): a parameter that formats but
 //! does not parse is read-only in every DAW's panel and automation entry.
 
-use gate_plugin::GateParams;
+use fts_model_gate::GateParams;
 use nice_plug::prelude::Params;
 
 /// Normalized points to probe, ends included.

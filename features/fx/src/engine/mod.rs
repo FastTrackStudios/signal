@@ -254,7 +254,13 @@ impl<P: Plugin> ProcessContext<P> for Process<'_, P> {
     fn try_send_event(
         &mut self,
         _event: PluginNoteEvent<P>,
-    ) -> Result<(), (PluginNoteEvent<P>, nice_plug::context::process::SendEventError)> {
+    ) -> Result<
+        (),
+        (
+            PluginNoteEvent<P>,
+            nice_plug::context::process::SendEventError,
+        ),
+    > {
         Ok(())
     }
 
